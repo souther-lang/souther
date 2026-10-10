@@ -3,11 +3,13 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.types.ValueName;
 
 import java.util.Set;
-import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
  * Which operations the library writes are read through their body where the analysis reads a tree
@@ -21,13 +23,15 @@ class WhichLibraryHelpersTheAnalysisReadsThroughTest {
 
     @Test
     void onlyAnOptionConsumedInOneMatchIsReadThrough() {
-        Set<String> readThrough = new TreeSet<>();
-        DefaultStdlib.get().helpers().forEach((operation, body) -> {
-            if (HelperTable.isTransparentToTheAnalysis(operation, body)) {
-                readThrough.add(operation.toString());
-            }
-        });
+        Set<String> readThrough = HelperTable.transparentIn(DefaultStdlib.get()).stream()
+                .map(ValueName.Stdlib.Operation::toString).collect(Collectors.toSet());
 
         assertEquals(Set.of("Option.withDefault"), readThrough);
+    }
+
+    @Test
+    void theSetIsWorkedOutOncePerLibrary() {
+        assertSame(HelperTable.transparentIn(DefaultStdlib.get()),
+                HelperTable.transparentIn(DefaultStdlib.get()));
     }
 }

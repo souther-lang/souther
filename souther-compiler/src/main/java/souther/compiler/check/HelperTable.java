@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.WeakHashMap;
 
 /**
  * Which declaration a name reaches where a body of one module is expanded.
@@ -124,7 +125,7 @@ public final class HelperTable {
      * what the module declared, what it took on to emit, what the modules it imports publish to it —
      * and the standard library underneath all three: every helper it writes under
      * {@link InliningPolicy#FULL}, and under {@link InliningPolicy#DISCHARGE} those nothing states a
-     * fact of ({@link #isTransparentToTheAnalysis}).
+     * fact of ({@link #transparentIn}).
      *
      * <p>Apart, because what a name reaches and what this module holds are two relations and one of
      * them cannot be recovered from the other. Handed a single joined map, a table answered that the
@@ -164,8 +165,10 @@ public final class HelperTable {
             emits.put(entry.address(), entry);
         }
         SequencedMap<ReachName.Declaration, HelperEntry> reached = new LinkedHashMap<>();
+        Set<ValueName.Stdlib.Operation> readThrough =
+                policy == InliningPolicy.FULL ? null : transparentIn(stdlib);
         stdlib.helpers().forEach((operation, body) -> {
-            if (policy == InliningPolicy.FULL || isTransparentToTheAnalysis(operation, body)) {
+            if (readThrough == null || readThrough.contains(operation)) {
                 HelperEntry entry =
                         HelperEntry.reached(new ReachName.OfLibrary(operation), body);
                 reached.put(entry.reachedAs(), entry);
@@ -191,12 +194,25 @@ public final class HelperTable {
      * is written as. One that has a fact stays a call, which is what the reader of that fact looks
      * for.
      */
-    static boolean isTransparentToTheAnalysis(ValueName.Stdlib.Operation operation, Hir.FnDef body) {
-        return !DefaultBoundOperationFacts.get().statesAnythingOf(operation)
-                && Combinators.of(operation) == null
-                && Combinators.positionsOf(operation) == null
-                && callsNothingAndWalksNothing(body.writtenBody());
+    static Set<ValueName.Stdlib.Operation> transparentIn(Stdlib stdlib) {
+        return TRANSPARENT.computeIfAbsent(stdlib, library -> {
+            Set<ValueName.Stdlib.Operation> out = new HashSet<>();
+            library.helpers().forEach((operation, body) -> {
+                if (!DefaultBoundOperationFacts.get().statesAnythingOf(operation)
+                        && Combinators.of(operation) == null
+                        && Combinators.positionsOf(operation) == null
+                        && callsNothingAndWalksNothing(body.writtenBody())) {
+                    out.add(operation);
+                }
+            });
+            return Collections.unmodifiableSet(out);
+        });
     }
+
+    /** What {@link #transparentIn} answered for each library: the same answer for every module
+     *  compiled against it, so it is worked out once and not once per table. */
+    private static final Map<Stdlib, Set<ValueName.Stdlib.Operation>> TRANSPARENT =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     /** Whether {@code e} is written in the language's own constructs alone: no call of another
      * operation and no closure, so reading it through is reading one choice or one sum and never a
@@ -206,7 +222,7 @@ public final class HelperTable {
             return false;
         }
         boolean[] plain = {true};
-        Hir.forEachChild(e, child -> plain[0] &= callsNothingAndWalksNothing(child));
+        Hir.forEachChild(e, child -> plain[0] = plain[0] && callsNothingAndWalksNothing(child));
         return plain[0];
     }
 
