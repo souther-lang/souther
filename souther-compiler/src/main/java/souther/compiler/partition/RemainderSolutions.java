@@ -271,8 +271,8 @@ final class RemainderSolutions {
                 return null;
             }
             member = upward ? member.add(members.modulus()) : member.subtract(members.modulus());
-            if (upward && high != null && member.compareTo(high) > 0
-                    || !upward && low != null && member.compareTo(low) < 0) {
+            if ((upward && high != null && member.compareTo(high) > 0)
+                    || (!upward && low != null && member.compareTo(low) < 0)) {
                 return null;
             }
         }
