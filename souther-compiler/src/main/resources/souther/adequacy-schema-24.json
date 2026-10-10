@@ -2704,6 +2704,7 @@
                   "subject_at_no_position",
                   "no_measure_of_its_size",
                   "outside_the_linear_fragment",
+                  "not_arithmetic",
                   "number_not_held",
                   "no_number_on_a_run",
                   "two_elements_of_one_container",

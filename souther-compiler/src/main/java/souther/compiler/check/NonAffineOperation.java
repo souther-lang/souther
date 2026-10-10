@@ -14,13 +14,5 @@ public enum NonAffineOperation {
     PRODUCT_OF_NON_CONSTANT_VALUES,
 
     /** A quotient by a form that is not a constant. */
-    DIVISION_BY_NON_CONSTANT_VALUE,
-
-    /** An operator that answers no number, so there is no arithmetic for a form to say. */
-    NO_NUMBER_OF_ARITHMETIC;
-
-    /** Whether this is arithmetic whose shape a report can name, and not an operator with none. */
-    public boolean isArithmetic() {
-        return this != NO_NUMBER_OF_ARITHMETIC;
-    }
+    DIVISION_BY_NON_CONSTANT_VALUE
 }

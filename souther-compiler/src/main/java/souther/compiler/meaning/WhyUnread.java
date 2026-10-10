@@ -72,6 +72,16 @@ public sealed interface WhyUnread {
     record OutsideTheLinearFragment(NonAffineOperation operation) implements WhyUnread {}
 
     /**
+     * A part of a comparison that is no arithmetic a form could say: an operator that answers no
+     * number, or a condition that holds or fails whatever the element is.
+     *
+     * <p>Its own case beside {@link OutsideTheLinearFragment}, which is arithmetic with a shape no
+     * form has. Nothing is multiplied or divided here, so a reader told of a product would look for
+     * one that is not written.
+     */
+    record NotArithmetic() implements WhyUnread {}
+
+    /**
      * A comparison whose form over those quantities was worked out exactly, with a number in it that
      * could not be held: the relation is linear, and what it is cannot be written down here.
      */

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.NonAffineOperation;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.inputs.BlockReason;
@@ -35,12 +36,14 @@ import souther.compiler.reach.ComparisonArrival;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -542,21 +545,31 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
-     * What the arithmetic said of a part it stopped at, among {@code stops} the parts of a
-     * statement stopped for, where it named arithmetic no form says — or null where none did.
+     * What the arithmetic said of the parts a statement stopped at, where every part stopped at
+     * arithmetic no form says — or null where some part stopped for anything else.
      *
-     * <p>The first such part in the order the statement lists them. Which of several is the
-     * statement's reason is no question a place can answer, and the parts say the same thing about
-     * the same operation wherever the closure that holds them is reached from.
+     * <p>One operation is that operation, wherever the closure that holds it is reached from. Two
+     * different ones are no operation: naming the first would say of the second that it was not
+     * there, so the statement is a part not read, which is all they have in common.
+     *
+     * <p>And a part that stopped for something else leaves this null, so that what is said is what
+     * would be said without it. The arithmetic's reason is the reason for the parts it stopped, and
+     * it is not the statement's where others did not stop there.
      */
     private static BlockReason.RuleReadingStopped decidedByTheArithmetic(List<WhyUnread> stops) {
+        Set<NonAffineOperation> operations = EnumSet.noneOf(NonAffineOperation.class);
         for (WhyUnread each : stops) {
-            if (each instanceof WhyUnread.OutsideTheLinearFragment(var operation)
-                    && operation.isArithmetic()) {
-                return new BlockReason.NonAffineArithmetic(operation);
+            if (!(each instanceof WhyUnread.OutsideTheLinearFragment(var operation))) {
+                return null;
             }
+            operations.add(operation);
         }
-        return null;
+        return switch (operations.size()) {
+            case 0 -> null;
+            case 1 -> new BlockReason.NonAffineArithmetic(operations.iterator().next());
+            default -> new BlockReason.WhatItStatesIsNoLine(
+                    BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ);
+        };
     }
 
     /**
@@ -599,7 +612,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static boolean wordedByThePlace(WhyUnread why) {
         return switch (why) {
-            case WhyUnread.OutsideTheLinearFragment _, WhyUnread.NoNumberOnARun _,
+            case WhyUnread.OutsideTheLinearFragment _, WhyUnread.NotArithmetic _,
+                 WhyUnread.NoNumberOnARun _,
                  WhyUnread.TwoElementsOfOneContainer _, WhyUnread.NoLawFor _,
                  WhyUnread.NoWordsFor _, WhyUnread.NotProvedOfItsBody _,
                  WhyUnread.NoFormOfWhatItAnswers _,

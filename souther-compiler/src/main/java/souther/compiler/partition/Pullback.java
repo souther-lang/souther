@@ -2301,8 +2301,7 @@ final class Pullback {
                             : size == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
                             : new Sized.AsAForm(LinearForm.atom(new DecisionAtom.OfTheInput(size)));
                 }
-                return new Sized.NotSized(new WhyUnread.OutsideTheLinearFragment(
-                        NonAffineOperation.NO_NUMBER_OF_ARITHMETIC));
+                return new Sized.NotSized(new WhyUnread.NotArithmetic());
             }
             Quantity.HowManyMeet count = new Quantity.HowManyMeet(held, element);
             counting.putIfAbsent(count, new Derivation.AComparisonRead.Counted(held, answered));
@@ -3732,8 +3731,7 @@ final class Pullback {
         switch (e) {
             // An operator that is no arithmetic: what it answers is no number of anything.
             case Core.Binary _ -> {
-                return new WhyUnread.OutsideTheLinearFragment(
-                        NonAffineOperation.NO_NUMBER_OF_ARITHMETIC);
+                return new WhyUnread.NotArithmetic();
             }
             // A choice between values, where what is chosen is one of the arms. A number is read
             // through a choice once for each arm ({@link #throughWhatItStopsAt}), so one met here

@@ -19,6 +19,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.BiFunction;
 
 /**
@@ -299,6 +300,22 @@ public final class AffineForms {
      * expressions it has a rule for, under which the parts it read do not come to one form.
      */
     public sealed interface Halt<A, E> {
+
+        /**
+         * The arithmetic no form says that this stop comes to, through however many calls the
+         * library states the form of it was reached under — or empty where it is another stop.
+         *
+         * <p>The one place a stop is asked this, so that a reader of a stop does not decide for
+         * itself how far down to look.
+         */
+        default Optional<NonAffineOperation> nonAffineOperation() {
+            Halt<A, E> at = this;
+            while (at instanceof AnArgumentStopped<A, E>(var argument)) {
+                at = argument.why();
+            }
+            return at instanceof NotLinear<A, E>(var operation)
+                    ? Optional.of(operation) : Optional.empty();
+        }
 
         /** No rule here for the expression, and the caller named it nothing. */
         record NoRule<A, E>() implements Halt<A, E> {}

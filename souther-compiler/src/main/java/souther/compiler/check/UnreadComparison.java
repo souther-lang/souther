@@ -5,6 +5,8 @@ import souther.compiler.inputs.BlockReason;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -144,15 +146,22 @@ public final class UnreadComparison {
          * it could not read beside it, and would go on being blamed as more operations became
          * readable.
          *
+         * <p>And the reason, where the arithmetic gave one: it met a shape no form says and named
+         * it where it composed the operation. That is the reason at every place the comparison is
+         * filed at, and nothing about where the values came from is asked to say it again.
+         *
          * @param stoppedAt what the expression with no rule here is made of
+         * @param decided the arithmetic the reading met, where that is what stopped it
          */
-        record NotRead<K>(ValueOrigin<K> stoppedAt) implements Quantity<K> {
+        record NotRead<K>(ValueOrigin<K> stoppedAt, Optional<NonAffineOperation> decided)
+                implements Quantity<K> {
 
             public NotRead {
                 if (stoppedAt == null) {
                     throw new IllegalArgumentException(
                             "a reading that read no form stopped somewhere");
                 }
+                Objects.requireNonNull(decided, "a reading says whether the arithmetic decided");
             }
         }
     }
@@ -305,6 +314,11 @@ public final class UnreadComparison {
     public static <K> BlockReason.RuleReadingStopped whereItStopped(RuleAt<K> at,
                                                                    Quantity.NotRead<K> notRead,
                                                                    Predicate<K> ordered) {
+        // The arithmetic said what it met, and that is the reason wherever the rule is filed: the
+        // place says where, and has nothing to add about why the reading stopped.
+        if (notRead.decided().isPresent()) {
+            return notAboutOwnValues(notRead.stoppedAt(), notRead.decided());
+        }
         return switch (at) {
             // The values here are what the rule speaks of, so what they are carried on says which
             // limit stopped the reading: `at < DateTime(...)` stops because nothing draws a line on
@@ -319,6 +333,20 @@ public final class UnreadComparison {
             // position it was about is the part that went unread.
             case RuleAt.NotAboutOwnValues<K> _ -> notAboutOwnValues(notRead.stoppedAt());
         };
+    }
+
+    /**
+     * Why a reading that stopped, at a place the rule states nothing about the values of: what the
+     * arithmetic said where it said anything, and otherwise what the walk stopped at
+     * ({@link #notAboutOwnValues(ValueOrigin)}).
+     *
+     * <p>Over the two things it reads and not over {@link Quantity}, so that a classification that
+     * only needs a reason does not take the vocabulary an answer is given in.
+     */
+    public static <K> BlockReason.RuleReadingStopped notAboutOwnValues(
+            ValueOrigin<K> stoppedAt, Optional<NonAffineOperation> decided) {
+        return decided.<BlockReason.RuleReadingStopped>map(BlockReason.NonAffineArithmetic::new)
+                .orElseGet(() -> notAboutOwnValues(stoppedAt));
     }
 
     /**

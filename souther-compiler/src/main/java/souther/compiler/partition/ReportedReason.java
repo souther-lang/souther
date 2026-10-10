@@ -200,8 +200,6 @@ public final class ReportedReason {
                 case PRODUCT_OF_NON_CONSTANT_VALUES -> UndividedPosition.Reason.NON_AFFINE_PRODUCT;
                 case DIVISION_BY_NON_CONSTANT_VALUE ->
                         UndividedPosition.Reason.NON_CONSTANT_DIVISOR;
-                // Not arithmetic a report can name, which no stop of the reading is held as.
-                case NO_NUMBER_OF_ARITHMETIC -> UndividedPosition.Reason.RULE_MEANING_NOT_READ;
             };
             case BlockReason.RuleAboutAnElementOfSeveralContainers _ ->
                     UndividedPosition.Reason.RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS;

@@ -43,6 +43,7 @@ import java.util.SequencedMap;
 import java.util.SequencedSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
@@ -2808,7 +2809,8 @@ public final class InvariantChecker {
         // here as separate readings of separate comparisons, which is why this is asked per name
         // rather than said once of the clause.
         BlockReason.RuleReadingStopped why = UnreadComparison.notAboutOwnValues(
-                placesIn(stopped.stoppedAt(), stopped.under(), byName, answering).origin());
+                placesIn(stopped.stoppedAt(), stopped.under(), byName, answering).origin(),
+                stopped.decided());
         found.forEach(each -> out.put(each, List.of(why)));
         return out;
     }
@@ -3508,8 +3510,8 @@ public final class InvariantChecker {
          * what a reader downstream makes of them: which subject that expression is about is an
          * answer, and holding it here would put an answer inside what a classification is asked of.
          */
-        record NotRead(StatedComparison comparison, Core stoppedAt, Denotations under)
-                implements CanonicalForm {}
+        record NotRead(StatedComparison comparison, Core stoppedAt, Denotations under,
+                       Optional<NonAffineOperation> decided) implements CanonicalForm {}
 
         /**
          * Each side was read as a form, and the difference of the two has no representation.
@@ -3588,7 +3590,8 @@ public final class InvariantChecker {
                                                     Arrivals answering) {
         return switch (form) {
             case CanonicalForm.NotRead it -> new UnreadComparison.Quantity.NotRead<>(
-                    placesIn(it.stoppedAt(), it.under(), byName, answering).origin());
+                    placesIn(it.stoppedAt(), it.under(), byName, answering).origin(),
+                    it.decided());
             case CanonicalForm.CutsNothing _ -> new UnreadComparison.Quantity.CutsNothing<>();
             case CanonicalForm.NoRatioHolds _ -> new UnreadComparison.Quantity.NoRatioHolds<>();
             case CanonicalForm.Over it -> it.positions().size() == 1
@@ -3622,7 +3625,8 @@ public final class InvariantChecker {
                 terms.outcomeOf(recognised.right(), at, byName::containsKey);
         for (AffineForms.Outcome<FactSubject, Denotations> side : java.util.List.of(left, right)) {
             if (side instanceof AffineForms.Outcome.StoppedAt<FactSubject, Denotations> stopped) {
-                return new CanonicalForm.NotRead(recognised, stopped.node(), stopped.at());
+                return new CanonicalForm.NotRead(recognised, stopped.node(), stopped.at(),
+                        stopped.why().nonAffineOperation());
             }
         }
         // Each side is a form, and the difference of the two can be one no ratio holds. That is a

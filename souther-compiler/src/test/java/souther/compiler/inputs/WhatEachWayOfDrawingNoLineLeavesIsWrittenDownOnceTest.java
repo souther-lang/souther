@@ -99,14 +99,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         table.put("UnreadValueRule", "UNSUPPORTED_SYNTAX/UNAFFECTED");
         // Arithmetic no form says, which the arithmetic named where it met it. Nothing was made of
         // a position and nothing was compared against a figure, so a run allowed more meets it
-        // again. Which operation it was is the word, so a row for each; an operator that answers no
-        // number is no arithmetic a report names, and is a part not read.
+        // again. Which operation it was is the word, so a row for each.
         table.put("NonAffineArithmetic:PRODUCT_OF_NON_CONSTANT_VALUES",
                 "NON_AFFINE_PRODUCT/UNAFFECTED");
         table.put("NonAffineArithmetic:DIVISION_BY_NON_CONSTANT_VALUE",
                 "NON_CONSTANT_DIVISOR/UNAFFECTED");
-        table.put("NonAffineArithmetic:NO_NUMBER_OF_ARITHMETIC",
-                "RULE_MEANING_NOT_READ/UNAFFECTED");
         // An end a choice in the rule left open. Its own word and not the one above: the rule at
         // this position was read, and what an author acts on is the branch written beside it. A run
         // allowed more meets it again — the reading of ends stopped on a form and not at a figure.
@@ -478,8 +475,6 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                         NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES),
                 new BlockReason.NonAffineArithmetic(
                         NonAffineOperation.DIVISION_BY_NON_CONSTANT_VALUE),
-                new BlockReason.NonAffineArithmetic(
-                        NonAffineOperation.NO_NUMBER_OF_ARITHMETIC),
                 new BlockReason.EndLeftOpenByAChoice(),
                 new BlockReason.ValueRuleLeftOpenByAChoice(),
                 new BlockReason.PatternTooCostly(),
