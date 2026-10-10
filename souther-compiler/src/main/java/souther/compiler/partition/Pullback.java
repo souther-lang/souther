@@ -207,6 +207,12 @@ final class Pullback {
      */
     private Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> counting;
     /**
+     * The counts every element settles alike that the law's comparison being read needed, as they
+     * are read ({@link Derivation.ALawComparison#alike}) — or null where what is read is no law's
+     * comparison.
+     */
+    private List<Derivation.AComparisonRead.Counted> alike;
+    /**
      * How many each answer an operation sized by cases holds, in the case of it the comparison
      * being read is read in ({@link #inEachCaseOf}): a number of the input, where the arguments
      * stand as that case says.
@@ -1578,17 +1584,20 @@ final class Pullback {
                 }
             }
             Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
+            List<Derivation.AComparisonRead.Counted> outerAlike = alike;
             counting = new LinkedHashMap<>();
+            alike = new ArrayList<>();
             try {
                 return switch (numbers(form)) {
                     case Numbers.NotRead(WhyUnread why) ->
                             leaf(new Derivation.Stopped(why, fixed(e, reads)), e, reads);
                     case Numbers.EachNumber(Map<LawNumber<?>, LinearForm<Quantity>> each) ->
-                            leaf(Derivation.ALawComparison.of(compared, each, counting), e,
+                            leaf(Derivation.ALawComparison.of(compared, each, counting, alike), e,
                                     reads);
                 };
             } finally {
                 counting = outer;
+                alike = outerAlike;
             }
         }
 
@@ -1846,6 +1855,9 @@ final class Pullback {
             // What is the same for every element counts all of them or none.
             if (!element.mayTurnOnAnElementOf(held)) {
                 if (element instanceof Proposition.Always(boolean holds)) {
+                    if (alike != null) {
+                        alike.add(new Derivation.AComparisonRead.Counted(held, answered));
+                    }
                     NumericTerm.TakenOf size = sizeAt(held);
                     return !holds ? new Sized.AsAForm(LinearForm.constant(ExactRatio.ZERO))
                             : size == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
@@ -1979,11 +1991,14 @@ final class Pullback {
      */
     private Derivation overQuantities(Denotation left, Denotation right, Rel states) {
         Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
+        List<Derivation.AComparisonRead.Counted> outerAlike = alike;
         counting = new LinkedHashMap<>();
+        alike = null;
         try {
             return overQuantitiesCounting(left, right, states);
         } finally {
             counting = outer;
+            alike = outerAlike;
         }
     }
 

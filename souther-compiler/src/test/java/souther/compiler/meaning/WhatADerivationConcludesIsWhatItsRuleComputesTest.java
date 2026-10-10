@@ -266,7 +266,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         second.form().coefs().keySet().forEach(number -> keyedByTheOther.put(number,
                 LinearForm.atom(INDEX)));
         assertThrows(IllegalArgumentException.class, () -> Derivation.ALawComparison.of(first,
-                keyedByTheOther, Map.of()));
+                keyedByTheOther, Map.of(), List.of()));
         // And a choice each of whose cases is the law's comparison, or stopped, is a reading.
         Derivation aChoiceOfTheLaws = new Derivation.AComparisonOfAChoice(
                 new Derivation.IfThenElse(truthAt(A), comparison(first, INDEX, LENGTH),
@@ -399,6 +399,106 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 compare, aboveOne, greaterThanTheLesser));
     }
 
+    /**
+     * An order of an argument and itself is what its difference, nought, says: with the sign
+     * {@code compare(x, x) > 0} it is false, and a statement of {@code x} against nought, or the
+     * order held true, is no reading of it.
+     */
+    @Test
+    void anOrderOfOnePositionAgainstItselfIsWhatNoughtSaysAgainstNought() {
+        TheSignOfAnOrder.TheSign aboveNought = new TheSignOfAnOrder.TheSign(INT_COMPARE,
+                Granularity.DISCRETE, Rel.GT, ExactRatio.ZERO);
+        List<DeclaredArgument> ordered = TheSignOfAnOrder.orderedArguments(INT_COMPARE);
+        Derivation.TheCall compareWithItself = callOf(INT_COMPARE, ordered.get(0), A,
+                ordered.get(1), A);
+        Derivation.AnOrderOfItsArguments read = new Derivation.AnOrderOfItsArguments(
+                compareWithItself, aboveNought, new Derivation.WrittenOut(false));
+        assertEquals(new Proposition.Always(false), concluded(read));
+        for (Derivation notTheOrder : List.of(truthAt(A), new Derivation.WrittenOut(true),
+                new Derivation.AComparisonRead(Derivation.ComparisonReading.BY_A_LAW,
+                        new Relation.Affine(LinearForm.atom(NUMBER_AT_A), Rel.GT), true))) {
+            assertThrows(IllegalArgumentException.class, () -> new Derivation.AnOrderOfItsArguments(
+                    compareWithItself, aboveNought, notTheOrder), () -> "refused: " + notTheOrder);
+        }
+    }
+
+    /**
+     * A count of the elements that meet a statement is a count of those meeting the law's: the
+     * reading of what the elements meet is a reading of that statement and of the container the
+     * count is over, and where every element settles it alike the count is all of them or none,
+     * as the statement came out.
+     */
+    @Test
+    void aCountOfTheElementsMeetingAStatementIsOfTheLawsStatement() {
+        Derivation.TheCall call = callOfGet();
+        DeclaredArgument list = null;
+        DeclaredArgument index = null;
+        for (Map.Entry<DeclaredArgument, TermPath> each : call.standingAt().entrySet()) {
+            if (each.getValue().equals(B)) {
+                list = each.getKey();
+            } else {
+                index = each.getKey();
+            }
+        }
+        LawProposition<DeclaredArgument> ofTheElement = new LawProposition.Observed<>(
+                new LawSubject.ElementOf<>(list), new SideAnswered(AnswerAspect.TRUTH, true));
+        LawProposition<DeclaredArgument> other = new LawProposition.Observed<>(
+                new LawSubject.ElementOf<>(list), new SideAnswered(AnswerAspect.PRESENCE, true));
+        LawProposition.Compared<DeclaredArgument> counting = new LawProposition.Compared<>(
+                LinearForm.atom(new LawNumber.HowManyMeet<>(list, ofTheElement)), Rel.GT);
+        Quantity count = new Quantity.HowManyMeet(B, truth(B.element()));
+        Derivation meetsIt = new Derivation.OnTheSideALawNames(
+                (LawProposition.Observed<?>) ofTheElement, truthAt(B.element()));
+        Derivation meetsTheOther = new Derivation.OnTheSideALawNames(
+                (LawProposition.Observed<?>) other, new Derivation.PresentInASubject(
+                        new DecisionSubject.AnInput(B.element())));
+        assertEquals(true, Derivation.ByALaw.readsTheLaw(counting, countedAs(counting, count,
+                new Derivation.AComparisonRead.Counted(B, meetsIt)), call));
+        // Counted as the reading says it was, and still not of the law's statement or container.
+        Quantity countOfTheOther = new Quantity.HowManyMeet(B, new Proposition.Present(
+                new DecisionSubject.AnInput(B.element()), true));
+        assertEquals(false, Derivation.ByALaw.readsTheLaw(counting, countedAs(counting,
+                countOfTheOther, new Derivation.AComparisonRead.Counted(B, meetsTheOther)), call));
+        assertEquals(false, Derivation.ByALaw.readsTheLaw(counting, countedAs(counting, count,
+                new Derivation.AComparisonRead.Counted(A, meetsIt)), call));
+        // Every element settling the statement alike: all of the container, or none of it.
+        LawProposition<DeclaredArgument> ofTheClosure = new LawProposition.Observed<>(
+                new LawSubject.WhatTheClosureAnswers<>(index), new SideAnswered(
+                        AnswerAspect.TRUTH, true));
+        LawProposition.Compared<DeclaredArgument> countingByTheClosure =
+                new LawProposition.Compared<>(LinearForm.atom(
+                        new LawNumber.HowManyMeet<>(list, ofTheClosure)), Rel.GT);
+        Derivation allMeetIt = new Derivation.OnTheSideALawNames(
+                (LawProposition.Observed<?>) ofTheClosure, new Derivation.WrittenOut(true));
+        Derivation noneMeetIt = new Derivation.OnTheSideALawNames(
+                (LawProposition.Observed<?>) ofTheClosure, new Derivation.WrittenOut(false));
+        LinearForm<Quantity> none = LinearForm.constant(ExactRatio.ZERO);
+        LinearForm<Quantity> all = LinearForm.atom(LENGTH);
+        for (AllOrNone stated : List.of(new AllOrNone(none, noneMeetIt, true),
+                new AllOrNone(all, allMeetIt, true), new AllOrNone(all, noneMeetIt, false),
+                new AllOrNone(none, allMeetIt, false))) {
+            Map<LawNumber<?>, LinearForm<Quantity>> numbers = Map.of(
+                    countingByTheClosure.form().coefs().keySet().iterator().next(), stated.count());
+            Derivation read = Derivation.ALawComparison.of(countingByTheClosure, numbers, Map.of(),
+                    List.of(new Derivation.AComparisonRead.Counted(B, stated.settled())));
+            assertEquals(stated.reads(), Derivation.ByALaw.readsTheLaw(countingByTheClosure, read,
+                    call), () -> "a count read as " + stated);
+        }
+    }
+
+    /** A count read as {@code count} where every element settled the statement as
+     *  {@code settled}, and whether that is a reading of the law's. */
+    private record AllOrNone(LinearForm<Quantity> count, Derivation settled, boolean reads) {
+    }
+
+    /** {@code law}, its one count read as {@code count} and {@code how}. */
+    private static Derivation countedAs(LawProposition.Compared<DeclaredArgument> law,
+                                        Quantity count, Derivation.AComparisonRead.Counted how) {
+        return Derivation.ALawComparison.of(law, Map.of(law.form().coefs().keySet().iterator()
+                .next(), LinearForm.atom(count)), Map.of((Quantity.HowManyMeet) count, how),
+                List.of());
+    }
+
     /** {@code first - second states 0}, read as a comparison of the numbers it is over. */
     private static Derivation relationOf(Quantity first, Quantity second, Rel states) {
         Relation.OneWay<Quantity> one = Relation.OneWay.of(new LinearForm<>(ExactRatio.ZERO,
@@ -491,7 +591,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         Map<LawNumber<?>, LinearForm<Quantity>> numbers = new LinkedHashMap<>();
         part.form().coefs().keySet().forEach(number -> numbers.put(number, LinearForm.atom(
                 number instanceof LawNumber.SizeOf<?> ? length : index)));
-        return Derivation.ALawComparison.of(part, numbers, Map.of());
+        return Derivation.ALawComparison.of(part, numbers, Map.of(), List.of());
     }
 
     /** The sameness {@code same} states, said the other way. */

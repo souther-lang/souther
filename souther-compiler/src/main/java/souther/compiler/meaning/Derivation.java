@@ -671,9 +671,10 @@ public sealed interface Derivation {
                 if (read instanceof Stopped) {
                     return true;
                 }
-                if (read instanceof ALawComparison(var part, var numbers, var _)) {
-                    return part.equals(law) && law.form().coefs().keySet().stream()
-                            .allMatch(number -> numberStands(number, numbers.get(number)));
+                if (read instanceof ALawComparison leaf) {
+                    return leaf.part().equals(law) && law.form().coefs().keySet().stream()
+                            .allMatch(number -> numberStands(number, leaf.numbers().get(number),
+                                    leaf));
                 }
                 List<Derivation> oneOf = read.oneOf();
                 return oneOf != null && !oneOf.isEmpty()
@@ -730,7 +731,7 @@ public sealed interface Derivation {
                     return true;
                 }
                 Proposition concluded = seen.concludes(Optional.empty());
-                if (Proposition.leavesSomethingUnread(concluded)) {
+                if (concluded instanceof Proposition.Unread) {
                     return true;
                 }
                 DecisionSubject subject = new DecisionSubject.AnInput(at);
@@ -757,10 +758,12 @@ public sealed interface Derivation {
              * of the argument it names: the argument's own number, how many it holds, how many
              * different values its elements come to, how many of them meet a statement, what a
              * number of each adds up to. Each is a number of its own kind, and one kind read as
-             * another is no reading of the law even where both are of the same position.
+             * another is no reading of the law even where both are of the same position. And a
+             * count of the elements that meet a statement is a count of those meeting the law's
+             * statement: the way {@code leaf} read what the elements meet is a reading of it.
              */
             private boolean numberStands(LawNumber<DeclaredArgument> number,
-                                         LinearForm<Quantity> form) {
+                                         LinearForm<Quantity> form, ALawComparison leaf) {
                 Quantity atom = soleAtom(form);
                 return switch (number) {
                     case LawNumber.AnArgument<DeclaredArgument>(var argument) -> {
@@ -782,14 +785,35 @@ public sealed interface Derivation {
                         TermPath at = positionOf(container);
                         yield at == null
                                 || (atom instanceof Quantity.SumOver(TermPath summed, var ofEach)
-                                && summed.equals(at) && numberStands(each, ofEach));
+                                && summed.equals(at) && numberStands(each, ofEach, leaf));
                     }
-                    case LawNumber.HowManyMeet<DeclaredArgument>(var container, var _) -> {
+                    case LawNumber.HowManyMeet<DeclaredArgument>(var container, var statement) -> {
                         TermPath at = positionOf(container);
-                        yield at == null || (atom instanceof Quantity.HowManyMeet(
-                                TermPath counted, var _) && counted.equals(at));
+                        yield at == null || counts(statement, at, form, atom, leaf);
                     }
                 };
+            }
+
+            /**
+             * Whether {@code form}, with {@code atom} its one quantity, is how many elements of
+             * the container at {@code at} meet {@code statement}, as {@code leaf} read it: the
+             * count of the elements meeting what was read as the statement, or, where every element
+             * settles the statement alike, all of them or none.
+             */
+            private boolean counts(LawProposition<DeclaredArgument> statement, TermPath at,
+                                   LinearForm<Quantity> form, Quantity atom, ALawComparison leaf) {
+                Conclusion asked = new Conclusion(Optional.empty());
+                if (atom instanceof Quantity.HowManyMeet(TermPath counted, var _)) {
+                    return counted.equals(at) && leaf.counts().stream().anyMatch(count ->
+                            count.container().equals(at) && atom.equals(count.counted(asked))
+                                    && reads(statement, count.ofTheElement()));
+                }
+                return leaf.alike().stream().anyMatch(count -> count.container().equals(at)
+                        && reads(statement, count.ofTheElement())
+                        && count.ofTheElement().concludes(Optional.empty())
+                        instanceof Proposition.Always(boolean all)
+                        && (all ? howManyAt(atom, at)
+                        : form.coefs().isEmpty() && form.constant().signum() == 0));
             }
 
             /** The one quantity {@code form} is, once, or null where it is anything else. */
@@ -926,38 +950,35 @@ public sealed interface Derivation {
      * the law's at every place — a reading can say only what each number of the law was read as,
      * and says it for every number the part names and no other.
      *
-     * @param counts how each count the form names was read: what the elements counted meet, as
-     *               {@link AComparisonRead} holds it, and held to the form there
+     * @param counts how each count the numbers needed was read: what the elements counted meet, as
+     *               {@link AComparisonRead} holds it. The ones the form still names are held to
+     *               it there; a count on both sides comes to nought and names none
+     * @param alike  how each count every element settles alike was read: the statement came out
+     *               the same for each, so the count is all of the container or none of it
      */
     record ALawComparison(LawProposition.Compared<?> part,
                           Map<LawNumber<?>, LinearForm<Quantity>> numbers,
-                          List<AComparisonRead.Counted> counts)
+                          List<AComparisonRead.Counted> counts,
+                          List<AComparisonRead.Counted> alike)
             implements ALawPart {
 
         /**
-         * {@code part} with its numbers read as {@code numbers}, holding of {@code counting} the
-         * counts the form still names: a count on both sides comes to nought and names none.
+         * {@code part} with its numbers read as {@code numbers}, the counts they needed read as
+         * {@code counting} and {@code alike}.
          */
         public static ALawComparison of(LawProposition.Compared<?> part,
                                         Map<LawNumber<?>, LinearForm<Quantity>> numbers,
                                         Map<Quantity.HowManyMeet, AComparisonRead.Counted>
-                                                counting) {
-            Map<Quantity, ExactRatio> named = formOf(part.form(), numbers)
-                    instanceof ExactAnswer.Held<LinearForm<Quantity>>(var form)
-                    ? Relation.OneWay.of(form, part.states()).form().coefs() : Map.of();
-            List<AComparisonRead.Counted> counts = new ArrayList<>();
-            counting.forEach((count, how) -> {
-                if (named.containsKey(count)) {
-                    counts.add(how);
-                }
-            });
-            return new ALawComparison(part, numbers, counts);
+                                                counting,
+                                        List<AComparisonRead.Counted> alike) {
+            return new ALawComparison(part, numbers, List.copyOf(counting.values()), alike);
         }
 
         public ALawComparison {
             Objects.requireNonNull(part, "a step reads a part of a law");
             numbers = Map.copyOf(numbers);
             counts = List.copyOf(counts);
+            alike = List.copyOf(alike);
             if (!numbers.keySet().equals(part.form().coefs().keySet())) {
                 throw new IllegalArgumentException("a comparison over " + part.form().coefs()
                         .keySet() + " is read with " + numbers.keySet());
@@ -999,8 +1020,13 @@ public sealed interface Derivation {
                 return new Proposition.Always(part.states().holds(form.constant().signum()));
             }
             Relation.OneWay<Quantity> one = Relation.OneWay.of(form, part.states());
+            // The counts the relation still names: one on both sides came to nought and names none.
+            Conclusion asked = new Conclusion(Optional.empty());
+            List<AComparisonRead.Counted> named = counts.stream()
+                    .filter(count -> one.form().coefs().containsKey(count.counted(asked)))
+                    .toList();
             return new AComparisonRead(ComparisonReading.BY_A_LAW,
-                    new Relation.Affine(one.form(), one.proposition()), one.holds(), counts)
+                    new Relation.Affine(one.form(), one.proposition()), one.holds(), named)
                     .conclusion(numbering);
         }
     }
@@ -1035,9 +1061,9 @@ public sealed interface Derivation {
             List<DeclaredArgument> ordered = TheSignOfAnOrder.orderedArguments(sign.operation());
             TermPath greater = call.standingAt().get(ordered.get(0));
             TermPath lesser = call.standingAt().get(ordered.get(1));
-            if (greater != null && lesser != null && !greater.equals(lesser)) {
+            if (greater != null && lesser != null) {
                 Proposition read = ofTheArguments.concludes(Optional.empty());
-                if (!Proposition.leavesSomethingUnread(read)
+                if (!(read instanceof Proposition.Unread)
                         && !read.equals(theGreaterAgainstTheLesser(greater, lesser, between))) {
                     throw new IllegalArgumentException(ofTheArguments + " is not the order the"
                             + " library states of " + call.standingAt() + ": the greater " + between
@@ -1048,14 +1074,17 @@ public sealed interface Derivation {
 
         /**
          * What the order says of the numbers at the two positions: the one at {@code greater}
-         * standing {@code between} to the one at {@code lesser}.
+         * standing {@code between} to the one at {@code lesser}. Where the two are one position
+         * their difference is nought, and what is said is whether nought stands so to nought.
          */
         private static Proposition theGreaterAgainstTheLesser(TermPath greater, TermPath lesser,
                                                                Rel between) {
-            LinearForm<Quantity> apart = new LinearForm<>(ExactRatio.ZERO, Map.of(
-                    new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(greater)), ExactRatio.ONE,
-                    new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(lesser)),
-                    ExactRatio.of(-1)));
+            LinearForm<Quantity> apart = LinearForm.difference(
+                    new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(greater)),
+                    new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(lesser)));
+            if (apart.coefs().isEmpty()) {
+                return new Proposition.Always(between.holds(apart.constant().signum()));
+            }
             Relation.OneWay<Quantity> one = Relation.OneWay.of(apart, between);
             return Proposition.compared(new Relation.Affine(one.form(), one.proposition()),
                     one.holds());
