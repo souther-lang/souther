@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Whether the rows say where a line is, or only that it is somewhere near.
@@ -84,7 +85,8 @@ public sealed interface AnotherLineTheRowsAllow {
      * @param keptOn      the side of that threshold this line keeps a row on, which is the side the
      *                    model's own rule is satisfied on
      * @param tellsApartAt an input the two lines answer differently at, or null where none was
-     *                    worked out. What the measurement itself reached, and never where a row has
+     *                    worked out or every one that was is one the declarations are shown to leave
+     *                    nothing at. What the measurement itself reached, and never where a row has
      *                    to be written: it is a witness of the condition and not the condition
      */
     record OneDoes(QuantityKey direction, ExactRatio cut, Towards keptOn,
@@ -124,6 +126,18 @@ public sealed interface AnotherLineTheRowsAllow {
             // every row stands rather than where the two lines differ.
             return within.assuming(new LinearForm<>(cut.negated(), direction.direction()),
                     keptOn == Towards.BELOW ? Rel.LE : Rel.GE).taken();
+        }
+
+        /**
+         * Whether {@code other} is the same line beside the same border, whatever input each names.
+         *
+         * <p>Two readings of one border read the same rows and so leave the same line standing; the
+         * input named for it is a further answer that each reading's own way to the border and
+         * declarations can give differently.
+         */
+        public boolean isTheLineOf(OneDoes other) {
+            return direction.equals(other.direction) && cut.equals(other.cut)
+                    && keptOn == other.keptOn;
         }
 
         /**
@@ -379,12 +393,18 @@ public sealed interface AnotherLineTheRowsAllow {
      * <p>One pass over the family, and the first line the rows allow is the one named. They are as
      * many as the quantity has positions and each is a line a row would rule out; naming all of them
      * would put a reader in front of a list every entry of which is the same row to write.
+     *
+     * <p>{@code refused} says whether the declarations of the positions are shown to leave nothing
+     * at an input. It decides which input is named for the line and never whether the line stands:
+     * an input is worked out by stepping along a line, which knows the arithmetic and nothing of
+     * what a position's type refuses.
      */
     static AnotherLineTheRowsAllow of(Border border,
                                       boolean everyPointMet,
                                       java.util.function.Supplier<StandingAtAPoint.RowsRead> read,
                                       List<OrderedAffineBoundary> elsewhere,
-                                      WayToTheBorder way) {
+                                      WayToTheBorder way,
+                                      Predicate<Map<NumericTerm, Place>> refused) {
         // The two ways a border is not a line another line can be written beside, told apart. A
         // rule that names a value orders nothing and has no side to keep a row on; a rule on an
         // order with no numbers has no weights to write differently. Read off one answer, either
@@ -479,12 +499,12 @@ public sealed interface AnotherLineTheRowsAllow {
             // one parts company with only where nothing arrives is the same line here, so it is no
             // fault and this walks on to the next; where nothing could show either, the question
             // stands rather than being answered by whichever way it fell.
-            Map<NumericTerm, Place> parting =
-                    partingAt(boundary, other, cut, satisfying, refusing, elsewhere, way);
+            Distinguisher parting =
+                    partingAt(boundary, other, cut, satisfying, refusing, elsewhere, way, refused);
             if (parting == null) {
                 return new CouldNotTell(new Unsettled.NoReachableDistinguisher());
             }
-            return new OneDoes(other, cut, boundary.satisfiedOn(), parting);
+            return new OneDoes(other, cut, boundary.satisfiedOn(), parting.named());
         }
         // Nothing stands, which the rows that were read establish however few of them there were:
         // a row read leaves fewer lines standing and never more, so a line none of these allows is
@@ -565,13 +585,20 @@ public sealed interface AnotherLineTheRowsAllow {
      * as it did at the row the step began from, and that row arrived. A condition this compiler
      * could not take in is one nothing here can answer that of, so a way holding one names no input
      * at all.
+     *
+     * <p><b>And one the declarations are not shown to leave nothing at, where there is one.</b> A
+     * step is arithmetic over amounts, so over positions whose types refuse some values it can land
+     * on one of those. Such an input is passed over for another that is not, and where every input
+     * that arrives is one of them the answer is still one, with none named: the two lines part
+     * company, and nothing here says where an author could write a row.
      */
-    private static Map<NumericTerm, Place> partingAt(OrderedAffineBoundary boundary,
-                                                     QuantityKey other, ExactRatio cut,
-                                                     List<Map<NumericTerm, Place>> satisfying,
-                                                     List<Map<NumericTerm, Place>> refusing,
-                                                     List<OrderedAffineBoundary> elsewhere,
-                                                     WayToTheBorder way) {
+    private static Distinguisher partingAt(OrderedAffineBoundary boundary,
+                                     QuantityKey other, ExactRatio cut,
+                                     List<Map<NumericTerm, Place>> satisfying,
+                                     List<Map<NumericTerm, Place>> refusing,
+                                     List<OrderedAffineBoundary> elsewhere,
+                                     WayToTheBorder way,
+                                     Predicate<Map<NumericTerm, Place>> refused) {
         Map<NumericTerm, ExactRatio> along = alongTheLine(boundary.direction(), other);
         if (along == null) {
             return null;
@@ -596,11 +623,31 @@ public sealed interface AnotherLineTheRowsAllow {
         // no row arrives is not something a row could show. What the behavior's other lines do with
         // it is the preference beside that: where they keep it, this line is what settles the answer
         // there, and where they do not the two part company under a rule that has already decided.
-        return found.stream().filter(Parting::reached)
-                .min(Comparator.comparingInt((Parting each) -> each.visible() ? 0 : 1)
+        List<Parting> arriving = found.stream().filter(Parting::reached)
+                .sorted(Comparator.comparingInt((Parting each) -> each.visible() ? 0 : 1)
                         .thenComparing(Parting::steps))
-                .map(Parting::at).orElse(null);
+                .toList();
+        if (arriving.isEmpty()) {
+            return null;
+        }
+        // In that order, and the first the declarations are not shown to leave nothing at. Asked
+        // one at a time and stopping there: each asking reads the declarations again.
+        for (Parting each : arriving) {
+            if (!refused.test(each.at())) {
+                return new Distinguisher(each.at());
+            }
+        }
+        return new Distinguisher(null);
     }
+
+    /**
+     * What tells the two lines apart where a row arrives.
+     *
+     * @param named an input the two lines answer differently at and the declarations are not shown
+     *              to leave nothing at — not that a row can be written there — or null where every
+     *              input that arrives is one they are shown to refuse
+     */
+    record Distinguisher(Map<NumericTerm, Place> named) {}
 
     /**
      * The inputs near one row that the two lines part company at.
