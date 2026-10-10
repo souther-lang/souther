@@ -556,7 +556,8 @@ public final class GuardThresholds {
         right.met().forEach(met::putIfAbsent);
         here.met().forEach(met::putIfAbsent);
         UnreadComparison.Quantity.NotRead<TermPath> notRead =
-                new UnreadComparison.Quantity.NotRead<>(here.origin());
+                new UnreadComparison.Quantity.NotRead<>(here.origin(),
+                        stopped.failure().why().nonAffineOperation());
         java.util.function.Predicate<TermPath> ordered =
                 at -> met.containsKey(at) && orderable(met.get(at), read.rules().declarations());
         java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out =

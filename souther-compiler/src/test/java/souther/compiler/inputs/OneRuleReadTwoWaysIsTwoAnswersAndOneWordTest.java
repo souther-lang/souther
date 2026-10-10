@@ -32,8 +32,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class OneRuleReadTwoWaysIsTwoAnswersAndOneWordTest {
 
     /** What the reading of lines makes of it: read to the end, and no line either side. */
-    private static final BlockReason.ComparisonBetweenPositions THE_LINE_READING =
-            new BlockReason.ComparisonBetweenPositions();
+    private static final BlockReason.ComparisonRelatingTwoValues THE_LINE_READING =
+            new BlockReason.ComparisonRelatingTwoValues();
 
     /** And what the reading of values makes of the same rule. */
     private static final BlockReason.RuleReadingStopped THE_VALUE_READING =
@@ -71,9 +71,9 @@ class OneRuleReadTwoWaysIsTwoAnswersAndOneWordTest {
     /** And a reader of the document meets one word, which is what the two were made one for. */
     @Test
     void theDocumentWritesOneWordForBoth() {
-        assertEquals(UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE,
+        assertEquals(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
                 ReportedReason.of(THE_LINE_READING));
-        assertEquals(UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE,
+        assertEquals(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
                 ReportedReason.of(THE_VALUE_READING));
     }
 

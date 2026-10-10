@@ -2,6 +2,7 @@ package souther.compiler.semantics;
 
 import souther.compiler.numeric.LinearForm;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -42,16 +43,49 @@ public sealed interface OperationLaw<A> {
         }
     }
 
-    /** How many the answer holds is {@code equalTo}, a number of the arguments. */
-    record Size<A>(LinearForm<LawNumber<A>> equalTo) implements OperationLaw<A> {
+    /**
+     * How many the answer holds is, in each of {@code cases}, the number of the arguments that case
+     * says — where the arguments stand as it says they do. Every way the arguments stand is one of
+     * them, and where two are both met they come to the same number.
+     *
+     * <p>Cases because the arguments decide which number it is: a list taken from holds as many as
+     * were asked for where it has that many, and as many as it has where it has fewer. One case met
+     * however the arguments stand is a size that is one number of them.
+     */
+    record Size<A>(List<Case<A>> cases) implements OperationLaw<A> {
 
         public Size {
-            Objects.requireNonNull(equalTo, "a size is some number");
+            cases = List.copyOf(cases);
+            if (cases.isEmpty()) {
+                throw new IllegalArgumentException("a size is some number in some case");
+            }
+        }
+
+        /** A size that is {@code equalTo} however the arguments stand. */
+        public Size(LinearForm<LawNumber<A>> equalTo) {
+            this(List.of(new Case<>(new LawProposition.Always<>(true), equalTo)));
+        }
+
+        /** The number the answer holds however the arguments stand, or null where which number
+         *  it is turns on how they stand. */
+        public LinearForm<LawNumber<A>> unconditional() {
+            return cases.size() == 1
+                    && cases.getFirst().where() instanceof LawProposition.Always<A>(boolean holds)
+                    && holds ? cases.getFirst().equalTo() : null;
         }
 
         @Override
         public Observed observed() {
             return Observed.SIZE;
+        }
+
+        /** Where the arguments stand as {@code where} says, the answer holds {@code equalTo}. */
+        public record Case<A>(LawProposition<A> where, LinearForm<LawNumber<A>> equalTo) {
+
+            public Case {
+                Objects.requireNonNull(where, "a case is met somewhere");
+                Objects.requireNonNull(equalTo, "and comes to some number there");
+            }
         }
     }
 

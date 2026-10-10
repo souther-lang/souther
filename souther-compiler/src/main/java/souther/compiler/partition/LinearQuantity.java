@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
@@ -123,10 +124,16 @@ public sealed interface LinearQuantity extends BorderQuantity
         for (NumericTerm term : terms()) {
             TermOrders orders = ordersOf(term);
             WhatATermRead read = switch (term) {
+                case NumericTerm.Multiplicity among ->
+                        WhatATermRead.among(orders, observation, among.place());
                 case NumericTerm.FromOnePosition one ->
                         WhatATermRead.at(orders, observation.at(one.position()));
-                case NumericTerm.TakenOver over ->
-                        WhatATermRead.over(orders, observation.everyValueAt(over.subjectPath()));
+                case NumericTerm.TakenOver over -> switch (over.source()) {
+                    case RunSource.ProjectedOccurrences _ -> WhatATermRead.over(orders,
+                            observation.everyValueAt(over.subjectPath()));
+                    case RunSource.ComputedOccurrences computed ->
+                            WhatATermRead.overElements(orders, computed, observation);
+                };
             };
             // One entry per term, which the orders say they are of, so two could only meet where a
             // quantity is taken of one term twice. Refused rather than let the second stand: a

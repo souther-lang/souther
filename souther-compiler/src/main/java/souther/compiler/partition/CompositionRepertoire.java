@@ -91,7 +91,23 @@ public enum CompositionRepertoire {
      * read over the elements of another container, is chosen by nothing here: what would reach it
      * is a way of choosing such elements, and raising no figure does.
      */
-    ELEMENTS_CHOSEN_FOR_A_COUNT;
+    ELEMENTS_CHOSEN_FOR_A_COUNT,
+
+    /**
+     * The elements whose computed number is made of the fields of one element in ways this
+     * compiler solves for.
+     *
+     * <p>A total of what a walk computed of each element is written by choosing one field of every
+     * element and solving for it, where the computation is a form of that one field alone. A form of
+     * several fields, or a choice between two by a flag, has more than one value to choose in an
+     * element, and nothing here chooses the others so that the first can be solved for. Raising
+     * anything reaches none of them; what would is a way of choosing the rest of an element.
+     *
+     * <p>So a total of such a number is not a total no row comes to. Read as a figure, an author is
+     * told to raise a number that changes nothing; read as an answer about the model, they are told
+     * the rules admit no row when what happened is that this compiler wrote none.
+     */
+    ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR;
 
     /**
      * Whether a wider run could reach the rest: never, since raising anything reaches none of it.

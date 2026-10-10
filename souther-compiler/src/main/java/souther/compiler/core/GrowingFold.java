@@ -4,7 +4,6 @@ import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -55,8 +54,9 @@ public final class GrowingFold {
      * publishes its own walk as, and it would go on being right for exactly as long as the two
      * agreed.
      */
-    private static boolean isTheWalk(Core.Call call, ValueName.Stdlib.Operation walk) {
-        return call.fn() instanceof Core.Reached reached && walk.equals(reached.denotes());
+    private static boolean isTheWalk(Core.Call call, TheWalk walk) {
+        return call.fn() instanceof Core.Reached reached
+                && walk.operation().equals(reached.denotes());
     }
 
     /**
@@ -109,7 +109,7 @@ public final class GrowingFold {
      * walk. What the step does with the map it grows is asked of the kernels the calls carry, so
      * nothing else here has a name in it.
      */
-    public static Core rewrite(Core body, ValueName.Stdlib.Operation walk) {
+    public static Core rewrite(Core body, TheWalk walk) {
         Core mapped = Core.mapChildren(body, each -> rewrite(each, walk), s -> s,
                 nd -> Core.mapChildren(nd, each -> rewrite(each, walk)));
         if (mapped instanceof Core.Call call) {
@@ -187,8 +187,10 @@ public final class GrowingFold {
     }
 
     /** {@code call} as a build, or null when it is not a fold that only grows a list or a map. */
-    private static Core built(Core.Call call, ValueName.Stdlib.Operation walk) {
-        if (!isTheWalk(call, walk) || call.args().size() != 4) {
+    private static Core built(Core.Call call, TheWalk walk) {
+        // The build is written against the loop's order of arguments and of the step's
+        // parameters, and a walk taking them in another is left the call it is.
+        if (!isTheWalk(call, walk) || !walk.inTheLoopsOrder() || call.args().size() != 4) {
             return null;
         }
         Core seed = call.args().get(1);

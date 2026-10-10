@@ -81,7 +81,7 @@ class AFactRelatingTheAnswerToAnArgumentIsHeldToThatRelationTest {
                 () -> bindWith(LIST_LENGTH, OperationFact.ResultIsNoSmallerThan.class,
                         new OperationFact.ResultIsNoSmallerThan(new ArgumentRef.At(0))));
         assertTrue(e.getMessage().contains("List.length")
-                && e.getMessage().contains("what is no smaller than a container"),
+                && e.getMessage().contains("what is no smaller than what it was built from"),
                 e.getMessage());
     }
 

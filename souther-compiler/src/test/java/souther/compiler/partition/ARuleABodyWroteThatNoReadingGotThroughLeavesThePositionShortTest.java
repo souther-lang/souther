@@ -51,7 +51,7 @@ class ARuleABodyWroteThatNoReadingGotThroughLeavesThePositionShortTest {
                 constructs Ok
 
             let f (n, m, s) = {
-                guard String.length(s) > Int.abs(m) else Low
+                guard String.length(s) > Int.floorMod(m, n) else Low
                 Ok { at = n }
             }
             """;

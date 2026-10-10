@@ -239,7 +239,9 @@ class ARuleAboutAnElementIsReadWhereTheyAllSupportOneFormTest {
 
         ReadComparisons read = ReadComparisons.of(source, "classify");
         ComparisonReadings.Reading against = read.only();
-        return switch (AffineReading.read(against.statement(), read.inputs(),
+        return switch (AffineReading.read(
+                ((ComparisonReadings.Stated.AComparison) against.statement()).comparison(),
+                read.inputs(),
                 against.reads(),
                 read.rules())) {
             case AffineReading.OfAComparison.Stopped _ -> "stopped";

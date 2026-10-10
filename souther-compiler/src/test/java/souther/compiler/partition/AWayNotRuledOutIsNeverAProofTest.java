@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.NonAffineOperation;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.flow.AWayThrough;
 import souther.compiler.inputs.InputReading;
@@ -31,7 +32,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class AWayNotRuledOutIsNeverAProofTest {
 
     private static final WhyUnread NO_SIZE = new WhyUnread.NoMeasureOfItsSize();
-    private static final WhyUnread NOT_LINEAR = new WhyUnread.OutsideTheLinearFragment();
+    private static final WhyUnread NOT_LINEAR = new WhyUnread.OutsideTheLinearFragment(
+            NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES);
 
     private static Proposition unread(int ordinal, WhyUnread why) {
         return new Proposition.Unread(Optional.empty(), ordinal, why, false, true);

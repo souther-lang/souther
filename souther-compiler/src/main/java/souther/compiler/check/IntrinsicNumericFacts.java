@@ -1,7 +1,11 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ConstantArguments;
+import souther.compiler.semantics.LawProposition;
+import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.ResultBound;
+import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactAnswer;
@@ -97,6 +101,87 @@ final class IntrinsicNumericFacts {
             }
         }
         return out;
+    }
+
+    /**
+     * How many {@code container} holds, where the law of the operation that answered it says
+     * whether it holds anything by whether its arguments do — or null where no operation answered
+     * it, no law says that, or the law reads something of an argument other than whether it holds
+     * anything.
+     *
+     * <p>The whole law or nothing. It says when the answer holds something and, by the same
+     * statement, when it holds nothing, so a part of it left out would answer the second wrong.
+     */
+    static Derivation heldWhereItsLawSays(Core container, Denotations at, Terms terms) {
+        AnOperationApplied applied = AnOperationApplied.of(container);
+        LawProposition<DeclaredArgument> law = applied == null ? null
+                : DischargeRules.whereItHoldsSomething(applied.operation());
+        Derivation.HoldsSomethingWhere.Holding holds = law == null ? null
+                : holding(law, applied, at, terms);
+        return holds == null ? null : new Derivation.HoldsSomethingWhere(holds);
+    }
+
+    /** {@code law} over the counts of what {@code applied} hands it, or null where a part of it is
+     *  about something else. */
+    private static Derivation.HoldsSomethingWhere.Holding holding(
+            LawProposition<DeclaredArgument> law, AnOperationApplied applied, Denotations at,
+            Terms terms) {
+        return switch (law) {
+            case LawProposition.Always<DeclaredArgument>(boolean holds) -> holds
+                    ? new Derivation.HoldsSomethingWhere.Holding.AllOf(List.of())
+                    : new Derivation.HoldsSomethingWhere.Holding.AnyOf(List.of());
+            case LawProposition.All<DeclaredArgument>(var parts) -> {
+                List<Derivation.HoldsSomethingWhere.Holding> ways = holdings(parts, applied, at,
+                        terms);
+                yield ways == null ? null : new Derivation.HoldsSomethingWhere.Holding.AllOf(ways);
+            }
+            case LawProposition.Any<DeclaredArgument>(var parts) -> {
+                List<Derivation.HoldsSomethingWhere.Holding> ways = holdings(parts, applied, at,
+                        terms);
+                yield ways == null ? null : new Derivation.HoldsSomethingWhere.Holding.AnyOf(ways);
+            }
+            case LawProposition.Observed<DeclaredArgument>(
+                    LawSubject.Argument<DeclaredArgument>(DeclaredArgument which),
+                    SideAnswered(AnswerAspect aspect, boolean holds))
+                    when aspect == AnswerAspect.EMPTINESS -> {
+                FactSubject count = countOf(applied.argument(which), at, terms);
+                if (count == null) {
+                    yield null;
+                }
+                Derivation.HoldsSomethingWhere.Holding something =
+                        new Derivation.HoldsSomethingWhere.Holding.Something(LinearForm.atom(count));
+                yield holds ? something : new Derivation.HoldsSomethingWhere.Holding.Not(something);
+            }
+            case LawProposition.Observed<DeclaredArgument> _,
+                 LawProposition.Compared<DeclaredArgument> _,
+                 LawProposition.SomeElement<DeclaredArgument> _,
+                 LawProposition.Same<DeclaredArgument> _ -> null;
+        };
+    }
+
+    private static List<Derivation.HoldsSomethingWhere.Holding> holdings(
+            List<LawProposition<DeclaredArgument>> parts, AnOperationApplied applied,
+            Denotations at, Terms terms) {
+        List<Derivation.HoldsSomethingWhere.Holding> out = new ArrayList<>();
+        for (LawProposition<DeclaredArgument> part : parts) {
+            Derivation.HoldsSomethingWhere.Holding one = holding(part, applied, at, terms);
+            if (one == null) {
+                return null;
+            }
+            out.add(one);
+        }
+        return out;
+    }
+
+    /** The count of what {@code argument} is, by the measure its type is counted by, or null where
+     *  there is no argument there, nothing counts it, or this cannot name the count. */
+    private static FactSubject countOf(Core argument, Denotations at, Terms terms) {
+        if (argument == null) {
+            return null;
+        }
+        ValueName counts = NumericMeasures.takenOf(Core.withoutStanding(argument).type(),
+                terms.newtypeInners());
+        return counts == null ? null : terms.sizeAtomFor(counts, argument, at);
     }
 
     /** States how {@code atom} stands to the size of {@code source}, where that size is one this can

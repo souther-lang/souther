@@ -8,9 +8,11 @@ import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleKey;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.ClosedStates;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
@@ -18,9 +20,12 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -280,6 +285,17 @@ final class ReadQuantities implements Quantities {
         // absent, so a term of another input comes back with an order on one end and nothing on the
         // other — an answer about no reading, wearing this one's name.
         held(term);
+        if (term instanceof NumericTerm.TakenOver over
+                && over.source() instanceof RunSource.ComputedOccurrences computed) {
+            // What a computed value stands as is what the computation made, and no position of the
+            // input holds it; the fields it reads are positions and are read on their own types.
+            Map<ElementProjection, Type> fieldTypes = new LinkedHashMap<>();
+            for (ElementProjection field : computed.computation().reads()) {
+                fieldTypes.put(field, typeAt.apply(field.from(computed.elements())));
+            }
+            return TermOrdering.of(term, computed.each(), fieldTypes,
+                    ruleReading.source().symbols(), ruleReading.source().declarations());
+        }
         return TermOrdering.of(term, typeAt.apply(term.subjectPath()),
                 ruleReading.source().symbols(), ruleReading.source().declarations());
     }
@@ -858,7 +874,7 @@ final class ReadQuantities implements Quantities {
                 if (counted == null) {
                     return rules;
                 }
-                InputAtom.Named atom = called(counted, under);
+                InputAtom atom = called(counted, under);
                 souther.compiler.numeric.Granularity spaced =
                         spacingOf(rules.numbers(), counted, atom);
                 return spaced == null ? rules : rules.taking(
@@ -1019,7 +1035,14 @@ final class ReadQuantities implements Quantities {
 
     /** The same, of a term this input holds. One number under one name whichever side it arrives
      *  from — the reading of a declaration, or a form a caller wrote. */
-    private InputAtom.Named called(NumericTerm term, StructuralContext under) {
+    private InputAtom called(NumericTerm term, StructuralContext under) {
+        // A number computed of each element is no number at a place, so what names it is the term,
+        // under the value whose rules the elements stand under.
+        if (term instanceof NumericTerm.TakenOver over
+                && over.source() instanceof RunSource.ComputedOccurrences) {
+            return new InputAtom.Computed(
+                    rootOf(standingUnder(term.subjectPath(), under)).root().toString(), over);
+        }
         UnderARoot at = rootOf(term.subjectPath());
         NumberAt<RuleKey> where = coordinateOf(at, term);
         return atomAt(standingUnder(pathOf(at.root(), where.position()), under), where.of());
@@ -1610,6 +1633,9 @@ final class ReadQuantities implements Quantities {
             case NumericTerm.ValueOf _ -> NumberAt.valueOf(at.named());
             case NumericTerm.TakenOf taken ->
                     NumberAt.takenOf(at.named(), taken.operation(), taken.arguments());
+            case NumericTerm.CodePointClassCount count ->
+                    NumberAt.countOf(at.named(), count.counted());
+            case NumericTerm.Multiplicity _ -> NumberAt.multiplicityOf(at.named());
             case NumericTerm.TakenOver over ->
                     NumberAt.takenOf(at.named(), over.operation());
         };
@@ -1650,9 +1676,138 @@ final class ReadQuantities implements Quantities {
         // Where two values were fixed there, between them: the rules leave nothing at all, which
         // {@link #emptiness} says, and a range that crossed itself is not something to hand a
         // caller that has not asked.
-        return fixedAt == null ? runs
+        return withinTheResiduesFixedOf(term, fixedAt == null ? runs
                 : meeting(runs, new NumericDomain.Bounds(Endpoint.inclusive(fixedAt.least()),
-                        Endpoint.inclusive(fixedAt.most())));
+                        Endpoint.inclusive(fixedAt.most()))));
+    }
+
+    /**
+     * {@code runs}, of a number of a position, once a remainder of the value there has been fixed.
+     *
+     * <p>A remainder fixed at a residue leaves the value the numbers of that class and no others,
+     * which is no run — so what is said of the value is the run between the first of them and the
+     * last the rules leave it ({@link ResidueHull}). A search that names a place at either end names
+     * a number of the class, and one that named an end of the run itself would name a number the
+     * remainder it was fixing refuses.
+     *
+     * <p>The same holds of a remainder of the value by another divisor, which is the value's own
+     * class by that divisor and so is held to the residue the two divisors can agree on: one number
+     * leaves one remainder by each, and a remainder chosen without asking is one no value leaves
+     * beside the first.
+     *
+     * <p>Only a remainder held at one number, whether fixed there or taken in as equal to it, and
+     * only of a value counted by whole numbers. A remainder asked for as one of several, or left to
+     * the rules, says nothing of where a number of the place runs.
+     */
+    private NumericDomain.Bounds withinTheResiduesFixedOf(NumericTerm term,
+                                                          NumericDomain.Bounds runs) {
+        Congruences together = residuesFixedAt(term);
+        return together == null ? runs : ResidueHull.of(runs, together);
+    }
+
+    /**
+     * The class of whole numbers the remainders fixed beside the value at {@code place} leave it in
+     * together — or null where none is fixed, or no number leaves them all.
+     *
+     * <p>What a search that chooses the value is held to besides the run it is chosen in: the
+     * run's ends are of the class, and a number of the run is of it only where it is looked for in
+     * it.
+     */
+    public Congruences valueClassAt(NumericTerm.ValueOf place) {
+        return residuesFixedAt(place);
+    }
+
+    /**
+     * What the remainders fixed at the position of {@code term} leave {@code term} in, which is the
+     * class the number it is of is held to.
+     */
+    private Congruences residuesFixedAt(NumericTerm term) {
+        if (!(term instanceof NumericTerm.FromOnePosition here)) {
+            return null;
+        }
+        // The divisor this term is a remainder by, or null where it is the value itself or any
+        // other number of the place: the two are told apart because what each is held to is not the
+        // same thing. The value is held to the class the fixed remainder says; a remainder by
+        // another divisor is held to the class of that one the two divisors can agree on.
+        BigInteger own = null;
+        if (term instanceof NumericTerm.TakenOf taken) {
+            own = divisorOfARemainder(taken);
+            if (own == null) {
+                return null;
+            }
+        } else if (!(term instanceof NumericTerm.ValueOf)) {
+            return null;
+        }
+        // The class every fixed remainder leaves the value in together: narrowing by each in turn
+        // would name an end of the run that is of one class and not of the other.
+        Congruences together = null;
+        for (Map.Entry<NumericTerm.TakenOf, BigInteger> each : remaindersPinned().entrySet()) {
+            NumericTerm.TakenOf other = each.getKey();
+            if (other.equals(term) || !other.position().equals(here.position())) {
+                continue;
+            }
+            BigInteger left = each.getValue();
+            BigInteger size = divisorOfARemainder(other);
+            if (size == null) {
+                continue;
+            }
+            // x leaves `left` by `size`, and this remainder is x's by `own`, so it leaves what
+            // `left` leaves by every divisor the two share: no more, and no less by the Chinese
+            // remainder theorem. Two divisors with nothing in common say nothing of each other.
+            BigInteger shared = own == null ? size : own.gcd(size);
+            if (shared.compareTo(BigInteger.ONE) > 0) {
+                Congruences leaves = new Congruences(left, shared);
+                together = together == null ? leaves : together.meet(leaves);
+                // Remainders that no number leaves together are a contradiction `emptiness` says,
+                // and nothing is claimed of the class here.
+                if (together == null) {
+                    return null;
+                }
+            }
+        }
+        return together;
+    }
+
+    /**
+     * The remainders held at one whole number each, by a value fixed there or by a comparison taken
+     * in that says no more than {@code remainder == number}.
+     *
+     * <p>Both are the same fact about the value the remainder is of, and a row reached through the
+     * line of one remainder is as much held to it as a row for which it was fixed.
+     */
+    private Map<NumericTerm.TakenOf, BigInteger> remaindersPinned() {
+        Map<NumericTerm.TakenOf, BigInteger> pinned = new LinkedHashMap<>();
+        for (Map.Entry<NumericTerm, Fixed> each : fixed.entrySet()) {
+            if (each.getKey() instanceof NumericTerm.TakenOf of && each.getValue().isOne()
+                    && each.getValue().least() instanceof Count residue
+                    && residue.exactly().isWhole()
+                    && residue.exactly().floor() instanceof ExactAnswer.Held<BigInteger> whole) {
+                pinned.put(of, whole.value());
+            }
+        }
+        for (Assumed taken : assumed) {
+            if (!(taken instanceof Assumed.OverAForm over) || over.rel() != Rel.EQ
+                    || over.form().coefs().size() != 1) {
+                continue;
+            }
+            Map.Entry<NumericTerm, ExactRatio> only =
+                    over.form().coefs().entrySet().iterator().next();
+            ExactRatio at = over.form().constant().negated();
+            if (only.getKey() instanceof NumericTerm.TakenOf of
+                    && only.getValue().equals(ExactRatio.ONE) && at.isWhole()
+                    && at.floor() instanceof ExactAnswer.Held<BigInteger> whole) {
+                pinned.putIfAbsent(of, whole.value());
+            }
+        }
+        return pinned;
+    }
+
+    /** The magnitude of the divisor {@code taken} is a remainder by, or null where it is no
+     *  remainder or no divisor reads. */
+    private static BigInteger divisorOfARemainder(NumericTerm.TakenOf taken) {
+        return taken.takenAs() instanceof TakenAs.TheFloorRemainder remainder
+                && remainder.read(taken.arguments()) instanceof BigDecimal divisor
+                ? Arithmetic.AFloorRemainder.magnitudeOf(divisor) : null;
     }
 
     /** What the bounds taken in on an order leave each term they are about, met together. Empty
@@ -1715,6 +1870,9 @@ final class ReadQuantities implements Quantities {
             case NumericTerm.FromOnePosition one -> ownOf(one);
             case NumericTerm.TakenOver over ->
                     RunReach.of(over, ordersOf(over), typeAt, ruleReading);
+            // Nothing the rules of the elements say bounds how often one of them occurs besides
+            // the term's own floor, which every term is read with.
+            case NumericTerm.Multiplicity _ -> null;
         };
     }
 

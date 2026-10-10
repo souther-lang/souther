@@ -196,6 +196,11 @@ public final class ReportedReason {
                         UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE;
                 case NO_RELATION_OF_NUMBERS -> UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
             };
+            case BlockReason.NonAffineArithmetic(var operation) -> switch (operation) {
+                case PRODUCT_OF_NON_CONSTANT_VALUES -> UndividedPosition.Reason.NON_AFFINE_PRODUCT;
+                case DIVISION_BY_NON_CONSTANT_VALUE ->
+                        UndividedPosition.Reason.NON_CONSTANT_DIVISOR;
+            };
             case BlockReason.RuleAboutAnElementOfSeveralContainers _ ->
                     UndividedPosition.Reason.RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS;
             case BlockReason.TypeUnresolved _ -> UndividedPosition.Reason.TYPE_UNRESOLVED;
@@ -269,8 +274,8 @@ public final class ReportedReason {
                     UndividedPosition.Reason.UNRESOLVED_CASE_PAIRING;
             case BlockReason.SeveralLinesInOneRule _ ->
                     UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE;
-            case BlockReason.ComparisonBetweenPositions _ ->
-                    UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
+            case BlockReason.ComparisonRelatingTwoValues _ ->
+                    UndividedPosition.Reason.RULE_RELATING_TWO_VALUES;
             // Its own word, because what a reader does about it is different. A rule between two
             // positions is waiting on a class about the pair; a rule about what a run comes to has
             // nothing to wait for — the model divides no position by it, and its border is already
@@ -288,7 +293,7 @@ public final class ReportedReason {
             // gathering values — so the split this compiler needs between the two is a split it
             // keeps to itself, and the two vocabularies still come to one word for one rule.
             case BlockReason.ValueRuleRelatingTwoPositions _ ->
-                    UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
+                    UndividedPosition.Reason.RULE_RELATING_TWO_VALUES;
             // Its own word and not the one above. Both are rules this read to the end that divide
             // nothing, and what a reader may go on to do about them differs: one is waiting on a
             // class about two positions, and the other has nothing to wait for.

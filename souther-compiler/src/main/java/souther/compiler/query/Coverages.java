@@ -6,6 +6,7 @@ import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputQuestion;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.StandingQuestion;
@@ -61,6 +62,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
@@ -886,7 +888,7 @@ final class Coverages {
         List<BorderAssessment> out = new ArrayList<>();
         for (Border each : lines) {
             out.add(assessed(each, reading(subject.at(each), projection, elsewhere(lines, each),
-                            wayTo(each, reaching)),
+                            wayTo(each, reaching), subject.quantities().region()),
                     observed, numbering));
         }
         return List.copyOf(out);
@@ -1195,9 +1197,11 @@ final class Coverages {
             souther.compiler.partition.MeasuredInput.BorderReading line,
             ItemAssessment.WritabilityProjection projection,
             List<souther.compiler.partition.OrderedAffineBoundary> elsewhere,
-            souther.compiler.partition.WayToTheBorder way) {
+            souther.compiler.partition.WayToTheBorder way, SearchRegion declarations) {
         List<ConditionOutcomeSite> site =
                 line.border().origin().recordedAt();
+        Predicate<Map<NumericTerm, Place>> refusedByTheDeclarations =
+                new DeclarationsRefuse(way, declarations);
         return new OneShapeOfBorder() {
 
             @Override
@@ -1209,7 +1213,8 @@ final class Coverages {
             public AnotherLineTheRowsAllow beside(boolean everyPointMet,
                                                   List<ObservedInputs> rows) {
                 return AnotherLineTheRowsAllow.of(line.border(), everyPointMet,
-                        () -> StandingAtAPoint.valuesOf(line, rows, site), elsewhere, way);
+                        () -> StandingAtAPoint.valuesOf(line, rows, site), elsewhere, way,
+                        refusedByTheDeclarations);
             }
 
             // What the position's rules prove answers this border's points only where a row reaches
@@ -1223,6 +1228,39 @@ final class Coverages {
                         : ItemAssessment.WritabilityProjection.NOT_COMPUTED;
             }
         };
+    }
+
+    /**
+     * Whether the declarations of the positions are shown to leave nothing at an input, under the
+     * way to one border.
+     *
+     * <p>The region is an over-approximation of what the declarations allow, so what this says is
+     * the one direction it can: {@code true} is a proof, and {@code false} is no claim that a row
+     * can be written at the input. A way no value takes leaves nothing anywhere.
+     *
+     * <p>Made when the way and the declarations are known and read when an input is asked about:
+     * most borders have no line beside them and never ask, and what is asked more than once is asked
+     * of one region.
+     */
+    private static final class DeclarationsRefuse implements Predicate<Map<NumericTerm, Place>> {
+
+        private final WayToTheBorder way;
+        private final SearchRegion declarations;
+        private Reachability reaching;
+
+        DeclarationsRefuse(WayToTheBorder way, SearchRegion declarations) {
+            this.way = way;
+            this.declarations = declarations;
+        }
+
+        @Override
+        public boolean test(Map<NumericTerm, Place> input) {
+            if (reaching == null) {
+                reaching = Reachability.of(way, declarations);
+            }
+            return !(reaching instanceof Reachability.Reaching able)
+                    || able.region().given(input).emptiness().isPresent();
+        }
     }
 
     /**
@@ -1624,8 +1662,8 @@ final class Coverages {
      * So a reading that was asked answers for both, and two that were both asked and disagree are
      * this compiler saying two things about one measurement.
      */
-    private static AnotherLineTheRowsAllow besides(AnotherLineTheRowsAllow a,
-                                                   AnotherLineTheRowsAllow b) {
+    static AnotherLineTheRowsAllow besides(AnotherLineTheRowsAllow a,
+                                           AnotherLineTheRowsAllow b) {
         // A reading that was asked answers for both, whichever of them could not be asked or could
         // not settle it. Two readings of one line are readings by the same rows, so one of them
         // reaching an answer is the answer.
@@ -1636,6 +1674,13 @@ final class Coverages {
         if (b instanceof AnotherLineTheRowsAllow.CouldNotTell
                 || b instanceof AnotherLineTheRowsAllow.NotDueYet || a.equals(b)) {
             return a;
+        }
+        // The same line, and the input each names is its reading's own: the way to the border and
+        // the declarations a reading holds decide which input is one a row arrives at. A reading
+        // that named none has nothing to say against one that did.
+        if (a instanceof AnotherLineTheRowsAllow.OneDoes one
+                && b instanceof AnotherLineTheRowsAllow.OneDoes other && one.isTheLineOf(other)) {
+            return one.tellsApartAt() != null ? one : other;
         }
         throw new IllegalStateException("two readings of one line disagreeing about which lines"
                 + " the rows leave standing beside it: " + a + " and " + b);
@@ -1946,7 +1991,8 @@ final class Coverages {
         for (Border each : partitioning.between()) {
             out.add(assessed(each, reading(subject.at(each),
                             ItemAssessment.WritabilityProjection.NOT_COMPUTED,
-                            elsewhere(partitioning.between(), each), wayTo(each, reaching)),
+                            elsewhere(partitioning.between(), each), wayTo(each, reaching),
+                            subject.quantities().region()),
                     observed, numbering));
         }
         return List.copyOf(out);

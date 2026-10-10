@@ -36,6 +36,15 @@ public final class BoundUnderEvaluation {
         return Strings.admission(text, EvaluationContext.checkpoint());
     }
 
+    /**
+     * {@code text} as the language holds it, which is how text is let in everywhere, or null where
+     * no {@code String} is that text: it is not a sequence of scalar values, or its canonical form
+     * has no place.
+     */
+    public static String heldAs(String text) {
+        return admission(text) instanceof TextAdmission.Admitted held ? held.text() : null;
+    }
+
     public static String admit(String text) {
         return Strings.admit(text, EvaluationContext.checkpoint());
     }

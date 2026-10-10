@@ -168,8 +168,8 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
         out.put(UndividedPosition.Reason.UNSUPPORTED_SYNTAX, of("""
                 module m
                 %s
-                behavior f : (n: Int) -> Answer
-                let f (n) = if n * n > 4 then Yes else No
+                behavior f : (x: Decimal) -> Answer
+                let f (x) = if x < Decimal.round(1, HALF_UP, 3.5m) then Yes else No
                 """.formatted(ANSWER)));
         // A rule whose end at a position rests on an alternative this compiler does not read. The
         // clause at the position was read and places its end; what the choice leaves is as far out
@@ -299,7 +299,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 let f (a, n) = if Int.max(a, a + n.value) > 5 then Yes else No
                 """.formatted(ANSWER)));
         // A line between two positions, which divides neither.
-        out.put(UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE, of("""
+        out.put(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES, of("""
                 module m
                 %s
                 behavior f : (a: Int, b: Int) -> Answer
@@ -350,14 +350,28 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior run : (x: Cyclic) -> Ok
                 let run (x) = Ok
                 """));
+        // A comparison over a product of two input fields, and over a quotient by one: the
+        // arithmetic met a shape it has no term for, and nothing was made of either position.
+        out.put(UndividedPosition.Reason.NON_AFFINE_PRODUCT, of("""
+                module m
+                %s
+                behavior f : (a: Int, b: Int) -> Answer
+                let f (a, b) = if a * b > 10 then Yes else No
+                """.formatted(ANSWER)));
+        out.put(UndividedPosition.Reason.NON_CONSTANT_DIVISOR, of("""
+                module m
+                %s
+                behavior f : (a: Int, b: Int) -> Answer
+                let f (a, b) = if a / b > 10 then Yes else No
+                """.formatted(ANSWER)));
         // A rule about a value an operation made of the positions. Where the value came from is
-        // known; what the rule says about the values at either position is not, because the minutes
-        // between two moments are not the difference of the two counts.
+        // known; what the rule says about the values at either position is not, because a remainder
+        // by a divisor no constant gives is no period the positions can be told apart by.
         out.put(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE, of("""
                 module m
                 %s
-                behavior f : (a: DateTime, b: DateTime) -> Answer
-                let f (a, b) = if DateTime.minutesBetween(a, b) > 10 then Yes else No
+                behavior f : (a: Int, b: Int) -> Answer
+                let f (a, b) = if Int.floorMod(a, b) > 10 then Yes else No
                 """.formatted(ANSWER)));
         // One block written once and handed to two walks. The name it reads the element under
         // holds an element of a different container on each run, so the rule inside it is about one
@@ -414,17 +428,23 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior f : (n: N) -> Answer
                 let f (n) = if n.value < 0 - 5 then Yes else No
                 """.formatted(ANSWER)));
-        // A comparison through a choice between two constructions. Each arm answers one number,
-        // and the step that composes the comparison through the arms is not written yet.
+        // A comparison over nine values each chosen by cases, read once for each way the cases
+        // can fall: more readings than one condition is read on.
         out.put(UndividedPosition.Reason.RULE_MEANING_NOT_READ, of("""
                 module m
                 %s
-                data Big = { threshold: Int }
-
                 behavior f : (n: Int) -> Answer
                 let f (n) = {
-                    let k = if n > 0 then Big { threshold = 100 } else Big { threshold = 200 }
-                    if n >= k.threshold then Yes else No
+                    let a = if n > 1 then 1 else 0
+                    let b = if n > 2 then 1 else 0
+                    let c = if n > 3 then 1 else 0
+                    let d = if n > 4 then 1 else 0
+                    let e = if n > 5 then 1 else 0
+                    let g = if n > 6 then 1 else 0
+                    let h = if n > 7 then 1 else 0
+                    let i = if n > 8 then 1 else 0
+                    let j = if n > 9 then 1 else 0
+                    if a + b + c + d + e + g + h + i + j > n then Yes else No
                 }
                 """.formatted(ANSWER)));
         // And a line the declarations do leave values at, that no row arriving at the comparison

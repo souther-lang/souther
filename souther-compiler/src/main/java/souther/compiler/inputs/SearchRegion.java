@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -203,6 +204,18 @@ public interface SearchRegion {
      * <p>Within a region that holds something, a {@code null} end is one nothing bounds.
      */
     NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form);
+
+    /**
+     * The class of whole numbers the remainders already fixed leave the value at {@code place} in
+     * together, or null where none is fixed or no number leaves them all.
+     *
+     * <p>{@link #projectionOf} says where the value runs and not which numbers of the run it may be:
+     * a search that chooses it is held to this as well. A region that fixes no remainder says
+     * nothing of one, which is what the default is.
+     */
+    default Congruences valueClassAt(NumericTerm.ValueOf place) {
+        return null;
+    }
 
     /** The same, of one term — the one-term case of the question above and not a second answer to
      *  it. */

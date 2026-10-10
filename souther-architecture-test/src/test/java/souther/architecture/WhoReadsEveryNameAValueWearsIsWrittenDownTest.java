@@ -133,6 +133,12 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "RealizationTarget$OfANumber;Ljava/util/List;L" + INPUTS
                             + "SearchRegion;" + CONTEXT + ")" + REALIZATION,
                     THE_POSITION),
+            row(PARTITION + "CardinalityComposer", "composeAlike",
+                    "(" + TYPE + "L" + PARTITION + "RealizationTarget$OfANumber;L" + PARTITION
+                            + "RealizationTarget$OfANumber;Ljava/util/SequencedMap;L" + INPUTS
+                            + "Quantities;L" + INPUTS + "SearchRegion;" + CONTEXT + ")"
+                            + REALIZATION,
+                    THE_POSITION),
             row(PARTITION + "ConstructionPlan", "applying",
                     "(L" + PARTITION + "ConstructionPlan$Settled;L" + INPUTS + "Refinement;" + INNERS
                             + SYMBOLS + KINDS + SUMS + ")L" + PARTITION
@@ -197,6 +203,15 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "TermRealizations", "oneValue",
                     "(L" + PARTITION + "FixtureTemplate;" + TYPE + SOURCE + ")" + REALIZATION,
+                    THE_POSITION),
+            row(PARTITION + "TermRealizations", "stringsHoldingThatManyOf",
+                    "(Lsouther/compiler/semantics/CodePointClass;" + TYPE
+                            + "Lsouther/compiler/numeric/Place;" + CONTEXT + ")" + REALIZATION,
+                    THE_POSITION),
+            row(PARTITION + "TermRealizations", "stringsHoldingTheirCounts",
+                    "(Ljava/util/Map;" + TYPE + "Ljava/util/SequencedMap;"
+                            + "Lsouther/compiler/inputs/SearchRegion;" + CONTEXT + ")"
+                            + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "ValuesCarryingANumber", "at",
                     "(L" + PARTITION + "ConstructionPlan$Slot;)L" + PARTITION + "FixtureTemplate;",

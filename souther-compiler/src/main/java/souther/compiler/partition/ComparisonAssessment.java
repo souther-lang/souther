@@ -29,6 +29,7 @@ import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * What one comparison comes to on the input space: one reading, and everything read off it.
@@ -122,6 +123,19 @@ sealed interface ComparisonAssessment {
          *  positions, which is a different thing to tell a reader who found no partition. */
         boolean overARun() {
             return cutting.of().readOverARun();
+        }
+    }
+
+    /**
+     * Read to the end, the comparison relates numbers of the input to a value no position holds,
+     * so it divides none of them ({@link Cutting.Read.AgainstAnotherValue}).
+     *
+     * @param filedAt the coordinates of the input's numbers it relates
+     */
+    record AgainstAnotherValue(List<FilingCoordinate> filedAt) implements ComparisonAssessment {
+
+        public AgainstAnotherValue {
+            filedAt = List.copyOf(filedAt);
         }
     }
 
@@ -392,14 +406,12 @@ sealed interface ComparisonAssessment {
                 conditions);
         return switch (cut) {
             case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
-                 Cutting.Read.NumberNoRatioHolds _ ->
-                    aLine(cut, at, comparison, reads, read, drawnByAnInvariant);
+                 Cutting.Read.NumberNoRatioHolds _ -> aLine(cut, at, read, drawnByAnInvariant,
+                    () -> aboutNoPosition(comparison, reads, read.newtypes()));
             // One rule and a line for each relation it holds, each line read as a comparison of
             // one line is and carrying where it decides.
-            case Cutting.Read.Several several -> new Several(several.parts().stream()
-                    .map(part -> new Several.Part(part.id(), aLine(part.line(), at, comparison,
-                            reads, read, drawnByAnInvariant), part.cases()))
-                    .toList());
+            case Cutting.Read.Several several -> eachLineOf(several, at, read, drawnByAnInvariant,
+                    () -> aboutNoPosition(comparison, reads, read.newtypes()));
             // Read to the end and cutting nothing, which is a fact about the rule and not a limit
             // of this compiler: `a <= a` holds of every row. Where the comparison names no position
             // either, there is no rule about a position to say it of — `2 > 1` is a comparison of
@@ -411,8 +423,12 @@ sealed interface ComparisonAssessment {
             // the decision table's. A number of an answer is no number of the input, so this reading
             // stops at it however the comparison was written, and the stop is about whose subject
             // the comparison is rather than about a form this compiler does not read.
-            case Cutting.Read.Stopped _ when dependencies.comparison(comparison, reads) ->
-                    new OnADependencysAnswer();
+            case Cutting.Read.Stopped _, Cutting.Read.AgainstAnotherValue _
+                    when dependencies.comparison(comparison, reads) -> new OnADependencysAnswer();
+            // A relation of the input to another value, read to the end, which the rule is and
+            // nothing short of it.
+            case Cutting.Read.AgainstAnotherValue against ->
+                    new AgainstAnotherValue(against.over());
             // And where the reading stopped, its own answer for having stopped — decided where it
             // stopped rather than worked out again from the comparison afterwards — and where the
             // values a side holds came from, at each place it did not already answer. Here the walk
@@ -430,9 +446,9 @@ sealed interface ComparisonAssessment {
      * <p>The one reading of a line, whether the comparison states one or a statement holds it
      * among several.
      */
-    private static ComparisonAssessment aLine(Cutting.Read line, Citation at,
-                                              StatedComparison comparison, InputReads reads,
-                                              InputReading read, boolean drawnByAnInvariant) {
+    private static ComparisonAssessment aLine(Cutting.Read line, Citation at, InputReading read,
+                                              boolean drawnByAnInvariant,
+                                              Supplier<ComparisonAssessment> aboutNoPosition) {
         return switch (line) {
             case Cutting.Read.Cuts cuts ->
                     onTheQuantity(at, cuts.cutting(), read.quantities(), drawnByAnInvariant);
@@ -442,18 +458,52 @@ sealed interface ComparisonAssessment {
             // left when several answers were absent: it says the values here carry no order to
             // draw a line on, and that is exactly what was found.
             case Cutting.Read.NoOrderToCountOn over -> over.over().isEmpty()
-                    ? aboutNoPosition(comparison, reads, read.newtypes())
+                    ? aboutNoPosition.get()
                     : new Unread(atEachOf(over.over(),
                             new BlockReason.UnreadComparisonDomain()));
             // And where the quantity was read, counts, and draws a line that falls at a number no
             // exact ratio holds. The same coordinates as the case above and a reason of its own:
             // what stopped it is a constant the rule is written with, and not the order beneath.
             case Cutting.Read.NumberNoRatioHolds over -> over.over().isEmpty()
-                    ? aboutNoPosition(comparison, reads, read.newtypes())
+                    ? aboutNoPosition.get()
                     : new Unread(atEachOf(over.over(),
                             new BlockReason.LineAtANumberNoRatioHolds()));
-            case Cutting.Read.CutsNothing _, Cutting.Read.Stopped _, Cutting.Read.Several _ ->
+            case Cutting.Read.CutsNothing _, Cutting.Read.Stopped _, Cutting.Read.Several _,
+                 Cutting.Read.AgainstAnotherValue _ ->
                     throw new IllegalArgumentException("one line is drawn or refused: " + line);
+        };
+    }
+
+    /** The same, for each line of a statement of several, carrying where each decides. */
+    private static ComparisonAssessment eachLineOf(Cutting.Read.Several lines, Citation at,
+                                                   InputReading read, boolean drawnByAnInvariant,
+                                                   Supplier<ComparisonAssessment> aboutNoPosition) {
+        return new Several(lines.parts().stream()
+                .map(part -> new Several.Part(part.id(), aLine(part.line(), at, read,
+                        drawnByAnInvariant, aboutNoPosition), part.cases()))
+                .toList());
+    }
+
+    /**
+     * What an application of an operation states comes to on the input space
+     * ({@link Cutting#ofAnApplication}): its lines, or the values it relates.
+     *
+     * <p>Every line of it is over the input's numbers, so each is somewhere: a line on no position
+     * is a comparison of constants, and an application's statement read to the end holds none.
+     */
+    static ComparisonAssessment ofAnApplication(Cutting.Read answered, Citation at,
+                                                InputReading read) {
+        return switch (answered) {
+            case Cutting.Read.Several lines -> eachLineOf(lines, at, read, false, () -> {
+                throw new IllegalStateException(
+                        "a line an application states at " + at + " is over the input's numbers");
+            });
+            case Cutting.Read.AgainstAnotherValue related ->
+                    new AgainstAnotherValue(related.over());
+            case Cutting.Read.Cuts _, Cutting.Read.CutsNothing _, Cutting.Read.Stopped _,
+                 Cutting.Read.NoOrderToCountOn _, Cutting.Read.NumberNoRatioHolds _ ->
+                    throw new IllegalArgumentException(
+                            "an application states lines or values it relates: " + answered);
         };
     }
 
@@ -607,7 +657,7 @@ sealed interface ComparisonAssessment {
             case TurnsNothing turns -> turns.cutting();
             case NoFeasibleInput none -> none.cutting();
             case AnswerDependent _, OnADependencysAnswer _, NoInput _, CutsNothing _, Unread _,
-                 Several _ -> throw new IllegalArgumentException(
+                 AgainstAnotherValue _, Several _ -> throw new IllegalArgumentException(
                          "a reading that drew no line is about none: " + line);
         };
     }
@@ -774,6 +824,7 @@ sealed interface ComparisonAssessment {
             case NoFeasibleInput none -> none.cutting().over();
             case Unread unread -> List.copyOf(unread.why().keySet());
             case CutsNothing cuts -> cuts.filedAt();
+            case AgainstAnotherValue against -> against.filedAt();
             // Where each of its lines is filed, each place once: one rule, and its lines are what
             // it is about.
             case Several several -> several.parts().stream()
@@ -828,7 +879,11 @@ sealed interface ComparisonAssessment {
             // terms, since a form of one term is either.
             case AcrossPositions across -> sameAtEachPlace(across.overARun()
                     ? new BlockReason.ComparisonOverARun()
-                    : new BlockReason.ComparisonBetweenPositions());
+                    : new BlockReason.ComparisonRelatingTwoValues());
+            // Another value is no position, and what the rule says is the same thing it says
+            // against one: where the value here stands against it.
+            case AgainstAnotherValue _ ->
+                    sameAtEachPlace(new BlockReason.ComparisonRelatingTwoValues());
             case CutsNothing _ -> sameAtEachPlace(new BlockReason.ComparisonCuttingNothing());
             case OutsideTheDomain _ -> sameAtEachPlace(OutsideTheDomain.leaves());
             // Not the reason above: there the declarations never run as far as the line, and here
@@ -914,7 +969,7 @@ sealed interface ComparisonAssessment {
             case Several several -> several.parts().stream()
                     .anyMatch(part -> part.line().drawsABorder());
             case AnswerDependent _, OnADependencysAnswer _, NoInput _, CutsNothing _,
-                 OutsideTheDomain _, TurnsNothing _,
+                 AgainstAnotherValue _, OutsideTheDomain _, TurnsNothing _,
                  NothingArrivesAtItsLine _, NoFeasibleInput _, Unread _ -> false;
         };
     }

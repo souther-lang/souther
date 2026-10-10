@@ -5,10 +5,14 @@ import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeOps;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.semantics.TakenArguments;
@@ -16,6 +20,8 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.Objects;
+import java.util.Optional;
 import java.util.function.UnaryOperator;
 
 /**
@@ -45,7 +51,8 @@ import java.util.function.UnaryOperator;
  * operation. An operation added to the language is read by everything here without a line being
  * written for it.
  */
-public sealed interface NumericTerm permits NumericTerm.FromOnePosition, NumericTerm.TakenOver {
+public sealed interface NumericTerm
+        permits NumericTerm.FromOnePosition, NumericTerm.TakenOver, NumericTerm.Multiplicity {
 
     /**
      * A number a row can be asked for at one place, because one value stands there.
@@ -56,7 +63,8 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      * a search for a row need, and it is a capability rather than a shape: a reader that has one of
      * these may act on the position, and a reader holding a bare {@link NumericTerm} may not.
      */
-    sealed interface FromOnePosition extends NumericTerm permits ValueOf, TakenOf {
+    sealed interface FromOnePosition extends NumericTerm
+            permits ValueOf, TakenOf, CodePointClassCount {
 
         /**
          * The single input position this term is read from.
@@ -264,6 +272,156 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
     }
 
     /**
+     * How many of the code points of the string a location holds are in a class: the ones that are
+     * not whitespace, or that are neither whitespace nor one separator.
+     *
+     * <p>A number a rule can be about without any operation of the language answering it. What
+     * {@code String.trim} leaves of a string holds something exactly where this is above nought,
+     * and the pieces a split by one code point leaves hold something between them under the same
+     * condition, so a rule about either is a rule about this count of the string it was made from.
+     * Nothing the language declares is a taking of it: a term {@link TakenOf} stands for is an
+     * operation's answer, this is a quantity the reading works out, and the two are kept apart so
+     * that a taking is still only of an operation that declares one.
+     *
+     * <p>Counted by what the run time counts by: in scalar values, against the one whitespace
+     * alphabet the library's own operations scan with ({@link CodePointClass}).
+     *
+     * <p>Only of a string. The number a count of one string's code points comes to is bounded by
+     * the string's own length, and where a rule is also drawn on that length the two are one
+     * string's numbers and are realized together.
+     */
+    final class CodePointClassCount implements FromOnePosition {
+
+        private final TermPath position;
+        private final CodePointClass counted;
+
+        private CodePointClassCount(TermPath position, CodePointClass counted) {
+            this.position = Objects.requireNonNull(position, "counted of somewhere");
+            this.counted = Objects.requireNonNull(counted, "and of some code points");
+        }
+
+        /**
+         * The count of the code points of the string at {@code position} that are in
+         * {@code counted}, or null where what stands there is no string.
+         *
+         * <p>Asked of what the names wrap, as a taking is: a name around a string is still one.
+         */
+        public static CodePointClassCount of(TermPath position, CodePointClass counted, Type at,
+                                             NewtypeInners inners) {
+            return at != null && TypeOps.base(at, inners) == Type.STRING
+                    ? new CodePointClassCount(position, counted) : null;
+        }
+
+        /** The code points this counts. */
+        public CodePointClass counted() {
+            return counted;
+        }
+
+        @Override
+        public TermPath position() {
+            return position;
+        }
+
+        @Override
+        public CodePointClassCount movedTo(UnaryOperator<TermPath> moved) {
+            return new CodePointClassCount(moved.apply(position), counted);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof CodePointClassCount count
+                    && position.equals(count.position) && counted.equals(count.counted);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(position, counted);
+        }
+
+        @Override
+        public String toString() {
+            return "#(" + counted + ")(" + position + ")";
+        }
+    }
+
+    /**
+     * How many elements of a container hold, at one place inside the element, the value the
+     * element under consideration holds there.
+     *
+     * <p>A number of an element, read off the container it stands in: every element of a list of
+     * keys is a key, and it occurs as many times as the list holds that key. What a fold that files
+     * a counter under each key answers for the key of an element is this number, shifted and scaled
+     * by what the fold starts the counter at and adds to it. Nothing the language declares takes
+     * it of a value — it is a quantity the reading works out — so it is kept apart from
+     * {@link TakenOf}, which is only ever an operation's answer.
+     *
+     * <p>The element is whichever one a statement about some element of the container is about, so
+     * this is one number for each element and no number of the container. Two elements holding the
+     * same value at {@code place} read the same number, and every element reads at least one, since
+     * it is one of those it counts.
+     */
+    final class Multiplicity implements NumericTerm {
+
+        private final TermPath container;
+        private final TermPath place;
+
+        private Multiplicity(TermPath container, TermPath place) {
+            this.container = Objects.requireNonNull(container, "counted among a container's elements");
+            this.place = Objects.requireNonNull(place, "by the value standing at a place");
+        }
+
+        /**
+         * The number of times the value at {@code place} occurs among the elements of
+         * {@code container}, or null where {@code place} is not inside an element of it.
+         *
+         * @param container the container whose elements are counted
+         * @param place     where, inside an element of {@code container}, the value compared stands
+         */
+        public static Multiplicity of(TermPath container, TermPath place) {
+            return container != null && place != null && place.isAtOrUnder(container.element())
+                    ? new Multiplicity(container, place) : null;
+        }
+
+        /** The container whose elements are counted. */
+        public TermPath container() {
+            return container;
+        }
+
+        /** Where the value compared stands, inside an element of {@link #container()}. */
+        public TermPath place() {
+            return place;
+        }
+
+        /** Where the value compared stands, which is where a reader is sent and no place the
+         *  number stands at. */
+        @Override
+        public TermPath subjectPath() {
+            return place;
+        }
+
+        @Override
+        public Multiplicity movedTo(UnaryOperator<TermPath> moved) {
+            return new Multiplicity(moved.apply(container), moved.apply(place));
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Multiplicity that
+                    && container.equals(that.container) && place.equals(that.place);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(container, place);
+        }
+
+        @Override
+        public String toString() {
+            return "multiplicity(" + place + ")";
+        }
+    }
+
+    /**
      * A number an operation took over a run of values, which no single position answers.
      *
      * <p>The dual of {@link TakenOf} and named for it: one takes a number of the value at a place,
@@ -335,7 +493,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
          *  is not. */
         @Override
         public TakenOver movedTo(UnaryOperator<TermPath> moved) {
-            RunSource at = RunSource.overTheOccurrencesAt(moved.apply(source.subjectPath()));
+            RunSource at = source.movedTo(moved);
             return at == null ? null : new TakenOver(operation, at);
         }
 
@@ -408,6 +566,9 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             // A run of values is answered by no single place, which is the whole of what this term
             // is. Every reader that goes on to draw a line or ask for a value gets the answer here.
             case TakenOver _ -> null;
+            // And how often a value occurs among its neighbours is read off all of them, so no
+            // value standing at one place is it.
+            case Multiplicity _ -> null;
         };
     }
 
@@ -434,11 +595,16 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             // quotient is the one its divisor says, and a taking given none is no quotient.
             case TakenOf taken -> TakenOf.of(taken.operation(), other, taken.arguments(), at,
                     inners, symbols);
+            case CodePointClassCount count ->
+                    CodePointClassCount.of(other, count.counted(), at, inners);
             // What moves here is where a number is taken, and a run is not taken anywhere: its
             // values come from a place inside a container, and the name that would move is the
             // container's. Answered as "not there" rather than by rebuilding the run at a
             // location, which would be this reading inventing where a walk got its values.
             case TakenOver _ -> null;
+            // How often a value occurs is read off the container it stands in, so a place moved
+            // alone is a count of some other container's elements.
+            case Multiplicity _ -> null;
         };
     }
 
@@ -457,19 +623,25 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      * (#1016). Nor is it read off what the operation takes: every operation sharing an account of
      * what it takes would carry one bound, which is the same defect one level along.
      *
-     * <p>Read with nothing said about the arguments, because a term of this kind carries none: what
-     * a size is taken of is a container and what a magnitude is taken of is the one number, and a
-     * bound may only name an argument that is a number ({@code check.OperationFactBinder}), so
-     * an operation like these declares no row that names one. A term whose operation does take
-     * numbers would have to answer them here rather than be read the same way and quietly come back
-     * wider.
+     * <p>A taking is read with what it was given beside the value, which is what a bound stated
+     * under a divisor reads: a remainder by seven lies from nought up to seven, and by an unknown
+     * divisor lies nowhere in particular. A taking over a run carries none, because what a total is
+     * taken of is a container, and an operation like that declares no row that names one.
      */
     default NumericDomain.Bounds intrinsicBounds() {
         return switch (this) {
             case ValueOf _ -> NumericDomain.Bounds.OPEN;
             case TakenOf taken -> ResultRange.of(
                     DefaultBoundOperationFacts.get().boundsOnTheResult(taken.operation()),
-                    ConstantArguments.none());
+                    argument -> Optional.ofNullable(taken.arguments().at(argument.position())));
+            // A count of some of a string's code points is never negative, as how many it holds is
+            // not. What it is at most is the string's own length, which is another number of the
+            // same place and is held where the two are realized together.
+            case CodePointClassCount _ ->
+                    new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+            // An element is one of the elements it counts, so there is always at least one.
+            case Multiplicity _ ->
+                    new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)), null);
             // Asked of the operation, as a taking is. That a total of non-negative amounts is
             // itself non-negative is not among the answers: it follows from what the values the run
             // walks guarantee, together with the value the operation starts from and the step it

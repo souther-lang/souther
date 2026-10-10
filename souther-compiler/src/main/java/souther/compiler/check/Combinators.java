@@ -1,11 +1,16 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
-import souther.compiler.stdlib.Stdlib;
-import souther.compiler.semantics.Combinator;
-import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
+import souther.compiler.proof.AppliedClosures;
+import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.ClosurePositions;
+import souther.compiler.semantics.Combinator;
+import souther.compiler.semantics.ElementLineage;
+import souther.compiler.semantics.HowAClosureIsApplied;
+import souther.compiler.semantics.SizeAgainstItsSource;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -15,6 +20,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Which library operations hand a closure the contents of a container, and where: the closure is
@@ -28,26 +34,41 @@ import java.util.Set;
  * analyzed rather than left opaque. What each does with the answer is its own; what it asks is one
  * question about the operation.
  *
- * <p>Nothing here is written down. The library's own signature already says which argument takes a
- * function and which parameter of that function has the type of what a container holds, so the rules
- * are read off {@link Stdlib}: an operation the library gains is answered for by being declared. A
- * signature this cannot read off — two function arguments, or two closure parameters that could each
- * be the element — raises rather than answering half, because a combinator nobody registered is a
- * check that quietly stops crediting an element.
+ * <p>Two halves, from two places. Where the closure and the container are is read off the library's
+ * signature ({@link #positionsOf}): the argument that takes a function, and the parameter of it
+ * whose type is the type of what a container holds. That the operation hands the closure anything
+ * at all, which container, and how far it goes, a signature does not say — an operation of that type
+ * could apply its closure once, or never. So that half is read off the operation's body where it
+ * has one ({@link AppliedClosures}), and declared of a kernel where it has none ({@link #KERNELS}),
+ * held there to what the kernel computes by a test that runs it. An operation answered by neither
+ * hands its closure nothing this says, whatever its signature.
  *
  * <p>Each reader asks under the name it holds. The totality check reads the tree an author wrote,
  * where {@code List.fold} still spells itself; the discharge check reads one where the rewrite to
  * {@code List.foldFrom} has happened. So a {@linkplain Stdlib#rewrites() sugared} name is answered
- * with what it rewrites to, over the arguments the rewrite keeps in place — and the discharge side
- * never asks, because {@link Preserved} is built from declarations and a sugar has none.
+ * with what it rewrites to, over the arguments the rewrite keeps in place.
  */
 final class Combinators {
 
     /** What {@code operation} hands its closure, or null where it hands one nothing a container
-     * holds — including where it applies no closure at all, and where the name applied is not a
-     * library operation. */
+     * holds — including where it applies no closure at all, where nothing establishes that it
+     * applies the one it takes, and where the name applied is not a library operation. */
     static Combinator of(ValueName operation) {
-        return operation == null ? null : Derived.RULES.get(operation);
+        return operation instanceof ValueName.Stdlib.Operation library
+                ? Derived.RULES.get(library) : null;
+    }
+
+    /**
+     * Where {@code operation}'s signature puts a closure and a container whose contents it could be
+     * handed, or null where the signature puts none.
+     *
+     * <p>Places and nothing else, for a reader that has a fact to hold to the arguments it names:
+     * which argument "the container" of a fact is depends on the signature and not on what the
+     * operation does with it.
+     */
+    static ClosurePositions positionsOf(ValueName operation) {
+        return operation instanceof ValueName.Stdlib.Operation library
+                ? Positions.RULES.get(library) : null;
     }
 
     /** What a call hands its closure: the argument that takes the function, the block that argument
@@ -80,8 +101,7 @@ final class Combinators {
      * its own answer about what a name stands for. What the operation hands over does not differ, so
      * it is read once here and the difference is a parameter.
      */
-    static Handed handedTo(Core.PreservedCall call,
-                           java.util.function.Function<Core, Core.Block> blockOf) {
+    static Handed handedTo(Core.PreservedCall call, Function<Core, Core.Block> blockOf) {
         return handedTo(call.operation(), call.args(), blockOf);
     }
 
@@ -92,12 +112,14 @@ final class Combinators {
      * table has anything to say about: the rule is about the operation, and the arguments are the
      * arguments. So the question is asked once, of the two things it is about, and a reader holding
      * either shape hands over the operation it resolved to and the arguments it carries.
+     *
+     * <p>An operation that hands its closure the elements from an index it is handed hands them all
+     * only where that index is nought, and is answered for nowhere else.
      */
-    static Handed handedTo(ValueName operation, List<Core> args,
-                           java.util.function.Function<Core, Core.Block> blockOf) {
+    static Handed handedTo(ValueName operation, List<Core> args, Function<Core, Core.Block> blockOf) {
         Combinator rule = of(operation);
         if (rule == null || rule.closureArg() >= args.size()
-                || rule.containerArg() >= args.size()) {
+                || rule.containerArg() >= args.size() || !fromTheFirst(rule, args)) {
             return null;
         }
         Core closure = args.get(rule.closureArg());
@@ -109,6 +131,14 @@ final class Combinators {
         return new Handed(closure, step, step.params().get(rule.elementParam()),
                 args.get(rule.containerArg()),
                 rule.handsAKey() ? step.params().get(rule.keyParam()) : null, rule.applied());
+    }
+
+    /** Whether a call hands its closure the container's elements from the first. */
+    private static boolean fromTheFirst(Combinator rule, List<Core> args) {
+        return rule.startsFrom() == Combinator.FROM_THE_FIRST
+                || (rule.startsFrom() < args.size()
+                && Core.withoutStanding(args.get(rule.startsFrom())) instanceof Core.Int from
+                && from.value() == 0);
     }
 
     /**
@@ -123,13 +153,6 @@ final class Combinators {
      * what is said about the arity of {@code List.fold} is said against the call it becomes, and by
      * then this has already read it. Nothing about arguments or parameters a call does not have is
      * true, so nothing is said, and the arity is reported by the check whose question it is.
-     *
-     * <p>The tree a representation keeps standing needs the first of those answers and not the
-     * second, and the two come from different places. A {@code PreservedCall} has the arguments its
-     * declaration takes, so the argument positions this table names are positions it has — that is
-     * the node's own and holds however one was built. What stands in the closure argument having as
-     * many parameters as the rule reaches for is a separate matter, settled where the block was
-     * typed against the signature; nothing about a call says it.
      */
     static Written handedTo(Hir.Apply call) {
         // A call applying a name nothing declares hands its closure to no operation this table
@@ -141,6 +164,12 @@ final class Combinators {
                 || !(call.args().get(rule.closureArg()) instanceof Hir.Block step)) {
             return null;
         }
+        if (rule.startsFrom() != Combinator.FROM_THE_FIRST
+                && (rule.startsFrom() >= call.args().size()
+                || !(call.args().get(rule.startsFrom()) instanceof Hir.IntLit(long from, var _, var _))
+                || from != 0)) {
+            return null;
+        }
         if (rule.elementParam() >= step.params().size()) {
             return null;
         }
@@ -148,61 +177,144 @@ final class Combinators {
                 call.args().get(rule.containerArg()));
     }
 
-    /** The operations a rule was read off. */
+    /** What every operation it is established hands its closure what a container holds hands it. */
+    static Map<ValueName.Stdlib.Operation, Combinator> all() {
+        return Derived.RULES;
+    }
+
+    /** The operations it is established hand their closure what a container holds. */
     static Set<ValueName> answered() {
-        return Derived.RULES.keySet();
+        return Collections.unmodifiableSet(Derived.RULES.keySet());
     }
 
     /** The operations there is a rule for, for the tests that hold them to firing. Handed over as
      *  the operations, so a reader holding one asks the library with it rather than with a spelling
      *  this rendered on the way out. */
     static Set<ValueName.Stdlib.Operation> named() {
-        Set<ValueName.Stdlib.Operation> named = new LinkedHashSet<>();
-        Derived.RULES.keySet().forEach(operation -> {
-            if (operation instanceof ValueName.Stdlib.Operation library) {
-                named.add(library);
-            }
-        });
-        return named;
+        return Collections.unmodifiableSet(new LinkedHashSet<>(Derived.RULES.keySet()));
     }
 
     /**
-     * The operations that stop applying their closure before the last element, and where.
+     * How far each kernel that takes a closure goes applying it.
      *
-     * <p>Written down, since a signature says what a closure is handed and not when it stops being
-     * handed anything. Every other operation applies it to every element. Which of the two each
-     * operation is, is held to what the library computes by a test that runs every operation whose
-     * closure answers a truth on a container whose second element aborts the closure.
+     * <p>An axiom about each, since a kernel has no body to read it off. Where the closure and the
+     * container are is still its signature's to say; this says only that it is applied, and how
+     * far. Every entry is held to what the kernel computes by a test that runs it.
      */
-    private static final Map<ValueName, HowAClosureIsApplied> STOPPING = Map.of(
-            ValueName.Stdlib.operation("List", "any"), HowAClosureIsApplied.UNTIL_ONE_HOLDS,
+    private static final Map<ValueName.Stdlib.Operation, HowAClosureIsApplied> KERNELS = Map.of(
             ValueName.Stdlib.operation("List", "find"), HowAClosureIsApplied.UNTIL_ONE_HOLDS,
-            ValueName.Stdlib.operation("List", "all"), HowAClosureIsApplied.UNTIL_ONE_FAILS);
+            ValueName.Stdlib.operation("List", "sortBy"), HowAClosureIsApplied.TO_EVERY_ELEMENT,
+            ValueName.Stdlib.operation("Option", "map"), HowAClosureIsApplied.TO_EVERY_ELEMENT);
 
-    /** Read off the library on the first ask. The library is the same library for every module
-     * compiled, and reading it is answering the question for all of them at once. */
-    private static final class Derived {
-        private static final Map<ValueName, Combinator> RULES =
-                read(DefaultStdlib.get());
+    /**
+     * What kernels answer of their arguments that no fact about what they build says: a list of
+     * every element of a set, each once; an option holding, where it holds anything, one value of a
+     * map.
+     *
+     * <p>An axiom about each, as {@link #KERNELS} is, and held to what the kernel computes the same
+     * way. Read where a body hands its closure what such an answer holds.
+     */
+    private static final Map<ValueName.Stdlib.Operation, AppliedClosures.Listing> LISTED = Map.of(
+            ValueName.Stdlib.operation("Set", "toList"),
+            new AppliedClosures.Listing.EveryElementOf(0, true),
+            ValueName.Stdlib.operation("Map", "get"),
+            new AppliedClosures.Listing.AtMostOneElementOf(1));
+
+    /** The places, read off the library's signatures on the first ask. */
+    private static final class Positions {
+        private static final Map<ValueName.Stdlib.Operation, ClosurePositions> RULES =
+                positions(DefaultStdlib.get());
     }
 
-    /** A pure function of the library, so the holder above is the only thing here that reaches for
-     *  the process's own — {@link souther.compiler.DefaultStdlib} says who may and why the loader
-     *  may not. */
-    private static Map<ValueName, Combinator> read(Stdlib stdlib) {
-        Map<ValueName, Combinator> rules = new LinkedHashMap<>();
+    /** What each operation does with them, read off the library on the first ask. The library is
+     *  the same library for every module compiled, and reading it is answering the question for all
+     *  of them at once. */
+    private static final class Derived {
+        private static final Map<ValueName.Stdlib.Operation, Combinator> RULES =
+                read(DefaultStdlib.get(), DefaultBoundOperationFacts.get());
+    }
+
+    /** A pure function of the library and what its kernels are declared to answer, so the holders
+     *  above are the only things here that reach for the process's own. */
+    private static Map<ValueName.Stdlib.Operation, Combinator> read(Stdlib stdlib,
+                                                                    BoundOperationFacts facts) {
+        return AppliedClosures.of(stdlib, kernelsIn(stdlib),
+                operation -> listing(stdlib, facts, operation), Combinators::positionsOf);
+    }
+
+    /** What the kernels taking a closure are declared to apply it to, held to the library. */
+    static Map<ValueName.Stdlib.Operation, Combinator> kernelsIn(Stdlib stdlib) {
+        Map<ValueName.Stdlib.Operation, Combinator> kernels = new LinkedHashMap<>();
+        KERNELS.forEach((operation, how) -> {
+            if (stdlib.intrinsicOf(operation) == null) {
+                throw new IllegalStateException(operation + " is declared to apply its closure as"
+                        + " a kernel, and the library writes it in the language — what it does is"
+                        + " its body's to say");
+            }
+            ClosurePositions at = positionsOf(operation);
+            if (at == null) {
+                throw new IllegalStateException(operation + " is declared to apply its closure, and"
+                        + " its signature puts no closure beside a container");
+            }
+            kernels.put(operation, new Combinator(at.closureArg(), at.elementParam(),
+                    at.containerArg(), at.keyParam(), how, Combinator.FROM_THE_FIRST));
+        });
+        return kernels;
+    }
+
+    /**
+     * What a kernel's answer lists of its arguments, as it is declared: every element of one, where
+     * it holds each of them once and nothing else; every entry or every value of a map it lists;
+     * at most one element of one, where it holds an element of it in an option.
+     */
+    static AppliedClosures.Listing listing(Stdlib stdlib, BoundOperationFacts facts,
+                                                   ValueName.Stdlib.Operation operation) {
+        AppliedClosures.Listing declared = LISTED.get(operation);
+        if (declared != null) {
+            if (stdlib.intrinsicOf(operation) == null) {
+                throw new IllegalStateException(operation + " is declared to list what it answers"
+                        + " as a kernel, and the library writes it in the language");
+            }
+            return declared;
+        }
+        BoundOperationFacts.Listed listed = facts.listsAPartOf(operation);
+        if (listed != null) {
+            return switch (listed.part()) {
+                case ENTRIES -> new AppliedClosures.Listing.EveryEntryOf(listed.map().position());
+                case VALUES ->
+                        new AppliedClosures.Listing.EveryElementOf(listed.map().position(), false);
+                case KEYS -> null;
+            };
+        }
+        BuiltFrom<DeclaredArgument> built = facts.buildsItsResultFrom(operation);
+        if (built == null || built.outputs().size() != 1
+                || !(built.lineage() instanceof ElementLineage.SameAs<DeclaredArgument> same)
+                || same.source().elements() != 1) {
+            return null;
+        }
+        return built.outputs().get(0).at().equals(ElementLineage.ResultPath.elements())
+                && built.size() == SizeAgainstItsSource.SAME
+                ? new AppliedClosures.Listing.EveryElementOf(same.source().argument().position(),
+                        false)
+                : null;
+    }
+
+    /** A pure function of the library. */
+    private static Map<ValueName.Stdlib.Operation, ClosurePositions> positions(Stdlib stdlib) {
+        Map<ValueName.Stdlib.Operation, ClosurePositions> rules = new LinkedHashMap<>();
         stdlib.entries().forEach((operation, entry) -> {
-            Combinator rule = ruleFor(operation, entry.signature().params());
+            ClosurePositions rule = positionsIn(operation, entry.signature().params());
             if (rule != null) {
                 rules.put(operation, rule);
             }
         });
         stdlib.rewrites().forEach((sugar, rewrite) -> {
-            Combinator target = rules.get(rewrite.target());
+            ClosurePositions target = rules.get(rewrite.target());
             if (target == null) {
                 return;   // what it becomes hands its closure nothing, so neither does it
             }
-            if (target.closureArg() >= rewrite.keptArgs() || target.containerArg() >= rewrite.keptArgs()) {
+            if (target.closureArg() >= rewrite.keptArgs()
+                    || target.containerArg() >= rewrite.keptArgs()) {
                 throw new IllegalStateException(sugar + " is sugar for " + rewrite.target()
                         + ", whose closure or container is not among the arguments the rewrite keeps"
                         + " in place — what it hands its closure cannot be said of the sugar");
@@ -213,14 +325,15 @@ final class Combinators {
     }
 
     /**
-     * The rule the signature of {@code qualified} states, or null where it states none.
+     * Where the signature of {@code qualified} puts a closure and a container, or null where it
+     * puts none.
      *
      * <p>The closure is the argument that takes a function. The container is an argument holding
-     * something whose element type is the type of one of that closure's parameters — which is what
-     * "hands its closure the contents of" means, said in types. An operation whose signature admits
-     * more than one reading of either is one this cannot answer for.
+     * something whose element type is the type of one of that closure's parameters. An operation
+     * whose signature admits more than one reading of either is one this cannot answer for.
      */
-    private static Combinator ruleFor(ValueName.Stdlib.Operation qualified, List<Type> params) {
+    private static ClosurePositions positionsIn(ValueName.Stdlib.Operation qualified,
+                                                List<Type> params) {
         int closureArg = -1;
         for (int i = 0; i < params.size(); i++) {
             if (params.get(i) instanceof Type.FnOf) {
@@ -235,7 +348,7 @@ final class Combinators {
             return null;
         }
         List<Type> closureParams = ((Type.FnOf) params.get(closureArg)).params();
-        Combinator found = null;
+        ClosurePositions found = null;
         for (int c = 0; c < params.size(); c++) {
             if (c == closureArg) {
                 continue;   // the closure is what receives; it is not what is received from
@@ -253,9 +366,8 @@ final class Combinators {
                             + " contents of more than one of its arguments, or on more than one"
                             + " parameter, so which is not read off its signature");
                 }
-                found = new Combinator(closureArg, p, c,
-                        keyParam(qualified, Type.keyOf(params.get(c)), closureParams, p),
-                        STOPPING.getOrDefault(qualified, HowAClosureIsApplied.TO_EVERY_ELEMENT));
+                found = new ClosurePositions(closureArg, p, c,
+                        keyParam(qualified, Type.keyOf(params.get(c)), closureParams, p));
             }
         }
         return found;

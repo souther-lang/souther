@@ -179,6 +179,13 @@ final class DerivedNumericFacts {
     private static final Bounds AT_OR_BELOW_NOUGHT =
             new Bounds(null, Endpoint.inclusive(Count.ZERO));
 
+    /** A count of one or more, which is what holding something is. */
+    private static final Bounds ABOVE_NOUGHT = new Bounds(Endpoint.inclusive(Count.of(1)), null);
+
+    /** A count of none. */
+    private static final Bounds AT_NOUGHT =
+            new Bounds(Endpoint.inclusive(Count.ZERO), Endpoint.inclusive(Count.ZERO));
+
     /**
      * The atoms whose recipe each reading evaluated, one entry per reading, where a test in this
      * package is watching — and null everywhere else.
@@ -632,6 +639,64 @@ final class DerivedNumericFacts {
                     rounded(atom, rounded, base, terms, done, deriving, copies);
             case Derivation.Chosen chosen ->
                     between(atom, chosen(chosen, base, terms, done, deriving, copies), terms);
+            case Derivation.HoldsSomethingWhere held ->
+                    switch (holds(held.holds(), base, terms, done, deriving, copies)) {
+                        case YES -> between(atom, ABOVE_NOUGHT, terms);
+                        case NO -> between(atom, AT_NOUGHT, terms);
+                        case UNSETTLED -> Says.NOTHING;
+                    };
+        };
+    }
+
+    /** Whether a statement over some counts holds under this reading, as far as it shows. */
+    private enum Shown { YES, NO, UNSETTLED }
+
+    /**
+     * Whether {@code holding} holds where each count lies where this reading puts it: a count
+     * shown above nought holds something, one shown at it holds nothing, and one this reading puts
+     * on neither side settles nothing of a statement it decides.
+     */
+    private static Shown holds(Derivation.HoldsSomethingWhere.Holding holding, ReadingDomain base,
+                               Terms terms, Memo done, Deriving deriving,
+                               ContextMultiplicity copies) {
+        return switch (holding) {
+            case Derivation.HoldsSomethingWhere.Holding.Something(LinearForm<FactSubject> count) -> {
+                Bounds lies = boundsOf(count, base, terms, done, deriving, copies);
+                yield !lies.meet(AT_OR_BELOW_NOUGHT).holdsAValue() ? Shown.YES
+                        : !lies.meet(ABOVE_NOUGHT).holdsAValue() ? Shown.NO : Shown.UNSETTLED;
+            }
+            case Derivation.HoldsSomethingWhere.Holding.AnyOf(var ways) -> {
+                Shown out = Shown.NO;
+                for (Derivation.HoldsSomethingWhere.Holding way : ways) {
+                    Shown one = holds(way, base, terms, done, deriving, copies);
+                    if (one == Shown.YES) {
+                        yield Shown.YES;
+                    }
+                    if (one == Shown.UNSETTLED) {
+                        out = Shown.UNSETTLED;
+                    }
+                }
+                yield out;
+            }
+            case Derivation.HoldsSomethingWhere.Holding.AllOf(var ways) -> {
+                Shown out = Shown.YES;
+                for (Derivation.HoldsSomethingWhere.Holding way : ways) {
+                    Shown one = holds(way, base, terms, done, deriving, copies);
+                    if (one == Shown.NO) {
+                        yield Shown.NO;
+                    }
+                    if (one == Shown.UNSETTLED) {
+                        out = Shown.UNSETTLED;
+                    }
+                }
+                yield out;
+            }
+            case Derivation.HoldsSomethingWhere.Holding.Not(var denied) ->
+                    switch (holds(denied, base, terms, done, deriving, copies)) {
+                        case YES -> Shown.NO;
+                        case NO -> Shown.YES;
+                        case UNSETTLED -> Shown.UNSETTLED;
+                    };
         };
     }
 

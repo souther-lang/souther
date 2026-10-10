@@ -131,6 +131,30 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- What the library's written operations state is proved against their bodies once,
+                 here, with the classes and the library this build ships, and what each proof came
+                 to rides inside the jar. A compilation reads it rather than proving them again at
+                 every start (LibraryProofsAsBuilt). -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <id>prove-the-library</id>
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <mainClass>souther.compiler.check.LibraryProofsAsBuilt</mainClass>
+                            <arguments>
+                                <argument>${project.build.outputDirectory}/souther/compiler/check/library-proofs.txt</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>

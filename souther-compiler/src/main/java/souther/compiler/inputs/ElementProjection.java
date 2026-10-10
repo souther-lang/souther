@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.Location;
 import souther.compiler.core.Core;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
@@ -140,6 +141,31 @@ public record ElementProjection(List<String> steps) {
         TermPath at = element;
         for (String step : steps) {
             at = at.then(step);
+        }
+        return at;
+    }
+
+    /**
+     * What stands at this way from {@code element}, or null where the element holds nothing there.
+     *
+     * <p>A newtype is no step of a path, so a name wrapped round a record is walked through to the
+     * record it wraps when a step is not one of its own fields.
+     */
+    public ObservedValue in(ObservedValue element) {
+        ObservedValue at = element;
+        for (String step : steps) {
+            ObservedValue held = at;
+            while (held instanceof ObservedValue.Constructed wrapper && wrapper.field(step) == null
+                    && wrapper.field("value") != null) {
+                held = wrapper.field("value");
+            }
+            if (!(held instanceof ObservedValue.Constructed holder)) {
+                return null;
+            }
+            at = holder.field(step);
+            if (at == null) {
+                return null;
+            }
         }
         return at;
     }

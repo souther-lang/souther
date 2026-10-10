@@ -127,6 +127,17 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "stops at a size or at the containers offered, and hands the figure over in"
                             + " the shortfall it comes back with"),
+            Map.entry("souther.compiler.partition.CardinalityComposer#composeAlike("
+                            + "Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/partition/RealizationTarget$OfANumber;"
+                            + "Lsouther/compiler/partition/RealizationTarget$OfANumber;"
+                            + "Ljava/util/SequencedMap;Lsouther/compiler/inputs/Quantities;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "stops at the containers offered and at the most elements a container is"
+                            + " composed with, and hands the figure over in the shortfall it"
+                            + " comes back with"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofACount("
                             + "Lsouther/compiler/partition/Standing$OfACount;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
@@ -135,6 +146,15 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Realization;",
                     "says the counts were offered short where the source of them stopped, as a"
                             + " side's levels are"),
+            Map.entry("souther.compiler.partition.LevelRealizer#ofACountAndAForm("
+                            + "Lsouther/compiler/partition/Standing$OfACountAndAForm;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Ljava/util/Map;"
+                            + "Lsouther/compiler/partition/WitnessSearch;"
+                            + "Lsouther/compiler/partition/ValuesTried;)"
+                            + "Lsouther/compiler/partition/Realization;",
+                    "tries the counts from none up to as many as a container is composed with, and"
+                            + " says that figure where it came to the end of them without a row"),
             Map.entry("souther.compiler.partition.Generator#inputsFrom("
                             + "Lsouther/compiler/partition/Generator$RowBeingComposed;I"
                             + "[Lsouther/compiler/partition/FixtureTemplate;"
@@ -288,18 +308,35 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.Pullback#answered("
                             + "Lsouther/compiler/inputs/Denotation;"
                             + "Lsouther/compiler/meaning/WhyUnread$AtNoPosition$Place;)"
-                            + "Lsouther/compiler/meaning/CasesOfAnAnswer$Answered;",
+                            + "Lsouther/compiler/meaning/WhichCase;",
                     "counts the arms a value chosen by cases is read through — a body's answer, or"
                             + " what a match chooses by — and past the figure carries which case it"
                             + " is out as unread, naming it"),
+            Map.entry("souther.compiler.partition.Pullback#goingIn("
+                            + "Lsouther/compiler/partition/Pullback$Inside;"
+                            + "Lsouther/compiler/inputs/InputReads;"
+                            + "Lsouther/compiler/inputs/Denotation;Z"
+                            + "Ljava/util/function/Function;)"
+                            + "Lsouther/compiler/meaning/Derivation;",
+                    "counts the readings a value gone into is read in — the arms of a choice, the"
+                            + " values a name stands for, the cases of a definition — and past the"
+                            + " figure carries what is read out as a part nothing read, naming it"),
             Map.entry("souther.compiler.partition.Pullback$ALawRead#ofEachWrittenOut("
                             + "Lsouther/compiler/check/DeclaredArgument;"
-                            + "Lsouther/compiler/core/Core$ListLit;"
-                            + "Lsouther/compiler/inputs/InputReads;"
+                            + "Ljava/util/List;"
                             + "Lsouther/compiler/semantics/LawProposition;)"
                             + "Lsouther/compiler/partition/Pullback$WrittenOutRead;",
                     "counts the values a law is read of one by one, and past the figure carries"
                             + " the law out as a part nothing read, naming it"),
+            Map.entry("souther.compiler.partition.Pullback$ALawRead#onTheApplicationHandingEach("
+                            + "Lsouther/compiler/check/DeclaredArgument;"
+                            + "Ljava/util/List;"
+                            + "Lsouther/compiler/inputs/Denotation;"
+                            + "Lsouther/compiler/core/Core$Block;"
+                            + "Lsouther/compiler/semantics/LawProposition;)"
+                            + "Lsouther/compiler/partition/Pullback$WrittenOutRead;",
+                    "counts the applications a closure is handed each value on, and past the"
+                            + " figure carries the law out as a part nothing read, naming it"),
             Map.entry("souther.compiler.partition.Pullback$ALawRead#count("
                             + "Lsouther/compiler/semantics/LawNumber$HowManyMeet;)"
                             + "Lsouther/compiler/partition/Pullback$Sized;",
@@ -325,6 +362,29 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "how many counts a container is asked to hold, and whether they were all the"
                             + " set admits"),
+            Map.entry("souther.compiler.partition.TermRealizations#holdingThatManyOfAClass("
+                            + "Lsouther/compiler/semantics/CodePointClass;"
+                            + "Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/partition/AskedAt;"
+                            + "Lsouther/compiler/inputs/TermOrders;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "how many counts a string is asked to hold of a class, and whether they were"
+                            + " all the set admits"),
+            Map.entry("souther.compiler.partition.TermRealizations#lengthsFrom(I)"
+                            + "Ljava/util/List;",
+                    "how far past a count a string the type admits is looked for; a plain string"
+                            + " is offered whichever is found, so reaching it gives up no count"),
+            Map.entry("souther.compiler.partition.TermRealizations#stringsHoldingTheirCounts("
+                            + "Ljava/util/Map;Lsouther/compiler/types/Type;"
+                            + "Ljava/util/SequencedMap;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "how many numbers of each demand are tried, up to which count every way of"
+                            + " writing a string is looked at, and how many steps the search may"
+                            + " take: each is handed over as what stopped it where nothing was"
+                            + " found"),
             Map.entry("souther.compiler.partition.TermRealizations#dateOn("
                             + "Ljava/util/Map;Lsouther/compiler/check/Carrier;)"
                             + "Lsouther/compiler/partition/TermRealizations$Search;",
@@ -336,6 +396,23 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/TermRealizations$Tried;",
                     "names the figure as what left more of the set untried, where the walk filled"
                             + " what it was allowed before the window ran out"),
+            // The number of a run that leaves the remainders asked for, solved for. A figure bounds
+            // how many remainders of each demand and how many combinations of them are tried, and
+            // what it hands over is the answer that says a figure stopped it.
+            Map.entry("souther.compiler.partition.RemainderSolutions#solve("
+                            + "Ljava/util/List;"
+                            + "Lsouther/compiler/partition/RemainderSolutions$Value;"
+                            + "Lsouther/compiler/check/Carrier;)"
+                            + "Lsouther/compiler/partition/RemainderSolutions$Answer;",
+                    "names the figure as what left remainders or combinations untried, as an"
+                            + " answer apart from there being no number"),
+            Map.entry("souther.compiler.partition.RemainderSolutions#choicesOf("
+                            + "Lsouther/compiler/partition/RemainderSolutions$Demand;"
+                            + "Ljava/math/BigInteger;Lsouther/compiler/check/Carrier;)"
+                            + "Lsouther/compiler/partition/RemainderSolutions$Choices;",
+                    "holds how many of a demand's remainders are tried, and says whether they were"
+                            + " every one it admits, which is what the answer above says it stopped"
+                            + " at"),
             // The numbers a place may be where several of its quotients are asked for. The run the
             // demands leave is walked as whole numbers, so the figure bounds how many of them are
             // tried — and what it hands over is that walk's own answer.

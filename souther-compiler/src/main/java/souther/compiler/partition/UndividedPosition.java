@@ -256,14 +256,16 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         SEVERAL_LINES_IN_ONE_RULE,
         /**
-         * The comparison relates two positions rather than dividing one.
+         * The rule relates the value here to another value rather than dividing the values here.
          *
-         * <p>`+x < y+` says where one position stands against another, and a class here is a set of
-         * values of one position. Nothing is missing from the carrier — both sides are ordered and a
+         * <p>{@code x < y} says where one position stands against another, and a class here is a
+         * set of values of one position. The other value may be no position at all — what an
+         * operation looked up, an element a walk was handed, the index it is at — and the rule says
+         * the same kind of thing. Nothing is missing from the carrier — both sides are ordered and a
          * line drawn on either against a number would be read — so saying the values cannot carry a
          * line would send a reader after the wrong thing entirely.
          */
-        UNSUPPORTED_PARTITION_SHAPE,
+        RULE_RELATING_TWO_VALUES,
         /**
          * The rule draws its line on a number taken over a run of this position's values, so it
          * divides none of them.
@@ -417,7 +419,25 @@ public record UndividedPosition(TermPath at, Why why) {
          * other part — which case a called behavior answers, a clause of an invariant an attempt
          * checks, a step of the reading not yet written, more readings than are made.
          */
-        RULE_MEANING_NOT_READ
+        RULE_MEANING_NOT_READ,
+        /**
+         * A rule naming this position compares a product of two values neither of which is a
+         * constant, and a form over the input's numbers has no term for one.
+         *
+         * <p>Its own word beside {@link #RULE_ABOUT_A_DERIVED_VALUE}. Nothing was made out of the
+         * position and no operation is left to read the rule back through: the comparison depends
+         * on the position and on another number, and the line it draws over them is not one a form
+         * says. A reader told the other would go looking for an operation to invert.
+         */
+        NON_AFFINE_PRODUCT,
+        /**
+         * The same for a quotient by a value that is not a constant.
+         *
+         * <p>Its own word beside {@link #NON_AFFINE_PRODUCT}, because what an author does differs:
+         * a product of two numbers may be re-stated over one of them, while a divisor that
+         * varies is a different shape of rule.
+         */
+        NON_CONSTANT_DIVISOR
     }
 
     /**

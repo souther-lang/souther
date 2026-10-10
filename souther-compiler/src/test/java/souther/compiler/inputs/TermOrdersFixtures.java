@@ -5,6 +5,8 @@ import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.types.Type;
 
+import java.util.Map;
+
 /**
  * Synthetic orders for a test that describes a term rather than reading one.
  *
@@ -26,6 +28,12 @@ public final class TermOrdersFixtures {
     /** A term read on one order and answering on another, which is every taking of an operation. */
     public static TermOrders orders(NumericTerm term, Carrier observed, Carrier answered) {
         return new TermOrders(term, observed, answered);
+    }
+
+    /** A term over what a walk computed of each element, which also reads the fields it names. */
+    public static TermOrders computed(NumericTerm term, Carrier observed, Carrier answered,
+                                      Map<ElementProjection, Carrier> fields) {
+        return new TermOrders(term, observed, answered, fields);
     }
 
     /**

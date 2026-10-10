@@ -4,8 +4,12 @@ import souther.compiler.execute.BoundaryValues;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
+import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.DeclarationKinds;
+import souther.compiler.check.DeclaredArgument;
+import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.cst.SyntaxKind;
@@ -1452,6 +1456,10 @@ public final class FixtureReader {
      * in, so both halves are asked: what is applied, by what it denotes rather than how it is spelt,
      * and who applied it. Asked by the first alone, every {@code List.map} a fixture reached would
      * be one this reader was evaluating.
+     *
+     * <p>And what it writes out is what the operation is proved to answer: the closure's answer on
+     * each element of the list, once each, in the list's order. Where that is not what the facts
+     * about the operation say, it is no edit this reader can write out.
      */
     private static boolean composedElementWise(Hir.Apply c) {
         return c.application() instanceof ApplicationOrigin.ComposedFixture
@@ -1459,7 +1467,19 @@ public final class FixtureReader {
                 && ApplicationOrigin.ComposedFixture.ELEMENT_WISE.equals(c.answered().denotes())
                 && c.args().size() == 2
                 && c.args().get(0) instanceof Hir.Block block
-                && block.params().size() == 1;
+                && block.params().size() == 1
+                && answersEachInOrder(ApplicationOrigin.ComposedFixture.ELEMENT_WISE);
+    }
+
+    /** Whether {@code operation} is proved to answer its first argument's answer on each element
+     *  of its second, once each, in that list's order. */
+    private static boolean answersEachInOrder(ValueName.Stdlib.Operation operation) {
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        BuiltFrom<DeclaredArgument> built = facts.buildsItsResultFrom(operation);
+        DeclaredArgument each = built == null ? null : built.mapsEachElementOf();
+        DeclaredArgument ordered = facts.keepsTheOrderOf(operation);
+        return each != null && each.position() == 1 && ordered != null
+                && ordered.position() == 1;
     }
 
     /**

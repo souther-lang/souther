@@ -175,9 +175,9 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
     @Test
     void aClosuresParameterIsTheValueEachApplicationHandsIt() {
         Proposition.Any some = assertInstanceOf(Proposition.Any.class,
-                stated("List.any(v -> { let y = Int.abs(b.x)\n v > y }, [1, 5])"));
+                stated("List.any(v -> { let y = Int.floorMod(b.x, 7)\n v > y }, [1, 5])"));
         Proposition.All every = assertInstanceOf(Proposition.All.class,
-                stated("List.all(v -> { let y = Int.abs(b.x)\n v > y }, [1, 5])"));
+                stated("List.all(v -> { let y = Int.floorMod(b.x, 7)\n v > y }, [1, 5])"));
         for (List<Proposition> parts : List.of(some.parts(), every.parts())) {
             assertEquals(2, parts.size(), () -> "one statement per value written: " + parts);
             assertEquals(1, parts.stream()
@@ -195,7 +195,7 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
     void aValueWorkedOutFromTheParameterIsNoOneValue() {
         for (String over : List.of("List.any", "List.all")) {
             Proposition stated = stated(over
-                    + "(v -> { let y = Int.abs(v - b.x)\n y > 3 }, [1, 5])");
+                    + "(v -> { let y = Int.floorMod(v - b.x, 7)\n y > 3 }, [1, 5])");
             assertFalse(stated.toString().contains("Affine"),
                     () -> over + " relates no value of one application to another's: " + stated);
         }
@@ -204,18 +204,19 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
     /** What the domain has no words for is not carried, whichever way it is asked. */
     @Test
     void whatTheDomainHasNoWordsForIsNotCarried() {
-        assertInstanceOf(Proposition.Unread.class, stated("String.isEmpty(String.trim(b.s))"));
         assertInstanceOf(Proposition.Unread.class,
-                stated("String.length(String.trim(b.s)) >= 1"));
+                stated("String.isEmpty(String.replace(\"a\", \"b\", b.s))"));
         assertInstanceOf(Proposition.Unread.class,
-                stated("List.isEmpty(String.words(b.s))"));
+                stated("String.length(String.replace(\"a\", \"b\", b.s)) >= 1"));
+        assertInstanceOf(Proposition.Unread.class,
+                stated("String.length(String.replace(\"a\", \"b\", b.s)) == 0"));
     }
 
     /** Two parts nothing read are two parts. */
     @Test
     void twoUnreadPartsAreNotOne() {
-        Proposition two = stated("String.isEmpty(String.trim(b.s))"
-                + " && List.isEmpty(String.words(b.s))");
+        Proposition two = stated("String.isEmpty(String.replace(\"a\", \"b\", b.s))"
+                + " && String.isEmpty(String.replace(\"c\", \"d\", b.s))");
         Proposition.All all = assertInstanceOf(Proposition.All.class, two);
         assertEquals(2, all.parts().size());
     }

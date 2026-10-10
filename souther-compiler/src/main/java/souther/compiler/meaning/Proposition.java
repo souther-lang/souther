@@ -82,10 +82,18 @@ public sealed interface Proposition {
         return switch (quantity) {
             case DecisionAtom.OfTheInput(var term) -> isAnElementOf(term.subjectPath(), container);
             case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _ -> true;
+            // A piece of a string is whatever the statement it is read inside says it is, and
+            // that statement is about the string and no container's element.
+            case Quantity.CodePointsOfAPiece _ -> false;
             case Quantity.HowManyMeet(TermPath counted, Proposition each) ->
                     isAnElementOf(counted, container) || each.mayTurnOnAnElementOf(container);
             case Quantity.HowManyHold(List<Proposition> each) -> each.stream()
                     .anyMatch(one -> one.mayTurnOnAnElementOf(container));
+            case Quantity.HowManyDifferent(TermPath counted, TermPath _) ->
+                    isAnElementOf(counted, container);
+            case Quantity.SumOver(TermPath summed, var each) ->
+                    isAnElementOf(summed, container) || each.coefs().keySet().stream()
+                            .anyMatch(one -> mayBeAnElementOf(one, container));
         };
     }
 
@@ -481,10 +489,14 @@ public sealed interface Proposition {
     private static boolean anAnswerIn(Quantity quantity) {
         return switch (quantity) {
             case DecisionAtom.OfAnAnswer _ -> true;
-            case DecisionAtom.OfTheInput _, Quantity.OfABinding _ -> false;
+            case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
+                 Quantity.CodePointsOfAPiece _ -> false;
             case Quantity.HowManyMeet count -> aboutAnAnswer(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream()
                     .anyMatch(Proposition::aboutAnAnswer);
+            case Quantity.HowManyDifferent _ -> false;
+            case Quantity.SumOver sum -> sum.ofTheElement().coefs().keySet().stream()
+                    .anyMatch(Proposition::anAnswerIn);
         };
     }
 

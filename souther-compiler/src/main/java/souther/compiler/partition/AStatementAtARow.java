@@ -5,6 +5,7 @@ import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
@@ -14,6 +15,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.observe.ObservedValue;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -23,6 +25,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * A statement over a row's own numbers, put to rows: each relation it is over, read as the quantity
@@ -37,6 +40,10 @@ import java.util.Set;
  * element chosen ({@link BorderQuantity.Observation#eachElementOf}) — so a statement about an
  * element inside a statement about another reads the inner container under each element of the
  * outer one, and nesting is the recursion and nothing besides.
+ *
+ * <p><b>And a position's own value, where a part asks it whether it is true or whether there is
+ * one.</b> A row writes a truth at a position as it writes a number, so whether {@code c.open}
+ * holds at a row is read off what the row put there.
  */
 final class AStatementAtARow {
 
@@ -66,29 +73,35 @@ final class AStatementAtARow {
     private final Proposition stated;
     private final Map<Relation, OneRelation> relations;
     private final Map<String, OverTheElements> elements;
+    /** The positions a part asks of their own value: whether it is true, whether there is one. */
+    private final Set<TermPath> positions;
 
     private AStatementAtARow(Proposition stated, Map<Relation, OneRelation> relations,
-                             Map<String, OverTheElements> elements) {
+                             Map<String, OverTheElements> elements, Set<TermPath> positions) {
         this.stated = stated;
         // In the order the relations were met, which is the order their containers are found in
         // when a row is walked for them.
         this.relations = Collections.unmodifiableMap(new LinkedHashMap<>(relations));
         this.elements = Collections.unmodifiableMap(new LinkedHashMap<>(elements));
+        this.positions = Collections.unmodifiableSet(new LinkedHashSet<>(positions));
     }
 
     /**
-     * Whether a row's own numbers say whether {@code stated} holds at it: relations over the
-     * input's own numbers, joined, statements about the elements of a container the input holds —
-     * some element meeting something, or how many do, against a number — or nothing asked at all.
+     * Whether a row's own values say whether {@code stated} holds at it: relations over the
+     * input's own numbers, whether a position of the input is true or holds a value, joined,
+     * statements about the elements of a container the input holds — some element meeting
+     * something, or how many do, against a number — or nothing asked at all.
      *
-     * <p>Anything else is no statement a row can be asked about. A truth, something nobody read, or
-     * a count against another of the input's numbers is not settled by the numbers a row writes
-     * the way a relation is, and a reader that took the statement without it would count rows it
-     * says nothing about.
+     * <p>Anything else is no statement a row can be asked about. Something nobody read, a truth of
+     * what a dependency answered, or a count against another of the input's numbers is not settled
+     * by the values a row writes, and a reader that took the statement without it would count rows
+     * it says nothing about.
      */
     static boolean askable(Proposition stated) {
         return switch (stated) {
             case Proposition.Always _ -> true;
+            case Proposition.Truth(DecisionSubject.AnInput _, boolean _, String _),
+                 Proposition.Present(DecisionSubject.AnInput _, boolean _, String _) -> true;
             case Proposition.All all -> all.parts().stream().allMatch(AStatementAtARow::askable);
             case Proposition.Any any -> any.parts().stream().allMatch(AStatementAtARow::askable);
             case Proposition.Some some -> askable(some.ofTheElement());
@@ -120,19 +133,24 @@ final class AStatementAtARow {
     static AStatementAtARow of(Proposition stated, String behavior, Quantities quantities) {
         Map<Relation, OneRelation> relations = new LinkedHashMap<>();
         Map<String, OverTheElements> elements = new LinkedHashMap<>();
-        gather(stated, behavior, quantities, relations, elements);
-        return new AStatementAtARow(stated, relations, elements);
+        Set<TermPath> positions = new LinkedHashSet<>();
+        gather(stated, behavior, quantities, relations, elements, positions);
+        return new AStatementAtARow(stated, relations, elements, positions);
     }
 
     private static void gather(Proposition stated, String behavior, Quantities quantities,
                                Map<Relation, OneRelation> into,
-                               Map<String, OverTheElements> elements) {
+                               Map<String, OverTheElements> elements, Set<TermPath> positions) {
         switch (stated) {
             case Proposition.Always _ -> { }
-            case Proposition.All all -> all.parts()
-                    .forEach(part -> gather(part, behavior, quantities, into, elements));
-            case Proposition.Any any -> any.parts()
-                    .forEach(part -> gather(part, behavior, quantities, into, elements));
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, String _) ->
+                    positions.add(at);
+            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _, String _) ->
+                    positions.add(at);
+            case Proposition.All all -> all.parts().forEach(part ->
+                    gather(part, behavior, quantities, into, elements, positions));
+            case Proposition.Any any -> any.parts().forEach(part ->
+                    gather(part, behavior, quantities, into, elements, positions));
             case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
                     _ -> new OverTheElements(some.container(),
                             of(some.ofTheElement(), behavior, quantities)));
@@ -222,6 +240,11 @@ final class AStatementAtARow {
         for (OneRelation each : relations.values()) {
             if (each.over().terms().stream().noneMatch(term -> under(term.subjectPath(), taken))) {
                 each.over().lookAt(row);
+            }
+        }
+        for (TermPath each : positions) {
+            if (!under(each, taken)) {
+                row.at(each);
             }
         }
         for (OverTheElements each : elements.values()) {
@@ -321,6 +344,12 @@ final class AStatementAtARow {
     private Answer at(Proposition part, BorderQuantity.Observation row) {
         return switch (part) {
             case Proposition.Always(boolean holds) -> holds ? Answer.HOLDS : Answer.FAILS;
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds,
+                                   String _) -> heldAs(holds, ofItsValue(at, row,
+                    value -> value instanceof ObservedValue.Bool(boolean truth) ? truth : null));
+            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean holds,
+                                     String _) -> heldAs(holds, ofItsValue(at, row,
+                    value -> !(value instanceof ObservedValue.Absent)));
             case Proposition.All all -> joined(all.parts().stream()
                     .map(each -> at(each, row)).toList(), true);
             case Proposition.Any any -> joined(any.parts().stream()
@@ -371,6 +400,40 @@ final class AStatementAtARow {
             case ValuesAtARow.CouldNotTell(var why) -> new Answer.CouldNotTell(why);
             case ValuesAtARow.NoneHere _ -> Answer.FAILS;
         };
+    }
+
+    /**
+     * What a row put at {@code at}, asked {@code asked}: holding where it answers true, failing
+     * where it answers false or where the row put nothing there, and not read where the walk did
+     * not get there or what stands there is no value it answers of.
+     */
+    private static Answer ofItsValue(TermPath at, BorderQuantity.Observation row,
+                                     Function<ObservedValue, Boolean> asked) {
+        return switch (row.at(at)) {
+            case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
+                    new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
+            case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
+                case ObservationAtPoint.Value(ObservedValue value) -> {
+                    Boolean answer = (value instanceof ObservedValue.Unknown
+                            || value instanceof ObservedValue.Truncated) ? null
+                            : asked.apply(value);
+                    if (answer == null) {
+                        yield new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));
+                    }
+                    yield answer ? Answer.HOLDS : Answer.FAILS;
+                }
+                // The row put nothing here, as a relation over a position a row left empty fails.
+                case ObservationAtPoint.WroteNothing _ -> Answer.FAILS;
+                case ObservationAtPoint.BelongsToAnotherReading _ ->
+                        new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));
+            };
+        };
+    }
+
+    /** {@code answered} where the part is held, and the other way round where it is denied. */
+    private static Answer heldAs(boolean holds, Answer answered) {
+        return holds || answered instanceof Answer.CouldNotTell ? answered
+                : answered instanceof Answer.Holds ? Answer.FAILS : Answer.HOLDS;
     }
 
     /**
@@ -449,6 +512,36 @@ final class AStatementAtARow {
         return out;
     }
 
+    /**
+     * Where each relation this reads over {@code term} turns over, for a term whose values are
+     * ordered and not counted: the places the term is held against.
+     *
+     * <p>A form cannot be over such a term, since there is no number to weigh, so the one place a
+     * relation turns is the place the term is compared with. Between two of them, and past the
+     * last, every relation reads any value of the term the same way.
+     *
+     * @return null where a form reads the term, which a value chosen from a run could answer
+     *         either way
+     */
+    List<Place> placesTurnedAt(NumericTerm term) {
+        List<Place> out = new ArrayList<>();
+        for (OneRelation each : relations.values()) {
+            switch (each) {
+                case OneRelation.OfAForm(LinearQuantity _, LinearForm<NumericTerm> form, Rel _) -> {
+                    if (form.coefs().containsKey(term)) {
+                        return null;
+                    }
+                }
+                case OneRelation.OnAnOrder(LinearQuantity _, NumericTerm on, Place at, Rel _) -> {
+                    if (on.equals(term)) {
+                        out.add(at);
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
     /** A statement about the elements of a container: the container, and what each is asked. */
     private record OverTheElements(TermPath container, AStatementAtARow ofTheElement) {}
 
@@ -509,12 +602,13 @@ final class AStatementAtARow {
     @Override
     public boolean equals(Object other) {
         return other instanceof AStatementAtARow that && stated.equals(that.stated)
-                && relations.equals(that.relations) && elements.equals(that.elements);
+                && relations.equals(that.relations) && elements.equals(that.elements)
+                && positions.equals(that.positions);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(stated, relations, elements);
+        return java.util.Objects.hash(stated, relations, elements, positions);
     }
 
     /** Every relation over the input's own numbers this reads, for the quantities a reader of it

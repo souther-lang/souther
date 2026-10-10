@@ -123,7 +123,7 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
     void andForAComparisonWithOnePositionOnEachSide() {
         assertEquals(saidAbout(blockOf("byGuard"), "b.x"),
                 saidAbout(blockOf("byRule"), "p.x"));
-        assertTrue(blockOf("byRule").contains("relates two positions"), blockOf("byRule"));
+        assertTrue(blockOf("byRule").contains("relates the value here to another value"), blockOf("byRule"));
     }
 
     /**
@@ -139,8 +139,8 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
         String rule = blockOf("byRuleAboutOne");
         String guard = blockOf("byGuardAboutOne");
 
-        assertFalse(rule.contains("relates two positions"), rule);
-        assertFalse(guard.contains("relates two positions"), guard);
+        assertFalse(rule.contains("relates the value here to another value"), rule);
+        assertFalse(guard.contains("relates the value here to another value"), guard);
         assertEquals(saidAbout(guard, "b.x"), saidAbout(rule, "s.x"));
     }
 

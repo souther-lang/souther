@@ -32,9 +32,9 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
      */
     @Test
     void arithmeticOverTwoPositionsRelatesThem() {
-        assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE),
+        assertEquals(List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
                 whyAt(guard("a: Int, b: Int", "Int.add(a, b) > 10"), "a"));
-        assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE),
+        assertEquals(List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
                 whyAt(guard("a: Int, b: Int", "Int.subtract(b, a) > 10"), "b"));
     }
 
@@ -45,7 +45,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
      */
     @Test
     void arithmeticOutsideTheFragmentIsAFormNobodyReads() {
-        assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
+        assertEquals(List.of(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
                 whyAt(guard("a: Int", "Int.multiply(a, a) > 10"), "a"));
     }
 
@@ -59,9 +59,9 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
     @Test
     void anOperationsAnswerIsARuleAboutAValueMadeFromThePosition() {
         assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                whyAt(guard("a: DateTime, b: DateTime", "DateTime.minutesBetween(a, b) > 10"), "a"));
+                whyAt(guard("a: Int, b: Int", "Int.floorMod(a, b) > 10"), "a"));
         assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                whyAt(guard("a: DateTime, b: DateTime", "DateTime.minutesBetween(a, b) > 10"), "b"));
+                whyAt(guard("a: Int, b: Int", "Int.floorMod(a, b) > 10"), "b"));
     }
 
     /**
@@ -69,20 +69,20 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
      *
      * <p>{@code Int.abs} has a body, and that body is not what the reading of rules looks at. The
      * tree such a reading is made over keeps the operation standing, so what the author wrote —
-     * a comparison against what an operation answered — is what is there to be read, and the word
-     * is the same word every other operation gets.
+     * a comparison against what an operation answered — is what is there to be read, through what
+     * the library states of the operation, as every other operation is.
      *
      * <p><b>Which is a decision about who owns a partition's contributions, taken here.</b> The
      * comparisons inside {@code Int.abs} are that operation's implementation, and a caller does not
      * owe rows for them: a line at nought came out of the body forking there, and the model that
      * called it never said anything about nought. So the caller's rule is read for what the caller
-     * wrote, and what {@code abs} does to the values is a fact about the operation — one this
-     * compiler may learn to state, and until it does, this is what the reading comes to.
+     * wrote, and what {@code abs} does to the values is a fact about the operation — the cases the
+     * library states of it, proved of its body — and with it the rule is read to the end and
+     * nothing stopped it.
      */
     @Test
     void anOperationWrittenInThisLanguageIsAnOperationLikeAnyOther() {
-        assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                whyAt(guard("a: Int", "Int.abs(a) > 10"), "a"));
+        assertEquals(List.of(), whyAt(guard("a: Int", "Int.abs(a) > 10"), "a"));
     }
 
     /**
@@ -92,7 +92,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
     @Test
     void bothArgumentsOfAnOperationAreNamed() {
         PartitionEvidence measured =
-                guard("a: DateTime, b: DateTime", "DateTime.minutesBetween(b, a) > 10");
+                guard("a: Int, b: Int", "Int.floorMod(b, a) > 10");
 
         assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
                 whyAt(measured, "a"));
@@ -117,7 +117,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
         PartitionEvidence measured = guard("s: String",
                 "String.length(s) > Int.multiply(String.length(s), String.length(s))");
 
-        assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
+        assertEquals(List.of(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
                 whyAt(measured, "String.length(s)"));
         assertEquals(List.of(), whyAt(measured, "s"),
                 "the string's own values are not what the rule is about");
@@ -131,7 +131,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
     @Test
     void anOperationThisDoesNotReadIsNamed() {
         assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                whyAt(guard("a: DateTime", "DateTime.minutesBetween(a, a) > 10"), "a"));
+                whyAt(guard("a: Int", "Int.floorMod(a, a) > 10"), "a"));
     }
 
     /**
@@ -191,7 +191,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
                 """;
 
         assertEquals(List.of(), whyAt(measured(model), "a"));
-        assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
+        assertEquals(List.of(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
                 whyAt(measured(model), "b"));
     }
 
@@ -229,11 +229,11 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
      */
     @Test
     void arithmeticRoundAnOperationDoesNotChangeWhatStoppedTheReading() {
-        for (String condition : List.of("DateTime.minutesBetween(a, b) <= 30",
-                "Int.add(DateTime.minutesBetween(a, b), 1) <= 30",
-                "Int.add(1, DateTime.minutesBetween(a, b)) <= 30")) {
+        for (String condition : List.of("Int.floorMod(a, b) <= 30",
+                "Int.add(Int.floorMod(a, b), 1) <= 30",
+                "Int.add(1, Int.floorMod(a, b)) <= 30")) {
             assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                    whyAt(guard("a: DateTime, b: DateTime", condition), "a"), condition);
+                    whyAt(guard("a: Int, b: Int", condition), "a"), condition);
         }
     }
 

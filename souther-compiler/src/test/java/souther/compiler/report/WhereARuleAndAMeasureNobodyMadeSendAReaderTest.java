@@ -29,31 +29,28 @@ class WhereARuleAndAMeasureNobodyMadeSendAReaderTest {
     /**
      * A fork on a value worked out from the input, which nothing classifies.
      *
-     * <p>Every class of the position is derived and both arms are reached; what stops is the
-     * reading of the fork, because whether the dropped list holds anything is a value made from the
-     * position and nothing the library says of {@code List.drop} works out what it says about the
-     * values there. That is a rule this compiler could not read, and a rule is somewhere a reader
-     * can be sent.
+     * <p>Both arms are reached; what stops is the reading of the fork, because whether the string
+     * with a text replaced in it holds anything is a value made from the position, empty exactly
+     * where the string was made up of copies of what was replaced, and nothing the library says of
+     * {@code String.replace} works out what that says about the values there. That is a rule this
+     * compiler could not read, and a rule is somewhere a reader can be sent.
      */
     private static final String A_RULE_NOTHING_READ = """
             module probe.ruleunread
 
-            data Ordinary
-            data Manager
-            data Rank = Ordinary | Manager
-
-            data Request = { ranks: List<Rank> }
+            data Request = { reason: String }
 
             data Reasoned
             data Unreasoned
 
             behavior decide : (request: Request) -> Reasoned | Unreasoned
             let decide (request) =
-                if List.isEmpty(List.drop(1, request.ranks)) then Unreasoned else Reasoned
+                if String.isEmpty(String.replace("a", "b", request.reason))
+                then Unreasoned else Reasoned
 
             example decide
-                | "two ranks have a reason" : (Request { ranks = [ Ordinary, Manager ] }) -> Reasoned
-                | "one rank has none" : (Request { ranks = [ Ordinary ] }) -> Unreasoned
+                | "a written reason is a reason" : (Request { reason = "travel" }) -> Reasoned
+                | "nothing written is none" : (Request { reason = "" }) -> Unreasoned
             """;
 
     /**

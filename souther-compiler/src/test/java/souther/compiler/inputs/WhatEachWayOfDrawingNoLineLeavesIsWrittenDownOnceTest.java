@@ -7,6 +7,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.SchemaReference;
+import souther.compiler.check.NonAffineOperation;
 
 import souther.compiler.check.Clause;
 import souther.compiler.check.PartId;
@@ -96,6 +97,13 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         table.put("RuleAboutAnElementOfSeveralContainers",
                 "RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS/UNAFFECTED");
         table.put("UnreadValueRule", "UNSUPPORTED_SYNTAX/UNAFFECTED");
+        // Arithmetic no form says, which the arithmetic named where it met it. Nothing was made of
+        // a position and nothing was compared against a figure, so a run allowed more meets it
+        // again. Which operation it was is the word, so a row for each.
+        table.put("NonAffineArithmetic:PRODUCT_OF_NON_CONSTANT_VALUES",
+                "NON_AFFINE_PRODUCT/UNAFFECTED");
+        table.put("NonAffineArithmetic:DIVISION_BY_NON_CONSTANT_VALUE",
+                "NON_CONSTANT_DIVISOR/UNAFFECTED");
         // An end a choice in the rule left open. Its own word and not the one above: the rule at
         // this position was read, and what an author acts on is the branch written beside it. A run
         // allowed more meets it again — the reading of ends stopped on a form and not at a figure.
@@ -139,11 +147,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // declaration that was never the matter. A group again, so no rule is named as the
         // expensive one, and a run allowed more may get past it.
         table.put("BehaviorDistinctionsTooCostly", "BEHAVIOR_DISTINCTIONS_TOO_COSTLY/MAY_CHANGE");
-        // One word with `ComparisonBetweenPositions` below, and on purpose: they are the two
+        // One word with `ComparisonRelatingTwoValues` below, and on purpose: they are the two
         // readings of `a < b`, opposite sentences about this compiler, and a document promises
         // its reader which kind of thing stopped a derivation rather than which reader stopped.
         table.put("ValueRuleRelatingTwoPositions",
-                "UNSUPPORTED_PARTITION_SHAPE/UNAFFECTED");
+                "RULE_RELATING_TWO_VALUES/UNAFFECTED");
         // Read to the end, and placed nowhere. Its own word beside the two above: the comparison
         // was taken apart, a line came out of it and every name it is between reached positions —
         // what was not reached is which of those positions the line runs between. Both measures are
@@ -177,7 +185,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // And its own word beside that one: rows arrive at the line, and the rest of the statement
         // it is a line of decides the outcome wherever they do. Nothing is owed there either.
         table.put("ComparisonLineTurningNothing", "RULE_NEVER_TURNS_ON_THIS_LINE/-");
-        table.put("ComparisonBetweenPositions", "UNSUPPORTED_PARTITION_SHAPE/-");
+        table.put("ComparisonRelatingTwoValues", "RULE_RELATING_TWO_VALUES/-");
         // Its own word beside the one above, because what a reader does about it differs: a rule
         // between two positions is waiting on a class about the pair, and a rule about what the
         // values at one come to has nothing to wait for — the position has no class from it and
@@ -324,7 +332,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
      * Whether a wider run could get past {@code reason}, asked of whichever capability holds it.
      *
      * <p>Asked of the reason and never of the word a document writes for it, which is what makes
-     * the fourth column worth having. {@code UNSUPPORTED_PARTITION_SHAPE} is one word over a rule
+     * the fourth column worth having. {@code RULE_RELATING_TWO_VALUES} is one word over a rule
      * this read partway and a rule it read to the end, so a sensitivity worked out from the word
      * would have to be the same for both — and it is not; the same is now true of
      * {@code RULES_NOT_READ_AT_ALL}.
@@ -431,6 +439,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                         : BlockReason.WhatItStatesIsNoLine.Why.values()) {
                     out.add("WhatItStatesIsNoLine:" + why);
                 }
+            } else if (each == BlockReason.NonAffineArithmetic.class) {
+                for (NonAffineOperation operation : NonAffineOperation.values()) {
+                    out.add("NonAffineArithmetic:" + operation);
+                }
             } else {
                 out.add(each.getSimpleName());
             }
@@ -459,6 +471,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.RuleAboutADerivedValue(),
                 new BlockReason.RuleAboutAnElementOfSeveralContainers(),
                 new BlockReason.UnreadValueRule(),
+                new BlockReason.NonAffineArithmetic(
+                        NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES),
+                new BlockReason.NonAffineArithmetic(
+                        NonAffineOperation.DIVISION_BY_NON_CONSTANT_VALUE),
                 new BlockReason.EndLeftOpenByAChoice(),
                 new BlockReason.ValueRuleLeftOpenByAChoice(),
                 new BlockReason.PatternTooCostly(),
@@ -473,7 +489,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.ComparisonCuttingOutsideDomain(),
                 new BlockReason.ComparisonNothingArrivesAtItsLine(),
                 new BlockReason.ComparisonLineTurningNothing(),
-                new BlockReason.ComparisonBetweenPositions(),
+                new BlockReason.ComparisonRelatingTwoValues(),
                 new BlockReason.ComparisonOverARun(),
                 new BlockReason.RuleRestrictingToAdmittedValues(),
                 new BlockReason.PredicateTellingNothingApart(),
@@ -501,9 +517,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
 
     /** The row a reason is written under: its kind, and which of its whys where it carries one. */
     private static String rowOf(BlockReason.RuleWithoutLineReason reason) {
-        return reason instanceof BlockReason.WhatItStatesIsNoLine(var why)
-                ? "WhatItStatesIsNoLine:" + why
-                : reason.getClass().getSimpleName();
+        return switch (reason) {
+            case BlockReason.WhatItStatesIsNoLine(var why) -> "WhatItStatesIsNoLine:" + why;
+            case BlockReason.NonAffineArithmetic(var operation) ->
+                    "NonAffineArithmetic:" + operation;
+            default -> reason.getClass().getSimpleName();
+        };
     }
 
     /**

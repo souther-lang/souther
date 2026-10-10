@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.PlacesApart;
@@ -61,6 +62,11 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     @Override
     public NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form) {
         return within.projectionOf(form);
+    }
+
+    @Override
+    public Congruences valueClassAt(NumericTerm.ValueOf place) {
+        return within.valueClassAt(place);
     }
 
     @Override

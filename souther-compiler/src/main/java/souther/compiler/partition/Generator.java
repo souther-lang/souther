@@ -16,8 +16,12 @@ import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.Carrier;
+import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.RunSource;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.TheRestOfTheBlock;
@@ -27,6 +31,7 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -36,6 +41,7 @@ import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -721,7 +727,12 @@ public final class Generator {
                              // came to is about the numbers it tried and about nothing else. The
                              // word says that, where the word for a set walked to its end says the
                              // set has no value in it.
-                             NUMBERS_OF_A_SET_TRIED -> THE_SEARCH_LEFT_SOMETHING_UNTRIED;
+                             NUMBERS_OF_A_SET_TRIED,
+                             // The counts a string is written for past this one, and the lengths
+                             // past the ones looked at, were never asked for either.
+                             CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
+                             CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR ->
+                                    THE_SEARCH_LEFT_SOMETHING_UNTRIED;
                         // Reaching these stops no composing, so no search comes back from one of
                         // them and there is no word to give. Asked for one all the same, this says
                         // so rather than lending a word from a budget that does stop something.
@@ -4707,12 +4718,28 @@ public final class Generator {
                         circularly(circular)), where.unrepresented());
             }
         }
+        // And what the way asks the elements of its containers to be, which the elements are
+        // written as. Where that is two things at one position inside an element, the elements are
+        // written alike and no row is — which is this composer's answer and not the model's.
+        ElementWrites elements = ElementWrites.of(reaching.boundedOnTheWay());
+        Requirements rowIs;
+        switch (elements.requiredBeside(reaching.requirements())) {
+            case Requirements.Merge.Merged(Requirements both) -> rowIs = both;
+            case Requirements.Merge.Conflict conflict -> {
+                return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                        ElementWrites.writtenAlike(conflict.at())),
+                        where.unrepresented());
+            }
+        }
+        Set<TermPath> truthsWritten = new LinkedHashSet<>(reaching.truths().at().keySet());
+        truthsWritten.addAll(elements.truthsAt());
         // Every way of writing them under the cases the row can be, one at a time, the first that
         // composes taken: a container a name every case of a sum spreads is composed under one of
         // the cases. What the rest came to is said over every one of them, the same whichever was
         // tried first.
-        ContentsAsked.UnderTheCases under = asked.underTheCases(subject.reach(),
-                reaching.requirements(), reaching.truths().at().keySet());
+        ContentsAsked.UnderTheCases under = asked.underTheCases(subject.reach(), rowIs,
+                truthsWritten);
         FixtureTemplate[] composed = new FixtureTemplate[order.parameters().size()];
         List<ParameterCameToNothing> cameToNothing = new ArrayList<>();
         ContentsAsked.UnderTheCases.Walked walked = under.tryEach(way -> {
@@ -4726,8 +4753,13 @@ public final class Generator {
             TruthsAsked truths = TruthsAsked.NONE;
             switch (reaching.truths().standingAt(way.standing())) {
                 case TruthsAsked.Merge.Merged(var here) -> {
-                    truths = here;
-                    twice = here.writtenInto(writes);
+                    switch (elements.truthsBeside(here, way.standing())) {
+                        case TruthsAsked.Merge.Merged(var withTheElements) -> {
+                            truths = here;
+                            twice = withTheElements.writtenInto(writes);
+                        }
+                        case TruthsAsked.Merge.Conflict(var at) -> twice = at;
+                    }
                 }
                 case TruthsAsked.Merge.Conflict(var at) -> twice = at;
             }
@@ -5139,15 +5171,70 @@ public final class Generator {
             if (cut.demand() instanceof RowDemand.SoMany many) {
                 CountedElements count = CountedElements.of(subject.behavior(), many.count(),
                         subject.quantities(), many.anElementMeeting());
-                countsOnTheWay.merge(count.identity(),
-                        new CountsAsked(count, many.counts().values(), cut), CountsAsked::and);
+                LevelRegion counts;
+                if (many.againstNumbers()) {
+                    // The count is held against what numbers of the row add up to, so which counts
+                    // meet it is known once those numbers stand somewhere: placed here, as numbers
+                    // beside an element are, and the count asked for is the one that goes with them.
+                    List<NumericTerm.FromOnePosition> added = new ArrayList<>();
+                    for (NumericTerm term : NumericTerms.inOrder(many.against().coefs().keySet())) {
+                        added.add(term.atOnePosition());
+                    }
+                    Function<NumericTerm, Carrier> on = term -> {
+                        TermOrders orders = subject.quantities().ordersOf(term);
+                        return orders == null ? null : orders.observed();
+                    };
+                    switch (NumericWitness.of(here, added, on, looking)) {
+                        case NumericWitness.Standing.Found standing -> {
+                            Map<NumericTerm, Place> standingAt = new LinkedHashMap<>();
+                            for (NumericWitness.Standing.Found.Placed placed
+                                    : standing.inFixingOrder()) {
+                                RealizationTarget at = RealizationTarget.of(placed.position());
+                                // A number already standing was given to the region, so it is
+                                // placed where it stands.
+                                if (out.putIfAbsent(at, placed.place()) == null) {
+                                    routed.put(placed.position(), (RealizationTarget.OfANumber) at);
+                                    here = here.given(placed.position(), placed.place());
+                                }
+                                standingAt.put(placed.position(), placed.place());
+                            }
+                            counts = switch (OrderedAffineBoundary.at(many.against(), standingAt)) {
+                                case ExactAnswer.Held<ExactRatio>(ExactRatio sum) ->
+                                        many.countsWhere(sum);
+                                case ExactAnswer.Unheld<ExactRatio> _ -> null;
+                            };
+                            if (counts == null) {
+                                gaps.add(new ReachabilityGap.Uncomposed(cut,
+                                        new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                                continue;
+                            }
+                        }
+                        case NumericWitness.Standing.ProvedImpossible _ -> {
+                            gaps.add(new ReachabilityGap.Uncomposed(cut,
+                                    new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                            continue;
+                        }
+                        case NumericWitness.Standing.NotFound(var by, var unheld) -> {
+                            gaps.add(new ReachabilityGap.Uncomposed(cut,
+                                    by.isEmpty() && unheld.isEmpty()
+                                            ? new ReachabilityGap.Why.NoValueComposedForItsPositions()
+                                            : ReachabilityGap.Why.TheWalkForItsPositionsWasStopped
+                                                    .by(by, unheld)));
+                            continue;
+                        }
+                    }
+                } else {
+                    counts = many.counts().values();
+                }
+                countsOnTheWay.merge(count.identity(), new CountsAsked(count, counts, cut),
+                        CountsAsked::and);
                 continue;
             }
             // A statement no composer writes toward: nothing is placed for it, and the run is what
             // says whether the row met it.
-            if (cut.demand() instanceof RowDemand.ForTheRun(var _, var why)) {
+            if (cut.demand() instanceof RowDemand.ForTheRun(var _, var why, var past)) {
                 gaps.add(new ReachabilityGap.Uncomposed(cut,
-                        new ReachabilityGap.Why.NoComposerWritesIt(why)));
+                        new ReachabilityGap.Why.NoComposerWritesIt(why, past)));
                 continue;
             }
             // What an element is asked with no relation among it has no number to place: that the
@@ -5307,14 +5394,13 @@ public final class Generator {
             // the rules allow meets them, and the container cannot hold none.
             case RowDemand.ForAll every -> {
                 List<RowDemand.Relational> ofEachElement = every.relations();
-                Optional<RowDemand.Relational> holdingNone = every.holdingNone();
                 Placed some = placedIn(subject, looking, here, alreadyStanding, someElement,
                         assumed, cut, constraints(ofEachElement), true);
-                if (some instanceof Placed.AtAll || holdingNone.isEmpty()) {
-                    yield asComposedOnly(cut, some, false);
+                if (some instanceof Placed.AtAll) {
+                    yield some;
                 }
                 Placed none = placedIn(subject, looking, here, alreadyStanding, someElement,
-                        assumed, cut, List.of(holdingNone.get().constraint()), true);
+                        assumed, cut, List.of(every.holdingNone().constraint()), true);
                 if (none instanceof Placed.AtAll) {
                     yield none;
                 }
@@ -5593,7 +5679,8 @@ public final class Generator {
         private Placed witnessed(Requirements trying,
                                  Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
                                  SequencedMap<RealizationTarget, NumericTerm.FromOnePosition> owing) {
-            NumericWitness.Standing found = NumericWitness.of(here,
+            NumericWitness.Standing found = NumericWitness.of(
+                    here.given(remaindersStanding(alreadyStanding)),
                     List.copyOf(new LinkedHashSet<>(owing.values())),
                     term -> carrierOf(term, subject.quantities()), looking);
             // What the rules settle before what this compiler managed, because a reader may act on
@@ -5757,6 +5844,7 @@ public final class Generator {
         return switch (target) {
             case RealizationTarget.AtOnePosition(NumericTerm.FromOnePosition term) -> term;
             case RealizationTarget.OverARun(NumericTerm.TakenOver term) -> term;
+            case RealizationTarget.AmongTheElements(NumericTerm.Multiplicity term) -> term;
             case RealizationTarget.AtOnePositionElsewhere(NumericTerm.FromOnePosition term,
                                                          TermPath root) -> {
                 NumericTerm moved = subject.quantities().namedAt(term, root);
@@ -6010,6 +6098,23 @@ public final class Generator {
                 Set<Incompleteness.Code> unread = EnumSet.noneOf(Incompleteness.Code.class);
                 Set<UnheldNumber> notWorkedOut = EnumSet.noneOf(UnheldNumber.class);
                 boolean stands = switch (target.term()) {
+                    // How often a value occurs among the values standing there: a row stands at a
+                    // point where some element's value is that frequent.
+                    case NumericTerm.Multiplicity _ -> {
+                        boolean any = false;
+                        for (ObservedValue value : values) {
+                            switch (on.readAmong(value, values)) {
+                                case NumericTerm.Reading.Number number ->
+                                        any |= number.value().compareTo(at) == 0;
+                                case NumericTerm.Reading.Missing missing ->
+                                        unread.add(missing.code());
+                                case NumericTerm.Reading.NotNumber _ -> { }
+                                case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
+                                        notWorkedOut.add(why);
+                            }
+                        }
+                        yield any;
+                    }
                     case NumericTerm.FromOnePosition _ -> {
                         boolean any = false;
                         for (souther.compiler.observe.ObservedValue value : values) {
@@ -6025,7 +6130,7 @@ public final class Generator {
                         }
                         yield any;
                     }
-                    case NumericTerm.TakenOver _ -> switch (on.readOver(values)) {
+                    case NumericTerm.TakenOver _ -> switch (readRun(on, values)) {
                         case NumericTerm.Reading.Number number ->
                                 number.value().compareTo(at) == 0;
                         case NumericTerm.Reading.Missing missing -> {
@@ -6058,6 +6163,25 @@ public final class Generator {
                         + " at " + at + " and does not stand there");
             }
         };
+    }
+
+    /**
+     * What {@code on} reads of a run from the values the walk stood at its position.
+     *
+     * <p>For a run computed of each element those values are the elements, and each is read as one
+     * element: the fields its computation reads are the fields of that element, so what is paired
+     * is what the row pairs.
+     */
+    private static NumericTerm.Reading readRun(TermOrders on, List<ObservedValue> values) {
+        if (!(on.term() instanceof NumericTerm.TakenOver over)
+                || !(over.source() instanceof RunSource.ComputedOccurrences)) {
+            return on.readOver(values);
+        }
+        List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+        for (ObservedValue element : values) {
+            each.add(field -> field.in(element));
+        }
+        return on.readOverElements(each);
     }
 
     /**
@@ -6136,6 +6260,30 @@ public final class Generator {
             }
         }
         return region;
+    }
+
+    /**
+     * The remainders the row already stands at, each at its number.
+     *
+     * <p>A position's value is placed after the item's numbers are, and a remainder of it is one of
+     * those: left out of what the place is chosen in, the value goes where the run begins and the
+     * remainder fixed beside it is refused afterwards. Said to the region first, the run the value
+     * is chosen in is the one the remainder leaves ({@code inputs.ReadQuantities}).
+     *
+     * <p>Only these. Any other number standing beside the value is read off it and not chosen
+     * before it, which is how it has been placed and is not what this changes.
+     */
+    private static Map<NumericTerm, Place> remaindersStanding(
+            Map<RealizationTarget, Place> standing) {
+        Map<NumericTerm, Place> remainders = new LinkedHashMap<>();
+        standing.forEach((target, at) -> {
+            if (target instanceof RealizationTarget.OfANumber number
+                    && number.term() instanceof NumericTerm.TakenOf taken
+                    && taken.takenAs() instanceof TakenAs.TheFloorRemainder) {
+                remainders.put(taken, at);
+            }
+        });
+        return remainders;
     }
 
     /**
@@ -7839,6 +7987,22 @@ public final class Generator {
                     null, Optional.of("the way to a comparison the row is held to takes a case"
                             + " its classes do not")));
         }
+        // And what the way asks the elements of its containers to be, which the elements are
+        // written as. Where that is two things at one position inside an element, beside each
+        // other or beside the classes, the elements are written alike and no row is — which is
+        // this composer's answer and not the model's.
+        ElementWrites elements = holding.reaching() == null
+                ? ElementWrites.of(List.of())
+                : ElementWrites.of(holding.reaching().boundedOnTheWay());
+        switch (elements.requiredBeside(withTheWay)) {
+            case Requirements.Merge.Merged(Requirements both) -> withTheWay = both;
+            case Requirements.Merge.Conflict conflict -> {
+                return RowComposed.Failed.ofTheRow(new Attempt(null,
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                        conflict.at().toString(),
+                        Optional.of(ElementWrites.writtenAlike(conflict.at()))));
+            }
+        }
         required = strictlyUnder(withTheWay, composedWhole, false);
         // And the locations only a comparison asked about, which no class wrote. Not one the row
         // is narrowed at: what has to hold of it is then one thing said two ways — the case it is,
@@ -7873,8 +8037,10 @@ public final class Generator {
         // by one under another case that does not. What they came to is said over every one of
         // them, with the figure where the walk stopped short of the rest.
         Requirements rowIs = required;
+        Set<TermPath> truthsWritten = new LinkedHashSet<>(truthsAsked.at().keySet());
+        truthsWritten.addAll(elements.truthsAt());
         ContentsAsked.UnderTheCases under = holding.contents().underTheCases(subject.reach(),
-                rowIs, truthsAsked.at().keySet());
+                rowIs, truthsWritten);
         RowComposed[] stoppedWith = {null};
         SearchShortfall[] passedOver = {null};
         List<RowComposed.Failed> cameToNothing = new ArrayList<>();
@@ -7904,6 +8070,22 @@ public final class Generator {
                         twice.toString(), Optional.of("`" + twice + "` is asked by the way to"
                                 + " hold " + truths.at().get(twice)
                                 + " and is written another value"))));
+                return false;
+            }
+            // Then what the elements are asked, written beside it: two things at one position
+            // inside an element are elements written alike, and not a row the model has none of.
+            TermPath alike;
+            switch (elements.truthsBeside(truths, way.standing())) {
+                case TruthsAsked.Merge.Merged(var withTheElements) -> {
+                    truths = withTheElements;
+                    alike = withTheElements.writtenInto(writes);
+                }
+                case TruthsAsked.Merge.Conflict(var at) -> alike = at;
+            }
+            if (alike != null) {
+                cameToNothing.add(RowComposed.Failed.ofTheRow(new Attempt(null,
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, alike.toString(),
+                        Optional.of(ElementWrites.writtenAlike(alike)))));
                 return false;
             }
             Set<TermPath> writtenAt = new LinkedHashSet<>(together.keySet());
@@ -9899,8 +10081,10 @@ public final class Generator {
                                 ? one.value() : null;
                 // What an operation answered is not what its root holds — three characters is not
                 // the position standing at three, and a hundred is not what the list adding up to
-                // it holds.
-                case NumericTerm.TakenOf _, NumericTerm.TakenOver _ -> null;
+                // it holds. Nor is how many of a string's code points are in a class, or how often
+                // a value occurs among the elements beside it.
+                case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
+                     NumericTerm.Multiplicity _, NumericTerm.TakenOver _ -> null;
             };
             // Nor is how many of its elements meet a statement.
             case RealizationTarget.ACount _ -> null;

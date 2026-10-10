@@ -29,8 +29,9 @@ public record AnOperationApplied(ValueName operation, List<Core> args) {
                     new AnOperationApplied(kept.declared().operation(), kept.args());
             case Core.Call call when call.fn() instanceof Core.Reached reached ->
                     new AnOperationApplied(reached.denotes(), call.args());
-            // The operator takes two strings or two lists and nothing else, so what is no string
-            // is a list.
+            // The checker types the operator over two strings or two lists and refuses it over
+            // anything else, so a join that is no string's is a list's: the string's append and the
+            // list's are the two operations it can be.
             case Core.Binary joined when joined.op() == BinOp.CONCAT -> new AnOperationApplied(
                     ValueName.Stdlib.operation(Type.STRING.equals(joined.type()) ? "String" : "List",
                             "append"), List.of(joined.left(), joined.right()));

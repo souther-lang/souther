@@ -710,7 +710,7 @@
             "path" : "item.price"
           },
           "stopped" : [ {
-            "reason" : "unsupported_syntax"
+            "reason" : "non_affine_product"
           } ]
         }, {
           "at" : "rate",
@@ -729,7 +729,7 @@
             "path" : "rate"
           },
           "stopped" : [ {
-            "reason" : "unsupported_syntax"
+            "reason" : "non_affine_product"
           } ]
         } ],
         "claimsOffAxis" : [ ],
@@ -1370,7 +1370,7 @@
         "notDerivable" : [ "item.note@Some" ],
         "notRead" : [ {
           "position" : "item.price",
-          "reason" : "unsupported_syntax",
+          "reason" : "non_affine_product",
           "rule" : "comparison@0:68:15",
           "ruleId" : {
             "kind" : "comparison",
@@ -1382,7 +1382,7 @@
           }
         }, {
           "position" : "rate",
-          "reason" : "unsupported_syntax",
+          "reason" : "non_affine_product",
           "rule" : "comparison@0:68:15",
           "ruleId" : {
             "kind" : "comparison",
@@ -1511,7 +1511,7 @@
           "ordinal" : 3,
           "lowered" : 0
         },
-        "reason" : "unsupported_syntax"
+        "reason" : "non_affine_product"
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
@@ -1524,7 +1524,7 @@
           "ordinal" : 3,
           "lowered" : 0
         },
-        "reason" : "unsupported_syntax"
+        "reason" : "non_affine_product"
       }, {
         "kind" : "rule_unaccounted",
         "disposition" : "reported",

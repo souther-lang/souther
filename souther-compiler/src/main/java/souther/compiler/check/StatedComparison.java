@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Rel;
 
+import java.math.BigDecimal;
 import java.util.function.Function;
 
 /**
@@ -91,6 +92,18 @@ public record StatedComparison(ComparisonClaim claim, Core left, Core right,
         }
         K other = named.apply(right);
         return other == null ? null : new Numbered<>(claim.turned(), other, left);
+    }
+
+    /**
+     * The number {@code e} folds to where the arithmetic over the input folds it, or null where it
+     * folds to none.
+     *
+     * <p>The side a number is held against is read as the arithmetic reads it, so a reader that
+     * needs the number {@code 0 - 5} or a name given one agrees with the line that arithmetic draws
+     * for the same comparison.
+     */
+    public static BigDecimal foldedNumber(Core e, Symbols symbols) {
+        return Terms.constantNumber(e, symbols);
     }
 
     /**

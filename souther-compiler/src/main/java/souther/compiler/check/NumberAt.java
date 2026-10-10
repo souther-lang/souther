@@ -1,7 +1,10 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.ValueName;
+
+import java.util.Objects;
 
 /**
  * One number, at one place: which of the numbers there it is, and where it sits.
@@ -78,6 +81,17 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                 new OfWhatNumber.OfWhatAnOperationAnswers(operation, arguments));
     }
 
+    /** How many of the code points of the string at {@code position} are in {@code counted}. */
+    public static <P> NumberAt<P> countOf(P position, CodePointClass counted) {
+        return new NumberAt<>(position, new OfWhatNumber.OfHowManyCodePointsAreIn(counted));
+    }
+
+    /** How many elements of the container {@code position} stands inside hold there what the
+     *  element under consideration holds. */
+    public static <P> NumberAt<P> multiplicityOf(P position) {
+        return new NumberAt<>(position, new OfWhatNumber.OfItsMultiplicity());
+    }
+
     /**
      * The same number with the place spelled {@code position}.
      *
@@ -122,6 +136,29 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                                 + " was given nothing");
             }
         }
+
+        /**
+         * How many of the code points of the string standing there are in {@code counted}.
+         *
+         * <p>No operation answers it, so no operation names it: what makes it a number of its own
+         * is the class, and two classes of one string are two numbers at one place.
+         */
+        record OfHowManyCodePointsAreIn(CodePointClass counted) implements OfWhatNumber {
+
+            public OfHowManyCodePointsAreIn {
+                Objects.requireNonNull(counted, "this one names the code points");
+            }
+        }
+
+        /**
+         * How many elements of the container the place stands inside hold at it what the element
+         * under consideration holds there.
+         *
+         * <p>A number of an element read off the elements beside it, so nothing the place holds
+         * says it: two elements holding one value are one number, and a place holding the same
+         * value is another number when what is counted is the elements around it.
+         */
+        record OfItsMultiplicity() implements OfWhatNumber {}
     }
 
     /**
@@ -140,6 +177,9 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
             case OfWhatNumber.OfItsOwnValue _ -> position.toString();
             case OfWhatNumber.OfWhatAnOperationAnswers taken ->
                     taken.operation() + taken.arguments().writtenWith(position.toString());
+            case OfWhatNumber.OfHowManyCodePointsAreIn count ->
+                    "#(" + count.counted() + ")(" + position + ")";
+            case OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + position + ")";
         };
     }
 }

@@ -14,6 +14,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Whether what {@code List.filter} kept holds anything is whether some element met the closure it
@@ -253,33 +254,163 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
     }
 
     /**
-     * And an operation that can empty what it was handed, or that says nothing either way, stops
-     * the reading where it is.
+     * Another order of a list's elements has as many of them meeting a closure as the list does, and
+     * some of them meeting it where the list does, so a filter over one is read as the filter over
+     * the list.
      */
     @Test
-    void anOperationThatCanEmptyWhatItWasHandedIsNotSeenThrough() {
+    void aFilterOverAnotherOrderOfTheElementsIsReadAsTheFilterOverThem() {
+        String list = """
+                behavior pick : (xs: List<Int>) -> Int
+                let pick (xs) = if List.length(%s) %s then 1 else 0
+                """;
+        for (String count : List.of(">= 1", "== 0")) {
+            Compilation direct = compiled(list.formatted("List.filter(x -> x > 0, xs)", count));
+            for (String order : List.of("List.reverse(xs)", "List.sort(xs)",
+                    "List.reverse(List.sort(xs))")) {
+                assertTheSame(direct, list.formatted(
+                        "List.filter(x -> x > 0, " + order + ")", count));
+            }
+        }
+    }
+
+    /**
+     * What a filter kept holds an element meeting a closure where some element it was handed met
+     * that closure and the one it kept by: a filter over a filter is the filter of both closures,
+     * in a list and in a set, asked whether it holds anything and how many.
+     */
+    @Test
+    void aFilterOverAFilterIsReadAsTheFilterOfBothClosures() {
+        String list = """
+                behavior pick : (xs: List<Int>) -> Int
+                let pick (xs) = if List.length(%s) >= 1 then 1 else 0
+                """;
+        String set = """
+                behavior pick : (xs: Set<Int>) -> Int
+                let pick (xs) = if Set.size(%s) >= 1 then 1 else 0
+                """;
+        // Rows no element of which meets both closures, one of which meets each, tell a filter
+        // over a filter from the filter over the first closure alone.
+        String pair = """
+
+                example pick
+                    | "each closure met by another element" : ([10, -1]) -> 0
+                    | "both met by one element" : ([10, 5]) -> 1
+                """;
+        String triple = """
+
+                example pick
+                    | "each closure met by another element" : ([10, -1]) -> 0
+                    | "two of three met by one element" : ([10, 5]) -> 0
+                    | "all three met by one element" : ([10, 6]) -> 1
+                """;
+        assertTheSame(list.formatted("List.filter(x -> x > 0 && x < 9, xs)") + pair,
+                list.formatted("List.filter(x -> x > 0, List.filter(x -> x < 9, xs))") + pair);
+        assertTheSame(set.formatted("Set.filter(x -> x > 0 && x < 9, xs)"), set.formatted(
+                "Set.filter(x -> x > 0, Set.filter(x -> x < 9, xs))"));
+        assertTheSame(list.formatted("List.filter(x -> x > 0 && x < 9 && x /= 5, xs)") + triple,
+                list.formatted("List.filter(x -> x > 0, List.filter(x -> x < 9,"
+                        + " List.filter(x -> x /= 5, xs)))") + triple);
+        assertTheSame(list.formatted("List.filter(x -> x + 1 > 0 && x < 9, xs)") + pair,
+                list.formatted("List.filter(y -> y > 0, List.map(x -> x + 1,"
+                        + " List.filter(x -> x < 9, xs)))") + pair);
+    }
+
+    /**
+     * A set made of a list holds every value the list does, so whether some element of it meets a
+     * closure is whether some element of the list does — and how many of the set meet it is not
+     * how many of the list do, where the list holds a value twice.
+     */
+    @Test
+    void aSetMadeOfAListHoldsAnElementMeetingAClosureWhereTheListDoes() {
+        assertTheSame("""
+                behavior pick : (xs: List<Int>) -> Int
+                let pick (xs) = if List.length(List.filter(x -> x > 0, xs)) >= 1 then 1 else 0
+                """, """
+                behavior pick : (xs: List<Int>) -> Int
+                let pick (xs) =
+                    if Set.size(Set.filter(x -> x > 0, Set.fromList(xs))) >= 1 then 1 else 0
+                """);
+        PartitionEvidence counted = measured(compiled("""
+                behavior pick : (xs: List<Int>) -> Int
+                let pick (xs) =
+                    if Set.size(Set.filter(x -> x > 0, Set.fromList(xs))) >= 2 then 1 else 0
+                """));
+        assertEquals(List.of("[xs[*]/x <= 0, xs[*]/0 < x]"), classesOf(counted),
+                "the closure's own line on each element, and none on how many meet it");
+        assertTrue(notRead(counted).contains("xs RULE_ABOUT_A_DERIVED_VALUE"),
+                "how many different values meet it is not how many elements do");
+    }
+
+    /**
+     * Every answer of a closure over a set is in what the set mapped holds, so whether some element
+     * of it meets a closure is read of the set — and how many of it do is not.
+     */
+    @Test
+    void aSetMappedHoldsAnElementMeetingAClosureWhereTheSetDoes() {
+        String model = """
+                behavior pick : (xs: Set<Int>) -> Int
+                let pick (xs) = if Set.size(Set.filter(x -> x > 0, Set.map(x -> x + 1, xs))) %s
+                    then 1 else 0
+                """;
+        assertEquals(List.of("xs[*] RULE_ABOUT_A_DERIVED_VALUE"),
+                notRead(measured(compiled(model.formatted(">= 1")))),
+                "the comparison is read, and the closure's own rule is the one a set's map leaves");
+        assertTrue(notRead(measured(compiled(model.formatted(">= 2"))))
+                        .contains("xs RULE_ABOUT_A_DERIVED_VALUE"),
+                "how many answers meet it is not how many elements of the set do");
+    }
+
+    /**
+     * A set mapped holds fewer elements than it was handed where two of them map to one, so how
+     * many of what it holds meet a closure is not how many of what it was handed do, and nothing
+     * is read as that.
+     */
+    @Test
+    void howManyOfAMappedSetMeetAClosureIsNotReadAsHowManyOfTheSetDo() {
+        PartitionEvidence counted = measured(compiled("""
+                behavior pick : (xs: Set<Int>) -> Int
+                let pick (xs) = if Set.size(Set.filter(x -> x == 0, Set.map(x -> 0, xs))) >= 2
+                    then 1 else 0
+                """));
+        assertEquals(List.of(), classesOf(counted).stream()
+                .filter(each -> each.contains("xs")).toList(),
+                "no line on the set's elements decides it");
+    }
+
+    /**
+     * An operation that can empty what it was handed is seen through where its law says when it
+     * does, and one that says nothing either way stops the reading where it is.
+     *
+     * <p>Taking {@code n} of what was kept is empty where {@code n} is below one or nothing was
+     * kept, which is the law the library's body of {@code List.take} was proved to answer: the
+     * check draws its line on {@code n}, deciding where something was kept, and the closure's
+     * comparison draws its own.
+     */
+    @Test
+    void anOperationThatCanEmptyWhatItWasHandedIsSeenThroughOnlyByItsLaw() {
         String list = """
                 behavior pick : (xs: List<Int>, n: Int) -> Int
                 let pick (xs, n) = if List.isEmpty(%s) then 1 else 0
                 """;
-        assertEquals(List.of("n RULE_ABOUT_A_DERIVED_VALUE", "xs[*] RULE_ABOUT_A_DERIVED_VALUE",
-                        "xs RULE_ABOUT_A_DERIVED_VALUE"),
-                notRead(measured(compiled(list.formatted(
-                        "List.take(n, List.filter(x -> x > 0, xs))")))),
-                "taking none of what was kept is empty whatever was kept");
+        PartitionEvidence taken = measured(compiled(list.formatted(
+                "List.take(n, List.filter(x -> x > 0, xs))")));
+        assertEquals(List.of(), notRead(taken),
+                "taking none of what was kept is empty whatever was kept, and nothing else is");
+        assertEquals(List.of("[xs[*]/x <= 0, xs[*]/0 < x]", "[n/x < 1, n/1 <= x]"),
+                classesOf(taken), "a line on n, beside the closure's on each element");
         String text = """
                 behavior pick : (s: String) -> Int
                 let pick (s) = if String.isEmpty(String.trim(s)) then 1 else 0
                 """;
-        assertEquals(List.of("s RULE_ABOUT_A_DERIVED_VALUE"),
-                notRead(measured(compiled(text))),
-                "a string of spaces trims to nothing");
+        assertEquals(List.of(), notRead(measured(compiled(text))),
+                "a string of spaces trims to nothing: no code point of it is outside whitespace");
     }
 
     /**
      * How many were kept of values written out is which of them were: read through, as what the
-     * closure answers for each — and with one of those a truth no row's numbers answer, held as
-     * several lines and not drawn, at each position the rule is about.
+     * closure answers for each — and with one of those a truth of the input, which a row writes,
+     * a line on the cost deciding where the trip is abroad, and nothing left unread.
      */
     @Test
     void howManyWereKeptIsWhichOfThemWere() {
@@ -289,10 +420,11 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
                         if List.length(List.filter(r -> applies(t, r), [High, Abroad])) %s
                         then 2 else 1
                     """.formatted(count)));
-            assertEquals(List.of("t.cost SEVERAL_LINES_IN_ONE_RULE",
-                            "t.abroad SEVERAL_LINES_IN_ONE_RULE"),
+            assertEquals(List.of(),
                     counted.notRead().stream().map(each -> each.at() + " " + each.reason())
                             .toList(), count);
+            assertEquals(List.of("[t.cost/x < 100, t.cost/100 <= x]", "[true, false]"),
+                    classesOf(counted), count);
         }
     }
 
@@ -404,6 +536,10 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
 
     private static List<String> notRead(PartitionEvidence evidence) {
         return evidence.notRead().stream().map(each -> each.at() + " " + each.reason()).toList();
+    }
+
+    private static List<String> classesOf(PartitionEvidence evidence) {
+        return evidence.axes().stream().map(axis -> String.valueOf(axis.classes())).toList();
     }
 
     private static List<String> toldApart(PartitionEvidence evidence) {

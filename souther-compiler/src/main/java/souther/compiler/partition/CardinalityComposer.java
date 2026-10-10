@@ -6,7 +6,9 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -149,20 +151,38 @@ final class CardinalityComposer {
             case NumericDomain.FormProjection.NothingIsLeft _ -> null;
             case null -> NumericDomain.Bounds.OPEN;
         };
-        List<ExactRatio> turns = new ArrayList<>();
-        for (Asked each : asked) {
-            List<ExactRatio> where = each.turnsAt(element.term(), beside);
-            if (where == null) {
-                return notChosen("where `" + each + "` turns over an element of `" + container
-                        + "` could not be worked out");
-            }
-            turns.addAll(where);
-        }
         boolean distinct = holding.kind() == Shape.Sequence.Kind.SET;
+        int perPart = distinct ? MOST_ELEMENTS : 1;
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
-        Groups groups = Groups.of(asked, container, element, written,
-                run == null ? List.of() : valuesAlong(element.carrier(), run, turns,
-                        distinct ? MOST_ELEMENTS : 1, unheld));
+        List<Place> candidates = List.of();
+        if (element.carrier().counts()) {
+            List<ExactRatio> turns = new ArrayList<>();
+            for (Asked one : asked) {
+                List<ExactRatio> where = one.turnsAt(element.term(), beside);
+                if (where == null) {
+                    return notChosen("where `" + one + "` turns over an element of `" + container
+                            + "` could not be worked out");
+                }
+                turns.addAll(where);
+            }
+            if (run != null) {
+                candidates = valuesAlong(element.carrier(), run, turns, perPart, unheld);
+            }
+        } else {
+            List<Place> turns = new ArrayList<>();
+            for (Asked one : asked) {
+                List<Place> where = one.placesTurnedAt(element.term());
+                if (where == null) {
+                    return notChosen("where `" + one + "` turns over an element of `" + container
+                            + "` could not be worked out");
+                }
+                turns.addAll(where);
+            }
+            if (run != null) {
+                candidates = valuesAlongAnOrder(element.carrier(), run, turns, perPart);
+            }
+        }
+        Groups groups = Groups.of(asked, container, element, written, candidates);
         TypeView ofTheElement = TypeView.of(holding.element(), ruleSource.inners(),
                 ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
         List<FixtureTemplate> built = new ArrayList<>();
@@ -214,6 +234,138 @@ final class CardinalityComposer {
     }
 
     /**
+     * Containers of {@code sourceType} holding some element as often as {@code alike} asks, and as
+     * many elements as {@code manyItHolds} asks where it is not null.
+     *
+     * <p>Which value it is that occurs is no part of what is asked: any one value occurring that
+     * often answers it, so one is taken from the values the element's own number leaves and the
+     * container is that value as many times as asked, with other values beside it where the size
+     * asked for is larger. The elements are those values and nothing else is chosen for them, so
+     * the key is the element itself.
+     */
+    static TermRealizations.Realization composeAlike(Type sourceType,
+                                                     RealizationTarget.OfANumber alike,
+                                                     RealizationTarget.OfANumber manyItHolds,
+                                                     SequencedMap<RealizationTarget, AskedAt> demands,
+                                                     Quantities measuring, SearchRegion within,
+                                                     RuleReadingContext reading) {
+        NumericTerm.Multiplicity term = (NumericTerm.Multiplicity) alike.term();
+        TermPath container = term.container();
+        RuleReadingSource ruleSource = reading.source();
+        AskedAt asked = demands.get(alike);
+        if (asked == null || asked.walking() == null) {
+            return none("nothing says how often an element of `" + container + "` is to occur");
+        }
+        NumericSet wanted = asked.walking();
+        NumericSet size = null;
+        if (manyItHolds != null) {
+            AskedAt holds = demands.get(manyItHolds);
+            if (holds == null || holds.walking() == null) {
+                return none("nothing says how many elements `" + container + "` holds");
+            }
+            size = holds.walking();
+        }
+        TypeView view = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums());
+        if (!(view.shape() instanceof Shape.Sequence holding)
+                || !container.element().outermostContainer().equals(container)) {
+            return notChosen("`" + container + "` is no list or set written where it stands, to"
+                    + " hold an element as often as asked (it stands as " + sourceType + ")");
+        }
+        if (!term.place().equals(container.element())) {
+            return notChosen("an element of `" + container + "` is alike another at a place inside"
+                    + " it, which is not one number the elements are chosen at");
+        }
+        NumericTerm own = new NumericTerm.ValueOf(container.element());
+        TermOrders orders = measuring.ordersOf(own);
+        Carrier carrier = orders == null ? null : orders.observed();
+        if (carrier == null) {
+            return notChosen("an element of `" + container + "` is on no order its values are"
+                    + " chosen on");
+        }
+        NumericDomain.Bounds run = switch (within == null ? null : within.projectionOf(own)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                    held == null ? NumericDomain.Bounds.OPEN : held;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> null;
+            case null -> NumericDomain.Bounds.OPEN;
+        };
+        if (run == null) {
+            return none("the rules leave no value for an element of `" + container + "`");
+        }
+        // One value to repeat and as many different ones beside it as the size asked for leaves
+        // room for; a set holds each value once, so it holds nothing repeated.
+        boolean distinct = holding.kind() == Shape.Sequence.Kind.SET;
+        Set<CompositionCapacity> unheld = new LinkedHashSet<>();
+        List<Place> candidates = carrier.counts()
+                ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld)
+                : valuesAlongAnOrder(carrier, run, List.of(), MOST_ELEMENTS + 1);
+        TypeView ofTheElement = TypeView.of(holding.element(), ruleSource.inners(),
+                ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
+        List<FixtureTemplate> built = new ArrayList<>();
+        Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
+        for (int often = 1; often <= MOST_ELEMENTS && built.size() < MOST_OFFERED; often++) {
+            if (!wanted.holds(Count.of(often), Carrier.WHOLE) || (distinct && often > 1)
+                    || candidates.isEmpty()) {
+                continue;
+            }
+            for (int total = often; total <= MOST_ELEMENTS && built.size() < MOST_OFFERED;
+                    total++) {
+                if (size != null && !size.holds(Count.of(total), Carrier.WHOLE)) {
+                    continue;
+                }
+                if (total - often + 1 > candidates.size()) {
+                    break;
+                }
+                List<Place> values = new ArrayList<>();
+                for (int i = 0; i < often; i++) {
+                    values.add(candidates.getFirst());
+                }
+                values.addAll(candidates.subList(1, 1 + total - often));
+                FixtureTemplate one = occursAsOften(values, wanted)
+                        ? holdingThese(values, carrier, view, ofTheElement, ruleSource) : null;
+                if (one != null) {
+                    built.add(one);
+                }
+                // The smallest container that is that many repeated is the one a row is written
+                // with, so a larger one is offered only where a size was asked for.
+                if (size == null) {
+                    break;
+                }
+            }
+        }
+        // Containers holding an element more often than a container is composed with are not
+        // looked at, which is the figure a reader raises where that is what the asked-for counts
+        // run to.
+        Endpoint mostOften = wanted.extent().max();
+        if (mostOften == null || mostOften.at().compareTo(Count.of(MOST_ELEMENTS)) > 0) {
+            refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
+        }
+        CompositionShortfall rest = CompositionShortfall.of(refused, Set.of(), unheld);
+        if (!built.isEmpty()) {
+            return new TermRealizations.Realization.Built(built, rest);
+        }
+        if (!rest.figures().isEmpty()) {
+            return new TermRealizations.Realization.Stopped(rest);
+        }
+        if (!rest.nothing()) {
+            return new TermRealizations.Realization.Unexhausted(rest, null);
+        }
+        return none("no container of `" + container + "` this composed holds an element as often"
+                + " as asked");
+    }
+
+    /** Whether some value of {@code values} occurs as often as {@code wanted} holds. */
+    private static boolean occursAsOften(List<Place> values, NumericSet wanted) {
+        for (Place each : values) {
+            long same = values.stream().filter(each::sameAs).count();
+            if (wanted.holds(Count.of(same), Carrier.WHOLE)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * One thing the elements of the container are asked, and how many of them are to answer it.
      *
      * <p>Two kinds, and one walk over both. How many elements meet a statement is a count; an
@@ -233,6 +385,10 @@ final class CardinalityComposer {
         /** Where an element's answer to this turns over, with the numbers beside it where {@code
          *  beside} says; null where that could not be worked out. */
         List<ExactRatio> turnsAt(NumericTerm element, Map<NumericTerm, Place> beside);
+
+        /** The places an element turns over at, where its values are ordered and not counted; null
+         *  where that could not be worked out. */
+        List<Place> placesTurnedAt(NumericTerm element);
 
         /** Whether a container of {@code values}, read whole as {@code row}, has as many elements
          *  answering this as it asks — for every count the reading leaves, where one was not read. */
@@ -265,6 +421,11 @@ final class CardinalityComposer {
             @Override
             public List<ExactRatio> turnsAt(NumericTerm element, Map<NumericTerm, Place> beside) {
                 return perElement.turnsAt(element, beside);
+            }
+
+            @Override
+            public List<Place> placesTurnedAt(NumericTerm element) {
+                return perElement.placesTurnedAt(element);
             }
         }
 
@@ -300,6 +461,12 @@ final class CardinalityComposer {
                     }
                 }
                 return out;
+            }
+
+            /** An element standing in a set of ordered values is not one this chooses. */
+            @Override
+            public List<Place> placesTurnedAt(NumericTerm element) {
+                return null;
             }
         }
     }
@@ -343,7 +510,7 @@ final class CardinalityComposer {
                 }
             }
             Carrier carrier = own == null ? null : on.get(own);
-            if (carrier == null || !carrier.counts()) {
+            if (carrier == null) {
                 return null;
             }
             return new Element(own, carrier, List.copyOf(beside), on);
@@ -427,6 +594,54 @@ final class CardinalityComposer {
             }
         }
         return out;
+    }
+
+    /**
+     * Values of an element inside {@code run}, for an order that is not counted: each place a
+     * relation turns at that the run holds, and up to {@code each} different values from every run
+     * between two of them and past the last.
+     *
+     * <p>No arithmetic parts the run here, since there is no distance between two values of the
+     * order. A place a relation turns at is a value and the run between two of them is walked from
+     * the carrier, which names a value inside it where there is one.
+     */
+    static List<Place> valuesAlongAnOrder(Carrier carrier, NumericDomain.Bounds run,
+                                          List<Place> turns, int each) {
+        List<Place> inside = new ArrayList<>();
+        for (Place turn : turns) {
+            if (holds(run, turn) && inside.stream().noneMatch(turn::sameAs)) {
+                inside.add(turn);
+            }
+        }
+        inside.sort(Place::compareTo);
+        List<Place> out = new ArrayList<>();
+        Endpoint from = run.min();
+        for (Place turn : inside) {
+            out.addAll(walked(carrier, from, Endpoint.exclusive(turn), each));
+            out.add(turn);
+            from = Endpoint.exclusive(turn);
+        }
+        out.addAll(walked(carrier, from, run.max(), each));
+        return out;
+    }
+
+    /** Whether {@code run} holds {@code place}. */
+    private static boolean holds(NumericDomain.Bounds run, Place place) {
+        Endpoint low = run.min();
+        Endpoint high = run.max();
+        if (low != null) {
+            int compared = low.at().compareTo(place);
+            if (compared > 0 || (compared == 0 && !low.inclusive())) {
+                return false;
+            }
+        }
+        if (high != null) {
+            int compared = high.at().compareTo(place);
+            if (compared < 0 || (compared == 0 && !high.inclusive())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

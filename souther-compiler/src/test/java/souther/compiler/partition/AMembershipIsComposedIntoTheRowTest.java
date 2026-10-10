@@ -132,7 +132,7 @@ class AMembershipIsComposedIntoTheRowTest {
     void aContainerWhoseSizeIsFixedHoldsTheValueAtThatSize() {
         RowDemand.Exists some = assertInstanceOf(RowDemand.Exists.class,
                 ((OnTheWay.TakenIn) stated("direct", true).getFirst()).demand());
-        NumericTerm size = some.holdingOne().orElseThrow().terms().iterator().next();
+        NumericTerm size = some.holdingOne().terms().iterator().next();
         List<OnTheWay.TakenIn> way = List.of((OnTheWay.TakenIn) stated("direct", true).getFirst());
         SearchRegion region = new WayToTheBorder(List.copyOf(way))
                 .narrowing(domain("direct").quantities(rules()).region());

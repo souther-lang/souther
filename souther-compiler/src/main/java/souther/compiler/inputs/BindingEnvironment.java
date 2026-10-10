@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
@@ -61,6 +62,10 @@ final class BindingEnvironment {
     private final ElementBindings elements;
     private final boolean callsStand;
     private volatile Map<BindingId, Core> boundAsATable;
+    /** {@link #hashCode}, worked out the first time it is asked: nothing here changes, and what
+     *  it is worked out from is every value bound, which a reader asking it of one environment
+     *  many times would otherwise walk each time. Nought where it has not been. */
+    private int hash;
 
     BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
                        ElementBindings elements, boolean callsStand) {
@@ -144,6 +149,15 @@ final class BindingEnvironment {
 
     /** Where in the element handed to {@code binding} the value a walk answered stands, or null
      *  where the walk answered no place of it ({@link ElementProjection}). */
+    ElementAnswer answerAt(BindingId binding) {
+        return elements.answerAt(binding);
+    }
+
+    /** What each binding the body made holds, over the whole of it. */
+    Map<BindingId, Core> heldByTheBody() {
+        return elements.held();
+    }
+
     ElementProjection projectionAt(BindingId binding) {
         return elements.projectionAt(binding);
     }
@@ -226,6 +240,16 @@ final class BindingEnvironment {
                 callsStand);
     }
 
+    /**
+     * The same, where the body of a behavior a call names is read as well: what that body binds to
+     * the elements of what, beside what this one does. Its bindings are its own, so none of them is
+     * one of these.
+     */
+    BindingEnvironment entering(ElementBindings called) {
+        return new BindingEnvironment(roots, handed, table, newest, elements.and(called),
+                callsStand);
+    }
+
     /** The parameters as positions, which is what a name in a tree stands for. */
     static Map<BindingId, TermPath> rooted(Map<BindingId, String> named) {
         Map<BindingId, TermPath> out = new LinkedHashMap<>();
@@ -246,7 +270,12 @@ final class BindingEnvironment {
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(roots, handed, bound(), elements, callsStand);
+        int h = hash;
+        if (h == 0) {
+            h = java.util.Objects.hash(roots, handed, bound(), elements, callsStand);
+            hash = h;
+        }
+        return h;
     }
 
     @Override

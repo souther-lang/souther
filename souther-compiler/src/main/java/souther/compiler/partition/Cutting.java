@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.NonAffineOperation;
+import souther.compiler.core.Core;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
@@ -11,6 +13,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -21,6 +24,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
@@ -32,12 +36,14 @@ import souther.compiler.reach.ComparisonArrival;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -93,6 +99,29 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
             public Cuts {
                 Objects.requireNonNull(cutting, "a comparison that cuts has a line");
+            }
+        }
+
+        /**
+         * Read to the end, a relation between numbers of the input and a value no position holds:
+         * what the body named a value an operation looked up, an element of what a walk was
+         * handed, the index a walk is at.
+         *
+         * <p>A fact about the rule and not a reading that stopped. Every part of what it states was
+         * read, and nothing that value was made from stopped a reading; where it falls on the
+         * input's numbers moves with the other value from run to run, so it divides none of them —
+         * as a relation between two positions does not.
+         *
+         * @param over the coordinates of the input's numbers it relates
+         */
+        record AgainstAnotherValue(List<FilingCoordinate> over) implements Read {
+
+            public AgainstAnotherValue {
+                over = List.copyOf(over);
+                if (over.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a relation against another value relates some number of the input");
+                }
             }
         }
 
@@ -291,6 +320,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> stopped =
                 new LinkedHashMap<>();
         List<FilingCoordinate> settled = new ArrayList<>();
+        List<FilingCoordinate> against = new ArrayList<>();
         Map<Read, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
         for (ClosureApplications.Application one : each) {
             switch (readOnce(behavior, comparison, read, one.reads(), answering, conditions)) {
@@ -298,6 +328,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 case Read.CutsNothing alone -> alone.filedAt().forEach(at -> {
                     if (!settled.contains(at)) {
                         settled.add(at);
+                    }
+                });
+                case Read.AgainstAnotherValue alone -> alone.over().forEach(at -> {
+                    if (!against.contains(at)) {
+                        against.add(at);
                     }
                 });
                 case Read.Several several -> several.parts().forEach(part -> lines
@@ -309,6 +344,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         if (!stopped.isEmpty()) {
             return new Read.Stopped(stopped);
+        }
+        // Every application's statement is a line or none of them is drawn, and one that relates
+        // the input to another value is no line.
+        if (!against.isEmpty()) {
+            return new Read.AgainstAnotherValue(against);
         }
         if (lines.isEmpty()) {
             return new Read.CutsNothing(settled);
@@ -335,7 +375,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static Read onACount(String behavior, Relation.Affine affine, boolean holds,
                                  InputReading read) {
         if (affine.form().coefs().size() != 1) {
-            return null;
+            return onACountAndNumbers(behavior, affine, holds, read);
         }
         Map.Entry<Quantity, ExactRatio> only = affine.form().coefs().entrySet().iterator().next();
         if (!(only.getKey() instanceof Quantity.HowManyMeet count)
@@ -354,6 +394,64 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         BorderQuantity.HowMany of = new BorderQuantity.HowMany(CountedElements.of(behavior, count,
                 read.quantities(), DemandReading.anElementMeeting(count, read)));
         Cutting drawn = made(of, new Level.OfTheQuantity(level), claim, read.quantities());
+        return drawn == null ? null : cutsOrRefused(drawn);
+    }
+
+    /**
+     * The line a relation over how many elements of a container meet something and numbers of the
+     * input draws — or null where the relation is no such thing: one count, and nothing but numbers
+     * of the input beside it.
+     *
+     * <p>The sum of the count and the form is the quantity, weighed once. A relation is written
+     * with whatever weight on the count, and its sign and size say nothing about where the rows
+     * fall, so it is scaled to weigh the count by one — turned over where that takes a negative —
+     * and then {@code count >= n}, {@code 2 * count >= 2 * n} and {@code n <= count} are one
+     * quantity and one line.
+     */
+    private static Read onACountAndNumbers(String behavior, Relation.Affine affine,
+                                           boolean holds, InputReading read) {
+        Quantity.HowManyMeet count = null;
+        ExactRatio weight = null;
+        for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
+            if (each.getKey() instanceof Quantity.HowManyMeet counted) {
+                if (count != null) {
+                    return null;
+                }
+                count = counted;
+                weight = each.getValue();
+            } else if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+                TermOrders orders = read.quantities().ordersOf(term);
+                if (orders == null || orders.answered() == null || !orders.answered().counts()) {
+                    return null;
+                }
+            } else {
+                return null;
+            }
+        }
+        if (count == null || !AStatementAtARow.askable(count.ofTheElement())) {
+            return null;
+        }
+        if (!(ExactRatio.ONE.dividedBy(weight) instanceof ExactAnswer.Held<ExactRatio>(
+                ExactRatio scale))
+                || !(affine.form().times(scale) instanceof ExactAnswer.Held<LinearForm<Quantity>>(
+                        LinearForm<Quantity> scaled))) {
+            return null;
+        }
+        Map<NumericTerm, ExactRatio> added = new LinkedHashMap<>();
+        Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
+        for (Map.Entry<Quantity, ExactRatio> each : scaled.coefs().entrySet()) {
+            if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+                added.put(term, each.getValue());
+                on.put(term, read.quantities().ordersOf(term));
+            }
+        }
+        ComparisonClaim claim = ComparisonClaim.stating(
+                holds ? affine.proposition() : affine.proposition().denied());
+        BorderQuantity.HowMany of = new BorderQuantity.HowMany(CountedElements.of(behavior, count,
+                read.quantities(), DemandReading.anElementMeeting(count, read)),
+                new LinearForm<>(ExactRatio.ZERO, added), on);
+        Cutting drawn = made(of, new Level.OfTheQuantity(scaled.constant().negated()),
+                scale.signum() < 0 ? claim.turned() : claim, read.quantities());
         return drawn == null ? null : cutsOrRefused(drawn);
     }
 
@@ -393,7 +491,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             GuardThresholds.filedAt(comparison, read, reads, answering));
             case Proposition.All _, Proposition.Any _
                     when !Proposition.leavesSomethingUnread(stated.proposition()) -> {
-                Read several = several(behavior, comparison, stated.proposition(), read, reads);
+                Read several =
+                        several(behavior, comparison.left(), stated.proposition(), read, reads);
                 yield several != null ? several
                         : severalNotDrawn(comparison, read, reads, answering);
             }
@@ -413,11 +512,34 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * on it at all, and where the values came from says whether an operation made them
      * ({@link GuardThresholds#whatEachPlaceIsLeftWith}). Every other kind is the statement's, and
      * the same at each place.
+     *
+     * <p>Except a relation read to the end against a value no position holds, which is no reading
+     * that stopped and is said at the input's numbers it relates ({@link #heldAgainstAnotherValue}).
      */
     private static Read noLine(StatedComparison comparison, Proposition stated,
                                Supplier<AffineReading.OfAComparison> arithmetic,
                                InputReading read, InputReads reads, Arrivals answering) {
-        BlockReason.WhatItStatesIsNoLine said = whatItStates(stated);
+        List<FilingCoordinate> against = heldAgainstAnotherValue(stated);
+        if (against != null) {
+            return new Read.AgainstAnotherValue(against);
+        }
+        // A part the arithmetic met a shape it has no term for in is a stop whose reason was
+        // decided where it was met. Which positions it is filed at is still asked of the
+        // comparison, and the reason is not asked again of where the values came from.
+        List<WhyUnread> stops = Proposition.stopsIn(stated);
+        BlockReason.RuleReadingStopped decided = decidedByTheArithmetic(stops);
+        if (decided != null) {
+            List<FilingCoordinate> at = GuardThresholds.filedAt(comparison, read, reads, answering);
+            if (!at.isEmpty()) {
+                return new Read.Stopped(ComparisonAssessment.atEachOf(at, decided));
+            }
+            SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> from =
+                    new LinkedHashMap<>();
+            GuardThresholds.cameFrom(comparison, reads, read.newtypes(), from);
+            from.replaceAll((place, was) -> decided);
+            return new Read.Stopped(from);
+        }
+        BlockReason.WhatItStatesIsNoLine said = whatItStates(stated, stops);
         // A number no position holds is all the statement says of what it relates. Which number
         // that is — one the body worked out, what a dependency answered, what an operation did —
         // is what the arithmetic over the input met where it stopped, and the place says it.
@@ -449,6 +571,66 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * Where {@code stated} relates numbers of the input to a value no position holds, read to the
+     * end, the coordinates of those numbers — or null where it is no such relation.
+     *
+     * <p>Read to the end means every part of it, and the other value too: a value bound to a name
+     * whose making a reading stopped at is a number this compiler could not follow back, and what
+     * is owed there is that reading's stop. A value nothing was made from — what an operation
+     * looked up, an element a walk was handed, the index it is at — is all there is to read.
+     *
+     * <p>One of those may be what a dependency answered, which a row stands in; whose relation it
+     * is then is the decision table's, asked where the reading is assessed
+     * ({@link ComparisonAssessment#of}).
+     */
+    private static List<FilingCoordinate> heldAgainstAnotherValue(Proposition stated) {
+        if (!(stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, String _))
+                || !Proposition.stopsIn(stated).isEmpty()) {
+            return null;
+        }
+        List<NumericTerm> input = new ArrayList<>();
+        boolean another = false;
+        for (Quantity each : affine.form().coefs().keySet()) {
+            switch (each) {
+                case DecisionAtom.OfTheInput(NumericTerm term) -> input.add(term);
+                case Quantity.OfABinding bound when bound.madeOf().isEmpty() -> another = true;
+                default -> {
+                    return null;
+                }
+            }
+        }
+        return input.isEmpty() || !another ? null : AffineReading.filedAt(input);
+    }
+
+    /**
+     * What the arithmetic said of the parts a statement stopped at, where every part stopped at
+     * arithmetic no form says — or null where some part stopped for anything else.
+     *
+     * <p>One operation is that operation, wherever the closure that holds it is reached from. Two
+     * different ones are no operation: naming the first would say of the second that it was not
+     * there, so the statement is a part not read, which is all they have in common.
+     *
+     * <p>And a part that stopped for something else leaves this null, so that what is said is what
+     * would be said without it. The arithmetic's reason is the reason for the parts it stopped, and
+     * it is not the statement's where others did not stop there.
+     */
+    private static BlockReason.RuleReadingStopped decidedByTheArithmetic(List<WhyUnread> stops) {
+        Set<NonAffineOperation> operations = EnumSet.noneOf(NonAffineOperation.class);
+        for (WhyUnread each : stops) {
+            if (!(each instanceof WhyUnread.OutsideTheLinearFragment(var operation))) {
+                return null;
+            }
+            operations.add(operation);
+        }
+        return switch (operations.size()) {
+            case 0 -> null;
+            case 1 -> new BlockReason.NonAffineArithmetic(operations.iterator().next());
+            default -> new BlockReason.WhatItStatesIsNoLine(
+                    BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ);
+        };
+    }
+
+    /**
      * Why {@code stated}, which the cases above draw no line of, is no line on the input — or null
      * where a part of it stopped at something each place it is filed at words for itself.
      *
@@ -456,8 +638,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * it before a step this compiler has not taken beside it. Then a part declined at how many
      * readings are made, since a run allowed more may read it, and then any other part.
      */
-    static BlockReason.WhatItStatesIsNoLine whatItStates(Proposition stated) {
-        List<WhyUnread> stops = Proposition.stopsIn(stated);
+    static BlockReason.WhatItStatesIsNoLine whatItStates(Proposition stated,
+                                                         List<WhyUnread> stops) {
         if (stops.stream().anyMatch(Cutting::wordedByThePlace)) {
             return null;
         }
@@ -488,16 +670,18 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static boolean wordedByThePlace(WhyUnread why) {
         return switch (why) {
-            case WhyUnread.OutsideTheLinearFragment _, WhyUnread.NoNumberOnARun _,
+            case WhyUnread.OutsideTheLinearFragment _, WhyUnread.NotArithmetic _,
+                 WhyUnread.NoNumberOnARun _,
                  WhyUnread.TwoElementsOfOneContainer _, WhyUnread.NoLawFor _,
-                 WhyUnread.NoWordsFor _, WhyUnread.NoFormOfWhatItAnswers _,
+                 WhyUnread.NoWordsFor _, WhyUnread.NotProvedOfItsBody _,
+                 WhyUnread.NoFormOfWhatItAnswers _,
                  WhyUnread.ANumberOfWhatAnOperationAnswers _,
                  WhyUnread.WhatARecursiveHelperAnswers _, WhyUnread.AtNoPosition _,
                  WhyUnread.NoMeasureOfItsSize _ -> true;
             case WhyUnread.MoreReadingsThanAreMade _, WhyUnread.ANumberNotHeld _,
                  WhyUnread.AClauseOfAnInvariant _, WhyUnread.AnInvariantNotReached _,
                  WhyUnread.InACalledBody _, WhyUnread.CopiesStateDifferentThings _,
-                 WhyUnread.NotMetByTheReading _, WhyUnread.NotYetComposed _ -> false;
+                 WhyUnread.NotMetByTheReading _ -> false;
         };
     }
 
@@ -513,6 +697,59 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * What an application of an operation answering a truth states, read to the end, on the input:
+     * the lines its relations draw, or the values it relates — or null where it is neither.
+     *
+     * <p>A rule of its own, as a comparison is. {@code List.all(l -> o.floor > 3, o.lines)} holds
+     * where {@code o.lines} is empty or {@code o.floor} is above three, and the first of those is
+     * stated by the application and by nothing else written there; the second is the comparison's,
+     * and the application states it again, as a comparison over a choice states what the choice
+     * turned on.
+     *
+     * <p>And {@code Set.contains(p, s)} holds where some element of {@code s} is {@code p}, which
+     * relates the values at two positions and divides neither ({@link #valuesItRelates}).
+     */
+    static Read ofAnApplication(String behavior, Core application, Proposition stated,
+                                InputReading read, InputReads reads) {
+        if (several(behavior, application, stated, read, reads) instanceof Read.Several lines) {
+            return lines;
+        }
+        List<FilingCoordinate> related = valuesItRelates(stated);
+        return related == null ? null : new Read.AgainstAnotherValue(related);
+    }
+
+    /**
+     * Where every part of {@code stated} says that two values of the input are one value — some
+     * element of a container being one, or not — the places of those values; null otherwise.
+     *
+     * <p>Two values being one is a relation between them, and a class of a position is a set of
+     * that position's values: the statement divides neither, whichever way it comes out.
+     */
+    private static List<FilingCoordinate> valuesItRelates(Proposition stated) {
+        List<FilingCoordinate> out = new ArrayList<>();
+        return relates(stated, out) && !out.isEmpty() ? List.copyOf(out) : null;
+    }
+
+    private static boolean relates(Proposition stated, List<FilingCoordinate> out) {
+        return switch (stated) {
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
+                                       DecisionSubject.AnInput(TermPath other), boolean _,
+                                       String _) -> {
+                for (TermPath each : List.of(one, other)) {
+                    if (!out.contains(FilingCoordinate.at(each))) {
+                        out.add(FilingCoordinate.at(each));
+                    }
+                }
+                yield true;
+            }
+            case Proposition.Some some -> relates(some.ofTheElement(), out);
+            case Proposition.All all -> all.parts().stream().allMatch(each -> relates(each, out));
+            case Proposition.Any any -> any.parts().stream().allMatch(each -> relates(each, out));
+            default -> false;
+        };
+    }
+
+    /**
      * The lines a statement of several relations draws, each with where it decides — or null where
      * one of the relations is no line on the input, or there is none.
      *
@@ -521,22 +758,30 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * {@code a = g} under {@code Int.max(a, b) <= g} with {@code b} above {@code g} is answered the
      * same way on both sides of the line, so it is no row for it.
      *
-     * <p>Every part of the statement is a line or none of them is drawn. A relation over something
-     * no row writes — what a dependency answered — has no line on the input to be, and a truth or a
-     * case is no line at all; the lines of the others would be drawn as though the statement were
-     * only them. And where a line decides is said over the statement's other parts, so with every
-     * part a line on the input, a row's own values say whether it is somewhere the line decides —
-     * how many elements meet something among them, which a row's elements say.
+     * <p>Every relation of the statement is a line or none of them is drawn. A relation over
+     * something no row writes — what a dependency answered — has no line on the input to be; the
+     * lines of the others would be drawn as though the statement were only them. A part a row
+     * answers of its own values and that is no relation — whether a position is true, whether it
+     * holds a value — is no line, and is where the lines decide. And where a line decides is said
+     * over the statement's other parts, so with every part one a row answers, a row's own values
+     * say whether it is somewhere the line decides — how many elements meet something among them,
+     * which a row's elements say.
+     *
+     * @param written the construct the rule is written as, asked only which position it names
+     *                first, which is the way each line is faced
      */
-    private static Read several(String behavior, StatedComparison comparison,
+    private static Read several(String behavior, Core written,
                                 Proposition stated, InputReading read, InputReads reads) {
-        if (!onlyRelations(stated)) {
+        if (!onlyRelations(stated) && !drawsLines(stated)) {
             return null;
         }
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
+        if (lines.isEmpty()) {
+            return null;
+        }
         List<Read.Several.Part> parts = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
-            Read line = lineOf(behavior, lines.get(i).line(), comparison, read, reads);
+            Read line = lineOf(behavior, lines.get(i).line(), written, read, reads);
             if (line == null) {
                 return null;
             }
@@ -567,8 +812,26 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return new BorderQuantity.OfACoordinate(behavior, term, quantities.ordersOf(term));
     }
 
+    /**
+     * Whether {@code stated} holds a relation joined with nothing a row cannot be asked about its
+     * own values: {@code List.length(c.items) > 0 && c.open} is a line on how many items a cart
+     * holds, deciding where the cart is open, and a row says whether it is.
+     */
+    static boolean drawsLines(Proposition stated) {
+        return AStatementAtARow.askable(stated) && holdsARelation(stated);
+    }
+
+    private static boolean holdsARelation(Proposition stated) {
+        return switch (stated) {
+            case Proposition.Compared _ -> true;
+            case Proposition.All all -> all.parts().stream().anyMatch(Cutting::holdsARelation);
+            case Proposition.Any any -> any.parts().stream().anyMatch(Cutting::holdsARelation);
+            default -> false;
+        };
+    }
+
     /** Whether every part {@code stated} joins is a relation. */
-    private static boolean onlyRelations(Proposition stated) {
+    static boolean onlyRelations(Proposition stated) {
         return switch (stated) {
             case Proposition.All all -> all.parts().stream().allMatch(Cutting::onlyRelations);
             case Proposition.Any any -> any.parts().stream().allMatch(Cutting::onlyRelations);
@@ -581,8 +844,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * The line one relation draws on the input, or the refusal to place it — or null where the
      * relation is over something that is not the input's.
      */
-    private static Read lineOf(String behavior, Proposition.Compared line,
-                               StatedComparison comparison, InputReading read, InputReads reads) {
+    private static Read lineOf(String behavior, Proposition.Compared line, Core written,
+                               InputReading read, InputReads reads) {
         return switch (line.relation()) {
             case Relation.Affine affine -> {
                 LinearForm<NumericTerm> over = WhatTheRulesLeave.ofTheInput(affine.form());
@@ -590,7 +853,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 // meet something, which is a line too.
                 yield over == null ? onACount(behavior, affine, true, read)
                         : realized(behavior, AffineReading.stating(over, affine.proposition(),
-                                comparison.left(), reads, read.rules()), read.quantities());
+                                written, reads, read.rules()), read.quantities());
             }
             case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel rel)
                     when term.atOnePosition() != null ->

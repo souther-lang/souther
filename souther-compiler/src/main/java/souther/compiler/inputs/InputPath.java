@@ -9,6 +9,7 @@ import souther.compiler.check.Location;
 import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
 import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.MapPart;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
@@ -598,6 +599,11 @@ final class InputPath {
         BuiltFrom<DeclaredArgument> built =
                 DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
         DeclaredArgument holds = built == null ? null : built.holdsTheElementsOf();
+        // A set of a list's values holds the very values the list does, though not as often.
+        if (holds == null && DefaultBoundOperationFacts.get().holdsTheImageOfEveryElement(operation)
+                instanceof ElementLineage.SameAs<DeclaredArgument> same) {
+            holds = same.source().argument();
+        }
         // What is made from a position came from it and is not it, so an answer holding only that
         // is crossed by the walk after where a value came from and not by the walk after which
         // position an expression names — the same two licences an edge written by an expansion
@@ -605,7 +611,8 @@ final class InputPath {
         // declaration that states them because the operation is still standing to be asked.
         return holds != null ? holds
                 : switch (asked) {
-                    case VALUE_ORIGIN -> built == null ? null : built.derivesItsElementsFrom();
+                    case VALUE_ORIGIN -> built != null ? built.derivesItsElementsFrom()
+                            : DefaultBoundOperationFacts.get().elementsMadeFromAlone(operation);
                     case NAMED_POSITION -> null;
                 };
     }

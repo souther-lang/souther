@@ -789,7 +789,7 @@ final class Terms {
         record Form<A>(LinearForm<A> form) implements Operated<A> {}
 
         /** Arithmetic no form over the atoms says: a product of two unknowns, a quotient by one. */
-        record NotLinear<A>() implements Operated<A> {}
+        record NotLinear<A>(NonAffineOperation operation) implements Operated<A> {}
 
         /** A quotient by nought, which no run has a number for. */
         record NoNumberOnARun<A>() implements Operated<A> {}
@@ -817,7 +817,7 @@ final class Terms {
             return Operated.of(b.times(a.constant()));
         }
         return b.coefs().isEmpty() ? Operated.of(a.times(b.constant()))
-                : new Operated.NotLinear<>();
+                : new Operated.NotLinear<>(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES);
     }
 
     /**
@@ -842,7 +842,7 @@ final class Terms {
      */
     static <A> Operated<A> quotient(LinearForm<A> a, LinearForm<A> b) {
         if (!b.coefs().isEmpty()) {
-            return new Operated.NotLinear<>();
+            return new Operated.NotLinear<>(NonAffineOperation.DIVISION_BY_NON_CONSTANT_VALUE);
         }
         if (b.constant().isZero()) {
             return new Operated.NoNumberOnARun<>();
@@ -1810,6 +1810,11 @@ final class Terms {
             Given built = sizedBy(container, at);
             carrying(atom, IntrinsicNumericFacts.ofSize(size, built.value(), atom, built.at(),
                     this));
+            Derivation held = IntrinsicNumericFacts.heldWhereItsLawSays(built.value(), built.at(),
+                    this);
+            if (held != null) {
+                computedBy(atom, new AtomKnowledge.Computation.Derived(held));
+            }
         }
         return atom;
     }
@@ -1850,6 +1855,16 @@ final class Terms {
             atomExtents.putIfAbsent(atom, extentOf(type));
         }
         return atom;
+    }
+
+    /** What {@code remainder} leaves of what stands at {@code place} when divided by
+     *  {@code divisor}, named as the call that takes it is: the call over the place and the number
+     *  written, so a guard on it and a body's name for the call are about one number. */
+    FactSubject remainderAtPlace(ValueName remainder, FactSubject place, long divisor) {
+        return place == null ? null
+                : named(interned.called(remainder,
+                        List.of(place.identity(), interned.written(divisor))),
+                        Granularity.DISCRETE);
     }
 
     /** The size {@code size} takes of what stands at {@code place}, named as {@link #sizeKeyOf}

@@ -11,15 +11,6 @@ package souther.compiler.semantics;
  */
 public enum Unsayable {
 
-    /** That every character of a string is whitespace — what a trimmed string is empty for, and
-     *  what a string with no words is. A string is no container of characters a statement can be
-     *  made of each of. */
-    EVERY_CHARACTER_IS_WHITESPACE("every character of a string being whitespace"),
-
-    /** That a value is one a map is keyed by. What an element of a map is is its value, so its keys
-     *  are no container a statement can be made of each of. */
-    A_KEY_OF_A_MAP("a value being a key of a map"),
-
     /** That a string is made up of copies of another. What a replacement leaves is empty for that,
      *  and a string is no container of parts. */
     MADE_UP_OF_COPIES_OF_A_TEXT("a string being made up of copies of another"),
@@ -32,9 +23,24 @@ public enum Unsayable {
      *  taken apart. */
     A_STRING_MATCHING_A_PATTERN("a string matching a pattern"),
 
-    /** That no two elements of a container come to one key. A statement about some element is
-     *  about one element at a time, and this is about every pair of them. */
-    NO_TWO_ELEMENTS_ALIKE("no two elements of a container coming to one key");
+    /** Which characters of a string are whitespace — how many a trimmed string loses at its ends,
+     *  and how many words whitespace parts a string into. A string is no container of characters
+     *  a statement can be made of each of. */
+    WHICH_CHARACTERS_ARE_WHITESPACE("which characters of a string are whitespace"),
+
+    /** How many times one string stands inside another — how many pieces a separator parts a
+     *  string into, and how many places a replacement is made at. */
+    HOW_MANY_TIMES_A_STRING_STANDS_INSIDE_ANOTHER("how many times one string stands inside another"),
+
+    /** How many code points a text holds once it is written in its canonical form, or its case is
+     *  changed: a mark can join the letter before it, which can then take a mark it already had,
+     *  and one letter can change case into several. What a text is put together from or rewritten
+     *  into is in that form, so how long it is no number of the texts it came from says. */
+    THE_LENGTH_OF_A_REWRITTEN_TEXT("how many code points a text holds once it is put in its"
+            + " canonical form or its case is changed"),
+
+    /** How many characters a number is written out in. */
+    HOW_MANY_CHARACTERS_A_NUMBER_IS_WRITTEN_IN("how many characters a number is written out in");
 
     private final String proposition;
 

@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.NonAffineOperation;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.RunSensitivity;
 import net.unit8.notation199x.pattern.Meter;
@@ -236,6 +237,7 @@ public sealed interface BlockReason {
                 case CasePairingNotDetermined _ -> 3;
                 case RuleAboutADerivedValue _ -> 4;
                 case UnreadValueRule _ -> 5;
+                case NonAffineArithmetic _ -> 6;
                 case PatternTooCostly _ -> 7;
                 case OrderedExtentTooCostly _ -> 8;
                 case RuleAboutAnElementOfSeveralContainers _ -> 9;
@@ -287,6 +289,7 @@ public sealed interface BlockReason {
                 case PatternTooCostly _, OrderedExtentTooCostly _,
                      UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                      RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
+                     NonAffineArithmetic _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
                      ValueRuleRelatingTwoPositions _, CasePairingNotDetermined _,
@@ -319,6 +322,7 @@ public sealed interface BlockReason {
                 // it stopped at.
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                      RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
+                     NonAffineArithmetic _,
                      ValueRuleRelatingTwoPositions _, EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
@@ -401,7 +405,7 @@ public sealed interface BlockReason {
      * compiler fell short, whichever rule shape it fell short on.
      *
      * <p>Which is why a relation between two positions is {@link ValueRuleRelatingTwoPositions}
-     * here and {@link ComparisonBetweenPositions} where a line is drawn. One rule, two readings,
+     * here and {@link ComparisonRelatingTwoValues} where a line is drawn. One rule, two readings,
      * two answers, and both are true: the reading of ends took {@code a < b} in completely and
      * placed no line, and the reading of values could not turn it into a set of one position's
      * values at all. Written as one reason, the second was reported in the words of the first —
@@ -629,6 +633,24 @@ public sealed interface BlockReason {
     record RuleAboutADerivedValue() implements RuleReadingStopped {}
 
     /**
+     * A rule's comparison is over arithmetic no form over the input's numbers says: a product of
+     * two values neither of which is a constant, or a quotient by one.
+     *
+     * <p>Its own case beside {@link RuleAboutADerivedValue}. Nothing was made of a position and no
+     * operation is left to follow back; the arithmetic met a shape it has no term for, and which
+     * shape it was is what an author can act on. The arithmetic says it where it composes the
+     * operation, and this carries it as it was said.
+     *
+     * @param operation which arithmetic it was
+     */
+    record NonAffineArithmetic(NonAffineOperation operation) implements RuleReadingStopped {
+
+        public NonAffineArithmetic {
+            Objects.requireNonNull(operation, "arithmetic that is not affine says which");
+        }
+    }
+
+    /**
      * A rule is written about an element of a container, in a block handed to more than one walk.
      *
      * <p>One block written once and given to two operations: the name it reads the element under
@@ -823,7 +845,7 @@ public sealed interface BlockReason {
      * one no rule admits. That is a stop, and every arm of
      * {@link souther.compiler.values.UnreadReason} is one for the same reason.
      *
-     * <p><b>Its own case and not {@link ComparisonBetweenPositions}, which is the other reading's
+     * <p><b>Its own case and not {@link ComparisonRelatingTwoValues}, which is the other reading's
      * answer for the same rule.</b> Nothing about {@code a < b} was beyond the reading of ends: it
      * took the rule in whole and placed no line, and no measure is short of anything on its
      * account. The reading of values met the same rule and got nothing it could hold. One reason
@@ -1001,20 +1023,22 @@ public sealed interface BlockReason {
     record ComparisonLineTurningNothing() implements ReadToEndWithoutLine {}
 
     /**
-     * The comparison relates two positions rather than dividing one.
+     * The comparison relates the value at a position to another value rather than dividing the
+     * position's values: to another position's, or to a value no position holds — what an
+     * operation looked up, an element a walk was handed, the index it is at.
      *
      * <p>Nothing is missing from the carrier: both sides are ordered, and a line drawn on either
-     * against a number would be read. What is missing is a class about two positions, which a
-     * partition of one is not — so a line like this is settled beside the partition rather than in
-     * it, and the position it names is left with no class of its own from this rule.
+     * against a number would be read. What is missing is a class about two values, which a
+     * partition of one position is not — so a line like this is settled beside the partition rather
+     * than in it, and the position it names is left with no class of its own from this rule.
      */
-    record ComparisonBetweenPositions() implements ReadToEndWithoutLine {}
+    record ComparisonRelatingTwoValues() implements ReadToEndWithoutLine {}
 
     /**
      * The comparison draws its line on a number taken over a run of values, which divides no
      * position.
      *
-     * <p>Its own word and not {@link ComparisonBetweenPositions}. Nothing here is between two
+     * <p>Its own word and not {@link ComparisonRelatingTwoValues}. Nothing here is between two
      * positions: there is one number and one line, and the values it is read from stand at a place
      * inside a container. Two lines of sixty and forty are on the boundary of a hundred as surely as
      * one of a hundred is, so there is no class of that place for the rule to have drawn — and a

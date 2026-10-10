@@ -1617,14 +1617,24 @@ public sealed interface Carrier extends ValueOrder {
      *
      * <p>Written through {@link Place#spelled}, which is that same number in digits. Naming a line
      * and writing one are two questions, and a reader here is asking the second.
+     *
+     * <p>A line may fall where the carrier has no value: a rule about a date shifted by a year of
+     * days draws its line a year past the last date there is. The line is real and so is the way a
+     * rule about it is read — the values on the near side are what the rule divides — but no date
+     * is written there, so it is named by the count in the carrier's own unit, which no reader can
+     * take for a value.
      */
     default String written(Place count) {
         return switch (this) {
             case Whole _, Dense _ -> count.spelled();
-            case Days _ -> Dates.written(requiredOnGrid(count));
-            case Seconds _ -> DateTimes.written(requiredOnGrid(count));
-            case SecondsOfDay _ -> Times.written(requiredOnGrid(count));
-            case Nanos _ -> Instants.written(requiredOnGrid(count));
+            case Days _ -> onTheGrid(count) == null ? "day " + count.spelled()
+                    : Dates.written(count);
+            case Seconds _ -> onTheGrid(count) == null ? "second " + count.spelled()
+                    : DateTimes.written(count);
+            case SecondsOfDay _ -> onTheGrid(count) == null ? "second of the day " + count.spelled()
+                    : Times.written(count);
+            case Nanos _ -> onTheGrid(count) == null ? "nanosecond " + count.spelled()
+                    : Instants.written(count);
             // The case's name, which is the only thing a person ever writes at such a position. An
             // ordinal in a report would name a line at a number the model does not contain.
             case Ordinal ordinal -> ordinal.caseAt(count).name();

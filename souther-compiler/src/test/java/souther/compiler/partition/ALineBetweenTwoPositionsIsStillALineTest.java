@@ -431,13 +431,13 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(TWO_NEWTYPES);
 
         int partition = report.indexOf("    partition ");
-        int note = report.indexOf("dividing one, about `charge`");
+        int note = report.indexOf("dividing the values here, about `charge`");
         int boundary = report.indexOf("    border ");
 
         assertTrue(note > partition && note < boundary,
                 "the note about the classes sits under the classes measure:\n" + report);
-        assertTrue(report.contains(
-                "it relates two positions rather than dividing one, about `charge`"), report);
+        assertTrue(report.contains("it relates the value here to another value rather than"
+                + " dividing the values here, about `charge`"), report);
     }
 
     /**
@@ -515,7 +515,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
      */
     @Test
     void aRuleRelatingTheTwoPositionsIsNotAnsweredByTheirRangesOverlapping() {
-        assertEquals(List.of("p.a: UNSUPPORTED_PARTITION_SHAPE", "p.b: UNSUPPORTED_PARTITION_SHAPE",
+        assertEquals(List.of("p.a: RULE_RELATING_TWO_VALUES", "p.b: RULE_RELATING_TWO_VALUES",
                         "p.a: RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS",
                         "p.b: RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS"),
                 notRead(RULED_OUT_BY_THE_RECORD),

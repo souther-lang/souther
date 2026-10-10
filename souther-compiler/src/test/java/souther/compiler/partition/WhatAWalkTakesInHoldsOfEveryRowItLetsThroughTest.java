@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.NonAffineOperation;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
@@ -67,7 +68,7 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             let withACall (p) = p.x > 0 && Int.max(p.y, 3) > 10
 
             behavior withAnUnreadCall : (p: Pair) -> Bool
-            let withAnUnreadCall (p) = p.x > 0 && Int.floorMod(p.y, 3) > 1
+            let withAnUnreadCall (p) = p.x > 0 && Int.floorMod(p.y, p.x) > 1
 
             behavior product : (p: Pair) -> Bool
             let product (p) = p.x * p.y > 4
@@ -86,7 +87,7 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             "either", (x, y) -> x > 0 || y > 10,
             "affineSum", (x, y) -> x + 2 * y <= 7,
             "withACall", (x, y) -> x > 0 && Math.max(y, 3) > 10,
-            "withAnUnreadCall", (x, y) -> x > 0 && Math.floorMod(y, 3) > 1,
+            "withAnUnreadCall", (x, y) -> x > 0 && Math.floorMod(y, x) > 1,
             "product", (x, y) -> x * y > 4,
             "productThroughACall", (x, y) -> x * y > 4,
             "nested", (x, y) -> (x > 0 || y > 1) && y < 5);
@@ -233,14 +234,12 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
      */
     @Test
     void aComparisonItCouldNotTurnIntoACutSaysThatAndNoMore() {
-        assertEquals(List.of(new WhyNotTaken.MeaningUnread(
-                        new WhyUnread.OutsideTheLinearFragment())),
-                whys("product", true));
+        WhyNotTaken product = new WhyNotTaken.MeaningUnread(new WhyUnread.OutsideTheLinearFragment(
+                NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES));
+        assertEquals(List.of(product), whys("product", true));
         // The same product handed to an operation the library says answers what it was handed:
         // the call is where the reading stopped, and why is what stopped its argument.
-        assertEquals(List.of(new WhyNotTaken.MeaningUnread(
-                        new WhyUnread.OutsideTheLinearFragment())),
-                whys("productThroughACall", true));
+        assertEquals(List.of(product), whys("productThroughACall", true));
         // The affine operand is taken in beside it: a conjunction coming out true says both, and
         // one of them being unreadable is no reason to lose the other.
         assertEquals(List.of(new WhyNotTaken.MeaningUnread(

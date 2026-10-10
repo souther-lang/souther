@@ -168,6 +168,14 @@ public sealed interface ElementLineage<A> {
      *
      * <p>The one lineage a rule about the output can be pushed back through as it stands, since
      * there is nothing between the two values to push it through.
+     *
+     * <p><b>Each element of the output is a different one of the source's.</b> Two places in the
+     * output are two places in the source, so no element of the source is answered twice: a list
+     * holding {@code [x, x]} built from {@code [x, y]} is no list this is true of, though every
+     * element of it is the source's own. That is what lets a count say more than a count: as many
+     * elements as the source, each a different one of its own, is every one of them once
+     * ({@link ElementShape#PERMUTES}), and no more of them is some of them, each once
+     * ({@link ElementShape#SUBSET}).
      */
     record SameAs<A>(Source<A> source) implements ElementLineage<A> {
 
@@ -183,13 +191,19 @@ public sealed interface ElementLineage<A> {
      * <p>{@code List.map}, {@code Set.map}, {@code Map.mapValues}. The input position it came from is
      * known; what value there would put the answer anywhere in particular is not this to say.
      *
-     * <p><b>The closure is applied to each element of the source, and its answer is one element of
-     * the result.</b> That is what this says and it says nothing more: not that the result has as
-     * many elements as the source — {@code Set.map} answers no more, since two elements may map onto
-     * one — and nothing about the order they come in. A reader wanting a correspondence between the
-     * two runs asks for this together with {@link SizeAgainstItsSource#SAME}
+     * <p><b>Each element of the result is the closure's answer on an element of the source, and on
+     * a different one for each.</b> From {@code [x1, x2]} it does not answer
+     * {@code [f(x1), f(x1)]}, though both elements are the closure's answer on an element there.
+     * That is what this says and it says nothing more: not that the result has as many elements as
+     * the source — {@code Set.map} answers no more, since two elements may map onto one — and so not
+     * that every element's answer is there; nothing about the order they come in either. Together
+     * with {@link SizeAgainstItsSource#SAME} it is every element's answer, each once
      * ({@link BuiltFrom#mapsEachElementOf}), and a reader wanting the order asks for something
      * nobody declares yet.
+     *
+     * <p>The closure is handed the element where it takes one, and its key where it takes one;
+     * what it is handed at any other parameter — the place {@code List.mapIndexed} hands it — this
+     * does not say.
      */
     record ClosureResult<A>(Source<A> source) implements ElementLineage<A> {
 
@@ -252,6 +266,11 @@ public sealed interface ElementLineage<A> {
      * value under one key replaced, so every value in its answer came from the argument, and each is
      * either that argument's own value or what the closure made of it. Read as one alternative, it
      * would say of every value what is true of one of them.
+     *
+     * <p><b>What each element is, and not how many of the source's.</b> The alternatives say where
+     * an element may have come from and this says no more: a value the closure made of one element
+     * may stand beside that element, so the answer is not each of the source's elements at most
+     * once, whatever its alternatives are.
      */
     record OneOf<A>(List<ElementLineage<A>> alternatives) implements ElementLineage<A> {
 

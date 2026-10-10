@@ -286,6 +286,11 @@ public final class Partitions {
                 // of any length exists and a `Set<Bool>` of three does not, and both are counts.
                 case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
                         .everyAnswerItCanGiveHasASourceValue(taken.operation());
+                // A string holding any number of the code points of a class is written by
+                // repeating one of them, as a string of any length is.
+                case NumericTerm.CodePointClassCount _ -> true;
+                // An element holding a value as often as asked is written by repeating the value.
+                case NumericTerm.Multiplicity _ -> true;
                 // A run has as many values as a row wrote and each of them is chosen, so whether
                 // some run adds up to a given total is a question about what the elements may hold
                 // and how many there may be — not one the operation answers about itself. Nothing

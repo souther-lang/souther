@@ -34,8 +34,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -50,11 +52,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * of a statement that was read to the end: that would be a reader's shortfall passed off as the
  * reading's, and a statement read to the end is the reading's whole answer.
  *
+ * <p>The partition is the fourth, and is held to the same where it reads: off the constructs a
+ * body writes, each handed a condition stating one kind of statement
+ * ({@link EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest}).
+ *
  * <p>And where one of them has no words, which edge it met is one of the words that name that
  * reader's domain. A row is written at the input's positions, so where a row reader stops is a
- * fact about the input's words — a quantity on no order, a size nothing measures, a position the
- * reading holds no place for, an answer a row stands in. A limit of what a path knows is not
- * one of those, and coming out of a row reader it would send an author to the wrong reader.
+ * fact about the input's words — a quantity on no order, an answer a row stands in. A limit of
+ * what a path knows is not one of those, and coming out of a row reader it would send an author to
+ * the wrong reader. Which model meets each is {@link EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest}'s.
  *
  * <p>The kinds are taken from the sealed hierarchy and not from a list here, so a kind of
  * statement added without a sample below is a failure rather than a statement nobody handed to
@@ -73,11 +79,12 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
             """;
 
     /** Where a row reader's words stop: the input's own words, and nothing of a path's. */
-    private static final Set<WhyNotTaken.DomainLimit> A_ROWS_EDGES = EnumSet.of(
-            WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER,
-            WhyNotTaken.DomainLimit.A_SIZE_NOTHING_MEASURES,
-            WhyNotTaken.DomainLimit.A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR,
-            WhyNotTaken.DomainLimit.AN_ANSWER_A_ROW_STANDS_IN);
+    private static final Set<WhyNotTaken.DomainLimit> A_ROWS_EDGES =
+            EnumSet.allOf(WhyNotTaken.DomainLimit.class).stream()
+                    .filter(each -> each.domain()
+                            == WhyNotTaken.DomainLimit.Domain.WHAT_A_ROW_IS_WRITTEN_IN)
+                    .collect(Collectors.toCollection(
+                            () -> EnumSet.noneOf(WhyNotTaken.DomainLimit.class)));
 
     @Test
     void everyKindOfStatementHasASampleHere() {
@@ -132,27 +139,36 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
     }
 
     /**
-     * Some element meeting parts no composer writes toward asks the run once for each composer
-     * missing, so what is missing is said whichever part stands first.
+     * Some element meeting one of several things is some element meeting one of them, each an
+     * alternative with what the row is asked beside the element — and nothing of it is left to
+     * the run.
      */
     @Test
-    void everyComposerMissingForAnElementIsSaid() {
+    void someElementMeetingOneOfSeveralThingsIsOneAlternativeForEach() {
         InputReading read = reading();
         Proposition element = new Proposition.Compared(new Relation.Affine(
                 LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(
                         new NumericTerm.ValueOf(TermPath.of("xs").element()))), Rel.GT), true);
+        RowDemand.ATruth beside = new RowDemand.ATruth(TermPath.of("b"), true);
         Proposition some = new Proposition.Some(TermPath.of("xs"), new Proposition.All(List.of(
                 new Proposition.Any(List.of(element, element.denied())),
                 new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("b")), true))),
                 true);
-        List<RowDemand.NoComposer> missing = new ArrayList<>();
-        for (DemandReading.Read each : DemandReading.asked(some, read)) {
-            if (each instanceof DemandReading.Read.Demands(RowDemand.ForTheRun(var _, var why))) {
-                missing.add(why);
-            }
+        List<DemandReading.Read> asked = DemandReading.asked(some, read);
+        assertEquals(1, asked.size(), () -> "one of two things: " + asked);
+        DemandReading.Read.OneOf alternatives =
+                assertInstanceOf(DemandReading.Read.OneOf.class, asked.getFirst());
+        assertEquals(2, alternatives.alternatives().size(), () -> "one for each: " + asked);
+        for (List<DemandReading.Read> one : alternatives.alternatives()) {
+            assertTrue(one.contains(new DemandReading.Read.Demands(beside)),
+                    () -> "the row is asked the truth beside the element: " + one);
+            assertTrue(one.stream().anyMatch(each -> each instanceof DemandReading.Read.Demands(
+                            RowDemand.Exists exists) && exists.relations().size() == 1),
+                    () -> "and an element meeting one of the two: " + one);
+            assertTrue(one.stream().noneMatch(each -> each instanceof DemandReading.Read.Demands(
+                            RowDemand.ForTheRun _)),
+                    () -> "and nothing of it is left to the run: " + one);
         }
-        assertEquals(List.of(RowDemand.NoComposer.ONE_OF_SEVERAL_FOR_AN_ELEMENT,
-                RowDemand.NoComposer.A_TRUTH_OF_AN_ELEMENT), missing);
     }
 
     /** What the three readers decline {@code stated} coming out {@code way} for, together. */

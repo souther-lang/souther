@@ -39,7 +39,9 @@ import java.util.Set;
  * terms of the other.
  *
  * @param computation how the value was reached, which may be {@link Computation.None}: a size is a
- *                   value this knows something about and computes nothing from
+ *                   value this knows something about and computes nothing from, except where the
+ *                   law of what answered the container says whether it holds anything by whether
+ *                   its arguments do ({@link Derivation.HoldsSomethingWhere})
  * @param intrinsic   what holds of the value whatever it was reached by, as relations. Relations and
  *                    not ranges, because a relation is the same statement in every domain and what
  *                    it comes to is the domain's answer — and because half of these relate this

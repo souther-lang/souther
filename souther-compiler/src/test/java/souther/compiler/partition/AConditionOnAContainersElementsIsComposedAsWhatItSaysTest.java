@@ -101,8 +101,8 @@ class AConditionOnAContainersElementsIsComposedAsWhatItSaysTest {
         OnTheWay.TakenIn atLeastOne = asked("atLeastOne");
         OnTheWay.TakenIn everyElement = asked("allPositive");
         RowDemand.ForAll every = assertInstanceOf(RowDemand.ForAll.class, everyElement.demand());
-        NumericTerm.FromOnePosition size = every.holdingNone().orElseThrow().terms().iterator()
-                .next().atOnePosition();
+        NumericTerm.FromOnePosition size = every.holdingNone().terms().iterator().next()
+                .atOnePosition();
         List<OnTheWay.TakenIn> way = List.of(atLeastOne, everyElement);
         SearchRegion region = new WayToTheBorder(List.copyOf(way))
                 .narrowing(domain("decide").quantities(rules()).region());

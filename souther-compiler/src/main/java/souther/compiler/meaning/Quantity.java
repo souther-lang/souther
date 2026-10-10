@@ -1,6 +1,8 @@
 package souther.compiler.meaning;
 
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
@@ -18,7 +20,98 @@ import java.util.Optional;
  * and only the second leaves a comparison over it with nothing to say.
  */
 public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
-        Quantity.HowManyMeet, Quantity.HowManyHold {
+        Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent, Quantity.SumOver,
+        Quantity.CodePointsOfAPiece {
+
+    /**
+     * How many of the code points of one piece of a string are in a class.
+     *
+     * <p>Of a piece and of no input position: what a split by one code point leaves of a string
+     * stands at no place a row writes, and the piece is whichever one the statement it is read
+     * inside is about. So it is no number of the input and only appears inside a statement about
+     * some piece, which holds against one of them is what the string holds ({@link
+     * Derivation.SomePieceMeeting}) — and is never compared on its own.
+     */
+    record CodePointsOfAPiece(CodePointClass counted) implements Quantity {
+
+        public CodePointsOfAPiece {
+            if (counted == null) {
+                throw new IllegalArgumentException("code points of a piece are counted by a class");
+            }
+        }
+
+        @Override
+        public String spelled() {
+            return "#(" + counted + ")(a piece)";
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * How many different values stand at {@code ofTheElement} over the elements of the container
+     * at {@code container}: the element itself, a position inside it, or the key it is filed under
+     * — two of them one value where they are equal. Never more than the container holds, and
+     * nought exactly where it holds nothing.
+     *
+     * <p>A number about every pair of elements and not about each: whether one adds to it turns on
+     * the ones beside it, so it is no count of elements meeting something.
+     */
+    record HowManyDifferent(TermPath container, TermPath ofTheElement) implements Quantity {
+
+        public HowManyDifferent {
+            if (container == null || ofTheElement == null) {
+                throw new IllegalArgumentException("the values are of a container's elements");
+            }
+            if (!ofTheElement.isAtOrUnder(container.element())
+                    && !ofTheElement.isAtOrUnder(container.key())) {
+                throw new IllegalArgumentException(ofTheElement + " is no part of an element of "
+                        + container);
+            }
+        }
+
+        @Override
+        public String spelled() {
+            return "#different " + container + " [" + ofTheElement + "]";
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * What {@code ofTheElement}, a number of each element of the container at {@code container},
+     * adds up to over all of them: how many the lists inside a list hold between them, say. The
+     * input's own totals are of a value standing at one position inside each element
+     * ({@code NumericTerm.TakenOver}); this is of any number of the element.
+     */
+    record SumOver(TermPath container, LinearForm<Quantity> ofTheElement) implements Quantity {
+
+        public SumOver {
+            if (container == null || ofTheElement == null) {
+                throw new IllegalArgumentException("a sum is of a number of each element");
+            }
+        }
+
+        @Override
+        public String spelled() {
+            StringBuilder out = new StringBuilder("#sum " + container + " [");
+            out.append(ofTheElement.constant());
+            ofTheElement.coefs().forEach((each, by) -> out.append(" + ").append(by).append('·')
+                    .append(each.spelled()));
+            return out.append(']').toString();
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
 
     /**
      * How many of these statements hold: what a closure states of each value a container was

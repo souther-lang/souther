@@ -51,7 +51,7 @@ class ARuleInABodyIsFiledAtWhatItsQuantityIsAboutTest {
     @Test
     void aCancelledPositionIsFiledAtByNothing() {
         assertEquals(
-                List.of("t.x/ComparisonBetweenPositions", "t.z/ComparisonBetweenPositions"),
+                List.of("t.x/ComparisonRelatingTwoValues", "t.z/ComparisonRelatingTwoValues"),
                 filedAt("t.x + t.y - t.y + t.z <= 10"));
     }
 

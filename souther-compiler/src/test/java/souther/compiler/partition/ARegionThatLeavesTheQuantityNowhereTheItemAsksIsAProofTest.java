@@ -216,6 +216,35 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
                 "a container holding nothing has none of its elements above the limit");
     }
 
+    /**
+     * And the same count with a number added to it: the elements are the composing's to choose and
+     * the number is placed beside them, so a region that leaves the elements nowhere proves nothing
+     * about where the sum can come to.
+     */
+    @Test
+    void aContainerHoldingNothingIsACountOfNoneWithANumberAddedToIt() {
+        Quantities measuring = COUNTED.input().quantities(COUNTED.rules());
+        SearchRegion holdingNothing = measuring.region();
+        TermPath xs = pathIn(COUNTED, "xs");
+        NumericTerm element = new NumericTerm.ValueOf(xs.element());
+        NumericTerm limit = new NumericTerm.ValueOf(pathIn(COUNTED, "limit"));
+        Map<Quantity, ExactRatio> atMost = new LinkedHashMap<>();
+        atMost.put(new DecisionAtom.OfTheInput(limit), ExactRatio.ONE);
+        atMost.put(new DecisionAtom.OfTheInput(element), ExactRatio.ONE.negated());
+        CountedElements counted = CountedElements.of("counted", new Quantity.HowManyMeet(xs,
+                new Proposition.Compared(new Relation.Affine(
+                        new LinearForm<>(ExactRatio.ZERO, atMost), Rel.GE), false)), measuring,
+                Optional.empty());
+        Map<NumericTerm, ExactRatio> added = new LinkedHashMap<>();
+        added.put(limit, ExactRatio.ONE.negated());
+        Standing none = new Standing.OfACountAndAForm(counted,
+                new LinearForm<>(ExactRatio.ZERO, added), Map.of(limit, Carrier.WHOLE),
+                LevelSpace.steppingBy(ExactRatio.ONE),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));
+        assertFalse(realize(none, holdingNothing) instanceof Realization.Impossible,
+                "a container holding nothing has none of its elements above the limit");
+    }
+
     /** The item's line, as far as a row for it is concerned. */
     private static Realization realize(Standing standing, SearchRegion within) {
         return new LevelRealizer().realize(standing, within,

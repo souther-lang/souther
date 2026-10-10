@@ -104,6 +104,12 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "the resolved tree, which is where an operator is written down"),
             new Held("souther.compiler.core.Core.Binary#op",
                     "the tree a check produces, which carries what the source wrote"),
+            new Held("souther.compiler.proof.LibraryTerm.Operator#op",
+                    "a library operation's body as the rules reading what it keeps read it, which"
+                            + " carries the operators its source wrote"),
+            new Held("souther.compiler.proof.Value.Arithmetic#op",
+                    "a number a library operation's body computes as a proof reads it, which is"
+                            + " the operator its source wrote over the values it read"),
             new Held("souther.compiler.coverage.Settled.Operator#op",
                     "what a comparison of a body compares by, as part of saying what that body"
                             + " does: two bodies alike but for an operator do different things, so"
@@ -161,6 +167,8 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "makes the node the resolved tree holds"),
             new Held("souther.compiler.core.Core.Binary.<init>",
                     "makes the node a check produces"),
+            new Held("souther.compiler.proof.LibraryTerm.Operator.<init>",
+                    "makes the term a library body's operator is read as"),
             new Held("souther.compiler.check.NumericMeaning.Operator.<init>",
                     "makes the arithmetic meaning keyed by an operator, and is what limits which"
                             + " operators one of them may be keyed by to those answering a number"),
@@ -273,6 +281,14 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.Pullback.joined",
                     "the composition of what a condition states, joined as the proposition the"
                             + " two halves make"),
+            new Held("souther.compiler.check.RemainderOfAShiftedValue.SumOrDifference.of",
+                    "asks whether a value is a sum or a difference, as written or as the library's"
+                            + " operation that computes the same, so a place moved by a number is"
+                            + " read however the moving was spelled"),
+            new Held("souther.compiler.partition.Pullback.ofACountOfWholeUnits",
+                    "writes the steps from one value to another as the difference of the two, so"
+                            + " that a comparison of a count of whole units is read where any"
+                            + " comparison of a difference is"),
             new Held("souther.compiler.partition.ClauseStatements.walk",
                     "walks into both halves, and stops where the connective composes either of"
                             + " them because what such a rule states is neither of its sides"),
@@ -327,8 +343,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.ConstantAlgebra.settledByTheLeft",
                     "which operators answer from their left operand alone, which is what says"
                             + " whether the one beside it is read at all"),
-            new Held("souther.compiler.check.DischargeRules.noSmallerThan",
-                    "which operands a string joined by another is no shorter than"),
             new Held("souther.compiler.check.AnOperationApplied.of",
                     "which operation the joining operator is, which the library declares it as,"
                             + " so what that operation says is said of the operator"),
@@ -349,6 +363,17 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             // Handing back the operator a value of one's own holds.
             new Held("souther.compiler.ast.Hir.Binary.op", "hands back what the node holds"),
             new Held("souther.compiler.core.Core.Binary.op", "hands back what the node holds"),
+            new Held("souther.compiler.proof.LibraryTerm.Operator.op",
+                    "hands back what the term holds"),
+            new Held("souther.compiler.proof.LibraryTerms.read",
+                    "copies it out of the resolved tree into the term a library body is read as"),
+            new Held("souther.compiler.proof.AppliedClosures.Walking.walk",
+                    "asks whether what stands on the right of an operator is reached only for some"
+                            + " of what reaches the left, which is whether a closure applied there is"
+                            + " applied on every run of the step around it"),
+            new Held("souther.compiler.proof.AppliedClosures.Walking.stopping",
+                    "asks which of the two joins a step answers, which is where a walk from a"
+                            + " truth stops applying its closure"),
             new Held("souther.compiler.check.NumericMeaning.Operator.op",
                     "hands back the operator an arithmetic meaning is keyed by"),
             new Held("souther.compiler.coverage.SourceOutcome.Compared.op",
@@ -414,6 +439,40 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " it compares, not how"),
             new Held("souther.compiler.check.ArithmeticCheck.of",
                     "names the constants it has rules for, against the operator it was handed"),
+            new Held("souther.compiler.proof.Value.Arithmetic.op",
+                    "hands out the operator a number a body computes was written with"),
+            new Held("souther.compiler.proof.Value.Arithmetic.<init>",
+                    "takes the operator a number a body computes was written with"),
+            new Held("souther.compiler.proof.Reading.cases",
+                    "reads an operator a library body writes into what it computes or states"),
+            new Held("souther.compiler.proof.Reading.operated",
+                    "what an operator a library body writes comes to over the two values it was"
+                            + " handed: a number computed, or a statement of how they stand"),
+            new Held("souther.compiler.proof.Reading.negated",
+                    "names the subtraction from nought a negation is"),
+            new Held("souther.compiler.proof.Reading.relationOf",
+                    "the order or equality each comparing operator states"),
+            new Held("souther.compiler.proof.Reading.number",
+                    "names the addition and the subtraction a number of a proof is a sum of"),
+            new Held("souther.compiler.proof.Collect.visit",
+                    "walks into both operands of a number a body computes, without asking which"
+                            + " operator it is"),
+            new Held("souther.compiler.proof.LibraryProver.walksIn",
+                    "the same, looking for a walk among the operands"),
+            new Held("souther.compiler.proof.Substituted.value",
+                    "puts one value in place of another in both operands of a number a body"
+                            + " computes, keeping the operator it was written with"),
+            new Held("souther.compiler.proof.WhatItAccumulates.combined",
+                    "names the operator a body writes the step of an accumulation with, which is"
+                            + " what the accumulation it is stated to be says the step is"),
+            new Held("souther.compiler.check.KeyedAccumulation.stepOf",
+                    "names the addition and the subtraction a step that moves a counter by a"
+                            + " constant is written with, and the counter is no other step"),
+            new Held("souther.compiler.partition.DecisionSubjects.what",
+                    "spells the operator a value a dependency was asked about is worked out with,"
+                            + " as part of naming the question; nothing asks what it means"),
+            new Held("souther.compiler.stdlib.TheWalksBody.isTheNext",
+                    "names the addition the walk moves to its next index by"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",
                     "names the two that scale a newtype"),
             new Held("souther.compiler.codegen.BodyGen.arithmetic",

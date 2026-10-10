@@ -1,5 +1,9 @@
 package souther.compiler.semantics;
 
+import souther.compiler.types.ValueName;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -113,6 +117,32 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers how many whole units lie between its two arguments, counting forward
+     * from {@code from} to {@code to}, where one unit is {@code perUnit} steps of the order the
+     * arguments are counted on.
+     *
+     * <p>The count is truncated toward zero: a {@code to} fifty-nine steps before {@code from} is no
+     * unit before it, and the answer is nought. So the answer is no form of the two arguments, and
+     * what is stated of it is stated through the difference of the two. With {@code d} the number of
+     * steps from {@code from} to {@code to}, the count is at least {@code n} exactly where
+     * {@code d} is at least {@code perUnit * n} for a positive {@code n}, and where {@code d} is at
+     * least {@code perUnit * n - (perUnit - 1)} for any other.
+     */
+    record CountsWholeUnitsBetween(ArgumentRef from, ArgumentRef to, long perUnit)
+            implements OperationFact {
+
+        public CountsWholeUnitsBetween {
+            Objects.requireNonNull(from, "a count of units starts somewhere");
+            Objects.requireNonNull(to, "and ends somewhere");
+            if (perUnit < 2) {
+                throw new IllegalArgumentException(
+                        "a unit is more than one step of the order, or the count is the difference"
+                                + " and states a form instead: " + perUnit);
+            }
+        }
+    }
+
+    /**
      * Something that holds of the number the operation answers, wherever it is called.
      *
      * <p>One fact per bound rather than a list in one: an operation with two bounds carries two
@@ -137,6 +167,35 @@ public sealed interface OperationFact {
     }
 
     /**
+     * Every element of the operation's answer is inside what a closure answered on an element of
+     * {@code lineage}'s source, and nothing is said of how many there are.
+     *
+     * <p>Where an element came from, apart from how many of them the answer has. A
+     * {@link BuildsItsResultFrom} says both, and its rows are also the table the invariant
+     * discharge reads, so an operation whose count is neither as many as its source nor no more
+     * ({@code List.flatMap} answers any number for each element) cannot be a row there. Declared
+     * here it is read by the readers that follow a value back to the position it was made from,
+     * and by nothing that reasons about the answer's size or what survives the construction.
+     *
+     * <p>Only the lineages a value is made from, which are the closure's answer and what is inside
+     * it. The very elements of an argument are a statement about the answer's count as well, and
+     * stay a {@link BuildsItsResultFrom}.
+     */
+    record ElementsComeFrom(ElementLineage<ArgumentRef> lineage) implements OperationFact {
+
+        public ElementsComeFrom {
+            Objects.requireNonNull(lineage, "this one says where the elements came from");
+            if (!(lineage instanceof ElementLineage.ClosureResult<ArgumentRef>
+                    || lineage instanceof ElementLineage.InsideClosureResult<ArgumentRef>)
+                    || lineage.source().elements() != 1) {
+                throw new IllegalArgumentException(
+                        "an element made from one element of an argument is what this says: "
+                                + lineage);
+            }
+        }
+    }
+
+    /**
      * The operation's result is never smaller than what {@code container} holds.
      *
      * <p>One fact per container it is no smaller than: {@code a ++ b} is as long as either half, and
@@ -156,6 +215,97 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The elements of the operation's answer stand in the order of the elements of {@code source}
+     * they came from: one stands before another where what it came from stood before what the
+     * other came from.
+     *
+     * <p>The order and nothing else. Where the elements came from is {@link BuildsItsResultFrom},
+     * and the two together are what a reader computing the answer itself needs: as many answers of
+     * the closure as elements, each on a different one ({@link ElementLineage.ClosureResult} with
+     * {@link SizeAgainstItsSource#SAME}), in the order they stand in, is the answer written out.
+     */
+    record KeepsTheOrderOf(ArgumentRef source) implements OperationFact {
+
+        public KeepsTheOrderOf {
+            Objects.requireNonNull(source, "this one names what the order is of");
+        }
+    }
+
+    /**
+     * The operation's answer holds the image of every element of the argument {@code image} names,
+     * and holds nothing else: an element of the answer is one of those images, and each of those
+     * is in the answer. The image is the element itself, or what the closure answered on it.
+     *
+     * <p>The answer as a set of values, whichever kind of container holds them and however many
+     * times. That a set made of a list holds each value once, and a set of what a closure made holds
+     * each answer once, are what {@link BuildsItsResultFrom} does not say: it says where an element
+     * came from, and an operation that kept some of what it was given has that too. What a reader
+     * asking whether some element of the answer meets a statement needs is the other half, that no
+     * element of the source was left out, and with it the statement about some element of the
+     * answer is the statement about some element of the source.
+     *
+     * <p>No count, as {@link ElementsComeFrom} has none. How many elements the answer holds is
+     * what a set that holds each value once is the number of different ones of, and no reader of
+     * this takes a count from it.
+     */
+    record HoldsTheImageOfEveryElement(ElementLineage<ArgumentRef> image) implements OperationFact {
+
+        public HoldsTheImageOfEveryElement {
+            Objects.requireNonNull(image, "this one says what the answer holds an image of");
+            if (!(image instanceof ElementLineage.SameAs<ArgumentRef>
+                    || image instanceof ElementLineage.ClosureResult<ArgumentRef>)
+                    || image.source().elements() != 1) {
+                throw new IllegalArgumentException(
+                        "the element itself or the closure's answer on it, of one element of an"
+                                + " argument, is what this says: " + image);
+            }
+        }
+    }
+
+    /**
+     * The operation answers the pieces {@code string} falls into where {@code separator} stands in
+     * it, each once and in order, the empty ones too: a string that is no longer than one piece is
+     * its own, and the code points of the pieces together are those of the string but for each
+     * place the separator stood.
+     *
+     * <p>Said of a separator that is one code point, and only then. A longer one can stand across
+     * where a shorter one is looked for, and what is left between two of its occurrences is not
+     * what is left of the string with a code point taken out. Whether a call's separator is one is
+     * a question about the call and is asked where it is read, as what a constant argument reads
+     * as.
+     *
+     * <p>Nothing here counts the pieces. How many there are is the number of times the separator
+     * stands in the string and is no number the language says.
+     */
+    record HoldsThePiecesOf(ArgumentRef separator, ArgumentRef string) implements OperationFact {
+
+        public HoldsThePiecesOf {
+            Objects.requireNonNull(separator, "this one names the separator");
+            Objects.requireNonNull(string, "and the string it stands in");
+        }
+    }
+
+    /**
+     * The operation answers what {@code into} holds with {@code value} put in: every element of the
+     * answer is one of {@code into}'s or {@code value}, it holds at most one element more than
+     * {@code into}, and of {@code into}'s it holds each as many times as {@code into} does or fewer.
+     *
+     * <p>A set put a value it holds answers the set; a map put a value under a key it has answers it
+     * with the value under that key replaced. Both are this statement, which says what each element
+     * of the answer was and nothing about which of {@code into}'s it gave up.
+     *
+     * <p>An axiom of a kernel, read by the proofs of what the library's written operations build out
+     * of what they are handed, and by nothing a reader of a condition is handed.
+     */
+    record PutsAValueIn(ArgumentRef value, ArgumentRef into) implements OperationFact {
+
+        public PutsAValueIn {
+            Objects.requireNonNull(value, "this one names the value put in");
+            Objects.requireNonNull(into, "and what it is put in");
+        }
+    }
+
+    /**
      * The operation answers a map every key of which is a key {@code map} was keyed by — the same
      * value, filed under in the answer as it was there.
      *
@@ -170,6 +320,31 @@ public sealed interface OperationFact {
 
         public KeepsTheKeysOf {
             Objects.requireNonNull(map, "this one names the map the keys were kept from");
+        }
+
+        /**
+         * What this says of {@code operation}, which takes {@code arity} arguments, as a statement
+         * beside what a map answers asked whether it holds a key: any value the answer holds as a
+         * key, {@code map} holds as one. What a proof of it shows, and what a proof of another
+         * operation takes of it.
+         */
+        public LawProposition<ArgumentRef> states(ValueName.Stdlib.Operation operation,
+                                                  int arity) {
+            List<LawSubject<ArgumentRef>> own = new ArrayList<>();
+            for (int at = 0; at < arity; at++) {
+                own.add(new LawSubject.Argument<>(new ArgumentRef.At(at)));
+            }
+            LawSubject<ArgumentRef> any = new LawSubject.Argument<>(new ArgumentRef.Every(0));
+            return new LawProposition.Any<>(List.of(
+                    holdsTheKey(any, new LawSubject.AnswerOf<>(operation, own)).denied(),
+                    holdsTheKey(any, new LawSubject.Argument<>(map))));
+        }
+
+        private static LawProposition<ArgumentRef> holdsTheKey(LawSubject<ArgumentRef> key,
+                                                              LawSubject<ArgumentRef> in) {
+            return new LawProposition.Observed<>(new LawSubject.AnswerOf<>(
+                    ValueName.Stdlib.operation("Map", "containsKey"), List.of(key, in)),
+                    new SideAnswered(AnswerAspect.TRUTH, true));
         }
     }
 
@@ -208,6 +383,64 @@ public sealed interface OperationFact {
         public LeavesUnsaid {
             Objects.requireNonNull(observed, "this one names an observation");
             Objects.requireNonNull(why, "and what it comes to");
+        }
+    }
+
+    /**
+     * A law of an operation the library writes in the language, stated to be proved against its
+     * body: {@code states}, which is a law only once proved, and what a walk the body makes carries
+     * at every step of it ({@code carries}), which the proof goes by.
+     *
+     * <p>Never a law on its own say-so. A law declared beside a body is a second account of what the
+     * body does and is refused there; this is the same statement as an obligation, which the body
+     * discharges or leaves open. A clause of {@code carries} names the walk's parts with
+     * {@link ArgumentRef.Carried}, {@link ArgumentRef.Walked} and {@link ArgumentRef.Every}, and may
+     * name what other operations answer ({@link LawSubject.AnswerOf}).
+     */
+    record IsALemma(OperationLaw<ArgumentRef> states, List<LawProposition<ArgumentRef>> carries)
+            implements OperationFact {
+
+        public IsALemma {
+            Objects.requireNonNull(states, "a lemma states something");
+            carries = List.copyOf(carries);
+        }
+    }
+
+    /**
+     * What an operation the library writes answers stands to what it was handed, and to what
+     * other operations answer on those, as {@code holds} says — stated to be proved against its
+     * body, with what a walk the body makes carries at every step of it ({@code carries}).
+     *
+     * <p>A lemma, as {@link IsALemma} is, about a statement no law can make: one naming what other
+     * operations answer, the answer itself among them ({@link LawSubject.AnswerOf} of the operation
+     * handed its own arguments), and holding of every value ({@link ArgumentRef.Every}). Proved, it
+     * is read by the proofs of the library's other operations where they call this one, as what is
+     * stated of a kernel beside others is ({@link IsRelated}); by no reader of a condition.
+     */
+    record IsRelatedInALemma(LawProposition<ArgumentRef> holds,
+                             List<LawProposition<ArgumentRef>> carries) implements OperationFact {
+
+        public IsRelatedInALemma {
+            Objects.requireNonNull(holds, "a lemma states something");
+            carries = List.copyOf(carries);
+        }
+    }
+
+    /**
+     * What a kernel answers stands to what other kernels answer on its arguments as {@code holds}
+     * says, wherever it answers: a key a map holds is one only where the map holds something; an
+     * insert holds one more than its map unless the key was there.
+     *
+     * <p>An axiom about a kernel, as a law of one is, and held to what it computes the same way. Not
+     * a law: a law says what one observation of an answer comes to over the arguments alone, and
+     * this names other answers ({@link LawSubject.AnswerOf}), the answer itself among them, and may
+     * hold of every value ({@link ArgumentRef.Every}). Read by the proofs of what the library's
+     * written operations keep, and by nothing a reader of a condition is handed.
+     */
+    record IsRelated(LawProposition<ArgumentRef> holds) implements OperationFact {
+
+        public IsRelated {
+            Objects.requireNonNull(holds, "a relation states something");
         }
     }
 

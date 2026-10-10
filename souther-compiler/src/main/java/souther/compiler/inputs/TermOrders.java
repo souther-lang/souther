@@ -1,6 +1,12 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.observe.ObservedValue;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
 
 /**
  * The two orders one term stands on: the one a value of it is observed on, and the one the number it
@@ -31,6 +37,7 @@ public final class TermOrders {
     private final NumericTerm term;
     private final Carrier observed;
     private final Carrier answered;
+    private final Map<ElementProjection, Carrier> fields;
 
     /**
      * @param term     the number these are the orders of. Carried, because an answer that leaves
@@ -43,12 +50,23 @@ public final class TermOrders {
      *                 is drawn and written back on
      */
     TermOrders(NumericTerm term, Carrier observed, Carrier answered) {
+        this(term, observed, answered, Map.of());
+    }
+
+    /**
+     * @param fields   for a term over what a walk computed of each element: what each field the
+     *                 computation reads is decoded on. Nothing for any other term, which reads no
+     *                 field of an element
+     */
+    TermOrders(NumericTerm term, Carrier observed, Carrier answered,
+               Map<ElementProjection, Carrier> fields) {
         if (term == null) {
             throw new IllegalArgumentException("orders of no term, which is an answer to nothing");
         }
         this.term = term;
         this.observed = observed;
         this.answered = answered;
+        this.fields = Map.copyOf(fields);
     }
 
     /** The number these are the orders of. */
@@ -86,16 +104,50 @@ public final class TermOrders {
     }
 
     /**
+     * The number of times the value {@code own} an element holds occurs among {@code every} value
+     * the elements of its container hold there, for a term that counts them.
+     */
+    public NumericTerm.Reading readAmong(ObservedValue own, List<ObservedValue> every) {
+        if (!(term instanceof NumericTerm.Multiplicity)) {
+            throw new IllegalArgumentException(term + " is not a count of an element's equals");
+        }
+        return TermReading.among(this, own, every);
+    }
+
+    /**
      * The same, over the values of a run.
      *
      * <p>Which rows there are and how many values stand at a place in one are the measure's; a term
      * only says what its number is of them.
      */
-    public NumericTerm.Reading readOver(java.util.List<souther.compiler.observe.ObservedValue> values) {
-        if (!(term instanceof NumericTerm.TakenOver)) {
+    public NumericTerm.Reading readOver(List<ObservedValue> values) {
+        if (!(term instanceof NumericTerm.TakenOver over)) {
             throw new IllegalArgumentException(term + " is a number of one value, not of a run");
         }
+        if (over.source() instanceof RunSource.ComputedOccurrences) {
+            throw new IllegalArgumentException(term + " is computed of each element, and values"
+                    + " gathered apart from their elements would pair one element's with another's");
+        }
         return TermReading.over(this, values);
+    }
+
+    /**
+     * The same, over a run computed of each element: one reading per element, each answering what
+     * stands at a field of that element.
+     */
+    public NumericTerm.Reading readOverElements(
+            List<Function<ElementProjection, ObservedValue>> each) {
+        if (!(term instanceof NumericTerm.TakenOver over)
+                || !(over.source() instanceof RunSource.ComputedOccurrences)) {
+            throw new IllegalArgumentException(term + " is not computed of each element");
+        }
+        return TermReading.overElements(this, each);
+    }
+
+    /** What the value at {@code field} of an element is decoded on, for a term computed of each
+     *  element, or null where nothing orders it. */
+    public Carrier fieldCarrier(ElementProjection field) {
+        return fields.get(field);
     }
 
     /** What a value at the term's path is decoded on, or null where nothing orders it. */
@@ -120,13 +172,14 @@ public final class TermOrders {
     public boolean equals(Object other) {
         return other instanceof TermOrders that
                 && term.equals(that.term)
-                && java.util.Objects.equals(observed, that.observed)
-                && java.util.Objects.equals(answered, that.answered);
+                && Objects.equals(observed, that.observed)
+                && Objects.equals(answered, that.answered)
+                && fields.equals(that.fields);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(term, observed, answered);
+        return Objects.hash(term, observed, answered, fields);
     }
 
     @Override

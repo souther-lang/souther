@@ -139,7 +139,37 @@ sealed interface InputAtom {
                         taken.operation() instanceof souther.compiler.types.ValueName.Stdlib named
                                 ? named.qualified() + taken.arguments().writtenWith(at)
                                 : "|" + at + "|";
+                case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count ->
+                        "#(" + count.counted() + ")(" + at + ")";
+                case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + at + ")";
             };
+        }
+    }
+
+    /**
+     * A number taken over what a walk computed of each element, which is no number at any place of
+     * the input.
+     *
+     * <p>Named by the term itself. A place says where a number sits and which number of it is meant,
+     * and a total of {@code q * 2} over the elements of a list sits nowhere: spelled as a place, it
+     * would be one name for the totals of every computation over that list. What makes two of these
+     * one number is that they are the same operation over the same elements computing the same
+     * thing, which is what the term is equal by.
+     *
+     * <p>The parameter is part of it for the reason {@link Anonymous} gives.
+     */
+    record Computed(String root, NumericTerm.TakenOver term) implements InputAtom {
+
+        public Computed {
+            if (root == null || term == null) {
+                throw new IllegalArgumentException("a computed number is one parameter's and is some"
+                        + " term");
+            }
+        }
+
+        @Override
+        public String toString() {
+            return root + ":" + term;
         }
     }
 

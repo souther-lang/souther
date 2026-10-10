@@ -2,9 +2,11 @@ package souther.compiler.partition;
 
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.flow.AWayThrough;
+import souther.compiler.flow.WhyRuledOut;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
@@ -26,12 +28,15 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Whether some input the rules admit brings what a condition states out one way.
@@ -57,11 +62,43 @@ public final class WhatTheRulesLeave {
 
     private static final AWayThrough LEFT = new AWayThrough.NotRuledOut(List.of());
 
+    /**
+     * What this reading has already answered, by the statement and the way asked.
+     *
+     * <p>Kept with the reading because the answer is a function of it and the question is asked
+     * many times: every arm of a {@code match} states the denial of the arms before it, so one
+     * part is asked once per arm after it, and the readers of a way through and of the branch count
+     * ask the same arm of the same reading. Not held across a recursive ask, so a part answered
+     * while its whole is being answered is filed on its own.
+     */
+    private static final class Answered {
+
+        private record Asked(Proposition stated, boolean want) {}
+
+        private final Map<Asked, AWayThrough> filed = new ConcurrentHashMap<>();
+    }
+
     /** Whether the rules leave some input on which {@code stated} comes out {@code want}. */
     public static AWayThrough admits(Proposition stated, boolean want, InputReading read) {
+        // A statement no part of which is about the input is answered without one, and has nothing
+        // to be kept with.
+        if (read == null) {
+            return answer(stated, want, null);
+        }
+        Answered answered = read.derived(Answered.class, _ -> new Answered());
+        Answered.Asked asked = new Answered.Asked(stated, want);
+        AWayThrough kept = answered.filed.get(asked);
+        if (kept == null) {
+            kept = answer(stated, want, read);
+            answered.filed.put(asked, kept);
+        }
+        return kept;
+    }
+
+    private static AWayThrough answer(Proposition stated, boolean want, InputReading read) {
         return switch (stated) {
             case Proposition.Always always -> always.holds() == want ? LEFT
-                    : new AWayThrough.RuledOut();
+                    : new AWayThrough.RuledOut(new WhyRuledOut.ItNeverComesOutSo());
             case Proposition.Compared compared ->
                     leaves(compared.relation(), compared.holds() == want, read.quantities());
             case Proposition.All all -> want ? every(all.parts(), true, read)
@@ -85,7 +122,7 @@ public final class WhatTheRulesLeave {
                     leaves(at, List.of(new Case.Presence(holds == want)), read);
             case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
                                      boolean holds, var _) ->
-                    leaves(at, casesOf(at, cases, holds == want, read), read);
+                    amongCases(at, cases, holds == want, read);
             // Whether two values are one is no rule of either position alone, so asked of each
             // on its own, nothing rules it out.
             case Proposition.SameValue _ -> LEFT;
@@ -108,24 +145,58 @@ public final class WhatTheRulesLeave {
                 return LEFT;
             }
         }
-        return new AWayThrough.RuledOut();
+        return new AWayThrough.RuledOut(new WhyRuledOut.TheRulesRefuseEveryCase(at, cases));
     }
 
-    /** The cases of what stands at {@code at} that are among {@code cases} where {@code among},
-     *  and the others where not, out of what its type divides into. */
-    private static List<Case> casesOf(TermPath at, CasesLeft cases, boolean among,
-                                      InputReading read) {
+    /**
+     * Whether the value at {@code at} is left one of {@code cases} where {@code among}, or none of
+     * them where not.
+     *
+     * <p>Two facts, asked in this order, and kept apart because they are about different things.
+     * What the declaration lets a value there be ({@link DeclaredInput#leavesAt}) is what the type
+     * says, whatever the rules are: an arm for a case the type does not hold is ruled out, and an
+     * arm for every case the type holds leaves nothing for a denial of it. Only what the type
+     * leaves is then asked of the rules about the position, a case at a time
+     * ({@link Distinctions}).
+     *
+     * <p>The declaration's answer is read as every name the value may wear says it, so a position
+     * where it is not settled how many names a statement took off is ruled out only where each
+     * reading rules it out. Where the declaration says nothing this can follow, the way is not ruled
+     * out.
+     */
+    private static AWayThrough amongCases(TermPath at, CasesLeft cases, boolean among,
+                                          InputReading read) {
+        List<TypeSymbol> named = namedIn(cases);
+        Optional<List<List<TypeSymbol>>> readings = read.declared().leavesAt(at);
+        if (readings.isPresent() && !named.isEmpty() && readings.get().stream().allMatch(
+                leaves -> among ? leaves.stream().noneMatch(named::contains)
+                        : named.containsAll(leaves))) {
+            return new AWayThrough.RuledOut(new WhyRuledOut.TheDeclarationLeavesNone(at,
+                    readings.get().getLast(), named, among));
+        }
         Position position = read.domain().at(at.position());
         if (position == null) {
-            return List.of();
+            return LEFT;
         }
-        List<Case> out = new ArrayList<>();
+        List<Case> asked = new ArrayList<>();
         for (Case each : Distinctions.ofType(position.view().shape(), read.rules().symbols(),
                 read.rules().kinds(), read.rules().sums())) {
             Refinement one = Refinement.of(each);
             if (one != null && cases.atoms().contains(one) == among) {
-                out.add(each);
+                asked.add(each);
             }
+        }
+        return asked.isEmpty() ? LEFT : leaves(at, asked, read);
+    }
+
+    /** The leaves {@code cases} names, or none unless it names nothing but cases of a sum. */
+    private static List<TypeSymbol> namedIn(CasesLeft cases) {
+        List<TypeSymbol> out = new ArrayList<>();
+        for (Refinement each : cases.atoms()) {
+            if (!(each instanceof Refinement.SumCase sum)) {
+                return List.of();
+            }
+            out.add(sum.leaf());
         }
         return out;
     }
@@ -143,7 +214,8 @@ public final class WhatTheRulesLeave {
         AWayThrough element = admits(some.ofTheElement(), someMeets, read);
         if (someMeets) {
             return element instanceof AWayThrough.RuledOut || mayHold(some.container(), true, read)
-                    ? element : new AWayThrough.RuledOut();
+                    ? element : new AWayThrough.RuledOut(
+                            new WhyRuledOut.NothingIsHeldIn(some.container()));
         }
         return mayHold(some.container(), false, read) ? LEFT : element;
     }
@@ -184,14 +256,26 @@ public final class WhatTheRulesLeave {
     /** Some one of {@code parts} coming out {@code want}: ruled out where every one is. */
     private static AWayThrough some(List<Proposition> parts, boolean want, InputReading read) {
         List<WhyNotTaken> notAsked = new ArrayList<>();
+        List<WhyRuledOut> eachRuledOut = new ArrayList<>();
         boolean somePartLeft = false;
         for (Proposition part : parts) {
-            if (admits(part, want, read) instanceof AWayThrough.NotRuledOut(var whys)) {
-                somePartLeft = true;
-                notAsked.addAll(whys);
+            switch (admits(part, want, read)) {
+                case AWayThrough.NotRuledOut(var whys) -> {
+                    somePartLeft = true;
+                    notAsked.addAll(whys);
+                }
+                case AWayThrough.RuledOut(var why) -> eachRuledOut.add(why);
             }
         }
-        return somePartLeft ? left(notAsked) : new AWayThrough.RuledOut();
+        if (somePartLeft) {
+            return left(notAsked);
+        }
+        // Ruled out by every part, so the reason is all of theirs. A statement of no parts leaves
+        // no way to come out so, which is what the empty disjunction states.
+        return new AWayThrough.RuledOut(eachRuledOut.isEmpty()
+                ? new WhyRuledOut.ItNeverComesOutSo()
+                : eachRuledOut.size() == 1 ? eachRuledOut.get(0)
+                : new WhyRuledOut.EveryWay(eachRuledOut));
     }
 
     private static AWayThrough notAsked(WhyNotTaken why) {
@@ -211,7 +295,8 @@ public final class WhatTheRulesLeave {
         return switch (relation) {
             case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), var at, Rel _) ->
                     someValue(rules.runsBetween(term), asked, at) ? LEFT
-                            : new AWayThrough.RuledOut();
+                            : new AWayThrough.RuledOut(
+                                    new WhyRuledOut.TheNumbersLeaveNone(relation, asked));
             case Relation.Ordered _ -> LEFT;
             case Relation.Affine affine -> {
                 LinearForm<NumericTerm> form = ofTheInput(affine.form());
@@ -219,7 +304,8 @@ public final class WhatTheRulesLeave {
                     yield LEFT;
                 }
                 yield someValue(rules.runsBetween(form), asked, Count.ZERO) ? LEFT
-                        : new AWayThrough.RuledOut();
+                        : new AWayThrough.RuledOut(
+                                new WhyRuledOut.TheNumbersLeaveNone(relation, asked));
             }
         };
     }

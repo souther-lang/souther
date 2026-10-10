@@ -1,9 +1,13 @@
 package souther.compiler.partition;
 
+import net.unit8.notation199x.WhiteSpace;
+
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.TypeView;
+import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
@@ -21,6 +25,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.Arithmetic;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -31,11 +36,13 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -295,6 +302,9 @@ final class TermRealizations {
         if (!counts.isEmpty()) {
             return countsOf(targets, counts, numbers);
         }
+        if (numbers.stream().anyMatch(each -> each.term() instanceof NumericTerm.Multiplicity)) {
+            return amongTheElements(targets, numbers);
+        }
         if (targets.size() == 1) {
             return new JointRealization.Supported(
                     new JointBuilder.OneNumberOnItsOwn(numbers.getFirst()));
@@ -302,6 +312,7 @@ final class TermRealizations {
         SequencedMap<RealizationTarget.OfANumber, TakenAs.TimePart> times = new LinkedHashMap<>();
         SequencedMap<RealizationTarget.OfANumber, TakenAs.DatePart> dates = new LinkedHashMap<>();
         SequencedMap<RealizationTarget.OfANumber, BigDecimal> quotients = new LinkedHashMap<>();
+        SequencedMap<RealizationTarget.OfANumber, BigDecimal> remainders = new LinkedHashMap<>();
         // What stands at the place, where the group asks for it as well as for numbers taken of
         // it. One group has at most one of these: what a number of a place is taken of is the
         // place, so a second value asked for is a second place and is another group's.
@@ -311,12 +322,23 @@ final class TermRealizations {
         // is composed out of rather than read for.
         RealizationTarget.OfANumber manyItHolds = null;
         RealizationTarget.OfANumber whatItComesTo = null;
+        // How many of a string's code points are in a class, which are numbers of one string to be
+        // written together with how long it is.
+        List<RealizationTarget.OfANumber> classCounts = new ArrayList<>();
         // Every target read before any of them is answered, because what the group is turns on all
         // of them. Decided as they come, a value asked for beside a length would be the group the
         // length is in or the group the value is in depending on which of them was read first.
         for (RealizationTarget.OfANumber target : numbers) {
             switch (target.term()) {
+                // Composed with the elements around it, which the arm above has already taken.
+                case NumericTerm.Multiplicity _ -> {
+                    return nothingSolvesAGroup();
+                }
                 case NumericTerm.ValueOf _ -> itself = target;
+                case NumericTerm.CodePointClassCount _ -> {
+                    takenOfIt.add(target);
+                    classCounts.add(target);
+                }
                 // A number taken over the values a walk came to is a number of a run, and a value
                 // standing at one place is not a run — so there is nothing here to read it off.
                 // What is added up over a run is still a number the container it runs through is
@@ -344,6 +366,16 @@ final class TermRealizations {
                             }
                             quotients.put(target, divisor);
                         }
+                        // A remainder is no place in the spelling of a number either. Asked for
+                        // beside the place's own value it is read off each value offered; asked for
+                        // alone, or beside remainders by other divisors, it is solved for below.
+                        case TakenAs.TheFloorRemainder by -> {
+                            BigDecimal divisor = by.read(taken.arguments());
+                            if (divisor == null || divisor.signum() == 0) {
+                                return nothingSolvesAGroup();
+                            }
+                            remainders.put(target, divisor);
+                        }
                         // How much a container holds, which is what a container is composed out of
                         // rather than a place in the spelling of one: what answers a length and a
                         // total together is a container built to have both, and the arm below is
@@ -365,6 +397,15 @@ final class TermRealizations {
             return wholly(targets, owned,
                     () -> new JointBuilder.ItsOwnValueAndWhatIsTakenOfIt(stands, takenOfIt));
         }
+        // Counts of a string's code points, beside how long it is where that is asked: one string
+        // written for all of them. Beside anything else of the place there is nothing here that
+        // writes one, which is a capability this compiler lacks and not a string no numbers have.
+        if (!classCounts.isEmpty()) {
+            RealizationTarget.OfANumber length = manyItHolds;
+            return wholly(targets, length == null ? classCounts
+                            : Stream.concat(classCounts.stream(), Stream.of(length)).toList(),
+                    () -> new JointBuilder.StringsHoldingTheirCounts(classCounts, length));
+        }
         // How many a container holds beside what it comes to, which is one container to compose:
         // the sizes it may be are the ones the first number leaves, and filling one of those to
         // the second is what a total is composed by anyway.
@@ -373,6 +414,17 @@ final class TermRealizations {
             RealizationTarget.OfANumber total = whatItComesTo;
             return wholly(targets, List.of(many, total),
                     () -> new JointBuilder.HoldingThatManyAndAddingUpToThat(many, total));
+        }
+        // The remainders of one place by their divisors, with nothing else asked of it. A value
+        // that is none of them is nothing these write, so a quotient or a part beside them is a
+        // group nothing here solves.
+        if (!remainders.isEmpty()) {
+            if (!quotients.isEmpty() || !times.isEmpty() || !dates.isEmpty()
+                    || manyItHolds != null || whatItComesTo != null) {
+                return nothingSolvesAGroup();
+            }
+            return wholly(targets, remainders.keySet(),
+                    () -> new JointBuilder.SolvingForTheirRemainders(remainders));
         }
         // A quotient of a place beside a part of it is a value that is both a number and a moment,
         // and what would write one is neither arm here.
@@ -399,6 +451,51 @@ final class TermRealizations {
         return wholly(targets, times.isEmpty() ? dates.keySet() : times.keySet(),
                 () -> times.isEmpty() ? new JointBuilder.OnThoseDateParts(dates)
                         : new JointBuilder.AtThoseTimeParts(times));
+    }
+
+    /**
+     * How often the value of an element occurs among the elements of one container, with how many
+     * the container holds where the group asks that too.
+     *
+     * <p>One container and one number of it. How often is asked of one place inside the element, so
+     * two places are two questions about which elements are alike, and counts of the same
+     * container beside them are a container composed for what the elements answer and for which of
+     * them are alike together, which nothing here writes.
+     */
+    private static JointRealization amongTheElements(Collection<RealizationTarget> group,
+                                                     List<RealizationTarget.OfANumber> numbers) {
+        List<RealizationTarget.OfANumber> alike = new ArrayList<>();
+        RealizationTarget.OfANumber many = null;
+        for (RealizationTarget.OfANumber each : numbers) {
+            switch (each.term()) {
+                case NumericTerm.Multiplicity _ -> alike.add(each);
+                case NumericTerm.TakenOf taken
+                        when taken.takenAs() instanceof TakenAs.HowManyItHolds -> {
+                    if (many != null) {
+                        return nothingSolvesAGroup();
+                    }
+                    many = each;
+                }
+                default -> {
+                    return nothingSolvesAGroup();
+                }
+            }
+        }
+        NumericTerm.Multiplicity first = (NumericTerm.Multiplicity) alike.getFirst().term();
+        for (RealizationTarget.OfANumber each : alike) {
+            if (!each.term().equals(first)) {
+                return nothingSolvesAGroup();
+            }
+        }
+        if (many != null && !((NumericTerm.TakenOf) many.term()).position()
+                .equals(first.container())) {
+            return nothingSolvesAGroup();
+        }
+        RealizationTarget.OfANumber holding = many;
+        return wholly(group, Stream.concat(alike.stream(),
+                        holding == null ? Stream.<RealizationTarget.OfANumber>empty()
+                                : Stream.of(holding)).toList(),
+                () -> new JointBuilder.ElementsAlikeAsOftenAsAsked(alike.getFirst(), holding));
     }
 
     /**
@@ -546,6 +643,44 @@ final class TermRealizations {
             }
         }
 
+        /**
+         * One string holding the numbers of code points asked of it in each class, and that many
+         * in all where the length is asked too.
+         *
+         * <p><b>One string and not one for each number.</b> The counts of one string are tied: no
+         * class holds more than the code points that are not whitespace, and none more than the
+         * string is long. A string written for each number alone and put side by side would answer
+         * none of them, so the numbers are chosen together and the string is written out of them.
+         */
+        record StringsHoldingTheirCounts(List<RealizationTarget.OfANumber> classes,
+                                         RealizationTarget.OfANumber length)
+                implements JointBuilder {
+
+            public StringsHoldingTheirCounts {
+                if (classes.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a string holding counts of code points says which classes");
+                }
+                classes = List.copyOf(classes);
+            }
+
+            @Override
+            public Realization from(Type sourceType,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                Map<RealizationTarget.OfANumber, Carrier> answeredOn = new LinkedHashMap<>();
+                for (RealizationTarget.OfANumber each : classes) {
+                    answeredOn.put(each, measuring.ordersOf(each.term()).answered());
+                }
+                if (length != null) {
+                    answeredOn.put(length, measuring.ordersOf(length.term()).answered());
+                }
+                return stringsHoldingTheirCounts(answeredOn, sourceType, demands, within, reading);
+            }
+        }
+
         /** The parts of a time, each standing at what its own set admits. */
         record AtThoseTimeParts(SequencedMap<RealizationTarget.OfANumber, TakenAs.TimePart> parts)
                 implements JointBuilder {
@@ -675,6 +810,72 @@ final class TermRealizations {
                 return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
                         numbersInside(lies, observed,
                                 at -> readsBackIntoEveryOne(at, by, demands, observed)),
+                        at -> writtenAt(at, sourceType, observed, ruleSource));
+            }
+        }
+
+        /**
+         * One number of the place whose remainders by those divisors are the numbers asked for,
+         * solved for ({@link RemainderSolutions}).
+         *
+         * <p><b>Solved and not walked.</b> What several remainders of one number ask is a class of
+         * whole numbers, or nothing where they disagree, and the number is the class's member nearest
+         * the end of the run the rules leave the place. How far apart the members are is the product
+         * of the divisors, which is why no walk through them is a way to find one.
+         *
+         * <p>What is read of each demand is the remainders it admits, as many as a figure allows, so
+         * a solving that did not try every one of them says it stopped and is never read as the rules
+         * leaving no number.
+         */
+        record SolvingForTheirRemainders(SequencedMap<RealizationTarget.OfANumber, BigDecimal> by)
+                implements JointBuilder {
+
+            public SolvingForTheirRemainders {
+                if (by.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a solving for some remainders says which divisors they are by");
+                }
+                by = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(by));
+            }
+
+            @Override
+            public Realization from(Type sourceType,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                Carrier observed = rootOf(by.keySet(), measuring);
+                if (observed == null) {
+                    return new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                }
+                // Every remainder is of one place, so the run the rules leave its value is the one
+                // run every demand is solved in.
+                NumericDomain.Bounds run = NumericDomain.Bounds.OPEN;
+                switch (valueOfThePlace(by.firstEntry().getKey().term(), within)) {
+                    case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                            run = held;
+                    case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    case null -> { }
+                }
+                List<RemainderSolutions.Demand> asked = new ArrayList<>();
+                for (Map.Entry<RealizationTarget.OfANumber, BigDecimal> each : by.entrySet()) {
+                    AskedAt of = demands.get(each.getKey());
+                    if (of == null) {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    asked.add(new RemainderSolutions.Demand(each.getValue(), of.walking(),
+                            of.named()));
+                }
+                RuleReadingSource ruleSource = reading.source();
+                return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
+                        offeredBy(RemainderSolutions.solve(asked,
+                                valueOfThePlaceHeldTo(by.firstEntry().getKey().term(), run, within),
+                                observed)),
                         at -> writtenAt(at, sourceType, observed, ruleSource));
             }
         }
@@ -854,6 +1055,32 @@ final class TermRealizations {
         }
 
         /**
+         * A container holding some element as often as asked, and as many elements as
+         * {@code manyItHolds} asks where it asks.
+         *
+         * <p>Composed out of how often and read for nothing: which values the elements hold and how
+         * many hold each is what the number turns on, so the container is written once
+         * ({@link CardinalityComposer#composeAlike}).
+         *
+         * @param alike       how often some element's value occurs
+         * @param manyItHolds how many elements the container holds, or null where nothing asks
+         */
+        record ElementsAlikeAsOftenAsAsked(RealizationTarget.OfANumber alike,
+                                           RealizationTarget.OfANumber manyItHolds)
+                implements JointBuilder {
+
+            @Override
+            public Realization from(Type sourceType,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                return CardinalityComposer.composeAlike(sourceType, alike, manyItHolds, demands,
+                        measuring, within, reading);
+            }
+        }
+
+        /**
          * The carrier the group's root is observed on, or null where a term of it is not measured.
          *
          * <p>One root has one, so this is read off each term and is the same answer every time
@@ -955,13 +1182,17 @@ final class TermRealizations {
                         over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
                 case NumericTerm.TakenOf taken ->
                         taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
-                case NumericTerm.ValueOf _ -> false;
+                case NumericTerm.ValueOf _, NumericTerm.CodePointClassCount _,
+                     NumericTerm.Multiplicity _ -> false;
             };
             // Each element is chosen for what it answers of the statements, out of values of the
             // element's own number; nothing else inside it is planned.
-            case JointBuilder.SoManyMeetingEach _ -> false;
-            case JointBuilder.AtThoseTimeParts _, JointBuilder.OnThoseDateParts _,
+            case JointBuilder.SoManyMeetingEach _, JointBuilder.ElementsAlikeAsOftenAsAsked _ ->
+                    false;
+            case JointBuilder.StringsHoldingTheirCounts _,
+                 JointBuilder.AtThoseTimeParts _, JointBuilder.OnThoseDateParts _,
                  JointBuilder.SolvingForTheirQuotients _,
+                 JointBuilder.SolvingForTheirRemainders _,
                  JointBuilder.ItsOwnValueAndWhatIsTakenOfIt _ -> false;
         };
     }
@@ -1057,8 +1288,19 @@ final class TermRealizations {
             }
             case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(), sourceType,
                     orders, asked, within, reading, inside);
+            case NumericTerm.CodePointClassCount counted -> {
+                nothingInside(inside);
+                yield holdingThatManyOfAClass(counted.counted(), sourceType, asked, orders,
+                        reading);
+            }
             case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, orders,
                     asked, within, reading, inside);
+            // Written by composing the container its elements stand in, which a value of one
+            // element's type is not: a group holding it is never answered by one number alone
+            // ({@link #jointRealizationOf}).
+            case NumericTerm.Multiplicity among -> throw new IllegalStateException(
+                    among + " is written by composing its container, and no value of one element"
+                            + " is asked for it");
         };
     }
 
@@ -1145,6 +1387,10 @@ final class TermRealizations {
             // it answers is one, so both ends are the order the value is written on.
             case TakenAs.TheTruncatingQuotient taken ->
                     atThatQuotient(taken.read(arguments), sourceType, orders, asked,
+                            within, ruleSource);
+            // And this one writes the residue itself, which is its own remainder.
+            case TakenAs.TheFloorRemainder taken ->
+                    atThatRemainder(taken.read(arguments), sourceType, orders, asked,
                             within, ruleSource);
         };
     }
@@ -1285,6 +1531,79 @@ final class TermRealizations {
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 onTheOrder(asked.walking(), orders, asked.named(), within),
                 quotient -> multipliedBack(by, sourceType, observed, quotient, ruleSource));
+    }
+
+    /**
+     * A value whose remainder by that divisor is one of the numbers asked for, found by solving for
+     * it ({@link RemainderSolutions}).
+     *
+     * <p><b>A right inverse, as the product is for a quotient.</b> Every value of a residue class
+     * answers the residue; which of them to write is the one the rules leave the place, and that is
+     * the member of the class nearest the end of the run, and the residue itself where the run is
+     * open. What it owes is that what it writes reads back as the number it was asked for.
+     */
+    private static Realization atThatRemainder(BigDecimal by, Type sourceType, TermOrders orders,
+                                               AskedAt asked, SearchRegion within,
+                                               RuleReadingSource ruleSource) {
+        Carrier observed = orders.observed();
+        // A divisor that is not there, or is nought, is a term nothing built.
+        if (observed == null || by == null || by.signum() == 0) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        NumericDomain.Bounds run = NumericDomain.Bounds.OPEN;
+        switch (valueOfThePlace(orders.term(), within)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) -> run = held;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                return new Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
+            case null -> { }
+        }
+        return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                offeredBy(RemainderSolutions.solve(
+                        List.of(new RemainderSolutions.Demand(by, asked.walking(), asked.named())),
+                        valueOfThePlaceHeldTo(orders.term(), run, within), observed)),
+                at -> writtenAt(at, sourceType, observed, ruleSource));
+    }
+
+    /** The value standing at the place {@code taking} is a number of, as far as the rules leave it:
+     *  where it runs, the class the remainders fixed beside it hold it to, and whether the rules
+     *  leave nothing where it stands at a number — which is how a hole is read, whatever rule made
+     *  it. */
+    private static RemainderSolutions.Value valueOfThePlaceHeldTo(
+            NumericTerm taking, NumericDomain.Bounds run, SearchRegion within) {
+        if (within == null || !(taking instanceof NumericTerm.TakenOf taken)) {
+            return new RemainderSolutions.Value(run, null, at -> false);
+        }
+        NumericTerm.ValueOf value = new NumericTerm.ValueOf(taken.position());
+        return new RemainderSolutions.Value(run, within.valueClassAt(value),
+                at -> within.given(value, at).emptiness().isPresent());
+    }
+
+    /** What the rules leave of the value standing at the place {@code taking} is a number of, or
+     *  null where they say nothing of it. */
+    private static NumericDomain.FormProjection valueOfThePlace(NumericTerm taking,
+                                                                SearchRegion within) {
+        return within == null || !(taking instanceof NumericTerm.TakenOf taken) ? null
+                : within.projectionOf(new NumericTerm.ValueOf(taken.position()));
+    }
+
+    /**
+     * The number a solving found as the numbers to try, or none and why there are none.
+     *
+     * <p>A search that stopped at a figure hands over nothing and says which, which is a different
+     * thing from the numbers there are being none: the first is what a reader may raise a figure for
+     * and the second is a proof about the rules.
+     */
+    private static Tried offeredBy(RemainderSolutions.Answer answer) {
+        return switch (answer) {
+            case RemainderSolutions.Answer.Found(BigInteger value) ->
+                    Tried.theOne(new Count(new BigDecimal(value)));
+            case RemainderSolutions.Answer.NoneThere _ -> Tried.allOf(List.of());
+            case RemainderSolutions.Answer.Undecided(CompositionBudget figure) ->
+                    new Tried(List.of(), new Remainder.StoppedAt(figure));
+        };
     }
 
     /**
@@ -1809,7 +2128,7 @@ final class TermRealizations {
             case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, orders,
                     within, reading, inside);
             case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _,
-                    TakenAs.TheTruncatingQuotient _ -> {
+                    TakenAs.TheTruncatingQuotient _, TakenAs.TheFloorRemainder _ -> {
                 nothingInside(inside);
                 yield new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -1835,6 +2154,526 @@ final class TermRealizations {
                 wholeNumbers(asked.walking(), orders.answered(), 0, Integer.MAX_VALUE,
                         CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
                 count -> holdingExactly(sourceType, count, reading));
+    }
+
+    /**
+     * Strings holding that many code points of a class, for each number of the set asked for.
+     *
+     * <p>From none upward, as every count is offered. A string holds as many of the class as it is
+     * written to, so there is a string for every number and what limits the walk is the figure the
+     * counts are walked under.
+     */
+    private static Realization holdingThatManyOfAClass(CodePointClass counted, Type sourceType,
+                                                       AskedAt asked, TermOrders orders,
+                                                       RuleReadingContext reading) {
+        return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                wholeNumbers(asked.walking(), orders.answered(), 0, Integer.MAX_VALUE,
+                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
+                count -> stringsHoldingThatManyOf(counted, sourceType, count, reading));
+    }
+
+    /**
+     * Strings of the position holding exactly {@code answer} code points of {@code counted}, each
+     * of them read back before it is offered.
+     *
+     * <p>What the type admits first and what is plainly written after, as a string of a length is
+     * offered ({@link Witnesses}). What is offered is what reads back as the number asked for and
+     * nothing else: a string the type admits that holds another number is a string for another
+     * number, and is left out rather than offered at this one.
+     */
+    private static Realization stringsHoldingThatManyOf(CodePointClass counted, Type sourceType,
+                                                        Place answer, RuleReadingContext reading) {
+        int many = CountDomain.asCount(answer);
+        if (many < 0) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        RuleReadingSource ruleSource = reading.source();
+        WornNames wears = namesOf(sourceType, ruleSource);
+        if (!(wears instanceof WornNames.Spelled worn)) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                    ((WornNames.Unwritable) wears).why());
+        }
+        TypeView holder = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums());
+        Set<String> candidates = new LinkedHashSet<>(
+                admittedStrings(holder, reading, lengthsFrom(many)));
+        candidates.addAll(plainStringsHolding(counted, many));
+        Set<String> held = new LinkedHashSet<>();
+        for (String each : candidates) {
+            String text = asTheLanguageHoldsIt(each);
+            if (text != null && countIn(counted, text) == many) {
+                held.add(text);
+            }
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (String each : held) {
+            out.add(RepresentativeSource.under(worn.names(), FixtureTemplate.string(each)));
+        }
+        if (out.isEmpty()) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        return Realization.Built.whole(out);
+    }
+
+    /**
+     * The lengths a string the type admits is looked for at, for a string holding {@code least}
+     * code points of a class: that many, which is as short as it can be, and a few more, for the
+     * whitespace and separators that stand beside them.
+     */
+    private static List<Integer> lengthsFrom(int least) {
+        int longest = least
+                + CompositionBudget.CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR.maximum();
+        List<Integer> out = new ArrayList<>();
+        for (int length = least; length <= longest; length++) {
+            out.add(length);
+        }
+        return out;
+    }
+
+    /**
+     * The strings of those lengths that the rules on the position admit, as text, in the order the
+     * lengths are given.
+     *
+     * <p>The one place a string the type admits is asked for, whichever number of a string is being
+     * written: a string answering a count or several of them is first of all a string of its type,
+     * and a writer that chose its strings apart from this would offer ones the type refuses where
+     * another would have offered ones it accepts.
+     */
+    private static List<String> admittedStrings(TypeView holder, RuleReadingContext reading,
+                                                Collection<Integer> lengths) {
+        List<String> out = new ArrayList<>();
+        for (int length : lengths) {
+            for (FixtureTemplate each : Partitions.admittedStringOfSize(holder, reading, length)) {
+                if (each.value() instanceof Hir.StringLit written) {
+                    out.add(written.value());
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Strings written for the number alone: {@code many} code points of the class, and the ones
+     * that stand beside them where nothing is written — whitespace, and the separator the class
+     * leaves out. Each is a string some value holds, and none is claimed to be the only one.
+     */
+    private static List<String> plainStringsHolding(CodePointClass counted, int many) {
+        Set<Integer> apart = counted instanceof CodePointClass.NotWhitespaceNorEqualTo(
+                int separator) ? Set.of(separator) : Set.of();
+        List<String> out = new ArrayList<>();
+        // A string of none is offered as whitespace before it is offered as nothing: a row at
+        // nothing is a row that passes with whatever trimming did to it.
+        if (many == 0) {
+            out.add(" ");
+        }
+        for (int member : codePointsOutside(apart)) {
+            String held = new String(Character.toChars(member)).repeat(many);
+            out.add(held);
+            out.add(held + " ");
+            if (counted instanceof CodePointClass.NotWhitespaceNorEqualTo(int separator)) {
+                out.add(held + new String(Character.toChars(separator)));
+                out.add(held + new String(Character.toChars(separator)) + " ");
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Code points that are not whitespace and are none of {@code excluded}, which a class that
+     * leaves out some separators counts wherever they stand: the first plain letter there is
+     * outside the set, and the first ideograph of the block that has no gaps.
+     *
+     * <p>Chosen from outside the set rather than from a list written for the purpose, so that no
+     * set of separators — however many a model writes for one string — leaves nothing to choose.
+     * The letter is first since a row is read by a person. The ideograph is there for the string
+     * the letter cannot be written into: a letter beside a combining separator is one code point
+     * once the text is let in, and no primary composite is made of an ideograph and a mark, so a
+     * string written with it keeps its code points. A set covering every plain letter and every
+     * ideograph is not one a model writes, and is refused as the contradiction it would be.
+     */
+    private static List<Integer> codePointsOutside(Set<Integer> excluded) {
+        List<Integer> out = new ArrayList<>();
+        PLAIN_LETTERS_FIRST.codePoints().filter(each -> !excluded.contains(each)).findFirst()
+                .ifPresent(out::add);
+        for (char each = FIRST_IDEOGRAPH; each <= LAST_IDEOGRAPH; each++) {
+            int codePoint = each;
+            if (!excluded.contains(codePoint)) {
+                out.add(codePoint);
+                break;
+            }
+        }
+        if (out.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "every plain letter and every ideograph of the block is a separator");
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * {@code text} as the language holds it, which is the text a row written from it reads as, or
+     * null where no {@code String} is that text.
+     *
+     * <p>The one place a string this composes becomes the string it offers. Text is canonicalized
+     * when it is let in, so a string made of code points laid side by side — a letter and the
+     * combining mark after it — is not the string the row spelled with them reads back as: it is
+     * the composite, one code point where two were laid. Every count, every length and every
+     * string offered is of the text as held, so a number read here is the number the row has.
+     */
+    private static String asTheLanguageHoldsIt(String text) {
+        return BoundUnderEvaluation.heldAs(text);
+    }
+
+    /** The letters a row is written with, in the order they are preferred. */
+    private static final String PLAIN_LETTERS_FIRST =
+            "xyzabcdefghijklmnopqrstuvwXYZABCDEFGHIJKLMNOPQRSTUVW";
+
+    /** The block of unified ideographs, which every code point of is assigned and none is
+     *  whitespace. */
+    private static final char FIRST_IDEOGRAPH = '一';
+
+    private static final char LAST_IDEOGRAPH = '鿿';
+
+    /** How many code points of {@code text} are in the class: the number a reading of the string
+     *  comes to, which is what a string offered for a count is held to. */
+    private static long countIn(CodePointClass counted, String text) {
+        return text.codePoints().filter(counted::contains).count();
+    }
+
+    /** One number of a string asked for, with where it may be: what the demand admits and what the
+     *  rules leave of it on the way. */
+    private record OfAString(CodePointClass counted, Predicate<Place> holds, Tried tried) {}
+
+    /**
+     * A string holding the numbers asked of it of each class's code points, and as many in all as
+     * the length asks.
+     *
+     * <p>Written out of how many there are of each kind of code point: ones in no class this
+     * counts, whitespace, and one run of each separator some class leaves out. Every number asked
+     * for is a sum of those, so a string is chosen by choosing them, and what is offered is read
+     * back through the one reader before it is — a string that does not answer every demand is not
+     * offered however the sums said it would.
+     *
+     * <p><b>None where the demands cannot all be met, and not-walked where this did not look.</b>
+     * Every number a demand admits is tried when the sets are small and every kind of code point
+     * is tried up to the largest of them, which is the whole of the question, so a search that
+     * found nothing there is a group no string answers. Where a set is larger than that the search
+     * is over some numbers, and what it did not find is a string this compiler did not write.
+     */
+    static Realization stringsHoldingTheirCounts(
+            Map<RealizationTarget.OfANumber, Carrier> answeredOn, Type sourceType,
+            SequencedMap<RealizationTarget, AskedAt> demands, SearchRegion within,
+            RuleReadingContext reading) {
+        List<OfAString> wanted = new ArrayList<>();
+        for (Map.Entry<RealizationTarget.OfANumber, Carrier> entry : answeredOn.entrySet()) {
+            RealizationTarget.OfANumber each = entry.getKey();
+            Carrier on = entry.getValue();
+            AskedAt demand = demands.get(each);
+            if (on == null || demand == null) {
+                return new Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
+            NumericDomain.Bounds held = NumericDomain.Bounds.OPEN;
+            switch (within == null ? null : within.projectionOf(each.term())) {
+                case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) ->
+                        held = bounds;
+                case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                    return new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                }
+                case null -> { }
+            }
+            NumericSet set = demand.walking();
+            NumericDomain.Bounds leaves = held;
+            Predicate<Place> holds = at -> set.holds(at, on) && leaves.admits(at);
+            Tried tried = wholeNumbers(set.extent(), holds, BigInteger.ZERO,
+                    BigInteger.valueOf(Integer.MAX_VALUE),
+                    CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
+            wanted.add(new OfAString(each.term() instanceof NumericTerm.CodePointClassCount count
+                    ? count.counted() : null, holds, tried));
+        }
+        boolean wholeQuestion = walkIsOfTheWholeQuestion(demands.values());
+        boolean everyNumberTried = true;
+        List<Integer> numbers = new ArrayList<>();
+        for (OfAString each : wanted) {
+            everyNumberTried &= each.tried().rest() instanceof Remainder.Exhausted;
+            if (each.tried().numbers().isEmpty() && each.tried().rest()
+                    instanceof Remainder.Exhausted) {
+                return new Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
+            for (Place each2 : each.tried().numbers()) {
+                int count = CountDomain.asCount(each2);
+                if (count >= 0) {
+                    numbers.add(count);
+                }
+            }
+        }
+        int largest = numbers.stream().mapToInt(Integer::intValue).max().orElse(0);
+        boolean pastWhatIsSearchedInFull =
+                largest > CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL.maximum();
+        boolean inFull = everyNumberTried && wholeQuestion && !pastWhatIsSearchedInFull;
+
+        // The separators some class leaves out, as the code points that are not whitespace.
+        List<Integer> separators = new ArrayList<>();
+        for (OfAString each : wanted) {
+            if (each.counted() instanceof CodePointClass.NotWhitespaceNorEqualTo apart
+                    && !WhiteSpace.contains(apart.separator())
+                    && !separators.contains(apart.separator())) {
+                separators.add(apart.separator());
+            }
+        }
+        List<Integer> plains = codePointsOutside(Set.copyOf(separators));
+        // Plain code points, each separator and whitespace: how many of each kind a string holds.
+        int kindsOfCodePoint = separators.size() + 2;
+        int steps = CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.maximum();
+        List<Integer> kinds = codePointsOfEachKind(numbers, inFull ? largest : -1,
+                (int) Math.floor(Math.pow(steps, 1.0 / kindsOfCodePoint)));
+
+        RuleReadingSource ruleSource = reading.source();
+        WornNames wears = namesOf(sourceType, ruleSource);
+        if (!(wears instanceof WornNames.Spelled worn)) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                    ((WornNames.Unwritable) wears).why());
+        }
+        StringSearch search = new StringSearch(separators, plains, wanted,
+                CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(), steps);
+        // The strings the type admits come first and are the only ones offered where any of them
+        // answers every demand. Written ones stand in only where the type admits none that
+        // answers, and are proposals like the rest: whether the type's construction takes them is
+        // its answer to give afterwards, and a refusal there is said as that.
+        TypeView holder = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums());
+        TreeSet<Integer> lengths = new TreeSet<>(lengthsFrom(0));
+        for (int each : numbers) {
+            lengths.addAll(lengthsFrom(each));
+        }
+        for (String each : admittedStrings(holder, reading, lengths)) {
+            search.adopt(each);
+        }
+        if (search.found().isEmpty()) {
+            search.over(0, new int[kindsOfCodePoint], kinds);
+        }
+        if (!search.found().isEmpty()) {
+            List<FixtureTemplate> out = new ArrayList<>();
+            for (String each : search.found()) {
+                out.add(RepresentativeSource.under(worn.names(), FixtureTemplate.string(each)));
+            }
+            return Realization.Built.whole(out);
+        }
+        // A search that looked at every way of writing a string there is, for every number the
+        // demands admit, found no string: the one answer here that is about the demands and not
+        // about this compiler.
+        boolean everyWayLookedAt = inFull && kinds.size() == largest + 1
+                && search.looked() < steps && !search.leftUnwritten();
+        if (everyWayLookedAt) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        // Otherwise what was not looked at is said as what stopped the looking: the numbers of a
+        // demand that were not all tried, the counts past what is searched in full, the steps the
+        // search was allowed.
+        CompositionShortfall met = CompositionShortfall.NONE;
+        for (OfAString each : wanted) {
+            met = met.and(shortfallOf(each.tried().rest()));
+        }
+        if (pastWhatIsSearchedInFull) {
+            met = met.and(CompositionShortfall.of(
+                    Set.of(CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL)));
+        }
+        if (search.looked() >= steps || (inFull && kinds.size() < largest + 1)) {
+            met = met.and(CompositionShortfall.of(
+                    Set.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)));
+        }
+        if (!met.figures().isEmpty()) {
+            return new Realization.Stopped(met);
+        }
+        return new Realization.Unexhausted(met.nothing() ? CompositionShortfall.writing(Set.of(
+                CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)) : met, null);
+    }
+
+    /** What a walk over numbers that ended short of the set says it was stopped by. */
+    private static CompositionShortfall shortfallOf(Remainder rest) {
+        return switch (rest) {
+            case Remainder.Exhausted _ -> CompositionShortfall.NONE;
+            case Remainder.StoppedAt(CompositionBudget figure) ->
+                    CompositionShortfall.of(Set.of(figure));
+            case Remainder.SomeOf(Set<CompositionRepertoire> written) ->
+                    CompositionShortfall.writing(written);
+        };
+    }
+
+    /**
+     * How many code points of one kind a string may be written with: nought, the numbers asked
+     * for and the differences between them — and every whole number up to {@code upTo} where that
+     * is not negative, which is every number a string of those counts can be written with.
+     */
+    private static List<Integer> codePointsOfEachKind(List<Integer> asked, int upTo, int most) {
+        TreeSet<Integer> kinds = new TreeSet<>(List.of(0, 1, 2));
+        if (upTo >= 0) {
+            for (int each = 0; each <= upTo && kinds.size() < Math.max(most, 3); each++) {
+                kinds.add(each);
+            }
+            return List.copyOf(kinds);
+        }
+        kinds.addAll(asked);
+        for (int one : asked) {
+            for (int other : asked) {
+                if (one > other) {
+                    kinds.add(one - other);
+                }
+            }
+        }
+        List<Integer> out = new ArrayList<>(kinds);
+        return out.size() > most ? List.copyOf(out.subList(0, most)) : List.copyOf(out);
+    }
+
+    /**
+     * The strings found for a group of numbers asked of one string, and how far the looking went.
+     *
+     * <p>Every string comes in through {@link #adopt}, whether the type offered it or this wrote it
+     * out of counts: it is let in as text is, and it is kept where the text as held reads back as
+     * a number every demand admits. A string kept is therefore the one a row spells, and not the
+     * code points it was made of laid side by side.
+     */
+    private static final class StringSearch {
+
+        private final List<Integer> separators;
+        private final List<Integer> plains;
+        private final List<OfAString> wanted;
+        private final int most;
+        private final int steps;
+        private final Set<String> found = new LinkedHashSet<>();
+        private int looked;
+        private boolean leftUnwritten;
+
+        StringSearch(List<Integer> separators, List<Integer> plains, List<OfAString> wanted,
+                     int most, int steps) {
+            this.separators = separators;
+            this.plains = plains;
+            this.wanted = wanted;
+            this.most = most;
+            this.steps = steps;
+        }
+
+        Set<String> found() {
+            return found;
+        }
+
+        /** How many ways of writing a string were looked at. */
+        int looked() {
+            return looked;
+        }
+
+        /**
+         * Whether some way of writing a string was said by its counts to answer every demand and
+         * no string written that way did, which is a way of writing this did not find a string
+         * for, and not a way there is none.
+         */
+        boolean leftUnwritten() {
+            return leftUnwritten;
+        }
+
+        /** Keeps {@code candidate}, as the language holds it, where it answers every demand. */
+        boolean adopt(String candidate) {
+            String text = asTheLanguageHoldsIt(candidate);
+            if (text == null || !answersEvery(text, wanted)) {
+                return false;
+            }
+            if (found.size() < most) {
+                found.add(text);
+            }
+            return true;
+        }
+
+        /**
+         * Every way of writing how many code points of each kind a string holds, in the order the
+         * smaller counts come first, where the string they write answers every demand.
+         *
+         * <p>The kinds are the plain ones, each separator and whitespace. The numbers are sums of
+         * the counts chosen, so most assignments are refused without a string being written; one
+         * that is not is written with each plain code point in turn, since which of them the
+         * separators stand beside decides whether the text keeps the code points it was written
+         * with, and is read back as the language holds it.
+         */
+        void over(int kind, int[] counts, List<Integer> kinds) {
+            if (looked >= steps || found.size() >= most) {
+                return;
+            }
+            if (kind == counts.length) {
+                looked++;
+                if (sumsAreAdmitted(counts, separators, wanted)) {
+                    boolean written = false;
+                    for (int plain : plains) {
+                        written = adopt(writtenWith(counts, separators, plain));
+                        if (written) {
+                            break;
+                        }
+                    }
+                    leftUnwritten |= !written;
+                }
+                return;
+            }
+            for (int each : kinds) {
+                counts[kind] = each;
+                over(kind + 1, counts, kinds);
+            }
+        }
+    }
+
+    /** The string with {@code counts[0]} plain code points, then each separator that many times,
+     *  then whitespace. */
+    private static String writtenWith(int[] counts, List<Integer> separators, int plain) {
+        StringBuilder out = new StringBuilder();
+        out.append(new String(Character.toChars(plain)).repeat(counts[0]));
+        for (int at = 0; at < separators.size(); at++) {
+            out.append(new String(Character.toChars(separators.get(at))).repeat(counts[at + 1]));
+        }
+        out.append(" ".repeat(counts[counts.length - 1]));
+        return out.toString();
+    }
+
+    /**
+     * Whether every demand admits the number the counts chosen come to: the length is all of
+     * them, a class holds the plain code points and every separator it does not leave out.
+     */
+    private static boolean sumsAreAdmitted(int[] counts, List<Integer> separators,
+                                           List<OfAString> wanted) {
+        long whitespace = counts[counts.length - 1];
+        long outsideWhitespace = counts[0];
+        for (int at = 0; at < separators.size(); at++) {
+            outsideWhitespace += counts[at + 1];
+        }
+        for (OfAString each : wanted) {
+            long number;
+            if (each.counted() == null) {
+                number = outsideWhitespace + whitespace;
+            } else if (each.counted() instanceof CodePointClass.NotWhitespaceNorEqualTo apart
+                    && separators.contains(apart.separator())) {
+                number = outsideWhitespace - counts[1 + separators.indexOf(apart.separator())];
+            } else {
+                number = outsideWhitespace;
+            }
+            if (!each.holds().test(Count.of(number))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether the string reads back as a number every demand admits. */
+    private static boolean answersEvery(String written, List<OfAString> wanted) {
+        for (OfAString each : wanted) {
+            long read = each.counted() == null ? written.codePointCount(0, written.length())
+                    : countIn(each.counted(), written);
+            if (!each.holds().test(Count.of(read))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Values of the position holding exactly that many, which is {@link Witnesses}' answer. */
