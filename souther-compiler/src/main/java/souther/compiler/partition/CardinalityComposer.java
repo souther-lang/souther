@@ -149,20 +149,38 @@ final class CardinalityComposer {
             case NumericDomain.FormProjection.NothingIsLeft _ -> null;
             case null -> NumericDomain.Bounds.OPEN;
         };
-        List<ExactRatio> turns = new ArrayList<>();
-        for (Asked each : asked) {
-            List<ExactRatio> where = each.turnsAt(element.term(), beside);
-            if (where == null) {
-                return notChosen("where `" + each + "` turns over an element of `" + container
-                        + "` could not be worked out");
-            }
-            turns.addAll(where);
-        }
         boolean distinct = holding.kind() == Shape.Sequence.Kind.SET;
+        int perPart = distinct ? MOST_ELEMENTS : 1;
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
-        Groups groups = Groups.of(asked, container, element, written,
-                run == null ? List.of() : valuesAlong(element.carrier(), run, turns,
-                        distinct ? MOST_ELEMENTS : 1, unheld));
+        List<Place> candidates = List.of();
+        if (element.carrier().counts()) {
+            List<ExactRatio> turns = new ArrayList<>();
+            for (Asked one : asked) {
+                List<ExactRatio> where = one.turnsAt(element.term(), beside);
+                if (where == null) {
+                    return notChosen("where `" + one + "` turns over an element of `" + container
+                            + "` could not be worked out");
+                }
+                turns.addAll(where);
+            }
+            if (run != null) {
+                candidates = valuesAlong(element.carrier(), run, turns, perPart, unheld);
+            }
+        } else {
+            List<Place> turns = new ArrayList<>();
+            for (Asked one : asked) {
+                List<Place> where = one.placesTurnedAt(element.term());
+                if (where == null) {
+                    return notChosen("where `" + one + "` turns over an element of `" + container
+                            + "` could not be worked out");
+                }
+                turns.addAll(where);
+            }
+            if (run != null) {
+                candidates = valuesAlongAnOrder(element.carrier(), run, turns, perPart);
+            }
+        }
+        Groups groups = Groups.of(asked, container, element, written, candidates);
         TypeView ofTheElement = TypeView.of(holding.element(), ruleSource.inners(),
                 ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
         List<FixtureTemplate> built = new ArrayList<>();
@@ -234,6 +252,10 @@ final class CardinalityComposer {
          *  beside} says; null where that could not be worked out. */
         List<ExactRatio> turnsAt(NumericTerm element, Map<NumericTerm, Place> beside);
 
+        /** The places an element turns over at, where its values are ordered and not counted; null
+         *  where that could not be worked out. */
+        List<Place> placesTurnedAt(NumericTerm element);
+
         /** Whether a container of {@code values}, read whole as {@code row}, has as many elements
          *  answering this as it asks — for every count the reading leaves, where one was not read. */
         AStatementAtARow.Answer over(TermPath container, List<Place> values,
@@ -265,6 +287,11 @@ final class CardinalityComposer {
             @Override
             public List<ExactRatio> turnsAt(NumericTerm element, Map<NumericTerm, Place> beside) {
                 return perElement.turnsAt(element, beside);
+            }
+
+            @Override
+            public List<Place> placesTurnedAt(NumericTerm element) {
+                return perElement.placesTurnedAt(element);
             }
         }
 
@@ -300,6 +327,12 @@ final class CardinalityComposer {
                     }
                 }
                 return out;
+            }
+
+            /** An element standing in a set of ordered values is not one this chooses. */
+            @Override
+            public List<Place> placesTurnedAt(NumericTerm element) {
+                return null;
             }
         }
     }
@@ -343,7 +376,7 @@ final class CardinalityComposer {
                 }
             }
             Carrier carrier = own == null ? null : on.get(own);
-            if (carrier == null || !carrier.counts()) {
+            if (carrier == null) {
                 return null;
             }
             return new Element(own, carrier, List.copyOf(beside), on);
@@ -427,6 +460,54 @@ final class CardinalityComposer {
             }
         }
         return out;
+    }
+
+    /**
+     * Values of an element inside {@code run}, for an order that is not counted: each place a
+     * relation turns at that the run holds, and up to {@code each} different values from every run
+     * between two of them and past the last.
+     *
+     * <p>No arithmetic parts the run here, since there is no distance between two values of the
+     * order. A place a relation turns at is a value and the run between two of them is walked from
+     * the carrier, which names a value inside it where there is one.
+     */
+    static List<Place> valuesAlongAnOrder(Carrier carrier, NumericDomain.Bounds run,
+                                          List<Place> turns, int each) {
+        List<Place> inside = new ArrayList<>();
+        for (Place turn : turns) {
+            if (holds(run, turn) && inside.stream().noneMatch(turn::sameAs)) {
+                inside.add(turn);
+            }
+        }
+        inside.sort(Place::compareTo);
+        List<Place> out = new ArrayList<>();
+        Endpoint from = run.min();
+        for (Place turn : inside) {
+            out.addAll(walked(carrier, from, Endpoint.exclusive(turn), each));
+            out.add(turn);
+            from = Endpoint.exclusive(turn);
+        }
+        out.addAll(walked(carrier, from, run.max(), each));
+        return out;
+    }
+
+    /** Whether {@code run} holds {@code place}. */
+    private static boolean holds(NumericDomain.Bounds run, Place place) {
+        Endpoint low = run.min();
+        Endpoint high = run.max();
+        if (low != null) {
+            int compared = low.at().compareTo(place);
+            if (compared > 0 || (compared == 0 && !low.inclusive())) {
+                return false;
+            }
+        }
+        if (high != null) {
+            int compared = high.at().compareTo(place);
+            if (compared < 0 || (compared == 0 && !high.inclusive())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

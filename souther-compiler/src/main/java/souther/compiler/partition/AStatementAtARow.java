@@ -512,6 +512,36 @@ final class AStatementAtARow {
         return out;
     }
 
+    /**
+     * Where each relation this reads over {@code term} turns over, for a term whose values are
+     * ordered and not counted: the places the term is held against.
+     *
+     * <p>A form cannot be over such a term, since there is no number to weigh, so the one place a
+     * relation turns is the place the term is compared with. Between two of them, and past the
+     * last, every relation reads any value of the term the same way.
+     *
+     * @return null where a form reads the term, which a value chosen from a run could answer
+     *         either way
+     */
+    List<Place> placesTurnedAt(NumericTerm term) {
+        List<Place> out = new ArrayList<>();
+        for (OneRelation each : relations.values()) {
+            switch (each) {
+                case OneRelation.OfAForm(LinearQuantity _, LinearForm<NumericTerm> form, Rel _) -> {
+                    if (form.coefs().containsKey(term)) {
+                        return null;
+                    }
+                }
+                case OneRelation.OnAnOrder(LinearQuantity _, NumericTerm on, Place at, Rel _) -> {
+                    if (on.equals(term)) {
+                        out.add(at);
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
     /** A statement about the elements of a container: the container, and what each is asked. */
     private record OverTheElements(TermPath container, AStatementAtARow ofTheElement) {}
 
