@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.NonAffineOperation;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.inputs.BlockReason;
@@ -35,12 +36,14 @@ import souther.compiler.reach.ComparisonArrival;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -462,7 +465,23 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (against != null) {
             return new Read.AgainstAnotherValue(against);
         }
-        BlockReason.WhatItStatesIsNoLine said = whatItStates(stated);
+        // A part the arithmetic met a shape it has no term for in is a stop whose reason was
+        // decided where it was met. Which positions it is filed at is still asked of the
+        // comparison, and the reason is not asked again of where the values came from.
+        List<WhyUnread> stops = Proposition.stopsIn(stated);
+        BlockReason.RuleReadingStopped decided = decidedByTheArithmetic(stops);
+        if (decided != null) {
+            List<FilingCoordinate> at = GuardThresholds.filedAt(comparison, read, reads, answering);
+            if (!at.isEmpty()) {
+                return new Read.Stopped(ComparisonAssessment.atEachOf(at, decided));
+            }
+            SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> from =
+                    new LinkedHashMap<>();
+            GuardThresholds.cameFrom(comparison, reads, read.newtypes(), from);
+            from.replaceAll((place, was) -> decided);
+            return new Read.Stopped(from);
+        }
+        BlockReason.WhatItStatesIsNoLine said = whatItStates(stated, stops);
         // A number no position holds is all the statement says of what it relates. Which number
         // that is — one the body worked out, what a dependency answered, what an operation did —
         // is what the arithmetic over the input met where it stopped, and the place says it.
@@ -526,6 +545,34 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * What the arithmetic said of the parts a statement stopped at, where every part stopped at
+     * arithmetic no form says — or null where some part stopped for anything else.
+     *
+     * <p>One operation is that operation, wherever the closure that holds it is reached from. Two
+     * different ones are no operation: naming the first would say of the second that it was not
+     * there, so the statement is a part not read, which is all they have in common.
+     *
+     * <p>And a part that stopped for something else leaves this null, so that what is said is what
+     * would be said without it. The arithmetic's reason is the reason for the parts it stopped, and
+     * it is not the statement's where others did not stop there.
+     */
+    private static BlockReason.RuleReadingStopped decidedByTheArithmetic(List<WhyUnread> stops) {
+        Set<NonAffineOperation> operations = EnumSet.noneOf(NonAffineOperation.class);
+        for (WhyUnread each : stops) {
+            if (!(each instanceof WhyUnread.OutsideTheLinearFragment(var operation))) {
+                return null;
+            }
+            operations.add(operation);
+        }
+        return switch (operations.size()) {
+            case 0 -> null;
+            case 1 -> new BlockReason.NonAffineArithmetic(operations.iterator().next());
+            default -> new BlockReason.WhatItStatesIsNoLine(
+                    BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ);
+        };
+    }
+
+    /**
      * Why {@code stated}, which the cases above draw no line of, is no line on the input — or null
      * where a part of it stopped at something each place it is filed at words for itself.
      *
@@ -533,8 +580,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * it before a step this compiler has not taken beside it. Then a part declined at how many
      * readings are made, since a run allowed more may read it, and then any other part.
      */
-    static BlockReason.WhatItStatesIsNoLine whatItStates(Proposition stated) {
-        List<WhyUnread> stops = Proposition.stopsIn(stated);
+    static BlockReason.WhatItStatesIsNoLine whatItStates(Proposition stated,
+                                                         List<WhyUnread> stops) {
         if (stops.stream().anyMatch(Cutting::wordedByThePlace)) {
             return null;
         }
@@ -565,7 +612,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static boolean wordedByThePlace(WhyUnread why) {
         return switch (why) {
-            case WhyUnread.OutsideTheLinearFragment _, WhyUnread.NoNumberOnARun _,
+            case WhyUnread.OutsideTheLinearFragment _, WhyUnread.NotArithmetic _,
+                 WhyUnread.NoNumberOnARun _,
                  WhyUnread.TwoElementsOfOneContainer _, WhyUnread.NoLawFor _,
                  WhyUnread.NoWordsFor _, WhyUnread.NotProvedOfItsBody _,
                  WhyUnread.NoFormOfWhatItAnswers _,

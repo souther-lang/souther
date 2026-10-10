@@ -18,7 +18,9 @@ import souther.compiler.types.WrittenOwner;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
+import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -107,6 +109,38 @@ class AStopSaysWhyTheArithmeticStoppedThereTest {
                 stopOf(binary(BinOp.ADD, product, X, Type.INT));
         assertSame(product, stopped.node());
         assertInstanceOf(AffineForms.Halt.NotLinear.class, stopped.why());
+    }
+
+    /** Which arithmetic no form says is the rule's to name, a product or a quotient. */
+    @Test
+    void theOperationIsTheOneTheRuleMet() {
+        assertSame(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES,
+                stopOf(binary(BinOp.MUL, X, Y, Type.INT)).why().nonAffineOperation().orElseThrow());
+        assertSame(NonAffineOperation.DIVISION_BY_NON_CONSTANT_VALUE,
+                stopOf(binary(BinOp.DIV, X, Y, Type.INT)).why().nonAffineOperation().orElseThrow());
+        assertEquals(Optional.empty(), stopOf(ONE_OF_TWO).why().nonAffineOperation());
+    }
+
+    /**
+     * A stop under calls the library states the form of is the stop of what the call was handed, at
+     * whatever depth, and it is the one place that says so.
+     */
+    @Test
+    void theOperationIsFoundThroughTheCallsAnArgumentStoppedUnder() {
+        AffineForms.Halt<String, String> product =
+                new AffineForms.Halt.NotLinear<>(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES);
+        AffineForms.Halt<String, String> once = new AffineForms.Halt.AnArgumentStopped<>(
+                new AffineForms.Outcome.StoppedAt<>(X, "at", product));
+        AffineForms.Halt<String, String> twice = new AffineForms.Halt.AnArgumentStopped<>(
+                new AffineForms.Outcome.StoppedAt<>(Y, "at", once));
+
+        assertSame(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES,
+                twice.nonAffineOperation().orElseThrow());
+        assertEquals(Optional.empty(),
+                new AffineForms.Halt.AnArgumentStopped<String, String>(
+                        new AffineForms.Outcome.StoppedAt<>(X, "at",
+                                new AffineForms.Halt.NoRule<>())).nonAffineOperation(),
+                "and a call whose argument stopped for something else says nothing of arithmetic");
     }
 
     private static Core name(String spelled, int index, Type type) {

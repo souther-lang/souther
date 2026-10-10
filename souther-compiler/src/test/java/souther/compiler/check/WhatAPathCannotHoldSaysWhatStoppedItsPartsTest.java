@@ -26,7 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 class WhatAPathCannotHoldSaysWhatStoppedItsPartsTest {
 
     private static final WhyUnread NO_SIZE = new WhyUnread.NoMeasureOfItsSize();
-    private static final WhyUnread NOT_LINEAR = new WhyUnread.OutsideTheLinearFragment();
+    private static final WhyUnread NOT_LINEAR = new WhyUnread.OutsideTheLinearFragment(
+            NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES);
     private static final WhyNotTaken NO_ALTERNATIVES =
             new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES);
 

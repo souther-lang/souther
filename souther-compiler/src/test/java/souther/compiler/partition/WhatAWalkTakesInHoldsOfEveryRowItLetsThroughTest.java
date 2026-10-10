@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.NonAffineOperation;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
@@ -233,14 +234,12 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
      */
     @Test
     void aComparisonItCouldNotTurnIntoACutSaysThatAndNoMore() {
-        assertEquals(List.of(new WhyNotTaken.MeaningUnread(
-                        new WhyUnread.OutsideTheLinearFragment())),
-                whys("product", true));
+        WhyNotTaken product = new WhyNotTaken.MeaningUnread(new WhyUnread.OutsideTheLinearFragment(
+                NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES));
+        assertEquals(List.of(product), whys("product", true));
         // The same product handed to an operation the library says answers what it was handed:
         // the call is where the reading stopped, and why is what stopped its argument.
-        assertEquals(List.of(new WhyNotTaken.MeaningUnread(
-                        new WhyUnread.OutsideTheLinearFragment())),
-                whys("productThroughACall", true));
+        assertEquals(List.of(product), whys("productThroughACall", true));
         // The affine operand is taken in beside it: a conjunction coming out true says both, and
         // one of them being unreadable is no reason to lose the other.
         assertEquals(List.of(new WhyNotTaken.MeaningUnread(

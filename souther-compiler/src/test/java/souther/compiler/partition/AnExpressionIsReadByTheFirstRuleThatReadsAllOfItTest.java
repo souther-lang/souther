@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.NonAffineOperation;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.Derivation;
@@ -30,7 +31,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest {
 
-    private static final WhyUnread STOPPED = new WhyUnread.OutsideTheLinearFragment();
+    private static final WhyUnread STOPPED = new WhyUnread.OutsideTheLinearFragment(
+            NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES);
 
     private static final Derivation READ = new Derivation.ATruthOfASubject(
             new DecisionSubject.AnInput(TermPath.of("a")), true);

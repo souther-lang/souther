@@ -2,6 +2,7 @@ package souther.compiler.meaning;
 
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClausesInOrder;
+import souther.compiler.check.NonAffineOperation;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.OperationLaw;
@@ -65,8 +66,20 @@ public sealed interface WhyUnread {
     /**
      * A comparison over arithmetic no form over the quantities a condition is read over says: a
      * product of two of them, a quotient by one.
+     *
+     * @param operation which of those it was, as the arithmetic that met it decided
      */
-    record OutsideTheLinearFragment() implements WhyUnread {}
+    record OutsideTheLinearFragment(NonAffineOperation operation) implements WhyUnread {}
+
+    /**
+     * A part of a comparison that is no arithmetic a form could say: an operator that answers no
+     * number, or a condition that holds or fails whatever the element is.
+     *
+     * <p>Its own case beside {@link OutsideTheLinearFragment}, which is arithmetic with a shape no
+     * form has. Nothing is multiplied or divided here, so a reader told of a product would look for
+     * one that is not written.
+     */
+    record NotArithmetic() implements WhyUnread {}
 
     /**
      * A comparison whose form over those quantities was worked out exactly, with a number in it that

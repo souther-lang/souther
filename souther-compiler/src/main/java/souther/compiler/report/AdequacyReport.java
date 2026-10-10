@@ -2773,6 +2773,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             + " reaches its line here the rest of it already decides the outcome";
             case RULE_MEANING_NOT_READ ->
                     "a part of what it states was not read";
+            case NON_AFFINE_PRODUCT ->
+                    "it compares a product of two values that are not constants, which no line on"
+                            + " the values here says";
+            case NON_CONSTANT_DIVISOR ->
+                    "it compares a quotient by a value that is not a constant, which no line on the"
+                            + " values here says";
             // And the four a position reaches, written about the position, because that is all
             // there is: nothing observed a rule to name. Which reasons reach which of the two is
             // settled by the authority a reason belongs to, so no reason is written both ways.
@@ -3960,8 +3966,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyUnread.NoMeasureOfItsSize _ ->
                     "a condition about what a container holds that comes to how many it holds,"
                             + " which is no number this reading measures";
-            case WhyUnread.OutsideTheLinearFragment _ -> "a comparison over a product of two"
-                    + " values or a quotient by one, which no linear form says";
+            case WhyUnread.OutsideTheLinearFragment(var operation) -> switch (operation) {
+                case PRODUCT_OF_NON_CONSTANT_VALUES -> "a comparison over a product of two values"
+                        + " that are not constants, which no linear form says";
+                case DIVISION_BY_NON_CONSTANT_VALUE -> "a comparison over a quotient by a value"
+                        + " that is not a constant, which no linear form says";
+            };
+            case WhyUnread.NotArithmetic _ -> "a comparison over something that is no arithmetic,"
+                    + " which no linear form says";
             case WhyUnread.ANumberNotHeld _ -> "a comparison over a number worked out exactly and"
                     + " too large to hold";
             case WhyUnread.NoNumberOnARun _ -> "a comparison over a quotient by nought, which no"
@@ -4554,6 +4566,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             };
                     case WhyUnread.NoMeasureOfItsSize _ -> "no_measure_of_its_size";
                     case WhyUnread.OutsideTheLinearFragment _ -> "outside_the_linear_fragment";
+                    case WhyUnread.NotArithmetic _ -> "not_arithmetic";
                     case WhyUnread.ANumberNotHeld _ -> "number_not_held";
                     case WhyUnread.NoNumberOnARun _ -> "no_number_on_a_run";
                     case WhyUnread.TwoElementsOfOneContainer _ -> "two_elements_of_one_container";

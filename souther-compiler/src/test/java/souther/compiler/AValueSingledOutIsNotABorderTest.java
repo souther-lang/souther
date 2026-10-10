@@ -132,7 +132,7 @@ class AValueSingledOutIsNotABorderTest {
     void anOrderTheReadingStoppedOnRelatesNothingYet() {
         assertEquals(List.of(), classes("r.a <= Int.multiply(r.other, r.other)"));
         assertEquals(0, borders("r.a <= Int.multiply(r.other, r.other)"));
-        assertEquals(List.of("r.a: UNSUPPORTED_SYNTAX", "r.other: UNSUPPORTED_SYNTAX"),
+        assertEquals(List.of("r.a: NON_AFFINE_PRODUCT", "r.other: NON_AFFINE_PRODUCT"),
                 notRead("r.a <= Int.multiply(r.other, r.other)"));
     }
 

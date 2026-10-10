@@ -419,7 +419,25 @@ public record UndividedPosition(TermPath at, Why why) {
          * other part — which case a called behavior answers, a clause of an invariant an attempt
          * checks, a step of the reading not yet written, more readings than are made.
          */
-        RULE_MEANING_NOT_READ
+        RULE_MEANING_NOT_READ,
+        /**
+         * A rule naming this position compares a product of two values neither of which is a
+         * constant, and a form over the input's numbers has no term for one.
+         *
+         * <p>Its own word beside {@link #RULE_ABOUT_A_DERIVED_VALUE}. Nothing was made out of the
+         * position and no operation is left to read the rule back through: the comparison depends
+         * on the position and on another number, and the line it draws over them is not one a form
+         * says. A reader told the other would go looking for an operation to invert.
+         */
+        NON_AFFINE_PRODUCT,
+        /**
+         * The same for a quotient by a value that is not a constant.
+         *
+         * <p>Its own word beside {@link #NON_AFFINE_PRODUCT}, because what an author does differs:
+         * a product of two numbers may be re-stated over one of them, while a divisor that
+         * varies is a different shape of rule.
+         */
+        NON_CONSTANT_DIVISOR
     }
 
     /**

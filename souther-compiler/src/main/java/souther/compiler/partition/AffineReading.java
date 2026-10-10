@@ -124,12 +124,25 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
         }
 
-        /** The reading stopped, at this expression and in the environment it was being read in. */
-        record Stopped(Core node, InputReads at) implements OfAComparison {
+        /**
+         * The reading stopped: where, in what environment, and for the reason the arithmetic gave.
+         * The reason is the arithmetic's own, so a reader of this takes it as it is.
+         */
+        record Stopped(AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> failure)
+                implements OfAComparison {
 
             public Stopped {
-                java.util.Objects.requireNonNull(node, "a reading that stopped stopped somewhere");
-                java.util.Objects.requireNonNull(at, "and was reading it in something");
+                java.util.Objects.requireNonNull(failure, "a reading that stopped stopped somewhere");
+            }
+
+            /** The expression the reading stopped at. */
+            public Core node() {
+                return failure.node();
+            }
+
+            /** The environment it was being read in. */
+            public InputReads at() {
+                return failure.at();
             }
         }
     }
@@ -151,7 +164,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             AffineForms.Outcome<NumericTerm, InputReads> read =
                     AffineForms.outcome(side, reads, reading(inputs, ruleSource, named));
             if (read instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped) {
-                return new OfAComparison.Stopped(stopped.node(), stopped.at());
+                return new OfAComparison.Stopped(stopped);
             }
             if (left == null) {
                 left = ((AffineForms.Outcome.Composed<NumericTerm, InputReads>) read).form();
