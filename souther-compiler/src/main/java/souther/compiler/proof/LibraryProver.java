@@ -73,6 +73,7 @@ public final class LibraryProver {
         this.readThrough = Set.copyOf(readThrough);
     }
 
+
     /** Whether {@code lemma}, a statement about {@code operation}, is proved against its body. */
     public Outcome prove(ValueName.Stdlib.Operation operation, Lemma lemma) {
         Reading reading = new Reading(library, readThrough);
@@ -136,6 +137,40 @@ public final class LibraryProver {
             return new Outcome.Proved(new Proof.ByTheBody(operation, reading.used()));
         } catch (Reading.Stopped stopped) {
             return stoppedAt(stopped);
+        }
+    }
+
+    /**
+     * Whether how many {@code operation} answers holds is {@code size}, a number of its arguments,
+     * wherever {@code proved} — a statement of its answer beside what others answer, proved of its
+     * body — holds: the two say one thing, in other words, and nothing of the body is read again.
+     */
+    public boolean sizeFollows(ValueName.Stdlib.Operation operation,
+                               LinearForm<LawNumber<Integer>> size, LawProposition<Slot> proved) {
+        // One about its arguments and its answer alone: a statement of every value, or of a walk,
+        // says something else.
+        boolean[] another = {false};
+        Collect.slots(proved, slot -> another[0] |= !(slot instanceof Slot.Place
+                || slot instanceof Slot.Answer));
+        if (another[0]) {
+            return false;
+        }
+        Reading reading = new Reading(library, readThrough);
+        try {
+            List<Value> params = arguments(operation);
+            Value answer = new Value.Made(operation, params);
+            LawProposition<Value> given = reading.proposition(
+                    TheAnswer.named(proved, operation, params.size()), operation,
+                    slot -> switch (slot) {
+                        case Slot.Place(int position) -> params.get(position);
+                        case Slot.Answer _ -> answer;
+                        case Slot.Every _, Slot.Carried _, Slot.Walked _ -> null;
+                    }, Reading.Elements.none());
+            return follows(reading, List.of(given), Props.compared(
+                    LinearForm.atom(new LawNumber.SizeOf<>(new LawSubject.Argument<>(answer))),
+                    Rel.EQ, reading.form(size, operation, params)), spacing(operation, Map.of()));
+        } catch (Reading.Stopped stopped) {
+            return false;
         }
     }
 

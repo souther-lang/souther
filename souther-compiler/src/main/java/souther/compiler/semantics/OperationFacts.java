@@ -560,17 +560,31 @@ public final class OperationFacts {
             // other it does not hold; or those of one side the other holds, or does not.
             about("Set", "singleton", sizeInCases(sized(always(true), 1))),
             about("Map", "singleton", sizeInCases(sized(always(true), 1))),
-            about("Set", "insert", sizeIs(1, sizeOf(at(1)), 1, howManyMeet(at(1),
-                    alike(new LawSubject.ElementOf<>(at(1)), the(at(0)))), -1)),
-            about("Set", "remove", sizeIs(0, sizeOf(at(1)), 1, howManyMeet(at(1),
-                    alike(new LawSubject.ElementOf<>(at(1)), the(at(0)))), -1)),
-            about("Map", "insert", sizeIs(1, sizeOf(at(2)), 1, howManyMeet(at(2),
-                    alike(new LawSubject.KeyOf<>(at(2)), the(at(0)))), -1)),
-            about("Map", "remove", sizeIs(0, sizeOf(at(1)), 1, howManyMeet(at(1),
-                    alike(new LawSubject.KeyOf<>(at(1)), the(at(0)))), -1)),
-            about("Map", "updateOrInsert", lemma(sizeIs(1, sizeOf(CONTAINER), 1,
-                    howManyMeet(CONTAINER, alike(new LawSubject.KeyOf<>(CONTAINER), the(at(0)))),
-                    -1))),
+            about("Set", "insert", sizeInCases(
+                    sized(holding(at(1), new LawSubject.ElementOf<>(at(1)), at(0)),
+                            sizeOf(at(1)), 0),
+                    sized(holding(at(1), new LawSubject.ElementOf<>(at(1)), at(0)).denied(),
+                            sizeOf(at(1)), 1))),
+            about("Set", "remove", sizeInCases(
+                    sized(holding(at(1), new LawSubject.ElementOf<>(at(1)), at(0)),
+                            sizeOf(at(1)), -1),
+                    sized(holding(at(1), new LawSubject.ElementOf<>(at(1)), at(0)).denied(),
+                            sizeOf(at(1)), 0))),
+            about("Map", "insert", sizeInCases(
+                    sized(holding(at(2), new LawSubject.KeyOf<>(at(2)), at(0)),
+                            sizeOf(at(2)), 0),
+                    sized(holding(at(2), new LawSubject.KeyOf<>(at(2)), at(0)).denied(),
+                            sizeOf(at(2)), 1))),
+            about("Map", "remove", sizeInCases(
+                    sized(holding(at(1), new LawSubject.KeyOf<>(at(1)), at(0)),
+                            sizeOf(at(1)), -1),
+                    sized(holding(at(1), new LawSubject.KeyOf<>(at(1)), at(0)).denied(),
+                            sizeOf(at(1)), 0))),
+            about("Map", "updateOrInsert", lemma(sizeInCases(
+                    sized(holding(CONTAINER, new LawSubject.KeyOf<>(CONTAINER), at(0)),
+                            sizeOf(CONTAINER), 0),
+                    sized(holding(CONTAINER, new LawSubject.KeyOf<>(CONTAINER), at(0)).denied(),
+                            sizeOf(CONTAINER), 1)))),
             about("Set", "union", sizeIs(0, sizeOf(at(0)), 1, howManyMeet(at(1),
                     some(at(0), sameElements(at(0), at(1))).denied()), 1)),
             about("Set", "intersection", size(howManyMeet(at(0),
@@ -644,9 +658,12 @@ public final class OperationFacts {
 
             // What a kernel's answer comes to beside what others answer on its arguments, where no
             // law of one observation says it. A key a map holds is one only where it holds
-            // something. An insert holds one more than what it was handed unless what was put in
-            // was there, and holds exactly that and what it was handed; nothing holds a key of an
-            // empty map.
+            // something. An insert holds exactly what was put in and what it was handed; nothing
+            // holds a key of an empty map. And how many an insert holds, which its law says, said
+            // again beside what the membership it turns on answers: what is stated of a kernel
+            // beside others is taken where that kernel is applied, so said in its words, the
+            // insert puts what is stated of `Map.containsKey` and `Set.contains` in reach of a
+            // proof that reads it.
             about("Map", "containsKey", related(any(
                     isTrue(answerOf("Map", "containsKey", the(at(0)), the(at(1)))).denied(),
                     holdsSomething(at(1))))),
@@ -969,6 +986,14 @@ public final class OperationFacts {
                                         LawNumber<ArgumentRef> b, long byB) {
         return new OperationFact.HasALaw(new OperationLaw.Size<>(new LinearForm<>(
                 ExactRatio.of(constant), Map.of(a, ExactRatio.of(byA), b, ExactRatio.of(byB)))));
+    }
+
+    /** Some element of {@code container} being, as {@code of} says of it, the argument at
+     *  {@code value}: the container holding that value, or a key of it being that value. */
+    private static LawProposition<ArgumentRef> holding(ArgumentRef container,
+                                                       LawSubject<ArgumentRef> of,
+                                                       ArgumentRef value) {
+        return some(container, alike(of, the(value)));
     }
 
     /** How many the answer holds comes to {@code why}, which the domain has no words for. */

@@ -9,6 +9,7 @@ import souther.compiler.proof.ByPlace;
 import souther.compiler.proof.Lemma;
 import souther.compiler.proof.Library;
 import souther.compiler.proof.LibraryProver;
+import souther.compiler.proof.Proof;
 import souther.compiler.proof.Slot;
 import souther.compiler.proof.Unproved;
 import souther.compiler.proof.WalksFromASeed;
@@ -71,6 +72,9 @@ final class ProvingTheLibrary {
             BoundOperationFacts.Settled>> settled = new HashMap<>();
     private final Map<ValueName.Stdlib.Operation, Boolean> provedToBuild = new HashMap<>();
     private final Map<List<Object>, Boolean> provedToRelate = new HashMap<>();
+    /** The proof of each statement beside others proved so far, by what {@link #provedToRelate}
+     *  keys it by. */
+    private final Map<List<Object>, Proof> relationProofs = new HashMap<>();
     private final Set<List<Object>> underWay = new HashSet<>();
     private final LibraryProver prover;
     private final WhereTheElementsCameFrom elements;
@@ -255,13 +259,33 @@ final class ProvingTheLibrary {
         if (!underWay.add(asking)) {
             return false;   // a proof reading what it is proving: nothing settles it yet
         }
-        boolean proved = prover.relates(operation, related.holds(),
+        LibraryProver.Outcome outcome = prover.relates(operation, related.holds(),
                 related.carried() != null ? List.of(related.carried())
-                        : carries.getOrDefault(operation, List.of()))
-                instanceof LibraryProver.Outcome.Proved;
+                        : carries.getOrDefault(operation, List.of()));
         underWay.remove(asking);
+        boolean proved = outcome instanceof LibraryProver.Outcome.Proved(var proof);
+        if (outcome instanceof LibraryProver.Outcome.Proved(var proof)) {
+            relationProofs.put(asking, proof);
+        }
         provedToRelate.put(asking, proved);
         return proved;
+    }
+
+    /**
+     * The proof of a statement of {@code operation}'s answer beside what others answer that says
+     * how many it holds is {@code size} — or null where none proved says it. A law that says what
+     * a proved statement says stands on that statement's proof, and the body is not read for it
+     * again.
+     */
+    private Proof sizeAlreadyProved(ValueName.Stdlib.Operation operation,
+                                    LinearForm<LawNumber<DeclaredArgument>> size) {
+        for (Related each : relates.getOrDefault(operation, List.of())) {
+            if (relates(operation, each) && prover.sizeFollows(operation,
+                    ByPlace.form(size, DeclaredArgument::position), each.holds())) {
+                return relationProofs.get(List.of(operation, each.holds()));
+            }
+        }
+        return null;
     }
 
     /** What is stated of {@code operation}'s answer beside what others answer, as a proof may take
@@ -353,6 +377,12 @@ final class ProvingTheLibrary {
                 case LibraryProver.Outcome.Proved _ -> new BoundOperationFacts.Settled.Open(null,
                         new Unproved.DoesNotFollow(Unproved.Obligation.THE_STATEMENT));
             };
+        }
+        if (what.law() instanceof OperationLaw.Size<DeclaredArgument> size
+                && size.unconditional() != null
+                && sizeAlreadyProved(operation, size.unconditional()) instanceof Proof proof) {
+            return new BoundOperationFacts.Settled.ByALaw(what.law(),
+                    new BoundOperationFacts.Grounds.Proved(proof));
         }
         return switch (prover.prove(operation, new Lemma(
                 ByPlace.law(what.law(), DeclaredArgument::position), what.carries()))) {
