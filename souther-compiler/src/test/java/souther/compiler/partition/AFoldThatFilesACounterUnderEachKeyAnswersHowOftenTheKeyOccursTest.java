@@ -168,6 +168,22 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 () -> "no point of the line is where nothing is filed: " + item));
     }
 
+    /** A counter that never moves holds one figure under every key, and still only under a key. */
+    @Test
+    void aCounterThatNeverMovesIsNoEntryForAnEmptyList() {
+        String never = "Map.updateOrInsert(x, 5, n -> n, acc)";
+        Compilation compilation = measured(modelOf(never, "count >= atLeast", """
+
+                example popular
+                    | "none" : ([], 5) -> []
+                """));
+        List<JsonNode> borders = bordersOf(compilation);
+        assertFalse(borders.isEmpty(), () -> report(compilation));
+        borders.forEach(border -> border.path("items").forEach(item ->
+                assertFalse(item.path("hit").asBoolean(),
+                        () -> "an empty list files nothing, whatever the figure is: " + item)));
+    }
+
     @Test
     void aConditionHeldTwiceDrawsAnotherLineOnTheSameCount() {
         Compilation compilation = measured(

@@ -358,9 +358,6 @@ public sealed interface NumericTerm
      * this is one number for each element and no number of the container. Two elements holding the
      * same value at {@code place} read the same number, and every element reads at least one, since
      * it is one of those it counts.
-     *
-     * @param container the container whose elements are counted
-     * @param place     where, inside an element of {@code container}, the value compared stands
      */
     final class Multiplicity implements NumericTerm {
 
@@ -375,6 +372,9 @@ public sealed interface NumericTerm
         /**
          * The number of times the value at {@code place} occurs among the elements of
          * {@code container}, or null where {@code place} is not inside an element of it.
+         *
+         * @param container the container whose elements are counted
+         * @param place     where, inside an element of {@code container}, the value compared stands
          */
         public static Multiplicity of(TermPath container, TermPath place) {
             return container != null && place != null && place.isAtOrUnder(container.element())
