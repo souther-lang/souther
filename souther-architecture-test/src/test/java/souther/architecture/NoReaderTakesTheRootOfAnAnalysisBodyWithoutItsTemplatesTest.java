@@ -45,7 +45,11 @@ class NoReaderTakesTheRootOfAnAnalysisBodyWithoutItsTemplatesTest {
                     + " reader asks is inside a template",
             "souther/compiler/partition/DecisionReading",
             "reads the root, and answers a build by what its template does; what is inside a template"
-                    + " is no way of the body, since a value takes no input");
+                    + " is no way of the body, since a value takes no input",
+            "souther/compiler/query/Adequacy$BodyAtACall",
+            "hands the root on to the reading of a call that enters the body, with the bindings of"
+                    + " the root and of every template, so a name a build gives is what it holds"
+                    + " there too");
 
     @Test
     void everyReaderThatTakesTheRootHasSaidWhatItDoesAboutTheTemplates() {

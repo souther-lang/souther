@@ -2574,7 +2574,8 @@ final class Pullback {
      * ({@link #chosenAt}), and read here as well they would be read twice.
      */
     private Inside.ACallDefinedByCases definedByCases(Core e, InputReads at) {
-        if (!(e instanceof Core.PreservedCall call) || Choice.of(call) != null
+        if (!(Core.withoutStanding(e) instanceof Core.PreservedCall call)
+                || Choice.of(call) != null
                 || !(AnOperationApplied.of(call) instanceof AnOperationApplied applied
                         && applied.operation() instanceof ValueName.Stdlib operation)) {
             return null;

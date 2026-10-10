@@ -4,6 +4,7 @@ import souther.compiler.check.AffineForms;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.Symbols;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
@@ -187,10 +188,13 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
                     && construct.values().size() == 1 ->
                     workedOut(construct.values().getFirst().value(), at, met);
             case Core.Int written -> Long.toString(written.value());
-            case Core.Decimal written -> written.value().toPlainString();
+            case Core.Decimal written -> ExactRatio.spelledBounded(written.value());
             case Core.Str written -> '"' + written.value() + '"';
             case Core.Bool written -> Boolean.toString(written.value());
             case Core.Temporal written -> written.text();
+            // The names read off a value, written as the accesses they stand for.
+            case Core.FieldProjection projection ->
+                    workedOut(projection.lastAccess(), at, met);
             default -> {
                 List<String> parts = new ArrayList<>();
                 Core.forEachChild(e, child -> parts.add(workedOut(child, at, met)));
@@ -201,12 +205,13 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
 
     /** What kind of expression {@code e} is, or which operation it applies, as a word. */
     private static String what(Core e) {
-        return switch (e) {
+        Core it = Core.withoutStanding(e);
+        return switch (it) {
             case Core.Call call -> call.fn().rendered();
             case Core.PreservedCall call -> call.declared().operation().toString();
             case Core.Binary binary -> binary.op().toString();
             case Core.FieldAccess access -> "." + access.field();
-            default -> e.getClass().getSimpleName();
+            default -> it.getClass().getSimpleName();
         };
     }
 

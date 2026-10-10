@@ -19,7 +19,6 @@ import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.reach.Reachability;
 import souther.compiler.reach.WhyUnsettled;
 
 import java.util.EnumMap;
@@ -245,7 +244,7 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
         assertNotNull(byBehavior.get(behavior), () -> "the walk answers about " + behavior);
         Set<WhyNotTaken.DomainLimit> out = new LinkedHashSet<>();
         byBehavior.get(behavior).found().values().forEach(reach -> {
-            if (reach instanceof Reachability.Unsettled(WhyUnsettled why)) {
+            if (reach instanceof souther.compiler.reach.Reachability.Unsettled(WhyUnsettled why)) {
                 why.said(new NotTaken()).forEach(each -> limitOf(each, out));
             }
         });
