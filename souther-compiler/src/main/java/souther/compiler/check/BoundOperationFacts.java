@@ -305,6 +305,21 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.BuildsItsResultFrom.class);
     }
 
+    /**
+     * The argument whose elements the answer of {@code operation} is made from where that is all
+     * the operation says, or null where it says more or says nothing.
+     *
+     * <p>An operation with a building says it there ({@link BuiltFrom#derivesItsElementsFrom}), and
+     * a reader that has already fetched the building asks it and comes here only without one. This
+     * is the lineage declared apart from a count, which is what an operation answering any number
+     * for each element states.
+     */
+    public DeclaredArgument elementsMadeFromAlone(ValueName operation) {
+        BoundOperationFact.ElementsComeFrom held =
+                one(BoundOperationFact.ElementsComeFrom.class, operation);
+        return held == null ? null : held.lineage().source().argument();
+    }
+
     /** Which part of which map {@code operation} answers a list of, or null where it lists no
      *  map's. */
     public Listed listsAPartOf(ValueName operation) {

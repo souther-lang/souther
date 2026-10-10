@@ -605,7 +605,8 @@ final class InputPath {
         // declaration that states them because the operation is still standing to be asked.
         return holds != null ? holds
                 : switch (asked) {
-                    case VALUE_ORIGIN -> built == null ? null : built.derivesItsElementsFrom();
+                    case VALUE_ORIGIN -> built != null ? built.derivesItsElementsFrom()
+                            : DefaultBoundOperationFacts.get().elementsMadeFromAlone(operation);
                     case NAMED_POSITION -> null;
                 };
     }

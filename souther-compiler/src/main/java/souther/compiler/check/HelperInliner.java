@@ -734,11 +734,13 @@ public final class HelperInliner {
         }
         BuiltFrom<DeclaredArgument> built =
                 DefaultBoundOperationFacts.get().buildsItsResultFrom(expansion.callee());
-        if (built == null) {
+        DeclaredArgument holds = built == null ? null : built.holdsTheElementsOf();
+        DeclaredArgument made = holds != null ? null
+                : built != null ? built.derivesItsElementsFrom()
+                : DefaultBoundOperationFacts.get().elementsMadeFromAlone(expansion.callee());
+        if (holds == null && made == null) {
             return;
         }
-        DeclaredArgument holds = built.holdsTheElementsOf();
-        DeclaredArgument made = holds != null ? null : built.derivesItsElementsFrom();
         BindingId container = boundFor(expansion, holds != null ? holds : made);
         if (container == null) {
             return;

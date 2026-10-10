@@ -141,6 +141,35 @@ public sealed interface OperationFact {
     }
 
     /**
+     * Every element of the operation's answer is inside what a closure answered on an element of
+     * {@code lineage}'s source, and nothing is said of how many there are.
+     *
+     * <p>Where an element came from, apart from how many of them the answer has. A
+     * {@link BuildsItsResultFrom} says both, and its rows are also the table the invariant
+     * discharge reads, so an operation whose count is neither as many as its source nor no more
+     * ({@code List.flatMap} answers any number for each element) cannot be a row there. Declared
+     * here it is read by the readers that follow a value back to the position it was made from,
+     * and by nothing that reasons about the answer's size or what survives the construction.
+     *
+     * <p>Only the lineages a value is made from, which are the closure's answer and what is inside
+     * it. The very elements of an argument are a statement about the answer's count as well, and
+     * stay a {@link BuildsItsResultFrom}.
+     */
+    record ElementsComeFrom(ElementLineage<ArgumentRef> lineage) implements OperationFact {
+
+        public ElementsComeFrom {
+            Objects.requireNonNull(lineage, "this one says where the elements came from");
+            if (!(lineage instanceof ElementLineage.ClosureResult<ArgumentRef>
+                    || lineage instanceof ElementLineage.InsideClosureResult<ArgumentRef>)
+                    || lineage.source().elements() != 1) {
+                throw new IllegalArgumentException(
+                        "an element made from one element of an argument is what this says: "
+                                + lineage);
+            }
+        }
+    }
+
+    /**
      * The operation's result is never smaller than what {@code container} holds.
      *
      * <p>One fact per container it is no smaller than: {@code a ++ b} is as long as either half, and
