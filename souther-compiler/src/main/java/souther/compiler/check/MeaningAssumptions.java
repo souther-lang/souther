@@ -348,9 +348,11 @@ final class MeaningAssumptions {
         };
     }
 
+    /** Whether {@code number} is a whole number other than nought that a signed 64-bit number holds,
+     *  the least one and the greatest included. */
     private static boolean isAWholeNumberOfALong(BigDecimal number) {
-        BigInteger magnitude = Arithmetic.AFloorRemainder.magnitudeOf(number);
-        return magnitude != null && magnitude.bitLength() < Long.SIZE - 1;
+        BigInteger whole = Arithmetic.AFloorRemainder.wholeDivisorOf(number);
+        return whole != null && whole.bitLength() < Long.SIZE;
     }
 
     /** {@code atom} held between the ends {@code operation} bounds what it answers to, for the

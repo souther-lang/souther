@@ -34,6 +34,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -709,6 +710,20 @@ public final class BoundOperationFacts {
     /** The operations that compute arithmetic of their own. */
     public Set<ValueName> computesANumber() {
         return ones(BoundOperationFact.ComputesANumber.class);
+    }
+
+    /**
+     * Which argument {@code operation} divides by, where what it answers is what a division leaves
+     * with the quotient floored — or empty where it answers something else.
+     *
+     * <p>The arithmetic's own answer, carried as a position and read off what the operation computes,
+     * so a reader asking which calls leave a floored remainder is not asking which operation it is
+     * by its name.
+     */
+    public OptionalInt divisorOfAFloorRemainder(ValueName operation) {
+        NumericResult<DeclaredArgument> result = computesANumber(operation);
+        return result != null && result.computes() instanceof Arithmetic.AFloorRemainder remainder
+                ? OptionalInt.of(remainder.divisor()) : OptionalInt.empty();
     }
 
     /**

@@ -76,6 +76,20 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
         assertTrue(key.getMessage().contains("has no TRUTH"), key.getMessage());
     }
 
+    /**
+     * A count of whole units is read by the order the two values are counted on: how far apart two
+     * of them can be is that order's first value and its last, and a threshold past it is settled
+     * by that. A fact declared over values that are not counted, or are not of one order, is a
+     * claim the reading cannot stand on, and it is refused where it meets the signature.
+     */
+    @Test
+    void aCountOfUnitsBetweenValuesThatAreNotOfOneCountedOrderIsRefused() {
+        CompleteSignature declaration = declared("Decimal.toInt");
+        assertThrows(IllegalStateException.class, () -> OperationFactBinder.holdCountOfWholeUnits(
+                declaration, new souther.compiler.semantics.OperationFact.CountsWholeUnitsBetween(
+                        new ArgumentRef.At(0), new ArgumentRef.At(1), 60)));
+    }
+
     private static final ArgumentRef CONTAINER = new ArgumentRef.TheContainer();
     private static final ArgumentRef CLOSURE = new ArgumentRef.TheClosure();
 

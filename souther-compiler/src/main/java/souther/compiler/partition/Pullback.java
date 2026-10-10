@@ -8,6 +8,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.ConstantComparison;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.DeclarationAccess;
@@ -17,6 +18,7 @@ import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.RemainderOfAShiftedValue;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
@@ -498,6 +500,7 @@ final class Pullback {
                 () -> partOf(at, onAnOrder(stated, arithmetic.get(), reads)),
                 () -> ofTheYearOfADate(stated, at, fixed, reads),
                 () -> ofACountOfWholeUnits(stated, at, fixed, reads),
+                () -> ofAShiftedRemainder(stated, at, fixed, reads),
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
                 () -> ofASizeInCases(stated, at, reads),
                 () -> ofAChoice(stated, at, reads),
@@ -3192,48 +3195,61 @@ final class Pullback {
                                             InputReads reads) {
         WholeUnitsBetween.Read<InputReads> counted =
                 WholeUnitsBetween.read(stated, reads, sides());
-        return counted == null ? null : theStepsStand(counted.statement(), counted, at, fixed);
-    }
-
-    /** What {@code statement} says of the steps between the two values, read as comparisons of
-     *  their difference. */
-    private Derivation theStepsStand(WholeUnitsBetween.Statement statement,
-                                     WholeUnitsBetween.Read<InputReads> counted, Denotation at,
-                                     boolean fixed) {
-        return switch (statement) {
-            case WholeUnitsBetween.Statement.Steps(Rel rel, BigInteger against) ->
-                    theStepsStandTo(rel, against, counted, at, fixed);
-            case WholeUnitsBetween.Statement.Both(var first, var second) ->
-                    new Derivation.Joined(ConditionJoin.BOTH,
-                            theStepsStand(first, counted, at, fixed),
-                            theStepsStand(second, counted, at, fixed));
-            case WholeUnitsBetween.Statement.Either(var first, var second) ->
-                    new Derivation.Joined(ConditionJoin.EITHER,
-                            theStepsStand(first, counted, at, fixed),
-                            theStepsStand(second, counted, at, fixed));
-        };
-    }
-
-    /**
-     * The difference of the two values compared with {@code against}.
-     *
-     * <p>A number of steps no two values are apart by is before every difference or after every one,
-     * so the comparison is the same for all of them and there is nothing to write it against.
-     */
-    private Derivation theStepsStandTo(Rel rel, BigInteger against,
-                                       WholeUnitsBetween.Read<InputReads> counted, Denotation at,
-                                       boolean fixed) {
-        if (against.bitLength() > Long.SIZE - 2) {
-            boolean after = against.signum() > 0;
-            return new Derivation.WrittenOut(rel == Rel.GE ? !after : after);
+        if (counted == null) {
+            return null;
         }
         Core to = counted.to();
         Core difference = new Core.Binary(BinOp.SUB, to, counted.from(),
                 Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.INT,
                 to.pos());
-        Core steps = new Core.Int(against.longValue(), Type.INT, to.pos());
-        return comparison(new StatedComparison(ComparisonClaim.stating(rel), difference, steps,
-                Core.BinaryReading.AS_THEY_STAND), at, fixed, counted.at());
+        return theStatementStands(counted.statement(), difference, at, fixed, counted.at());
+    }
+
+    /**
+     * A comparison of what a division leaves of a place moved by a number, read as the comparison of
+     * what it leaves of the place ({@link RemainderOfAShiftedValue}) — or null where it is no such
+     * comparison.
+     *
+     * <p>What a rule over {@code Int.floorMod(x + 1, 7)} states of {@code x} is exactly what a rule
+     * over {@code Int.floorMod(x, 7)} states of it, over the one stretch of remainders or the other.
+     * The call is read as it is written when its first argument is the place, which is the number
+     * taken of a place, and the moving is peeled off here and nowhere else.
+     */
+    private Derivation ofAShiftedRemainder(StatedComparison stated, Denotation at, boolean fixed,
+                                           InputReads reads) {
+        RemainderOfAShiftedValue.Read<InputReads> shifted =
+                RemainderOfAShiftedValue.read(stated, reads, sides());
+        if (shifted == null) {
+            return null;
+        }
+        return theStatementStands(shifted.statement(), shifted.remainder(), at, fixed,
+                shifted.at());
+    }
+
+    /**
+     * What {@code statement} says of {@code subject}, read as the comparisons of it that it is.
+     *
+     * <p>Each comparison is read as any comparison is, so a rule that turns one thing into another
+     * hands over the tree of what the other states and nothing of how it is read. A comparison the
+     * range of the number settles is the same for every value and has nothing to be written against.
+     */
+    private Derivation theStatementStands(ConstantComparison statement, Core subject,
+                                          Denotation at, boolean fixed, InputReads reads) {
+        return switch (statement) {
+            case ConstantComparison.Settled(boolean holds) -> new Derivation.WrittenOut(holds);
+            case ConstantComparison.Both(var first, var second) ->
+                    new Derivation.Joined(ConditionJoin.BOTH,
+                            theStatementStands(first, subject, at, fixed, reads),
+                            theStatementStands(second, subject, at, fixed, reads));
+            case ConstantComparison.Either(var first, var second) ->
+                    new Derivation.Joined(ConditionJoin.EITHER,
+                            theStatementStands(first, subject, at, fixed, reads),
+                            theStatementStands(second, subject, at, fixed, reads));
+            case ConstantComparison.Against(Rel rel, BigInteger against) -> comparison(
+                    new StatedComparison(ComparisonClaim.stating(rel), subject,
+                            new Core.Int(against.longValue(), Type.INT, subject.pos()),
+                            Core.BinaryReading.AS_THEY_STAND), at, fixed, reads);
+        };
     }
 
     /** {@code side}, where it is the year of a date that stands at no position. */

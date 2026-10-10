@@ -666,14 +666,17 @@ final class OperationFactBinder {
      * a number, and what is counted from and to is of one type, since a count of units between two
      * values of different kinds has no steps to count.
      */
-    private static BoundOperationFact.CountsWholeUnitsBetween holdCountOfWholeUnits(
+    static BoundOperationFact.CountsWholeUnitsBetween holdCountOfWholeUnits(
             CompleteSignature declaration, OperationFact.CountsWholeUnitsBetween counts) {
         holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
                 "what a count of whole units is");
+        // Counted: a unit is a number of steps of the order the values stand on, so the steps
+        // between two of them are a whole number, and how far apart two can be is the order's own
+        // first value and last. What reads the fact stands on both.
         DeclaredArgument from = holdToTheDeclaration(declaration, counts.from(), null,
-                TypeRequirement.ANY, "the value the units are counted from");
+                TypeRequirement.COUNTED, "the value the units are counted from");
         DeclaredArgument to = holdToTheDeclaration(declaration, counts.to(), null,
-                TypeRequirement.ANY, "the value the units are counted to");
+                TypeRequirement.COUNTED, "the value the units are counted to");
         if (!from.stands().equals(to.stands())) {
             throw new IllegalStateException("the units are counted from "
                     + Type.show(from.stands()) + " to " + Type.show(to.stands())

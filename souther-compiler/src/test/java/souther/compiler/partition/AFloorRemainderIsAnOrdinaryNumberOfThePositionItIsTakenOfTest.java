@@ -11,6 +11,9 @@ import souther.compiler.query.PartitionEvidence;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.function.LongPredicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -179,6 +182,193 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "demo");
         assertNotNull(read);
         assertEquals(List.of("0"), read.get("f").stream().map(BorderAssessment::value).toList());
+    }
+
+    /**
+     * A place moved by a number has the remainder the place has, moved round the divisor — however
+     * the moving is spelled.
+     *
+     * <p>{@code Int.floorMod(x + 1, 7) == 0} is a rule about {@code x} being six more than a
+     * multiple of seven, and states of {@code x} what {@code Int.floorMod(x, 7) == 6} does.
+     */
+    @Test
+    void aPlaceMovedByANumberStatesWhatItsRemainderMovedStates() {
+        for (String moved : List.of("x + 1", "1 + x", "x - 6", "Int.add(x, 1)",
+                "Int.subtract(x, 6)", "Int.add(x, 8)", "x + 1 + 7", "x + 3 - 2")) {
+            assertEquals(List.of("6"), bordersOf("x: Int", "Int.floorMod(" + moved + ", 7) == 0"),
+                    moved);
+            assertEquals(List.of("6"), rowsAt("x: Int", "Int.floorMod(" + moved + ", 7) == 0",
+                    "Int.floorMod(x, 7) = 6"), moved);
+        }
+        // Taken from a number, the remainder runs the other way.
+        assertEquals(List.of("3"), bordersOf("x: Int", "Int.floorMod(3 - x, 7) == 0"));
+        assertEquals(List.of("3"), rowsAt("x: Int", "Int.floorMod(3 - x, 7) == 0",
+                "Int.floorMod(x, 7) = 3"));
+        assertEquals(List.of(), reasonsOf("x: Int", "Int.floorMod(x + 1, 7) == 0"));
+    }
+
+    /**
+     * What the rows built say of the moved value is what the run time says of it: some of them stand
+     * on the side of the comparison it holds on, and some on the other.
+     *
+     * <p>Checked against the library's own remainder and not against the rewriting that reads it,
+     * for every relation, a moving each way and a moving past the divisor — where the remainder of
+     * the place and the remainder of the moved value part at a stretch of the first.
+     */
+    @Test
+    void theRowsBuiltForAMovedValueStandOnBothSidesOfItsOwnRemainder() {
+        for (String relation : List.of("== 0", "< 2", ">= 5", "/= 3", "> 0", "<= 4")) {
+            for (int by : List.of(1, 3, 6, 10, -4)) {
+                LongPredicate holds = switch (relation) {
+                    case "== 0" -> r -> r == 0;
+                    case "< 2" -> r -> r < 2;
+                    case ">= 5" -> r -> r >= 5;
+                    case "/= 3" -> r -> r != 3;
+                    case "> 0" -> r -> r > 0;
+                    default -> r -> r <= 4;
+                };
+                String condition = "Int.floorMod(x + " + (by < 0 ? "(0 - " + -by + ")" : by)
+                        + ", 7) " + relation;
+                Set<Boolean> sides = new TreeSet<>();
+                for (long x : valuesOfRowsBuiltFor(condition)) {
+                    sides.add(holds.test(Math.floorMod(x + by, 7L)));
+                }
+                assertEquals(Set.of(false, true), sides, condition);
+            }
+            for (int by : List.of(0, 3, 6, 9)) {
+                LongPredicate holds = switch (relation) {
+                    case "== 0" -> r -> r == 0;
+                    case "< 2" -> r -> r < 2;
+                    case ">= 5" -> r -> r >= 5;
+                    case "/= 3" -> r -> r != 3;
+                    case "> 0" -> r -> r > 0;
+                    default -> r -> r <= 4;
+                };
+                String condition = "Int.floorMod(" + by + " - x, 7) " + relation;
+                Set<Boolean> sides = new TreeSet<>();
+                for (long x : valuesOfRowsBuiltFor(condition)) {
+                    sides.add(holds.test(Math.floorMod(by - x, 7L)));
+                }
+                assertEquals(Set.of(false, true), sides, condition);
+            }
+        }
+    }
+
+    /** The place moved by a number, named before its remainder is compared, is the same rule. */
+    @Test
+    void aMovedPlaceNamedBeforeItsRemainderIsComparedIsTheSameRule() {
+        String model = """
+                module demo
+
+                data Ok
+                data No
+
+                behavior f : (x: Int) -> Ok | No
+                let f (x) = {
+                    let next = x + 1
+                    guard Int.floorMod(next, 7) < 2 else No
+                    Ok
+                }
+                """;
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        List<String> named = Adequacy.readingsOf(compilation.db(), "demo").get("f").stream()
+                .map(BorderAssessment::value).toList();
+        assertEquals(bordersOf("x: Int", "Int.floorMod(x + 1, 7) < 2"), named);
+        assertEquals(List.of(), compilation.db().ask(new Adequacy.Coverage("demo")).value()
+                .get("f").notRead());
+    }
+
+    /** What is scaled, or made of two places, is no place moved by a number, and a divisor below
+     *  nought answers the other side of nought where the moving was worked out for this one. */
+    @Test
+    void whatIsNotAPlaceMovedByANumberIsLeftUnread() {
+        assertEquals(List.of(), bordersOf("x: Int", "Int.floorMod(x * 2, 7) == 0"));
+        assertEquals(List.of(), bordersOf("x: Int, y: Int", "Int.floorMod(x + y, 7) == 0"));
+        assertEquals(List.of(), bordersOf("x: Int", "Int.floorMod(x + 1, 0 - 7) == 0"));
+        assertFalse(reasonsOf("x: Int", "Int.floorMod(x * 2, 7) == 0").isEmpty());
+    }
+
+    /**
+     * The remainders asked for may be sets of numbers, and the one a search tries first may be a
+     * number the others rule out: the others are tried, and what is found is a number of every one.
+     */
+    @Test
+    void aChoiceOfRemainderThatDisagreesWithAnotherIsNotTheEndOfTheSearch() {
+        // A remainder of nought or one by one thousand and two, and of nine hundred ninety nine
+        // thousand nine hundred ninety nine by a million: the first can only be one, and the number
+        // that answers both is a long way from where a step from nought would reach.
+        String condition = "Int.floorMod(x, 1000002) < 2 && Int.floorMod(x, 1000000) == 999999";
+        assertFalse(valuesOfRowsBuiltFor(condition).isEmpty());
+        assertEquals(0, attemptsThatBuiltNothing("x: Int, y: Int", condition),
+                "every point owed a row has one");
+        for (long x : rowsAtAsNumbers("x: Int, y: Int", condition,
+                "Int.floorMod(x, 1000000) = 999999")) {
+            assertEquals(999999L, Math.floorMod(x, 1000000L));
+        }
+    }
+
+    /** The divisors a signed 64-bit number can hold are all divisors, the least and the greatest
+     *  among them. */
+    @Test
+    void theLeastAndGreatestDivisorsAreDivisors() {
+        Map<String, String> remainderBy = Map.of("9223372036854775807", "7",
+                "0 - 9223372036854775807 - 1", "-7");
+        remainderBy.forEach((divisor, remainder) -> {
+            String condition = "Int.floorMod(x, " + divisor + ") == "
+                    + (remainder.startsWith("-") ? "0 - " + remainder.substring(1) : remainder);
+            assertEquals(List.of(remainder), bordersOf("x: Int", condition), condition);
+            assertEquals(0, attemptsThatBuiltNothing("x: Int", condition), condition);
+        });
+    }
+
+    /** How many searches of the condition's points built no row. */
+    private static long attemptsThatBuiltNothing(String parameters, String condition) {
+        long count = 0;
+        for (BorderAssessment border : linesOf(parameters, condition)) {
+            for (ItemAssessment.Owed owed : owedItems(border)) {
+                count += owed.searches().each().stream()
+                        .filter(each -> !(each instanceof ItemAssessment.Attempt.Certified))
+                        .count();
+            }
+        }
+        return count;
+    }
+
+    private static List<Long> rowsAtAsNumbers(String parameters, String condition, String label) {
+        return rowsAt(parameters, condition, label).stream().map(Long::parseLong).toList();
+    }
+
+    /**
+     * Around the point the remainder comes back to nought the run is the run, and the row is a
+     * number of the class that the run reaches — above nought or below it.
+     */
+    @Test
+    void aRunAcrossWhereTheRemainderComesRoundHasItsRowAtTheTurn() {
+        assertEquals(List.of("7"), rowsAt("x: Int, y: Int",
+                "x >= 6 && x <= 8 && Int.floorMod(x, 7) < 1", "Int.floorMod(x, 7) = 0"));
+        assertEquals(List.of("-7"), rowsAt("x: Int, y: Int",
+                "x >= -8 && x <= -6 && Int.floorMod(x, 7) < 1", "Int.floorMod(x, 7) = 0"));
+        assertEquals(List.of("6"), rowsAt("x: Int, y: Int",
+                "x >= 5 && x <= 7 && Int.floorMod(x, 7) == 6", "Int.floorMod(x, 7) = 6"));
+        assertEquals(List.of("-1"), rowsAt("x: Int, y: Int",
+                "x >= -2 && x <= 0 && Int.floorMod(x, 7) == 6", "Int.floorMod(x, 7) = 6"));
+    }
+
+    /** The first input of every certified row built for the condition, as a number. */
+    private static List<Long> valuesOfRowsBuiltFor(String condition) {
+        List<Long> values = new ArrayList<>();
+        for (BorderAssessment border : linesOf("x: Int, y: Int", condition)) {
+            for (ItemAssessment.Owed owed : owedItems(border)) {
+                for (ItemAssessment.Attempt attempt : owed.searches().each()) {
+                    if (attempt instanceof ItemAssessment.Attempt.Certified certified) {
+                        values.add(Long.parseLong(certified.row().inputs().getFirst().text()));
+                    }
+                }
+            }
+        }
+        return values;
     }
 
     private static List<ItemAssessment.Owed> owedItems(BorderAssessment border) {

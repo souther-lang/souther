@@ -209,14 +209,25 @@ public sealed interface Arithmetic {
         }
 
         /**
-         * The magnitude of {@code divisor} where it is a whole number other than nought, or null
-         * where it is none: a period is a whole number of steps, and a divisor that is not one
-         * names no residue class.
+         * {@code divisor} where it is a whole number other than nought, with its sign, or null where
+         * it is none: a divisor that is not one names no residue class, and nought is a call that
+         * aborts.
+         *
+         * <p>The sign is part of the answer, because the remainder takes the divisor's side of
+         * nought. What a reader that only has room for a signed 64-bit number asks is whether this
+         * value fits, and not whether its magnitude does: the least such number is a divisor, and
+         * its magnitude is one more than the greatest is.
          */
-        public static BigInteger magnitudeOf(BigDecimal divisor) {
+        public static BigInteger wholeDivisorOf(BigDecimal divisor) {
             ExactRatio ratio = ExactRatio.of(divisor);
             return ratio.isWhole() && ratio.floor() instanceof ExactAnswer.Held<BigInteger> held
-                    && held.value().signum() != 0 ? held.value().abs() : null;
+                    && held.value().signum() != 0 ? held.value() : null;
+        }
+
+        /** The magnitude of {@link #wholeDivisorOf the divisor}, or null where there is none. */
+        public static BigInteger magnitudeOf(BigDecimal divisor) {
+            BigInteger whole = wholeDivisorOf(divisor);
+            return whole == null ? null : whole.abs();
         }
     }
 

@@ -1680,7 +1680,7 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * {@code runs}, of the value at a position, once a remainder of it has been fixed.
+     * {@code runs}, of a number of a position, once a remainder of the value there has been fixed.
      *
      * <p>A remainder fixed at a residue leaves the value the numbers of that class and no others,
      * which is no run — so what is said of the value is the run between the first of them and the
@@ -1688,31 +1688,65 @@ final class ReadQuantities implements Quantities {
      * a number of the class, and one that named an end of the run itself would name a number the
      * remainder it was fixing refuses.
      *
+     * <p>The same holds of a remainder of the value by another divisor, which is the value's own
+     * class by that divisor and so is held to the residue the two divisors can agree on: one number
+     * leaves one remainder by each, and a remainder chosen without asking is one no value leaves
+     * beside the first.
+     *
      * <p>Only a remainder fixed at one number, and only of a value counted by whole numbers. A
-     * remainder asked for as one of several, or left to the rules, says nothing of where the value
-     * runs.
+     * remainder asked for as one of several, or left to the rules, says nothing of where a number
+     * of the place runs.
      */
     private NumericDomain.Bounds withinTheResiduesFixedOf(NumericTerm term,
                                                           NumericDomain.Bounds runs) {
-        if (!(term instanceof NumericTerm.ValueOf value) || fixed.isEmpty()) {
+        if (fixed.isEmpty() || !(term instanceof NumericTerm.FromOnePosition here)) {
+            return runs;
+        }
+        // The divisor this term is a remainder by, or null where it is the value itself or any
+        // other number of the place: the two are told apart because what each is held to is not the
+        // same thing. The value is held to the class the fixed remainder says; a remainder by
+        // another divisor is held to the class of that one the two divisors can agree on.
+        BigInteger own = null;
+        if (term instanceof NumericTerm.TakenOf taken) {
+            own = divisorOfARemainder(taken);
+            if (own == null) {
+                return runs;
+            }
+        } else if (!(term instanceof NumericTerm.ValueOf)) {
             return runs;
         }
         NumericDomain.Bounds out = runs;
         for (Map.Entry<NumericTerm, Fixed> each : fixed.entrySet()) {
-            if (each.getKey() instanceof NumericTerm.TakenOf taken
-                    && taken.position().equals(value.position())
-                    && taken.takenAs() instanceof TakenAs.TheFloorRemainder remainder
-                    && remainder.read(taken.arguments()) instanceof BigDecimal divisor
-                    && divisor.signum() != 0
-                    && each.getValue().isOne()
-                    && each.getValue().least() instanceof Count residue
-                    && residue.exactly().isWhole()
-                    && residue.exactly().floor() instanceof ExactAnswer.Held<BigInteger> left
-                    && Arithmetic.AFloorRemainder.magnitudeOf(divisor) instanceof BigInteger size) {
-                out = ResidueHull.of(out, left.value(), size);
+            if (!(each.getKey() instanceof NumericTerm.TakenOf other)
+                    || each.getKey().equals(term)
+                    || !other.position().equals(here.position())
+                    || !each.getValue().isOne()
+                    || !(each.getValue().least() instanceof Count residue)
+                    || !residue.exactly().isWhole()
+                    || !(residue.exactly().floor() instanceof ExactAnswer.Held<BigInteger> left)) {
+                continue;
+            }
+            BigInteger size = divisorOfARemainder(other);
+            if (size == null) {
+                continue;
+            }
+            // x leaves `left` by `size`, and this remainder is x's by `own`, so it leaves what
+            // `left` leaves by every divisor the two share: no more, and no less by the Chinese
+            // remainder theorem. Two divisors with nothing in common say nothing of each other.
+            BigInteger shared = own == null ? size : own.gcd(size);
+            if (shared.compareTo(BigInteger.ONE) > 0) {
+                out = ResidueHull.of(out, left.value(), shared);
             }
         }
         return out;
+    }
+
+    /** The magnitude of the divisor {@code taken} is a remainder by, or null where it is no
+     *  remainder or no divisor reads. */
+    private static BigInteger divisorOfARemainder(NumericTerm.TakenOf taken) {
+        return taken.takenAs() instanceof TakenAs.TheFloorRemainder remainder
+                && remainder.read(taken.arguments()) instanceof BigDecimal divisor
+                ? Arithmetic.AFloorRemainder.magnitudeOf(divisor) : null;
     }
 
     /** What the bounds taken in on an order leave each term they are about, met together. Empty

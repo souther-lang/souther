@@ -400,6 +400,76 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
     }
 
     /**
+     * A divisor the least or greatest signed 64-bit number is a divisor all the same: what is asked
+     * is whether the divisor itself fits, and the least such number is one whose magnitude does not.
+     */
+    @Test
+    void theLeastAndGreatestDivisorsAreReadLikeAnyOther() {
+        // How many departures nothing reaches. A remainder by a divisor above nought can be five or
+        // six, so only the second guard's departure is out of reach, by the first. One by a divisor
+        // below nought is never above nought, so both guards hold of every value.
+        Map<String, Integer> unreachable = Map.of("9223372036854775807", 1,
+                "0 - 9223372036854775807 - 1", 2);
+        for (String divisor : List.of("9223372036854775807", "0 - 9223372036854775807 - 1")) {
+            String source = """
+                    module d
+
+                    data Amount = Int invariant value >= 0 && value <= 1000
+                    data Free
+                    data Charged = { yen: Int }
+
+                    behavior charge : (a: Amount) -> Free | Charged
+                        constructs Charged
+                    let charge (a) = {
+                        let x = Int.floorMod(a.value, %s)
+                        guard x < 5 else Free
+                        guard x < 6 else Free
+                        Charged { yen = 1 }
+                    }
+                    """.formatted(divisor);
+
+            assertEquals(unreachable.get(divisor), provenIn(source, "charge").size(),
+                    "what no value reaches, whatever `x` is: " + divisor);
+            assertTrue(armsOf(source, "charge").stream()
+                            .filter(Reachability.Unsettled.class::isInstance)
+                            .map(each -> ((Reachability.Unsettled) each).why())
+                            .noneMatch(WhatAnAnswerSays::isAConditionNotRead),
+                    "every condition is read: " + divisor);
+        }
+    }
+
+    /**
+     * A remainder of a place moved by a number keeps what the guards say of it.
+     *
+     * <p>Read as the remainder of the place over two stretches, what a guard over the moved
+     * remainder says is one of two things, and a path holds facts that all hold and not one of
+     * several. The guards still rule the same departure out, since they are about one value, and
+     * what they say of it is taken in as the value they are about.
+     */
+    @Test
+    void aGuardOverARemainderOfAMovedPlaceStillRulesOutWhatItRulesOut() {
+        String source = """
+                module d
+
+                data Amount = Int invariant value >= 0 && value <= 1000
+                data Free
+                data Charged = { yen: Int }
+
+                behavior charge : (a: Amount) -> Free | Charged
+                    constructs Charged
+                let charge (a) = {
+                    let x = Int.floorMod(a.value + 1, 7)
+                    guard x < 5 else Free
+                    guard x < 6 else Free
+                    Charged { yen = 1 }
+                }
+                """;
+
+        assertEquals(1, provenIn(source, "charge").size(),
+                "nothing under five is six or more, whatever `x` is");
+    }
+
+    /**
      * What a division leaves of a value is read, and what a guard says of it is taken in as what it
      * says of the call.
      *
