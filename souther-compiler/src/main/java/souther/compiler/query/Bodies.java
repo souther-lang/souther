@@ -3417,7 +3417,8 @@ public final class Bodies {
                     UnreachableClaims.of(body, read, scope.value(), ruleReading.source(), plan),
                     () -> PathReachability.of(body,
                             fn == null ? null : SpecImplementation.align(spec, fn),
-                            plan, read, ruleReading, Adequacy.meaningsOf(
+                            plan, Adequacy.readingOf(db, read, reading.value()), ruleReading,
+                            Adequacy.meaningsOf(
                                     analysed.get(spec.name()), read,
                                     () -> Adequacy.readingOf(db, read, reading.value()),
                                     reading.value()),

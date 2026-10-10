@@ -18,8 +18,16 @@ import java.util.List;
  */
 public sealed interface AWayThrough {
 
-    /** The rules leave no input on which the condition comes out this way: no run enters. */
-    record RuledOut() implements AWayThrough {}
+    /** The rules leave no input on which the condition comes out this way: no run enters, for the
+     *  reason {@code why} says. */
+    record RuledOut(WhyRuledOut why) implements AWayThrough {
+
+        public RuledOut {
+            if (why == null) {
+                throw new IllegalArgumentException("a way ruled out is ruled out by something");
+            }
+        }
+    }
 
     /**
      * Not ruled out, and every part of what the condition states that was not asked of the rules,

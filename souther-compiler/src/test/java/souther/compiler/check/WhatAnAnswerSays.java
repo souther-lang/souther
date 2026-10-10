@@ -49,6 +49,25 @@ final class WhatAnAnswerSays {
                                                                  List<TypeSymbol> cases) {
                 return List.of();
             }
+
+            @Override
+            public List<PathDecision> theDeclarationHoldsNoneOf(String position,
+                                                                List<TypeSymbol> declared,
+                                                                List<TypeSymbol> cases) {
+                return List.of();
+            }
+
+            @Override
+            public List<PathDecision> theDeclarationHoldsNothingElse(String position,
+                                                                     List<TypeSymbol> declared,
+                                                                     List<TypeSymbol> cases) {
+                return List.of();
+            }
+
+            @Override
+            public List<PathDecision> everyWayInIsRuledOut(List<Proof> each) {
+                return List.of();
+            }
         });
     }
 
@@ -76,6 +95,25 @@ final class WhatAnAnswerSays {
             @Override
             public List<TypeSymbol> noCaseTheValueCanBeIsTaken(List<TypeSymbol> canBe,
                                                                List<TypeSymbol> cases) {
+                return List.of();
+            }
+
+            @Override
+            public List<TypeSymbol> theDeclarationHoldsNoneOf(String position,
+                                                              List<TypeSymbol> declared,
+                                                              List<TypeSymbol> cases) {
+                return List.of();
+            }
+
+            @Override
+            public List<TypeSymbol> theDeclarationHoldsNothingElse(String position,
+                                                                   List<TypeSymbol> declared,
+                                                                   List<TypeSymbol> cases) {
+                return List.of();
+            }
+
+            @Override
+            public List<TypeSymbol> everyWayInIsRuledOut(List<Proof> each) {
                 return List.of();
             }
         });
@@ -107,6 +145,24 @@ final class WhatAnAnswerSays {
             @Override
             public String noCaseTheValueCanBeIsTaken(List<TypeSymbol> canBe,
                                                      List<TypeSymbol> cases) {
+                return null;
+            }
+
+            @Override
+            public String theDeclarationHoldsNoneOf(String position, List<TypeSymbol> declared,
+                                                    List<TypeSymbol> cases) {
+                return null;
+            }
+
+            @Override
+            public String theDeclarationHoldsNothingElse(String position,
+                                                         List<TypeSymbol> declared,
+                                                         List<TypeSymbol> cases) {
+                return null;
+            }
+
+            @Override
+            public String everyWayInIsRuledOut(List<Proof> each) {
                 return null;
             }
         });

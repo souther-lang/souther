@@ -5,9 +5,17 @@ import souther.compiler.coverage.NumberingIdentity;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.coverage.ControlPlace;
+import souther.compiler.flow.WhyNoValueTakesTheArm;
+import souther.compiler.flow.WhyRuledOut;
 import souther.compiler.inputs.Admits;
+import souther.compiler.inputs.Case;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.Unsettlement;
+import souther.compiler.partition.WhatTheRulesLeaveAnArm;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Position;
@@ -36,7 +44,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * What the model's own rules say arrives at each place in a behavior's body.
@@ -239,7 +246,7 @@ public final class PathReachability {
      * what it would say about the model. A caller without one measures nothing here.
      */
     public static Answers of(Core body, SpecImplementation.Implemented implemented,
-                             CoverageSites.Plan plan, InputDomain read,
+                             CoverageSites.Plan plan, InputReading read,
                              RuleReadingContext ruleReading, MeaningsOfABody meanings,
                              ElementBindings elements) {
         Objects.requireNonNull(read, "a reachability reading is made against an input that was read");
@@ -270,13 +277,15 @@ public final class PathReachability {
      * condition inside a copy of one of the language's operations is no condition of the model:
      * the path goes on through it and takes nothing in.
      */
-    public static Answers of(Core body, Scope params, CoverageSites.Plan plan, InputDomain read,
-                             RuleReadingContext ruleReading, MeaningsOfABody meanings,
-                             ElementBindings elements) {
-        Objects.requireNonNull(read, "a reachability reading is made against an input that was read");
+    public static Answers of(Core body, Scope params, CoverageSites.Plan plan,
+                             InputReading reading, RuleReadingContext ruleReading,
+                             MeaningsOfABody meanings, ElementBindings elements) {
+        Objects.requireNonNull(reading,
+                "a reachability reading is made against an input that was read");
         if (body == null) {
             return Answers.NONE;
         }
+        InputDomain read = reading.domain();
         PathEngine engine = new PathEngine(ruleReading, Terms.Of.THE_TREE_THAT_RUNS);
         Map<ControlPlace, Reachability> out = new LinkedHashMap<>();
         Map<ConstructOccurrence,
@@ -288,15 +297,15 @@ public final class PathReachability {
         }
         Map<String, BindingId> parameters = new LinkedHashMap<>();
         read.parameterReads().forEach((binding, name) -> parameters.put(name, binding));
-        PathReachability reading =
-                new PathReachability(engine, plan, read, ruleReading.source().symbols(),
+        PathReachability walker =
+                new PathReachability(engine, plan, reading, ruleReading.source().symbols(),
                         ruleReading.source().newtypes(), out,
                         arriving, meanings, new MeaningAssumptions.InputPlaces(parameters,
                                 path -> read.typeAt(path, ruleReading.source()), Map.of(),
                                 Map.of()));
-        reading.entry = in.known();
-        reading.entered = in.at();
-        reading.walk(body, in.known(), in.at(),
+        walker.entry = in.known();
+        walker.entered = in.at();
+        walker.walk(body, in.known(), in.at(),
                         InputReads.ofParameters(read.parameterReads(),
                                 read.declared(ruleReading.source()), elements,
                                 read.dependencies()),
@@ -406,6 +415,10 @@ public final class PathReachability {
     /** What the declarations leave each position, which is what a {@code match} arm is held
      *  against. A condition narrows a path; a case is refused or left by the rules themselves. */
     private final InputDomain read;
+    /** The same input with what its rules leave the numbers there, which is what an arm is asked
+     *  of ({@link WhatTheRulesLeaveAnArm}) — the one reading {@code NumberWays} asks it of too, so
+     *  the two cannot answer about different inputs. */
+    private final InputReading reading;
     private final Symbols symbols;
 
     /** Which declarations wear one value, which is what says whether reading a field reaches
@@ -430,7 +443,7 @@ public final class PathReachability {
     /** Where the positions those statements name stand in this tree. */
     private final MeaningAssumptions.InputPlaces places;
 
-    private PathReachability(PathEngine engine, CoverageSites.Plan plan, InputDomain read,
+    private PathReachability(PathEngine engine, CoverageSites.Plan plan, InputReading reading,
                              Symbols symbols, DeclarationNewtypes newtypes,
                              Map<ControlPlace, Reachability> out,
                              Map<ConstructOccurrence,
@@ -441,7 +454,8 @@ public final class PathReachability {
         this.plan = plan;
         // Here as well as at the ways in, so that nothing inside this class is written against a
         // reading that might not be one.
-        this.read = Objects.requireNonNull(read);
+        this.reading = Objects.requireNonNull(reading);
+        this.read = reading.domain();
         this.symbols = symbols;
         this.newtypes = newtypes;
         this.out = out;
@@ -915,35 +929,35 @@ public final class PathReachability {
         if (arms == null) {
             return;
         }
-        // Not a position of this input, or not one this reading reached: either way nothing here
-        // has rules about it to carry. What it may still be is a value the source wrote, and an
-        // arm none of its cases takes is one nothing arrives at, whatever the rules leave.
+        // Whether any value arrives at an arm is decided in one place, which every reader of an arm
+        // asks, wherever the scrutinee stands: a position of the input, a value the source wrote,
+        // or a value the body works out whose cases are read off the input. What this adds is the
+        // witness, which only a scrutinee at a position of the input can have.
+        WhatTheRulesLeaveAnArm ruling =
+                WhatTheRulesLeaveAnArm.of(match, reads, symbols, newtypes, meanings, reading);
         TermPath path = positionOf(match.scrutinee(), reads);
-        if (path == null) {
-            Set<TypeSymbol> written =
-                    reads.casesWritten(match.scrutinee(), symbols, newtypes);
-            for (int i = 0; written != null && i < match.cases().size() && i < arms.length; i++) {
-                Core.Case arm = match.cases().get(i);
-                if (InputReads.whetherEveryRowTakes(arm, written).equals(Optional.of(false))) {
-                    out.put(arms[i], new Reachability.Unreachable(Proof.noCaseTheValueCanBeIsTaken(
-                            List.copyOf(written), arm.caseTypes())));
-                }
-            }
-            return;
-        }
         // The reading this walk was given, which is the one held here. Which location the name
         // stands for is the environment's answer and what the rules leave there is the reading's,
         // and neither is asked of the other.
-        Position at = read.at(path);
+        Position at = path == null ? null : read.at(path);
         for (int i = 0; i < match.cases().size() && i < arms.length; i++) {
+            Core.Case arm = match.cases().get(i);
+            Optional<Proof> proof = ruling.ruledOut(i).flatMap(why -> proofOf(why, arm));
+            if (proof.isPresent()) {
+                out.put(arms[i], new Reachability.Unreachable(proof.get()));
+                continue;
+            }
+            if (path == null) {
+                continue;
+            }
             // A position this reading never got to — deeper than it reads into what a parameter
             // holds — states no such distinction, which is the position's own answer and not this
             // walk's. Said in its words so that a claim below the depth is told what it is told
             // everywhere else.
             Reachability said = at == null
                     ? new Reachability.Unsettled(WhyUnsettled.thePositionDidNotSettleIt(
-                            new souther.compiler.inputs.Unsettlement.NoSuchDistinction()))
-                    : saidOf(at, path, match.cases().get(i), nothingAbove);
+                            new Unsettlement.NoSuchDistinction()))
+                    : witnessOf(at, path, arm, nothingAbove);
             if (said != null) {
                 out.put(arms[i], said);
             }
@@ -951,41 +965,106 @@ public final class PathReachability {
     }
 
     /**
-     * What the rules leave one arm, or null where the arm names no case — a binding of the whole
-     * value, which the rules of the position say nothing about.
+     * {@code why} as a proof an author reads, or empty where it has no words.
+     *
+     * <p>What rules a way out is what the declaration or the rules leave the value matched on, and
+     * a composite is ruled out where every way in it is: those are the proofs said here. The
+     * numbers a comparison is over, a container that holds nothing, and a statement that never
+     * holds are what a {@code match} arm does not state — an arm selects by the cases of a value —
+     * so there is no sentence for them, and an arm ruled out by one would be left as one nothing
+     * was shown about rather than given a sentence written for something else.
+     */
+    private static Optional<Proof> proofOf(WhyNoValueTakesTheArm why, Core.Case arm) {
+        return switch (why) {
+            case WhyNoValueTakesTheArm.ByWhatIsWritten(var canBe, var cases) ->
+                    Optional.of(Proof.noCaseTheValueCanBeIsTaken(canBe, cases));
+            case WhyNoValueTakesTheArm.ByTheRulesOfThePosition(var at, var cases) ->
+                    Optional.of(Proof.everyCaseRefused(at.toString(), cases));
+            case WhyNoValueTakesTheArm.ByWhatItStates(var stated) -> proofOf(stated, arm);
+        };
+    }
+
+    private static Optional<Proof> proofOf(WhyRuledOut why, Core.Case arm) {
+        return switch (why) {
+            case WhyRuledOut.TheDeclarationLeavesNone(var at, var declared, var asked,
+                                                      var among) ->
+                    Optional.of(Proof.theDeclarationLeavesNoCase(at.toString(), declared, asked,
+                            among));
+            case WhyRuledOut.TheRulesRefuseEveryCase(var at, var refused) -> {
+                List<TypeSymbol> leaves = new ArrayList<>();
+                for (Case each : refused) {
+                    if (!(each instanceof Case.SumCase sum)) {
+                        yield arm.caseTypes().isEmpty() ? Optional.empty()
+                                : Optional.of(Proof.everyCaseRefused(at.toString(),
+                                        arm.caseTypes()));
+                    }
+                    leaves.add(sum.leaf());
+                }
+                yield Optional.of(Proof.everyCaseRefused(at.toString(), leaves));
+            }
+            case WhyRuledOut.EveryWay(var each) -> {
+                List<Proof> proofs = new ArrayList<>();
+                for (WhyRuledOut one : each) {
+                    Optional<Proof> proof = proofOf(one, arm);
+                    if (proof.isEmpty()) {
+                        yield Optional.empty();
+                    }
+                    proofs.add(proof.get());
+                }
+                yield Optional.of(Proof.everyAlternativeRuledOut(proofs));
+            }
+            case WhyRuledOut.ItNeverComesOutSo _, WhyRuledOut.TheNumbersLeaveNone _,
+                 WhyRuledOut.NothingIsHeldIn _ -> Optional.empty();
+        };
+    }
+
+    /** The distinctions {@code arm} reaches, read off the checker's resolution of it. */
+    private static List<Refinement> reachedBy(Core.Case arm) {
+        List<Refinement> reaches = new ArrayList<>();
+        for (ResolvedCase each : arm.pattern().cases()) {
+            reaches.addAll(Refinement.allOf(each));
+        }
+        return reaches;
+    }
+
+    /**
+     * That a value arrives at an arm nothing ruled out, where that is shown, or null where the arm
+     * names no case — a binding of the whole value, which the rules of the position say nothing
+     * about.
+     *
+     * <p>Not ruled out is no witness. What is one is every case the arm is written for left
+     * standing by the rules of the position, so a caller can supply one, and nothing standing above
+     * the fork, so that supplying one arrives here: a fork the body reaches first is reached by the
+     * behavior being applied at all.
      *
      * <p><b>Asked of the distinctions the arm reaches and not of the names it is written by.</b> A
      * name is not a distinction of a position: an optional's carriers name none of them, and a case
-     * that is itself a sum names the leaves under it rather than any one of them. Asked by name,
-     * every such arm came back as a position that had settled nothing — this compiler reporting a
-     * limit as an answer about the model, and `unreachable` written on an arm the rules admit
-     * going unreported (#1252). What the arm reaches is the checker's resolution of it, read as
-     * distinctions where the two vocabularies agree.
+     * that is itself a sum names the leaves under it rather than any one of them. What the arm
+     * reaches is the checker's resolution of it, read as distinctions where the two vocabularies
+     * agree.
      */
-    private Reachability saidOf(Position at, TermPath path, Core.Case arm, boolean nothingAbove) {
-        List<TypeSymbol> named = arm.caseTypes();
-        if (named.isEmpty()) {
+    private Reachability witnessOf(Position at, TermPath path, Core.Case arm,
+                                   boolean nothingAbove) {
+        if (arm.caseTypes().isEmpty()) {
             return null;
         }
-        List<souther.compiler.inputs.Refinement> reaches = new java.util.ArrayList<>();
-        for (souther.compiler.types.ResolvedCase each : arm.pattern().cases()) {
-            reaches.addAll(souther.compiler.inputs.Refinement.allOf(each));
-        }
-        if (reaches.stream().allMatch(each -> at.admissionOf(each) instanceof Admits.Refused)) {
-            // Every case it is written for is one the rules refuse, so an arm a row could still
-            // take is not among these: an arm goes only where all of them go.
-            return new Reachability.Unreachable(
-                    Proof.everyCaseRefused(path.toString(), named));
-        }
-        for (souther.compiler.inputs.Refinement each : reaches) {
-            if (at.admissionOf(each) instanceof Admits.Unsettled unsettled) {
-                return new Reachability.Unsettled(
-                        WhyUnsettled.thePositionDidNotSettleIt(unsettled.why()));
+        boolean oneLeft = false;
+        for (Refinement each : reachedBy(arm)) {
+            switch (at.admissionOf(each)) {
+                case Admits.Unsettled unsettled -> {
+                    return new Reachability.Unsettled(
+                            WhyUnsettled.thePositionDidNotSettleIt(unsettled.why()));
+                }
+                case Admits.Admitted _ -> oneLeft = true;
+                case Admits.Refused _ -> { }
             }
         }
-        // Every one of them left standing, so a caller can supply one. Whether it arrives at this
-        // fork as well is the other half, and nothing standing above is the one answer that settles
-        // it: a fork the body reaches first is reached by the behavior being applied at all.
+        // Some case the arm is written for is one the rules leave, and the ones they refuse are not
+        // what a caller supplies. None left is no witness: that is a proof of the other kind, and it
+        // is made above where it is made at all.
+        if (!oneLeft) {
+            return new Reachability.Unsettled(WhyUnsettled.noWitness());
+        }
         return nothingAbove
                 ? new Reachability.Reachable(
                         Witness.everyRuleReadAndNothingAbove(path.toString()))

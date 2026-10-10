@@ -1135,7 +1135,8 @@ public final class Adequacy {
                     continue;
                 }
                 out.put(spec.name(), souther.compiler.check.PathReachability.of(
-                        both.emitted(), SpecImplementation.align(spec, fn), plan, read,
+                        both.emitted(), SpecImplementation.align(spec, fn), plan,
+                        readingOf(db, read, reading.value()),
                         ruleReading, meaningsOf(both.analysis(), read,
                                 () -> readingOf(db, read, reading.value()), reading.value()),
                         checked.value().elementBindings()
@@ -1737,6 +1738,36 @@ public final class Adequacy {
                                 .collect(java.util.stream.Collectors.joining(", ")),
                         cases.stream().map(souther.compiler.types.TypeSymbol::name)
                                 .collect(java.util.stream.Collectors.joining(", "))));
+            }
+
+            @Override
+            public souther.compiler.diag.Diagnostic.Builder theDeclarationHoldsNoneOf(
+                    String position, List<TypeSymbol> declared, List<TypeSymbol> cases) {
+                return said.hint(new DeadBranchMessage.ItsDeclarationHoldsNoneOfTheCases(
+                        position, named(declared), named(cases)));
+            }
+
+            @Override
+            public souther.compiler.diag.Diagnostic.Builder theDeclarationHoldsNothingElse(
+                    String position, List<TypeSymbol> declared, List<TypeSymbol> cases) {
+                return said.hint(new DeadBranchMessage.ItsDeclarationHoldsNothingTheArmsBeforeLeave(
+                        position, named(declared), named(cases)));
+            }
+
+            @Override
+            public souther.compiler.diag.Diagnostic.Builder everyWayInIsRuledOut(
+                    List<souther.compiler.reach.Proof> each) {
+                souther.compiler.diag.Diagnostic.Builder out =
+                        said.hint(new DeadBranchMessage.EveryWayInIsRuledOut());
+                for (souther.compiler.reach.Proof way : each) {
+                    out = new DeadBranchProofWords(out).of(way);
+                }
+                return out;
+            }
+
+            /** {@code cases} as an author reads them, in the order given. */
+            private static String named(List<TypeSymbol> cases) {
+                return String.join(", ", cases.stream().map(TypeSymbol::name).toList());
             }
         }
 
