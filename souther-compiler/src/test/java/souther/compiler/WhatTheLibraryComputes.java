@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Supplier;
 
 /**
  * Statements about what the library's operations answer, written as Souther over the values each
@@ -429,6 +430,14 @@ public final class WhatTheLibraryComputes {
                     slot(container);
                     proposition(ofTheElement);
                 }
+                case LawNumber.HowManyDifferent<Slot>(Slot container, var ofTheElement) -> {
+                    slot(container);
+                    subject(ofTheElement);
+                }
+                case LawNumber.SumOver<Slot>(Slot container, var ofTheElement) -> {
+                    slot(container);
+                    number(ofTheElement);
+                }
             }
         }
 
@@ -632,8 +641,29 @@ public final class WhatTheLibraryComputes {
                                 "List.length(List.filter(" + element(counted.container(),
                                         within(counted.ofTheElement(), counted.container()))
                                         + ", " + listed(counted.container()) + "))";
+                        // As many as a set of them holds.
+                        case LawNumber.HowManyDifferent<Slot> different ->
+                                "Set.size(Set.fromList(List.map(" + element(different.container(),
+                                        inside(different.container(),
+                                                () -> subject(different.ofTheElement())))
+                                        + ", " + listed(different.container()) + ")))";
+                        case LawNumber.SumOver<Slot> sum ->
+                                "List.sum(List.map(" + element(sum.container(),
+                                        inside(sum.container(), () -> number(
+                                                LinearForm.atom(sum.ofTheElement()))))
+                                        + ", " + listed(sum.container()) + "))";
                     }));
             return out.toString();
+        }
+
+        /** What {@code write} writes of the element of {@code container}. */
+        private String inside(Slot container, Supplier<String> write) {
+            within.addLast(container);
+            try {
+                return write.get();
+            } finally {
+                within.removeLast();
+            }
         }
 
         /** The value {@code slot} names, written out. */
@@ -680,10 +710,15 @@ public final class WhatTheLibraryComputes {
          *  it. */
         private String element(Slot container, String body) {
             String element = elementOf(container);
-            return typeOf(container) instanceof Type.MapOf
-                    ? "kv" + element + " -> {\n    let (" + keyOf(container) + ", " + element
-                            + ") = kv" + element + "\n    " + body + "\n}"
-                    : element + " -> " + body;
+            return switch (typeOf(container)) {
+                case Type.MapOf _ -> "kv" + element + " -> {\n    let (" + keyOf(container) + ", "
+                        + element + ") = kv" + element + "\n    " + body + "\n}";
+                // An entry of a list of them is filed under its first.
+                case Type.ListOf(Type.TupleOf(List<Type> pair)) when pair.size() == 2 ->
+                        element + " -> {\n    let (" + keyOf(container) + ", _) = " + element
+                                + "\n    " + body + "\n}";
+                default -> element + " -> " + body;
+            };
         }
 
         /** The container at {@code container}, as a list of what it holds. */

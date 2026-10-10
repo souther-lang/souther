@@ -1,5 +1,8 @@
 package souther.compiler.proof;
 
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.LawNumber;
@@ -69,8 +72,14 @@ public final class WhatAStatementSurvives {
                         subject(of, false);
                     }
                 }
-                case LawProposition.Compared<Integer>(var form, var _) ->
+                case LawProposition.Compared<Integer>(var form, Rel states) -> {
+                    if (noTwoAlike(form, states)) {
+                        // Denied, two of them come to one value, which more elements make truer.
+                        growing |= !upright;
+                    } else {
                         form.coefs().keySet().forEach(this::number);
+                    }
+                }
                 case LawProposition.SomeElement<Integer>(Integer over, var ofTheElement,
                                                          boolean holds) -> {
                     if (over == container) {
@@ -107,7 +116,11 @@ public final class WhatAStatementSurvives {
                             if (number instanceof LawNumber.AnArgument<Integer>(Integer at)
                                     && at == container
                                     || number instanceof LawNumber.HowManyMeet<Integer>(
-                                            Integer over, var _) && over == container) {
+                                            Integer over, var _) && over == container
+                                    || number instanceof LawNumber.HowManyDifferent<Integer>(
+                                            Integer different, var _) && different == container
+                                    || number instanceof LawNumber.SumOver<Integer>(
+                                            Integer summed, var _) && summed == container) {
                                 otherwise = true;
                             } else if (number instanceof LawNumber.SizeOf<Integer>(var of)) {
                                 subject(of, true);
@@ -147,7 +160,54 @@ public final class WhatAStatementSurvives {
                         statement(ofTheElement, false);
                     }
                 }
+                // How many different values a container's elements come to, and what a number of
+                // each adds up to, turn on which elements it holds and how many times each and on
+                // nothing else of it — save where what is taken of each is the key it is filed
+                // under, which is no element.
+                case LawNumber.HowManyDifferent<Integer>(Integer over, var ofTheElement) -> {
+                    if (over == container) {
+                        byNumber = true;
+                        otherwise |= ofTheElement instanceof LawSubject.KeyOf<Integer>;
+                    } else {
+                        subject(ofTheElement, false);
+                    }
+                }
+                case LawNumber.SumOver<Integer>(Integer over, var ofTheElement) -> {
+                    if (over == container) {
+                        byNumber = true;
+                        element(new LawProposition.Compared<>(LinearForm.atom(ofTheElement),
+                                Rel.EQ));
+                    } else {
+                        number(ofTheElement);
+                    }
+                }
             }
+        }
+
+        /**
+         * Whether {@code form} standing as {@code states} says that no two elements of the
+         * container come to one value of what is taken of each: as many different values as it
+         * holds elements. That is about every pair of them, so it holds of any part of them as
+         * well, and of them in any order.
+         */
+        private boolean noTwoAlike(LinearForm<LawNumber<Integer>> form, Rel states) {
+            if (!form.constant().isZero() || form.coefs().size() != 2) {
+                return false;
+            }
+            ExactRatio different = null;
+            ExactRatio size = null;
+            for (var term : form.coefs().entrySet()) {
+                if (term.getKey() instanceof LawNumber.HowManyDifferent<Integer>(Integer over,
+                        var of) && over == container && !(of instanceof LawSubject.KeyOf<Integer>)) {
+                    different = term.getValue();
+                } else if (term.getKey() instanceof LawNumber.SizeOf<Integer>(
+                        LawSubject.Argument<Integer>(Integer at)) && at == container) {
+                    size = term.getValue();
+                }
+            }
+            // Never more different values than elements, so as many or more is as many.
+            return different != null && size != null && different.negated().equals(size)
+                    && (states == Rel.EQ || states == (different.signum() > 0 ? Rel.GE : Rel.LE));
         }
 
         /** Reads a value a statement names, where {@code anElement} says whether an element of

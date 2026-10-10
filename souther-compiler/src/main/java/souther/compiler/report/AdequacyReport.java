@@ -3816,6 +3816,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                     case A_COUNT_WITHIN_AN_ELEMENT ->
                                             "how many elements of a container inside an"
                                                     + " element of another meet something";
+                                    case A_NUMBER_OVER_ELEMENTS ->
+                                            "how many different values the elements of a"
+                                                    + " container come to, or what a number of"
+                                                    + " each adds up to";
                                     case TWO_SUBJECTS_ONE_VALUE -> "two values being one";
                                     case AN_ORDER_OF_NO_ONE_POSITION ->
                                             "a place on an order of a term that is no one"
@@ -3920,6 +3924,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         + " path knows says";
                 case A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS -> "how many elements of a container meet"
                         + " something, which no fact a path knows says";
+                case A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS -> "how many different values the"
+                        + " elements of a container come to, or what a number of each adds up to,"
+                        + " which no fact a path knows says";
                 case A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN -> "what every element meets, which a"
                         + " path holds only as the closure it was written with";
                 case A_NUMBER_THE_PATH_CANNOT_HOLD -> "a relation of numbers whose weights, added"
@@ -4582,6 +4589,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case A_PATH_KNOWS_NO_SAMENESS_OF_VALUES -> "path_knows_no_sameness_of_values";
                     case A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER -> "path_knows_no_place_on_an_order";
                     case A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS -> "path_knows_no_count_of_elements";
+                    case A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS ->
+                            "path_knows_no_number_over_elements";
                     case A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN ->
                             "path_holds_element_facts_as_written";
                     case A_NUMBER_THE_PATH_CANNOT_HOLD -> "number_the_path_cannot_hold";

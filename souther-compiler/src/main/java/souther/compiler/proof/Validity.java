@@ -531,7 +531,19 @@ final class Validity {
                     Props.same(new LawProposition.SomeElement<>(container, ofTheElement, true),
                             Props.compared(Props.minus(LinearForm.atom(number),
                                     Props.constant(1)), Rel.GE)));
-            case LawNumber.AnArgument<Value> _ -> List.of();
+            // Never more different values than elements, and one or more exactly where there is
+            // an element.
+            case LawNumber.HowManyDifferent<Value>(Value container, var _) -> List.of(
+                    Props.compared(LinearForm.atom(number), Rel.GE),
+                    Props.compared(Props.minus(sizeOf(container), LinearForm.atom(number)),
+                            Rel.GE),
+                    Props.same(holds(container), Props.compared(Props.minus(
+                            LinearForm.atom(number), Props.constant(1)), Rel.GE)));
+            // What sizes add up to is never below nought.
+            case LawNumber.SumOver<Value>(var _, LawNumber<Value> each)
+                    when each instanceof LawNumber.SizeOf<Value> ->
+                    List.of(Props.compared(LinearForm.atom(number), Rel.GE));
+            case LawNumber.SumOver<Value> _, LawNumber.AnArgument<Value> _ -> List.of();
         };
     }
 
@@ -554,11 +566,19 @@ final class Validity {
 
     private Map<Integer, Granularity> spacings(LinearForm<LawNumber<Value>> form) {
         Map<Integer, Granularity> out = new HashMap<>();
-        form.coefs().keySet().forEach(number -> out.put(idOf(number), switch (number) {
-            case LawNumber.SizeOf<Value> _, LawNumber.HowManyMeet<Value> _ -> Granularity.DISCRETE;
-            case LawNumber.AnArgument<Value>(Value value) -> spacing.apply(value);
-        }));
+        form.coefs().keySet().forEach(number -> out.put(idOf(number), spacingOf(number)));
         return out;
+    }
+
+    /** How the values of {@code number} are spaced: a count is whole, and what numbers of the
+     *  elements add up to is spaced as they are. */
+    private Granularity spacingOf(LawNumber<Value> number) {
+        return switch (number) {
+            case LawNumber.SizeOf<Value> _, LawNumber.HowManyMeet<Value> _,
+                 LawNumber.HowManyDifferent<Value> _ -> Granularity.DISCRETE;
+            case LawNumber.AnArgument<Value>(Value value) -> spacing.apply(value);
+            case LawNumber.SumOver<Value>(var _, LawNumber<Value> each) -> spacingOf(each);
+        };
     }
 
     private int idOf(LawNumber<Value> number) {

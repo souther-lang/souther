@@ -119,6 +119,11 @@ public sealed interface WhyNotTaken {
          *  the tree it walks is that count. */
         A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS,
 
+        /** A number taken over the elements of a container — how many different values they come
+         *  to, or what a number of each adds up to — as what a path knows: no subject of the tree
+         *  it walks is that number. */
+        A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS,
+
         /**
          * Every element of a container meeting something, as what a path knows: a path holds what
          * every element meets as the closure the quantifier was written with, so that it can be
@@ -148,7 +153,8 @@ public sealed interface WhyNotTaken {
                 case A_PATH_KNOWS_NO_ALTERNATIVES, A_PLACE_THE_PATH_DOES_NOT_READ,
                      A_PATH_KNOWS_NO_CASES, A_PATH_KNOWS_NO_SAMENESS_OF_VALUES,
                      A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER, A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS,
-                     A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN, A_NUMBER_THE_PATH_CANNOT_HOLD ->
+                     A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS, A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN,
+                     A_NUMBER_THE_PATH_CANNOT_HOLD ->
                         Domain.WHAT_A_PATH_KNOWS;
             };
         }

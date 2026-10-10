@@ -615,6 +615,10 @@ public sealed interface RowDemand {
         /** How many elements of a container inside an element of another meet something. */
         A_COUNT_WITHIN_AN_ELEMENT,
 
+        /** How many different values the elements of a container come to, or what a number of
+         *  each adds up to over them. */
+        A_NUMBER_OVER_ELEMENTS,
+
         /** Two subjects of a row being one value. */
         TWO_SUBJECTS_ONE_VALUE,
 

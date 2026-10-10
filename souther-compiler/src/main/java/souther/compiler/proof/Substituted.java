@@ -87,6 +87,12 @@ final class Substituted {
             case LawNumber.HowManyMeet<Value>(Value container, var ofTheElement) ->
                     new LawNumber.HowManyMeet<>(value(container, from, to),
                             proposition(ofTheElement, from, to));
+            case LawNumber.HowManyDifferent<Value>(Value container, var ofTheElement) ->
+                    new LawNumber.HowManyDifferent<>(value(container, from, to),
+                            subject(ofTheElement, from, to));
+            case LawNumber.SumOver<Value>(Value container, var ofTheElement) ->
+                    new LawNumber.SumOver<>(value(container, from, to),
+                            number(ofTheElement, from, to));
         };
     }
 

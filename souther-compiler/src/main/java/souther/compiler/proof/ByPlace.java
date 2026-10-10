@@ -73,6 +73,11 @@ public final class ByPlace {
             case LawNumber.HowManyMeet<A>(A container, LawProposition<A> ofTheElement) ->
                     new LawNumber.HowManyMeet<>(word.apply(container),
                             proposition(ofTheElement, word));
+            case LawNumber.HowManyDifferent<A>(A container, LawSubject<A> ofTheElement) ->
+                    new LawNumber.HowManyDifferent<>(word.apply(container),
+                            subject(ofTheElement, word));
+            case LawNumber.SumOver<A>(A container, LawNumber<A> ofTheElement) ->
+                    new LawNumber.SumOver<>(word.apply(container), number(ofTheElement, word));
         };
     }
 

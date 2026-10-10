@@ -346,10 +346,38 @@ public final class OperationFacts {
             about("Set", "map", lemma(law(AnswerAspect.EMPTINESS, holdsSomething(CONTAINER)),
                     iff(holdsSomething(CARRIED), holdsSomething(WALKED)))),
             about("Set", "fromList", law(AnswerAspect.EMPTINESS, holdsSomething(at(0)))),
-            about("Set", "fromList", new OperationFact.LeavesUnsaid(OperationLaw.Observed.SIZE,
-                    Unsayable.HOW_MANY_DIFFERENT_VALUES)),
             about("Set", "toList", law(AnswerAspect.EMPTINESS, holdsSomething(at(0)))),
             about("Map", "fromList", law(AnswerAspect.EMPTINESS, holdsSomething(at(0)))),
+            // And how many: one for each different value the elements come to, or each different
+            // key they are filed under. Built a value at a time, what is built holds a value
+            // exactly where the walk met it so far, and one more than before exactly where the
+            // value it puts in was not there yet — which is one more different value walked.
+            about("Set", "fromList", size(different(at(0), new LawSubject.ElementOf<>(at(0))))),
+            about("Map", "fromList", size(different(at(0), new LawSubject.KeyOf<>(at(0))))),
+            about("List", "distinct", lemma(size(different(at(0),
+                            new LawSubject.ElementOf<>(at(0)))),
+                    equal(sizeOf(carried(1)), sizeOf(carried(0)), 0),
+                    iff(isTrue(answerOf("Set", "contains", the(ANY), the(carried(0)))),
+                            some(WALKED, alike(new LawSubject.ElementOf<>(WALKED), the(ANY)))),
+                    equal(sizeOf(carried(0)), different(WALKED,
+                            new LawSubject.ElementOf<>(WALKED)), 0))),
+            about("List", "distinctBy", lemma(size(different(CONTAINER, keyed())),
+                    equal(sizeOf(carried(1)), sizeOf(carried(0)), 0),
+                    iff(isTrue(answerOf("Set", "contains", the(ANY), the(carried(0)))),
+                            some(WALKED, alike(keyed(), the(ANY)))),
+                    equal(sizeOf(carried(0)), different(WALKED, keyed()), 0))),
+            about("List", "groupBy", lemma(size(different(CONTAINER, keyed())),
+                    iff(isTrue(answerOf("Map", "containsKey", the(ANY), the(CARRIED))),
+                            some(WALKED, alike(keyed(), the(ANY)))),
+                    equal(sizeOf(CARRIED), different(WALKED, keyed()), 0))),
+            about("List", "indexBy", lemma(size(different(CONTAINER, keyed())),
+                    iff(isTrue(answerOf("Map", "containsKey", the(ANY), the(CARRIED))),
+                            some(WALKED, alike(keyed(), the(ANY)))),
+                    equal(sizeOf(CARRIED), different(WALKED, keyed()), 0))),
+            about("Set", "map", lemma(size(different(CONTAINER, keyed())),
+                    iff(isTrue(answerOf("Set", "contains", the(ANY), the(CARRIED))),
+                            some(WALKED, alike(keyed(), the(ANY)))),
+                    equal(sizeOf(CARRIED), different(WALKED, keyed()), 0))),
             about("List", "distinct", lemma(law(AnswerAspect.EMPTINESS, holdsSomething(at(0))),
                     iff(holdsSomething(carried(0)), holdsSomething(WALKED)),
                     iff(holdsSomething(carried(1)), holdsSomething(WALKED)))),
@@ -438,6 +466,14 @@ public final class OperationFacts {
                     holdsSomething(new LawSubject.ElementOf<>(at(0))))),
                     iff(holdsSomething(CARRIED),
                             some(WALKED, holdsSomething(new LawSubject.ElementOf<>(WALKED)))))),
+            // As many as the lists put end to end hold between them: what is put together so far
+            // holds what the lists walked so far hold, added up.
+            about("List", "concat", lemma(size(sumOver(at(0),
+                            sizeOf(new LawSubject.ElementOf<>(at(0))))),
+                    equal(sizeOf(CARRIED), sumOver(WALKED,
+                            sizeOf(new LawSubject.ElementOf<>(WALKED))), 0))),
+            about("List", "flatMap", lemma(size(sumOver(CONTAINER, sizeOf(keyed()))),
+                    equal(sizeOf(CARRIED), sumOver(WALKED, sizeOf(keyed())), 0))),
             about("String", "concat", law(AnswerAspect.EMPTINESS, some(at(0),
                     holdsSomething(new LawSubject.ElementOf<>(at(0)))))),
             about("String", "join", law(AnswerAspect.EMPTINESS, any(
@@ -629,8 +665,10 @@ public final class OperationFacts {
                     Unsayable.A_STRING_INSIDE_ANOTHER)),
             about("String", "matches", unsaid(AnswerAspect.TRUTH,
                     Unsayable.A_STRING_MATCHING_A_PATTERN)),
-            about("List", "allDistinctBy", unsaid(AnswerAspect.TRUTH,
-                    Unsayable.NO_TWO_ELEMENTS_ALIKE)),
+            // No two elements coming to one answer of the closure is as many different answers as
+            // elements.
+            about("List", "allDistinctBy", lemma(law(AnswerAspect.TRUTH,
+                    equal(different(CONTAINER, keyed()), sizeOf(CONTAINER), 0)))),
 
             // The containers a construction's result is never smaller than. A union answers one of
             // what both sides hold and an insert of something already there adds nothing, so
@@ -1035,6 +1073,23 @@ public final class OperationFacts {
     private static LawProposition<ArgumentRef> closureAnswers(AnswerAspect aspect) {
         return new LawProposition.Observed<>(new LawSubject.WhatTheClosureAnswers<>(CLOSURE),
                 new SideAnswered(aspect, true));
+    }
+
+    /** How many different values {@code of} comes to over the elements of {@code container}. */
+    private static LawNumber<ArgumentRef> different(ArgumentRef container,
+                                                    LawSubject<ArgumentRef> of) {
+        return new LawNumber.HowManyDifferent<>(container, of);
+    }
+
+    /** What {@code each}, a number of an element of {@code container}, adds up to over them. */
+    private static LawNumber<ArgumentRef> sumOver(ArgumentRef container,
+                                                  LawNumber<ArgumentRef> each) {
+        return new LawNumber.SumOver<>(container, each);
+    }
+
+    /** What the operation's closure answers of the element it is handed. */
+    private static LawSubject<ArgumentRef> keyed() {
+        return new LawSubject.WhatTheClosureAnswers<>(CLOSURE);
     }
 
     /** The element of {@code one} the statement is about being the element of {@code other} it

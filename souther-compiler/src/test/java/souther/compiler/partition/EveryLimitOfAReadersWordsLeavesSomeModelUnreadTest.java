@@ -58,7 +58,7 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
             data Item = { n: Int }
             data P = { n: Int }
             data O = { a: Int, b: Int, name: String, other: String, tier: Tier,
-                       xs: List<Item>, p: P, q: P }
+                       xs: List<Item>, ns: List<Int>, p: P, q: P }
 
             data A
             data B
@@ -99,6 +99,11 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
             behavior aCount : (o: O) -> A | B | C
             let aCount (o) =
                 if List.length(List.filter(i -> i.n > 3, o.xs)) == 2
+                then (if o.a > 5 then A else B) else C
+
+            behavior someDifferent : (o: O) -> A | B | C
+            let someDifferent (o) =
+                if List.length(List.distinct(o.ns)) >= 2
                 then (if o.a > 5 then A else B) else C
 
             behavior twoTexts : (o: O) -> A | B | C
@@ -150,6 +155,8 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER, "anOrder");
         // How many elements meet something, against a number.
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS, "aCount");
+        // How many different values a list holds, against a number.
+        out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS, "someDifferent");
         // Two texts compared as numbers: no place of the tree a path walks is either of them.
         out.put(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ, "twoTexts");
         // A name the cases spread and the same name under the case, which are one fact on a path,

@@ -1530,7 +1530,9 @@ final class Pullback {
                         yield made != null && !sizedInACase.containsKey(made.e()) ? made : null;
                     }
                     case LawNumber.SizeOf<DeclaredArgument> _,
-                         LawNumber.HowManyMeet<DeclaredArgument> _ -> null;
+                         LawNumber.HowManyMeet<DeclaredArgument> _,
+                         LawNumber.HowManyDifferent<DeclaredArgument> _,
+                         LawNumber.SumOver<DeclaredArgument> _ -> null;
                 };
                 if (sized != null) {
                     return inEachCaseOf(sized, new Denotation(e, reads),
@@ -1570,6 +1572,8 @@ final class Pullback {
                             case LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(of);
                         };
                 case LawNumber.HowManyMeet<DeclaredArgument>(DeclaredArgument at, var _) -> at;
+                case LawNumber.HowManyDifferent<DeclaredArgument>(DeclaredArgument at, var _) -> at;
+                case LawNumber.SumOver<DeclaredArgument>(DeclaredArgument at, var _) -> at;
             };
         }
 
@@ -1586,6 +1590,8 @@ final class Pullback {
                             case LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(of);
                         };
                 case LawNumber.HowManyMeet<DeclaredArgument> _ -> 5;
+                case LawNumber.HowManyDifferent<DeclaredArgument> _ -> 6;
+                case LawNumber.SumOver<DeclaredArgument> _ -> 7;
             };
         }
 
@@ -1668,7 +1674,61 @@ final class Pullback {
                             case LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(of);
                         };
                 case LawNumber.HowManyMeet<DeclaredArgument> counted -> count(counted);
+                case LawNumber.HowManyDifferent<DeclaredArgument>(DeclaredArgument at,
+                                                                  var ofTheElement) ->
+                        different(at, ofTheElement);
+                case LawNumber.SumOver<DeclaredArgument>(DeclaredArgument at, var ofTheElement) ->
+                        sumOver(at, ofTheElement);
             };
+        }
+
+        /**
+         * How many different values {@code ofTheElement} comes to over the elements of the
+         * container at {@code at}, where the container stands at a position and what is taken of
+         * each element stands at one inside it.
+         */
+        private Sized different(DeclaredArgument at, LawSubject<DeclaredArgument> ofTheElement) {
+            if (!(reads.pathOf(applied.argument(at), read.rules().newtypes())
+                    instanceof PathResolution.At(TermPath held))) {
+                return new Sized.NotSized(
+                        new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
+            }
+            TermPath each = switch (ofTheElement) {
+                case LawSubject.ElementOf<DeclaredArgument> _ -> held.element();
+                case LawSubject.KeyOf<DeclaredArgument> _ -> held.key();
+                // What a closure answers stands at no position a row writes.
+                case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _,
+                     LawSubject.Argument<DeclaredArgument> _ -> null;
+                case LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(ofTheElement);
+            };
+            return each == null ? new Sized.NotSized(
+                    new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT))
+                    : new Sized.AsAForm(LinearForm.atom(new Quantity.HowManyDifferent(held, each)));
+        }
+
+        /**
+         * What {@code ofTheElement}, a number of each element of the container at {@code at}, adds
+         * up to over them, where the container stands at a position.
+         */
+        private Sized sumOver(DeclaredArgument at, LawNumber<DeclaredArgument> ofTheElement) {
+            if (!(reads.pathOf(applied.argument(at), read.rules().newtypes())
+                    instanceof PathResolution.At(TermPath held))) {
+                return new Sized.NotSized(
+                        new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
+            }
+            if (!quantifying.add(held)) {
+                return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
+            }
+            elements.put(at, new ElementAt.AtAPosition(held));
+            Sized each;
+            try {
+                each = number(LinearForm.atom(ofTheElement));
+            } finally {
+                elements.remove(at);
+                quantifying.remove(held);
+            }
+            return each instanceof Sized.AsAForm(LinearForm<Quantity> form)
+                    ? new Sized.AsAForm(LinearForm.atom(new Quantity.SumOver(held, form))) : each;
         }
 
         /** How many what stands at {@code at} holds, as a number of the input. */
@@ -1824,6 +1884,11 @@ final class Pullback {
                                 of.equals(new LawSubject.ElementOf<>(container));
                         case LawNumber.HowManyMeet<DeclaredArgument> inner ->
                                 namesTheElement(inner.ofTheElement(), container);
+                        case LawNumber.HowManyDifferent<DeclaredArgument>(var _, var of) ->
+                                of.equals(new LawSubject.ElementOf<>(container));
+                        case LawNumber.SumOver<DeclaredArgument>(var _, var of) ->
+                                namesTheElement(new LawProposition.Compared<>(
+                                        LinearForm.atom(of), Rel.EQ), container);
                     });
             case LawProposition.SomeElement<DeclaredArgument> some ->
                     namesTheElement(some.ofTheElement(), container);

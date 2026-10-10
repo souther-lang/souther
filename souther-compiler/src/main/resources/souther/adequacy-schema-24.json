@@ -2655,6 +2655,7 @@
                   "path_knows_no_sameness_of_values",
                   "path_knows_no_place_on_an_order",
                   "path_knows_no_count_of_elements",
+                  "path_knows_no_number_over_elements",
                   "path_holds_element_facts_as_written",
                   "number_the_path_cannot_hold"
                 ]

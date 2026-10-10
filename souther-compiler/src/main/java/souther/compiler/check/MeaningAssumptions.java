@@ -290,6 +290,10 @@ final class MeaningAssumptions {
                 return new AtomAt.AtTheEdge(
                         WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS);
             }
+            case Quantity.HowManyDifferent _, Quantity.SumOver _ -> {
+                return new AtomAt.AtTheEdge(
+                        WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS);
+            }
         }
         return named != null ? new AtomAt.Named(named)
                 : new AtomAt.AtTheEdge(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);

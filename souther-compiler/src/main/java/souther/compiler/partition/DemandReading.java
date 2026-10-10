@@ -772,6 +772,7 @@ final class DemandReading {
      */
     private static Read overNoRowNumber(Proposition.Compared compared, LinearForm<Quantity> form) {
         boolean counted = false;
+        boolean overElements = false;
         List<WhyUnread> past = new ArrayList<>();
         for (Quantity atom : form.coefs().keySet()) {
             switch (atom) {
@@ -779,9 +780,13 @@ final class DemandReading {
                     return anAnswerARowStandsIn();
                 }
                 case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> counted = true;
+                case Quantity.HowManyDifferent _, Quantity.SumOver _ -> overElements = true;
                 case Quantity.OfABinding bound -> bound.madeOf().ifPresent(past::add);
                 case DecisionAtom.OfTheInput _ -> { }
             }
+        }
+        if (overElements) {
+            return forTheRun(compared, RowDemand.NoComposer.A_NUMBER_OVER_ELEMENTS);
         }
         return counted ? forTheRun(compared, RowDemand.NoComposer.A_COUNT_OF_ELEMENTS)
                 : forTheRun(compared, RowDemand.NoComposer.A_VALUE_THE_BODY_WORKS_OUT, past);

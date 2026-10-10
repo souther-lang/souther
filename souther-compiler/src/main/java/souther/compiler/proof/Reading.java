@@ -4,6 +4,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ClosurePositions;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
@@ -590,6 +591,14 @@ final class Reading {
                         howMany(argument.apply(container), each ->
                                 proposition(ofTheElement, operation, argument,
                                         elements.with(container, each)));
+                case LawNumber.HowManyDifferent<A>(A container, LawSubject<A> ofTheElement) ->
+                        different(argument.apply(container), each ->
+                                subject(ofTheElement, operation, argument,
+                                        elements.with(container, each)));
+                case LawNumber.SumOver<A>(A container, LawNumber<A> ofTheElement) ->
+                        sum(argument.apply(container), each ->
+                                form(LinearForm.atom(ofTheElement), operation, argument,
+                                        elements.with(container, each)));
             };
             out = Props.plus(out, Props.held(read.times(term.getValue())));
         }
@@ -609,29 +618,32 @@ final class Reading {
                                         List<LawSubject<A>> args) -> new Value.Made(answering,
                     args.stream().map(arg -> subject(arg, operation, argument, elements)).toList());
             case LawSubject.WhatTheClosureAnswers<A>(A closure) -> {
-                Element handed = elementNamed(elements.innermost());
-                ClosurePositions at = library.positions(operation);
                 Value function = argument.apply(closure);
-                int arity = function instanceof Value.Lambda(LibraryTerm.Closure written, var _,
-                        var _)
-                        ? written.params().size() : at == null ? 0
-                        : Math.max(at.elementParam(), at.keyParam()) + 1;
-                List<Value> handedOn = new ArrayList<>();
-                for (int p = 0; p < arity; p++) {
-                    if (at != null && p == at.elementParam()) {
-                        handedOn.add(handed.value());
-                    } else if (at != null && p == at.keyParam()) {
-                        handedOn.add(handed.key());
-                    } else {
-                        // A parameter the element and its key are not handed on is one a law
-                        // about the closure's answer on an element says nothing of.
-                        throw new Stopped(new Library.Settled.Open(
-                                new Unproved.NotOverItsArguments()));
-                    }
-                }
-                yield new Value.AppliedTo(function, handedOn);
+                yield new Value.AppliedTo(function, handed(function,
+                        library.positions(operation), elementNamed(elements.innermost())));
             }
         };
+    }
+
+    /** What {@code function}, the closure an operation with its closure at {@code at} applies,
+     *  is handed of {@code handed}: the element, and its key where it takes one. */
+    private static List<Value> handed(Value function, ClosurePositions at, Element handed) {
+        int arity = function instanceof Value.Lambda(LibraryTerm.Closure written, var _, var _)
+                ? written.params().size() : at == null ? 0
+                : Math.max(at.elementParam(), at.keyParam()) + 1;
+        List<Value> handedOn = new ArrayList<>();
+        for (int p = 0; p < arity; p++) {
+            if (at != null && p == at.elementParam()) {
+                handedOn.add(handed.value());
+            } else if (at != null && p == at.keyParam()) {
+                handedOn.add(handed.key());
+            } else {
+                // A parameter the element and its key are not handed on is one a law about the
+                // closure's answer on an element says nothing of.
+                throw new Stopped(new Library.Settled.Open(new Unproved.NotOverItsArguments()));
+            }
+        }
+        return handedOn;
     }
 
     private static Element elementNamed(Element element) {
@@ -688,6 +700,105 @@ final class Reading {
             default -> {
                 Element each = elementOf(container);
                 yield LinearForm.atom(new LawNumber.HowManyMeet<>(container, of.apply(each)));
+            }
+        };
+    }
+
+    /**
+     * How many different values what {@code of} makes of each element of {@code container} comes
+     * to. A walk one element further holds one more exactly where what it makes of that element is
+     * nothing it made of one before; a listing of every element of a container holds the same
+     * values as the container, however many times each.
+     */
+    LinearForm<LawNumber<Value>> different(Value container, Function<Element, Value> of) {
+        return switch (container) {
+            case Value.NothingYet _ -> Props.constant(0);
+            case Value.OneMore(Value walked, Value next) ->
+                    Props.plus(different(walked, of), aNewOne(walked, next, of));
+            case Value.Listed(List<Value> elements) -> {
+                LinearForm<LawNumber<Value>> out = Props.constant(0);
+                for (int at = 0; at < elements.size(); at++) {
+                    out = Props.plus(out, aNewOne(new Value.Listed(elements.subList(0, at)),
+                            elements.get(at), of));
+                }
+                yield out;
+            }
+            case Value.AsEntries(Value entries) ->
+                    different(entries, entry -> of.apply(unpacked(entry)));
+            case Value.Made(ValueName.Stdlib.Operation operation, List<Value> args)
+                    when library.listing(operation)
+                            instanceof AppliedClosures.Listing.EveryElementOf(int argument,
+                                                                             var _) ->
+                    different(args.get(argument), of);
+            // What a closure answered of each element of another, once each: as many different
+            // values as that closure answers of those elements.
+            case Value.Made(ValueName.Stdlib.Operation operation, List<Value> args)
+                    when mapsEach(operation) != null -> {
+                used.add(new Proof.Used(operation, Proof.Taken.WHAT_IT_BUILDS));
+                ClosurePositions at = library.positions(operation);
+                Value closure = args.get(at.closureArg());
+                yield different(args.get(mapsEach(operation)), each -> of.apply(itself(
+                        new Value.AppliedTo(closure, handed(closure, at, each)))));
+            }
+            default -> LinearForm.atom(new LawNumber.HowManyDifferent<>(container,
+                    new LawSubject.Argument<>(of.apply(elementOf(container)))));
+        };
+    }
+
+    /** The argument whose elements {@code operation} answers its closure's answer on, once each
+     *  and nothing else, or null where it builds its answer no such way. */
+    private Integer mapsEach(ValueName.Stdlib.Operation operation) {
+        BuiltFrom<Integer> built = library.builtFrom(operation);
+        return built == null || library.positions(operation) == null ? null
+                : built.mapsEachElementOf();
+    }
+
+    /** One where what {@code of} makes of {@code next} is nothing it makes of an element of
+     *  {@code before}, and nought where it is. */
+    private LinearForm<LawNumber<Value>> aNewOne(Value before, Value next,
+                                                 Function<Element, Value> of) {
+        return oneIf(next, each -> some(before,
+                other -> same(of.apply(other), of.apply(each))).denied());
+    }
+
+    /**
+     * What what {@code of} makes of each element of {@code container}, a number, adds up to over
+     * all of them. A listing of every element of a container, each once, adds up what the
+     * container's elements do.
+     */
+    LinearForm<LawNumber<Value>> sum(Value container,
+                                     Function<Element, LinearForm<LawNumber<Value>>> of) {
+        return switch (container) {
+            case Value.Listed(List<Value> elements) -> {
+                LinearForm<LawNumber<Value>> out = Props.constant(0);
+                for (Value each : elements) {
+                    out = Props.plus(out, of.apply(itself(each)));
+                }
+                yield out;
+            }
+            case Value.Joined(Value left, Value right) ->
+                    Props.plus(sum(left, of), sum(right, of));
+            case Value.NothingYet _ -> Props.constant(0);
+            case Value.OneMore(Value walked, Value next) ->
+                    Props.plus(sum(walked, of), of.apply(itself(next)));
+            case Value.AsEntries(Value entries) -> sum(entries, entry -> of.apply(unpacked(entry)));
+            case Value.Made(ValueName.Stdlib.Operation operation, List<Value> args)
+                    when library.listing(operation)
+                            instanceof AppliedClosures.Listing.EveryElementOf(int argument,
+                                                                             var _) ->
+                    sum(args.get(argument), of);
+            default -> {
+                // A number of each element is a constant and some numbers of it, so what it adds
+                // up to is the constant once for each element and each number added up.
+                LinearForm<LawNumber<Value>> each = of.apply(elementOf(container));
+                LinearForm<LawNumber<Value>> out =
+                        Props.held(size(container).times(each.constant()));
+                for (Map.Entry<LawNumber<Value>, ExactRatio> term : each.coefs().entrySet()) {
+                    out = Props.plus(out, Props.held(LinearForm.<LawNumber<Value>>atom(
+                            new LawNumber.SumOver<>(container, term.getKey()))
+                            .times(term.getValue())));
+                }
+                yield out;
             }
         };
     }

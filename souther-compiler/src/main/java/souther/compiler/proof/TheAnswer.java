@@ -67,6 +67,10 @@ final class TheAnswer {
                 case LawNumber.SizeOf<Slot>(var of) -> new LawNumber.SizeOf<>(subject(of));
                 case LawNumber.HowManyMeet<Slot>(Slot container, var ofTheElement) ->
                         new LawNumber.HowManyMeet<>(container, proposition(ofTheElement));
+                case LawNumber.HowManyDifferent<Slot>(Slot container, var ofTheElement) ->
+                        new LawNumber.HowManyDifferent<>(container, subject(ofTheElement));
+                case LawNumber.SumOver<Slot>(Slot container, var ofTheElement) ->
+                        new LawNumber.SumOver<>(container, number(ofTheElement));
             };
         }
 

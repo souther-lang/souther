@@ -51,20 +51,26 @@ final class Triggers {
             case LawProposition.Any<Slot>(var parts) -> parts.forEach(part -> in(part, which, out));
             case LawProposition.Observed<Slot>(LawSubject<Slot> of, var _) -> in(of, which, out);
             case LawProposition.Compared<Slot>(LinearForm<LawNumber<Slot>> form, var _) ->
-                    form.coefs().keySet().forEach(number -> {
-                        switch (number) {
-                            case LawNumber.SizeOf<Slot>(LawSubject<Slot> of) -> in(of, which, out);
-                            case LawNumber.HowManyMeet<Slot>(var _, var ofTheElement) ->
-                                    in(ofTheElement, which, out);
-                            case LawNumber.AnArgument<Slot> _ -> { }
-                        }
-                    });
+                    form.coefs().keySet().forEach(number -> in(number, which, out));
             case LawProposition.SomeElement<Slot>(var _, var ofTheElement, var _) ->
                     in(ofTheElement, which, out);
             case LawProposition.Same<Slot>(LawSubject<Slot> one, LawSubject<Slot> other, var _) -> {
                 in(one, which, out);
                 in(other, which, out);
             }
+        }
+    }
+
+    private static void in(LawNumber<Slot> number, int which,
+                           Map<ValueName.Stdlib.Operation, Integer> out) {
+        switch (number) {
+            case LawNumber.SizeOf<Slot>(LawSubject<Slot> of) -> in(of, which, out);
+            case LawNumber.HowManyMeet<Slot>(var _, var ofTheElement) ->
+                    in(ofTheElement, which, out);
+            case LawNumber.HowManyDifferent<Slot>(var _, var ofTheElement) ->
+                    in(ofTheElement, which, out);
+            case LawNumber.SumOver<Slot>(var _, var ofTheElement) -> in(ofTheElement, which, out);
+            case LawNumber.AnArgument<Slot> _ -> { }
         }
     }
 

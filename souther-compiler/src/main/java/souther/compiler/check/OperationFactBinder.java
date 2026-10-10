@@ -4,6 +4,7 @@ import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.DeclaredOperation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.ArgumentsStand;
@@ -669,6 +670,11 @@ final class OperationFactBinder {
                                     answersNamedIn(stdlib, of);
                             case LawNumber.HowManyMeet<ArgumentRef>(var _, var ofTheElement) ->
                                     answersNamedIn(stdlib, ofTheElement);
+                            case LawNumber.HowManyDifferent<ArgumentRef>(var _, var ofTheElement)
+                                    -> answersNamedIn(stdlib, ofTheElement);
+                            case LawNumber.SumOver<ArgumentRef>(var _, var ofTheElement) ->
+                                    answersNamedIn(stdlib, new LawProposition.Compared<>(
+                                            LinearForm.atom(ofTheElement), Rel.EQ));
                             case LawNumber.AnArgument<ArgumentRef> _ -> { }
                         }
                     });
@@ -1152,6 +1158,29 @@ final class OperationFactBinder {
                 yield new LawNumber.HowManyMeet<>(container, lawProposition(declaration,
                         counted.ofTheElement(), within(over, container)));
             }
+            case LawNumber.HowManyDifferent<ArgumentRef> different -> {
+                DeclaredArgument container = lawContainer(declaration, different.container(),
+                        over);
+                LawSubject<DeclaredArgument> each = lawSubject(declaration,
+                        different.ofTheElement(), within(over, container));
+                // Something of each element of that container: the element, its key, or what the
+                // closure it is handed answers.
+                if (!(each instanceof LawSubject.ElementOf<DeclaredArgument>(var of)
+                        && of.equals(container)
+                        || each instanceof LawSubject.KeyOf<DeclaredArgument>(var keyed)
+                                && keyed.equals(container)
+                        || each instanceof LawSubject.WhatTheClosureAnswers<DeclaredArgument>)) {
+                    throw new IllegalStateException("a law of " + library.qualified()
+                            + " counts the different values of " + each + ", which is nothing"
+                            + " of each element of argument " + (container.position() + 1));
+                }
+                yield new LawNumber.HowManyDifferent<>(container, each);
+            }
+            case LawNumber.SumOver<ArgumentRef> sum -> {
+                DeclaredArgument container = lawContainer(declaration, sum.container(), over);
+                yield new LawNumber.SumOver<>(container, lawNumber(declaration,
+                        sum.ofTheElement(), within(over, container)));
+            }
         };
     }
 
@@ -1207,7 +1236,11 @@ final class OperationFactBinder {
                 DeclaredArgument map = holdToTheDeclaration(declaration, at,
                         new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
                         "a map a law of it names the key of an element of");
-                if (!(map.stands() instanceof Type.MapOf) || !over.contains(map)) {
+                // A map, or a list of entries, each filed under its first.
+                boolean files = map.stands() instanceof Type.MapOf
+                        || map.stands() instanceof Type.ListOf(Type.TupleOf(var pair))
+                                && pair.size() == 2;
+                if (!files || !over.contains(map)) {
                     throw new IllegalStateException("a law of " + library.qualified()
                             + " names a key of argument " + (map.position() + 1)
                             + " outside a statement about some element of it, or of what is"

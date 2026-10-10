@@ -12,7 +12,6 @@ import souther.compiler.proof.LibraryProver;
 import souther.compiler.proof.Slot;
 import souther.compiler.proof.Unproved;
 import souther.compiler.proof.WalksFromASeed;
-import souther.compiler.proof.WhatAClosingIsAbout;
 import souther.compiler.proof.WhatAStatementSurvives;
 import souther.compiler.proof.WhatItAccumulates;
 import souther.compiler.proof.WhereTheElementsCameFrom;
@@ -76,7 +75,6 @@ final class ProvingTheLibrary {
     private final LibraryProver prover;
     private final WhereTheElementsCameFrom elements;
     private final WhatItAccumulates accumulated;
-    private final WhatAClosingIsAbout closings;
 
     /**
      * @param awaiting every fact stated of an operation the library writes, waiting to be proved
@@ -120,7 +118,6 @@ final class ProvingTheLibrary {
         this.prover = new LibraryProver(library, walks);
         this.elements = new WhereTheElementsCameFrom(library, walks);
         this.accumulated = new WhatItAccumulates(library, walks);
-        this.closings = new WhatAClosingIsAbout(library, walks);
     }
 
     /**
@@ -186,19 +183,11 @@ final class ProvingTheLibrary {
 
     /**
      * Whether what {@code operation}'s answer comes out true for survives every construction
-     * {@code reads} names: read off the law its body proves, or off the closing it proves, where
-     * that is about the container named.
+     * {@code reads} names, read off the law its body proves.
      */
     private boolean survives(ValueName.Stdlib.Operation operation,
                              BoundOperationFact.ReadsItsContainer reads) {
         int container = reads.container().position();
-        if (settle(operation, OperationLaw.Observed.TRUTH)
-                instanceof BoundOperationFacts.Settled.Unsaid(Unsayable why)) {
-            ClosurePositions at = Combinators.positionsOf(operation);
-            return aboutTheContainer(why) && about(operation, why) && at != null
-                    && at.containerArg() == container
-                    && reads.through().stream().allMatch(why::survives);
-        }
         if (!(lawOf(operation, OperationLaw.Observed.TRUTH)
                 instanceof OperationLaw.Observation<Integer>(var _, LawProposition<Integer> holds))) {
             return false;
@@ -207,42 +196,20 @@ final class ProvingTheLibrary {
                 WhatAStatementSurvives.survives(holds, container, shape));
     }
 
-    /** Whether {@code operation}'s answer comes out true by a closing about a closure's answer on
-     *  each element of its container, and the closure is the one at {@code projection}. */
+    /** Whether the law {@code operation}'s answer comes out true by, which its body proves,
+     *  counts the different answers of the closure at {@code projection} on each element of its
+     *  container. */
     private boolean overAProjection(ValueName.Stdlib.Operation operation,
                                     DeclaredArgument projection) {
         ClosurePositions at = Combinators.positionsOf(operation);
-        return at != null && at.closureArg() == projection.position()
-                && settle(operation, OperationLaw.Observed.TRUTH)
-                instanceof BoundOperationFacts.Settled.Unsaid(Unsayable why)
-                && aboutTheContainer(why) && about(operation, why);
-    }
-
-    /**
-     * Whether a closing for {@code why} is about the operation's container and closure, which the
-     * closing's proof shows of the body ({@link #about}).
-     */
-    private static boolean aboutTheContainer(Unsayable why) {
-        return switch (why) {
-            case NO_TWO_ELEMENTS_ALIKE -> true;
-            case EVERY_CHARACTER_IS_WHITESPACE, MADE_UP_OF_COPIES_OF_A_TEXT,
-                 A_STRING_INSIDE_ANOTHER, A_STRING_MATCHING_A_PATTERN, HOW_MANY_DIFFERENT_VALUES ->
-                    false;
-        };
-    }
-
-    /**
-     * Whether the body of {@code operation} comes to {@code why} about what the closing says it is
-     * about: for a closing about the operation's container and closure, about those two, as the
-     * body says; for any other, nothing beyond the proposition.
-     */
-    private boolean about(ValueName.Stdlib.Operation operation, Unsayable why) {
-        if (!aboutTheContainer(why)) {
-            return true;
+        if (at == null || at.closureArg() != projection.position()
+                || !(lawOf(operation, OperationLaw.Observed.TRUTH)
+                        instanceof OperationLaw.Observation<Integer>(var _,
+                                LawProposition.Compared<Integer>(var form, var _)))) {
+            return false;
         }
-        ClosurePositions at = Combinators.positionsOf(operation);
-        return at != null && closings.noTwoAlike(operation, at.containerArg(), at.closureArg())
-                instanceof LibraryProver.Outcome.Proved;
+        return form.coefs().containsKey(new LawNumber.HowManyDifferent<>(at.containerArg(),
+                new LawSubject.WhatTheClosureAnswers<>(at.closureArg())));
     }
 
     /** Whether {@code operation} comes out true exactly where no element of its container is one
@@ -375,11 +342,9 @@ final class ProvingTheLibrary {
             OperationLaw<Integer> nothing = new OperationLaw.Observation<>(sideOf(observed),
                     new LawProposition.Always<>(true));
             // The body shows the domain has no words for the side by coming to a proposition it
-            // has none for; the closing is taken only where that is the one it names or one it
-            // is stated through.
+            // has none for; the closing is taken only where that is the one it names.
             return switch (prover.prove(operation, new Lemma(nothing, what.carries()))) {
-                case LibraryProver.Outcome.Unsaid(Unsayable why) when what.closedAs().standsOn(why)
-                        && about(operation, what.closedAs()) ->
+                case LibraryProver.Outcome.Unsaid(Unsayable why) when what.closedAs() == why ->
                         new BoundOperationFacts.Settled.Unsaid(what.closedAs());
                 case LibraryProver.Outcome.Unsaid _ -> new BoundOperationFacts.Settled.Open(null,
                         new Unproved.DoesNotFollow(Unproved.Obligation.THE_STATEMENT));

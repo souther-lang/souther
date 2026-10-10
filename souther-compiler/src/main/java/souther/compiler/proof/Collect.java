@@ -101,14 +101,20 @@ final class Collect {
             case LawProposition.All<A>(var parts) -> parts.forEach(part -> numbers(part, each));
             case LawProposition.Any<A>(var parts) -> parts.forEach(part -> numbers(part, each));
             case LawProposition.Compared<A>(LinearForm<LawNumber<A>> form, var _) ->
-                    form.coefs().keySet().forEach(number -> {
-                        each.accept(number);
-                        if (number instanceof LawNumber.HowManyMeet<A>(var _, var ofTheElement)) {
-                            numbers(ofTheElement, each);
-                        }
-                    });
+                    form.coefs().keySet().forEach(number -> number(number, each));
             case LawProposition.SomeElement<A>(var _, var ofTheElement, var _) ->
                     numbers(ofTheElement, each);
+        }
+    }
+
+    /** {@code number}, and every number inside what it says of an element. */
+    private static <A> void number(LawNumber<A> number, Consumer<LawNumber<A>> each) {
+        each.accept(number);
+        switch (number) {
+            case LawNumber.HowManyMeet<A>(var _, var ofTheElement) -> numbers(ofTheElement, each);
+            case LawNumber.SumOver<A>(var _, var ofTheElement) -> number(ofTheElement, each);
+            case LawNumber.AnArgument<A> _, LawNumber.SizeOf<A> _,
+                 LawNumber.HowManyDifferent<A> _ -> { }
         }
     }
 
@@ -120,16 +126,7 @@ final class Collect {
             case LawProposition.Any<A>(var parts) -> parts.forEach(part -> slots(part, each));
             case LawProposition.Observed<A>(LawSubject<A> of, var _) -> slots(of, each);
             case LawProposition.Compared<A>(LinearForm<LawNumber<A>> form, var _) ->
-                    form.coefs().keySet().forEach(number -> {
-                        switch (number) {
-                            case LawNumber.AnArgument<A>(A at) -> each.accept(at);
-                            case LawNumber.SizeOf<A>(LawSubject<A> of) -> slots(of, each);
-                            case LawNumber.HowManyMeet<A>(A container, var ofTheElement) -> {
-                                each.accept(container);
-                                slots(ofTheElement, each);
-                            }
-                        }
-                    });
+                    form.coefs().keySet().forEach(number -> slots(number, each));
             case LawProposition.SomeElement<A>(A container, var ofTheElement, var _) -> {
                 each.accept(container);
                 slots(ofTheElement, each);
@@ -137,6 +134,25 @@ final class Collect {
             case LawProposition.Same<A>(LawSubject<A> one, LawSubject<A> other, var _) -> {
                 slots(one, each);
                 slots(other, each);
+            }
+        }
+    }
+
+    private static <A> void slots(LawNumber<A> number, Consumer<A> each) {
+        switch (number) {
+            case LawNumber.AnArgument<A>(A at) -> each.accept(at);
+            case LawNumber.SizeOf<A>(LawSubject<A> of) -> slots(of, each);
+            case LawNumber.HowManyMeet<A>(A container, var ofTheElement) -> {
+                each.accept(container);
+                slots(ofTheElement, each);
+            }
+            case LawNumber.HowManyDifferent<A>(A container, var ofTheElement) -> {
+                each.accept(container);
+                slots(ofTheElement, each);
+            }
+            case LawNumber.SumOver<A>(A container, var ofTheElement) -> {
+                each.accept(container);
+                slots(ofTheElement, each);
             }
         }
     }
@@ -176,6 +192,14 @@ final class Collect {
             case LawNumber.AnArgument<Value>(Value value) -> visit(value, each);
             case LawNumber.SizeOf<Value>(LawSubject<Value> of) -> visit(of, each);
             case LawNumber.HowManyMeet<Value>(Value container, var ofTheElement) -> {
+                visit(container, each);
+                visit(ofTheElement, each);
+            }
+            case LawNumber.HowManyDifferent<Value>(Value container, var ofTheElement) -> {
+                visit(container, each);
+                visit(ofTheElement, each);
+            }
+            case LawNumber.SumOver<Value>(Value container, var ofTheElement) -> {
                 visit(container, each);
                 visit(ofTheElement, each);
             }

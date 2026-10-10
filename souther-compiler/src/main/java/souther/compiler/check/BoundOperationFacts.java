@@ -1,6 +1,8 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.proof.Proof;
 import souther.compiler.proof.Slot;
 import souther.compiler.proof.Unproved;
@@ -549,19 +551,41 @@ public final class BoundOperationFacts {
      * handed come to one answer of a closure it is handed: which argument is the container and
      * which the closure — or null where it states no such thing.
      *
-     * <p>Read off what its body is proved to come to: a closing of its truth as no two elements
-     * alike, which its proof shows is about its container and its closure, so the operation reads
-     * that container and is stated over that closure.
+     * <p>Read off the law its body is proved to come to: as many different answers of that closure
+     * on the container's elements as the container holds elements.
      */
     public NoTwoAlike statesNoTwoAlike(ValueName operation) {
-        if (!(settled(operation, OperationLaw.Observed.TRUTH)
-                instanceof Settled.Unsaid(Unsayable why))
-                || why != Unsayable.NO_TWO_ELEMENTS_ALIKE) {
+        if (!(settled(operation, OperationLaw.Observed.TRUTH) instanceof Settled.ByALaw(
+                OperationLaw.Observation<DeclaredArgument>(var _,
+                        LawProposition.Compared<DeclaredArgument>(var form, Rel states)), var _))
+                || states != Rel.EQ || !form.constant().isZero() || form.coefs().size() != 2) {
             return null;
         }
-        DeclaredArgument by = isStatedOverAProjection(operation);
-        BoundOperationFact.ReadsItsContainer reads = readsItsContainer(operation);
-        return by == null || reads == null ? null : new NoTwoAlike(reads.container(), by);
+        DeclaredArgument container = null;
+        DeclaredArgument by = null;
+        DeclaredArgument sized = null;
+        ExactRatio different = null;
+        ExactRatio size = null;
+        for (var term : form.coefs().entrySet()) {
+            switch (term.getKey()) {
+                case LawNumber.HowManyDifferent<DeclaredArgument>(var over,
+                        LawSubject.WhatTheClosureAnswers<DeclaredArgument>(var closure)) -> {
+                    container = over;
+                    by = closure;
+                    different = term.getValue();
+                }
+                case LawNumber.SizeOf<DeclaredArgument>(
+                        LawSubject.Argument<DeclaredArgument>(var of)) -> {
+                    sized = of;
+                    size = term.getValue();
+                }
+                default -> {
+                    return null;
+                }
+            }
+        }
+        return container == null || !container.equals(sized)
+                || !different.negated().equals(size) ? null : new NoTwoAlike(container, by);
     }
 
     /** The container no two elements of which are alike, and the closure whose answers they are
