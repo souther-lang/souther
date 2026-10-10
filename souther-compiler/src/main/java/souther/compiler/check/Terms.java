@@ -789,7 +789,7 @@ final class Terms {
         record Form<A>(LinearForm<A> form) implements Operated<A> {}
 
         /** Arithmetic no form over the atoms says: a product of two unknowns, a quotient by one. */
-        record NotLinear<A>() implements Operated<A> {}
+        record NotLinear<A>(NonAffineOperation operation) implements Operated<A> {}
 
         /** A quotient by nought, which no run has a number for. */
         record NoNumberOnARun<A>() implements Operated<A> {}
@@ -817,7 +817,7 @@ final class Terms {
             return Operated.of(b.times(a.constant()));
         }
         return b.coefs().isEmpty() ? Operated.of(a.times(b.constant()))
-                : new Operated.NotLinear<>();
+                : new Operated.NotLinear<>(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES);
     }
 
     /**
@@ -842,7 +842,7 @@ final class Terms {
      */
     static <A> Operated<A> quotient(LinearForm<A> a, LinearForm<A> b) {
         if (!b.coefs().isEmpty()) {
-            return new Operated.NotLinear<>();
+            return new Operated.NotLinear<>(NonAffineOperation.DIVISION_BY_NON_CONSTANT_VALUE);
         }
         if (b.constant().isZero()) {
             return new Operated.NoNumberOnARun<>();

@@ -2,6 +2,7 @@ package souther.compiler.meaning;
 
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClausesInOrder;
+import souther.compiler.check.NonAffineOperation;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.OperationLaw;
@@ -65,8 +66,10 @@ public sealed interface WhyUnread {
     /**
      * A comparison over arithmetic no form over the quantities a condition is read over says: a
      * product of two of them, a quotient by one.
+     *
+     * @param operation which of those it was, as the arithmetic that met it decided
      */
-    record OutsideTheLinearFragment() implements WhyUnread {}
+    record OutsideTheLinearFragment(NonAffineOperation operation) implements WhyUnread {}
 
     /**
      * A comparison whose form over those quantities was worked out exactly, with a number in it that

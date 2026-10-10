@@ -17,6 +17,7 @@ import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Location;
+import souther.compiler.check.NonAffineOperation;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RemainderOfAShiftedValue;
 import souther.compiler.check.StatedComparison;
@@ -2300,7 +2301,8 @@ final class Pullback {
                             : size == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
                             : new Sized.AsAForm(LinearForm.atom(new DecisionAtom.OfTheInput(size)));
                 }
-                return new Sized.NotSized(new WhyUnread.OutsideTheLinearFragment());
+                return new Sized.NotSized(new WhyUnread.OutsideTheLinearFragment(
+                        NonAffineOperation.NO_NUMBER_OF_ARITHMETIC));
             }
             Quantity.HowManyMeet count = new Quantity.HowManyMeet(held, element);
             counting.putIfAbsent(count, new Derivation.AComparisonRead.Counted(held, answered));
@@ -3660,8 +3662,8 @@ final class Pullback {
         return switch (stopped.why()) {
             case AffineForms.Halt.NoRule<Quantity, InputReads> _ ->
                     noRuleFor(stopped.node(), stopped.at());
-            case AffineForms.Halt.NotLinear<Quantity, InputReads> _ ->
-                    new WhyUnread.OutsideTheLinearFragment();
+            case AffineForms.Halt.NotLinear<Quantity, InputReads>(NonAffineOperation operation) ->
+                    new WhyUnread.OutsideTheLinearFragment(operation);
             case AffineForms.Halt.NoNumberOnARun<Quantity, InputReads> _ ->
                     new WhyUnread.NoNumberOnARun();
             case AffineForms.Halt.NotHeld<Quantity, InputReads>(UnheldNumber why) ->
@@ -3730,7 +3732,8 @@ final class Pullback {
         switch (e) {
             // An operator that is no arithmetic: what it answers is no number of anything.
             case Core.Binary _ -> {
-                return new WhyUnread.OutsideTheLinearFragment();
+                return new WhyUnread.OutsideTheLinearFragment(
+                        NonAffineOperation.NO_NUMBER_OF_ARITHMETIC);
             }
             // A choice between values, where what is chosen is one of the arms. A number is read
             // through a choice once for each arm ({@link #throughWhatItStopsAt}), so one met here

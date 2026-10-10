@@ -168,8 +168,8 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
         out.put(UndividedPosition.Reason.UNSUPPORTED_SYNTAX, of("""
                 module m
                 %s
-                behavior f : (n: Int) -> Answer
-                let f (n) = if n * n > 4 then Yes else No
+                behavior f : (x: Decimal) -> Answer
+                let f (x) = if x < Decimal.round(1, HALF_UP, 3.5m) then Yes else No
                 """.formatted(ANSWER)));
         // A rule whose end at a position rests on an alternative this compiler does not read. The
         // clause at the position was read and places its end; what the choice leaves is as far out
@@ -350,6 +350,20 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior run : (x: Cyclic) -> Ok
                 let run (x) = Ok
                 """));
+        // A comparison over a product of two input fields, and over a quotient by one: the
+        // arithmetic met a shape it has no term for, and nothing was made of either position.
+        out.put(UndividedPosition.Reason.NON_AFFINE_PRODUCT, of("""
+                module m
+                %s
+                behavior f : (a: Int, b: Int) -> Answer
+                let f (a, b) = if a * b > 10 then Yes else No
+                """.formatted(ANSWER)));
+        out.put(UndividedPosition.Reason.NON_CONSTANT_DIVISOR, of("""
+                module m
+                %s
+                behavior f : (a: Int, b: Int) -> Answer
+                let f (a, b) = if a / b > 10 then Yes else No
+                """.formatted(ANSWER)));
         // A rule about a value an operation made of the positions. Where the value came from is
         // known; what the rule says about the values at either position is not, because a remainder
         // by a divisor no constant gives is no period the positions can be told apart by.

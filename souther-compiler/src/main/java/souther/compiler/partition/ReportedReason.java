@@ -196,6 +196,13 @@ public final class ReportedReason {
                         UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE;
                 case NO_RELATION_OF_NUMBERS -> UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
             };
+            case BlockReason.NonAffineArithmetic(var operation) -> switch (operation) {
+                case PRODUCT_OF_NON_CONSTANT_VALUES -> UndividedPosition.Reason.NON_AFFINE_PRODUCT;
+                case DIVISION_BY_NON_CONSTANT_VALUE ->
+                        UndividedPosition.Reason.NON_CONSTANT_DIVISOR;
+                // Not arithmetic a report can name, which no stop of the reading is held as.
+                case NO_NUMBER_OF_ARITHMETIC -> UndividedPosition.Reason.RULE_MEANING_NOT_READ;
+            };
             case BlockReason.RuleAboutAnElementOfSeveralContainers _ ->
                     UndividedPosition.Reason.RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS;
             case BlockReason.TypeUnresolved _ -> UndividedPosition.Reason.TYPE_UNRESOLVED;

@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.NonAffineOperation;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.RunSensitivity;
 import net.unit8.notation199x.pattern.Meter;
@@ -236,6 +237,7 @@ public sealed interface BlockReason {
                 case CasePairingNotDetermined _ -> 3;
                 case RuleAboutADerivedValue _ -> 4;
                 case UnreadValueRule _ -> 5;
+                case NonAffineArithmetic _ -> 6;
                 case PatternTooCostly _ -> 7;
                 case OrderedExtentTooCostly _ -> 8;
                 case RuleAboutAnElementOfSeveralContainers _ -> 9;
@@ -287,6 +289,7 @@ public sealed interface BlockReason {
                 case PatternTooCostly _, OrderedExtentTooCostly _,
                      UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                      RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
+                     NonAffineArithmetic _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
                      ValueRuleRelatingTwoPositions _, CasePairingNotDetermined _,
@@ -319,6 +322,7 @@ public sealed interface BlockReason {
                 // it stopped at.
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                      RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
+                     NonAffineArithmetic _,
                      ValueRuleRelatingTwoPositions _, EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
@@ -627,6 +631,24 @@ public sealed interface BlockReason {
      * a model whose predicate this cannot follow is one that states no rule.
      */
     record RuleAboutADerivedValue() implements RuleReadingStopped {}
+
+    /**
+     * A rule's comparison is over arithmetic no form over the input's numbers says: a product of
+     * two values neither of which is a constant, or a quotient by one.
+     *
+     * <p>Its own case beside {@link RuleAboutADerivedValue}. Nothing was made of a position and no
+     * operation is left to follow back; the arithmetic met a shape it has no term for, and which
+     * shape it was is what an author can act on. The arithmetic says it where it composes the
+     * operation, and this carries it as it was said.
+     *
+     * @param operation which arithmetic it was
+     */
+    record NonAffineArithmetic(NonAffineOperation operation) implements RuleReadingStopped {
+
+        public NonAffineArithmetic {
+            Objects.requireNonNull(operation, "arithmetic that is not affine says which");
+        }
+    }
 
     /**
      * A rule is written about an element of a container, in a block handed to more than one walk.

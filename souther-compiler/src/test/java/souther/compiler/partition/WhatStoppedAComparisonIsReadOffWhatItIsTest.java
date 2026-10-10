@@ -45,7 +45,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
      */
     @Test
     void arithmeticOutsideTheFragmentIsAFormNobodyReads() {
-        assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
+        assertEquals(List.of(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
                 whyAt(guard("a: Int", "Int.multiply(a, a) > 10"), "a"));
     }
 
@@ -117,7 +117,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
         PartitionEvidence measured = guard("s: String",
                 "String.length(s) > Int.multiply(String.length(s), String.length(s))");
 
-        assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
+        assertEquals(List.of(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
                 whyAt(measured, "String.length(s)"));
         assertEquals(List.of(), whyAt(measured, "s"),
                 "the string's own values are not what the rule is about");
@@ -191,7 +191,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
                 """;
 
         assertEquals(List.of(), whyAt(measured(model), "a"));
-        assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
+        assertEquals(List.of(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
                 whyAt(measured(model), "b"));
     }
 

@@ -2773,6 +2773,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             + " reaches its line here the rest of it already decides the outcome";
             case RULE_MEANING_NOT_READ ->
                     "a part of what it states was not read";
+            case NON_AFFINE_PRODUCT ->
+                    "it compares a product of two values that are not constants, which no line on"
+                            + " the values here says";
+            case NON_CONSTANT_DIVISOR ->
+                    "it compares a quotient by a value that is not a constant, which no line on the"
+                            + " values here says";
             // And the four a position reaches, written about the position, because that is all
             // there is: nothing observed a rule to name. Which reasons reach which of the two is
             // settled by the authority a reason belongs to, so no reason is written both ways.

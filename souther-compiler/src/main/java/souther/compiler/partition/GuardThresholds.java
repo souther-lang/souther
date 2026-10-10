@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.carrier.Membership;
+import souther.compiler.check.AffineForms;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Choice;
@@ -561,9 +562,16 @@ public final class GuardThresholds {
                 at -> met.containsKey(at) && orderable(met.get(at), read.rules().declarations());
         java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out =
                 new java.util.LinkedHashMap<>();
+        // Where the arithmetic said what it met, that is the reason at every place the comparison
+        // is filed at; what the places add is where it is filed and nothing about why it stopped.
+        BlockReason.RuleReadingStopped said = switch (stopped.failure().why()) {
+            case AffineForms.Halt.NotLinear<NumericTerm, InputReads>(var operation)
+                    when operation.isArithmetic() -> new BlockReason.NonAffineArithmetic(operation);
+            default -> null;
+        };
         for (FilingCoordinate at : filedAt(comparison, read, reads, answering)) {
-            out.putIfAbsent(at,
-                    UnreadComparison.whereItStopped(ruleAt(at, left, right), notRead, ordered));
+            out.putIfAbsent(at, said != null ? said
+                    : UnreadComparison.whereItStopped(ruleAt(at, left, right), notRead, ordered));
         }
         return out;
     }

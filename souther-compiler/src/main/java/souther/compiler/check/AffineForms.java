@@ -305,7 +305,7 @@ public final class AffineForms {
 
         /** A product of two values neither of which is a constant, or a quotient by one that is
          *  not: arithmetic, and none a form over the atoms says. */
-        record NotLinear<A, E>() implements Halt<A, E> {}
+        record NotLinear<A, E>(NonAffineOperation operation) implements Halt<A, E> {}
 
         /** A quotient by nought or the least whole number negated, which no run has a number
          *  for: the run aborts there. */
@@ -803,7 +803,8 @@ public final class AffineForms {
         }
         return switch (rule.apply(left, right)) {
             case Terms.Operated.Form<A>(LinearForm<A> form) -> form;
-            case Terms.Operated.NotLinear<A> _ -> halted(e, at, new Halt.NotLinear<>(), stopped);
+            case Terms.Operated.NotLinear<A>(NonAffineOperation operation) ->
+                    halted(e, at, new Halt.NotLinear<>(operation), stopped);
             case Terms.Operated.NoNumberOnARun<A> _ ->
                     halted(e, at, new Halt.NoNumberOnARun<>(), stopped);
             case Terms.Operated.NotHeld<A>(UnheldNumber why) ->

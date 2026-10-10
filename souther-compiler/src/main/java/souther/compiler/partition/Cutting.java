@@ -462,6 +462,21 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (against != null) {
             return new Read.AgainstAnotherValue(against);
         }
+        // A part the arithmetic met a shape it has no term for in is a stop whose reason was
+        // decided where it was met. Which positions it is filed at is still asked of the
+        // comparison, and the reason is not asked again of where the values came from.
+        BlockReason.RuleReadingStopped decided = decidedByTheArithmetic(stated);
+        if (decided != null) {
+            List<FilingCoordinate> at = GuardThresholds.filedAt(comparison, read, reads, answering);
+            if (!at.isEmpty()) {
+                return new Read.Stopped(ComparisonAssessment.atEachOf(at, decided));
+            }
+            SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> from =
+                    new LinkedHashMap<>();
+            GuardThresholds.cameFrom(comparison, reads, read.newtypes(), from);
+            from.replaceAll((place, was) -> decided);
+            return new Read.Stopped(from);
+        }
         BlockReason.WhatItStatesIsNoLine said = whatItStates(stated);
         // A number no position holds is all the statement says of what it relates. Which number
         // that is — one the body worked out, what a dependency answered, what an operation did —
@@ -523,6 +538,24 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
         }
         return input.isEmpty() || !another ? null : AffineReading.filedAt(input);
+    }
+
+    /**
+     * What the arithmetic said of a part of {@code stated} it stopped at, where it named arithmetic
+     * no form says — or null where no part stopped for that.
+     *
+     * <p>The first such part in the order the statement lists them. Which of several is the
+     * statement's reason is no question a place can answer, and the parts say the same thing about
+     * the same operation wherever the closure that holds them is reached from.
+     */
+    private static BlockReason.RuleReadingStopped decidedByTheArithmetic(Proposition stated) {
+        for (WhyUnread each : Proposition.stopsIn(stated)) {
+            if (each instanceof WhyUnread.OutsideTheLinearFragment(var operation)
+                    && operation.isArithmetic()) {
+                return new BlockReason.NonAffineArithmetic(operation);
+            }
+        }
+        return null;
     }
 
     /**
