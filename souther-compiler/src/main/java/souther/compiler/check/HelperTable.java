@@ -165,7 +165,7 @@ public final class HelperTable {
         }
         SequencedMap<ReachName.Declaration, HelperEntry> reached = new LinkedHashMap<>();
         Set<ValueName.Stdlib.Operation> readThrough =
-                policy == InliningPolicy.FULL ? null : LibraryReadThrough.shipped();
+                policy == InliningPolicy.FULL ? null : LibraryReadThrough.of(stdlib);
         stdlib.helpers().forEach((operation, body) -> {
             if (readThrough == null || readThrough.contains(operation)) {
                 HelperEntry entry =

@@ -3,12 +3,14 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ValueName;
 
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -34,6 +36,16 @@ class WhichLibraryHelpersTheAnalysisReadsThroughTest {
     void theShippedTableIsWhatTheLibraryAndItsFactsComeTo() {
         assertEquals(LibraryReadThrough.shipped(), LibraryReadThrough.of(DefaultStdlib.get(),
                 DefaultBoundOperationFacts.get()));
+    }
+
+    /** A library other than the shipped one is read against facts bound to it, and a copy of the
+     *  shipped sources comes to what the shipped library does. */
+    @Test
+    void anotherLibraryIsReadAgainstItsOwnFacts() {
+        Stdlib another = StdlibLoader.load();
+
+        assertNotSame(DefaultStdlib.get(), another);
+        assertEquals(LibraryReadThrough.shipped(), LibraryReadThrough.of(another));
     }
 
     /** What a fact is stated of is held as a call, whatever its body is. */

@@ -108,8 +108,9 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
             for (int away : new int[] {-400, -1, 0, 1, 400}) {
                 try {
                     LocalDate date = line.plusDays(away);
-                    date.plusDays(shift);
-                    dates.add(date);
+                    // Shifted and shifted back: the date itself, where the shift leaves the
+                    // calendar's range is refused as the program refuses it.
+                    dates.add(date.plusDays(shift).minusDays(shift));
                 } catch (java.time.DateTimeException beyondTheRange) {
                     // No such date, so no such row.
                 }

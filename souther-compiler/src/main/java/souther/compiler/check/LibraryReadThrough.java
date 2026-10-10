@@ -24,6 +24,11 @@ import java.util.Set;
  * container holds, is not read through however little is stated of it; reading one through would
  * put a walk into every tree that mentions it.
  *
+ * <p>Read through is read as one value whose arms are all evaluated: a fork the model does not state
+ * arrives as the value it computes ({@code flow.ValueArrivals}), and not as ways of the body. An
+ * operation whose arm can fail or never answer would be read as failing or never answering whichever
+ * arm is taken, so one is added to the library only with that in mind.
+ *
  * <p>A pure function of a library and the facts held to it, and the shipped pair is held once. That
  * is the pattern {@link Combinators} follows: what depends on which compilation is running takes a
  * library as a value, and a table that is the same for every compilation is derived from the
@@ -43,6 +48,18 @@ final class LibraryReadThrough {
             }
         });
         return Collections.unmodifiableSet(out);
+    }
+
+    /**
+     * The operations of {@code stdlib} read through.
+     *
+     * <p>The shipped library's are held once, since every compilation is held to it. Any other
+     * library is read against facts bound to it, so what is stated of an operation is what that
+     * library's own declarations say and not what the shipped one's do.
+     */
+    static Set<ValueName.Stdlib.Operation> of(Stdlib stdlib) {
+        return stdlib == DefaultStdlib.get() ? shipped()
+                : of(stdlib, OperationFactBinder.bindAll(stdlib));
     }
 
     /** The operations of the shipped library read through, which is the same for every compilation. */
