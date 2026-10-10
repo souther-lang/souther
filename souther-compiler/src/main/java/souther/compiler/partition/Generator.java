@@ -725,7 +725,12 @@ public final class Generator {
                              // came to is about the numbers it tried and about nothing else. The
                              // word says that, where the word for a set walked to its end says the
                              // set has no value in it.
-                             NUMBERS_OF_A_SET_TRIED -> THE_SEARCH_LEFT_SOMETHING_UNTRIED;
+                             NUMBERS_OF_A_SET_TRIED,
+                             // The counts a string is written for past this one, and the lengths
+                             // past the ones looked at, were never asked for either.
+                             CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
+                             CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR ->
+                                    THE_SEARCH_LEFT_SOMETHING_UNTRIED;
                         // Reaching these stops no composing, so no search comes back from one of
                         // them and there is no word to give. Asked for one all the same, this says
                         // so rather than lending a word from a budget that does stop something.
@@ -10001,8 +10006,9 @@ public final class Generator {
                                 ? one.value() : null;
                 // What an operation answered is not what its root holds — three characters is not
                 // the position standing at three, and a hundred is not what the list adding up to
-                // it holds.
-                case NumericTerm.TakenOf _, NumericTerm.TakenOver _ -> null;
+                // it holds. Nor is how many of a string's code points are in a class.
+                case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
+                     NumericTerm.TakenOver _ -> null;
             };
             // Nor is how many of its elements meet a statement.
             case RealizationTarget.ACount _ -> null;

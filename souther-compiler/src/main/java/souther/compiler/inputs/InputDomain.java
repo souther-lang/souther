@@ -1759,6 +1759,9 @@ public final class InputDomain {
             case NumberAt.OfWhatNumber.OfItsOwnValue _ -> new NumericTerm.ValueOf(path);
             case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers _ ->
                     NumericTerm.TakenOf.of(taken, path, type, source.inners(), source.symbols());
+            case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count ->
+                    NumericTerm.CodePointClassCount.of(path, count.counted(), type,
+                            source.inners());
         };
         if (term == null) {
             throw new IllegalStateException(
@@ -1778,7 +1781,8 @@ public final class InputDomain {
         // whichever answer it was not named in.
         NarrowedBounds projected = switch (term) {
             case NumericTerm.ValueOf _ -> placed.at(path);
-            case NumericTerm.TakenOf _ -> NarrowedBounds.NOTHING;
+            case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _ ->
+                    NarrowedBounds.NOTHING;
         };
         return new PositionBounds(term,
                 // Two questions of one pair of readings, and they do not have one answer. What the
@@ -1805,7 +1809,8 @@ public final class InputDomain {
     private static Carrier carrierOn(NumberAt.OfWhatNumber kind, Carrier carried) {
         return switch (kind) {
             case NumberAt.OfWhatNumber.OfItsOwnValue _ -> carried;
-            case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers _ -> Carrier.WHOLE;
+            case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers _,
+                 NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _ -> Carrier.WHOLE;
         };
     }
 
@@ -1881,6 +1886,15 @@ public final class InputDomain {
             case NumberAt.OfWhatNumber.OfItsOwnValue _ -> new NumericTerm.ValueOf(path);
             case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers answered ->
                     takenBy(answered.operation(), path, type, source);
+            case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count -> {
+                NumericTerm.CodePointClassCount counted = NumericTerm.CodePointClassCount.of(path,
+                        count.counted(), type, source.inners());
+                if (counted == null) {
+                    throw new IllegalStateException("a count of the code points of `" + path
+                            + "` was asked for, and what stands there is no string");
+                }
+                yield counted;
+            }
         };
     }
 

@@ -161,6 +161,7 @@ import souther.compiler.query.PartitionEvidence;
 import souther.compiler.query.RowDisposition;
 import souther.compiler.query.RowObligation;
 import souther.compiler.query.RowSummary;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.text.DisplayColumns;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.WrittenOwner;
@@ -4916,6 +4917,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     argument.put("at", at);
                     argument.put("value", ExactRatio.of(read).spelled());
                 });
+            }
+            // The code points counted, by the class and, where the class leaves one out, which.
+            case NumericTerm.CodePointClassCount it -> {
+                into.put("kind", "code_points");
+                into.put("position", it.position().discriminated());
+                switch (it.counted()) {
+                    case CodePointClass.NotWhitespace _ -> into.put("class", "not_whitespace");
+                    case CodePointClass.NotWhitespaceNorEqualTo apart -> {
+                        into.put("class", "not_whitespace_nor_equal_to");
+                        into.put("separator", apart.separator());
+                    }
+                }
             }
             case NumericTerm.TakenOver it -> {
                 into.put("kind", "taken_over");

@@ -124,6 +124,9 @@ public final class WhatAStatementSurvives {
                                 otherwise = true;
                             } else if (number instanceof LawNumber.SizeOf<Integer>(var of)) {
                                 subject(of, true);
+                            } else if (number instanceof LawNumber.CodePointsOf<Integer>(
+                                    var of, var _)) {
+                                subject(of, true);
                             } else if (number instanceof LawNumber.HowManyMeet<Integer>(
                                     var _, var ofTheElement)) {
                                 withinAnElement(ofTheElement);
@@ -151,6 +154,10 @@ public final class WhatAStatementSurvives {
                         subject(of, false);
                     }
                 }
+                // The code points of a string a construction put together are not those of what it
+                // was put together from, so a statement about them is no statement this carries.
+                case LawNumber.CodePointsOf<Integer>(LawSubject<Integer> of, var _) ->
+                        subject(of, false);
                 case LawNumber.HowManyMeet<Integer>(Integer over, var ofTheElement) -> {
                     if (over == container) {
                         byNumber = true;

@@ -82,7 +82,7 @@ class EveryRuleThatReadsAComparisonInFullStatesOneThingTest {
      */
     @Test
     void whatARuleSetAsideMetIsNoPartOfWhatIsStated() {
-        String condition = "String.length(String.trim(b.s)) > 0";
+        String condition = "String.length(String.replace(\"a\", \"b\", b.s)) > 0";
         Reading reading = reading(condition);
         List<Proposition> byEach = Pullback.byEachRule(reading.comparison(), reading.reads(),
                 reading.read());
@@ -94,8 +94,8 @@ class EveryRuleThatReadsAComparisonInFullStatesOneThingTest {
                 "where no rule reads it all, the first that takes it is kept");
         Proposition.Unread unread = assertInstanceOf(Proposition.Unread.class,
                 pulled.proposition());
-        assertEquals(new WhyUnread.NoWordsFor(new ValueName.Stdlib.Operation("String", "trim"),
-                OperationLaw.Observed.EMPTINESS, Unsayable.EVERY_CHARACTER_IS_WHITESPACE),
+        assertEquals(new WhyUnread.NoWordsFor(new ValueName.Stdlib.Operation("String", "replace"),
+                OperationLaw.Observed.EMPTINESS, Unsayable.MADE_UP_OF_COPIES_OF_A_TEXT),
                 unread.why());
         assertEquals(List.of(unread), pulled.leaves().stream().map(Pullback.Leaf::part).toList(),
                 "the one part met is the kept rule's");

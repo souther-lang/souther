@@ -11,6 +11,7 @@ import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.DefinitionCase;
+import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
@@ -340,6 +341,29 @@ public final class BoundOperationFacts {
         BoundOperationFact.ElementsComeFrom held =
                 one(BoundOperationFact.ElementsComeFrom.class, operation);
         return held == null ? null : held.lineage().source().argument();
+    }
+
+    /**
+     * Which arguments of {@code operation} the pieces it answers are of — the separator and the
+     * string — or null where it answers no pieces of a string.
+     */
+    public Pieces piecesOf(ValueName operation) {
+        BoundOperationFact.HoldsThePiecesOf held =
+                one(BoundOperationFact.HoldsThePiecesOf.class, operation);
+        return held == null ? null : new Pieces(held.separator(), held.string());
+    }
+
+    /** The separator and the string an operation answers the pieces of. */
+    public record Pieces(DeclaredArgument separator, DeclaredArgument string) {}
+
+    /**
+     * What the answer of {@code operation} holds an image of every element of, or null where it
+     * says no such thing: the image is the element itself or what the closure answered on it.
+     */
+    public ElementLineage<DeclaredArgument> holdsTheImageOfEveryElement(ValueName operation) {
+        BoundOperationFact.HoldsTheImageOfEveryElement held =
+                one(BoundOperationFact.HoldsTheImageOfEveryElement.class, operation);
+        return held == null ? null : held.image();
     }
 
     /** Which part of which map {@code operation} answers a list of, or null where it lists no

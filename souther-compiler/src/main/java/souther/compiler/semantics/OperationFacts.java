@@ -275,6 +275,17 @@ public final class OperationFacts {
                     new ElementLineage.InsideClosureResult<>(
                             new ElementLineage.Source<>(CONTAINER, 1)))),
             about("Set", "map", maps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
+            // And what holds each value of what it was handed, though not each as often. A set made
+            // of a list, or of what a closure made of a set's elements, holds one of every value
+            // there was, and a list of a set's elements holds each of them.
+            about("Set", "map", holdsAnImageOfEvery(new ElementLineage.ClosureResult<>(
+                    new ElementLineage.Source<>(CONTAINER, 1)))),
+            about("Set", "fromList", holdsAnImageOfEvery(new ElementLineage.SameAs<>(
+                    new ElementLineage.Source<>(at(0), 1)))),
+            about("Set", "toList", holdsAnImageOfEvery(new ElementLineage.SameAs<>(
+                    new ElementLineage.Source<>(at(0), 1)))),
+            // And what a split answers: the string, parted where the separator stands in it.
+            about("String", "split", new OperationFact.HoldsThePiecesOf(at(0), at(1))),
 
             // Which keys a map an operation answers is keyed by, where they are keys of a map it
             // was given. A rewrite of the values keeps every key, and taking entries out keeps the
@@ -720,10 +731,15 @@ public final class OperationFacts {
                     some(at(1), alike(new LawSubject.KeyOf<>(at(1)), the(at(0)))))),
 
             // And what the domain has no words for.
-            about("String", "trim", unsaid(AnswerAspect.EMPTINESS,
-                    Unsayable.EVERY_CHARACTER_IS_WHITESPACE)),
-            about("String", "words", unsaid(AnswerAspect.EMPTINESS,
-                    Unsayable.EVERY_CHARACTER_IS_WHITESPACE)),
+            // What trimming leaves, and what splitting on whitespace answers, holds something
+            // exactly where the string holds a code point that is not whitespace: the alphabet both
+            // scan with is one (spec §string-whitespace), so the count of what is outside it is a
+            // number of the argument. How much trimming takes off the ends is the length's, and
+            // stays unsaid there.
+            about("String", "trim", law(AnswerAspect.EMPTINESS,
+                    atLeast(codePointsOf(at(0), new CodePointClass.NotWhitespace()), 1, -1))),
+            about("String", "words", law(AnswerAspect.EMPTINESS,
+                    atLeast(codePointsOf(at(0), new CodePointClass.NotWhitespace()), 1, -1))),
             about("String", "replace", unsaid(AnswerAspect.EMPTINESS,
                     Unsayable.MADE_UP_OF_COPIES_OF_A_TEXT)),
 
@@ -1222,6 +1238,12 @@ public final class OperationFacts {
         return new LawNumber.SizeOf<>(new LawSubject.Argument<>(argument));
     }
 
+    /** How many code points of the string {@code argument} are in {@code counted}. */
+    private static LawNumber<ArgumentRef> codePointsOf(ArgumentRef argument,
+                                                       CodePointClass counted) {
+        return new LawNumber.CodePointsOf<>(new LawSubject.Argument<>(argument), counted);
+    }
+
     private static LawNumber<ArgumentRef> howManyMeet(ArgumentRef container,
                                                       LawProposition<ArgumentRef> ofTheElement) {
         return new LawNumber.HowManyMeet<>(container, ofTheElement);
@@ -1250,6 +1272,11 @@ public final class OperationFacts {
                                                        long constant) {
         return new LawProposition.Compared<>(new LinearForm<>(ExactRatio.of(constant),
                 Map.of(a, ExactRatio.of(byA), b, ExactRatio.of(byB))), Rel.GE);
+    }
+
+    /** The answer holds the image {@code image} says of every element of its source. */
+    private static OperationFact holdsAnImageOfEvery(ElementLineage<ArgumentRef> image) {
+        return new OperationFact.HoldsTheImageOfEveryElement(image);
     }
 
     /** The answer holds the very elements {@code source} held. */

@@ -65,6 +65,8 @@ final class TheAnswer {
             return switch (number) {
                 case LawNumber.AnArgument<Slot> argument -> argument;
                 case LawNumber.SizeOf<Slot>(var of) -> new LawNumber.SizeOf<>(subject(of));
+                case LawNumber.CodePointsOf<Slot>(var of, var counted) ->
+                        new LawNumber.CodePointsOf<>(subject(of), counted);
                 case LawNumber.HowManyMeet<Slot>(Slot container, var ofTheElement) ->
                         new LawNumber.HowManyMeet<>(container, proposition(ofTheElement));
                 case LawNumber.HowManyDifferent<Slot>(Slot container, var ofTheElement) ->

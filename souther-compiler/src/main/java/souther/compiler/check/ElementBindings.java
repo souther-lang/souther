@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.ElementLineage;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.HeldIn;
@@ -463,6 +464,44 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         return handed != null && answersOnePerElementOf(operation, handed.container(), call.args())
                 ? new StepOnEachElement(handed.step(), handed.element(), handed.container())
                 : null;
+    }
+
+    /**
+     * The step whose answer on every element of what the application hands it is one of the
+     * elements {@code container} holds, or null where it holds no such run.
+     *
+     * <p>Beside {@link #stepAnsweredOnEachElement} and licensing less of the answer and more of the
+     * operations: an element of the container is the step's answer on some element, and every such
+     * answer is an element of it, so a statement about some element of the container is a statement
+     * about the step's answer on some element of what it walks. How many elements the container
+     * holds, and which element answered which, is not said — a set holds a value once however many
+     * elements answered it.
+     */
+    public static StepOnEachElement stepHoldingTheAnswerOnEachElement(
+            Core container, Function<Core, Core.Block> blockOf) {
+        if (!(Core.withoutStanding(container) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        ValueName operation = call.declared().operation();
+        Combinators.Handed handed = Combinators.handedTo(operation, call.args(), blockOf);
+        return handed != null
+                && holdsTheAnswerOnEachElementOf(operation, handed.container(), call.args())
+                ? new StepOnEachElement(handed.step(), handed.element(), handed.container())
+                : null;
+    }
+
+    /** Whether the answer of {@code operation} holds what its closure answered on every element of
+     *  the argument {@code container} is, and nothing else. */
+    private static boolean holdsTheAnswerOnEachElementOf(ValueName operation, Core container,
+                                                         List<Core> args) {
+        ElementLineage<DeclaredArgument> image =
+                DefaultBoundOperationFacts.get().holdsTheImageOfEveryElement(operation);
+        if (!(image instanceof ElementLineage.ClosureResult<DeclaredArgument> made)
+                || made.source().elements() != 1) {
+            return false;
+        }
+        int at = CallArguments.positionOf(made.source().argument(), operation);
+        return at >= 0 && at < args.size() && args.get(at) == container;
     }
 
     /**

@@ -11,11 +11,6 @@ package souther.compiler.semantics;
  */
 public enum Unsayable {
 
-    /** That every character of a string is whitespace — what a trimmed string is empty for, and
-     *  what a string with no words is. A string is no container of characters a statement can be
-     *  made of each of. */
-    EVERY_CHARACTER_IS_WHITESPACE("every character of a string being whitespace"),
-
     /** That a string is made up of copies of another. What a replacement leaves is empty for that,
      *  and a string is no container of parts. */
     MADE_UP_OF_COPIES_OF_A_TEXT("a string being made up of copies of another"),

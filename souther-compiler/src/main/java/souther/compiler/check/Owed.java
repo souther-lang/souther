@@ -81,6 +81,8 @@ public sealed interface Owed {
                 case NumberAt.OfWhatNumber.OfItsOwnValue _ -> where;
                 case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
                         taken.operation() + taken.arguments().writtenWith(where);
+                case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count ->
+                        "#(" + count.counted() + ")(" + where + ")";
             };
         }
     }

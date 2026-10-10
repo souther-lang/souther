@@ -82,6 +82,9 @@ public sealed interface Proposition {
         return switch (quantity) {
             case DecisionAtom.OfTheInput(var term) -> isAnElementOf(term.subjectPath(), container);
             case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _ -> true;
+            // A piece of a string is whatever the statement it is read inside says it is, and
+            // that statement is about the string and no container's element.
+            case Quantity.CodePointsOfAPiece _ -> false;
             case Quantity.HowManyMeet(TermPath counted, Proposition each) ->
                     isAnElementOf(counted, container) || each.mayTurnOnAnElementOf(container);
             case Quantity.HowManyHold(List<Proposition> each) -> each.stream()
@@ -486,7 +489,8 @@ public sealed interface Proposition {
     private static boolean anAnswerIn(Quantity quantity) {
         return switch (quantity) {
             case DecisionAtom.OfAnAnswer _ -> true;
-            case DecisionAtom.OfTheInput _, Quantity.OfABinding _ -> false;
+            case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
+                 Quantity.CodePointsOfAPiece _ -> false;
             case Quantity.HowManyMeet count -> aboutAnAnswer(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream()
                     .anyMatch(Proposition::aboutAnAnswer);

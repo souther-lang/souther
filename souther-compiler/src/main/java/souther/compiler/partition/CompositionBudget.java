@@ -266,6 +266,33 @@ public enum CompositionBudget {
     NUMBERS_OF_A_SET_TRIED(8),
 
     /**
+     * The most code points of a class a string is asked to hold up to which every way of writing a
+     * string holding that many is tried.
+     *
+     * <p>A string is written by choosing how many code points of each kind it holds, and every
+     * number asked of it is a sum of those. Up to this figure every choice is looked at, so a group
+     * of counts none of them meets is a group no string answers and is said so. Past it the choices
+     * looked at are the ones the numbers asked for and the differences between them suggest, and
+     * what that finds nothing in is a string this compiler did not write.
+     *
+     * <p><b>This is what it says when a search past it found nothing.</b> Raise it and the whole of
+     * the choices is looked at for larger counts, which is what makes the word one an author can act
+     * on.
+     */
+    CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL(12),
+
+    /**
+     * How many code points past a count a string the type admits is looked for.
+     *
+     * <p>A string the rules admit of the position — one of a format, or of lengths the rules leave —
+     * is offered before one written plainly, and the number of code points it is looked for at is
+     * the count asked for and a few more, since a string holding that many of a class is as long
+     * and may be longer by the whitespace and separators beside them. A string longer than that is
+     * not looked for, and what was not found among those is what this stops.
+     */
+    CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR(2),
+
+    /**
      * How many runs one row's exchange for a row that gets further into the body may make.
      *
      * <p>Counted in runs: whether a row got further is what only the behavior says, so every row
@@ -340,6 +367,8 @@ public enum CompositionBudget {
                  PATHS_OF_A_DECISION_READ, READINGS_OF_ONE_CONDITION,
                  WAYS_A_WAY_IS_SPLIT_INTO,
                  DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,
+                 CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
+                 CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,
                  RUNS_REPAIRING_A_ROW -> null;
         };
     }

@@ -89,6 +89,8 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleCitation cit
             case NumericTerm.TakenOf taken ->
                     new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(taken.operation(),
                             taken.arguments());
+            case NumericTerm.CodePointClassCount count ->
+                    new NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn(count.counted());
             // The operation likewise, since what a rule about this number is about is what the
             // operation answered. That it answered it over a run rather than of one value is not a
             // difference a rule of the value the run is under can name: no clause of a record is

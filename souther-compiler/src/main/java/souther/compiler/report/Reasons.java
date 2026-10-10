@@ -184,6 +184,10 @@ final class Reasons {
                         "how many times one condition is read, once per value or case";
                 case NUMBERS_OF_A_SET_TRIED ->
                         "how many of the numbers a class admits are tried";
+                case CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL ->
+                        "how many code points of a class a string is searched for in full";
+                case CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR ->
+                        "how many code points past a count a string is looked for";
                 case RUNS_REPAIRING_A_ROW ->
                         "how many runs looking for a row that goes further may make";
             });

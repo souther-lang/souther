@@ -114,7 +114,7 @@ final class Collect {
             case LawNumber.HowManyMeet<A>(var _, var ofTheElement) -> numbers(ofTheElement, each);
             case LawNumber.SumOver<A>(var _, var ofTheElement) -> number(ofTheElement, each);
             case LawNumber.AnArgument<A> _, LawNumber.SizeOf<A> _,
-                 LawNumber.HowManyDifferent<A> _ -> { }
+                 LawNumber.CodePointsOf<A> _, LawNumber.HowManyDifferent<A> _ -> { }
         }
     }
 
@@ -142,6 +142,7 @@ final class Collect {
         switch (number) {
             case LawNumber.AnArgument<A>(A at) -> each.accept(at);
             case LawNumber.SizeOf<A>(LawSubject<A> of) -> slots(of, each);
+            case LawNumber.CodePointsOf<A>(LawSubject<A> of, var _) -> slots(of, each);
             case LawNumber.HowManyMeet<A>(A container, var ofTheElement) -> {
                 each.accept(container);
                 slots(ofTheElement, each);
@@ -191,6 +192,7 @@ final class Collect {
         switch (number) {
             case LawNumber.AnArgument<Value>(Value value) -> visit(value, each);
             case LawNumber.SizeOf<Value>(LawSubject<Value> of) -> visit(of, each);
+            case LawNumber.CodePointsOf<Value>(LawSubject<Value> of, var _) -> visit(of, each);
             case LawNumber.HowManyMeet<Value>(Value container, var ofTheElement) -> {
                 visit(container, each);
                 visit(ofTheElement, each);

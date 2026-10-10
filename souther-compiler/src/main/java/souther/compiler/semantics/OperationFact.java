@@ -232,6 +232,60 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation's answer holds the image of every element of the argument {@code image} names,
+     * and holds nothing else: an element of the answer is one of those images, and each of those
+     * is in the answer. The image is the element itself, or what the closure answered on it.
+     *
+     * <p>The answer as a set of values, whichever kind of container holds them and however many
+     * times. That a set made of a list holds each value once, and a set of what a closure made holds
+     * each answer once, are what {@link BuildsItsResultFrom} does not say: it says where an element
+     * came from, and an operation that kept some of what it was given has that too. What a reader
+     * asking whether some element of the answer meets a statement needs is the other half, that no
+     * element of the source was left out, and with it the statement about some element of the
+     * answer is the statement about some element of the source.
+     *
+     * <p>No count, as {@link ElementsComeFrom} has none. How many elements the answer holds is
+     * what a set that holds each value once is the number of different ones of, and no reader of
+     * this takes a count from it.
+     */
+    record HoldsTheImageOfEveryElement(ElementLineage<ArgumentRef> image) implements OperationFact {
+
+        public HoldsTheImageOfEveryElement {
+            Objects.requireNonNull(image, "this one says what the answer holds an image of");
+            if (!(image instanceof ElementLineage.SameAs<ArgumentRef>
+                    || image instanceof ElementLineage.ClosureResult<ArgumentRef>)
+                    || image.source().elements() != 1) {
+                throw new IllegalArgumentException(
+                        "the element itself or the closure's answer on it, of one element of an"
+                                + " argument, is what this says: " + image);
+            }
+        }
+    }
+
+    /**
+     * The operation answers the pieces {@code string} falls into where {@code separator} stands in
+     * it, each once and in order, the empty ones too: a string that is no longer than one piece is
+     * its own, and the code points of the pieces together are those of the string but for each
+     * place the separator stood.
+     *
+     * <p>Said of a separator that is one code point, and only then. A longer one can stand across
+     * where a shorter one is looked for, and what is left between two of its occurrences is not
+     * what is left of the string with a code point taken out. Whether a call's separator is one is
+     * a question about the call and is asked where it is read, as what a constant argument reads
+     * as.
+     *
+     * <p>Nothing here counts the pieces. How many there are is the number of times the separator
+     * stands in the string and is no number the language says.
+     */
+    record HoldsThePiecesOf(ArgumentRef separator, ArgumentRef string) implements OperationFact {
+
+        public HoldsThePiecesOf {
+            Objects.requireNonNull(separator, "this one names the separator");
+            Objects.requireNonNull(string, "and the string it stands in");
+        }
+    }
+
+    /**
      * The operation answers what {@code into} holds with {@code value} put in: every element of the
      * answer is one of {@code into}'s or {@code value}, it holds at most one element more than
      * {@code into}, and of {@code into}'s it holds each as many times as {@code into} does or fewer.

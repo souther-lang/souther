@@ -164,6 +164,8 @@ final class NumericReadings {
                      BoundOperationFact.CountsWholeUnitsBetween _,
                      BoundOperationFact.BuildsItsResultFrom _,
                      BoundOperationFact.ElementsComeFrom _,
+                     BoundOperationFact.HoldsTheImageOfEveryElement _,
+                     BoundOperationFact.HoldsThePiecesOf _,
                      BoundOperationFact.KeepsTheKeysOf _,
                      BoundOperationFact.HasALaw _,
                      BoundOperationFact.HasALemma _,

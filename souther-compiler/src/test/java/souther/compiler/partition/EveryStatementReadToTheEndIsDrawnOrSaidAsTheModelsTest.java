@@ -79,7 +79,7 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
         out.put("both, in one check", "List.length(if i.b then i.xs else []) >= 1");
         out.put("some element", "List.any(x -> x > 0, i.xs)");
         out.put("joined over values written out", "List.any(x -> x > 5, [i.n, i.m])");
-        out.put("unread", "String.isEmpty(String.trim(i.s))");
+        out.put("unread", "String.isEmpty(String.replace(\"a\", \"b\", i.s))");
         return out;
     }
 

@@ -11,6 +11,7 @@ import souther.compiler.semantics.ArgumentsStand;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ClosurePositions;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.ElementLineage;
@@ -355,6 +356,18 @@ final class OperationFactBinder {
             case OperationFact.ElementsComeFrom comes ->
                     new BoundOperationFact.ElementsComeFrom(operation,
                             holdElementsComeFrom(declaration, comes));
+            case OperationFact.HoldsTheImageOfEveryElement holds ->
+                    new BoundOperationFact.HoldsTheImageOfEveryElement(operation,
+                            holdTheImage(declaration, holds));
+            case OperationFact.HoldsThePiecesOf pieces -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
+                        "the pieces a string falls into");
+                yield new BoundOperationFact.HoldsThePiecesOf(operation,
+                        holdToTheDeclaration(declaration, pieces.separator(), null,
+                                TypeRequirement.TEXT, "where the pieces are parted"),
+                        holdToTheDeclaration(declaration, pieces.string(), null,
+                                TypeRequirement.TEXT, "the string that falls into pieces"));
+            }
             // A key kept is the same key, so the answer is a map keyed by what the map named is.
             case OperationFact.KeepsTheKeysOf kept -> {
                 DeclaredArgument map = holdToTheDeclaration(declaration, kept.map(),
@@ -753,6 +766,24 @@ final class OperationFactBinder {
         return built;
     }
 
+    /** Holds the argument whose elements the answer holds an image of to a container the
+     *  declaration has, the answer to a container of what the image is, and the closure it says
+     *  made them to the signature. */
+    private static ElementLineage<DeclaredArgument> holdTheImage(
+            CompleteSignature declaration, OperationFact.HoldsTheImageOfEveryElement holds) {
+        ElementLineage<DeclaredArgument> held = holds.image()
+                .withArguments(named -> holdToTheDeclaration(declaration, named,
+                        new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                        "the container whose every element has an image in the answer"));
+        if (held instanceof ElementLineage.SameAs<DeclaredArgument> same) {
+            holdTheAnswerTo(declaration, same.source().argument(), Type::elementOfAContainer,
+                    Type::elementOfAContainer,
+                    "a container of the elements that argument holds");
+        }
+        holdWhatTheClosureAnswered(declaration, held);
+        return held;
+    }
+
     /** Holds the argument a lineage of made elements names to a container the declaration has, and
      *  the closure it says made them to the signature. */
     private static ElementLineage<DeclaredArgument> holdElementsComeFrom(
@@ -973,6 +1004,9 @@ final class OperationFactBinder {
                     form.coefs().keySet().forEach(number -> {
                         switch (number) {
                             case LawNumber.SizeOf<ArgumentRef>(LawSubject<ArgumentRef> of) ->
+                                    answersNamedIn(stdlib, of);
+                            case LawNumber.CodePointsOf<ArgumentRef>(
+                                    LawSubject<ArgumentRef> of, var _) ->
                                     answersNamedIn(stdlib, of);
                             case LawNumber.HowManyMeet<ArgumentRef>(var _, var ofTheElement) ->
                                     answersNamedIn(stdlib, ofTheElement);
@@ -1458,6 +1492,15 @@ final class OperationFactBinder {
                 holdTheSide(AnswerAspect.EMPTINESS, typeOf(sized),
                         "what a law of " + library.qualified() + " takes the size of");
                 yield new LawNumber.SizeOf<>(sized);
+            }
+            case LawNumber.CodePointsOf<ArgumentRef>(LawSubject<ArgumentRef> of,
+                                                     CodePointClass counted) -> {
+                LawSubject<DeclaredArgument> counting = lawSubject(declaration, of, over);
+                if (!Type.STRING.equals(typeOf(counting))) {
+                    throw new IllegalStateException("a law of " + library.qualified()
+                            + " counts the code points of " + counting + ", which is no string");
+                }
+                yield new LawNumber.CodePointsOf<>(counting, counted);
             }
             case LawNumber.HowManyMeet<ArgumentRef> counted -> {
                 DeclaredArgument container = lawContainer(declaration, counted.container(), over);
