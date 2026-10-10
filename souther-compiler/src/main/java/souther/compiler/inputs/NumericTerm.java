@@ -335,7 +335,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
          *  is not. */
         @Override
         public TakenOver movedTo(UnaryOperator<TermPath> moved) {
-            RunSource at = RunSource.overTheOccurrencesAt(moved.apply(source.subjectPath()));
+            RunSource at = source.movedTo(moved);
             return at == null ? null : new TakenOver(operation, at);
         }
 

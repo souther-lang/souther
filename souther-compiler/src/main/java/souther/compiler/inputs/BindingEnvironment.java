@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
@@ -148,6 +149,15 @@ final class BindingEnvironment {
 
     /** Where in the element handed to {@code binding} the value a walk answered stands, or null
      *  where the walk answered no place of it ({@link ElementProjection}). */
+    ElementAnswer answerAt(BindingId binding) {
+        return elements.answerAt(binding);
+    }
+
+    /** What each binding the body made holds, over the whole of it. */
+    Map<BindingId, Core> heldByTheBody() {
+        return elements.held();
+    }
+
     ElementProjection projectionAt(BindingId binding) {
         return elements.projectionAt(binding);
     }

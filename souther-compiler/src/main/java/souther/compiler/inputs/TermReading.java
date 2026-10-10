@@ -15,9 +15,12 @@ import souther.compiler.semantics.TakenAs;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 
 import souther.compiler.inputs.NumericTerm.Reading;
 import net.unit8.notation199x.ScalarValues;
@@ -111,6 +114,71 @@ final class TermReading {
             case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _,
                     TakenAs.TheTruncatingQuotient _ -> new Reading.NotNumber();
         };
+    }
+
+    /**
+     * The number a term names over what a walk computed of each element, or why there is none.
+     *
+     * <p>One reading per element, each answering what stands at a field of that element, because
+     * the computation reads several of them and values gathered field by field would pair one
+     * element's number with another's. What an element comes to is the computation's, applied to
+     * the numbers its fields hold; what is added up is those, in the exact arithmetic.
+     *
+     * <p>An element whose computed number the carrier of what the walk answers cannot hold is one
+     * the program stops at rather than one it answers, so the row has no number for the run. Read as
+     * the exact sum it would be a total the program never returns.
+     */
+    static Reading overElements(TermOrders on,
+                                List<Function<ElementProjection, ObservedValue>> each) {
+        NumericTerm.TakenOver term = (NumericTerm.TakenOver) on.term();
+        Objects.requireNonNull(each, "a term is read over the elements a walk came to");
+        if (!(term.source() instanceof RunSource.ComputedOccurrences computed)
+                || !(term.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
+            return new Reading.NotNumber();
+        }
+        Carrier answeredPerElement = on.observed();
+        if (answeredPerElement == null) {
+            return new Reading.NotNumber();
+        }
+        List<ExactRatio> terms = new ArrayList<>();
+        for (Function<ElementProjection, ObservedValue> element : each) {
+            Map<ElementProjection, ExactRatio> numbers = new HashMap<>();
+            Map<ElementProjection, Boolean> flags = new HashMap<>();
+            for (ElementProjection field : computed.computation().reads()) {
+                ObservedValue at = element.apply(field);
+                // A field the element holds no value at is an element this is no number of, as an
+                // observation of the wrong shape is.
+                if (at == null) {
+                    return new Reading.NotNumber();
+                }
+                Membership.Incomplete unread = Membership.unread(at);
+                if (unread != null) {
+                    return new Reading.Missing(unread.code());
+                }
+                if (at instanceof ObservedValue.Bool flag) {
+                    flags.put(field, flag.value());
+                    continue;
+                }
+                Carrier held = on.fieldCarrier(field);
+                Place place = held == null ? null : held.placeOf(at);
+                if (!(place instanceof Count count)) {
+                    return new Reading.NotNumber();
+                }
+                numbers.put(field, count.exactly());
+            }
+            ExactRatio made = computed.computation().at(numbers::get, flags::get);
+            if (made == null) {
+                return new Reading.NotNumber();
+            }
+            // The one the program computes, which is what the carrier of the answer holds.
+            if (!(made.writtenDecimal() instanceof ExactAnswer.Held<Optional<BigDecimal>> written)
+                    || written.value().isEmpty()
+                    || answeredPerElement.onTheGrid(new Count(written.value().get())) == null) {
+                return new Reading.NotNumber();
+            }
+            terms.add(made);
+        }
+        return sumOf(terms);
     }
 
     /** The number the term is, where the term is what the location holds. */
@@ -251,6 +319,18 @@ final class TermReading {
             }
             terms.add(count.exactly());
         }
+        return sumOf(terms);
+    }
+
+    /**
+     * What the numbers add up to, as the number a term answers.
+     *
+     * <p>One sum of them all, for both of the readers that gather numbers a run holds: the one that
+     * reads a value at a place of each element and the one that computes one from several places of
+     * it. The two are one account of one operation, so what a sum too wide for the exact arithmetic
+     * comes to is one answer.
+     */
+    private static Reading sumOf(List<ExactRatio> terms) {
         // A container may hold a model's own decimals, spaced as widely apart in scale as any two
         // of them this compiler ever adds — the same hazard `check.ConstantAlgebra` guards against
         // when a rule adds two of them. The values are numbers and the sum is a number of them;

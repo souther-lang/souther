@@ -1,10 +1,14 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.WalkElements;
 import souther.compiler.core.Core;
+import souther.compiler.semantics.TakenAs;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
 /**
@@ -97,6 +101,9 @@ public final class InputNumber {
      * which is a `let` changing what a model means. The environment the value was given in comes
      * with it, so what is read of the walk afterwards is read where the walk stands.
      *
+     * <p>Where the answer is no place of the element but something made of its fields, the run is
+     * over what was computed of each element instead ({@link #overWhatWasComputed}).
+     *
      * <p>Null wherever any of the three is missing, which is a rule this compiler did not read
      * rather than a rule the model does not state — and is reported as one. Null too where the three
      * are in hand and what they come to is not one run
@@ -118,7 +125,7 @@ public final class InputNumber {
         Denotation met = reads.denotes(measured.of(), symbols, source.newtypes());
         Core walk = met.value();
         InputReads where = met.at();
-        souther.compiler.types.BindingId element =
+        BindingId element =
                 WalkElements.elementBindingOf(walk, where, symbols, source.newtypes());
         if (element == null) {
             return null;
@@ -133,8 +140,11 @@ public final class InputNumber {
             // than one container is no one run.
             case PathResolution.MayStandAt _ -> null;
         };
-        if (answered == null || at == null) {
+        if (at == null) {
             return null;
+        }
+        if (answered == null) {
+            return overWhatWasComputed(measured, where, element, at, source);
         }
         TermPath under = answered.from(at);
         // Whether what is read from there is one run is the run's own question, and it is asked
@@ -149,6 +159,37 @@ public final class InputNumber {
         return stands == null ? null
                 : NumericTerm.TakenOver.of(measured.operation(), over, stands, source.inners(),
                         symbols);
+    }
+
+    /**
+     * The number {@code measured} takes over what a walk computed of each of its elements, or null
+     * where the walk answered no such computation this reads.
+     *
+     * <p>For a closure whose answer is not a place of its element — arithmetic over its fields, or
+     * a choice between two of those by a flag it holds. The licence is the one a place answer has:
+     * the walk answers one value per element of what it was given, proved before the tree was
+     * rewritten, so what is asked here is only what the closure came to.
+     */
+    private static NumericTerm overWhatWasComputed(NumericMeasures.Measured measured,
+                                                   InputReads where, BindingId element,
+                                                   TermPath at, RuleReadingSource source) {
+        // Only a total. What a run computed of each element is read for is the sum of those numbers;
+        // a count of a walk's answers is a count of the container it walked, and is read as that.
+        if (!(DefaultBoundOperationFacts.get().takenAs(measured.operation())
+                instanceof TakenAs.TheSumOfWhatItHolds)) {
+            return null;
+        }
+        ElementAnswer closure = where.answerAt(element);
+        ElementValue computed =
+                closure == null ? null : ElementValue.read(closure, where.heldByTheBody(), source);
+        if (computed == null) {
+            return null;
+        }
+        Type each = closure.body().type();
+        RunSource over = RunSource.computedOverTheElementsAt(at, computed, each);
+        return over == null ? null
+                : NumericTerm.TakenOver.of(measured.operation(), over, each, source.inners(),
+                        source.symbols());
     }
 
 }

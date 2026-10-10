@@ -16,8 +16,11 @@ import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.Carrier;
+import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.RunSource;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.TheRestOfTheBlock;
@@ -6045,7 +6048,7 @@ public final class Generator {
                         }
                         yield any;
                     }
-                    case NumericTerm.TakenOver _ -> switch (on.readOver(values)) {
+                    case NumericTerm.TakenOver _ -> switch (readRun(on, values)) {
                         case NumericTerm.Reading.Number number ->
                                 number.value().compareTo(at) == 0;
                         case NumericTerm.Reading.Missing missing -> {
@@ -6078,6 +6081,25 @@ public final class Generator {
                         + " at " + at + " and does not stand there");
             }
         };
+    }
+
+    /**
+     * What {@code on} reads of a run from the values the walk stood at its position.
+     *
+     * <p>For a run computed of each element those values are the elements, and each is read as one
+     * element: the fields its computation reads are the fields of that element, so what is paired
+     * is what the row pairs.
+     */
+    private static NumericTerm.Reading readRun(TermOrders on, List<ObservedValue> values) {
+        if (!(on.term() instanceof NumericTerm.TakenOver over)
+                || !(over.source() instanceof RunSource.ComputedOccurrences)) {
+            return on.readOver(values);
+        }
+        List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+        for (ObservedValue element : values) {
+            each.add(field -> field.in(element));
+        }
+        return on.readOverElements(each);
     }
 
     /**

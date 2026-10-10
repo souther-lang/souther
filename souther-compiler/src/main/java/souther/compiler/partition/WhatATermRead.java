@@ -1,14 +1,21 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 
 /**
  * What one term of a quantity came to at one row: the number it names, or why it names none.
@@ -86,6 +93,48 @@ sealed interface WhatATermRead {
                     new CameToNothing(ReadingGap.COULD_NOT_WALK);
             case WalkResult.Reached(List<ObservedValue> values) -> of(on.readOver(values));
         };
+    }
+
+    /**
+     * What {@code on} reads of a run computed of each element of the container {@code row} wrote.
+     *
+     * <p>Element by element, each read as the row with that element chosen, so the fields one
+     * computation reads are the fields of one element. A field the row wrote nothing at is a row
+     * that has no value for the run, which is the row's own answer and outranks any element read
+     * before it.
+     */
+    static WhatATermRead overElements(TermOrders on, RunSource.ComputedOccurrences computed,
+                                      BorderQuantity.Observation row) {
+        TermPath container = computed.elements().outermostContainer();
+        if (!(row.eachElementOf(container)
+                instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
+            return new CameToNothing(ReadingGap.COULD_NOT_WALK);
+        }
+        List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+        for (BorderQuantity.Observation element : reached.value()) {
+            Map<ElementProjection, ObservedValue> held = new HashMap<>();
+            for (ElementProjection field : computed.computation().reads()) {
+                switch (element.at(field.from(computed.elements()))) {
+                    case WalkResult.CouldNotWalk<ObservationAtPoint> _ -> {
+                        return new CameToNothing(ReadingGap.COULD_NOT_WALK);
+                    }
+                    case WalkResult.Reached(ObservationAtPoint standing) -> {
+                        switch (standing) {
+                            case ObservationAtPoint.Value(ObservedValue value) ->
+                                    held.put(field, value);
+                            case ObservationAtPoint.WroteNothing _ -> {
+                                return new NothingWrittenThere();
+                            }
+                            case ObservationAtPoint.BelongsToAnotherReading _ -> {
+                                return new CameToNothing(ReadingGap.NO_VALUE);
+                            }
+                        }
+                    }
+                }
+            }
+            each.add(held::get);
+        }
+        return of(on.readOverElements(each));
     }
 
     /** What a term's own reading of a value comes to here. */

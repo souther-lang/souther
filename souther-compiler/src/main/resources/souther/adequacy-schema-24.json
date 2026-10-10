@@ -805,21 +805,113 @@
               "$ref": "#/$defs/operationId"
             },
             "over": {
-              "type": "object",
-              "description": "Every value standing at one position inside one sequence.",
-              "required": [
-                "kind",
-                "position"
-              ],
-              "additionalProperties": false,
-              "properties": {
-                "kind": {
-                  "const": "occurrences"
+              "oneOf": [
+                {
+                  "type": "object",
+                  "description": "Every value standing at one position inside one sequence.",
+                  "required": [
+                    "kind",
+                    "position"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "const": "occurrences"
+                    },
+                    "position": {
+                      "type": "string"
+                    }
+                  }
                 },
-                "position": {
-                  "type": "string"
+                {
+                  "type": "object",
+                  "description": "What is computed of each element of one sequence: one value per element, each made of that element's own fields by `computation`. No position holds these values, so `elements` says where the elements stand and `computation` what is made of one of them.",
+                  "required": [
+                    "kind",
+                    "elements",
+                    "computation"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "const": "computed_occurrences"
+                    },
+                    "elements": {
+                      "type": "string"
+                    },
+                    "computation": {
+                      "$ref": "#/$defs/elementComputation"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "elementComputation": {
+      "description": "What one element's number is made of: a sum of its fields each weighed by a number, or the choice between two such by a flag the element holds. A field is named by its steps from the element, joined by dots, and by the empty string where the element is itself the number. Terms are listed in the order the fields' names sort.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "constant",
+            "terms"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "form"
+            },
+            "constant": {
+              "type": "string",
+              "description": "An exact number, written one way for one value."
+            },
+            "terms": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "field",
+                  "weight"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "field": {
+                    "type": "string"
+                  },
+                  "weight": {
+                    "type": "string",
+                    "description": "An exact number, written one way for one value."
+                  }
                 }
               }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "flag",
+            "whenSet",
+            "otherwise"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "choose"
+            },
+            "flag": {
+              "type": "string"
+            },
+            "whenSet": {
+              "$ref": "#/$defs/elementComputation"
+            },
+            "otherwise": {
+              "$ref": "#/$defs/elementComputation"
             }
           }
         }

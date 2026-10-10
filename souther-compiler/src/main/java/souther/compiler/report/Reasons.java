@@ -212,6 +212,9 @@ final class Reasons {
                         "the places inside one run a value is named at";
                 case ELEMENTS_CHOSEN_FOR_A_COUNT ->
                         "the elements chosen for how many of them meet a statement";
+                case ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR ->
+                        "the elements whose computed number is made of several fields or chosen"
+                                + " by a flag";
             });
         }
         return String.join(", ", out);

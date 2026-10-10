@@ -280,6 +280,17 @@ final class ReadQuantities implements Quantities {
         // absent, so a term of another input comes back with an order on one end and nothing on the
         // other — an answer about no reading, wearing this one's name.
         held(term);
+        if (term instanceof NumericTerm.TakenOver over
+                && over.source() instanceof RunSource.ComputedOccurrences computed) {
+            // What a computed value stands as is what the computation made, and no position of the
+            // input holds it; the fields it reads are positions and are read on their own types.
+            Map<ElementProjection, Type> fieldTypes = new LinkedHashMap<>();
+            for (ElementProjection field : computed.computation().reads()) {
+                fieldTypes.put(field, typeAt.apply(field.from(computed.elements())));
+            }
+            return TermOrdering.of(term, computed.each(), fieldTypes,
+                    ruleReading.source().symbols(), ruleReading.source().declarations());
+        }
         return TermOrdering.of(term, typeAt.apply(term.subjectPath()),
                 ruleReading.source().symbols(), ruleReading.source().declarations());
     }
@@ -858,7 +869,7 @@ final class ReadQuantities implements Quantities {
                 if (counted == null) {
                     return rules;
                 }
-                InputAtom.Named atom = called(counted, under);
+                InputAtom atom = called(counted, under);
                 souther.compiler.numeric.Granularity spaced =
                         spacingOf(rules.numbers(), counted, atom);
                 return spaced == null ? rules : rules.taking(
@@ -1019,7 +1030,14 @@ final class ReadQuantities implements Quantities {
 
     /** The same, of a term this input holds. One number under one name whichever side it arrives
      *  from — the reading of a declaration, or a form a caller wrote. */
-    private InputAtom.Named called(NumericTerm term, StructuralContext under) {
+    private InputAtom called(NumericTerm term, StructuralContext under) {
+        // A number computed of each element is no number at a place, so what names it is the term,
+        // under the value whose rules the elements stand under.
+        if (term instanceof NumericTerm.TakenOver over
+                && over.source() instanceof RunSource.ComputedOccurrences) {
+            return new InputAtom.Computed(
+                    rootOf(standingUnder(term.subjectPath(), under)).root().toString(), over);
+        }
         UnderARoot at = rootOf(term.subjectPath());
         NumberAt<RuleKey> where = coordinateOf(at, term);
         return atomAt(standingUnder(pathOf(at.root(), where.position()), under), where.of());

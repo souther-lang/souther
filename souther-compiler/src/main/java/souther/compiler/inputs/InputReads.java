@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Location;
 import souther.compiler.check.ScopeStep;
@@ -1096,6 +1097,17 @@ public final class InputReads {
      *  where the walk answered no place of it ({@link ElementProjection}). */
     ElementProjection projectionAt(BindingId binding) {
         return names.projectionAt(binding);
+    }
+
+    /** What the walk handing {@code binding} its element answered, as the closure, where a licence
+     *  says it answered one value per element ({@link ElementAnswer}). */
+    ElementAnswer answerAt(BindingId binding) {
+        return names.answerAt(binding);
+    }
+
+    /** What each binding of the body holds, for reading a closure's answer through the names in it. */
+    Map<BindingId, Core> heldByTheBody() {
+        return names.heldByTheBody();
     }
 
     /**
