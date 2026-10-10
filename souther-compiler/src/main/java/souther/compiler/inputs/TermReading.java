@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 
 import souther.compiler.inputs.NumericTerm.Reading;
@@ -141,10 +142,11 @@ final class TermReading {
             return new Reading.NotNumber();
         }
         List<ExactRatio> terms = new ArrayList<>();
+        Set<ElementProjection> fields = computed.computation().reads();
         for (Function<ElementProjection, ObservedValue> element : each) {
             Map<ElementProjection, ExactRatio> numbers = new HashMap<>();
             Map<ElementProjection, Boolean> flags = new HashMap<>();
-            for (ElementProjection field : computed.computation().reads()) {
+            for (ElementProjection field : fields) {
                 ObservedValue at = element.apply(field);
                 // A field the element holds no value at is an element this is no number of, as an
                 // observation of the wrong shape is.

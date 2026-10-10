@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -111,9 +112,10 @@ sealed interface WhatATermRead {
             return new CameToNothing(ReadingGap.COULD_NOT_WALK);
         }
         List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+        Set<ElementProjection> fields = computed.computation().reads();
         for (BorderQuantity.Observation element : reached.value()) {
             Map<ElementProjection, ObservedValue> held = new HashMap<>();
-            for (ElementProjection field : computed.computation().reads()) {
+            for (ElementProjection field : fields) {
                 switch (element.at(field.from(computed.elements()))) {
                     case WalkResult.CouldNotWalk<ObservationAtPoint> _ -> {
                         return new CameToNothing(ReadingGap.COULD_NOT_WALK);

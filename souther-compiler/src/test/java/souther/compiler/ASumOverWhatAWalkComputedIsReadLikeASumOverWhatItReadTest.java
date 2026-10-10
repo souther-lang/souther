@@ -78,14 +78,16 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
                     if List.sum(List.map(a -> doubled(a), xs)) >= 4
                     then Many else Few
                 """;
-        assertTrue(report(named).contains("List.sum({2·q + 0 | xs[*]})"), report(named));
+        String report = report(named);
+        assertTrue(report.contains("List.sum({2·q + 0 | xs[*]})"), report);
     }
 
     /** Two computations over one list are two numbers. */
     @Test
     void twoComputationsOverOneListAreTwoNumbers() {
-        assertTrue(report(model("a.q * 3", 4)).contains("List.sum({3·q + 0 | xs[*]})"));
-        assertFalse(report(model("a.q * 3", 4)).contains("{2·q"));
+        String report = report(model("a.q * 3", 4));
+        assertTrue(report.contains("List.sum({3·q + 0 | xs[*]})"), report);
+        assertFalse(report.contains("{2·q"), report);
     }
 
     /** More than one field, and a choice by a flag the element holds, are read. */
@@ -169,9 +171,10 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
     @Test
     void aFormOfSeveralFieldsIsReadAndNoRowIsWrittenForIt() {
         String model = model("a.q + a.p", 3);
-        assertTrue(report(model).contains("made of several fields or chosen by a flag"),
-                report(model));
-        assertTrue(rowsOf(model).contains("no row for"), rowsOf(model));
+        String report = report(model);
+        assertTrue(report.contains("made of several fields or chosen by a flag"), report);
+        String rows = rowsOf(model);
+        assertTrue(rows.contains("no row for"), rows);
     }
 
     private static List<Long> totalsOf(String rows) {
