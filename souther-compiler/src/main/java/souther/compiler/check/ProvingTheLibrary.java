@@ -263,9 +263,10 @@ final class ProvingTheLibrary {
                 related.carried() != null ? List.of(related.carried())
                         : carries.getOrDefault(operation, List.of()));
         underWay.remove(asking);
-        boolean proved = outcome instanceof LibraryProver.Outcome.Proved(var proof);
+        boolean proved = false;
         if (outcome instanceof LibraryProver.Outcome.Proved(var proof)) {
             relationProofs.put(asking, proof);
+            proved = true;
         }
         provedToRelate.put(asking, proved);
         return proved;

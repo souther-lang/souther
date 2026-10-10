@@ -73,7 +73,6 @@ public final class LibraryProver {
         this.readThrough = Set.copyOf(readThrough);
     }
 
-
     /** Whether {@code lemma}, a statement about {@code operation}, is proved against its body. */
     public Outcome prove(ValueName.Stdlib.Operation operation, Lemma lemma) {
         Reading reading = new Reading(library, readThrough);

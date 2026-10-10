@@ -46,7 +46,9 @@ public sealed interface LawSubject<A> {
 
     /**
      * The key the element of {@code container} the statement it stands in is about is filed under
-     * — named where {@link ElementOf} may be, of a container filing what it holds under keys.
+     * — named where {@link ElementOf} may be, of a container filing what it holds under keys: a
+     * map, whose element is a value under its key, or a list of pairs, whose element is a pair
+     * filed under its first ({@code Type#filedUnder}).
      */
     record KeyOf<A>(A container) implements LawSubject<A> {
 

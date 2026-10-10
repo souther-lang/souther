@@ -108,7 +108,9 @@ public final class BoundOperationFacts {
             }
         }
         writtenAs = writtenAs();
-        relations = projected(BoundOperationFact.IsRelated.class, BoundOperationFact.IsRelated::holds);
+        relations = relations(projected(BoundOperationFact.IsRelated.class,
+                BoundOperationFact.IsRelated::holds), projected(BoundOperationFact.HasALaw.class,
+                BoundOperationFact.HasALaw::beside));
         Settling settling = settle(awaiting);
         settled = settling.settled();
         // One the body does not prove is an obligation, held apart, and no reader takes it. The
@@ -196,6 +198,22 @@ public final class BoundOperationFacts {
             }
             out.put(operation, List.copyOf(parts));
         });
+        return Collections.unmodifiableMap(out);
+    }
+
+    /** What is stated of each kernel beside others: what is declared so, and what its laws say
+     *  beside the memberships their cases turn on. */
+    private static Map<ValueName, List<LawProposition<Slot>>> relations(
+            Map<ValueName, List<LawProposition<Slot>>> declared,
+            Map<ValueName, List<List<LawProposition<Slot>>>> besideALaw) {
+        Map<ValueName, List<LawProposition<Slot>>> out = new LinkedHashMap<>();
+        declared.forEach((operation, holds) -> out.put(operation, new ArrayList<>(holds)));
+        besideALaw.forEach((operation, each) -> each.forEach(beside -> {
+            if (!beside.isEmpty()) {
+                out.computeIfAbsent(operation, _ -> new ArrayList<>()).addAll(beside);
+            }
+        }));
+        out.replaceAll((operation, holds) -> List.copyOf(holds));
         return Collections.unmodifiableMap(out);
     }
 

@@ -772,7 +772,7 @@ public final class WhatTheLibraryComputes {
                 case LawSubject.WhatTheClosureAnswers<Slot>(Slot at) ->
                         ((Type.FnOf) typeOf(at)).result();
                 case LawSubject.KeyOf<Slot>(Slot at) ->
-                        typeOf(at) == null ? null : Type.keyOf(typeOf(at));
+                        typeOf(at) == null ? null : Type.filedUnder(typeOf(at));
                 case LawSubject.AnswerOf<Slot>(var operation, var _) -> {
                     Stdlib.Signature declaration =
                             DefaultStdlib.get().entry(operation).signature();

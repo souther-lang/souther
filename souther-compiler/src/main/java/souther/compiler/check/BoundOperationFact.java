@@ -108,9 +108,19 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
      * <p>Several to an operation, one to each observation: a filter's answer has a law of whether
      * it holds anything and one of how many it holds, and two laws of one observation would be two
      * answers to one question, refused where these are collected.
+     *
+     * @param beside the law of a kernel said beside what the operations its cases turn on answer,
+     *               in the words of a walk — a case of some element being a value said as
+     *               {@code Set.contains} answering true — or none where it turns on none
      */
-    record HasALaw(DeclaredOperation operation, OperationLaw<DeclaredArgument> law)
-            implements SeveralAboutAnOperation {}
+    record HasALaw(DeclaredOperation operation, OperationLaw<DeclaredArgument> law,
+                   List<LawProposition<Slot>> beside)
+            implements SeveralAboutAnOperation {
+
+        public HasALaw {
+            beside = List.copyOf(beside);
+        }
+    }
 
     /** What the observation {@code observed} of the operation's answer comes to is {@code why},
      *  which no statement over the arguments can say. */

@@ -660,12 +660,12 @@ final class Reading {
     LawProposition<Value> some(Value container, Function<Element, LawProposition<Value>> of) {
         return switch (container) {
             case Value.Listed(List<Value> elements) -> Props.any(elements.stream()
-                    .map(each -> of.apply(itself(each))).toList());
+                    .map(each -> of.apply(inAList(each))).toList());
             case Value.Joined(Value left, Value right) ->
                     Props.either(some(left, of), some(right, of));
             case Value.NothingYet _ -> Props.always(false);
             case Value.OneMore(Value walked, Value next) ->
-                    Props.either(some(walked, of), of.apply(itself(next)));
+                    Props.either(some(walked, of), of.apply(inAList(next)));
             case Value.AsEntries(Value entries) -> some(entries, entry -> of.apply(unpacked(entry)));
             case Value.Made(ValueName.Stdlib.Operation operation, List<Value> args)
                     when library.listing(operation) != null ->
@@ -773,7 +773,7 @@ final class Reading {
             case Value.Listed(List<Value> elements) -> {
                 LinearForm<LawNumber<Value>> out = Props.constant(0);
                 for (Value each : elements) {
-                    out = Props.plus(out, of.apply(itself(each)));
+                    out = Props.plus(out, of.apply(inAList(each)));
                 }
                 yield out;
             }
@@ -781,7 +781,7 @@ final class Reading {
                     Props.plus(sum(left, of), sum(right, of));
             case Value.NothingYet _ -> Props.constant(0);
             case Value.OneMore(Value walked, Value next) ->
-                    Props.plus(sum(walked, of), of.apply(itself(next)));
+                    Props.plus(sum(walked, of), of.apply(inAList(next)));
             case Value.AsEntries(Value entries) -> sum(entries, entry -> of.apply(unpacked(entry)));
             case Value.Made(ValueName.Stdlib.Operation operation, List<Value> args)
                     when library.listing(operation)
@@ -810,7 +810,7 @@ final class Reading {
                                                Function<Element, LawProposition<Value>> of) {
         Value alone = new Value.Listed(List.of(element));
         return LinearForm.atom(new LawNumber.HowManyMeet<>(alone,
-                of.apply(itself(element))));
+                of.apply(inAList(element))));
     }
 
     /** The element a statement about the elements of {@code container} is about. */
@@ -821,6 +821,12 @@ final class Reading {
     /** {@code element} as an element of whatever holds it, under whatever key it is filed under. */
     private static Element itself(Value element) {
         return new Element(element, new Value.KeyOf(element));
+    }
+
+    /** {@code element} as an element of a list, which a law reads as filed under the first of the
+     *  pair it is ({@code Type#filedUnder}). */
+    private static Element inAList(Value element) {
+        return new Element(element, componentOf(element, 0));
     }
 
     /** An entry of a map, a pair of its key and its value, read as the value under the key. */

@@ -659,11 +659,9 @@ public final class OperationFacts {
             // What a kernel's answer comes to beside what others answer on its arguments, where no
             // law of one observation says it. A key a map holds is one only where it holds
             // something. An insert holds exactly what was put in and what it was handed; nothing
-            // holds a key of an empty map. And how many an insert holds, which its law says, said
-            // again beside what the membership it turns on answers: what is stated of a kernel
-            // beside others is taken where that kernel is applied, so said in its words, the
-            // insert puts what is stated of `Map.containsKey` and `Set.contains` in reach of a
-            // proof that reads it.
+            // holds a key of an empty map. How many an insert or a remove holds beside what the
+            // membership it turns on answers is not written here: the binder says the law of it
+            // in the words of `Map.containsKey` and `Set.contains`.
             about("Map", "containsKey", related(any(
                     isTrue(answerOf("Map", "containsKey", the(at(0)), the(at(1)))).denied(),
                     holdsSomething(at(1))))),
@@ -674,13 +672,6 @@ public final class OperationFacts {
                     howManyMeet(ANY, isTrue(answerOf("Map", "containsKey",
                             new LawSubject.KeyOf<>(ANY), the(at(1)))).denied()), 1,
                     sizeOf(ANY), -1, 0))),
-            about("Map", "insert", related(any(
-                    all(isTrue(answerOf("Map", "containsKey", the(at(0)), the(at(2)))),
-                            equal(sizeOf(answerOf("Map", "insert", the(at(0)), the(at(1)),
-                                    the(at(2)))), sizeOf(at(2)), 0)),
-                    all(isTrue(answerOf("Map", "containsKey", the(at(0)), the(at(2)))).denied(),
-                            equal(sizeOf(answerOf("Map", "insert", the(at(0)), the(at(1)),
-                                    the(at(2)))), sizeOf(at(2)), 1))))),
             about("Map", "insert", related(iff(
                     isTrue(answerOf("Map", "containsKey", the(ANY),
                             answerOf("Map", "insert", the(at(0)), the(at(1)), the(at(2))))),
@@ -689,13 +680,6 @@ public final class OperationFacts {
             about("Map", "empty", related(
                     isTrue(answerOf("Map", "containsKey", the(ANY), answerOf("Map", "empty")))
                             .denied())),
-            about("Set", "insert", related(any(
-                    all(isTrue(answerOf("Set", "contains", the(at(0)), the(at(1)))),
-                            equal(sizeOf(answerOf("Set", "insert", the(at(0)), the(at(1)))),
-                                    sizeOf(at(1)), 0)),
-                    all(isTrue(answerOf("Set", "contains", the(at(0)), the(at(1)))).denied(),
-                            equal(sizeOf(answerOf("Set", "insert", the(at(0)), the(at(1)))),
-                                    sizeOf(at(1)), 1))))),
             about("Set", "insert", related(iff(
                     isTrue(answerOf("Set", "contains", the(ANY),
                             answerOf("Set", "insert", the(at(0)), the(at(1))))),
