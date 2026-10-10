@@ -7,6 +7,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.semantics.HowAClosureIsApplied;
@@ -102,6 +103,7 @@ sealed interface ClosureApplications {
         DeclarationNewtypes newtypes = read.newtypes();
         List<Application> out = new ArrayList<>();
         boolean handed = false;
+        boolean asked = false;
         for (Application around : outer) {
             switch (Pullback.applicationsOf(block, around.reads(), symbols, newtypes)) {
                 case InputReads.Applications.Each(var each, var how) -> {
@@ -115,15 +117,23 @@ sealed interface ClosureApplications {
                         out.add(new Application(each.get(at), reached.get(at)));
                     }
                 }
-                case InputReads.Applications.NoneHanded _ -> out.add(new Application(
-                        around.reads().entering(step, symbols, newtypes), around.reached()));
+                case InputReads.Applications.NoneHanded _ -> {
+                    Optional<TermPath> container = around.reads()
+                            .containerHandingTheElements(block)
+                            .flatMap(held -> Pullback.positionHoldingWhatItHolds(held, read));
+                    asked |= container.isPresent();
+                    out.add(new Application(around.reads().entering(step, symbols, newtypes),
+                            container.map(held -> WhereAnApplicationIsMade
+                                            .whereTheContainerHoldsSomething(around.reached(), held))
+                                    .orElse(around.reached())));
+                }
                 case InputReads.Applications.Unsaid _,
                      InputReads.Applications.MoreThanAreRead _ -> {
                     return new NotSaid();
                 }
             }
         }
-        return handed || !outside ? new Each(out) : OUTSIDE;
+        return handed || asked || !outside ? new Each(out) : OUTSIDE;
     }
 
     /**

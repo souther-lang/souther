@@ -594,6 +594,35 @@ final class Pullback {
     private static final CompositionBudget READINGS = CompositionBudget.READINGS_OF_ONE_CONDITION;
 
     /**
+     * The position of the input whose holding something is what the container {@code container}
+     * holding something comes to, or empty where there is none.
+     *
+     * <p>A container at a position of the input is that position. A map built by filing a counter
+     * under the key of each element of a list ({@link KeyedAccumulation}) has an entry for each
+     * element, so it holds something exactly where the list does. Any other container — a filter
+     * of one, say — may be empty with what it was made of not, and is not read back to it.
+     */
+    static Optional<TermPath> positionHoldingWhatItHolds(Denotation container,
+                                                         InputReading read) {
+        Symbols symbols = read.rules().symbols();
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        if (container.at().pathOf(container.value(), newtypes) instanceof PathResolution.At(
+                TermPath at)) {
+            return Optional.of(at);
+        }
+        Denotation whole = container.at().standing(container.value(), symbols, newtypes);
+        KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), closure ->
+                Core.withoutStanding(whole.at().standing(closure, symbols, newtypes).value())
+                        instanceof Core.Block block ? block : null);
+        if (filed == null) {
+            return Optional.empty();
+        }
+        Denotation walked = whole.at().standing(filed.walked(), symbols, newtypes);
+        return walked.at().pathOf(walked.value(), newtypes) instanceof PathResolution.At(
+                TermPath at) ? Optional.of(at) : Optional.empty();
+    }
+
+    /**
      * {@code block}'s body read on each of its applications in {@code at}, held to how many readings
      * of one condition are made — for every reader of a closure over values written out.
      */

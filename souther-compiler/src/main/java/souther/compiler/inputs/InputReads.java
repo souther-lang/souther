@@ -360,6 +360,28 @@ public final class InputReads {
     }
 
     /**
+     * The container every element-taking parameter of {@code block} takes its elements from, read
+     * here, or empty where there is no such parameter or they take them from different containers.
+     *
+     * <p>A body entered by an application of the closure is entered only where the container holds
+     * something, so what the container holds is what a run needs to reach it.
+     */
+    public Optional<Denotation> containerHandingTheElements(Core.Block block) {
+        Core only = null;
+        for (Core.Binder param : block.params()) {
+            if (param == null || param.binding() == null
+                    || !(names.roleOf(param.binding()) instanceof BindingRole.Element(var held))) {
+                continue;
+            }
+            if (only != null && !only.equals(held.container())) {
+                return Optional.empty();
+            }
+            only = held.container();
+        }
+        return Optional.ofNullable(only).map(container -> new Denotation(container, this));
+    }
+
+    /**
      * What reading {@code block}'s body on each application of it that hands a parameter one of the
      * values a container was written with comes to.
      *

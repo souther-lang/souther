@@ -1,5 +1,6 @@
 package souther.compiler.meaning;
 
+import souther.compiler.inputs.TermPath;
 import souther.compiler.semantics.HowAClosureIsApplied;
 
 import java.util.ArrayList;
@@ -61,6 +62,17 @@ public final class WhereAnApplicationIsMade {
     /** What has to hold to be inside no closure at all, which is nothing. */
     public static Proposition nothingAsked() {
         return new Proposition.Always(true);
+    }
+
+    /**
+     * What has to hold for a run to be inside a closure handed the elements of the container at
+     * {@code container}, under {@code outer}: that the container holds something. Said where the
+     * values it holds are not written out, and so no application is said; an operation may stop
+     * before it makes any, so this is necessary for an application and not enough for one.
+     */
+    public static Proposition whereTheContainerHoldsSomething(Proposition outer,
+                                                              TermPath container) {
+        return past(outer, new Proposition.Some(container, nothingAsked(), true));
     }
 
     /** Whether {@code cases} say a line decides wherever a row is. */
