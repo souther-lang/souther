@@ -91,8 +91,12 @@ final class OperationFactBinder {
      * fact may not say beside another — that a number is read by one representation — is asked of
      * all of them together once every one is bound, since a question about the set cannot be
      * answered from the order the declarations happen to come in.
+     *
+     * @param proofs how what is stated of the operations the library writes is proved of their
+     *               bodies
      */
-    static BoundOperationFacts bindAll(Stdlib stdlib, List<OperationFacts.Declared> declared) {
+    static BoundOperationFacts bindAll(Stdlib stdlib, List<OperationFacts.Declared> declared,
+                                       LibraryProofs.Source proofs) {
         List<OperationFacts.Declared> memberships = memberships(declared);
         List<BoundOperationFact> bound = new ArrayList<>();
         for (OperationFacts.Declared each : declared) {
@@ -103,14 +107,25 @@ final class OperationFactBinder {
                     ((BoundOperationFact.HasALaw) one).law(),
                     List.of(slots(stdlib, declaration, beside, false))));
         }
-        BoundOperationFacts facts = new BoundOperationFacts(stdlib, bound);
+        BoundOperationFacts facts = new BoundOperationFacts(stdlib, bound, proofs);
         holdEachNumberToOneReading(stdlib, facts);
         return facts;
     }
 
+    /** The same, each written operation's facts proved here against its body. */
+    static BoundOperationFacts bindAll(Stdlib stdlib, List<OperationFacts.Declared> declared) {
+        return bindAll(stdlib, declared, LibraryProofs.PROVING);
+    }
+
     /** The same, over what the language declares. */
     static BoundOperationFacts bindAll(Stdlib stdlib) {
-        return bindAll(stdlib, OperationFacts.declarations());
+        return bindAll(stdlib, LibraryProofs.PROVING);
+    }
+
+    /** The same, over what the language declares, with what is proved of the operations the
+     *  library writes come by through {@code proofs}. */
+    static BoundOperationFacts bindAll(Stdlib stdlib, LibraryProofs.Source proofs) {
+        return bindAll(stdlib, OperationFacts.declarations(), proofs);
     }
 
     /** Every declaration of {@code declared} that is a truth law saying a container holds a

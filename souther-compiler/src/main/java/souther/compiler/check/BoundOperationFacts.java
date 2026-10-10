@@ -93,8 +93,10 @@ public final class BoundOperationFacts {
     /** Made by the binder and by nothing else: what these are is what a binding came to, and a
      *  set of facts gathered anywhere else would say so of facts nothing bound. Counted from the
      *  class files, as the arms' own constructors are. {@code stdlib} is the library they were
-     *  held to, whose written operations' laws are proved against their bodies here. */
-    BoundOperationFacts(Stdlib stdlib, List<BoundOperationFact> bound) {
+     *  held to, whose written operations' laws are proved against their bodies, by
+     *  {@code proofs}. */
+    BoundOperationFacts(Stdlib stdlib, List<BoundOperationFact> bound,
+                        LibraryProofs.Source proofs) {
         this.stdlib = stdlib;
         this.held = List.copyOf(bound);
         // What is stated of an operation the library writes is filed once its body proves it and
@@ -111,7 +113,7 @@ public final class BoundOperationFacts {
         relations = relations(projected(BoundOperationFact.IsRelated.class,
                 BoundOperationFact.IsRelated::holds), projected(BoundOperationFact.HasALaw.class,
                 BoundOperationFact.HasALaw::beside));
-        Settling settling = settle(awaiting);
+        Settling settling = settle(awaiting, proofs);
         settled = settling.settled();
         // One the body does not prove is an obligation, held apart, and no reader takes it. The
         // cases a definition is written in stand or fall together: a reader takes them as every
@@ -391,12 +393,16 @@ public final class BoundOperationFacts {
 
         /** It is proved against the operation's body, as {@code proof} says. */
         record Proved(Proof proof) implements Grounds {}
+
+        /** It was proved against the operation's body when this compiler was built, which is
+         *  what the proofs shipped with it record ({@link LibraryProofsAsBuilt}). */
+        record ProvedWhenBuilt() implements Grounds {}
     }
 
     /** Every settling, read once off the facts: what is declared of the kernels and what follows
      *  from what they are declared to build, and what is proved of the operations the library
      *  writes in the language. */
-    private Settling settle(List<BoundOperationFact> awaiting) {
+    private Settling settle(List<BoundOperationFact> awaiting, LibraryProofs.Source proofs) {
         Map<ValueName, Map<OperationLaw.Observed, Settled>> out = new LinkedHashMap<>();
         Map<ValueName.Stdlib.Operation, Map<OperationLaw.Observed, ProvingTheLibrary.Stated>>
                 stated = new LinkedHashMap<>();
@@ -448,7 +454,7 @@ public final class BoundOperationFacts {
                 }
             }
         }
-        ProvingTheLibrary proving = new ProvingTheLibrary(stdlib, this, out, stated, awaiting);
+        LibraryProofs proving = proofs.over(stdlib, this, out, stated, awaiting);
         stated.forEach((operation, of) -> of.keySet().forEach(observed ->
                 out.computeIfAbsent(operation, _ -> new LinkedHashMap<>())
                         .put(observed, proving.settle(operation, observed))));
@@ -460,7 +466,7 @@ public final class BoundOperationFacts {
     /** The settlings, with what proved those of the operations the library writes, which proves
      *  what else is stated of them. */
     private record Settling(Map<ValueName, Map<OperationLaw.Observed, Settled>> settled,
-                            ProvingTheLibrary proving) {}
+                            LibraryProofs proving) {}
 
     /** Whether {@code operation} is one the library writes in the language. */
     private boolean writes(ValueName operation) {

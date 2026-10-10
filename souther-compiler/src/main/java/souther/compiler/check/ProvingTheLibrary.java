@@ -50,7 +50,7 @@ import java.util.Set;
  * law is what it is declared; nothing else is a law here until a proof makes it one. A proof that
  * would read, on the way, the law it is proving is a circle, and it is left open rather than taken.
  */
-final class ProvingTheLibrary {
+final class ProvingTheLibrary implements LibraryProofs {
 
     /** What is stated of one operation the library writes, waiting to be proved. */
     record Stated(OperationLaw<DeclaredArgument> law, List<LawProposition<Slot>> carries,
@@ -131,7 +131,8 @@ final class ProvingTheLibrary {
      * <p>No default. A kind of fact added is one this says how to prove of a body, or says has no
      * proof here; a statement nothing proves is no fact, and is filed nowhere a reader looks.
      */
-    boolean proves(BoundOperationFact fact) {
+    @Override
+    public boolean proves(BoundOperationFact fact) {
         ValueName.Stdlib.Operation operation =
                 (ValueName.Stdlib.Operation) fact.operation().operation();
         return switch (fact) {
@@ -337,8 +338,9 @@ final class ProvingTheLibrary {
     }
 
     /** How {@code observed} of {@code operation}, which the library writes, is settled. */
-    BoundOperationFacts.Settled settle(ValueName.Stdlib.Operation operation,
-                                       OperationLaw.Observed observed) {
+    @Override
+    public BoundOperationFacts.Settled settle(ValueName.Stdlib.Operation operation,
+                                              OperationLaw.Observed observed) {
         Map<OperationLaw.Observed, BoundOperationFacts.Settled> done =
                 settled.computeIfAbsent(operation, _ -> new HashMap<>());
         BoundOperationFacts.Settled already = done.get(observed);

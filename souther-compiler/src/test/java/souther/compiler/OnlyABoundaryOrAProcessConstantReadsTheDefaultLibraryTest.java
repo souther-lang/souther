@@ -38,7 +38,9 @@ class OnlyABoundaryOrAProcessConstantReadsTheDefaultLibraryTest {
             // A compile: read once as it starts, and handed to everything it reaches.
             "query/Compilation.java",
             // `souther api`, which lists the library and is downstream of no compile.
-            "doc/ApiCommand.java");
+            "doc/ApiCommand.java",
+            // The build proving the library it ships, which is downstream of no compile.
+            "check/LibraryProofsAsBuilt.java");
 
     /** Rule tables derived from the shipped library and from nothing else. */
     private static final Set<String> PROCESS_CONSTANTS = Set.of(
