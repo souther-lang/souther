@@ -38,9 +38,11 @@ class AMapOfHowOftenEachKeyOccursIsFilteredAndMeasuredWholeTest {
             """;
 
     /**
-     * The four rows the line is owed, written the way the offering writes them, and two more where
-     * a key occurs more than once: the rows with one element each stand on other lines as well as
-     * this one, and it is the rows with several alike that tell it from them.
+     * The four rows the line is owed, written the way the offering writes them, and the rows that
+     * tell it from every other line: a line through two quantities is told from the lines beside it
+     * by rows at two different occurrences on each of its sides. The rows above stand at one
+     * occurrence, and the example at two, so this adds the third at the line and the second just
+     * short of it.
      */
     private static final String ANSWERED = """
                 | "at the line" : ([""], 1) -> [("", 1)]

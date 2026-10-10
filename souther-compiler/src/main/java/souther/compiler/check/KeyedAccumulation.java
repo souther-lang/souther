@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.proof.KeyedUpdates;
 import souther.compiler.types.BinOp;
@@ -99,7 +100,7 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, Exac
         Core key = args.get(update.keyArg());
         ExactRatio first = constant(args.get(update.absentArg()));
         Core.Block closure = blockOf.apply(args.get(update.closureArg()));
-        if (!isThe(args.get(update.mapArg()), accumulator) || mentions(key, accumulator)
+        if (!isThe(args.get(update.mapArg()), accumulator) || WhatABodyReads.binding(key, accumulator)
                 || first == null || closure == null || closure.params().size() != 1
                 || closure.params().getFirst().binding() == null) {
             return null;
@@ -124,7 +125,7 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, Exac
         Core.Case found = armOf(match, true);
         Core.Case missing = armOf(match, false);
         if (found == null || missing == null || found.binder() == null
-                || found.binder().binding() == null || mentions(key, accumulator)) {
+                || found.binder().binding() == null || WhatABodyReads.binding(key, accumulator)) {
             return null;
         }
         ExactRatio first = filedUnder(missing.body(), key, accumulator);
@@ -218,21 +219,4 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, Exac
         return Core.withoutStanding(e) instanceof Core.Read read && read.binding().equals(binding);
     }
 
-    /** Whether {@code e} reads the binding {@code binding} anywhere inside it. */
-    private static boolean mentions(Core e, BindingId binding) {
-        boolean[] found = {false};
-        look(e, binding, found);
-        return found[0];
-    }
-
-    private static void look(Core e, BindingId binding, boolean[] found) {
-        if (found[0]) {
-            return;
-        }
-        if (e instanceof Core.Read read && read.binding().equals(binding)) {
-            found[0] = true;
-            return;
-        }
-        Core.forEachChild(e, child -> look(child, binding, found));
-    }
 }

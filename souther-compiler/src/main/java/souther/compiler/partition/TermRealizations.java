@@ -1207,11 +1207,11 @@ final class TermRealizations {
             case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, orders,
                     asked, within, reading, inside);
             // Written by composing the container its elements stand in, which a value of one
-            // element's type is not.
-            case NumericTerm.Multiplicity _ -> new Realization.Unexhausted(
-                    CompositionShortfall.writing(Set.of(
-                            CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
-                    null);
+            // element's type is not: a group holding it is never answered by one number alone
+            // ({@link #jointRealizationOf}).
+            case NumericTerm.Multiplicity among -> throw new IllegalStateException(
+                    among + " is written by composing its container, and no value of one element"
+                            + " is asked for it");
         };
     }
 
