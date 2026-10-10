@@ -1,6 +1,7 @@
 package souther.compiler.proof;
 
 import souther.compiler.semantics.OperationLaw;
+import souther.compiler.semantics.Unsayable;
 import souther.compiler.types.ValueName;
 
 /**
@@ -22,6 +23,14 @@ public sealed interface Unproved {
     /** The body calls {@code operation}, whose {@code observed} is itself not proved. */
     record OpenBelow(ValueName.Stdlib.Operation operation, OperationLaw.Observed observed)
             implements Unproved {}
+
+    /**
+     * The statement turns on what the body calls answering something the domain has no words for,
+     * for {@code why}. Not proved, and not a closing either: the statement is in words the domain
+     * has, and what lacks them is a value the proof needed to read, which says nothing of whether
+     * the statement holds.
+     */
+    record TurnsOnWhatIsNotSaid(Unsayable why) implements Unproved {}
 
     /** What the body comes to is a statement about more than the operation's own arguments. */
     record NotOverItsArguments() implements Unproved {}

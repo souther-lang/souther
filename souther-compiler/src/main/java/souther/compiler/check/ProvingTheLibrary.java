@@ -362,21 +362,14 @@ final class ProvingTheLibrary {
     private BoundOperationFacts.Settled proved(ValueName.Stdlib.Operation operation,
                                                OperationLaw.Observed observed, Stated what) {
         if (what.closedAs() != null) {
-            // A closing is what the body comes to on that side where the domain has no words for
-            // it: a statement of nothing, which only words the domain lacks can leave unproved.
-            OperationLaw<Integer> nothing = new OperationLaw.Observation<>(sideOf(observed),
-                    new LawProposition.Always<>(true));
-            // The body shows the domain has no words for the side by coming to a proposition it
-            // has none for; the closing is taken only where that is the one it names.
-            return switch (prover.prove(operation, new Lemma(nothing, what.carries()))) {
-                case LibraryProver.Outcome.Unsaid(Unsayable why) when what.closedAs() == why ->
+            // A closing of a written operation is taken where its body answers, in every case,
+            // what an operation answers whose same observation is closed for the same reason —
+            // and nowhere a proof merely met such a value on its way.
+            return switch (prover.closes(operation, observed, what.closedAs())) {
+                case LibraryProver.Outcome.Proved _ ->
                         new BoundOperationFacts.Settled.Unsaid(what.closedAs());
-                case LibraryProver.Outcome.Unsaid _ -> new BoundOperationFacts.Settled.Open(null,
-                        new Unproved.DoesNotFollow(Unproved.Obligation.THE_STATEMENT));
                 case LibraryProver.Outcome.Open(Unproved why) ->
                         new BoundOperationFacts.Settled.Open(null, why);
-                case LibraryProver.Outcome.Proved _ -> new BoundOperationFacts.Settled.Open(null,
-                        new Unproved.DoesNotFollow(Unproved.Obligation.THE_STATEMENT));
             };
         }
         if (what.law() instanceof OperationLaw.Size<DeclaredArgument> size
@@ -389,8 +382,6 @@ final class ProvingTheLibrary {
                 ByPlace.law(what.law(), DeclaredArgument::position), what.carries()))) {
             case LibraryProver.Outcome.Proved(var proof) -> new BoundOperationFacts.Settled.ByALaw(
                     what.law(), new BoundOperationFacts.Grounds.Proved(proof));
-            case LibraryProver.Outcome.Unsaid(Unsayable why) ->
-                    new BoundOperationFacts.Settled.Unsaid(why);
             case LibraryProver.Outcome.Open(Unproved why) ->
                     new BoundOperationFacts.Settled.Open(what.law(), why);
         };
@@ -446,16 +437,6 @@ final class ProvingTheLibrary {
 
     private static LawNumber<Integer> numberAt(DeclaredArgument argument) {
         return new LawNumber.AnArgument<>(argument.position());
-    }
-
-    /** The side of an answer {@code observed} is about; a closing is of a side, never of a size. */
-    private static AnswerAspect sideOf(OperationLaw.Observed observed) {
-        return switch (observed) {
-            case TRUTH -> AnswerAspect.TRUTH;
-            case EMPTINESS -> AnswerAspect.EMPTINESS;
-            case PRESENCE -> AnswerAspect.PRESENCE;
-            case SIZE -> throw new IllegalStateException("a size is closed, which only a side is");
-        };
     }
 
     /** How a side of {@code operation} is settled, as a proof reads it. */

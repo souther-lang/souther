@@ -48,10 +48,8 @@ public final class LibraryProver {
         /** It is proved, as {@code proof} says. */
         record Proved(Proof proof) implements Outcome {}
 
-        /** What the body comes to is something the domain has no words for, for {@code why}. */
-        record Unsaid(Unsayable why) implements Outcome {}
-
-        /** It is not proved, for {@code why}. */
+        /** It is not proved, for {@code why} — however far the proof got, a value it met that
+         *  the domain has no words for among the reasons. */
         record Open(Unproved why) implements Outcome {}
     }
 
@@ -71,6 +69,36 @@ public final class LibraryProver {
     public LibraryProver(Library library, Set<ValueName.Stdlib.Operation> readThrough) {
         this.library = library;
         this.readThrough = Set.copyOf(readThrough);
+    }
+
+    /**
+     * Whether {@code observed} of what {@code operation} answers is something the domain has no
+     * words for, for {@code why}: in every case of its body the answer is what an operation
+     * answers whose {@code observed} is closed for that reason, so what it comes to on that
+     * observation is that answer's, and lacks words for the same reason.
+     *
+     * <p>Only the answer itself. A body meeting such a value somewhere — under a guard, beside
+     * another value, inside a walk — comes to something that may well have words, and a proof that
+     * stopped there has not shown it does not.
+     */
+    public Outcome closes(ValueName.Stdlib.Operation operation, OperationLaw.Observed observed,
+                          Unsayable why) {
+        Reading reading = new Reading(library, readThrough);
+        try {
+            for (Reading.Case each : reading.cases(reading.bodyOf(operation),
+                    new Reading.Frame(arguments(operation), Map.of()))) {
+                if (!(each.is() instanceof Value.Made(ValueName.Stdlib.Operation answering,
+                        var _) && library.settled(answering, observed)
+                        instanceof Library.Settled.Unsaid(Unsayable closed) && closed == why)) {
+                    return new Outcome.Open(new Unproved.DoesNotFollow(
+                            Unproved.Obligation.THE_CASES));
+                }
+                reading.took(Proof.Used.law(answering, observed));
+            }
+            return new Outcome.Proved(new Proof.ByTheBody(operation, reading.used()));
+        } catch (Reading.Stopped stopped) {
+            return stoppedAt(stopped);
+        }
     }
 
     /** Whether {@code lemma}, a statement about {@code operation}, is proved against its body. */
@@ -283,7 +311,8 @@ public final class LibraryProver {
 
     static Outcome stoppedAt(Reading.Stopped stopped) {
         return switch (stopped.why()) {
-            case Library.Settled.Unsaid(Unsayable why) -> new Outcome.Unsaid(why);
+            case Library.Settled.Unsaid(Unsayable why) ->
+                    new Outcome.Open(new Unproved.TurnsOnWhatIsNotSaid(why));
             case Library.Settled.Open(Unproved why) -> new Outcome.Open(why);
             case Library.Settled.ByALaw _ -> throw new IllegalStateException(
                     "a reading stopped on a law, which is no reason to stop");
@@ -304,11 +333,13 @@ public final class LibraryProver {
 
     /**
      * What a failed obligation comes to: the domain having no words for something the statement
-     * turned on, a law the proof needed not being settled, or the statement simply not following.
+     * turned on, a law the proof needed not being settled, or the statement simply not following
+     * — each of them a statement not proved.
      */
     private static Outcome outcomeOf(Failed failed, Reading reading) {
         return switch (reading.unsettledIn(failed.goal())) {
-            case Library.Settled.Unsaid(Unsayable why) -> new Outcome.Unsaid(why);
+            case Library.Settled.Unsaid(Unsayable why) ->
+                    new Outcome.Open(new Unproved.TurnsOnWhatIsNotSaid(why));
             case Library.Settled.Open(Unproved why) -> new Outcome.Open(why);
             case null, default -> new Outcome.Open(new Unproved.DoesNotFollow(failed.which()));
         };
@@ -539,21 +570,6 @@ public final class LibraryProver {
             }
         }
         return true;
-    }
-
-    /** Every way of taking each value {@code statement} holds of every one of as one of
-     *  {@code candidates}. */
-    private static List<Map<Integer, Value>> everyWay(LawProposition<Slot> statement,
-                                                      Set<Value> candidates) {
-        Set<Integer> every = new TreeSet<>();
-        Collect.slots(statement, slot -> {
-            if (slot instanceof Slot.Every(int which)) {
-                every.add(which);
-            }
-        });
-        Map<Integer, Set<Value>> taken = new HashMap<>();
-        every.forEach(which -> taken.put(which, candidates));
-        return everyWay(every, taken);
     }
 
     private static List<Map<Integer, Value>> everyWay(Set<Integer> every,
