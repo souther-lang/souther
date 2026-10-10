@@ -14,6 +14,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An input a declaration refuses is not named for a line the rows leave standing, and the line is
@@ -64,6 +65,11 @@ class AProposedInputADeclarationRefusesIsLeftOutTest {
                 + undeclared);
         assertEquals(1, declared.size(), () -> "and the declared ones leave the same line standing: "
                 + declared);
+        // What the case is about: with nothing refused the input stepping along the line lands on
+        // is a negative one, so the declared run has something to leave out.
+        assertTrue(undeclared.get(0).contains(", and a row at ")
+                        && undeclared.get(0).contains("= -"),
+                () -> "the plain positions are named an input below nought: " + undeclared);
         assertFalse(declared.get(0).contains("= -"),
                 () -> "an amount that cannot be negative is not named as one: " + declared);
         assertEquals(undeclared.get(0).replaceFirst(", and a row at.*$", ""),

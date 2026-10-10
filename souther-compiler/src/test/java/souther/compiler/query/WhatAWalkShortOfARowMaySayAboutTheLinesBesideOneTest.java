@@ -116,7 +116,7 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
         AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(names, MET,
                 () -> new StandingAtAPoint.RowsRead(rowsOf(names, ALIKE_UNDER_BOTH),
                         Set.of(), StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
-                List.of(), WayToTheBorder.UNTOUCHED);
+                List.of(), WayToTheBorder.UNTOUCHED, _ -> false);
 
         AnotherLineTheRowsAllow.CouldNotTell open =
                 assertInstanceOf(AnotherLineTheRowsAllow.CouldNotTell.class, said,
@@ -133,7 +133,7 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
                 () -> {
                     throw new AssertionError("the rows are not read for a line with no neighbour");
                 },
-                List.of(), WayToTheBorder.UNTOUCHED);
+                List.of(), WayToTheBorder.UNTOUCHED, _ -> false);
 
         assertEquals(new AnotherLineTheRowsAllow.NoSuchQuestion(
                         AnotherLineTheRowsAllow.Reason.THE_LINE_IS_ON_ONE_POSITION), said,
@@ -188,7 +188,7 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
         Border border = TheLinesBesideABorder.aLineOverTwoPositions();
         return AnotherLineTheRowsAllow.of(border, MET,
                 () -> new StandingAtAPoint.RowsRead(rowsOf(border, rows), Set.of(), tried, false),
-                List.of(), WayToTheBorder.UNTOUCHED);
+                List.of(), WayToTheBorder.UNTOUCHED, _ -> false);
     }
 
     /** One reading per row, each value on the term the quantity reads it at. */
@@ -274,7 +274,7 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
         AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(border, MET,
                 () -> new StandingAtAPoint.RowsRead(rowsOf(border, ALIKE_UNDER_BOTH),
                         Set.of(), StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
-                List.of(), TheLinesBesideABorder.aWayThatHoldsXAtNought());
+                List.of(), TheLinesBesideABorder.aWayThatHoldsXAtNought(), _ -> false);
 
         AnotherLineTheRowsAllow.CouldNotTell open =
                 assertInstanceOf(AnotherLineTheRowsAllow.CouldNotTell.class, said,
@@ -304,7 +304,8 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
         AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(border, MET,
                 () -> new StandingAtAPoint.RowsRead(rowsOf(border, ALIKE_UNDER_BOTH),
                         Set.of(), StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
-                List.of(), TheLinesBesideABorder.aWayOverAPositionTheBorderIsNotOn());
+                List.of(), TheLinesBesideABorder.aWayOverAPositionTheBorderIsNotOn(),
+                _ -> false);
 
         AnotherLineTheRowsAllow.OneDoes named =
                 assertInstanceOf(AnotherLineTheRowsAllow.OneDoes.class, said,
@@ -327,7 +328,7 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
         AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(border, MET,
                 () -> new StandingAtAPoint.RowsRead(rowsOf(border, ALIKE_UNDER_BOTH),
                         Set.of(), StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
-                List.of(), TheLinesBesideABorder.aWayWithAConditionNobodyRead());
+                List.of(), TheLinesBesideABorder.aWayWithAConditionNobodyRead(), _ -> false);
 
         assertInstanceOf(AnotherLineTheRowsAllow.Unsettled.NoReachableDistinguisher.class,
                 assertInstanceOf(AnotherLineTheRowsAllow.CouldNotTell.class, said).why(),
@@ -349,7 +350,7 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
                 () -> {
                     throw new AssertionError("the rows are not read before the question is due");
                 },
-                List.of(), WayToTheBorder.UNTOUCHED);
+                List.of(), WayToTheBorder.UNTOUCHED, _ -> false);
 
         assertEquals(AnotherLineTheRowsAllow.NOT_DUE_YET, said,
                 "what the rows are short of here is what the points say they are short of");
@@ -363,7 +364,7 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
                 () -> new StandingAtAPoint.RowsRead(rowsOf(border, ALIKE_UNDER_BOTH),
                         Set.of(ReadingGap.NO_VALUE), StandingAtAPoint.ReadingsTried.EVERY_ONE,
                         false),
-                List.of(), WayToTheBorder.UNTOUCHED);
+                List.of(), WayToTheBorder.UNTOUCHED, _ -> false);
 
         assertNotNull(said);
         assertInstanceOf(AnotherLineTheRowsAllow.CouldNotTell.class, said,
