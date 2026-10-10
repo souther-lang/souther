@@ -61,7 +61,9 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.Year;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -2688,19 +2690,32 @@ final class Pullback {
      * is a form of the input's own, which is where a year of it has no term of its own: a taking is
      * of a position. A date that is one is left to the term that stands for its year.
      *
-     * <p>Only where each end is a date the language writes, which is the years it spells with four
-     * digits. Equality is the dates of that year, and a difference is the dates outside it.
+     * <p>Equality is the dates of that year, and a difference is the dates outside it. A date the
+     * shift takes off the end of the range is no date, and which inputs make it so is not this
+     * reading's: the comparison is read over the dates it is about, as
+     * {@code Date.addDays(1, b) >= Date("2027-01-01")} is, and a row that would abort there is
+     * never a row that reached a line.
+     *
+     * <p>Only the parts that are runs of days. A month or a day of the month repeats every year,
+     * so it is no line on the date.
      */
     private Derivation ofTheYearOfADate(StatedComparison stated, Denotation at, boolean fixed,
                                         InputReads reads) {
         StatedComparison.Numbered<Core.PreservedCall> year =
                 stated.at(side -> theYearOfADateNoPositionHolds(side, reads));
-        if (year == null || !(Core.withoutStanding(year.other()) instanceof Core.Int written)
-                || written.value() < FIRST_YEAR_WRITTEN || written.value() > LAST_YEAR_WRITTEN) {
+        BigDecimal written = year == null ? null
+                : StatedComparison.foldedNumber(year.other(), read.rules().symbols());
+        if (written == null) {
             return null;
         }
         Core.PreservedCall taking = year.number();
-        int from = (int) written.value();
+        // A year past either end of the dates is the same one for the comparison, so it is held
+        // just past the end and the sum with one below cannot leave the range of a long.
+        long below = Year.MIN_VALUE - 2L;
+        long above = Year.MAX_VALUE + 2L;
+        long from = written.compareTo(BigDecimal.valueOf(below)) <= 0 ? below
+                : written.compareTo(BigDecimal.valueOf(above)) >= 0 ? above
+                : written.longValue();
         return switch (year.claim().statedRelation()) {
             case GE -> comparedWithTheStartOf(from, Rel.GE, taking, at, fixed, reads);
             case GT -> comparedWithTheStartOf(from + 1, Rel.GE, taking, at, fixed, reads);
@@ -2715,9 +2730,6 @@ final class Pullback {
         };
     }
 
-    private static final long FIRST_YEAR_WRITTEN = 1;
-    private static final long LAST_YEAR_WRITTEN = 9998;
-
     /** {@code side}, where it is the year of a date that stands at no position. */
     private Core.PreservedCall theYearOfADateNoPositionHolds(Core side, InputReads reads) {
         if (!(Core.withoutStanding(side) instanceof Core.PreservedCall call)
@@ -2730,10 +2742,20 @@ final class Pullback {
                 instanceof PathResolution.NotAPosition ? call : null;
     }
 
-    /** The date {@code taking} is the year of, compared with the first day of {@code year}. */
-    private Derivation comparedWithTheStartOf(int year, Rel relation, Core.PreservedCall taking,
+    /**
+     * The date {@code taking} is the year of, compared with the first day of {@code year}: on or
+     * after it, or before it.
+     *
+     * <p>A year no date has is before every date or after every one, so the comparison is the same
+     * for all of them and there is no day to write it against.
+     */
+    private Derivation comparedWithTheStartOf(long year, Rel relation, Core.PreservedCall taking,
                                               Denotation at, boolean fixed, InputReads reads) {
-        Core start = new Core.Temporal(Type.Prim.DATE, LocalDate.of(year, 1, 1).toString(),
+        if (year < Year.MIN_VALUE || year > Year.MAX_VALUE) {
+            boolean onOrAfter = year < Year.MIN_VALUE;
+            return new Derivation.WrittenOut(relation == Rel.GE ? onOrAfter : !onOrAfter);
+        }
+        Core start = new Core.Temporal(Type.Prim.DATE, LocalDate.of((int) year, 1, 1).toString(),
                 taking.application(), taking.pos());
         return comparison(new StatedComparison(ComparisonClaim.stating(relation),
                 taking.args().getFirst(), start, new Core.BinaryReading.AsTheyStand()), at, fixed,
