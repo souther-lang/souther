@@ -39,6 +39,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.TreeSet;
@@ -2033,10 +2034,10 @@ final class TermRealizations {
      * as the contradiction it would be rather than answered with a code point it holds.
      */
     private static int aCodePointOutside(Set<Integer> excluded) {
-        for (int each : PLAIN_LETTERS_FIRST.toCharArray()) {
-            if (!excluded.contains(each)) {
-                return each;
-            }
+        OptionalInt letter = PLAIN_LETTERS_FIRST.codePoints()
+                .filter(each -> !excluded.contains(each)).findFirst();
+        if (letter.isPresent()) {
+            return letter.getAsInt();
         }
         for (char each = FIRST_IDEOGRAPH; each <= LAST_IDEOGRAPH; each++) {
             int codePoint = each;
