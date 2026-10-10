@@ -45,13 +45,6 @@ import java.util.function.Function;
  */
 final class DischargeRules {
 
-    /** The operation {@code name} of the library module published as {@code alias}, as what a name
-     * reaching it denotes. Written as the two values it is, so that a row here says which library it
-     * is about without a reader splitting a spelling to find out. */
-    private static ValueName op(String alias, String name) {
-        return ValueName.Stdlib.operation(alias, name);
-    }
-
     /** The facts about the language's operations, held to the library this compiler ships. */
     private static BoundOperationFacts facts() {
         return DefaultBoundOperationFacts.get();

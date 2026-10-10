@@ -446,8 +446,8 @@ public final class WhereTheElementsCameFrom {
                 return false;
             }
             return positions.keyParam() == Combinator.NO_KEY
-                    || positions.keyParam() < args.size() && element.key() != null
-                    && args.get(positions.keyParam()).equals(element.key());
+                    || (positions.keyParam() < args.size() && element.key() != null
+                            && args.get(positions.keyParam()).equals(element.key()));
         }
 
         /** Whether {@code value} holds nothing whatever it was made of: written empty, or the

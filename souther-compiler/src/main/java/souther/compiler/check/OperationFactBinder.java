@@ -153,13 +153,17 @@ final class OperationFactBinder {
                 membership.ofTheElement()).other()).argument();
     }
 
-    /** Whether {@code named} is a key of an element of {@code container}, or the element itself —
-     *  or null where it is neither. */
-    private static Boolean namesAnElementOf(LawSubject<ArgumentRef> named, ArgumentRef container) {
+    /** How a membership names what a container holds: as an element, or as a key. */
+    private enum Held { AS_AN_ELEMENT, AS_A_KEY }
+
+    /** How {@code named} is what {@code container} holds — or null where it is neither an element
+     *  of it nor a key of one. */
+    private static Held namesAnElementOf(LawSubject<ArgumentRef> named, ArgumentRef container) {
         return switch (named) {
             case LawSubject.ElementOf<ArgumentRef>(ArgumentRef of) when of.equals(container) ->
-                    false;
-            case LawSubject.KeyOf<ArgumentRef>(ArgumentRef of) when of.equals(container) -> true;
+                    Held.AS_AN_ELEMENT;
+            case LawSubject.KeyOf<ArgumentRef>(ArgumentRef of) when of.equals(container) ->
+                    Held.AS_A_KEY;
             default -> null;
         };
     }
@@ -249,9 +253,9 @@ final class OperationFactBinder {
     /** Whether {@code a} and {@code b} are containers of one kind: both lists, both sets, or both
      *  maps. */
     private static boolean sameKind(Type a, Type b) {
-        return a instanceof Type.ListOf && b instanceof Type.ListOf
-                || a instanceof Type.SetOf && b instanceof Type.SetOf
-                || a instanceof Type.MapOf && b instanceof Type.MapOf;
+        return (a instanceof Type.ListOf && b instanceof Type.ListOf)
+                || (a instanceof Type.SetOf && b instanceof Type.SetOf)
+                || (a instanceof Type.MapOf && b instanceof Type.MapOf);
     }
 
     /** {@code operation}, whose truth law is {@code says}, answering true handed
@@ -1329,10 +1333,10 @@ final class OperationFactBinder {
                         different.ofTheElement(), within(over, container));
                 // Something of each element of that container: the element, its key, or what the
                 // closure it is handed answers.
-                if (!(each instanceof LawSubject.ElementOf<DeclaredArgument>(var of)
-                        && of.equals(container)
-                        || each instanceof LawSubject.KeyOf<DeclaredArgument>(var keyed)
-                                && keyed.equals(container)
+                if (!((each instanceof LawSubject.ElementOf<DeclaredArgument>(var of)
+                        && of.equals(container))
+                        || (each instanceof LawSubject.KeyOf<DeclaredArgument>(var keyed)
+                                && keyed.equals(container))
                         || each instanceof LawSubject.WhatTheClosureAnswers<DeclaredArgument>)) {
                     throw new IllegalStateException("a law of " + library.qualified()
                             + " counts the different values of " + each + ", which is nothing"

@@ -414,8 +414,9 @@ final class AStatementAtARow {
                     new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
             case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
                 case ObservationAtPoint.Value(ObservedValue value) -> {
-                    Boolean answer = value instanceof ObservedValue.Unknown
-                            || value instanceof ObservedValue.Truncated ? null : asked.apply(value);
+                    Boolean answer = (value instanceof ObservedValue.Unknown
+                            || value instanceof ObservedValue.Truncated) ? null
+                            : asked.apply(value);
                     if (answer == null) {
                         yield new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));
                     }

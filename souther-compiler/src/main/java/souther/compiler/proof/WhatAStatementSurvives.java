@@ -113,14 +113,14 @@ public final class WhatAStatementSurvives {
                 case LawProposition.Observed<Integer>(var of, var _) -> subject(of, true);
                 case LawProposition.Compared<Integer>(var form, var _) ->
                         form.coefs().keySet().forEach(number -> {
-                            if (number instanceof LawNumber.AnArgument<Integer>(Integer at)
-                                    && at == container
-                                    || number instanceof LawNumber.HowManyMeet<Integer>(
-                                            Integer over, var _) && over == container
-                                    || number instanceof LawNumber.HowManyDifferent<Integer>(
-                                            Integer different, var _) && different == container
-                                    || number instanceof LawNumber.SumOver<Integer>(
-                                            Integer summed, var _) && summed == container) {
+                            if ((number instanceof LawNumber.AnArgument<Integer>(Integer at)
+                                    && at == container)
+                                    || (number instanceof LawNumber.HowManyMeet<Integer>(
+                                            Integer over, var _) && over == container)
+                                    || (number instanceof LawNumber.HowManyDifferent<Integer>(
+                                            Integer different, var _) && different == container)
+                                    || (number instanceof LawNumber.SumOver<Integer>(
+                                            Integer summed, var _) && summed == container)) {
                                 otherwise = true;
                             } else if (number instanceof LawNumber.SizeOf<Integer>(var of)) {
                                 subject(of, true);
