@@ -353,6 +353,15 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/TermRealizations$Tried;",
                     "names the figure as what left more of the set untried, where the walk filled"
                             + " what it was allowed before the window ran out"),
+            // The numbers of a run that leave the remainders asked for, found by stepping through
+            // one period of it. Both the steps and the numbers handed over are counted, and what
+            // it hands over says which of the two stopped the walk.
+            Map.entry("souther.compiler.partition.TermRealizations#throughOnePeriod("
+                            + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
+                            + "Ljava/math/BigInteger;Ljava/util/function/Predicate;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Tried;",
+                    "names the figure as what left the period untried, where the walk used the"
+                            + " steps it was allowed or filled what it was allowed to hand over"),
             // The numbers a place may be where several of its quotients are asked for. The run the
             // demands leave is walked as whole numbers, so the figure bounds how many of them are
             // tried — and what it hands over is that walk's own answer.

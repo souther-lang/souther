@@ -213,6 +213,64 @@ public sealed interface TakenAs {
     }
 
     /**
+     * What the value leaves when it is divided by what the divisor argument reads as and the
+     * quotient is floored, so the answer takes the divisor's sign.
+     *
+     * <p><b>A number taken of one place, as the quotient is.</b> What it states of the position is a
+     * residue class, which is no line on the position's own order and no run of it, so it is not
+     * drawn there: the rule is over two numbers, the position's own and this one, and this one runs
+     * through the residues and is the number a border is drawn on. A comparison of it is an ordinary
+     * comparison of a number that stays between its ends, which is what the operation declares of
+     * its answer, and two rules over one position's remainder by one divisor are rules over one
+     * number.
+     *
+     * <p><b>Realizable by the residue itself.</b> Every value of a residue class answers the
+     * residue, and the residue is one of them: a number that is a remainder by the divisor is its own
+     * remainder. That is what a value is written at where nothing else is asked of the position,
+     * and a position asked for as well is offered the values its own demand leaves and read back
+     * ({@code partition.TermRealizations}).
+     *
+     * <p>Which argument the divisor is, is the arithmetic's own answer
+     * ({@link Arithmetic.AFloorRemainder#divisor}), carried here as a position as the quotient's is.
+     * A divisor the reading does not have as a number is no period, and one of nought is no number
+     * at all: the operation aborts there, and an account of one would be a line drawn where no row
+     * can stand.
+     */
+    record TheFloorRemainder(int divisor) implements TakenAs {
+
+        public TheFloorRemainder {
+            if (divisor < 1) {
+                throw new IllegalArgumentException(
+                        "a remainder is taken of the value at the first argument and divided by one"
+                                + " beside it, and argument " + (divisor + 1) + " is not beside it");
+            }
+        }
+
+        @Override
+        public boolean takenOf(Type source, Type answered) {
+            return source == Type.Prim.INT && answered == Type.Prim.INT;
+        }
+
+        @Override
+        public boolean settledBy(TakenArguments arguments) {
+            BigDecimal by = read(arguments);
+            return by != null && by.signum() != 0;
+        }
+
+        /** The divisor and nothing else: a residue class is the one its divisor says. */
+        @Override
+        public TakenArguments naming(TakenArguments gave) {
+            BigDecimal by = read(gave);
+            return by == null ? TakenArguments.NONE : TakenArguments.at(divisor, by);
+        }
+
+        /** What the divisor reads as, or null where these arguments do not say. */
+        public BigDecimal read(TakenArguments arguments) {
+            return arguments.at(divisor);
+        }
+    }
+
+    /**
      * Which part of a time of day it is: the hour it falls in, the minute within that hour, the
      * second within that minute.
      *

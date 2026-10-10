@@ -344,6 +344,8 @@ final class OperationFactBinder {
                                     TypeRequirement.ANY,
                                     "the argument a positive answer names as lesser"));
             case OperationFact.ShiftsBy shifts -> holdShift(stdlib, declaration, shifts);
+            case OperationFact.CountsWholeUnitsBetween counts ->
+                    holdCountOfWholeUnits(declaration, counts);
             case OperationFact.BoundsItsResult bounded ->
                     new BoundOperationFact.BoundsItsResult(operation,
                             holdBound(declaration, bounded.bound()));
@@ -646,6 +648,28 @@ final class OperationFactBinder {
                 declaredSignature(stdlib, shift.measure()).declaring(), moved, amount, shift.per());
     }
 
+    /**
+     * As {@link #holdToTheDeclaration}, for a count of whole units between two values: the answer is
+     * a number, and what is counted from and to is of one type, since a count of units between two
+     * values of different kinds has no steps to count.
+     */
+    private static BoundOperationFact.CountsWholeUnitsBetween holdCountOfWholeUnits(
+            CompleteSignature declaration, OperationFact.CountsWholeUnitsBetween counts) {
+        holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
+                "what a count of whole units is");
+        DeclaredArgument from = holdToTheDeclaration(declaration, counts.from(), null,
+                TypeRequirement.ANY, "the value the units are counted from");
+        DeclaredArgument to = holdToTheDeclaration(declaration, counts.to(), null,
+                TypeRequirement.ANY, "the value the units are counted to");
+        if (!from.stands().equals(to.stands())) {
+            throw new IllegalStateException("the units are counted from "
+                    + Type.show(from.stands()) + " to " + Type.show(to.stands())
+                    + ", which are not steps of one order");
+        }
+        return new BoundOperationFact.CountsWholeUnitsBetween(declaration.declaring(), from, to,
+                counts.perUnit());
+    }
+
     /** As {@link #holdToTheDeclaration}, for the arguments a case names: the ones the number it
      *  answers is written in, and the ones each side of each condition it is reached under is. */
     private static DefinitionCase<DeclaredArgument> holdCase(CompleteSignature declaration,
@@ -688,6 +712,9 @@ final class OperationFactBinder {
             case ResultBound.Provided.Always<ArgumentRef> _ -> new ResultBound.Provided.Always<>();
             case ResultBound.Provided.ConstantAboveZero<ArgumentRef> constant ->
                     new ResultBound.Provided.ConstantAboveZero<>(
+                            holdBoundArgument(declaration, constant.argument()));
+            case ResultBound.Provided.ConstantBelowZero<ArgumentRef> constant ->
+                    new ResultBound.Provided.ConstantBelowZero<>(
                             holdBoundArgument(declaration, constant.argument()));
         };
         return new ResultBound<>(against, bound.offset(), bound.rel(), provided);

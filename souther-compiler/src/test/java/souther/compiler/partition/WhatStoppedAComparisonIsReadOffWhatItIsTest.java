@@ -59,9 +59,9 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
     @Test
     void anOperationsAnswerIsARuleAboutAValueMadeFromThePosition() {
         assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                whyAt(guard("a: DateTime, b: DateTime", "DateTime.minutesBetween(a, b) > 10"), "a"));
+                whyAt(guard("a: Int, b: Int", "Int.floorMod(a, b) > 10"), "a"));
         assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                whyAt(guard("a: DateTime, b: DateTime", "DateTime.minutesBetween(a, b) > 10"), "b"));
+                whyAt(guard("a: Int, b: Int", "Int.floorMod(a, b) > 10"), "b"));
     }
 
     /**
@@ -92,7 +92,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
     @Test
     void bothArgumentsOfAnOperationAreNamed() {
         PartitionEvidence measured =
-                guard("a: DateTime, b: DateTime", "DateTime.minutesBetween(b, a) > 10");
+                guard("a: Int, b: Int", "Int.floorMod(b, a) > 10");
 
         assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
                 whyAt(measured, "a"));
@@ -131,7 +131,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
     @Test
     void anOperationThisDoesNotReadIsNamed() {
         assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                whyAt(guard("a: DateTime", "DateTime.minutesBetween(a, a) > 10"), "a"));
+                whyAt(guard("a: Int", "Int.floorMod(a, a) > 10"), "a"));
     }
 
     /**
@@ -229,11 +229,11 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
      */
     @Test
     void arithmeticRoundAnOperationDoesNotChangeWhatStoppedTheReading() {
-        for (String condition : List.of("DateTime.minutesBetween(a, b) <= 30",
-                "Int.add(DateTime.minutesBetween(a, b), 1) <= 30",
-                "Int.add(1, DateTime.minutesBetween(a, b)) <= 30")) {
+        for (String condition : List.of("Int.floorMod(a, b) <= 30",
+                "Int.add(Int.floorMod(a, b), 1) <= 30",
+                "Int.add(1, Int.floorMod(a, b)) <= 30")) {
             assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                    whyAt(guard("a: DateTime, b: DateTime", condition), "a"), condition);
+                    whyAt(guard("a: Int, b: Int", condition), "a"), condition);
         }
     }
 

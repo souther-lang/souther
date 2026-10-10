@@ -746,7 +746,7 @@ enum Question {
             // They answer one of the values they were given, which is which case they are in and
             // not arithmetic of their own.
             return Set.of(op("Int", "min"), op("Int", "max"), op("Int", "clamp"),
-                    op("Int", "floorMod"), op("Int", "compare"), op("Decimal", "min"),
+                    op("Int", "compare"), op("Decimal", "min"),
                     op("Decimal", "max"), op("Decimal", "clamp"));
         }
     },

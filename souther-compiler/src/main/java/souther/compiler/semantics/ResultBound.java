@@ -71,5 +71,14 @@ public record ResultBound<A>(A against, BigDecimal offset, Rel rel, Provided<A> 
                 java.util.Objects.requireNonNull(argument, "this one names an argument");
             }
         }
+
+        /** An argument that reads as a constant below zero, constant for the reason
+         *  {@link ConstantAboveZero} is. */
+        record ConstantBelowZero<A>(A argument) implements Provided<A> {
+
+            public ConstantBelowZero {
+                java.util.Objects.requireNonNull(argument, "this one names an argument");
+            }
+        }
     }
 }

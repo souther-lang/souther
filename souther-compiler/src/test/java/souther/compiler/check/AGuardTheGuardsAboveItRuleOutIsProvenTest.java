@@ -356,9 +356,9 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
      *
      * <p>The two questions this reading answers came apart when every value got an identity. A guard
      * over a value the body bound from something no form reads is a condition whose shape runs out —
-     * there is no reading of what {@code Int.floorMod} answers — and it narrows the state all the
-     * same, through the subject the binding is. So it is not among the reasons and among them at
-     * once: not read, and taken in.
+     * there is no reading of what {@code Int.floorMod} answers where its divisor is no constant —
+     * and it narrows the state all the same, through the subject the binding is. So it is not among
+     * the reasons and among them at once: not read, and taken in.
      *
      * <p>Answered from the wrong one of the two, this proof said the readable guard cannot hold, and
      * that guard can hold perfectly well. A proof is a claim about the program; a limit of this
@@ -376,7 +376,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                 behavior charge : (a: Amount) -> Free | Charged
                     constructs Charged
                 let charge (a) = {
-                    let x = Int.floorMod(a.value, 7)
+                    let x = Int.floorMod(1000, a.value + 1)
                     guard a.value < 900 else Free
                     guard x < 5 else Free
                     guard x < 6 else Free
@@ -397,5 +397,42 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                         .map(each -> ((Reachability.Unsettled) each).why())
                         .anyMatch(WhatAnAnswerSays::isAConditionNotRead),
                 "its shape ran out, and an arm left unsettled by it says so");
+    }
+
+    /**
+     * What a division leaves of a value is read, and what a guard says of it is taken in as what it
+     * says of the call.
+     *
+     * <p>Named as the call is, so the remainder a guard names and the value the body bound the call
+     * to are one number: nothing under five is six or more of it, and what the operation answers is
+     * carried with it, so a remainder by seven is never seven.
+     */
+    @Test
+    void aRemainderOfAPlaceIsReadAndTheEndsItsOperationGivesAreCarried() {
+        String source = """
+                module d
+
+                data Amount = Int invariant value >= 0 && value <= 1000
+                data Free
+                data Charged = { yen: Int }
+
+                behavior charge : (a: Amount) -> Free | Charged
+                    constructs Charged
+                let charge (a) = {
+                    let x = Int.floorMod(a.value, 7)
+                    guard x < 5 else Free
+                    guard x < 6 else Free
+                    guard x < 7 else Free
+                    Charged { yen = 1 }
+                }
+                """;
+
+        assertEquals(2, provenIn(source, "charge").size(),
+                "the second guard's departure by the first, and the third's by the ends of the call");
+        assertTrue(armsOf(source, "charge").stream()
+                        .filter(Reachability.Unsettled.class::isInstance)
+                        .map(each -> ((Reachability.Unsettled) each).why())
+                        .noneMatch(WhatAnAnswerSays::isAConditionNotRead),
+                "every condition is read");
     }
 }

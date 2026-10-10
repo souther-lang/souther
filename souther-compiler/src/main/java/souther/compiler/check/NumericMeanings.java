@@ -17,7 +17,15 @@ import java.util.List;
  */
 final class NumericMeanings {
 
-    /** What a call handing over {@code args} to {@code arithmetic} computes. */
+    /**
+     * What a call handing over {@code args} to {@code arithmetic} computes, or null where the check
+     * has no meaning for it.
+     *
+     * <p>A floor remainder is one such: what the check knows of it is the ends its operation is
+     * declared to answer between, and what a rule over it is about is a number taken of a place
+     * ({@code semantics.TakenAs.TheFloorRemainder}). A meaning here would be a second account of
+     * the same number, which the library may not carry ({@link NumericReadings}).
+     */
     static NumericMeaning of(Arithmetic arithmetic, List<Core> args) {
         return switch (arithmetic) {
             case Arithmetic.TheOperator operator ->
@@ -26,6 +34,7 @@ final class NumericMeanings {
                     new NumericMeaning.TruncatingQuotient(args.get(0), args.get(1));
             case Arithmetic.ATruncatingRemainder _ ->
                     new NumericMeaning.TruncatingRemainder(args.get(0), args.get(1));
+            case Arithmetic.AFloorRemainder _ -> null;
             case Arithmetic.AQuotientRoundedToAScale _ -> new NumericMeaning.RoundedQuotient(
                     args.get(0), args.get(1), args.get(2), args.get(3));
         };

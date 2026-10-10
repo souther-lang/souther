@@ -292,6 +292,18 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.ShiftsBy.class);
     }
 
+    /** How {@code operation} counts whole units between its two arguments, or null where it
+     *  counts none. */
+    public BoundOperationFact.CountsWholeUnitsBetween countsWholeUnitsBetween(
+            ValueName operation) {
+        return one(BoundOperationFact.CountsWholeUnitsBetween.class, operation);
+    }
+
+    /** The operations that count whole units between two values. */
+    public Set<ValueName> countsWholeUnitsBetween() {
+        return ones(BoundOperationFact.CountsWholeUnitsBetween.class);
+    }
+
     /** What holds of the number {@code operation} answers, wherever it is called, in the order
      *  declared. */
     public List<ResultBound<DeclaredArgument>> boundsOnTheResult(ValueName operation) {

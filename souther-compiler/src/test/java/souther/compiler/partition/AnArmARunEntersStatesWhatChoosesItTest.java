@@ -95,7 +95,7 @@ class AnArmARunEntersStatesWhatChoosesItTest {
     void aClauseNotReadStandsBeforeTheClausesAfterIt() {
         Map<MeaningsOfABody.Part.Arm, Proposition> arms = arms("""
                 data Odd = Int
-                    invariant odd = Int.floorMod(value, 2) == 1
+                    invariant odd = Int.floorMod(100, value) == 1
                     invariant high = value <= 10
                 """, "Odd", """
                 {

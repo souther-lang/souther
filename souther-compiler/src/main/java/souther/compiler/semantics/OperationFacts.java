@@ -141,11 +141,12 @@ public final class OperationFacts {
             // operation, so it is stated at every call and not only where something was guarded:
             // `Int.abs(x)` is not negative whatever `x` is.
             //
-            // `Int.floorMod` states both its ends only where the divisor reads as a constant above
-            // zero, and neither of them otherwise. The result takes the sign of the divisor —
-            // `floorMod(1, -3)` is `-2` — so a divisor that could be negative puts it the other
-            // side of zero, and the lower end is as much the divisor's to decide as the upper one.
-            // Its `0` is not a case at all: the operation aborts.
+            // `Int.floorMod` states both its ends only where the divisor reads as a constant, and
+            // neither of them otherwise. The result takes the sign of the divisor — `floorMod(1, -3)`
+            // is `-2` — so a divisor above zero leaves it from nought up to the divisor, one below
+            // zero from the divisor up to nought, and a divisor that could be either puts it on
+            // whichever side the divisor decides. Its `0` is not a case at all: the operation
+            // aborts.
             //
             // `Decimal.toInt` is within one of what it rounds, whichever mode it is handed. What a
             // single mode does more narrowly — `HALF_UP` rounds to within a half — is a second
@@ -154,6 +155,8 @@ public final class OperationFacts {
             about("Decimal", "abs", bounded(Rel.GE, 0)),
             about("Int", "floorMod", bounded(Rel.GE, 0, aboveZero(at(1)))),
             about("Int", "floorMod", bounded(Rel.LT, at(1), 0, aboveZero(at(1)))),
+            about("Int", "floorMod", bounded(Rel.LE, 0, belowZero(at(1)))),
+            about("Int", "floorMod", bounded(Rel.GT, at(1), 0, belowZero(at(1)))),
             about("Decimal", "toInt", bounded(Rel.GT, at(1), -1, always())),
             about("Decimal", "toInt", bounded(Rel.LT, at(1), 1, always())),
 
@@ -194,6 +197,9 @@ public final class OperationFacts {
             about("Date", "year", bounded(Rel.LE, java.time.LocalDate.MAX.getYear())),
             about("DateTime", "minutesBetween", bounded(Rel.GE, -minutesAcrossEveryDateTime())),
             about("DateTime", "minutesBetween", bounded(Rel.LE, minutesAcrossEveryDateTime())),
+            // A date-time counts seconds and a minute is sixty of them. The answer drops what is
+            // left toward zero, so it is no form of the two and is stated through their difference.
+            about("DateTime", "minutesBetween", countsWholeUnitsBetween(at(0), at(1), 60)),
 
             // The operations that move a value by an amount, each stated through the measure that
             // counts two such values apart. Every one of them works on a local value, where a day
@@ -819,6 +825,7 @@ public final class OperationFacts {
                     computesInTheCaseCarrying(Type.INT, new Arithmetic.ATruncatingQuotient())),
             about("Int", "truncatingRemainder",
                     computesInTheCaseCarrying(Type.INT, new Arithmetic.ATruncatingRemainder())),
+            about("Int", "floorMod", computes(new Arithmetic.AFloorRemainder())),
             about("Decimal", "divide",
                     computesInTheCaseCarrying(Type.DECIMAL,
                             new Arithmetic.AQuotientRoundedToAScale())),
@@ -1296,6 +1303,15 @@ public final class OperationFacts {
 
     private static ResultBound.Provided<ArgumentRef> aboveZero(ArgumentRef argument) {
         return new ResultBound.Provided.ConstantAboveZero<>(argument);
+    }
+
+    private static ResultBound.Provided<ArgumentRef> belowZero(ArgumentRef argument) {
+        return new ResultBound.Provided.ConstantBelowZero<>(argument);
+    }
+
+    private static OperationFact countsWholeUnitsBetween(ArgumentRef from, ArgumentRef to,
+                                                         long perUnit) {
+        return new OperationFact.CountsWholeUnitsBetween(from, to, perUnit);
     }
 
     private static OperationFact shifts(String module, String measure, ArgumentRef of,

@@ -281,6 +281,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.Pullback.joined",
                     "the composition of what a condition states, joined as the proposition the"
                             + " two halves make"),
+            new Held("souther.compiler.partition.Pullback.theStepsStandTo",
+                    "writes the steps from one value to another as the difference of the two, so"
+                            + " that a comparison of a count of whole units is read where any"
+                            + " comparison of a difference is"),
             new Held("souther.compiler.partition.ClauseStatements.walk",
                     "walks into both halves, and stops where the connective composes either of"
                             + " them because what such a rule states is neither of its sides"),

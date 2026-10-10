@@ -11,6 +11,7 @@ import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
@@ -18,9 +19,12 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -1668,9 +1672,45 @@ final class ReadQuantities implements Quantities {
         // Where two values were fixed there, between them: the rules leave nothing at all, which
         // {@link #emptiness} says, and a range that crossed itself is not something to hand a
         // caller that has not asked.
-        return fixedAt == null ? runs
+        return withinTheResiduesFixedOf(term, fixedAt == null ? runs
                 : meeting(runs, new NumericDomain.Bounds(Endpoint.inclusive(fixedAt.least()),
-                        Endpoint.inclusive(fixedAt.most())));
+                        Endpoint.inclusive(fixedAt.most()))));
+    }
+
+    /**
+     * {@code runs}, of the value at a position, once a remainder of it has been fixed.
+     *
+     * <p>A remainder fixed at a residue leaves the value the numbers of that class and no others,
+     * which is no run — so what is said of the value is the run between the first of them and the
+     * last the rules leave it ({@link ResidueHull}). A search that names a place at either end names
+     * a number of the class, and one that named an end of the run itself would name a number the
+     * remainder it was fixing refuses.
+     *
+     * <p>Only a remainder fixed at one number, and only of a value counted by whole numbers. A
+     * remainder asked for as one of several, or left to the rules, says nothing of where the value
+     * runs.
+     */
+    private NumericDomain.Bounds withinTheResiduesFixedOf(NumericTerm term,
+                                                          NumericDomain.Bounds runs) {
+        if (!(term instanceof NumericTerm.ValueOf value) || fixed.isEmpty()) {
+            return runs;
+        }
+        NumericDomain.Bounds out = runs;
+        for (Map.Entry<NumericTerm, Fixed> each : fixed.entrySet()) {
+            if (each.getKey() instanceof NumericTerm.TakenOf taken
+                    && taken.position().equals(value.position())
+                    && taken.takenAs() instanceof TakenAs.TheFloorRemainder remainder
+                    && remainder.read(taken.arguments()) instanceof BigDecimal divisor
+                    && divisor.signum() != 0
+                    && each.getValue().isOne()
+                    && each.getValue().least() instanceof Count residue
+                    && residue.exactly().isWhole()
+                    && residue.exactly().floor() instanceof ExactAnswer.Held<BigInteger> left
+                    && Arithmetic.AFloorRemainder.magnitudeOf(divisor) instanceof BigInteger size) {
+                out = ResidueHull.of(out, left.value(), size);
+            }
+        }
+        return out;
     }
 
     /** What the bounds taken in on an order leave each term they are about, met together. Empty

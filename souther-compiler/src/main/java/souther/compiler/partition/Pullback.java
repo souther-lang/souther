@@ -20,6 +20,7 @@ import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
+import souther.compiler.check.WholeUnitsBetween;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Denotation;
@@ -55,13 +56,16 @@ import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.Unsayable;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.Year;
 import java.util.ArrayList;
@@ -490,6 +494,7 @@ final class Pullback {
                 () -> partOf(at, asACut(stated, arithmetic.get(), fixed)),
                 () -> partOf(at, onAnOrder(stated, arithmetic.get(), reads)),
                 () -> ofTheYearOfADate(stated, at, fixed, reads),
+                () -> ofACountOfWholeUnits(stated, at, fixed, reads),
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
                 () -> ofASizeInCases(stated, at, reads),
                 () -> ofAChoice(stated, at, reads),
@@ -2728,6 +2733,65 @@ final class Pullback {
                     comparedWithTheStartOf(from, Rel.LT, taking, at, fixed, reads),
                     comparedWithTheStartOf(from + 1, Rel.GE, taking, at, fixed, reads));
         };
+    }
+
+    /**
+     * A comparison of a count of whole units between two values, read as the comparison of the steps
+     * between them it states ({@link WholeUnitsBetween}) — or null where it is no such comparison.
+     *
+     * <p>The count drops what is left of a unit toward zero, so it is no form of the two values and
+     * the walk over arithmetic has nothing to say of it. What it states is exact all the same, and
+     * is read here as the difference of the two against the steps it comes to: a count of minutes
+     * above five is a difference of six minutes' seconds or more. Equality is the steps between two
+     * thresholds, which is a stretch of both signs around nought and not the two values being equal,
+     * and a difference is the steps outside it.
+     */
+    private Derivation ofACountOfWholeUnits(StatedComparison stated, Denotation at, boolean fixed,
+                                            InputReads reads) {
+        WholeUnitsBetween.Read<InputReads> counted =
+                WholeUnitsBetween.read(stated, reads, sides());
+        return counted == null ? null : theStepsStand(counted.statement(), counted, at, fixed);
+    }
+
+    /** What {@code statement} says of the steps between the two values, read as comparisons of
+     *  their difference. */
+    private Derivation theStepsStand(WholeUnitsBetween.Statement statement,
+                                     WholeUnitsBetween.Read<InputReads> counted, Denotation at,
+                                     boolean fixed) {
+        return switch (statement) {
+            case WholeUnitsBetween.Statement.Steps(Rel rel, BigInteger against) ->
+                    theStepsStandTo(rel, against, counted, at, fixed);
+            case WholeUnitsBetween.Statement.Both(var first, var second) ->
+                    new Derivation.Joined(ConditionJoin.BOTH,
+                            theStepsStand(first, counted, at, fixed),
+                            theStepsStand(second, counted, at, fixed));
+            case WholeUnitsBetween.Statement.Either(var first, var second) ->
+                    new Derivation.Joined(ConditionJoin.EITHER,
+                            theStepsStand(first, counted, at, fixed),
+                            theStepsStand(second, counted, at, fixed));
+        };
+    }
+
+    /**
+     * The difference of the two values compared with {@code against}.
+     *
+     * <p>A number of steps no two values are apart by is before every difference or after every one,
+     * so the comparison is the same for all of them and there is nothing to write it against.
+     */
+    private Derivation theStepsStandTo(Rel rel, BigInteger against,
+                                       WholeUnitsBetween.Read<InputReads> counted, Denotation at,
+                                       boolean fixed) {
+        if (against.bitLength() > Long.SIZE - 2) {
+            boolean after = against.signum() > 0;
+            return new Derivation.WrittenOut(rel == Rel.GE ? !after : after);
+        }
+        Core to = counted.to();
+        Core difference = new Core.Binary(BinOp.SUB, to, counted.from(),
+                Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.INT,
+                to.pos());
+        Core steps = new Core.Int(against.longValue(), Type.INT, to.pos());
+        return comparison(new StatedComparison(ComparisonClaim.stating(rel), difference, steps,
+                Core.BinaryReading.AS_THEY_STAND), at, fixed, counted.at());
     }
 
     /** {@code side}, where it is the year of a date that stands at no position. */

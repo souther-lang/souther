@@ -302,6 +302,7 @@ final class TermRealizations {
         SequencedMap<RealizationTarget.OfANumber, TakenAs.TimePart> times = new LinkedHashMap<>();
         SequencedMap<RealizationTarget.OfANumber, TakenAs.DatePart> dates = new LinkedHashMap<>();
         SequencedMap<RealizationTarget.OfANumber, BigDecimal> quotients = new LinkedHashMap<>();
+        SequencedMap<RealizationTarget.OfANumber, BigDecimal> remainders = new LinkedHashMap<>();
         // What stands at the place, where the group asks for it as well as for numbers taken of
         // it. One group has at most one of these: what a number of a place is taken of is the
         // place, so a second value asked for is a second place and is another group's.
@@ -344,6 +345,16 @@ final class TermRealizations {
                             }
                             quotients.put(target, divisor);
                         }
+                        // A remainder is no place in the spelling of a number either. Asked for
+                        // beside the place's own value it is read off each value offered; asked for
+                        // alone, or beside remainders by other divisors, it is solved for below.
+                        case TakenAs.TheFloorRemainder by -> {
+                            BigDecimal divisor = by.read(taken.arguments());
+                            if (divisor == null || divisor.signum() == 0) {
+                                return nothingSolvesAGroup();
+                            }
+                            remainders.put(target, divisor);
+                        }
                         // How much a container holds, which is what a container is composed out of
                         // rather than a place in the spelling of one: what answers a length and a
                         // total together is a container built to have both, and the arm below is
@@ -373,6 +384,17 @@ final class TermRealizations {
             RealizationTarget.OfANumber total = whatItComesTo;
             return wholly(targets, List.of(many, total),
                     () -> new JointBuilder.HoldingThatManyAndAddingUpToThat(many, total));
+        }
+        // The remainders of one place by their divisors, with nothing else asked of it. A value
+        // that is none of them is nothing these write, so a quotient or a part beside them is a
+        // group nothing here solves.
+        if (!remainders.isEmpty()) {
+            if (!quotients.isEmpty() || !times.isEmpty() || !dates.isEmpty()
+                    || manyItHolds != null || whatItComesTo != null) {
+                return nothingSolvesAGroup();
+            }
+            return wholly(targets, remainders.keySet(),
+                    () -> new JointBuilder.SolvingForTheirRemainders(remainders));
         }
         // A quotient of a place beside a part of it is a value that is both a number and a moment,
         // and what would write one is neither arm here.
@@ -680,6 +702,75 @@ final class TermRealizations {
         }
 
         /**
+         * One number of the place whose remainders by those divisors are the numbers asked for,
+         * found among the first period's worth of whole numbers.
+         *
+         * <p><b>Searched, and where the search is the proof.</b> A residue class repeats every
+         * divisor, so the remainders of one number by several divisors repeat every product of them:
+         * a number that answers every demand exists if and only if one of the first product's worth
+         * of whole numbers does. Where the walk reaches the end of that window and no number
+         * answered, there is none, and a window the figure of this compiler cut short is said to
+         * be cut short and is not read as nothing.
+         *
+         * <p>Every candidate is admitted by dividing it, as a quotient's is: what a builder owes is
+         * that what it writes reads back as the number it was asked for.
+         */
+        record SolvingForTheirRemainders(SequencedMap<RealizationTarget.OfANumber, BigDecimal> by)
+                implements JointBuilder {
+
+            public SolvingForTheirRemainders {
+                if (by.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a solving for some remainders says which divisors they are by");
+                }
+                by = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(by));
+            }
+
+            @Override
+            public Realization from(Type sourceType,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                Carrier observed = rootOf(by.keySet(), measuring);
+                if (observed == null) {
+                    return new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                }
+                BigInteger period = BigInteger.ONE;
+                for (BigDecimal divisor : by.values()) {
+                    // A divisor of an Int is whole; one that is not is a term nothing built.
+                    BigInteger size = Arithmetic.AFloorRemainder.magnitudeOf(divisor);
+                    if (size == null) {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    period = period.multiply(size);
+                }
+                NumericDomain.Bounds firstPeriod = new NumericDomain.Bounds(
+                        Endpoint.inclusive(new Count(BigDecimal.ZERO)),
+                        Endpoint.inclusive(new Count(new BigDecimal(period.subtract(BigInteger.ONE)))));
+                // Every remainder is of one place, and where the rules leave the value of that place
+                // a bounded run, the period is stepped through from its end instead.
+                NumericDomain.Bounds window = firstPeriod;
+                switch (valueOfThePlace(by.firstEntry().getKey().term(), within)) {
+                    case NumericDomain.FormProjection.Within(NumericDomain.Bounds held)
+                            when held.min() != null || held.max() != null -> window = held;
+                    case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    case null, default -> { }
+                }
+                RuleReadingSource ruleSource = reading.source();
+                return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
+                        throughOnePeriod(window, period,
+                                at -> readsBackIntoEveryRemainder(at, by, demands, observed)),
+                        at -> writtenAt(at, sourceType, observed, ruleSource));
+            }
+        }
+
+        /**
          * The value the place is asked to stand at, with the numbers taken of it read off it.
          *
          * <p><b>Offered and read back, not solved for.</b> A group asking what stands at a place
@@ -962,6 +1053,7 @@ final class TermRealizations {
             case JointBuilder.SoManyMeetingEach _ -> false;
             case JointBuilder.AtThoseTimeParts _, JointBuilder.OnThoseDateParts _,
                  JointBuilder.SolvingForTheirQuotients _,
+                 JointBuilder.SolvingForTheirRemainders _,
                  JointBuilder.ItsOwnValueAndWhatIsTakenOfIt _ -> false;
         };
     }
@@ -1146,6 +1238,10 @@ final class TermRealizations {
             case TakenAs.TheTruncatingQuotient taken ->
                     atThatQuotient(taken.read(arguments), sourceType, orders, asked,
                             within, ruleSource);
+            // And this one writes the residue itself, which is its own remainder.
+            case TakenAs.TheFloorRemainder taken ->
+                    atThatRemainder(taken.read(arguments), sourceType, orders, asked,
+                            within, ruleSource);
         };
     }
 
@@ -1285,6 +1381,165 @@ final class TermRealizations {
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 onTheOrder(asked.walking(), orders, asked.named(), within),
                 quotient -> multipliedBack(by, sourceType, observed, quotient, ruleSource));
+    }
+
+    /**
+     * The whole numbers of a run that {@code holds} admits, found by stepping through one
+     * {@code period} of it from the end it has, in the order to try them.
+     *
+     * <p><b>Where the stepping is the proof.</b> What repeats every period is wholly decided by one
+     * period, so a walk that reached the end of it and found nothing has found that the run holds
+     * nothing — and a walk the figure cut short says so, and is never read as having found none.
+     * Stepped from the lower end, or from the upper one where the run is open below, or from nought
+     * where it has neither: a place a period away from one end is as good as any other.
+     *
+     * <p>The steps are counted as well as the numbers handed over. A period is as wide as the
+     * product of its divisors, and a walk that steps through all of it without finding one is a
+     * walk that spends nothing from the figure that counts what it hands over.
+     */
+    private static Tried throughOnePeriod(NumericDomain.Bounds run, BigInteger period,
+                                          Predicate<Place> holds) {
+        BigInteger from;
+        BigInteger to;
+        if (run.min() != null && run.min().at() instanceof Count low
+                && low.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger> least) {
+            from = least.value();
+            to = from.add(period);
+        } else if (run.max() != null && run.max().at() instanceof Count high
+                && high.exactly().floor() instanceof ExactAnswer.Held<BigInteger> most) {
+            to = most.value();
+            from = to.subtract(period);
+        } else {
+            from = BigInteger.ZERO;
+            to = period;
+        }
+        // One period is as many numbers as the period says, so the end an exclusive edge moves
+        // is the one the window was given a number longer than that to absorb.
+        BigInteger first = startOf(run.min(), from);
+        BigInteger last = endOf(run.max(), to);
+        int many = CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum();
+        long steps = CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.maximum();
+        List<Place> out = new ArrayList<>();
+        long taken = 0;
+        for (BigInteger at = first; at.compareTo(last) <= 0; at = at.add(BigInteger.ONE)) {
+            if (taken++ >= steps) {
+                return new Tried(List.copyOf(out),
+                        new Remainder.StoppedAt(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE));
+            }
+            Count place = new Count(new BigDecimal(at));
+            if (holds.test(place)) {
+                out.add(place);
+                if (out.size() > many) {
+                    return new Tried(List.copyOf(out.subList(0, many)),
+                            new Remainder.StoppedAt(CompositionBudget.NUMBERS_OF_A_SET_TRIED));
+                }
+            }
+        }
+        return Tried.allOf(List.copyOf(out));
+    }
+
+    /**
+     * A value whose remainder by that divisor is that number: the number itself.
+     *
+     * <p><b>A right inverse, as the product is for a quotient.</b> Every value of a residue class
+     * answers the residue, and the residue is one of them where it is a remainder by the divisor at
+     * all — between nought and the divisor, the divisor excluded. What it owes is that what it
+     * writes reads back as the number it was asked for, so a number the divisor can leave nowhere is
+     * nothing composed rather than a row offered at a number it reads back as something else.
+     */
+    private static Realization atThatRemainder(BigDecimal by, Type sourceType, TermOrders orders,
+                                               AskedAt asked, SearchRegion within,
+                                               RuleReadingSource ruleSource) {
+        Carrier observed = orders.observed();
+        // A divisor that is not there, or is nought, is a term nothing built.
+        if (observed == null || by == null || by.signum() == 0) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        // Where the rules leave the value itself, which is what the place's other lines say of it.
+        // A bounded run is stepped through for a value answering the remainder, because the
+        // residue is a value of the place only where the run reaches it.
+        NumericSet wanted = asked.walking();
+        switch (valueOfThePlace(orders.term(), within)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held)
+                    when (held.min() != null || held.max() != null)
+                    && Arithmetic.AFloorRemainder.magnitudeOf(by) != null -> {
+                return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                        throughOnePeriod(held, Arithmetic.AFloorRemainder.magnitudeOf(by),
+                                at -> remainderIsWanted(at, by, wanted, observed)),
+                        at -> writtenAt(at, sourceType, observed, ruleSource));
+            }
+            case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                return new Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
+            case null, default -> { }
+        }
+        return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                onTheOrder(asked.walking(), orders, asked.named(), within),
+                residue -> writtenAsItsOwnRemainder(by, sourceType, observed, residue,
+                        ruleSource));
+    }
+
+    /** What the rules leave of the value standing at the place {@code taking} is a number of, or
+     *  null where they say nothing of it. */
+    private static NumericDomain.FormProjection valueOfThePlace(NumericTerm taking,
+                                                                SearchRegion within) {
+        return within == null || !(taking instanceof NumericTerm.TakenOf taken) ? null
+                : within.projectionOf(new NumericTerm.ValueOf(taken.position()));
+    }
+
+    /** Whether the remainder of {@code at} by {@code by} is one of the numbers {@code wanted} holds. */
+    private static boolean remainderIsWanted(Place at, BigDecimal by, NumericSet wanted,
+                                             Carrier observed) {
+        if (!(at instanceof Count count)
+                || !(Arithmetic.AFloorRemainder.remainderOf(count.at(), by)
+                        instanceof ExactAnswer.Held<BigDecimal> read)) {
+            return false;
+        }
+        Place remainder = observed.onTheGrid(new Count(read.value()));
+        return remainder != null && wanted.holds(remainder, observed);
+    }
+
+    /** The one value that is its own remainder by that divisor, or nothing composed where the
+     *  number is no remainder by it. */
+    private static Realization writtenAsItsOwnRemainder(BigDecimal by, Type sourceType,
+                                                        Carrier observed, Place answer,
+                                                        RuleReadingSource ruleSource) {
+        if (!(answer instanceof Count wanted)
+                || !(Arithmetic.AFloorRemainder.remainderOf(wanted.at(), by)
+                        instanceof ExactAnswer.Held<BigDecimal> read)
+                || read.value().compareTo(wanted.at()) != 0) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        return writtenAt(wanted, sourceType, observed, ruleSource);
+    }
+
+    /**
+     * Whether the remainder of {@code at} by each of those divisors is one of the numbers that
+     * demand asked for, read through the account as a quotient is
+     * ({@link #readsBackIntoEveryOne}).
+     */
+    private static boolean readsBackIntoEveryRemainder(
+            Place at, SequencedMap<RealizationTarget.OfANumber, BigDecimal> by,
+            SequencedMap<RealizationTarget, AskedAt> asked, Carrier observed) {
+        if (!(at instanceof Count count)) {
+            return false;
+        }
+        for (Map.Entry<RealizationTarget.OfANumber, BigDecimal> each : by.entrySet()) {
+            AskedAt of = asked.get(each.getKey());
+            NumericSet wanted = of == null ? null : of.walking();
+            if (!(Arithmetic.AFloorRemainder.remainderOf(count.at(), each.getValue())
+                    instanceof ExactAnswer.Held<BigDecimal> read)) {
+                return false;
+            }
+            Place remainder = observed.onTheGrid(new Count(read.value()));
+            if (wanted == null || remainder == null || !wanted.holds(remainder, observed)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -1809,7 +2064,7 @@ final class TermRealizations {
             case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, orders,
                     within, reading, inside);
             case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _,
-                    TakenAs.TheTruncatingQuotient _ -> {
+                    TakenAs.TheTruncatingQuotient _, TakenAs.TheFloorRemainder _ -> {
                 nothingInside(inside);
                 yield new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);

@@ -67,7 +67,7 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             let withACall (p) = p.x > 0 && Int.max(p.y, 3) > 10
 
             behavior withAnUnreadCall : (p: Pair) -> Bool
-            let withAnUnreadCall (p) = p.x > 0 && Int.floorMod(p.y, 3) > 1
+            let withAnUnreadCall (p) = p.x > 0 && Int.floorMod(p.y, p.x) > 1
 
             behavior product : (p: Pair) -> Bool
             let product (p) = p.x * p.y > 4
@@ -86,7 +86,7 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             "either", (x, y) -> x > 0 || y > 10,
             "affineSum", (x, y) -> x + 2 * y <= 7,
             "withACall", (x, y) -> x > 0 && Math.max(y, 3) > 10,
-            "withAnUnreadCall", (x, y) -> x > 0 && Math.floorMod(y, 3) > 1,
+            "withAnUnreadCall", (x, y) -> x > 0 && Math.floorMod(y, x) > 1,
             "product", (x, y) -> x * y > 4,
             "productThroughACall", (x, y) -> x * y > 4,
             "nested", (x, y) -> (x > 0 || y > 1) && y < 5);
