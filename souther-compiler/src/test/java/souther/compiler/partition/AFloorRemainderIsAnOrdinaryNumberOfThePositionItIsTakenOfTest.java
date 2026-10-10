@@ -154,6 +154,23 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
     }
 
     /**
+     * The first member of the class two remainders leave is past the end of the order the value is
+     * counted on, and the member inside it is the one a row stands at: one less than each of two
+     * neighbouring divisors is minus one, and the class's own least non-negative number is not a
+     * number of the order at all.
+     */
+    @Test
+    void aClassWhoseLeastMemberIsPastTheOrdersEndHasItsRowInsideTheOrder() {
+        String condition =
+                "Int.floorMod(x, 4000000000) == 3999999999 && Int.floorMod(x, 4000000001) == 4000000000";
+        // The first line is reached with nothing before it, so its row is the remainder itself.
+        assertEquals(List.of("3999999999"), rowsAt("x: Int, y: Int", condition,
+                "Int.floorMod(x, 4000000000) = 3999999999"));
+        assertEquals(List.of("-1"), rowsAt("x: Int, y: Int", condition,
+                "Int.floorMod(x, 4000000001) = 4000000000"));
+    }
+
+    /**
      * A number the rules leave a hole at is no row, and the class it is in has another member to
      * try: the remainder's own representative, nought, is the hole here.
      */

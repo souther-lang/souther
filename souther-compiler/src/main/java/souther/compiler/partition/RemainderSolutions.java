@@ -80,8 +80,25 @@ final class RemainderSolutions {
      * @param refuses  whether the rules leave nothing where the value stands at a number, which a
      *                 run does not say: a class has another member to offer where its nearest one
      *                 is a number the rules refuse
+     * @param floor    the least whole number the order the value is counted on has, or null where it
+     *                 has none; set by {@link #solve}
+     * @param ceiling  the greatest, or null
      */
-    record Value(NumericDomain.Bounds run, Congruences standing, Predicate<Place> refuses) {}
+    record Value(NumericDomain.Bounds run, Congruences standing, Predicate<Place> refuses,
+                 BigInteger floor, BigInteger ceiling) {
+
+        Value(NumericDomain.Bounds run, Congruences standing, Predicate<Place> refuses) {
+            this(run, standing, refuses, null, null);
+        }
+
+        /** This value, held to the numbers {@code carrier} has: a class has members beyond them,
+         *  and the one the residue names first may be one of those. */
+        Value within(Carrier carrier) {
+            return new Value(run, standing, refuses,
+                    lowestWholeNumberOf(carrier.extent().low()),
+                    highestWholeNumberOf(carrier.extent().high()));
+        }
+    }
 
     /**
      * The number of the value's run that leaves what {@code demands} ask, where {@code carrier} is
@@ -93,7 +110,8 @@ final class RemainderSolutions {
      * does, is stepped past to the next member, so that what stands in the way of the nearest
      * member is not taken for the class having none.
      */
-    static Answer solve(List<Demand> demands, Value value, Carrier carrier) {
+    static Answer solve(List<Demand> demands, Value standing, Carrier carrier) {
+        Value value = standing.within(carrier);
         List<Choices> choices = new ArrayList<>();
         List<BigInteger> sizes = new ArrayList<>();
         CompositionBudget stopped = null;
@@ -219,22 +237,60 @@ final class RemainderSolutions {
      */
     static BigInteger inTheRun(Congruences members, Value value, BigInteger own, int[] tried,
                                int steps) {
-        BigInteger low = lowestWholeNumberOf(value.run().min());
-        BigInteger high = highestWholeNumberOf(value.run().max());
-        boolean upward = low != null || high == null;
-        BigInteger member = low != null ? members.leastAtOrAbove(low)
-                : high != null ? members.greatestAtOrBelow(high)
-                : own != null ? own : members.residue();
-        while (value.refuses().test(new Count(new BigDecimal(member)))) {
+        BigInteger runLow = lowestWholeNumberOf(value.run().min());
+        BigInteger runHigh = highestWholeNumberOf(value.run().max());
+        // What the run and the order the value is counted on leave together: a member of the class
+        // outside the order is no value, and the class's first member is one of those where the
+        // divisors are wide: one less than each of two neighbouring divisors is a number far past
+        // the order's end, and the member of its class just below nought is inside it.
+        BigInteger low = tighter(runLow, value.floor(), true);
+        BigInteger high = tighter(runHigh, value.ceiling(), false);
+        boolean upward;
+        BigInteger member;
+        if (runLow != null) {
+            member = members.leastAtOrAbove(low);
+            upward = true;
+        } else if (runHigh != null) {
+            member = members.greatestAtOrBelow(high);
+            upward = false;
+        } else {
+            // Open: the member the caller would have first, or the class's own least non-negative
+            // one, and the nearest member inside the order where that is outside it.
+            member = own != null ? own : members.residue();
+            upward = true;
+            if (high != null && member.compareTo(high) > 0) {
+                member = members.greatestAtOrBelow(high);
+                upward = false;
+            } else if (low != null && member.compareTo(low) < 0) {
+                member = members.leastAtOrAbove(low);
+            }
+        }
+        while (!inside(member, low, high)
+                || value.refuses().test(new Count(new BigDecimal(member)))) {
             if (++tried[0] > steps) {
                 return null;
             }
             member = upward ? member.add(members.modulus()) : member.subtract(members.modulus());
-            if (upward && high != null && member.compareTo(high) > 0) {
+            if (upward && high != null && member.compareTo(high) > 0
+                    || !upward && low != null && member.compareTo(low) < 0) {
                 return null;
             }
         }
-        return upward && high != null && member.compareTo(high) > 0 ? null : member;
+        return member;
+    }
+
+    /** The end that leaves less: the greater of two lower ends, or the lesser of two upper ones,
+     *  where either is not there being the other. */
+    private static BigInteger tighter(BigInteger one, BigInteger other, boolean lower) {
+        if (one == null || other == null) {
+            return one == null ? other : one;
+        }
+        return lower ? one.max(other) : one.min(other);
+    }
+
+    private static boolean inside(BigInteger member, BigInteger low, BigInteger high) {
+        return (low == null || member.compareTo(low) >= 0)
+                && (high == null || member.compareTo(high) <= 0);
     }
 
     /** The first whole number {@code end} admits, or null where it has none to name. */
