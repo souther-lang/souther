@@ -11,6 +11,7 @@ import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
+import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -71,7 +72,21 @@ public final class WhereTheElementsCameFrom {
                 .equals(ElementLineage.ResultPath.elements())) {
             return new LibraryProver.Outcome.Open(new Unproved.NotOverItsArguments());
         }
-        ElementLineage<Integer> wanted = built.lineage();
+        return prove(operation, built.lineage(), built.size());
+    }
+
+    /** Whether every element of {@code operation}'s answer came from its source as {@code wanted}
+     *  says, how many there are being no part of the statement. */
+    public LibraryProver.Outcome proveWhereTheyCameFrom(ValueName.Stdlib.Operation operation,
+                                                        ElementLineage<Integer> wanted) {
+        return prove(operation, wanted, null);
+    }
+
+    /** As {@link #prove(ValueName.Stdlib.Operation, BuiltFrom)}, with the count held to
+     *  {@code size} where there is one and left alone where it is null. */
+    private LibraryProver.Outcome prove(ValueName.Stdlib.Operation operation,
+                                        ElementLineage<Integer> wanted,
+                                        SizeAgainstItsSource size) {
         ElementLineage.Source<Integer> source = wanted.source();
         if (source == null || source.elements() != 1) {
             return new LibraryProver.Outcome.Open(new Unproved.NotOverItsArguments());
@@ -93,8 +108,8 @@ public final class WhereTheElementsCameFrom {
                 }
                 atMostOneEach &= accounts == Accounts.AT_MOST_ONE;
             }
-            boolean asMany = asManyAs(operation, source.argument(), reading);
-            boolean holds = switch (built.size()) {
+            boolean asMany = size != null && asManyAs(operation, source.argument(), reading);
+            boolean holds = size == null || switch (size) {
                 case SAME -> asMany;
                 case AT_MOST -> asMany || atMostOneEach;
             };
@@ -269,9 +284,14 @@ public final class WhereTheElementsCameFrom {
             Value before = at(carried, path);
             Reading.Element element = handedAs.apply(new Reading.Element(next,
                     new Value.KeyOf(next)));
+            Accounts accounts = Accounts.AT_MOST_ONE;
             for (Reading.Case each : reading.applied(args.get(walk.step()), handed)) {
                 Value after = at(each.is(), path);
                 if (after.equals(before)) {
+                    continue;
+                }
+                if (joinsTheClosuresAnswer(after, before, element, wanted)) {
+                    accounts = Accounts.ANY_NUMBER;
                     continue;
                 }
                 Value put = putIn(after, before);
@@ -279,7 +299,22 @@ public final class WhereTheElementsCameFrom {
                     return null;
                 }
             }
-            return Accounts.AT_MOST_ONE;
+            return accounts;
+        }
+
+        /**
+         * Whether {@code after} is {@code before} with the closure's whole answer on
+         * {@code element} joined to it, and {@code wanted} says an element may be inside that
+         * answer.
+         *
+         * <p>Any number of the answer's elements come of the one element of the source, which is
+         * why this is not a value put in.
+         */
+        private boolean joinsTheClosuresAnswer(Value after, Value before, Reading.Element element,
+                                               ElementLineage<Integer> wanted) {
+            return permits(wanted, Kind.INSIDE_THE_CLOSURES_ANSWER)
+                    && after instanceof Value.Joined(Value left, Value right)
+                    && left.equals(before) && theClosuresAnswer(right, element);
         }
 
         /** How an element {@code list} hands a walk reads as an element of the source, or null

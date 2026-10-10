@@ -140,6 +140,10 @@ final class ProvingTheLibrary implements LibraryProofs {
             case BoundOperationFact.IsDefinedByCases defined ->
                     answersInTheCase(operation, defined.one());
             case BoundOperationFact.BuildsItsResultFrom _ -> builds(operation);
+            case BoundOperationFact.ElementsComeFrom comes ->
+                    elements.proveWhereTheyCameFrom(operation,
+                            comes.lineage().withArguments(DeclaredArgument::position))
+                            instanceof LibraryProver.Outcome.Proved;
             case BoundOperationFact.KeepsTheOrderOf kept ->
                     elements.inOrder(operation, kept.source().position())
                             instanceof LibraryProver.Outcome.Proved;

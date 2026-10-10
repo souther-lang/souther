@@ -258,10 +258,16 @@ public final class OperationFacts {
                     SizeAgainstItsSource.SAME))),
             // Inside what the closure answered, which is an optional here and a list in a
             // `flatMap`. One lineage for the two, told apart by what the closure's own signature
-            // says it answers with.
+            // says it answers with. A `filterMap` answers no more than it was given and says so;
+            // a `flatMap` answers any number for each, which is neither of the two counts a
+            // building can state, so its lineage is declared alone and is not a row the discharge
+            // reads.
             about("List", "filterMap", new OperationFact.BuildsItsResultFrom(new BuiltFrom<>(
                     new ElementLineage.InsideClosureResult<>(
                             new ElementLineage.Source<>(CONTAINER, 1)), SizeAgainstItsSource.AT_MOST))),
+            about("List", "flatMap", new OperationFact.ElementsComeFrom(
+                    new ElementLineage.InsideClosureResult<>(
+                            new ElementLineage.Source<>(CONTAINER, 1)))),
             about("Set", "map", maps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
 
             // Which keys a map an operation answers is keyed by, where they are keys of a map it

@@ -13,6 +13,7 @@ import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ClosurePositions;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.DefinitionCase;
+import souther.compiler.semantics.ElementLineage;
 import souther.compiler.proof.ByPlace;
 import souther.compiler.proof.Slot;
 import souther.compiler.semantics.LawNumber;
@@ -320,6 +321,9 @@ final class OperationFactBinder {
             case OperationFact.BuildsItsResultFrom builds ->
                     new BoundOperationFact.BuildsItsResultFrom(operation,
                             holdBuilding(declaration, builds));
+            case OperationFact.ElementsComeFrom comes ->
+                    new BoundOperationFact.ElementsComeFrom(operation,
+                            holdElementsComeFrom(declaration, comes));
             // A key kept is the same key, so the answer is a map keyed by what the map named is.
             case OperationFact.KeepsTheKeysOf kept -> {
                 DeclaredArgument map = holdToTheDeclaration(declaration, kept.map(),
@@ -690,6 +694,14 @@ final class OperationFactBinder {
                     Type::elementOfAContainer, "a container of the elements that argument holds");
         }
         return built;
+    }
+
+    /** Holds the argument a lineage of made elements names to a container the declaration has. */
+    private static ElementLineage<DeclaredArgument> holdElementsComeFrom(
+            CompleteSignature declaration, OperationFact.ElementsComeFrom comes) {
+        return comes.lineage().withArguments(named -> holdToTheDeclaration(declaration, named,
+                new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                "the container something is made from"));
     }
 
     /**
