@@ -251,6 +251,8 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 case NumberAt.OfWhatNumber
                                         .OfHowManyCodePointsAreIn count ->
                                         "#(" + count.counted() + ")(" + at() + ")";
+                                case NumberAt.OfWhatNumber.OfItsMultiplicity _ ->
+                                        "multiplicity(" + at() + ")";
                             };
                 };
                 // The number the walk had named when it stopped, where it named one. Not what the

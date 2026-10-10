@@ -80,6 +80,7 @@ public final class NumericTerms {
             case NumericTerm.TakenOf _ -> "2";
             case NumericTerm.TakenOver _ -> "3";
             case NumericTerm.CodePointClassCount _ -> "4";
+            case NumericTerm.Multiplicity _ -> "5";
         };
     }
 }

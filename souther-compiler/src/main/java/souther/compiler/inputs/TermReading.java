@@ -81,6 +81,35 @@ final class TermReading {
     }
 
     /**
+     * How many of the values {@code every} holds are the value {@code own} is.
+     *
+     * <p>Equal as the row wrote them: two elements a row holds at one place are one value where
+     * they are written alike, which is what a fold that files a counter under each key files them
+     * by. {@code every} holds {@code own} among them, since an element is one of the elements, so
+     * the number is at least one.
+     */
+    static Reading among(ObservedValue own, List<ObservedValue> every) {
+        Objects.requireNonNull(own, "a term is read at a value the walk came to");
+        Objects.requireNonNull(every, "and among the values a walk came to");
+        Membership.Incomplete unreadOwn = Membership.unread(own);
+        if (unreadOwn != null) {
+            return new Reading.Missing(unreadOwn.code());
+        }
+        long same = 0;
+        for (ObservedValue each : every) {
+            Objects.requireNonNull(each, "every value the walk came to is a value");
+            Membership.Incomplete unread = Membership.unread(each);
+            if (unread != null) {
+                return new Reading.Missing(unread.code());
+            }
+            if (each.equals(own)) {
+                same++;
+            }
+        }
+        return new Reading.Number(Count.of(same));
+    }
+
+    /**
      * How many of the code points a string holds are in a class.
      *
      * <p>Counted in scalar values, as {@code String.length} counts, and against the one whitespace

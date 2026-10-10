@@ -158,6 +158,8 @@ sealed interface ConditionPlacement {
             case NumericTerm.CodePointClassCount count ->
                     measured instanceof NumericTerm.CodePointClassCount there
                             && there.counted().equals(count.counted());
+            // No number a position answers is this one.
+            case NumericTerm.Multiplicity _ -> false;
             case NumericTerm.TakenOver _ -> false;
         };
     }

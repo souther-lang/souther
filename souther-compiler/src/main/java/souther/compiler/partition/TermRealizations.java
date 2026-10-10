@@ -302,6 +302,9 @@ final class TermRealizations {
         if (!counts.isEmpty()) {
             return countsOf(targets, counts, numbers);
         }
+        if (numbers.stream().anyMatch(each -> each.term() instanceof NumericTerm.Multiplicity)) {
+            return amongTheElements(targets, numbers);
+        }
         if (targets.size() == 1) {
             return new JointRealization.Supported(
                     new JointBuilder.OneNumberOnItsOwn(numbers.getFirst()));
@@ -326,6 +329,10 @@ final class TermRealizations {
         // length is in or the group the value is in depending on which of them was read first.
         for (RealizationTarget.OfANumber target : numbers) {
             switch (target.term()) {
+                // Composed with the elements around it, which the arm above has already taken.
+                case NumericTerm.Multiplicity _ -> {
+                    return nothingSolvesAGroup();
+                }
                 case NumericTerm.ValueOf _ -> itself = target;
                 case NumericTerm.CodePointClassCount _ -> {
                     takenOfIt.add(target);
@@ -422,6 +429,51 @@ final class TermRealizations {
         return wholly(targets, times.isEmpty() ? dates.keySet() : times.keySet(),
                 () -> times.isEmpty() ? new JointBuilder.OnThoseDateParts(dates)
                         : new JointBuilder.AtThoseTimeParts(times));
+    }
+
+    /**
+     * How often the value of an element occurs among the elements of one container, with how many
+     * the container holds where the group asks that too.
+     *
+     * <p>One container and one number of it. How often is asked of one place inside the element, so
+     * two places are two questions about which elements are alike, and counts of the same
+     * container beside them are a container composed for what the elements answer and for which of
+     * them are alike together, which nothing here writes.
+     */
+    private static JointRealization amongTheElements(Collection<RealizationTarget> group,
+                                                     List<RealizationTarget.OfANumber> numbers) {
+        List<RealizationTarget.OfANumber> alike = new ArrayList<>();
+        RealizationTarget.OfANumber many = null;
+        for (RealizationTarget.OfANumber each : numbers) {
+            switch (each.term()) {
+                case NumericTerm.Multiplicity _ -> alike.add(each);
+                case NumericTerm.TakenOf taken
+                        when taken.takenAs() instanceof TakenAs.HowManyItHolds -> {
+                    if (many != null) {
+                        return nothingSolvesAGroup();
+                    }
+                    many = each;
+                }
+                default -> {
+                    return nothingSolvesAGroup();
+                }
+            }
+        }
+        NumericTerm.Multiplicity first = (NumericTerm.Multiplicity) alike.getFirst().term();
+        for (RealizationTarget.OfANumber each : alike) {
+            if (!each.term().equals(first)) {
+                return nothingSolvesAGroup();
+            }
+        }
+        if (many != null && !((NumericTerm.TakenOf) many.term()).position()
+                .equals(first.container())) {
+            return nothingSolvesAGroup();
+        }
+        RealizationTarget.OfANumber holding = many;
+        return wholly(group, Stream.concat(alike.stream(),
+                        holding == null ? Stream.<RealizationTarget.OfANumber>empty()
+                                : Stream.of(holding)).toList(),
+                () -> new JointBuilder.ElementsAlikeAsOftenAsAsked(alike.getFirst(), holding));
     }
 
     /**
@@ -915,6 +967,32 @@ final class TermRealizations {
         }
 
         /**
+         * A container holding some element as often as asked, and as many elements as
+         * {@code manyItHolds} asks where it asks.
+         *
+         * <p>Composed out of how often and read for nothing: which values the elements hold and how
+         * many hold each is what the number turns on, so the container is written once
+         * ({@link CardinalityComposer#composeAlike}).
+         *
+         * @param alike       how often some element's value occurs
+         * @param manyItHolds how many elements the container holds, or null where nothing asks
+         */
+        record ElementsAlikeAsOftenAsAsked(RealizationTarget.OfANumber alike,
+                                           RealizationTarget.OfANumber manyItHolds)
+                implements JointBuilder {
+
+            @Override
+            public Realization from(Type sourceType,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                return CardinalityComposer.composeAlike(sourceType, alike, manyItHolds, demands,
+                        measuring, within, reading);
+            }
+        }
+
+        /**
          * The carrier the group's root is observed on, or null where a term of it is not measured.
          *
          * <p>One root has one, so this is read off each term and is the same answer every time
@@ -1016,11 +1094,13 @@ final class TermRealizations {
                         over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
                 case NumericTerm.TakenOf taken ->
                         taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
-                case NumericTerm.ValueOf _, NumericTerm.CodePointClassCount _ -> false;
+                case NumericTerm.ValueOf _, NumericTerm.CodePointClassCount _,
+                     NumericTerm.Multiplicity _ -> false;
             };
             // Each element is chosen for what it answers of the statements, out of values of the
             // element's own number; nothing else inside it is planned.
-            case JointBuilder.SoManyMeetingEach _ -> false;
+            case JointBuilder.SoManyMeetingEach _, JointBuilder.ElementsAlikeAsOftenAsAsked _ ->
+                    false;
             case JointBuilder.StringsHoldingTheirCounts _,
                  JointBuilder.AtThoseTimeParts _, JointBuilder.OnThoseDateParts _,
                  JointBuilder.SolvingForTheirQuotients _,
@@ -1126,6 +1206,12 @@ final class TermRealizations {
             }
             case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, orders,
                     asked, within, reading, inside);
+            // Written by composing the container its elements stand in, which a value of one
+            // element's type is not.
+            case NumericTerm.Multiplicity _ -> new Realization.Unexhausted(
+                    CompositionShortfall.writing(Set.of(
+                            CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
+                    null);
         };
     }
 

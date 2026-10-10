@@ -62,6 +62,7 @@ public sealed interface RealizationTarget {
      */
     static OfANumber of(NumericTerm term) {
         return switch (term) {
+            case NumericTerm.Multiplicity among -> new AmongTheElements(among);
             case NumericTerm.FromOnePosition one -> new AtOnePosition(one);
             case NumericTerm.TakenOver over -> new OverARun(over);
         };
@@ -157,6 +158,27 @@ public sealed interface RealizationTarget {
         @Override
         public TermPath writeRoot() {
             return term.source().subjectPath().outermostContainer();
+        }
+
+        @Override
+        public String toString() {
+            return term.toString();
+        }
+    }
+
+    /**
+     * How often the value an element holds occurs among the elements of its container, realized by
+     * writing the container with that many elements holding it.
+     *
+     * <p>A number one position reads and no position holds: it is the number of elements the
+     * container has at the element's value, so the row that moves it is one that rebuilds the
+     * container, as it is for a total of what the container holds.
+     */
+    record AmongTheElements(NumericTerm.Multiplicity term) implements OfANumber {
+
+        @Override
+        public TermPath writeRoot() {
+            return term.container().element().outermostContainer();
         }
 
         @Override

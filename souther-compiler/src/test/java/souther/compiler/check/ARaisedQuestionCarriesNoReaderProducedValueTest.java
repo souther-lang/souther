@@ -101,6 +101,10 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
      * is a number of the place as a length is: which code points a count is of is what makes two
      * counts of one string two numbers, and it is the whitespace the library trims at and one
      * separator the author wrote.
+     *
+     * <p>{@code OfItsMultiplicity} belongs to how often an element's value occurs among the
+     * elements beside it, which carries nothing: the place says which value, and the container it
+     * stands inside says which elements are counted.
      */
     private static final Set<String> THE_QUESTIONS_OWN_VOCABULARY = Set.of(
             "souther/compiler/check/Owed",
@@ -111,6 +115,7 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
             "souther/compiler/check/NumberAt$OfWhatNumber$OfItsOwnValue",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfWhatAnOperationAnswers",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfHowManyCodePointsAreIn",
+            "souther/compiler/check/NumberAt$OfWhatNumber$OfItsMultiplicity",
             "souther/compiler/check/RuleKey",
             "souther/compiler/inputs/InputQuestion",
             "souther/compiler/inputs/InputQuestion$AboutAPosition",

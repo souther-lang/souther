@@ -5842,6 +5842,7 @@ public final class Generator {
         return switch (target) {
             case RealizationTarget.AtOnePosition(NumericTerm.FromOnePosition term) -> term;
             case RealizationTarget.OverARun(NumericTerm.TakenOver term) -> term;
+            case RealizationTarget.AmongTheElements(NumericTerm.Multiplicity term) -> term;
             case RealizationTarget.AtOnePositionElsewhere(NumericTerm.FromOnePosition term,
                                                          TermPath root) -> {
                 NumericTerm moved = subject.quantities().namedAt(term, root);
@@ -6095,6 +6096,23 @@ public final class Generator {
                 Set<Incompleteness.Code> unread = EnumSet.noneOf(Incompleteness.Code.class);
                 Set<UnheldNumber> notWorkedOut = EnumSet.noneOf(UnheldNumber.class);
                 boolean stands = switch (target.term()) {
+                    // How often a value occurs among the values standing there: a row stands at a
+                    // point where some element's value is that frequent.
+                    case NumericTerm.Multiplicity _ -> {
+                        boolean any = false;
+                        for (ObservedValue value : values) {
+                            switch (on.readAmong(value, values)) {
+                                case NumericTerm.Reading.Number number ->
+                                        any |= number.value().compareTo(at) == 0;
+                                case NumericTerm.Reading.Missing missing ->
+                                        unread.add(missing.code());
+                                case NumericTerm.Reading.NotNumber _ -> { }
+                                case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
+                                        notWorkedOut.add(why);
+                            }
+                        }
+                        yield any;
+                    }
                     case NumericTerm.FromOnePosition _ -> {
                         boolean any = false;
                         for (souther.compiler.observe.ObservedValue value : values) {
@@ -10037,9 +10055,10 @@ public final class Generator {
                                 ? one.value() : null;
                 // What an operation answered is not what its root holds — three characters is not
                 // the position standing at three, and a hundred is not what the list adding up to
-                // it holds. Nor is how many of a string's code points are in a class.
+                // it holds. Nor is how many of a string's code points are in a class, or how often
+                // a value occurs among the elements beside it.
                 case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
-                     NumericTerm.TakenOver _ -> null;
+                     NumericTerm.Multiplicity _, NumericTerm.TakenOver _ -> null;
             };
             // Nor is how many of its elements meet a statement.
             case RealizationTarget.ACount _ -> null;

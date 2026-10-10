@@ -578,6 +578,10 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "core/Core$FieldProjection", "then", "(" + core + "Ljava/lang/String;L" + c
                 + "types/Type;L" + c + "diag/SourcePos;)L" + CORE + "$FieldProjection;", 1,
                 ONE_PROJECTION);
+        row(out, c + "check/KeyedAccumulation", "look",
+                "(" + core + "Lsouther/compiler/types/BindingId;[Z)V", 1,
+                "looks for a read of one binding in every node of a tree, walking on through a"
+                        + " Widen into what it holds");
         row(out, c + "core/GrowingFold", "adds", "(" + core + ")I", 2, COUNTS_THROUGH_IT);
         row(out, c + "core/GrowingFold", "aliased", "(" + core + "Ljava/util/Set;)I", 1,
                 COUNTS_THROUGH_IT);

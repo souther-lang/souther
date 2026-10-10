@@ -127,6 +127,17 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "stops at a size or at the containers offered, and hands the figure over in"
                             + " the shortfall it comes back with"),
+            Map.entry("souther.compiler.partition.CardinalityComposer#composeAlike("
+                            + "Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/partition/RealizationTarget$OfANumber;"
+                            + "Lsouther/compiler/partition/RealizationTarget$OfANumber;"
+                            + "Ljava/util/SequencedMap;Lsouther/compiler/inputs/Quantities;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "stops at the containers offered and at the most elements a container is"
+                            + " composed with, and hands the figure over in the shortfall it"
+                            + " comes back with"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofACount("
                             + "Lsouther/compiler/partition/Standing$OfACount;"
                             + "Lsouther/compiler/inputs/SearchRegion;"

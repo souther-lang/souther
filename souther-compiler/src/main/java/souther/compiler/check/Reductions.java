@@ -10,6 +10,7 @@ import souther.compiler.types.ValueName;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Which library operations walk a container from a seed and answer the accumulator they end with,
@@ -65,8 +66,16 @@ final class Reductions {
      * Combinators#handedTo} takes one: a closure may be written as a name bound to a block.
      */
     static Reducing reducing(Core.PreservedCall call, Denotations at) {
+        return reducing(call, closure -> Terms.blockOf(closure, at));
+    }
+
+    /**
+     * The same, told how to reach the block a closure is, for a reader whose names are denoted by
+     * something other than the denotations a check builds.
+     */
+    static Reducing reducing(Core.PreservedCall call, Function<Core, Core.Block> blockOf) {
         Reduction rule = of(call.operation());
-        Combinators.Handed handed = Combinators.handedTo(call, at);
+        Combinators.Handed handed = Combinators.handedTo(call, blockOf);
         if (rule == null || handed == null
                 || rule.accumulatorParam() >= handed.step().params().size()) {
             return null;

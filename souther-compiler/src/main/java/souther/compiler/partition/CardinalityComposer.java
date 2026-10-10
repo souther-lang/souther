@@ -6,7 +6,9 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -229,6 +231,138 @@ final class CardinalityComposer {
             return new TermRealizations.Realization.Unexhausted(rest, groups.unreadSaid());
         }
         return none("no container of `" + container + "` this composed meets every count asked");
+    }
+
+    /**
+     * Containers of {@code sourceType} holding some element as often as {@code alike} asks, and as
+     * many elements as {@code manyItHolds} asks where it is not null.
+     *
+     * <p>Which value it is that occurs is no part of what is asked: any one value occurring that
+     * often answers it, so one is taken from the values the element's own number leaves and the
+     * container is that value as many times as asked, with other values beside it where the size
+     * asked for is larger. The elements are those values and nothing else is chosen for them, so
+     * the key is the element itself.
+     */
+    static TermRealizations.Realization composeAlike(Type sourceType,
+                                                     RealizationTarget.OfANumber alike,
+                                                     RealizationTarget.OfANumber manyItHolds,
+                                                     SequencedMap<RealizationTarget, AskedAt> demands,
+                                                     Quantities measuring, SearchRegion within,
+                                                     RuleReadingContext reading) {
+        NumericTerm.Multiplicity term = (NumericTerm.Multiplicity) alike.term();
+        TermPath container = term.container();
+        RuleReadingSource ruleSource = reading.source();
+        AskedAt asked = demands.get(alike);
+        if (asked == null || asked.walking() == null) {
+            return none("nothing says how often an element of `" + container + "` is to occur");
+        }
+        NumericSet wanted = asked.walking();
+        NumericSet size = null;
+        if (manyItHolds != null) {
+            AskedAt holds = demands.get(manyItHolds);
+            if (holds == null || holds.walking() == null) {
+                return none("nothing says how many elements `" + container + "` holds");
+            }
+            size = holds.walking();
+        }
+        TypeView view = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums());
+        if (!(view.shape() instanceof Shape.Sequence holding)
+                || !container.element().outermostContainer().equals(container)) {
+            return notChosen("`" + container + "` is no list or set written where it stands, to"
+                    + " hold an element as often as asked (it stands as " + sourceType + ")");
+        }
+        if (!term.place().equals(container.element())) {
+            return notChosen("an element of `" + container + "` is alike another at a place inside"
+                    + " it, which is not one number the elements are chosen at");
+        }
+        NumericTerm own = new NumericTerm.ValueOf(container.element());
+        TermOrders orders = measuring.ordersOf(own);
+        Carrier carrier = orders == null ? null : orders.observed();
+        if (carrier == null) {
+            return notChosen("an element of `" + container + "` is on no order its values are"
+                    + " chosen on");
+        }
+        NumericDomain.Bounds run = switch (within == null ? null : within.projectionOf(own)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                    held == null ? NumericDomain.Bounds.OPEN : held;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> null;
+            case null -> NumericDomain.Bounds.OPEN;
+        };
+        if (run == null) {
+            return none("the rules leave no value for an element of `" + container + "`");
+        }
+        // One value to repeat and as many different ones beside it as the size asked for leaves
+        // room for; a set holds each value once, so it holds nothing repeated.
+        boolean distinct = holding.kind() == Shape.Sequence.Kind.SET;
+        Set<CompositionCapacity> unheld = new LinkedHashSet<>();
+        List<Place> candidates = carrier.counts()
+                ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld)
+                : valuesAlongAnOrder(carrier, run, List.of(), MOST_ELEMENTS + 1);
+        TypeView ofTheElement = TypeView.of(holding.element(), ruleSource.inners(),
+                ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
+        List<FixtureTemplate> built = new ArrayList<>();
+        Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
+        for (int often = 1; often <= MOST_ELEMENTS && built.size() < MOST_OFFERED; often++) {
+            if (!wanted.holds(Count.of(often), Carrier.WHOLE) || (distinct && often > 1)
+                    || candidates.isEmpty()) {
+                continue;
+            }
+            for (int total = often; total <= MOST_ELEMENTS && built.size() < MOST_OFFERED;
+                    total++) {
+                if (size != null && !size.holds(Count.of(total), Carrier.WHOLE)) {
+                    continue;
+                }
+                if (total - often + 1 > candidates.size()) {
+                    break;
+                }
+                List<Place> values = new ArrayList<>();
+                for (int i = 0; i < often; i++) {
+                    values.add(candidates.getFirst());
+                }
+                values.addAll(candidates.subList(1, 1 + total - often));
+                FixtureTemplate one = occursAsOften(values, wanted)
+                        ? holdingThese(values, carrier, view, ofTheElement, ruleSource) : null;
+                if (one != null) {
+                    built.add(one);
+                }
+                // The smallest container that is that many repeated is the one a row is written
+                // with, so a larger one is offered only where a size was asked for.
+                if (size == null) {
+                    break;
+                }
+            }
+        }
+        // Containers holding an element more often than a container is composed with are not
+        // looked at, which is the figure a reader raises where that is what the asked-for counts
+        // run to.
+        Endpoint mostOften = wanted.extent().max();
+        if (mostOften == null || mostOften.at().compareTo(Count.of(MOST_ELEMENTS)) > 0) {
+            refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
+        }
+        CompositionShortfall rest = CompositionShortfall.of(refused, Set.of(), unheld);
+        if (!built.isEmpty()) {
+            return new TermRealizations.Realization.Built(built, rest);
+        }
+        if (!rest.figures().isEmpty()) {
+            return new TermRealizations.Realization.Stopped(rest);
+        }
+        if (!rest.nothing()) {
+            return new TermRealizations.Realization.Unexhausted(rest, null);
+        }
+        return none("no container of `" + container + "` this composed holds an element as often"
+                + " as asked");
+    }
+
+    /** Whether some value of {@code values} occurs as often as {@code wanted} holds. */
+    private static boolean occursAsOften(List<Place> values, NumericSet wanted) {
+        for (Place each : values) {
+            long same = values.stream().filter(each::sameAs).count();
+            if (wanted.holds(Count.of(same), Carrier.WHOLE)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

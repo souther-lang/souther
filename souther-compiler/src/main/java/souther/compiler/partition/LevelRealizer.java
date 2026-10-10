@@ -338,7 +338,7 @@ public final class LevelRealizer {
         Place at = placeMeeting(one.where(), one.term(), one.of(), runs.get(one.term()),
                 looking, tried, Map.of());
         return at == null ? Realization.Unknown.nothingComposedOne()
-                : found(Map.of(new RealizationTarget.AtOnePosition(one.term()), at), within, tried);
+                : found(Map.of(RealizationTarget.of(one.term()), at), within, tried);
     }
 
     /**
@@ -425,14 +425,13 @@ public final class LevelRealizer {
                 Criterion here = related.where();
                 Place at = here == null ? null
                         : placeMeeting(here, reading.settles(), two.of(), settled, looking, tried,
-                                Map.of(new RealizationTarget.AtOnePosition(reading.anchors()),
-                                        common));
+                                Map.of(RealizationTarget.of(reading.anchors()), common));
                 if (at == null) {
                     continue;
                 }
                 Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
-                fixing.put(new RealizationTarget.AtOnePosition(reading.settles()), at);
-                fixing.put(new RealizationTarget.AtOnePosition(reading.anchors()), common);
+                fixing.put(RealizationTarget.of(reading.settles()), at);
+                fixing.put(RealizationTarget.of(reading.anchors()), common);
                 if (found(fixing, within, tried) instanceof Realization.Found made) {
                     return made;
                 }
@@ -1508,7 +1507,7 @@ public final class LevelRealizer {
                                       Carrier carrier, NumericDomain.Bounds bounds,
                                       WitnessSearch looking, ValuesTried tried,
                                       Map<RealizationTarget, Place> given) {
-        PlacesApart apart = tried.apartFor(new RealizationTarget.AtOnePosition(term), given);
+        PlacesApart apart = tried.apartFor(RealizationTarget.of(term), given);
         Place offered = switch (where) {
             // The level itself, and the set is not asked. A point on a line stands where the rule
             // wrote it; held to what the declarations admit, a line drawn at a value they refuse

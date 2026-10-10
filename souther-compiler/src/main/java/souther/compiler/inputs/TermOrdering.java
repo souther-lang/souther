@@ -52,7 +52,8 @@ final class TermOrdering {
         Carrier answered = switch (term) {
             case NumericTerm.ValueOf _ -> observed;
             case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
-                 NumericTerm.TakenOver _ -> answeredOn(term, positionType, symbols, declarations);
+                 NumericTerm.Multiplicity _, NumericTerm.TakenOver _ ->
+                    answeredOn(term, positionType, symbols, declarations);
         };
         Map<ElementProjection, Carrier> fields = new LinkedHashMap<>();
         fieldTypes.forEach((field, type) -> {
@@ -92,6 +93,8 @@ final class TermOrdering {
             // How many code points there are is a whole number whatever they are code points of,
             // as how many a container holds is.
             case NumericTerm.CodePointClassCount _ -> Carrier.ofValue(Type.Prim.INT, declarations);
+            // How often a value occurs is a whole number whatever the value is.
+            case NumericTerm.Multiplicity _ -> Carrier.ofValue(Type.Prim.INT, declarations);
             // Asked of the operation as a taking is, and asked of what it was given: a run is a
             // container of the values standing at the place it is read from, so what the operation
             // answers of one is what it answers of a container of them. Written out here as the

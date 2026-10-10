@@ -1161,7 +1161,8 @@ public final class InvariantChecker {
                                 ? atomOf(held.get(where.position())) : null;
                 // Nothing a clause is written about either: no declaration says how many of a
                 // string's code points are in a class.
-                case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _ -> null;
+                case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
+                     NumberAt.OfWhatNumber.OfItsMultiplicity _ -> null;
             };
             if (atom == null) {
                 continue;
