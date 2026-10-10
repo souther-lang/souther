@@ -245,25 +245,18 @@ final class RemainderSolutions {
         // the order's end, and the member of its class just below nought is inside it.
         BigInteger low = tighter(runLow, value.floor(), true);
         BigInteger high = tighter(runHigh, value.ceiling(), false);
-        boolean upward;
+        boolean upward = true;
         BigInteger member;
         if (runLow != null) {
             member = members.leastAtOrAbove(low);
-            upward = true;
         } else if (runHigh != null) {
             member = members.greatestAtOrBelow(high);
             upward = false;
         } else {
             // Open: the member the caller would have first, or the class's own least non-negative
-            // one, and the nearest member inside the order where that is outside it.
-            member = own != null ? own : members.residue();
-            upward = true;
-            if (high != null && member.compareTo(high) > 0) {
-                member = members.greatestAtOrBelow(high);
-                upward = false;
-            } else if (low != null && member.compareTo(low) < 0) {
-                member = members.leastAtOrAbove(low);
-            }
+            // one, and the members either side of it after that.
+            return acrossBothSides(members, own != null ? own : members.residue(), low, high,
+                    value, tried, steps);
         }
         while (!inside(member, low, high)
                 || value.refuses().test(new Count(new BigDecimal(member)))) {
@@ -277,6 +270,43 @@ final class RemainderSolutions {
             }
         }
         return member;
+    }
+
+    /**
+     * The member of the class the rules do not refuse that is nearest {@code start}, on either side
+     * of it, inside the order's ends.
+     *
+     * <p>With nothing in the run to say which side, the members the order holds lie on both: a
+     * hole at the one nearest nought leaves the next one above it and the next one below it, and a
+     * search that went only up would say the class has none where the order's own least number is
+     * the one member left. It ends where both sides have run past the order, which is every member
+     * there is, and a figure ends it before that, which is not that.
+     */
+    private static BigInteger acrossBothSides(Congruences members, BigInteger start,
+                                              BigInteger low, BigInteger high, Value value,
+                                              int[] tried, int steps) {
+        BigInteger by = members.modulus();
+        for (BigInteger far = BigInteger.ZERO; ; far = far.add(by)) {
+            BigInteger above = start.add(far);
+            BigInteger below = start.subtract(far);
+            boolean aboveEnds = high != null && above.compareTo(high) > 0;
+            boolean belowEnds = low != null && below.compareTo(low) < 0;
+            if (aboveEnds && belowEnds) {
+                return null;
+            }
+            for (BigInteger member : far.signum() == 0 ? List.of(above)
+                    : List.of(above, below)) {
+                if (!inside(member, low, high)) {
+                    continue;
+                }
+                if (!value.refuses().test(new Count(new BigDecimal(member)))) {
+                    return member;
+                }
+                if (++tried[0] > steps) {
+                    return null;
+                }
+            }
+        }
     }
 
     /** The end that leaves less: the greater of two lower ends, or the lesser of two upper ones,

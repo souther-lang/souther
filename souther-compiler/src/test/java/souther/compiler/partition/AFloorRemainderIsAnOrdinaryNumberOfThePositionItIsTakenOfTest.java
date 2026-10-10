@@ -171,6 +171,33 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
     }
 
     /**
+     * With no end in the run, the members of the class lie on both sides of the one first tried,
+     * and a hole at it leaves the one on the far side where the order holds none on the near side:
+     * the divisor is the least number there is, so nought is the class's near member and the least
+     * number is the only other one the order holds.
+     */
+    @Test
+    void aHoleAtTheNearMemberLeavesTheOneOnTheOtherSideOfIt() {
+        String condition = "x /= 0 && Int.floorMod(x, 0 - 9223372036854775807 - 1) == 0";
+        List<String> rows = new ArrayList<>();
+        for (BorderAssessment border : linesOf("x: Int, y: Int", condition)) {
+            for (ItemAssessment.Owed owed : owedItems(border)) {
+                for (ItemAssessment.Attempt attempt : owed.searches().each()) {
+                    if (attempt instanceof ItemAssessment.Attempt.Certified certified
+                            && certified.row().purposes().stream().anyMatch(
+                                    each -> each.labels().stream().anyMatch(
+                                            label -> label.contains("= 0")
+                                                    && label.contains("floorMod")))) {
+                        rows.add(certified.row().inputs().getFirst().text());
+                    }
+                }
+            }
+        }
+        assertTrue(rows.contains("-9223372036854775808"), rows.toString());
+        assertFalse(rows.contains("0"), rows.toString());
+    }
+
+    /**
      * A number the rules leave a hole at is no row, and the class it is in has another member to
      * try: the remainder's own representative, nought, is the hole here.
      */
@@ -178,7 +205,8 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
     void aMemberOfTheClassThatIsAHoleIsStepPastToTheNextMember() {
         assertEquals(List.of("7"), rowsAt("x: Int, y: Int",
                 "x /= 0 && Int.floorMod(x, 7) == 0", "Int.floorMod(x, 7) = 0"));
-        assertEquals(List.of("14"), rowsAt("x: Int, y: Int",
+        // Both sides of the first member are tried, above before below, a step further out each.
+        assertEquals(List.of("-7"), rowsAt("x: Int, y: Int",
                 "x /= 0 && x /= 7 && Int.floorMod(x, 7) == 0", "Int.floorMod(x, 7) = 0"));
         // Held above, the members are those the run holds and the hole is one of them.
         assertEquals(List.of("21"), rowsAt("x: Int, y: Int",
