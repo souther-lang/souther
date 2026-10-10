@@ -80,8 +80,15 @@ public final class WhatTheLibraryComputes {
                         new LawProposition.All<>(List.of(side, equivalentTo)),
                         new LawProposition.All<>(List.of(side.denied(), equivalentTo.denied()))));
             }
-            case OperationLaw.Size<Slot>(LinearForm<LawNumber<Slot>> equalTo) ->
-                    new LawProposition.Compared<>(differenceOf(answer, equalTo), Rel.EQ);
+            // One of the cases met, and as many as it says there.
+            case OperationLaw.Size<Slot>(var cases) -> {
+                List<LawProposition<Slot>> each = cases.stream()
+                        .<LawProposition<Slot>>map(one -> new LawProposition.All<>(List.of(
+                                one.where(), new LawProposition.Compared<>(
+                                        differenceOf(answer, one.equalTo()), Rel.EQ))))
+                        .toList();
+                yield each.size() == 1 ? each.getFirst() : new LawProposition.Any<>(each);
+            }
         };
         return new Statement(operation, law.observed().toString(), holds);
     }

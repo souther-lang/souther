@@ -26,8 +26,10 @@ public final class ByPlace {
         return switch (law) {
             case OperationLaw.Observation<A>(var aspect, LawProposition<A> holds) ->
                     new OperationLaw.Observation<>(aspect, proposition(holds, word));
-            case OperationLaw.Size<A>(LinearForm<LawNumber<A>> equalTo) ->
-                    new OperationLaw.Size<>(form(equalTo, word));
+            case OperationLaw.Size<A>(var cases) -> new OperationLaw.Size<>(cases.stream()
+                    .map(each -> new OperationLaw.Size.Case<>(proposition(each.where(), word),
+                            form(each.equalTo(), word)))
+                    .toList());
         };
     }
 

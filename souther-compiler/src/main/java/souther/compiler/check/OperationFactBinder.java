@@ -1042,7 +1042,11 @@ final class OperationFactBinder {
             case OperationLaw.Size<ArgumentRef> size -> {
                 holdTheSide(AnswerAspect.EMPTINESS, declaration.result(),
                         "what " + library.qualified() + " answers as many of");
-                yield new OperationLaw.Size<>(lawForm(declaration, size.equalTo(), List.of()));
+                yield new OperationLaw.Size<>(size.cases().stream()
+                        .map(each -> new OperationLaw.Size.Case<>(
+                                lawProposition(declaration, each.where(), List.of()),
+                                lawForm(declaration, each.equalTo(), List.of())))
+                        .toList());
             }
         });
     }

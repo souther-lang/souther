@@ -9,7 +9,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Sites;
-import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.sites.WrittenCondition;
 import souther.compiler.types.SourceConstructOrigin;
@@ -48,7 +48,7 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
      *  inside another, which nothing here has words for. */
     private static final WhyNotTaken STARTS_WITH_HAS_NO_WORDS = new WhyNotTaken.MeaningUnread(
             new WhyUnread.NoWordsFor(new ValueName.Stdlib.Operation("String", "startsWith"),
-                    AnswerAspect.TRUTH, Unsayable.A_STRING_INSIDE_ANOTHER));
+                    OperationLaw.Observed.TRUTH, Unsayable.A_STRING_INSIDE_ANOTHER));
 
     /**
      * Two forks on a truth this reading has no words for, one inside the other.

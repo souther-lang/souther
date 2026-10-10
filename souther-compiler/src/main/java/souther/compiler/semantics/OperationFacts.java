@@ -456,6 +456,53 @@ public final class OperationFacts {
                     equal(number(carried(0)), sizeOf(WALKED), 0),
                     iff(holdsSomething(carried(1)), all(holdsSomething(WALKED),
                             atLeast(sizeOf(WALKED), 1, number(at(0)), -1, -1))))),
+            // And how many, which turns on how the count stands to how many there are: what is
+            // taken is as many as were asked for where there are that many, and all of them where
+            // there are fewer; what is dropped from is the rest. Walking a list, what is kept so
+            // far stands so to what was walked.
+            about("List", "take", lemma(sizeInCases(
+                    sized(atLeast(number(at(0)), -1, 0), 0),
+                    sized(all(atLeast(number(at(0)), 1, -1),
+                            atLeast(sizeOf(at(1)), 1, number(at(0)), -1, 0)), number(at(0)), 0),
+                    sized(atLeast(number(at(0)), 1, sizeOf(at(1)), -1, -1), sizeOf(at(1)), 0)),
+                    equal(number(carried(0)), sizeOf(WALKED), 0),
+                    any(all(atLeast(number(at(0)), -1, 0), atLeast(sizeOf(carried(1)), -1, 0)),
+                            all(atLeast(number(at(0)), 1, -1),
+                                    atLeast(sizeOf(WALKED), 1, number(at(0)), -1, 0),
+                                    equal(sizeOf(carried(1)), number(at(0)), 0)),
+                            all(atLeast(number(at(0)), 1, sizeOf(WALKED), -1, -1),
+                                    equal(sizeOf(carried(1)), sizeOf(WALKED), 0))))),
+            about("List", "drop", lemma(sizeInCases(
+                    sized(atLeast(number(at(0)), -1, 0), sizeOf(at(1)), 0),
+                    sized(all(atLeast(number(at(0)), 1, -1),
+                                    atLeast(sizeOf(at(1)), 1, number(at(0)), -1, 0)),
+                            sizeOf(at(1)), number(at(0)), 0),
+                    sized(atLeast(number(at(0)), 1, sizeOf(at(1)), -1, -1), 0)),
+                    equal(number(carried(0)), sizeOf(WALKED), 0),
+                    any(all(atLeast(number(at(0)), -1, 0),
+                                    equal(sizeOf(carried(1)), sizeOf(WALKED), 0)),
+                            all(atLeast(number(at(0)), 1, -1),
+                                    atLeast(sizeOf(WALKED), 1, number(at(0)), -1, 0),
+                                    equalToTheDifference(sizeOf(carried(1)), sizeOf(WALKED),
+                                            number(at(0)))),
+                            all(atLeast(number(at(0)), 1, sizeOf(WALKED), -1, -1),
+                                    atLeast(sizeOf(carried(1)), -1, 0))))),
+            // A pair for each element of the shorter: as many as the first where the second has
+            // as many, and as many as the second where it has fewer.
+            about("List", "zipShortest", lemma(sizeInCases(
+                    sized(atLeast(sizeOf(at(1)), 1, sizeOf(at(0)), -1, 0), sizeOf(at(0)), 0),
+                    sized(atLeast(sizeOf(at(0)), 1, sizeOf(at(1)), -1, -1), sizeOf(at(1)), 0)),
+                    equal(number(carried(0)), sizeOf(WALKED), 0),
+                    any(all(atLeast(sizeOf(at(1)), 1, sizeOf(WALKED), -1, 0),
+                                    equal(sizeOf(carried(1)), sizeOf(WALKED), 0)),
+                            all(atLeast(sizeOf(WALKED), 1, sizeOf(at(1)), -1, -1),
+                                    equal(sizeOf(carried(1)), sizeOf(at(1)), 0))))),
+            // Every whole number from the first to the last, where the last is not below the
+            // first, and none where it is.
+            about("List", "rangeInclusive", sizeInCases(
+                    sized(atLeast(number(at(1)), 1, number(at(0)), -1, 0), number(at(1)),
+                            number(at(0)), 1),
+                    sized(atLeast(number(at(0)), 1, number(at(1)), -1, -1), 0))),
             about("String", "repeat", law(AnswerAspect.EMPTINESS,
                     all(atLeast(number(at(0)), 1, -1), holdsSomething(at(1))))),
             about("String", "padLeft", law(AnswerAspect.EMPTINESS, any(holdsSomething(at(2)),
@@ -805,6 +852,41 @@ public final class OperationFacts {
                 new LinearForm<>(ExactRatio.ZERO, coefs)));
     }
 
+    /** The answer holds as many as the one of {@code cases} the arguments stand as says. */
+    @SafeVarargs
+    private static OperationFact sizeInCases(OperationLaw.Size.Case<ArgumentRef>... cases) {
+        List<OperationLaw.Size.Case<ArgumentRef>> each = new ArrayList<>();
+        for (OperationLaw.Size.Case<ArgumentRef> one : cases) {
+            each.add(one);
+        }
+        return new OperationFact.HasALaw(new OperationLaw.Size<>(each));
+    }
+
+    /** Where {@code where} holds of the arguments, as many as {@code constant}. */
+    private static OperationLaw.Size.Case<ArgumentRef> sized(LawProposition<ArgumentRef> where,
+                                                             long constant) {
+        return new OperationLaw.Size.Case<>(where, LinearForm.constant(ExactRatio.of(constant)));
+    }
+
+    /** Where {@code where} holds of the arguments, as many as {@code a} with
+     *  {@code constant} added. */
+    private static OperationLaw.Size.Case<ArgumentRef> sized(LawProposition<ArgumentRef> where,
+                                                             LawNumber<ArgumentRef> a,
+                                                             long constant) {
+        return new OperationLaw.Size.Case<>(where, new LinearForm<>(ExactRatio.of(constant),
+                Map.of(a, ExactRatio.ONE)));
+    }
+
+    /** Where {@code where} holds of the arguments, as many as {@code a} less {@code b}, with
+     *  {@code constant} added. */
+    private static OperationLaw.Size.Case<ArgumentRef> sized(LawProposition<ArgumentRef> where,
+                                                             LawNumber<ArgumentRef> a,
+                                                             LawNumber<ArgumentRef> b,
+                                                             long constant) {
+        return new OperationLaw.Size.Case<>(where, new LinearForm<>(ExactRatio.of(constant),
+                Map.of(a, ExactRatio.ONE, b, ExactRatio.of(-1))));
+    }
+
     /**
      * {@code stated}, a law of an operation the library writes in the language or what it answers
      * beside what others answer, as the lemma it is: to be proved against the body, with what a
@@ -879,6 +961,15 @@ public final class OperationFacts {
         return new LawNumber.SizeOf<>(subject);
     }
 
+    /** {@code part} being {@code whole} less {@code less}. */
+    private static LawProposition<ArgumentRef> equalToTheDifference(LawNumber<ArgumentRef> part,
+                                                                    LawNumber<ArgumentRef> whole,
+                                                                    LawNumber<ArgumentRef> less) {
+        return new LawProposition.Compared<>(new LinearForm<>(ExactRatio.ZERO,
+                Map.of(part, ExactRatio.ONE, whole, ExactRatio.of(-1), less, ExactRatio.ONE)),
+                Rel.EQ);
+    }
+
     /** {@code whole} being {@code one} and {@code other} added. */
     private static LawProposition<ArgumentRef> equalToTheSum(LawNumber<ArgumentRef> whole,
                                                              LawNumber<ArgumentRef> one,
@@ -898,14 +989,22 @@ public final class OperationFacts {
         return new LawProposition.Always<>(holds);
     }
 
-    private static LawProposition<ArgumentRef> all(LawProposition<ArgumentRef> one,
-                                                   LawProposition<ArgumentRef> other) {
-        return new LawProposition.All<>(List.of(one, other));
+    @SafeVarargs
+    private static LawProposition<ArgumentRef> all(LawProposition<ArgumentRef>... parts) {
+        List<LawProposition<ArgumentRef>> each = new ArrayList<>();
+        for (LawProposition<ArgumentRef> part : parts) {
+            each.add(part);
+        }
+        return new LawProposition.All<>(each);
     }
 
-    private static LawProposition<ArgumentRef> any(LawProposition<ArgumentRef> one,
-                                                   LawProposition<ArgumentRef> other) {
-        return new LawProposition.Any<>(List.of(one, other));
+    @SafeVarargs
+    private static LawProposition<ArgumentRef> any(LawProposition<ArgumentRef>... parts) {
+        List<LawProposition<ArgumentRef>> each = new ArrayList<>();
+        for (LawProposition<ArgumentRef> part : parts) {
+            each.add(part);
+        }
+        return new LawProposition.Any<>(each);
     }
 
     /** The argument at {@code argument} holding something. */

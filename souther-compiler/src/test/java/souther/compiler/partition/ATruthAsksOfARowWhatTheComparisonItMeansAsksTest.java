@@ -17,7 +17,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.types.ValueName;
 
@@ -135,7 +135,8 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
             OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
                     only("wordAsked", holding));
             assertEquals(List.of(new WhyNotTaken.MeaningUnread(new WhyUnread.NoWordsFor(
-                    new ValueName.Stdlib.Operation("String", "contains"), AnswerAspect.TRUTH,
+                    new ValueName.Stdlib.Operation("String", "contains"),
+                    OperationLaw.Observed.TRUTH,
                     Unsayable.A_STRING_INSIDE_ANOTHER))),
                     declined.whys());
         }

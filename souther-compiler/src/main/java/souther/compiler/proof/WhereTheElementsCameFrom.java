@@ -179,9 +179,9 @@ public final class WhereTheElementsCameFrom {
      *  {@code source}. */
     private boolean asManyAs(ValueName.Stdlib.Operation operation, int source, Reading reading) {
         if (library.settled(operation, OperationLaw.Observed.SIZE)
-                instanceof Library.Settled.ByALaw(OperationLaw.Size<Integer>(var equalTo))
-                && equalTo.equals(LinearForm.atom(new LawNumber.SizeOf<>(
-                        new LawSubject.Argument<>(source))))) {
+                instanceof Library.Settled.ByALaw(OperationLaw.Size<Integer> size)
+                && LinearForm.atom(new LawNumber.SizeOf<>(
+                        new LawSubject.Argument<>(source))).equals(size.unconditional())) {
             reading.took(Proof.Used.law(operation, OperationLaw.Observed.SIZE));
             return true;
         }

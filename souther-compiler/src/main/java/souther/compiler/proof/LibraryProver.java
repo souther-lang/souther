@@ -299,14 +299,27 @@ public final class LibraryProver {
                 yield follows(reading, List.of(), ends, goal, spacing) ? null
                         : new Failed(Unproved.Obligation.THE_STATEMENT, goal);
             }
-            case OperationLaw.Size<Integer>(LinearForm<LawNumber<Integer>> equalTo) -> {
-                LinearForm<LawNumber<Value>> stated = reading.form(equalTo, operation, params);
+            case OperationLaw.Size<Integer>(var sized) -> {
                 List<Universal> ends = induction == null ? List.of() : induction.whereItEnds();
-                for (Reading.Case each : cases) {
-                    LawProposition<Value> goal = Props.compared(reading.size(each.is()), Rel.EQ,
-                            stated);
-                    if (!follows(reading, List.of(each.when()), ends, goal, spacing)) {
-                        yield new Failed(Unproved.Obligation.THE_STATEMENT, goal);
+                // Every way the arguments stand is one of the cases, and in each, whichever case
+                // of the body is taken, the body answers as many as the case says.
+                List<LawProposition<Value>> where = new ArrayList<>();
+                sized.forEach(each -> where.add(reading.proposition(each.where(), operation,
+                        params)));
+                LawProposition<Value> covered = Props.any(where);
+                if (!follows(reading, List.of(), ends, covered, spacing)) {
+                    yield new Failed(Unproved.Obligation.THE_STATEMENT, covered);
+                }
+                for (int at = 0; at < sized.size(); at++) {
+                    LinearForm<LawNumber<Value>> stated = reading.form(sized.get(at).equalTo(),
+                            operation, params);
+                    for (Reading.Case each : cases) {
+                        LawProposition<Value> goal = Props.compared(reading.size(each.is()),
+                                Rel.EQ, stated);
+                        if (!follows(reading, List.of(each.when(), where.get(at)), ends, goal,
+                                spacing)) {
+                            yield new Failed(Unproved.Obligation.THE_STATEMENT, goal);
+                        }
                     }
                 }
                 yield null;
@@ -406,9 +419,22 @@ public final class LibraryProver {
             }
         }
         if (library.settled(made.operation(), OperationLaw.Observed.SIZE)
-                instanceof Library.Settled.ByALaw) {
-            out.add(Props.compared(LinearForm.atom(new LawNumber.SizeOf<>(
-                    new LawSubject.Argument<>((Value) made))), Rel.EQ, reading.size(made)));
+                instanceof Library.Settled.ByALaw(OperationLaw<Integer> law)) {
+            LinearForm<LawNumber<Value>> itsSize = LinearForm.atom(new LawNumber.SizeOf<>(
+                    new LawSubject.Argument<>((Value) made)));
+            if (law instanceof OperationLaw.Size<Integer> size && size.unconditional() == null) {
+                // As many as one of its cases says, where the arguments stand as that case does.
+                List<LawProposition<Value>> cases = new ArrayList<>();
+                for (OperationLaw.Size.Case<Integer> each : size.cases()) {
+                    cases.add(Props.both(reading.proposition(each.where(), made.operation(),
+                            made.args()), Props.compared(itsSize, Rel.EQ,
+                            reading.form(each.equalTo(), made.operation(), made.args()))));
+                }
+                reading.took(Proof.Used.law(made.operation(), OperationLaw.Observed.SIZE));
+                out.add(Props.any(cases));
+            } else {
+                out.add(Props.compared(itsSize, Rel.EQ, reading.size(made)));
+            }
         }
         return out;
     }

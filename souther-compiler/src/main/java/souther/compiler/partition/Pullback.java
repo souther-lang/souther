@@ -206,6 +206,12 @@ final class Pullback {
      * read is no comparison that keeps them, and a count is not read there.
      */
     private Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> counting;
+    /**
+     * How many each answer an operation sized by cases holds, in the case of it the comparison
+     * being read is read in ({@link #bySizedCases}): a number of the input, where the arguments
+     * stand as that case says.
+     */
+    private final Map<Core, LinearForm<Quantity>> sizedInACase = new HashMap<>();
 
     private Pullback(InputReading read, Optional<ModelOccurrence> where) {
         this.read = read;
@@ -481,6 +487,7 @@ final class Pullback {
                 () -> partOf(at, asACut(stated, arithmetic.get(), fixed)),
                 () -> partOf(at, onAnOrder(stated, arithmetic.get(), reads)),
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
+                () -> ofASizeInCases(stated, at, reads),
                 () -> ofAChoice(stated, at, reads),
                 () -> throughWhatItStopsAt(stated, at, fixed, reads),
                 () -> partOf(at, ofBoundValues(stated, fixed, reads)));
@@ -915,9 +922,11 @@ final class Pullback {
                 OperationLaw.Observed.of(aspect))) {
             case null -> null;
             case BoundOperationFacts.Settled.Unsaid(Unsayable why) -> leaf(new Derivation.Stopped(
-                    new WhyUnread.NoWordsFor(operation, aspect, why), fixed(e, reads)), stopsAt);
+                    new WhyUnread.NoWordsFor(operation, OperationLaw.Observed.of(aspect), why),
+                    fixed(e, reads)), stopsAt);
             case BoundOperationFacts.Settled.Open _ -> leaf(new Derivation.Stopped(
-                    new WhyUnread.NotProvedOfItsBody(operation, aspect), fixed(e, reads)), stopsAt);
+                    new WhyUnread.NotProvedOfItsBody(operation, OperationLaw.Observed.of(aspect)),
+                    fixed(e, reads)), stopsAt);
             case BoundOperationFacts.Settled.ByALaw(
                     OperationLaw.Observation<DeclaredArgument> law, var _) ->
                     new Derivation.ByALaw(operation, aspect, law.equivalentTo(),
@@ -986,16 +995,121 @@ final class Pullback {
             return new Sized.NotSized(
                     new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT));
         }
-        if (!(DefaultBoundOperationFacts.get().settled(operation, OperationLaw.Observed.SIZE)
-                instanceof BoundOperationFacts.Settled.ByALaw(
-                        OperationLaw.Size<DeclaredArgument> law, var _))) {
-            ValueName.Stdlib measure = NumericMeasures.takenOf(value.type(), read.rules().inners());
-            return new Sized.NotSized(measure == null
-                    ? new WhyUnread.NoMeasureOfItsSize()
-                    : new WhyUnread.ANumberOfWhatAnOperationAnswers(measure, operation));
+        Core e = Core.withoutStanding(made.value());
+        // In the case of its size the comparison is being read in, the number that case says.
+        LinearForm<Quantity> inACase = sizedInACase.get(e);
+        if (inACase != null) {
+            return new Sized.AsAForm(inACase);
         }
-        return new ALawRead(applied, Core.withoutStanding(made.value()), made.at())
-                .number(law.equalTo());
+        return switch (DefaultBoundOperationFacts.get().settled(operation,
+                OperationLaw.Observed.SIZE)) {
+            case null -> {
+                ValueName.Stdlib measure = NumericMeasures.takenOf(value.type(),
+                        read.rules().inners());
+                yield new Sized.NotSized(measure == null
+                        ? new WhyUnread.NoMeasureOfItsSize()
+                        : new WhyUnread.ANumberOfWhatAnOperationAnswers(measure, operation));
+            }
+            case BoundOperationFacts.Settled.Unsaid(Unsayable why) -> new Sized.NotSized(
+                    new WhyUnread.NoWordsFor(operation, OperationLaw.Observed.SIZE, why));
+            case BoundOperationFacts.Settled.Open _ -> new Sized.NotSized(
+                    new WhyUnread.NotProvedOfItsBody(operation, OperationLaw.Observed.SIZE));
+            case BoundOperationFacts.Settled.ByALaw(
+                    OperationLaw.Size<DeclaredArgument> law, var _) -> {
+                LinearForm<LawNumber<DeclaredArgument>> equalTo = law.unconditional();
+                // Which number it is turns on how the arguments stand: a comparison over it is
+                // read in each of its cases ({@link #inEachCaseOf}), and anywhere else it is no
+                // one number, and stands at no position either.
+                yield equalTo == null ? new Sized.NotSized(
+                        new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT))
+                        : new ALawRead(applied, e, made.at()).number(equalTo);
+            }
+            case BoundOperationFacts.Settled.ByALaw(
+                    OperationLaw.Observation<DeclaredArgument> _, var _) ->
+                    throw new IllegalStateException(operation + " settles how many it holds with"
+                            + " a side of its answer");
+        };
+    }
+
+    /**
+     * The law sizing what {@code value} answers by cases, with the call — or null where it is no
+     * call of an operation whose size turns on how its arguments stand.
+     */
+    private SizedByCases sizedByCases(Core value, InputReads at) {
+        Denotation made = at.standing(value, read.rules().symbols(), read.rules().newtypes());
+        Core e = Core.withoutStanding(made.value());
+        return AnOperationApplied.of(e) instanceof AnOperationApplied applied
+                && applied.operation() instanceof ValueName.Stdlib operation
+                && DefaultBoundOperationFacts.get().settled(operation, OperationLaw.Observed.SIZE)
+                        instanceof BoundOperationFacts.Settled.ByALaw(
+                                OperationLaw.Size<DeclaredArgument> law, var _)
+                && law.unconditional() == null
+                ? new SizedByCases(applied, operation, e, made.at(), law) : null;
+    }
+
+    /** A call of {@code operation}, at {@code e} where it stands in {@code reads}, sized by the
+     *  cases of {@code law}. */
+    private record SizedByCases(AnOperationApplied applied, ValueName.Stdlib operation, Core e,
+                                InputReads reads, OperationLaw.Size<DeclaredArgument> law) {}
+
+    /**
+     * A call sized by cases whose size {@code value} takes somewhere inside it, and not in a case
+     * already: the innermost, so that what an outer one's cases say of it is read in one of its
+     * own — or null where it takes none.
+     */
+    private SizedByCases measuredByCases(Denotation value) {
+        Denotation stands = value.at().standing(value.value(), read.rules().symbols(),
+                read.rules().newtypes());
+        Core e = Core.withoutStanding(stands.value());
+        // A closure's body is read where it is applied, and is no part of this value.
+        if (e instanceof Core.Block) {
+            return null;
+        }
+        SizedByCases[] inner = {null};
+        Core.forEachChild(e, child -> {
+            if (inner[0] == null) {
+                inner[0] = measuredByCases(new Denotation(child, stands.at()));
+            }
+        });
+        if (inner[0] != null) {
+            return inner[0];
+        }
+        if (AnOperationApplied.of(e) instanceof AnOperationApplied measuring
+                && measuring.operation() instanceof ValueName.Stdlib measure
+                && DefaultBoundOperationFacts.get().takenAs(measure)
+                        instanceof TakenAs.HowManyItHolds
+                && measuring.args().size() == 1) {
+            SizedByCases sized = sizedByCases(measuring.args().getFirst(), stands.at());
+            return sized != null && !sizedInACase.containsKey(sized.e()) ? sized : null;
+        }
+        return null;
+    }
+
+    /**
+     * What {@code read} comes to in each case of how many {@code sized} answers: the arguments
+     * standing as that case says, and {@code read} again with that many standing for the size.
+     */
+    private Derivation inEachCaseOf(SizedByCases sized, Denotation at,
+                                    Supplier<Derivation> read) {
+        ALawRead law = new ALawRead(sized.applied(), sized.e(), sized.reads());
+        List<Derivation.MatchArms.Arm> arms = new ArrayList<>();
+        for (OperationLaw.Size.Case<DeclaredArgument> each : sized.law().cases()) {
+            Derivation reached = law.of(each.where());
+            Derivation there = switch (law.number(each.equalTo())) {
+                case Sized.NotSized(WhyUnread why) ->
+                        partOf(at, new Derivation.Stopped(why, false));
+                case Sized.AsAForm(LinearForm<Quantity> form) -> {
+                    sizedInACase.put(sized.e(), form);
+                    try {
+                        yield read.get();
+                    } finally {
+                        sizedInACase.remove(sized.e());
+                    }
+                }
+            };
+            arms.add(new Derivation.MatchArms.Arm(reached, there));
+        }
+        return new Derivation.AnOperationsCases(sized.operation(), arms);
     }
 
     /** The number a size of the container at {@code held} is, or null where no type measures it. */
@@ -1396,6 +1510,32 @@ final class Pullback {
             if (inside != null) {
                 return goingIn(inside, reads, new Denotation(e, reads), fixed(e, reads),
                         taking -> new ALawRead(this, taking.apply(reads)).compared(form, states));
+            }
+            // And on each case of how many an argument holds, or a number an argument is takes,
+            // where which number that is turns on how the arguments of what made it stand.
+            for (LawNumber<DeclaredArgument> number : form.coefs().keySet()) {
+                SizedByCases sized = switch (number) {
+                    case LawNumber.AnArgument<DeclaredArgument>(DeclaredArgument at) ->
+                            measuredByCases(new Denotation(applied.argument(at), reads));
+                    case LawNumber.SizeOf<DeclaredArgument>(
+                            LawSubject.Argument<DeclaredArgument>(DeclaredArgument at)) -> {
+                        SizedByCases made = sizedByCases(applied.argument(at), reads);
+                        yield made != null && !sizedInACase.containsKey(made.e()) ? made : null;
+                    }
+                    // An element that is a value written out is that value, sized as it is.
+                    case LawNumber.SizeOf<DeclaredArgument>(
+                            LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at)) -> {
+                        SizedByCases made = elements.get(at) instanceof ElementAt.AValue(
+                                Core value, InputReads in) ? sizedByCases(value, in) : null;
+                        yield made != null && !sizedInACase.containsKey(made.e()) ? made : null;
+                    }
+                    case LawNumber.SizeOf<DeclaredArgument> _,
+                         LawNumber.HowManyMeet<DeclaredArgument> _ -> null;
+                };
+                if (sized != null) {
+                    return inEachCaseOf(sized, new Denotation(e, reads),
+                            () -> compared(form, states));
+                }
             }
             Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
             counting = new LinkedHashMap<>();
@@ -2405,6 +2545,21 @@ final class Pullback {
     }
 
     /**
+     * A comparison over how many an operation answers, where which number that is turns on how the
+     * operation's arguments stand: read in each case of it, as a choice is read in each of its
+     * cases — or null where neither side takes such a size.
+     */
+    private Derivation ofASizeInCases(StatedComparison stated, Denotation at, InputReads reads) {
+        Denotation left = new Denotation(stated.left(), reads);
+        Denotation right = new Denotation(stated.right(), reads);
+        if (measuredByCases(left) == null && measuredByCases(right) == null) {
+            return null;
+        }
+        return new Derivation.AComparisonOfAChoice(
+                comparedCase(left, right, stated.claim().statedRelation(), at));
+    }
+
+    /**
      * A comparison one side of which is a value chosen by cases, read as the choice: in each case,
      * the comparison of what that case answers — or null where neither side is such a value.
      *
@@ -2458,6 +2613,15 @@ final class Pullback {
             return goingIn(inside, left.at(), at, false, taking -> comparedCase(
                     new Denotation(left.value(), taking.apply(left.at())),
                     new Denotation(right.value(), taking.apply(right.at())), states, at));
+        }
+        // And how many an operation answers, where which number that is turns on how its
+        // arguments stand.
+        SizedByCases sized = measuredByCases(left);
+        if (sized == null) {
+            sized = measuredByCases(right);
+        }
+        if (sized != null) {
+            return inEachCaseOf(sized, at, () -> comparedCase(left, right, states, at));
         }
         return partOf(at, overQuantities(left, right, states));
     }

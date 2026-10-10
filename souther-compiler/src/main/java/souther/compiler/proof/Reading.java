@@ -466,9 +466,15 @@ final class Reading {
             case Value.Made(ValueName.Stdlib.Operation operation, List<Value> args) -> {
                 Library.Settled settled = library.settled(operation, OperationLaw.Observed.SIZE);
                 if (settled instanceof Library.Settled.ByALaw(OperationLaw<Integer> law)
-                        && law instanceof OperationLaw.Size<Integer>(var equalTo)) {
-                    used.add(Proof.Used.law(operation, OperationLaw.Observed.SIZE));
-                    yield form(equalTo, operation, args);
+                        && law instanceof OperationLaw.Size<Integer> size) {
+                    LinearForm<LawNumber<Integer>> equalTo = size.unconditional();
+                    if (equalTo != null) {
+                        used.add(Proof.Used.law(operation, OperationLaw.Observed.SIZE));
+                        yield form(equalTo, operation, args);
+                    }
+                    // Which number it is turns on how the arguments stand, so it is the answer's
+                    // own size, which what is known of the value ties to the cases.
+                    yield LinearForm.atom(new LawNumber.SizeOf<>(new LawSubject.Argument<>(value)));
                 }
                 Value source = listed(operation, args);
                 if (source != null) {

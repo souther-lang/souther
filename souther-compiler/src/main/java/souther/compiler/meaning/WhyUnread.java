@@ -4,6 +4,7 @@ import souther.compiler.check.Clause;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.types.ValueName;
 
@@ -105,32 +106,32 @@ public sealed interface WhyUnread {
     }
 
     /**
-     * How {@code operation}'s answer comes out on {@code aspect} comes to {@code proposition}, which
-     * the domain has no words for: what it states is known, and no proposition over the input says
-     * it.
+     * What {@code observed} of {@code operation}'s answer — a side of it, or how many it holds —
+     * comes to is {@code proposition}, which the domain has no words for: what it states is known,
+     * and no proposition over the input says it.
      */
-    record NoWordsFor(ValueName.Stdlib operation, AnswerAspect aspect, Unsayable proposition)
-            implements WhyUnread {
+    record NoWordsFor(ValueName.Stdlib operation, OperationLaw.Observed observed,
+                      Unsayable proposition) implements WhyUnread {
 
         public NoWordsFor {
             Objects.requireNonNull(operation, "a closing is of an operation");
-            Objects.requireNonNull(aspect, "about one side of what it answers");
+            Objects.requireNonNull(observed, "about something observed of what it answers");
             Objects.requireNonNull(proposition, "and names what that comes to");
         }
     }
 
     /**
-     * What is stated of how {@code operation}'s answer comes out on {@code aspect} is not proved
+     * What is stated of what {@code observed} of {@code operation}'s answer comes to is not proved
      * against the operation's body, so it is an obligation still open and no law: about what this
      * compiler has shown, and neither about the domain's words nor about an operation nothing is
      * stated of.
      */
-    record NotProvedOfItsBody(ValueName.Stdlib operation, AnswerAspect aspect)
+    record NotProvedOfItsBody(ValueName.Stdlib operation, OperationLaw.Observed observed)
             implements WhyUnread {
 
         public NotProvedOfItsBody {
             Objects.requireNonNull(operation, "a statement is of an operation");
-            Objects.requireNonNull(aspect, "about one side of what it answers");
+            Objects.requireNonNull(observed, "about something observed of what it answers");
         }
     }
 
