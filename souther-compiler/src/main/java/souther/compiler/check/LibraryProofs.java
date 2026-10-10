@@ -44,4 +44,24 @@ interface LibraryProofs {
 
     /** Each proved here, against its body. */
     Source PROVING = ProvingTheLibrary::new;
+
+    /**
+     * Each taken to hold and none settling anything, for asking what the declarations say beside
+     * one another before anything is proved: a question about the declarations, whose answer no
+     * proof changes, and which a set of facts holding all of them answers most strictly. Never the
+     * facts a reader is handed.
+     */
+    Source TAKEN_AS_HOLDING = (_, _, _, _, _) -> new LibraryProofs() {
+
+        @Override
+        public BoundOperationFacts.Settled settle(ValueName.Stdlib.Operation operation,
+                                                  OperationLaw.Observed observed) {
+            return null;
+        }
+
+        @Override
+        public boolean proves(BoundOperationFact fact) {
+            return true;
+        }
+    };
 }

@@ -107,9 +107,12 @@ final class OperationFactBinder {
                     ((BoundOperationFact.HasALaw) one).law(),
                     List.of(slots(stdlib, declaration, beside, false))));
         }
-        BoundOperationFacts facts = new BoundOperationFacts(stdlib, bound, proofs);
-        holdEachNumberToOneReading(stdlib, facts);
-        return facts;
+        // What the declarations may not say beside one another is asked of all of them, before
+        // anything is proved: it is a question about the declarations, which no proof changes, and
+        // a declaration refused is one nothing should be proved for.
+        holdEachNumberToOneReading(stdlib,
+                new BoundOperationFacts(stdlib, bound, LibraryProofs.TAKEN_AS_HOLDING));
+        return new BoundOperationFacts(stdlib, bound, proofs);
     }
 
     /** The same, each written operation's facts proved here against its body. */

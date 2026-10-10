@@ -43,7 +43,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
     void theBindingIsOverTheDeclarations() {
         assertEquals(OperationFacts.declarations().stream()
                         .map(OperationFacts.Declared::operation).toList(),
-                OperationFactBinder.bindAll(DefaultStdlib.get(), OperationFacts.declarations())
+                DefaultBoundOperationFacts.get()
                         .all().stream().map(each -> each.operation().operation()).toList(),
                 "what the binding bound is what is declared, about the operations it is declared"
                         + " of");
