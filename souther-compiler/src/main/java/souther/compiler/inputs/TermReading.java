@@ -83,17 +83,26 @@ final class TermReading {
     /**
      * How many of the values {@code every} holds are the value {@code own} is.
      *
-     * <p>Equal as the row wrote them: two elements a row holds at one place are one value where
-     * they are written alike, which is what a fold that files a counter under each key files them
-     * by. {@code every} holds {@code own} among them, since an element is one of the elements, so
-     * the number is at least one.
+     * <p>Equal as the place's order has them: two values are one where the order puts them at one
+     * place, which is how the language holds a decimal's amount and the value inside a newtype,
+     * and so what a fold that files a counter under each key files them by. Read as the
+     * observation's own equality, two decimals of one amount written to different scales would be
+     * two values. A value the order has no place for — a value with parts, which the order holds
+     * nothing of — is no number here, and nothing is guessed of whether it is the same as another.
+     * {@code every} holds {@code own} among them, since an element is one of the elements, so the
+     * number is at least one.
      */
-    static Reading among(ObservedValue own, List<ObservedValue> every) {
+    static Reading among(TermOrders on, ObservedValue own, List<ObservedValue> every) {
         Objects.requireNonNull(own, "a term is read at a value the walk came to");
         Objects.requireNonNull(every, "and among the values a walk came to");
         Membership.Incomplete unreadOwn = Membership.unread(own);
         if (unreadOwn != null) {
             return new Reading.Missing(unreadOwn.code());
+        }
+        Carrier observed = on.observed();
+        Place ownPlace = observed == null ? null : observed.placeOf(withoutNewtype(own));
+        if (ownPlace == null) {
+            return new Reading.NotNumber();
         }
         long same = 0;
         for (ObservedValue each : every) {
@@ -102,11 +111,24 @@ final class TermReading {
             if (unread != null) {
                 return new Reading.Missing(unread.code());
             }
-            if (each.equals(own)) {
+            Place place = observed.placeOf(withoutNewtype(each));
+            if (place == null) {
+                return new Reading.NotNumber();
+            }
+            if (place.sameAs(ownPlace)) {
                 same++;
             }
         }
         return new Reading.Number(Count.of(same));
+    }
+
+    /** What a newtype wraps, as {@link #at} reads it: the value inside, however deep. */
+    private static ObservedValue withoutNewtype(ObservedValue value) {
+        ObservedValue at = value;
+        while (at instanceof ObservedValue.Constructed c && c.field("value") != null) {
+            at = c.field("value");
+        }
+        return at;
     }
 
     /**

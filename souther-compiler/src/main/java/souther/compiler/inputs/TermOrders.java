@@ -111,7 +111,7 @@ public final class TermOrders {
         if (!(term instanceof NumericTerm.Multiplicity)) {
             throw new IllegalArgumentException(term + " is not a count of an element's equals");
         }
-        return TermReading.among(own, every);
+        return TermReading.among(this, own, every);
     }
 
     /**
