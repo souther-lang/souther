@@ -68,6 +68,10 @@ public final class TheSignOfAnOrder {
      */
     public sealed interface Read<E> {
 
+        /** What the sign was compared with: the answer counted at {@code spacing}, standing
+         *  {@code written} to {@code against}, which is what is read off it. */
+        TheSign sign();
+
         /**
          * The comparison of the two arguments, read where the operation was applied.
          *
@@ -77,25 +81,48 @@ public final class TheSignOfAnOrder {
          *                       of days held above one by {@code daysBetween(a, b) > 1} proves
          *                       {@code b > a} and is not where it holds
          */
-        record OfTheArguments<E>(ValueName operation, StatedComparison arguments, E at,
+        record OfTheArguments<E>(TheSign sign, StatedComparison arguments, E at,
                                  boolean isTheCondition) implements Read<E> {
 
             public OfTheArguments {
-                Objects.requireNonNull(operation, "an order is answered by an operation");
+                Objects.requireNonNull(sign, "an order is answered by an operation");
                 Objects.requireNonNull(arguments, "and is of its arguments");
                 Objects.requireNonNull(at, "read somewhere");
+            }
+
+            /** The operation answering the order. */
+            public ValueName operation() {
+                return sign.operation();
             }
         }
 
         /**
-         * The same whatever the arguments: every answer the operation can give comes out
-         * {@code holds}, so the comparison states no order of them.
+         * The same whatever the arguments: every answer the operation can give comes out one way
+         * ({@link #settledByItsBounds}), so the comparison states no order of them.
          */
-        record Settled<E>(ValueName operation, boolean holds) implements Read<E> {
+        record Settled<E>(TheSign sign) implements Read<E> {
 
             public Settled {
-                Objects.requireNonNull(operation, "an order is answered by an operation");
+                Objects.requireNonNull(sign, "an order is answered by an operation");
             }
+
+            /** The operation answering the order. */
+            public ValueName operation() {
+                return sign.operation();
+            }
+        }
+    }
+
+    /** The answer of {@code operation}, counted at {@code spacing}, standing {@code written} to
+     *  {@code against}. */
+    public record TheSign(ValueName operation, Granularity spacing, Rel written,
+                          ExactRatio against) {
+
+        public TheSign {
+            Objects.requireNonNull(operation, "a sign is what an operation answers");
+            Objects.requireNonNull(spacing, "counted at some spacing");
+            Objects.requireNonNull(written, "standing some way");
+            Objects.requireNonNull(against, "to some number");
         }
     }
 
@@ -129,11 +156,13 @@ public final class TheSignOfAnOrder {
             // the two were written round.
             Rel written = (signFirst ? comparison.claim() : comparison.claim().turned())
                     .statedRelation();
+            TheSign compared = new TheSign(applied.operation(), counted.spacing(), written,
+                    against);
             return switch (of(applied.operation(), counted.spacing(), written, against)) {
                 case null -> null;
-                case Stands.Settled(boolean holds) -> new Read.Settled<>(applied.operation(), holds);
+                case Stands.Settled _ -> new Read.Settled<>(compared);
                 case Stands.Between(Rel between, boolean isTheCondition) ->
-                        new Read.OfTheArguments<>(applied.operation(),
+                        new Read.OfTheArguments<>(compared,
                                 new StatedComparison(ComparisonClaim.stating(between), greater,
                                         lesser,
                                         // Two arguments of the operation that orders them, each
@@ -144,6 +173,29 @@ public final class TheSignOfAnOrder {
             };
         }
         return null;
+    }
+
+    /**
+     * The relation the greater argument of {@code operation} stands in to the lesser exactly where
+     * its answer, counted at {@code spacing}, stands {@code rel} to {@code against} — or null where
+     * the two rules leave that open, settle it whatever the arguments are, or prove an order
+     * without being where it holds.
+     */
+    public static Rel betweenTheArguments(ValueName operation, Granularity spacing, Rel rel,
+                                          ExactRatio against) {
+        return of(operation, spacing, rel, against) instanceof Stands.Between(Rel between,
+                boolean isTheCondition) && isTheCondition ? between : null;
+    }
+
+    /**
+     * Which way the answer of {@code operation}, counted at {@code spacing}, comes out standing
+     * {@code rel} to {@code against} whatever the arguments are — or null where it is not the same
+     * on every answer the library says the operation can give.
+     */
+    public static Boolean settledByItsBounds(ValueName operation, Granularity spacing, Rel rel,
+                                             ExactRatio against) {
+        return of(operation, spacing, rel, against) instanceof Stands.Settled(boolean holds)
+                ? holds : null;
     }
 
     /** What the sign standing a way to a number states of the arguments. */

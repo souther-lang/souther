@@ -90,9 +90,9 @@ public record Choice(Kind kind, List<Arm> arms) {
      * given: the arithmetic over them it answers, and how they stand for it to be reached. Lowered
      * out of the table's own way of naming an argument, as an arm is.
      */
-    public record ACase(LinearForm<Core> answers, List<FormsStand> given) {
+    public record ADefinitionCase(LinearForm<Core> answers, List<FormsStand> given) {
 
-        public ACase {
+        public ADefinitionCase {
             given = List.copyOf(given);
         }
     }
@@ -253,15 +253,15 @@ public record Choice(Kind kind, List<Arm> arms) {
      * chosen by how two of them stand, the same cases are the arms of the choice the call is
      * ({@link #of}), and a reader taking the call as that choice does not read them here as well.
      */
-    public static List<ACase> casesOf(Core.PreservedCall call) {
-        List<ACase> out = new ArrayList<>();
+    public static List<ADefinitionCase> casesOf(Core.PreservedCall call) {
+        List<ADefinitionCase> out = new ArrayList<>();
         for (DefinitionCase<DeclaredArgument> one : DischargeRules.chosenBy(call)) {
             List<FormsStand> given = new ArrayList<>(one.given().size());
             for (ArgumentsStand<DeclaredArgument> stands : one.given()) {
                 given.add(new FormsStand(atTheCall(stands.left(), call), stands.rel(),
                         atTheCall(stands.right(), call)));
             }
-            out.add(new ACase(atTheCall(one.answers(), call), given));
+            out.add(new ADefinitionCase(atTheCall(one.answers(), call), given));
         }
         return out;
     }

@@ -70,7 +70,6 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.EnumSet;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -292,7 +291,7 @@ final class Pullback {
         if (Proposition.leavesSomethingUnread(stated)) {
             return false;
         }
-        return !Cutting.onlyRelations(stated) && !Cutting.drawsLines(stated)
+        return (!Cutting.onlyRelations(stated) && !Cutting.drawsLines(stated))
                 || read.turnsOn().stream()
                         .allMatch(leaf -> aComparisonWrittenInside(leaf.from().value(), check));
     }
@@ -929,7 +928,7 @@ final class Pullback {
                     fixed(e, reads)), stopsAt);
             case BoundOperationFacts.Settled.ByALaw(
                     OperationLaw.Observation<DeclaredArgument> law, var _) ->
-                    new Derivation.ByALaw(operation, aspect, law.equivalentTo(),
+                    new Derivation.ByALaw(operation, aspect,
                             new ALawRead(applied, e, reads).of(law.equivalentTo()));
             case BoundOperationFacts.Settled.ByALaw(OperationLaw.Size<DeclaredArgument> _, var _) ->
                     throw new IllegalStateException(operation + " settles a side of its answer"
@@ -946,6 +945,14 @@ final class Pullback {
         record AsAForm(LinearForm<Quantity> form) implements Sized {}
 
         record NotSized(WhyUnread why) implements Sized {}
+    }
+
+    /** What each number of a law's form was read as at a call, or why one was not. */
+    private sealed interface Numbers {
+
+        record EachNumber(Map<LawNumber<?>, LinearForm<Quantity>> each) implements Numbers {}
+
+        record NotRead(WhyUnread why) implements Numbers {}
     }
 
     /** What an element a law names is, inside a statement about some element of its container. */
@@ -1115,7 +1122,7 @@ final class Pullback {
             };
             arms.add(new Derivation.MatchArms.Arm(reached, there));
         }
-        return new Derivation.AnOperationsCases(sized.operation(), arms);
+        return new Derivation.ASizeInCases(sized.operation(), arms);
     }
 
     /** The number a size of the container at {@code held} is, or null where no type measures it. */
@@ -1161,29 +1168,33 @@ final class Pullback {
             this.application = read.application;
         }
 
+        /**
+         * {@code law} read at the call: each part of it as the step that reads that part, with
+         * what the arguments are read as — and what each part comes to is that step's to work
+         * out ({@link Derivation.ALawPart}).
+         */
         Derivation of(LawProposition<DeclaredArgument> law) {
             return switch (law) {
-                case LawProposition.Always<DeclaredArgument>(boolean holds) ->
-                        new Derivation.ALawSettles(holds);
+                case LawProposition.Always<DeclaredArgument> always ->
+                        new Derivation.ALawSettles(always);
                 case LawProposition.All<DeclaredArgument> all ->
-                        new Derivation.ALawJoins(all.parts().stream().map(this::of).toList(), true);
+                        new Derivation.ALawJoins(all, all.parts().stream().map(this::of).toList());
                 case LawProposition.Any<DeclaredArgument> any ->
-                        new Derivation.ALawJoins(any.parts().stream().map(this::of).toList(),
-                                false);
+                        new Derivation.ALawJoins(any, any.parts().stream().map(this::of).toList());
                 case LawProposition.Observed<DeclaredArgument> observed ->
-                        new Derivation.OnTheSideALawNames(
-                                observed(observed.of(), observed.side().aspect()),
-                                observed.side().holds());
-                case LawProposition.Compared<DeclaredArgument> compared ->
-                        compared(compared.form(), compared.states());
-                case LawProposition.SomeElement<DeclaredArgument> some -> some(some);
+                        new Derivation.OnTheSideALawNames(observed,
+                                observed(observed.of(), observed.side().aspect()));
+                case LawProposition.Compared<DeclaredArgument> compared -> compared(compared);
+                case LawProposition.SomeElement<DeclaredArgument> some ->
+                        new Derivation.ALawQuantifies(some, meeting(
+                                applied.argument(some.container()), some));
                 case LawProposition.Same<DeclaredArgument> same -> {
                     DecisionSubject one = subject(same.one());
                     DecisionSubject other = subject(same.other());
                     yield one == null || other == null
                             ? unread(e, reads,
                                     new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE))
-                            : leaf(new Derivation.TheSameValue(one, other, same.holds()), e, reads);
+                            : leaf(new Derivation.TheSameValue(same, one, other), e, reads);
                 }
             };
         }
@@ -1275,12 +1286,6 @@ final class Pullback {
          * Some element of a container meeting a statement, read as the quantifier over the
          * container's element where it stands, or element by element where it was written out.
          */
-        private Derivation some(LawProposition.SomeElement<DeclaredArgument> some) {
-            Core over = applied.argument(some.container());
-            Derivation meeting = meeting(over, some);
-            return some.holds() ? meeting : new Derivation.OnTheSideALawNames(meeting, false);
-        }
-
         private Derivation meeting(Core over, LawProposition.SomeElement<DeclaredArgument> some) {
             Denotation container = reads.standing(over, read.rules().symbols(),
                     read.rules().newtypes());
@@ -1502,7 +1507,8 @@ final class Pullback {
          * {@code form states 0}, over numbers of the arguments, read as a relation over the
          * quantities a condition is read over.
          */
-        private Derivation compared(LinearForm<LawNumber<DeclaredArgument>> form, Rel states) {
+        private Derivation compared(LawProposition.Compared<DeclaredArgument> compared) {
+            LinearForm<LawNumber<DeclaredArgument>> form = compared.form();
             // An argument chosen by cases is compared on each of them, and one a behavior's call
             // answers through its body, as a comparison the source wrote is
             // ({@link #throughWhatItStopsAt}).
@@ -1515,7 +1521,7 @@ final class Pullback {
             Inside inside = aWayIn(numbers);
             if (inside != null) {
                 return goingIn(inside, reads, new Denotation(e, reads), fixed(e, reads),
-                        taking -> new ALawRead(this, taking.apply(reads)).compared(form, states));
+                        taking -> new ALawRead(this, taking.apply(reads)).compared(compared));
             }
             // And on each case of how many an argument holds, or a number an argument is takes,
             // where which number that is turns on how the arguments of what made it stand.
@@ -1542,22 +1548,18 @@ final class Pullback {
                 };
                 if (sized != null) {
                     return inEachCaseOf(sized, new Denotation(e, reads),
-                            () -> compared(form, states));
+                            () -> compared(compared));
                 }
             }
             Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
             counting = new LinkedHashMap<>();
             try {
-                List<LinearForm<Quantity>> parts = new ArrayList<>();
-                Sized sized = number(form, parts);
-                return switch (sized) {
-                    case Sized.NotSized(WhyUnread why) ->
+                return switch (numbers(form)) {
+                    case Numbers.NotRead(WhyUnread why) ->
                             leaf(new Derivation.Stopped(why, fixed(e, reads)), e, reads);
-                    case Sized.AsAForm(LinearForm<Quantity> read) -> read.coefs().isEmpty()
-                            ? new Derivation.ACutThatCutsNothing(
-                                    states.holds(read.constant().signum()), ofTheInputIn(parts))
-                            : leaf(aRelation(Derivation.ComparisonReading.BY_A_LAW, read, states,
-                                    counting), e, reads);
+                    case Numbers.EachNumber(Map<LawNumber<?>, LinearForm<Quantity>> each) ->
+                            leaf(Derivation.ALawComparison.of(compared, each, counting), e,
+                                    reads);
                 };
             } finally {
                 counting = outer;
@@ -1601,51 +1603,48 @@ final class Pullback {
             };
         }
 
-        /** {@code form}, a number of the arguments, as a form over the quantities a condition is
-         *  read over. */
+        /**
+         * {@code form}, a number of the arguments, as a form over the quantities a condition is
+         * read over: the law's form over what each of its numbers was read as, worked out where
+         * a law's comparison is ({@link Derivation.ALawComparison#formOf}).
+         */
         Sized number(LinearForm<LawNumber<DeclaredArgument>> form) {
-            return number(form, new ArrayList<>());
+            return switch (numbers(form)) {
+                case Numbers.NotRead(WhyUnread why) -> new Sized.NotSized(why);
+                case Numbers.EachNumber(var each) ->
+                        switch (Derivation.ALawComparison.formOf(form, each)) {
+                            case ExactAnswer.Held<LinearForm<Quantity>>(var held) ->
+                                    new Sized.AsAForm(held);
+                            case ExactAnswer.Unheld<LinearForm<Quantity>>(var why) ->
+                                    new Sized.NotSized(new WhyUnread.ANumberNotHeld(why));
+                        };
+            };
         }
 
-        /** The same, with what each number of it was read as put in {@code parts}, before any of
-         *  them cancels. */
-        private Sized number(LinearForm<LawNumber<DeclaredArgument>> form,
-                             List<LinearForm<Quantity>> parts) {
-            List<LinearForm<Quantity>> scaled = new ArrayList<>();
-            scaled.add(LinearForm.constant(form.constant()));
-            Set<UnheldNumber> unheld = EnumSet.noneOf(UnheldNumber.class);
-            // Walked by the argument each number is of, and then by what of it the number is, so
-            // that where two numbers have no form, which one the law is said to stop at is the law's
-            // and not the order a map keeps its numbers in.
-            List<Map.Entry<LawNumber<DeclaredArgument>, ExactRatio>> inOrder =
-                    new ArrayList<>(form.coefs().entrySet());
+        /**
+         * What each number {@code form} names was read as, or why one was not — or why the form
+         * over them is not held. Walked by the argument each number is of, and then by what of it
+         * the number is, so that where two numbers have no form, which one the law is said to stop
+         * at is the law's and not the order a map keeps its numbers in.
+         */
+        private Numbers numbers(LinearForm<LawNumber<DeclaredArgument>> form) {
+            List<LawNumber<DeclaredArgument>> inOrder = new ArrayList<>(form.coefs().keySet());
             inOrder.sort(Comparator.comparingInt(
-                            (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> each) ->
-                                    argumentOf(each.getKey()).position())
-                    .thenComparingInt(each -> whatOfIt(each.getKey())));
-            for (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> term : inOrder) {
-                Sized part = atom(term.getKey());
-                if (!(part instanceof Sized.AsAForm(LinearForm<Quantity> each))) {
-                    return part;
-                }
-                parts.add(each);
-                switch (each.times(term.getValue())) {
-                    case ExactAnswer.Held<LinearForm<Quantity>> held -> scaled.add(held.value());
-                    case ExactAnswer.Unheld<LinearForm<Quantity>> not -> unheld.add(not.why());
-                }
-            }
-            // Every part's weights added at once, so whether they are held does not turn on which
-            // part came first; and where some are not, which way is said of all of them, as a sum
-            // of forms says it ({@link LinearForm#sum}).
-            if (unheld.isEmpty()) {
-                switch (LinearForm.sum(scaled)) {
-                    case ExactAnswer.Held<LinearForm<Quantity>> held -> {
-                        return new Sized.AsAForm(held.value());
+                            (LawNumber<DeclaredArgument> each) -> argumentOf(each).position())
+                    .thenComparingInt(ALawRead::whatOfIt));
+            Map<LawNumber<?>, LinearForm<Quantity>> out = new LinkedHashMap<>();
+            for (LawNumber<DeclaredArgument> number : inOrder) {
+                switch (atom(number)) {
+                    case Sized.AsAForm(LinearForm<Quantity> each) -> out.put(number, each);
+                    case Sized.NotSized(WhyUnread why) -> {
+                        return new Numbers.NotRead(why);
                     }
-                    case ExactAnswer.Unheld<LinearForm<Quantity>> not -> unheld.add(not.why());
                 }
             }
-            return new Sized.NotSized(new WhyUnread.ANumberNotHeld(UnheldNumber.ofAll(unheld)));
+            return Derivation.ALawComparison.formOf(form, out)
+                    instanceof ExactAnswer.Unheld<LinearForm<Quantity>>(var why)
+                    ? new Numbers.NotRead(new WhyUnread.ANumberNotHeld(why))
+                    : new Numbers.EachNumber(out);
         }
 
         private Sized atom(LawNumber<DeclaredArgument> number) {
@@ -2302,12 +2301,12 @@ final class Pullback {
             case TheSignOfAnOrder.Read.OfTheArguments<InputReads> ordered
                     when !ordered.isTheCondition() -> null;
             case TheSignOfAnOrder.Read.OfTheArguments<InputReads> ordered
-                    when ordered.operation() instanceof ValueName.Stdlib operation ->
-                    new Derivation.AnOrderOfItsArguments(operation, firstThatReadsIt(
+                    when ordered.operation() instanceof ValueName.Stdlib ->
+                    new Derivation.AnOrderOfItsArguments(ordered.sign(), firstThatReadsIt(
                             rulesFor(ordered.arguments(), null, fixed, ordered.at())));
             case TheSignOfAnOrder.Read.Settled<InputReads> settled
-                    when settled.operation() instanceof ValueName.Stdlib operation ->
-                    new Derivation.ASignItsBoundsSettle(operation, settled.holds());
+                    when settled.operation() instanceof ValueName.Stdlib ->
+                    new Derivation.ASignItsBoundsSettle(settled.sign());
             // An order the library declares is of one of its own operations.
             case TheSignOfAnOrder.Read.OfTheArguments<InputReads> _,
                  TheSignOfAnOrder.Read.Settled<InputReads> _ -> null;
@@ -2359,8 +2358,8 @@ final class Pullback {
          * the values it was given — arithmetic over them, reached by how they stand against a
          * constant — read where the call stands, {@code at}.
          */
-        record ACallDefinedByCases(Core call, ValueName.Stdlib operation, List<Choice.ACase> cases,
-                                   InputReads at)
+        record ACallDefinedByCases(Core call, ValueName.Stdlib operation,
+                                   List<Choice.ADefinitionCase> cases, InputReads at)
                 implements Inside {}
     }
 
@@ -2405,13 +2404,13 @@ final class Pullback {
             // the arguments stand as the case says and as none before it does — which is what the
             // library proved its body answers ({@link Choice#casesOf}).
             case Inside.ACallDefinedByCases(Core call, ValueName.Stdlib operation,
-                                            List<Choice.ACase> cases, InputReads where) -> {
+                                            List<Choice.ADefinitionCase> cases, InputReads where) -> {
                 if (reads.readings() * cases.size() > READINGS.maximum()) {
                     yield partOf(at, new Derivation.Stopped(
                             new WhyUnread.MoreReadingsThanAreMade(), fixed));
                 }
                 List<Derivation.MatchArms.Arm> each = new ArrayList<>();
-                for (Choice.ACase one : cases) {
+                for (Choice.ADefinitionCase one : cases) {
                     each.add(new Derivation.MatchArms.Arm(reachedIn(one, where),
                             again.apply(on -> on.takingAForm(call, one.answers(),
                                     cases.size()))));
@@ -2426,7 +2425,7 @@ final class Pullback {
      * writes its operation in, says they do for it to be reached — each relation read as the
      * arithmetic over those values it is, where the call stands.
      */
-    private Derivation reachedIn(Choice.ACase one, InputReads where) {
+    private Derivation reachedIn(Choice.ADefinitionCase one, InputReads where) {
         Derivation reached = null;
         for (Choice.FormsStand stands : one.given()) {
             Derivation relation = overTheValues(stands, where);
@@ -2580,7 +2579,7 @@ final class Pullback {
                         && applied.operation() instanceof ValueName.Stdlib operation)) {
             return null;
         }
-        List<Choice.ACase> cases = Choice.casesOf(call);
+        List<Choice.ADefinitionCase> cases = Choice.casesOf(call);
         return cases.isEmpty() ? null
                 : new Inside.ACallDefinedByCases(call, operation, cases, at);
     }
