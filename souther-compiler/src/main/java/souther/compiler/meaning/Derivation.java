@@ -6,6 +6,7 @@ import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -1303,6 +1304,11 @@ public sealed interface Derivation {
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
+            // Whether an optional holds a value is one fact however the arm that selects it was
+            // written, so it is the statement a row answers of its own values.
+            if (cases.only() instanceof Refinement.Presence presence) {
+                return new Proposition.Present(of, presence.present());
+            }
             return new Proposition.InCases(of, cases, true);
         }
     }

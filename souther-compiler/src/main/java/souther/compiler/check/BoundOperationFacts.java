@@ -235,6 +235,16 @@ public final class BoundOperationFacts {
         return held;
     }
 
+    /** Whether any fact is stated of {@code operation}, whatever the fact is about. */
+    public boolean statesAnythingOf(ValueName operation) {
+        for (BoundOperationFact fact : held) {
+            if (fact.operation().operation().equals(operation)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private <F extends BoundOperationFact.OneAboutAnOperation> F one(Class<F> kind,
                                                                     ValueName operation) {
         Map<ValueName, BoundOperationFact.OneAboutAnOperation> byOperation = ones.get(kind);

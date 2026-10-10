@@ -122,7 +122,9 @@ public final class HelperTable {
     /**
      * The table a body of {@code module} is expanded against, built from the three sources apart:
      * what the module declared, what it took on to emit, what the modules it imports publish to it —
-     * and, under {@link InliningPolicy#FULL}, the standard library underneath all three.
+     * and the standard library underneath all three: every helper it writes under
+     * {@link InliningPolicy#FULL}, and under {@link InliningPolicy#DISCHARGE} those it is read
+     * through ({@link LibraryReadThrough}).
      *
      * <p>Apart, because what a name reaches and what this module holds are two relations and one of
      * them cannot be recovered from the other. Handed a single joined map, a table answered that the
@@ -162,13 +164,15 @@ public final class HelperTable {
             emits.put(entry.address(), entry);
         }
         SequencedMap<ReachName.Declaration, HelperEntry> reached = new LinkedHashMap<>();
-        if (policy == InliningPolicy.FULL) {
-            stdlib.helpers().forEach((operation, body) -> {
+        Set<ValueName.Stdlib.Operation> readThrough =
+                policy == InliningPolicy.FULL ? null : LibraryReadThrough.of(stdlib);
+        stdlib.helpers().forEach((operation, body) -> {
+            if (readThrough == null || readThrough.contains(operation)) {
                 HelperEntry entry =
                         HelperEntry.reached(new ReachName.OfLibrary(operation), body);
                 reached.put(entry.reachedAs(), entry);
-            });
-        }
+            }
+        });
         for (Hir.FnDef fn : imported.definitions().values()) {
             HelperEntry entry = HelperEntry.reached(takenOnAs(fn), fn);
             reached.put(entry.reachedAs(), entry);

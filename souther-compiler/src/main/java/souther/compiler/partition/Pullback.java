@@ -7,6 +7,7 @@ import souther.compiler.check.CalledBody;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Choice;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.DeclarationAccess;
@@ -60,6 +61,9 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.Year;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -485,6 +489,7 @@ final class Pullback {
                 () -> heldAgainstAWrittenTruth(stated, reads),
                 () -> partOf(at, asACut(stated, arithmetic.get(), fixed)),
                 () -> partOf(at, onAnOrder(stated, arithmetic.get(), reads)),
+                () -> ofTheYearOfADate(stated, at, fixed, reads),
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
                 () -> ofASizeInCases(stated, at, reads),
                 () -> ofAChoice(stated, at, reads),
@@ -2673,6 +2678,88 @@ final class Pullback {
         Inside.ACall called = intoACall(new Denotation(e, reads));
         return called == null ? null : new Derivation.ABehaviorsBody(called.behavior(),
                 observe(called.body().value(), aspect, called.body().at()));
+    }
+
+    /**
+     * A comparison of the year of a date no position holds with a year written out, read as the
+     * comparison of that date with where the year begins — or null where it is no such comparison.
+     *
+     * <p>A year is a run of days, so the years from one on are the dates from the first day of it
+     * on, and {@code Date.year(Date.addDays(1, b)) >= 2027} says what
+     * {@code Date.addDays(1, b) >= Date("2027-01-01")} does. That comparison is read where the date
+     * is a form of the input's own, which is where a year of it has no term of its own: a taking is
+     * of a position. A date that is one is left to the term that stands for its year.
+     *
+     * <p>Equality is the dates of that year, and a difference is the dates outside it. A date the
+     * shift takes off the end of the range is no date, and which inputs make it so is not this
+     * reading's: the comparison is read over the dates it is about, as
+     * {@code Date.addDays(1, b) >= Date("2027-01-01")} is, and a row that would abort there is
+     * never a row that reached a line.
+     *
+     * <p>Only the parts that are runs of days. A month or a day of the month repeats every year,
+     * so it is no line on the date.
+     */
+    private Derivation ofTheYearOfADate(StatedComparison stated, Denotation at, boolean fixed,
+                                        InputReads reads) {
+        StatedComparison.Numbered<Core.PreservedCall> year =
+                stated.at(side -> theYearOfADateNoPositionHolds(side, reads));
+        BigDecimal written = year == null ? null
+                : StatedComparison.foldedNumber(year.other(), read.rules().symbols());
+        if (written == null) {
+            return null;
+        }
+        Core.PreservedCall taking = year.number();
+        // A year past either end of the dates is the same one for the comparison, so it is held
+        // just past the end and the sum with one below cannot leave the range of a long.
+        long below = Year.MIN_VALUE - 2L;
+        long above = Year.MAX_VALUE + 2L;
+        long from = written.compareTo(BigDecimal.valueOf(below)) <= 0 ? below
+                : written.compareTo(BigDecimal.valueOf(above)) >= 0 ? above
+                : written.longValue();
+        return switch (year.claim().statedRelation()) {
+            case GE -> comparedWithTheStartOf(from, Rel.GE, taking, at, fixed, reads);
+            case GT -> comparedWithTheStartOf(from + 1, Rel.GE, taking, at, fixed, reads);
+            case LE -> comparedWithTheStartOf(from + 1, Rel.LT, taking, at, fixed, reads);
+            case LT -> comparedWithTheStartOf(from, Rel.LT, taking, at, fixed, reads);
+            case EQ -> new Derivation.Joined(ConditionJoin.BOTH,
+                    comparedWithTheStartOf(from, Rel.GE, taking, at, fixed, reads),
+                    comparedWithTheStartOf(from + 1, Rel.LT, taking, at, fixed, reads));
+            case NE -> new Derivation.Joined(ConditionJoin.EITHER,
+                    comparedWithTheStartOf(from, Rel.LT, taking, at, fixed, reads),
+                    comparedWithTheStartOf(from + 1, Rel.GE, taking, at, fixed, reads));
+        };
+    }
+
+    /** {@code side}, where it is the year of a date that stands at no position. */
+    private Core.PreservedCall theYearOfADateNoPositionHolds(Core side, InputReads reads) {
+        if (!(Core.withoutStanding(side) instanceof Core.PreservedCall call)
+                || !call.operation().equals(ValueName.Stdlib.operation("Date", "year"))
+                || call.args().size() != 1) {
+            return null;
+        }
+        Core date = call.args().getFirst();
+        return Type.DATE.equals(date.type()) && reads.pathOf(date, read.rules().newtypes())
+                instanceof PathResolution.NotAPosition ? call : null;
+    }
+
+    /**
+     * The date {@code taking} is the year of, compared with the first day of {@code year}: on or
+     * after it, or before it.
+     *
+     * <p>A year no date has is before every date or after every one, so the comparison is the same
+     * for all of them and there is no day to write it against.
+     */
+    private Derivation comparedWithTheStartOf(long year, Rel relation, Core.PreservedCall taking,
+                                              Denotation at, boolean fixed, InputReads reads) {
+        if (year < Year.MIN_VALUE || year > Year.MAX_VALUE) {
+            boolean onOrAfter = year < Year.MIN_VALUE;
+            return new Derivation.WrittenOut(relation == Rel.GE ? onOrAfter : !onOrAfter);
+        }
+        Core start = new Core.Temporal(Type.Prim.DATE, LocalDate.of((int) year, 1, 1).toString(),
+                taking.application(), taking.pos());
+        return comparison(new StatedComparison(ComparisonClaim.stating(relation),
+                taking.args().getFirst(), start, new Core.BinaryReading.AsTheyStand()), at, fixed,
+                reads);
     }
 
     /**

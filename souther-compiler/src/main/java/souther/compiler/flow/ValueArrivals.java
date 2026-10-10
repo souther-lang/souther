@@ -4,6 +4,7 @@ import souther.compiler.check.Choice;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -96,6 +97,14 @@ public final class ValueArrivals<P> {
         private IntoArms(Core.If fork, Naming<P> naming) {
             this.fork = fork;
             this.naming = naming;
+        }
+
+        /** Both arms' ways, said as not known: for a fork the model does not state, whose arms no
+         *  way of the body goes down. */
+        IntoArms withNoWaysKnown() {
+            found.set(0, new Ways.Unknown<>());
+            found.set(1, new Ways.Unknown<>());
+            return this;
         }
 
         Ways<P> at(int part) {
@@ -533,6 +542,17 @@ public final class ValueArrivals<P> {
             }
             case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() ->
                     through(binary, naming, comparisons, bound);
+            // A fork inside one of the language's own operations is the operation's and not the
+            // body's: what the language defines the meaning of is the operation, so the ways
+            // through the walk it does are no ways of the body. It arrives as one value, as a call
+            // of the operation standing does.
+            case Core.If iff when !statedByTheModel(iff.place()) -> {
+                into.put(iff, new IntoArms(iff, naming).withNoWaysKnown());
+                enters.put(iff, new boolean[] {true, true});
+                yield built(iff, naming, comparisons, bound);
+            }
+            case Core.Match match when !statedByTheModel(match.place()) ->
+                    built(match, naming, comparisons, bound);
             case Core.If iff -> fork(iff, naming, comparisons, bound);
             case Core.Match match -> arms(match, naming, comparisons, bound);
             case Core.IfConstructed constructed -> attempted(constructed, naming, comparisons, bound);
@@ -801,6 +821,15 @@ public final class ValueArrivals<P> {
         P named = naming.forkArm(fork, part);
         return named == null
                 ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL) : whole(named);
+    }
+
+    /** Whether the model states the fork that stands at {@code place}, as against one that stands
+     *  inside an operation of the language. */
+    private boolean statedByTheModel(Core.ForkPlace place) {
+        // Where the operations are expanded the walk they do is part of the tree that runs, and
+        // its ways are ways of it.
+        return operations == WhereTheOperationsAre.ARE_EXPANDED_IN_IT
+                || ModelOccurrence.statedAt(place.occurrence()).isPresent();
     }
 
     private Paths<P> arms(Core.Match match, Naming<P> naming, ComparisonWays comparisons,
