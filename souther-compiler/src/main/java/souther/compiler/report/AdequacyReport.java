@@ -67,6 +67,8 @@ import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.AuthoredOrder;
+import souther.compiler.inputs.ElementProjection;
+import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.InputQuestion;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.RuleSite;
@@ -4924,7 +4926,43 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         over.put("kind", "occurrences");
                         over.put("position", run.subjectPath().discriminated());
                     }
+                    case RunSource.ComputedOccurrences run -> {
+                        over.put("kind", "computed_occurrences");
+                        over.put("elements", run.elements().discriminated());
+                        elementComputation(over.putObject("computation"), run.computation());
+                    }
                 }
+            }
+        }
+    }
+
+    /**
+     * What is made of one element, by the fields it reads and what weighs each.
+     *
+     * <p>Terms in the order the fields' names sort, and the weights as an exact number is written.
+     * A form's coefficients are held in a map, so the order they were met in is nothing a document
+     * compared against the last one may carry.
+     */
+    private static void elementComputation(ObjectNode into, ElementValue computed) {
+        switch (computed) {
+            case ElementValue.Affine it -> {
+                into.put("kind", "form");
+                into.put("constant", it.form().constant().spelled());
+                ArrayNode terms = into.putArray("terms");
+                it.form().coefs().entrySet().stream()
+                        .sorted(Map.Entry.comparingByKey(
+                                Comparator.comparing(ElementProjection::toString)))
+                        .forEach(each -> {
+                            ObjectNode term = terms.addObject();
+                            term.put("field", String.join(".", each.getKey().steps()));
+                            term.put("weight", each.getValue().spelled());
+                        });
+            }
+            case ElementValue.Choose it -> {
+                into.put("kind", "choose");
+                into.put("flag", String.join(".", it.flag().steps()));
+                elementComputation(into.putObject("whenSet"), it.whenSet());
+                elementComputation(into.putObject("otherwise"), it.otherwise());
             }
         }
     }

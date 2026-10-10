@@ -1,10 +1,15 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.WalkElements;
 import souther.compiler.core.Core;
+import souther.compiler.semantics.TakenAs;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
 /**
@@ -97,6 +102,10 @@ public final class InputNumber {
      * which is a `let` changing what a model means. The environment the value was given in comes
      * with it, so what is read of the walk afterwards is read where the walk stands.
      *
+     * <p>Where the answer is no place of the element but something made of its fields, the run is
+     * over what was computed of each element instead ({@link #overWhatWasComputed}), and is the run
+     * over a place where what was computed is that place.
+     *
      * <p>Null wherever any of the three is missing, which is a rule this compiler did not read
      * rather than a rule the model does not state — and is reported as one. Null too where the three
      * are in hand and what they come to is not one run
@@ -118,7 +127,7 @@ public final class InputNumber {
         Denotation met = reads.denotes(measured.of(), symbols, source.newtypes());
         Core walk = met.value();
         InputReads where = met.at();
-        souther.compiler.types.BindingId element =
+        BindingId element =
                 WalkElements.elementBindingOf(walk, where, symbols, source.newtypes());
         if (element == null) {
             return null;
@@ -133,8 +142,22 @@ public final class InputNumber {
             // than one container is no one run.
             case PathResolution.MayStandAt _ -> null;
         };
-        if (answered == null || at == null) {
+        if (at == null) {
             return null;
+        }
+        ElementValue computed = null;
+        if (answered == null) {
+            computed = computedOf(measured, where, element, source);
+            if (computed == null) {
+                return null;
+            }
+            // What was computed may be the element's own field and nothing made of it, as a closure
+            // that weighs a field once and adds nothing is. That is the place, and one number has
+            // one term whichever way its closure was spelled.
+            answered = placeStanding(computed, where.answerAt(element), at, inputs, source);
+        }
+        if (answered == null) {
+            return overWhatWasComputed(measured, where.answerAt(element), computed, at, source);
         }
         TermPath under = answered.from(at);
         // Whether what is read from there is one run is the run's own question, and it is asked
@@ -149,6 +172,66 @@ public final class InputNumber {
         return stands == null ? null
                 : NumericTerm.TakenOver.of(measured.operation(), over, stands, source.inners(),
                         symbols);
+    }
+
+    /**
+     * The field {@code computed} is, where it is that field as the same kind of number, or null.
+     *
+     * <p>The same number is not the same term. What a total is counted as is part of it, and a call
+     * that changes only that — whole numbers as decimals — computes the field's number and is not
+     * the field: two lines of the largest whole number come to a decimal and to no whole number.
+     * So a form that is a field is the place only where what the closure answers stands as what the
+     * field stands as, with the names either is written under taken off, which is the account the
+     * term is made under ({@link NumericTerm.TakenOver#of}).
+     */
+    private static ElementProjection placeStanding(ElementValue computed, ElementAnswer closure,
+                                                   TermPath at, InputDomain inputs,
+                                                   RuleReadingSource source) {
+        ElementProjection place = computed.asAPlace();
+        if (place == null) {
+            return null;
+        }
+        Type fieldType = inputs.typeAt(place.from(at), source);
+        return fieldType != null && TypeOps.base(closure.body().type(), source.inners())
+                .equals(TypeOps.base(fieldType, source.inners())) ? place : null;
+    }
+
+    /**
+     * The number {@code measured} takes over what a walk computed of each of its elements, or null
+     * where the walk answered no such computation this reads.
+     *
+     * <p>For a closure whose answer is not a place of its element — arithmetic over its fields, or
+     * a choice between two of those by a flag it holds. The licence is the one a place answer has:
+     * the walk answers one value per element of what it was given, proved before the tree was
+     * rewritten, so what is asked here is only what the closure came to.
+     */
+    private static NumericTerm overWhatWasComputed(NumericMeasures.Measured measured,
+                                                   ElementAnswer closure, ElementValue computed,
+                                                   TermPath at, RuleReadingSource source) {
+        Type each = closure.body().type();
+        RunSource over = RunSource.computedOverTheElementsAt(at, computed, each);
+        return over == null ? null
+                : NumericTerm.TakenOver.of(measured.operation(), over, each, source.inners(),
+                        source.symbols());
+    }
+
+    /**
+     * What the closure the walk handed {@code element} to computed of it, or null where there is no
+     * such closure or this reads none of it.
+     *
+     * <p>Only for a total. What is read of a run computed of each element is the sum of those
+     * numbers; a count of a walk's answers is a count of the container it walked, and is read as
+     * that.
+     */
+    private static ElementValue computedOf(NumericMeasures.Measured measured, InputReads where,
+                                           BindingId element, RuleReadingSource source) {
+        if (!(DefaultBoundOperationFacts.get().takenAs(measured.operation())
+                instanceof TakenAs.TheSumOfWhatItHolds)) {
+            return null;
+        }
+        ElementAnswer closure = where.answerAt(element);
+        return closure == null ? null
+                : ElementValue.read(closure, where.heldByTheBody(), source);
     }
 
 }

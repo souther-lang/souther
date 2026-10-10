@@ -7,6 +7,9 @@ import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.Symbols;
 import souther.compiler.types.Type;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * Both orders a term stands on, worked out from what stands where its number comes from.
  *
@@ -30,6 +33,18 @@ final class TermOrdering {
      */
     static TermOrders of(NumericTerm term, Type positionType, Symbols symbols,
                          DeclarationAccess declarations) {
+        return of(term, positionType, Map.of(), symbols, declarations);
+    }
+
+    /**
+     * The same, for a term over what a walk computed of each element, whose value is read on the
+     * type the computation stands as and whose fields are read on their own.
+     *
+     * @param fieldTypes what stands at each field the computation reads
+     */
+    static TermOrders of(NumericTerm term, Type positionType,
+                         Map<ElementProjection, Type> fieldTypes, Symbols symbols,
+                         DeclarationAccess declarations) {
         Carrier observed = observedOn(positionType, declarations);
         // One construction and not one per arm. A term that is a location's own content answers on
         // the order its value is read on, which is that order twice rather than a second way of
@@ -39,7 +54,14 @@ final class TermOrdering {
             case NumericTerm.TakenOf _, NumericTerm.TakenOver _ ->
                     answeredOn(term, positionType, symbols, declarations);
         };
-        return new TermOrders(term, observed, answered);
+        Map<ElementProjection, Carrier> fields = new LinkedHashMap<>();
+        fieldTypes.forEach((field, type) -> {
+            Carrier on = observedOn(type, declarations);
+            if (on != null) {
+                fields.put(field, on);
+            }
+        });
+        return new TermOrders(term, observed, answered, fields);
     }
 
     /**

@@ -51,7 +51,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                               Map<BindingId, Core> held,
                               ElementProvenance provenance,
                               Map<BindingId, ElementProjection> projected,
-                              ValueTemplates templates) {
+                              ValueTemplates templates,
+                              Map<BindingId, ElementAnswer> answers) {
 
     /** Nothing was read, which is what a body with no combinator in it comes to. */
     public static final ElementBindings NONE =
@@ -61,10 +62,19 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         containers = Map.copyOf(containers);
         held = Map.copyOf(held);
         projected = Map.copyOf(projected);
+        answers = Map.copyOf(answers);
         if (templates == null) {
             throw new IllegalArgumentException("a body builds values it holds the meaning of, or"
                     + " none");
         }
+    }
+
+    /** Of a body whose closures are asked for no more than the place they answered. */
+    public ElementBindings(Map<BindingId, List<HeldIn>> containers, Map<BindingId, Core> held,
+                           ElementProvenance provenance,
+                           Map<BindingId, ElementProjection> projected,
+                           ValueTemplates templates) {
+        this(containers, held, provenance, projected, templates, Map.of());
     }
 
     /** Of a body that builds no value. */
@@ -93,8 +103,10 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         joinedProjected.putAll(other.projected);
         Map<ReachName.Declaration, Core> joinedTemplates = new LinkedHashMap<>(templates.templates());
         joinedTemplates.putAll(other.templates.templates());
+        Map<BindingId, ElementAnswer> joinedAnswers = new LinkedHashMap<>(answers);
+        joinedAnswers.putAll(other.answers);
         return new ElementBindings(joinedContainers, joinedHeld, provenance.and(other.provenance),
-                joinedProjected, new ValueTemplates(joinedTemplates));
+                joinedProjected, new ValueTemplates(joinedTemplates), joinedAnswers);
     }
 
     /**
@@ -120,6 +132,18 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
      */
     public ElementProjection projectionAt(BindingId binding) {
         return binding == null ? null : projected.get(binding);
+    }
+
+    /**
+     * What the closure handed the element at {@code binding} answered, as the closure and the
+     * parameter it was written about, or null where no licensed walk answered one per element of it.
+     *
+     * <p>The beside of {@link #projectionAt}: that is the answer where it is a place of the element,
+     * and this is what is left to read where it is not. The same licence stands behind both, so a
+     * closure is here exactly where a place would have been given had the answer been one.
+     */
+    public ElementAnswer answerAt(BindingId binding) {
+        return binding == null ? null : answers.get(binding);
     }
 
     /**
@@ -205,9 +229,11 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                 standing.remove(element);
             }
         });
+        Map<BindingId, ElementAnswer> closures = new LinkedHashMap<>();
         Map<BindingId, ElementProjection> projected =
-                projections(answered, found, held, provenance, newtypes);
+                projections(answered, found, held, provenance, newtypes, closures);
         standing.forEach((element, closure) -> {
+            closures.putIfAbsent(element, new ElementAnswer(element, closure));
             ElementProjection was =
                     ElementProjection.read(closure, element, held, newtypes);
             if (was != null) {
@@ -215,7 +241,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
             }
         });
         return found.isEmpty() && provenance.isEmpty() && values.templates().isEmpty() ? NONE
-                : new ElementBindings(found, held, provenance, projected, values);
+                : new ElementBindings(found, held, provenance, projected, values, closures);
     }
 
     /**
@@ -241,7 +267,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     private static Map<BindingId, ElementProjection> projections(
             Map<BindingId, Core> answered, Map<BindingId, List<HeldIn>> containers,
             Map<BindingId, Core> held, ElementProvenance provenance,
-            DeclarationNewtypes newtypes) {
+            DeclarationNewtypes newtypes, Map<BindingId, ElementAnswer> closures) {
         Map<BindingId, ElementProjection> out = new LinkedHashMap<>();
         answered.forEach((parameter, body) -> {
             // The element the closure was applied to, which is what the parameter was bound to.
@@ -259,6 +285,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                             provenance.projectedFrom(parameter), held)) {
                 return;
             }
+            closures.putIfAbsent(read.binding(), new ElementAnswer(parameter, body));
             ElementProjection projected =
                     ElementProjection.read(body, parameter, held, newtypes);
             if (projected != null) {

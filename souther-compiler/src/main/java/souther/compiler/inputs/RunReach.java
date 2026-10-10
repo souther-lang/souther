@@ -17,6 +17,8 @@ import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -63,6 +65,11 @@ final class RunReach {
      *  equal to itself and to no other, so the two ends of the law an order owes meet exactly. */
     private static final CanonicalOrder<Atom> IN_ONE_ORDER = CanonicalOrder.asTheyAreDeclared();
 
+    /** The fields of one element, in the order their names sort. A form's atoms are read off a map,
+     *  so the order they are met in is nothing a reader may rely on and is not what this follows. */
+    private static final CanonicalOrder<ElementProjection> BY_NAME =
+            Comparator.<ElementProjection, String>comparing(ElementProjection::toString)::compare;
+
     private static final LinearForm<Atom> ACCUMULATOR =
             LinearForm.atom(Atom.ACCUMULATOR);
 
@@ -102,7 +109,11 @@ final class RunReach {
                                    Function<TermPath, Type> typeAt, RuleReadingContext reading) {
         orders.areOf(over);
         Accumulation walk = DefaultBoundOperationFacts.get().accumulation(over.operation());
-        NumericDomain.Bounds element = ofTheValuesWalked(over.source(), typeAt, reading);
+        NumericDomain.Bounds element = switch (over.source()) {
+            case RunSource.ProjectedOccurrences run -> ofTheValuesWalked(run, typeAt, reading);
+            case RunSource.ComputedOccurrences run ->
+                    ofWhatWasComputed(run.computation(), run.elements(), orders, typeAt, reading);
+        };
         Granularity answeredOn = spacingOf(orders.answered());
         Granularity observedOn = spacingOf(orders.observed());
         if (walk == null || element == null || answeredOn == null || observedOn == null) {
@@ -141,12 +152,57 @@ final class RunReach {
      * is asked for, and a reader wiring some other source of element bounds in here owes that
      * filter.
      */
-    private static NumericDomain.Bounds ofTheValuesWalked(RunSource source,
+    private static NumericDomain.Bounds ofTheValuesWalked(RunSource.ProjectedOccurrences source,
                                                           Function<TermPath, Type> typeAt,
                                                           RuleReadingContext reading) {
         Type walked = typeAt.apply(source.subjectPath());
         return walked == null ? null
                 : ValueGuarantees.of(walked, reading).get(RuleKey.THE_VALUE);
+    }
+
+    /**
+     * Where what a walk computed of one element runs, or null where the declarations say nothing of
+     * a field the computation reads.
+     *
+     * <p>What each field of the element guarantees of itself, put through the computation: a form
+     * is read off the same domain every other arithmetic of this compiler is, with each field
+     * assumed at what it guarantees, and a choice is as wide as the two answers it chooses between.
+     * No relation between fields of one element is assumed, so the range is the widest one the
+     * fields allow and never a narrower one a relation among them would give.
+     *
+     * <p>The range of what the computation can come to, not of what the program returns: a value
+     * past what the answer's carrier holds is one the program stops at, and a range that includes it
+     * is wider than what is reached and never narrower.
+     */
+    private static NumericDomain.Bounds ofWhatWasComputed(ElementValue computation,
+                                                          TermPath elements, TermOrders orders,
+                                                          Function<TermPath, Type> typeAt,
+                                                          RuleReadingContext reading) {
+        switch (computation) {
+            case ElementValue.Affine affine -> {
+                NumericDomain<ElementProjection> domain = NumericDomain.top(BY_NAME);
+                Map<ElementProjection, Granularity> kinds = new LinkedHashMap<>();
+                for (ElementProjection field : affine.form().coefs().keySet()) {
+                    Type at = typeAt.apply(field.from(elements));
+                    NumericDomain.Bounds guaranteed = at == null ? null
+                            : ValueGuarantees.of(at, reading).get(RuleKey.THE_VALUE);
+                    Granularity spacing = spacingOf(orders.fieldCarrier(field));
+                    if (guaranteed == null || spacing == null) {
+                        return null;
+                    }
+                    kinds.put(field, spacing);
+                    domain = domain.assuming(field, guaranteed, kinds);
+                }
+                return domain.boundsOf(affine.form());
+            }
+            case ElementValue.Choose choice -> {
+                NumericDomain.Bounds yes =
+                        ofWhatWasComputed(choice.whenSet(), elements, orders, typeAt, reading);
+                NumericDomain.Bounds no =
+                        ofWhatWasComputed(choice.otherwise(), elements, orders, typeAt, reading);
+                return yes == null || no == null ? null : NumericDomain.Bounds.spanning(yes, no);
+            }
+        }
     }
 
     /** The value the walk starts from, as a range, or null where this reading has no number for it.

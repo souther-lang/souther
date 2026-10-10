@@ -81,6 +81,11 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
                 if List.sum(List.map(line -> if line.free then 0 else line.amount.value, lines))
                         >= 100000 then Needed else NotNeeded
 
+            behavior overAProductOfFields : (lines: List<Item>) -> Verdict
+            let overAProductOfFields (lines) =
+                if List.sum(List.map(line -> line.amount.value * line.amount.value, lines))
+                        >= 100000 then Needed else NotNeeded
+
             behavior counting : (lines: List<Item>) -> Verdict
             let counting (lines) =
                 if List.length(lines) >= 3 then Needed else NotNeeded
@@ -175,14 +180,30 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
      * this, because nothing about that shape has changed.
      */
     @Test
-    void aBranchingProjectionStaysUnread() {
-        assertTrue(reasonsOf("overABranchingProjection")
+    void aProductOfTwoFieldsStaysUnread() {
+        assertTrue(reasonsOf("overAProductOfFields")
                         .contains(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                "what the branch answers is not read out of the element, so the rule is one this"
-                        + " could not follow rather than one about a run");
-        assertTrue(axesOf("overABranchingProjection").stream()
+                "what the closure answers is a product of two fields, which is no form of them, so"
+                        + " the rule is one this could not follow rather than one about a run");
+        assertTrue(axesOf("overAProductOfFields").stream()
                         .noneMatch(each -> each.contains("List.sum")),
                 "and no total is measured");
+    }
+
+    /**
+     * A choice between two numbers of the element by a flag it holds is a number made of the
+     * element, and the total of those is measured as a total is.
+     */
+    @Test
+    void aChoiceByAFlagOfTheElementIsMeasuredAsATotal() {
+        assertTrue(reasonsOf("overABranchingProjection")
+                        .contains(UndividedPosition.Reason.RULE_ABOUT_A_RUN),
+                "the rule is about what the values come to");
+        assertTrue(axesOf("overABranchingProjection").stream()
+                        .noneMatch(each -> each.contains("amount")),
+                "and the place the numbers are made from keeps no class");
+        assertEquals(4, pointsOn("overABranchingProjection").size(),
+                "and a line on the total owes the four points every border owes");
     }
 
     /** A count of the same list is a number of it, and unaffected. */
