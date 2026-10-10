@@ -73,8 +73,8 @@ class ARuleIsFiledAtWhatItsQuantityIsAboutTest {
     void everyPositionTheQuantityRunsOverIsFiledAt() {
         FieldDomains read = read(ONE_CANCELS_OF_THREE);
 
-        assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()), reasonsAt(read, "x"));
-        assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()), reasonsAt(read, "z"));
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "x"));
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "z"));
         assertEquals(List.of(), reasonsAt(read, "y"));
     }
 

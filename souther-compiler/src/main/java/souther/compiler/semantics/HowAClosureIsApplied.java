@@ -6,8 +6,13 @@ package souther.compiler.semantics;
  *
  * <p>A fact about the operation and not about any call of it: {@code List.any} answers once one
  * element holds, so an element after that one is handed to nothing, whatever the closure states.
- * What the closure is handed is read off the signature ({@link Combinator}); where the operation
- * stops is not in a signature, so it is declared beside it and held to what the library computes.
+ * Where the arguments are is read off the signature ({@link Combinator}); whether and how far the
+ * closure is applied is read off the operation's body, or declared of a kernel and held to what the
+ * kernel computes.
+ *
+ * <p>A second fact beside the first, and apart from it: that what the closure is handed is an
+ * element of the container ({@link Combinator}). A reader crediting a value as part of the container
+ * asks that one and never this; a reader asking which applications a run makes asks this.
  */
 public enum HowAClosureIsApplied {
 
@@ -18,5 +23,14 @@ public enum HowAClosureIsApplied {
     UNTIL_ONE_HOLDS,
 
     /** To each element in turn until one application answers false, and to none after it. */
-    UNTIL_ONE_FAILS
+    UNTIL_ONE_FAILS,
+
+    /**
+     * To one element at most — the one the call picks out by something else it was handed, if the
+     * container holds it — and to no other. Which element, and whether any, is not said.
+     */
+    AT_MOST_ONE,
+
+    /** To some of the elements, on some runs: which, and how many, is not said. */
+    TO_SOME
 }

@@ -4707,12 +4707,28 @@ public final class Generator {
                         circularly(circular)), where.unrepresented());
             }
         }
+        // And what the way asks the elements of its containers to be, which the elements are
+        // written as. Where that is two things at one position inside an element, the elements are
+        // written alike and no row is — which is this composer's answer and not the model's.
+        ElementWrites elements = ElementWrites.of(reaching.boundedOnTheWay());
+        Requirements rowIs;
+        switch (elements.requiredBeside(reaching.requirements())) {
+            case Requirements.Merge.Merged(Requirements both) -> rowIs = both;
+            case Requirements.Merge.Conflict conflict -> {
+                return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                        ElementWrites.writtenAlike(conflict.at())),
+                        where.unrepresented());
+            }
+        }
+        Set<TermPath> truthsWritten = new LinkedHashSet<>(reaching.truths().at().keySet());
+        truthsWritten.addAll(elements.truthsAt());
         // Every way of writing them under the cases the row can be, one at a time, the first that
         // composes taken: a container a name every case of a sum spreads is composed under one of
         // the cases. What the rest came to is said over every one of them, the same whichever was
         // tried first.
-        ContentsAsked.UnderTheCases under = asked.underTheCases(subject.reach(),
-                reaching.requirements(), reaching.truths().at().keySet());
+        ContentsAsked.UnderTheCases under = asked.underTheCases(subject.reach(), rowIs,
+                truthsWritten);
         FixtureTemplate[] composed = new FixtureTemplate[order.parameters().size()];
         List<ParameterCameToNothing> cameToNothing = new ArrayList<>();
         ContentsAsked.UnderTheCases.Walked walked = under.tryEach(way -> {
@@ -4726,8 +4742,13 @@ public final class Generator {
             TruthsAsked truths = TruthsAsked.NONE;
             switch (reaching.truths().standingAt(way.standing())) {
                 case TruthsAsked.Merge.Merged(var here) -> {
-                    truths = here;
-                    twice = here.writtenInto(writes);
+                    switch (elements.truthsBeside(here, way.standing())) {
+                        case TruthsAsked.Merge.Merged(var withTheElements) -> {
+                            truths = here;
+                            twice = withTheElements.writtenInto(writes);
+                        }
+                        case TruthsAsked.Merge.Conflict(var at) -> twice = at;
+                    }
                 }
                 case TruthsAsked.Merge.Conflict(var at) -> twice = at;
             }
@@ -5145,9 +5166,9 @@ public final class Generator {
             }
             // A statement no composer writes toward: nothing is placed for it, and the run is what
             // says whether the row met it.
-            if (cut.demand() instanceof RowDemand.ForTheRun(var _, var why)) {
+            if (cut.demand() instanceof RowDemand.ForTheRun(var _, var why, var past)) {
                 gaps.add(new ReachabilityGap.Uncomposed(cut,
-                        new ReachabilityGap.Why.NoComposerWritesIt(why)));
+                        new ReachabilityGap.Why.NoComposerWritesIt(why, past)));
                 continue;
             }
             // What an element is asked with no relation among it has no number to place: that the
@@ -5307,14 +5328,13 @@ public final class Generator {
             // the rules allow meets them, and the container cannot hold none.
             case RowDemand.ForAll every -> {
                 List<RowDemand.Relational> ofEachElement = every.relations();
-                Optional<RowDemand.Relational> holdingNone = every.holdingNone();
                 Placed some = placedIn(subject, looking, here, alreadyStanding, someElement,
                         assumed, cut, constraints(ofEachElement), true);
-                if (some instanceof Placed.AtAll || holdingNone.isEmpty()) {
-                    yield asComposedOnly(cut, some, false);
+                if (some instanceof Placed.AtAll) {
+                    yield some;
                 }
                 Placed none = placedIn(subject, looking, here, alreadyStanding, someElement,
-                        assumed, cut, List.of(holdingNone.get().constraint()), true);
+                        assumed, cut, List.of(every.holdingNone().constraint()), true);
                 if (none instanceof Placed.AtAll) {
                     yield none;
                 }
@@ -7839,6 +7859,22 @@ public final class Generator {
                     null, Optional.of("the way to a comparison the row is held to takes a case"
                             + " its classes do not")));
         }
+        // And what the way asks the elements of its containers to be, which the elements are
+        // written as. Where that is two things at one position inside an element, beside each
+        // other or beside the classes, the elements are written alike and no row is — which is
+        // this composer's answer and not the model's.
+        ElementWrites elements = holding.reaching() == null
+                ? ElementWrites.of(List.of())
+                : ElementWrites.of(holding.reaching().boundedOnTheWay());
+        switch (elements.requiredBeside(withTheWay)) {
+            case Requirements.Merge.Merged(Requirements both) -> withTheWay = both;
+            case Requirements.Merge.Conflict conflict -> {
+                return RowComposed.Failed.ofTheRow(new Attempt(null,
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                        conflict.at().toString(),
+                        Optional.of(ElementWrites.writtenAlike(conflict.at()))));
+            }
+        }
         required = strictlyUnder(withTheWay, composedWhole, false);
         // And the locations only a comparison asked about, which no class wrote. Not one the row
         // is narrowed at: what has to hold of it is then one thing said two ways — the case it is,
@@ -7873,8 +7909,10 @@ public final class Generator {
         // by one under another case that does not. What they came to is said over every one of
         // them, with the figure where the walk stopped short of the rest.
         Requirements rowIs = required;
+        Set<TermPath> truthsWritten = new LinkedHashSet<>(truthsAsked.at().keySet());
+        truthsWritten.addAll(elements.truthsAt());
         ContentsAsked.UnderTheCases under = holding.contents().underTheCases(subject.reach(),
-                rowIs, truthsAsked.at().keySet());
+                rowIs, truthsWritten);
         RowComposed[] stoppedWith = {null};
         SearchShortfall[] passedOver = {null};
         List<RowComposed.Failed> cameToNothing = new ArrayList<>();
@@ -7904,6 +7942,22 @@ public final class Generator {
                         twice.toString(), Optional.of("`" + twice + "` is asked by the way to"
                                 + " hold " + truths.at().get(twice)
                                 + " and is written another value"))));
+                return false;
+            }
+            // Then what the elements are asked, written beside it: two things at one position
+            // inside an element are elements written alike, and not a row the model has none of.
+            TermPath alike;
+            switch (elements.truthsBeside(truths, way.standing())) {
+                case TruthsAsked.Merge.Merged(var withTheElements) -> {
+                    truths = withTheElements;
+                    alike = withTheElements.writtenInto(writes);
+                }
+                case TruthsAsked.Merge.Conflict(var at) -> alike = at;
+            }
+            if (alike != null) {
+                cameToNothing.add(RowComposed.Failed.ofTheRow(new Attempt(null,
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, alike.toString(),
+                        Optional.of(ElementWrites.writtenAlike(alike)))));
                 return false;
             }
             Set<TermPath> writtenAt = new LinkedHashSet<>(together.keySet());

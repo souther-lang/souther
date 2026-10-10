@@ -111,14 +111,14 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
                 () -> new RuleWithoutALine(
                         new RuleWithoutALine.Fact(comparison(), at("x"),
                                 RuleSite.theRuleItself(),
-                                new BlockReason.ComparisonBetweenPositions()),
+                                new BlockReason.ComparisonRelatingTwoValues()),
                         Set.of()),
                 "a comparison nothing places is one nobody can be sent to look at");
         assertThrows(IllegalArgumentException.class,
                 () -> new RuleWithoutALine(
                         new RuleWithoutALine.Fact(invariant(), at("x"),
                                 RuleSite.theRuleItself(),
-                                new BlockReason.ComparisonBetweenPositions()),
+                                new BlockReason.ComparisonRelatingTwoValues()),
                         Set.of(new RuleReportAnchor.ByTheModuleThatWroteIt())),
                 "and a question about where a rule the author named is written is a second way to"
                         + " say one thing");
@@ -137,7 +137,7 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
         gathered.unclassified(ONE_CALL, at("x"), new BlockReason.UnreadComparisonForm());
         gathered.unclassified(ANOTHER_CALL, at("x"),
                 new BlockReason.UnreadComparisonForm());
-        gathered.add(ONE_CALL, at("x"), new BlockReason.ComparisonBetweenPositions());
+        gathered.add(ONE_CALL, at("x"), new BlockReason.ComparisonRelatingTwoValues());
 
         assertEquals(1, gathered.found().unclassified().size(),
                 () -> "one rule, one place, one limit: " + gathered.found().unclassified());
@@ -258,7 +258,7 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
 
     private static RuleWithoutALine found(RuleCitation cited, String at) {
         return RuleWithoutALine.of(cited, at(at),
-                new BlockReason.ComparisonBetweenPositions());
+                new BlockReason.ComparisonRelatingTwoValues());
     }
 
     private static FilingCoordinate at(String path) {

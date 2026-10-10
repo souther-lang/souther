@@ -312,6 +312,16 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             @Override
+            public AffineForms.ReadThrough<InputReads> taken(Core node, InputReads at) {
+                return NameAnswers.taken(node, at);
+            }
+
+            @Override
+            public LinearForm<Core> takenAsAForm(Core node, InputReads at) {
+                return NameAnswers.takenAsAForm(node, at);
+            }
+
+            @Override
             public boolean readsThrough(Core.FieldAccess fa, InputReads at) {
                 // Read through where the target is at no position of the input: a field of a value
                 // that stands nowhere is arithmetic's to walk into, since it is no place a row

@@ -220,6 +220,22 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
     }
 
     /**
+     * What a law reads each element of a container of this type as filed under, or null where it
+     * reads none: a map's key, and the first of each pair a list of pairs holds, which is what a
+     * map made of that list files the second under.
+     *
+     * <p>Wider than {@link #keyOf}, which answers what a closure over the container is handed as a
+     * key: a closure over a list of pairs is handed the pair.
+     */
+    static Type filedUnder(Type t) {
+        return switch (t) {
+            case MapOf map -> map.key();
+            case ListOf(TupleOf(var pair)) when pair.size() == 2 -> pair.getFirst();
+            case null, default -> null;
+        };
+    }
+
+    /**
      * What a container of this type holds many of, or null where it is no container: a list's or a
      * set's element, and a map's value.
      *

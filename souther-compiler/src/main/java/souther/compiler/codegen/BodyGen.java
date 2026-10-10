@@ -1174,7 +1174,7 @@ final class BodyGen {
         private boolean walksInside(Core e) {
             if (e instanceof Core.Call c
                     && ((c.fn() instanceof Core.Reached r
-                            && ctx.symbols.theWalk().equals(r.denotes()))
+                            && ctx.symbols.theWalk().operation().equals(r.denotes()))
                     || c.fn() == Core.Emitted.BUILD_LIST || c.fn() == Core.Emitted.BUILD_MAP)) {
                 return true;
             }
@@ -1456,7 +1456,8 @@ final class BodyGen {
                 }
                 case Core.Reaches.AHelper _ -> {
                     // The one loop the language has is emitted where it stands, not called.
-                    if (!ctx.symbols.theWalk().equals(reached.denotes()) || !folded(call)) {
+                    if (!ctx.symbols.theWalk().operation().equals(reached.denotes())
+                            || !folded(call)) {
                         recursiveHelperCall(call);
                     }
                 }

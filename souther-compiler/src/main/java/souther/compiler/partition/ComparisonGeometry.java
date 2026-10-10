@@ -87,7 +87,8 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between) 
                     "a line of a statement is one line: " + assessed);
             case ComparisonAssessment.AnswerDependent _,
                  ComparisonAssessment.OnADependencysAnswer _, ComparisonAssessment.NoInput _,
-                 ComparisonAssessment.CutsNothing _, ComparisonAssessment.OutsideTheDomain _,
+                 ComparisonAssessment.CutsNothing _, ComparisonAssessment.AgainstAnotherValue _,
+                 ComparisonAssessment.OutsideTheDomain _,
                  ComparisonAssessment.NothingArrivesAtItsLine _,
                  ComparisonAssessment.TurnsNothing _,
                  ComparisonAssessment.NoFeasibleInput _, ComparisonAssessment.Unread _ -> NONE;

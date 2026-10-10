@@ -2335,7 +2335,7 @@ public final class InvariantChecker {
         // `width <= height + 1` is not one, and read as a bound it raised a question about where
         // `width` stops that no reading can ever answer, because a rule relating two positions
         // places no end (ADR-0090). The reader already knows: the reason it records for such a
-        // comparison is `ComparisonBetweenPositions`.
+        // comparison is `ComparisonRelatingTwoValues`.
         if (about != null && numbered.claim() instanceof ComparisonClaim.Cut
                 && coordinatesIn(numbered.other(), at, byName, answering).isEmpty()
                 && shape instanceof ClauseStates.SomethingElse named) {

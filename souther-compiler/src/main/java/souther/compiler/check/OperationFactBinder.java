@@ -4,13 +4,17 @@ import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.DeclaredOperation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.ArgumentsStand;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.ClosurePositions;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.DefinitionCase;
+import souther.compiler.proof.ByPlace;
+import souther.compiler.proof.Slot;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
@@ -20,6 +24,7 @@ import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.ResultBound;
+import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
@@ -86,21 +91,206 @@ final class OperationFactBinder {
      * fact may not say beside another — that a number is read by one representation — is asked of
      * all of them together once every one is bound, since a question about the set cannot be
      * answered from the order the declarations happen to come in.
+     *
+     * @param proofs how what is stated of the operations the library writes is proved of their
+     *               bodies
      */
-    static BoundOperationFacts bindAll(Stdlib stdlib, List<OperationFacts.Declared> declared) {
+    static BoundOperationFacts bindAll(Stdlib stdlib, List<OperationFacts.Declared> declared,
+                                       LibraryProofs.Source proofs) {
+        List<OperationFacts.Declared> memberships = memberships(declared);
         List<BoundOperationFact> bound = new ArrayList<>();
         for (OperationFacts.Declared each : declared) {
             CompleteSignature declaration = declaredSignature(stdlib, each.operation());
-            bound.add(bind(stdlib, declaration, each.fact()));
+            BoundOperationFact one = bind(stdlib, declaration, each.fact());
+            LawProposition<ArgumentRef> beside = besideTheMembership(stdlib, each, memberships);
+            bound.add(beside == null ? one : new BoundOperationFact.HasALaw(one.operation(),
+                    ((BoundOperationFact.HasALaw) one).law(),
+                    List.of(slots(stdlib, declaration, beside, false))));
         }
-        BoundOperationFacts facts = new BoundOperationFacts(bound);
-        holdEachNumberToOneReading(stdlib, facts);
-        return facts;
+        // What the declarations may not say beside one another is asked of all of them, before
+        // anything is proved: it is a question about the declarations, which no proof changes, and
+        // a declaration refused is one nothing should be proved for.
+        holdEachNumberToOneReading(stdlib,
+                new BoundOperationFacts(stdlib, bound, LibraryProofs.TAKEN_AS_HOLDING));
+        return new BoundOperationFacts(stdlib, bound, proofs);
+    }
+
+    /** The same, each written operation's facts proved here against its body. */
+    static BoundOperationFacts bindAll(Stdlib stdlib, List<OperationFacts.Declared> declared) {
+        return bindAll(stdlib, declared, LibraryProofs.PROVING);
     }
 
     /** The same, over what the language declares. */
     static BoundOperationFacts bindAll(Stdlib stdlib) {
-        return bindAll(stdlib, OperationFacts.declarations());
+        return bindAll(stdlib, LibraryProofs.PROVING);
+    }
+
+    /** The same, over what the language declares, with what is proved of the operations the
+     *  library writes come by through {@code proofs}. */
+    static BoundOperationFacts bindAll(Stdlib stdlib, LibraryProofs.Source proofs) {
+        return bindAll(stdlib, OperationFacts.declarations(), proofs);
+    }
+
+    /** Every declaration of {@code declared} that is a truth law saying a container holds a
+     *  value. */
+    private static List<OperationFacts.Declared> memberships(
+            List<OperationFacts.Declared> declared) {
+        List<OperationFacts.Declared> out = new ArrayList<>();
+        for (OperationFacts.Declared each : declared) {
+            if (each.fact() instanceof OperationFact.HasALaw(
+                    OperationLaw.Observation<ArgumentRef>(AnswerAspect aspect,
+                            LawProposition<ArgumentRef> holds))
+                    && aspect == AnswerAspect.TRUTH && aMembership(holds) != null) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    /** {@code holds} where it says some element of a container, or a key of one, is a value
+     *  handed beside it — or null where it says anything else. */
+    private static LawProposition.SomeElement<ArgumentRef> aMembership(
+            LawProposition<ArgumentRef> holds) {
+        return holds instanceof LawProposition.SomeElement<ArgumentRef>(ArgumentRef container,
+                LawProposition.Same<ArgumentRef>(LawSubject<ArgumentRef> named,
+                        LawSubject.Argument<ArgumentRef> _, boolean alike), boolean some)
+                && alike && namesAnElementOf(named, container) != null
+                ? (LawProposition.SomeElement<ArgumentRef>) holds : null;
+    }
+
+    /** The membership {@code declared}, one of {@link #memberships}, states. */
+    private static LawProposition.SomeElement<ArgumentRef> membershipOf(
+            OperationFacts.Declared declared) {
+        return aMembership(((OperationLaw.Observation<ArgumentRef>)
+                ((OperationFact.HasALaw) declared.fact()).law()).equivalentTo());
+    }
+
+    /** The argument a membership says is held, or as a key. */
+    private static ArgumentRef heldIn(LawProposition.SomeElement<ArgumentRef> membership) {
+        return ((LawSubject.Argument<ArgumentRef>) ((LawProposition.Same<ArgumentRef>)
+                membership.ofTheElement()).other()).argument();
+    }
+
+    /** How a membership names what a container holds: as an element, or as a key. */
+    private enum Held { AS_AN_ELEMENT, AS_A_KEY }
+
+    /** How {@code named} is what {@code container} holds — or null where it is neither an element
+     *  of it nor a key of one. */
+    private static Held namesAnElementOf(LawSubject<ArgumentRef> named, ArgumentRef container) {
+        return switch (named) {
+            case LawSubject.ElementOf<ArgumentRef>(ArgumentRef of) when of.equals(container) ->
+                    Held.AS_AN_ELEMENT;
+            case LawSubject.KeyOf<ArgumentRef>(ArgumentRef of) when of.equals(container) ->
+                    Held.AS_A_KEY;
+            default -> null;
+        };
+    }
+
+    /**
+     * How many a kernel's answer holds, where its law says it in cases a membership decides, said
+     * beside what the operation that answers the membership answers — or null where {@code each}
+     * is no such law.
+     *
+     * <p>Derived and not declared. A case written as some element being a value is what the
+     * operation whose truth law says so answers, and a proof taking what is stated of that
+     * operation beside others meets the cases only where they are said in its words. Declared a
+     * second time, the two would be two statements of one fact that nothing holds to one another.
+     */
+    private static LawProposition<ArgumentRef> besideTheMembership(Stdlib stdlib,
+            OperationFacts.Declared each, List<OperationFacts.Declared> memberships) {
+        if (!(each.fact() instanceof OperationFact.HasALaw(OperationLaw.Size<ArgumentRef> size))
+                || size.unconditional() != null
+                || stdlib.intrinsicOf(theLibraryOperation(each.operation())) == null) {
+            return null;
+        }
+        int arity = declaredSignature(stdlib, each.operation()).params().size();
+        List<LawSubject<ArgumentRef>> own = new ArrayList<>();
+        for (int at = 0; at < arity; at++) {
+            own.add(new LawSubject.Argument<>(new ArgumentRef.At(at)));
+        }
+        LawNumber<ArgumentRef> itsSize = new LawNumber.SizeOf<>(new LawSubject.AnswerOf<>(
+                theLibraryOperation(each.operation()), own));
+        List<LawProposition<ArgumentRef>> cases = new ArrayList<>();
+        boolean said = false;
+        List<Type> takes = declaredSignature(stdlib, each.operation()).params();
+        for (OperationLaw.Size.Case<ArgumentRef> one : size.cases()) {
+            LawProposition<ArgumentRef> where = inItsWords(stdlib, takes, one.where(),
+                    memberships);
+            said |= !where.equals(one.where());
+            Map<LawNumber<ArgumentRef>, ExactRatio> less = new LinkedHashMap<>();
+            less.put(itsSize, ExactRatio.ONE);
+            // A law is over the operation's arguments and never its own answer, so no number of
+            // the case is the size it is equal to.
+            one.equalTo().coefs().forEach((number, by) -> less.put(number, by.negated()));
+            cases.add(new LawProposition.All<>(List.of(where, new LawProposition.Compared<>(
+                    new LinearForm<>(one.equalTo().constant().negated(), less), Rel.EQ))));
+        }
+        return !said ? null : cases.size() == 1 ? cases.getFirst()
+                : new LawProposition.Any<>(cases);
+    }
+
+    /** {@code where}, over arguments of the types {@code takes}, with each membership in it said
+     *  as the operation that answers it of a container of that kind. */
+    private static LawProposition<ArgumentRef> inItsWords(Stdlib stdlib, List<Type> takes,
+                                                         LawProposition<ArgumentRef> where,
+                                                         List<OperationFacts.Declared>
+                                                                 memberships) {
+        return switch (where) {
+            case LawProposition.All<ArgumentRef>(var parts) -> new LawProposition.All<>(
+                    parts.stream().map(part -> inItsWords(stdlib, takes, part, memberships))
+                            .toList());
+            case LawProposition.Any<ArgumentRef>(var parts) -> new LawProposition.Any<>(
+                    parts.stream().map(part -> inItsWords(stdlib, takes, part, memberships))
+                            .toList());
+            case LawProposition.SomeElement<ArgumentRef>(ArgumentRef container,
+                    LawProposition.Same<ArgumentRef>(LawSubject<ArgumentRef> named,
+                            LawSubject.Argument<ArgumentRef>(ArgumentRef value), boolean alike),
+                    boolean some) when alike && namesAnElementOf(named, container) != null
+                    && container instanceof ArgumentRef.At(int at) -> {
+                for (OperationFacts.Declared membership : memberships) {
+                    LawProposition.SomeElement<ArgumentRef> says = membershipOf(membership);
+                    if (namesAnElementOf(((LawProposition.Same<ArgumentRef>) says.ofTheElement())
+                                    .one(), says.container())
+                                    == namesAnElementOf(named, container)
+                            && says.container() instanceof ArgumentRef.At(int its)
+                            && sameKind(takes.get(at), declaredSignature(stdlib,
+                                    membership.operation()).params().get(its))) {
+                        LawProposition<ArgumentRef> answered = answeredTrue(stdlib,
+                                membership.operation(), says, container, value);
+                        yield some ? answered : answered.denied();
+                    }
+                }
+                yield where;
+            }
+            case LawProposition.Always<ArgumentRef> _, LawProposition.Observed<ArgumentRef> _,
+                 LawProposition.Compared<ArgumentRef> _, LawProposition.SomeElement<ArgumentRef> _,
+                 LawProposition.Same<ArgumentRef> _ -> where;
+        };
+    }
+
+    /** Whether {@code a} and {@code b} are containers of one kind: both lists, both sets, or both
+     *  maps. */
+    private static boolean sameKind(Type a, Type b) {
+        return (a instanceof Type.ListOf && b instanceof Type.ListOf)
+                || (a instanceof Type.SetOf && b instanceof Type.SetOf)
+                || (a instanceof Type.MapOf && b instanceof Type.MapOf);
+    }
+
+    /** {@code operation}, whose truth law is {@code says}, answering true handed
+     *  {@code container} and {@code value} where it takes them. */
+    private static LawProposition<ArgumentRef> answeredTrue(Stdlib stdlib, ValueName operation,
+            LawProposition.SomeElement<ArgumentRef> says, ArgumentRef container,
+            ArgumentRef value) {
+        int arity = declaredSignature(stdlib, operation).params().size();
+        List<LawSubject<ArgumentRef>> handed = new ArrayList<>();
+        for (int at = 0; at < arity; at++) {
+            ArgumentRef here = new ArgumentRef.At(at);
+            handed.add(new LawSubject.Argument<>(here.equals(says.container()) ? container
+                    : here.equals(heldIn(says)) ? value : here));
+        }
+        return new LawProposition.Observed<>(new LawSubject.AnswerOf<>(
+                theLibraryOperation(operation), handed),
+                new SideAnswered(AnswerAspect.TRUTH, true));
     }
 
     /** One fact held to the declaration it is about. No default: a kind of fact added is a kind
@@ -137,10 +327,54 @@ final class OperationFactBinder {
                         "the map the keys were kept from");
                 holdTheAnswerTo(declaration, map, Type::keyOf, Type::keyOf,
                         "a map keyed by the keys of that map");
-                yield new BoundOperationFact.KeepsTheKeysOf(operation, map);
+                yield new BoundOperationFact.KeepsTheKeysOf(operation, map,
+                        slots(stdlib, declaration, kept.states(
+                                theLibraryOperation(operation.operation()),
+                                declaration.params().size()), false));
             }
-            case OperationFact.HasALaw stated -> holdLaw(declaration, operation, stated.law());
+            case OperationFact.HasALaw stated -> {
+                // A law beside a body is a second account of what the body does: what is stated
+                // of an operation the library writes is a lemma, proved against the body.
+                if (stdlib.helpers().containsKey(theLibraryOperation(operation.operation()))) {
+                    throw new IllegalStateException(operation.operation() + " is written in the"
+                            + " language, and a law of it is declared beside its body: state it"
+                            + " as a lemma, to be proved against the body");
+                }
+                yield holdLaw(declaration, operation, stated.law());
+            }
             case OperationFact.LeavesUnsaid unsaid -> holdUnsaid(declaration, operation, unsaid);
+            case OperationFact.IsALemma lemma -> {
+                if (!stdlib.helpers().containsKey(theLibraryOperation(operation.operation()))) {
+                    throw new IllegalStateException(operation.operation() + " is a kernel, with no"
+                            + " body for a lemma to be proved against: what is stated of it is a"
+                            + " law");
+                }
+                yield new BoundOperationFact.HasALemma(operation,
+                        ((BoundOperationFact.HasALaw) holdLaw(declaration, operation,
+                                lemma.states())).law(),
+                        lemma.carries().stream().map(clause ->
+                                slots(stdlib, declaration, clause, true)).toList());
+            }
+            case OperationFact.IsRelatedInALemma lemma -> {
+                if (!stdlib.helpers().containsKey(theLibraryOperation(operation.operation()))) {
+                    throw new IllegalStateException(operation.operation() + " is a kernel, with no"
+                            + " body for a lemma to be proved against: what is stated of it beside"
+                            + " other kernels is an axiom");
+                }
+                yield new BoundOperationFact.HasARelatedLemma(operation,
+                        slots(stdlib, declaration, lemma.holds(), false),
+                        lemma.carries().stream().map(clause ->
+                                slots(stdlib, declaration, clause, true)).toList());
+            }
+            case OperationFact.IsRelated related -> {
+                if (stdlib.intrinsicOf(theLibraryOperation(operation.operation())) == null) {
+                    throw new IllegalStateException(operation.operation() + " is written in the"
+                            + " language, and what it answers is related to other kernels' answers"
+                            + " beside its body: what a body comes to is proved of it");
+                }
+                yield new BoundOperationFact.IsRelated(operation,
+                        slots(stdlib, declaration, related.holds(), false));
+            }
             // A list of a part of a map is a list of values of that part's type.
             case OperationFact.ListsAPartOf lists -> {
                 DeclaredArgument map = holdToTheDeclaration(declaration, lists.map(),
@@ -156,12 +390,41 @@ final class OperationFactBinder {
             }
             // What is no smaller than a container is one: a size is what the two are compared by.
             case OperationFact.ResultIsNoSmallerThan bounded -> {
-                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
-                        "what is no smaller than a container");
+                // Of anything holding a number of things, a string as much as a container: how many
+                // a value holds is what the bound is about.
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.SIZED,
+                        "what is no smaller than what it was built from");
                 yield new BoundOperationFact.ResultIsNoSmallerThan(operation,
                         holdToTheDeclaration(declaration, bounded.container(),
+                                new ArgumentRef.TheContainer(), TypeRequirement.SIZED,
+                                "what the result is no smaller than"));
+            }
+            // An order is of a sequence, and of the answer's elements as it is of the source's.
+            case OperationFact.KeepsTheOrderOf kept -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
+                        "what keeps the order of what it was built from");
+                yield new BoundOperationFact.KeepsTheOrderOf(operation,
+                        holdToTheDeclaration(declaration, kept.source(),
                                 new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
-                                "a container the result is no smaller than"));
+                                "what the order is of"));
+            }
+            // What a value is put in answers a container like it, and what is put in is one of what
+            // such a container holds.
+            case OperationFact.PutsAValueIn puts -> {
+                if (stdlib.intrinsicOf(theLibraryOperation(operation.operation())) == null) {
+                    throw new IllegalStateException(operation.operation() + " is written in the"
+                            + " language, and what it puts in is declared beside its body: what a"
+                            + " body builds is proved of it");
+                }
+                DeclaredArgument into = holdToTheDeclaration(declaration, puts.into(), null,
+                        TypeRequirement.CONTAINER, "what a value is put in");
+                DeclaredArgument value = holdToTheDeclaration(declaration, puts.value(), null,
+                        TypeRequirement.ANY, "the value put in");
+                holdTheAnswerTo(declaration, into, UnaryOperator.identity(),
+                        UnaryOperator.identity(), "the same kind of container");
+                holdTheAnswerTo(declaration, value, Type::elementOfAContainer,
+                        UnaryOperator.identity(), "a container and one of what it holds");
+                yield new BoundOperationFact.PutsAValueIn(operation, value, into);
             }
             case OperationFact.ReadsItsContainer reads ->
                     new BoundOperationFact.ReadsItsContainer(operation,
@@ -236,7 +499,8 @@ final class OperationFactBinder {
                     + library.qualified() + " is " + Type.show(stands) + ", not " + required
                     + "; it is named as " + role);
         }
-        if (at instanceof ArgumentRef.At && derived != null && Combinators.of(library) != null
+        if (at instanceof ArgumentRef.At && derived != null
+                && Combinators.positionsOf(library) != null
                 && positionIn(derived, library) == position) {
             throw new IllegalStateException("the rule about " + role + " for "
                     + library.qualified()
@@ -259,15 +523,19 @@ final class OperationFactBinder {
             case ArgumentRef.At at -> at.position();
             case ArgumentRef.TheContainer _ -> handing(operation, "the container").containerArg();
             case ArgumentRef.TheClosure _ -> handing(operation, "the closure").closureArg();
+            case ArgumentRef.Carried _, ArgumentRef.Walked _, ArgumentRef.Every _ ->
+                    throw new IllegalStateException("a fact about " + operation + " names " + ref
+                            + ", which is no argument of it: only what a lemma states a walk"
+                            + " carries may name one");
         };
     }
 
-    private static Combinator handing(ValueName operation, String part) {
-        Combinator handed = Combinators.of(operation);
+    private static ClosurePositions handing(ValueName operation, String part) {
+        ClosurePositions handed = Combinators.positionsOf(operation);
         if (handed == null) {
             throw new IllegalStateException("a rule about " + operation + " names " + part
-                    + " of what it hands its closure, and its signature says it hands one nothing"
-                    + " a container holds");
+                    + " of what it hands its closure, and its signature puts no closure beside a"
+                    + " container");
         }
         return handed;
     }
@@ -345,19 +613,27 @@ final class OperationFactBinder {
                 declaredSignature(stdlib, shift.measure()).declaring(), moved, amount, shift.per());
     }
 
-    /** As {@link #holdToTheDeclaration}, for the arguments a case names: the one it answers, and
-     *  the two sides of each condition it is reached under. */
+    /** As {@link #holdToTheDeclaration}, for the arguments a case names: the ones the number it
+     *  answers is written in, and the ones each side of each condition it is reached under is. */
     private static DefinitionCase<DeclaredArgument> holdCase(CompleteSignature declaration,
                                                              DefinitionCase<ArgumentRef> one) {
         holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
                 "what a case of the definition answers");
-        DeclaredArgument answers = holdCaseArgument(declaration, one.answers());
         List<ArgumentsStand<DeclaredArgument>> given = new ArrayList<>();
         for (ArgumentsStand<ArgumentRef> stands : one.given()) {
-            given.add(new ArgumentsStand<>(holdCaseArgument(declaration, stands.left()),
-                    stands.rel(), holdCaseArgument(declaration, stands.right())));
+            given.add(new ArgumentsStand<>(holdCaseForm(declaration, stands.left()),
+                    stands.rel(), holdCaseForm(declaration, stands.right())));
         }
-        return new DefinitionCase<>(answers, given);
+        return new DefinitionCase<>(holdCaseForm(declaration, one.answers()), given);
+    }
+
+    /** {@code form}, each argument it is written in held to the declaration. */
+    private static LinearForm<DeclaredArgument> holdCaseForm(CompleteSignature declaration,
+                                                             LinearForm<ArgumentRef> form) {
+        Map<DeclaredArgument, ExactRatio> held = new LinkedHashMap<>();
+        form.coefs().forEach((named, weight) ->
+                held.put(holdCaseArgument(declaration, named), weight));
+        return new LinearForm<>(form.constant(), held);
     }
 
     private static DeclaredArgument holdCaseArgument(CompleteSignature declaration,
@@ -538,6 +814,75 @@ final class OperationFactBinder {
                     + " of it");
         }
         return params.get(ROUNDING_POLICY_ARGUMENT);
+    }
+
+    /**
+     * {@code statement} in the words of a walk ({@link Slot}): each argument it names held to the
+     * declaration as a place, each part of a walk taken as it is — where {@code ofAWalk}, and
+     * refused otherwise — and every other operation it names an answer of held to the library.
+     */
+    private static LawProposition<Slot> slots(Stdlib stdlib, CompleteSignature declaration,
+                                              LawProposition<ArgumentRef> statement,
+                                              boolean ofAWalk) {
+        answersNamedIn(stdlib, statement);
+        return ByPlace.proposition(statement, ref -> switch (ref) {
+            case ArgumentRef.At _, ArgumentRef.TheContainer _, ArgumentRef.TheClosure _ ->
+                    new Slot.Place(holdToTheDeclaration(declaration, ref, null,
+                            TypeRequirement.ANY, "what a statement about it names").position());
+            case ArgumentRef.Every(int which) -> new Slot.Every(which);
+            case ArgumentRef.Carried(List<Integer> path) when ofAWalk -> new Slot.Carried(path);
+            case ArgumentRef.Walked _ when ofAWalk -> new Slot.Walked();
+            case ArgumentRef.Carried _, ArgumentRef.Walked _ -> throw new IllegalStateException(
+                    "what is stated of " + declaration.declaring().operation() + " beside other"
+                            + " kernels names " + ref + ", a part of a walk it has none of");
+        });
+    }
+
+    /** Holds every other operation {@code statement} names an answer of to the library: one it
+     *  declares, handed as many arguments as it takes. */
+    private static void answersNamedIn(Stdlib stdlib, LawProposition<ArgumentRef> statement) {
+        switch (statement) {
+            case LawProposition.Always<ArgumentRef> _ -> { }
+            case LawProposition.All<ArgumentRef>(var parts) ->
+                    parts.forEach(part -> answersNamedIn(stdlib, part));
+            case LawProposition.Any<ArgumentRef>(var parts) ->
+                    parts.forEach(part -> answersNamedIn(stdlib, part));
+            case LawProposition.Observed<ArgumentRef>(LawSubject<ArgumentRef> of, var _) ->
+                    answersNamedIn(stdlib, of);
+            case LawProposition.Compared<ArgumentRef>(var form, var _) ->
+                    form.coefs().keySet().forEach(number -> {
+                        switch (number) {
+                            case LawNumber.SizeOf<ArgumentRef>(LawSubject<ArgumentRef> of) ->
+                                    answersNamedIn(stdlib, of);
+                            case LawNumber.HowManyMeet<ArgumentRef>(var _, var ofTheElement) ->
+                                    answersNamedIn(stdlib, ofTheElement);
+                            case LawNumber.HowManyDifferent<ArgumentRef>(var _, var ofTheElement)
+                                    -> answersNamedIn(stdlib, ofTheElement);
+                            case LawNumber.SumOver<ArgumentRef>(var _, var ofTheElement) ->
+                                    answersNamedIn(stdlib, new LawProposition.Compared<>(
+                                            LinearForm.atom(ofTheElement), Rel.EQ));
+                            case LawNumber.AnArgument<ArgumentRef> _ -> { }
+                        }
+                    });
+            case LawProposition.SomeElement<ArgumentRef>(var _, var ofTheElement, var _) ->
+                    answersNamedIn(stdlib, ofTheElement);
+            case LawProposition.Same<ArgumentRef>(var one, var other, var _) -> {
+                answersNamedIn(stdlib, one);
+                answersNamedIn(stdlib, other);
+            }
+        }
+    }
+
+    private static void answersNamedIn(Stdlib stdlib, LawSubject<ArgumentRef> subject) {
+        if (subject instanceof LawSubject.AnswerOf<ArgumentRef>(var operation, var args)) {
+            Stdlib.Entry entry = holdTheOperationToTheLibrary(stdlib, operation);
+            if (entry.signature().params().size() != args.size()) {
+                throw new IllegalStateException("a statement names what " + operation
+                        + " answers handed " + args.size() + " argument(s), and it takes "
+                        + entry.signature().params().size());
+            }
+            args.forEach(arg -> answersNamedIn(stdlib, arg));
+        }
     }
 
     /** The library operation {@code operation} names. Every fact is declared of one, so the name
@@ -889,9 +1234,13 @@ final class OperationFactBinder {
             case OperationLaw.Size<ArgumentRef> size -> {
                 holdTheSide(AnswerAspect.EMPTINESS, declaration.result(),
                         "what " + library.qualified() + " answers as many of");
-                yield new OperationLaw.Size<>(lawForm(declaration, size.equalTo(), List.of()));
+                yield new OperationLaw.Size<>(size.cases().stream()
+                        .map(each -> new OperationLaw.Size.Case<>(
+                                lawProposition(declaration, each.where(), List.of()),
+                                lawForm(declaration, each.equalTo(), List.of())))
+                        .toList());
             }
-        });
+        }, List.of());
     }
 
     /** That {@code observed} of the operation's answer is closed, held to a side the answer has. */
@@ -995,6 +1344,29 @@ final class OperationFactBinder {
                 yield new LawNumber.HowManyMeet<>(container, lawProposition(declaration,
                         counted.ofTheElement(), within(over, container)));
             }
+            case LawNumber.HowManyDifferent<ArgumentRef> different -> {
+                DeclaredArgument container = lawContainer(declaration, different.container(),
+                        over);
+                LawSubject<DeclaredArgument> each = lawSubject(declaration,
+                        different.ofTheElement(), within(over, container));
+                // Something of each element of that container: the element, its key, or what the
+                // closure it is handed answers.
+                if (!((each instanceof LawSubject.ElementOf<DeclaredArgument>(var of)
+                        && of.equals(container))
+                        || (each instanceof LawSubject.KeyOf<DeclaredArgument>(var keyed)
+                                && keyed.equals(container))
+                        || each instanceof LawSubject.WhatTheClosureAnswers<DeclaredArgument>)) {
+                    throw new IllegalStateException("a law of " + library.qualified()
+                            + " counts the different values of " + each + ", which is nothing"
+                            + " of each element of argument " + (container.position() + 1));
+                }
+                yield new LawNumber.HowManyDifferent<>(container, each);
+            }
+            case LawNumber.SumOver<ArgumentRef> sum -> {
+                DeclaredArgument container = lawContainer(declaration, sum.container(), over);
+                yield new LawNumber.SumOver<>(container, lawNumber(declaration,
+                        sum.ofTheElement(), within(over, container)));
+            }
         };
     }
 
@@ -1019,7 +1391,7 @@ final class OperationFactBinder {
                 yield new LawSubject.ElementOf<>(container);
             }
             case LawSubject.WhatTheClosureAnswers<ArgumentRef>(ArgumentRef at) -> {
-                Combinator walks = Combinators.of(library);
+                ClosurePositions walks = Combinators.positionsOf(library);
                 if (walks == null) {
                     throw new IllegalStateException(library.qualified() + " hands no closure"
                             + " the elements of a container, so no law of it names what one"
@@ -1046,6 +1418,24 @@ final class OperationFactBinder {
                 }
                 yield new LawSubject.WhatTheClosureAnswers<>(closure);
             }
+            case LawSubject.KeyOf<ArgumentRef>(ArgumentRef at) -> {
+                DeclaredArgument map = holdToTheDeclaration(declaration, at,
+                        new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                        "a map a law of it names the key of an element of");
+                if (Type.filedUnder(map.stands()) == null || !over.contains(map)) {
+                    throw new IllegalStateException("a law of " + library.qualified()
+                            + " names a key of argument " + (map.position() + 1)
+                            + " outside a statement about some element of it, or of what is"
+                            + " filed under no key");
+                }
+                yield new LawSubject.KeyOf<>(map);
+            }
+            // What another operation answers is no argument of this one, and a law says what this
+            // one's answer comes to over its own.
+            case LawSubject.AnswerOf<ArgumentRef> _ ->
+                    throw new IllegalStateException("a law of " + library.qualified() + " names "
+                            + subject + ": only a lemma about a body, or what is stated of"
+                            + " kernels beside one another, may");
         };
     }
 
@@ -1077,6 +1467,10 @@ final class OperationFactBinder {
                     Type.elementOfAContainer(at.stands());
             case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(DeclaredArgument at) ->
                     ((Type.FnOf) at.stands()).result();
+            case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) ->
+                    Type.filedUnder(at.stands());
+            case LawSubject.AnswerOf<DeclaredArgument> _ -> throw new IllegalStateException(
+                    "a law names what another operation answers: " + subject);
         };
     }
 }

@@ -6,11 +6,6 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.FilingCoordinate;
-import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.StandingQuestion;
-import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
@@ -18,6 +13,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A value written down is told from a call that answers with one, and the type does not tell them
@@ -38,8 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class ACallIsAValueOnlyWhenItIsTheConstructionTest {
 
-    private static GuardThresholds.Guards read(String primitive, String written) {
-        String source = """
+    private static String model(String primitive, String written) {
+        return """
                 module demo
 
                 data Ok
@@ -55,6 +51,10 @@ class ACallIsAValueOnlyWhenItIsTheConstructionTest {
                         then Ok
                         else No
                 """.replace("PRIM", primitive).replace("WRITTEN", written);
+    }
+
+    private static GuardThresholds.Guards read(String primitive, String written) {
+        String source = model(primitive, written);
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
@@ -81,19 +81,15 @@ class ACallIsAValueOnlyWhenItIsTheConstructionTest {
 
             assertEquals(List.of(), guards.thresholds(),
                     each[0] + ": an implementation nothing here has read draws no line");
-            assertEquals(1, guards.noLine().unclassified().size(),
-                    each[0] + ": and the position says a rule about it went unread");
-            StandingQuestion.Unclassified said =
-                    guards.noLine().unclassified().getFirst();
-            assertEquals(FilingCoordinate.of(new NumericTerm.ValueOf(TermPath.of("t"))),
-                    said.at(),
-                    each[0] + ": at the position's own values, which is what the rule bounds and"
-                            + " what the side naming it came to");
-            // What a dependency answered about a written string is a step the reading does not
-            // take yet, and that is what is said: not a form the author wrote.
-            assertEquals(new BlockReason.WhatItStatesIsNoLine(
-                            BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ), said.why(),
-                    each[0] + ": for the part of it that was not read");
+            // The rule is over what the dependency answered about the written string, which a row
+            // stands in: the decision table holds it, and the position holds no rule left unread.
+            assertEquals(List.of(), guards.noLine().unclassified(),
+                    each[0] + ": and the position is left nothing unread");
+            assertTrue(DecisionReadings.readToTheEnd(model(each[0], each[1]), "pick").stream()
+                            .flatMap(rule -> rule.consulted().keySet().stream())
+                            .anyMatch(condition -> condition.toString().contains(
+                                    "demo.openingAt(\"" + each[1] + "\")")),
+                    each[0] + ": the decision table holds a column over that answer");
         }
     }
 }

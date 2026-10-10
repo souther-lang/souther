@@ -393,7 +393,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "core/GrowingFold", "count", "(" + core + "Ljava/util/function/Predicate;[I)V",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/GrowingFold", "rewrite", "(" + core + "L" + c
-                + "types/ValueName$Stdlib$Operation;)" + core, Reading.THE_TREE_THAT_RUNS, RUNS);
+                + "core/TheWalk;)" + core, Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/AnswerEmissionIndex", "walk", "(" + core + "L" + c
                 + "coverage/CoverageSites$Plan;Ljava/util/Map;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/ArmEmissionIndex", "walk", "(" + core + "L" + c
@@ -471,6 +471,16 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(L" + CORE + "$FieldAccess;" + reads + ")Z", Reading.ONE_ACCESS, ONE);
         row(out, c + "partition/Pullback", "underItsAccesses", "(L" + c + "inputs/Denotation;)L"
                 + c + "inputs/Denotation;", Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "partition/Pullback", "aWayInto", "(L" + c + "inputs/Denotation;"
+                + "Ljava/util/Set;)L" + c + "partition/Pullback$Inside;", Reading.STRUCTURE,
+                CHOICES_AND_CALLS);
+        row(out, c + "partition/Pullback", "measuredByCases", "(L" + c + "inputs/Denotation;"
+                + "Ljava/util/Map;)L" + c + "partition/Pullback$SizedByCases;", Reading.STRUCTURE,
+                CHOICES_AND_CALLS);
+        row(out, c + "partition/DecisionSubjects", "workedOut", "(" + core + reads
+                + "Ljava/util/Set;)Ljava/lang/String;", Reading.NAMES,
+                "writes a projection as the access it ends with, whose target is the projection one"
+                        + " name shorter, so its names are written as the accesses they stand for");
         row(out, c + "partition/PredicateReadings", "walk", "(" + core + "Ljava/lang/String;L" + c
                 + "inputs/InputReading;" + reads + "L" + c + "partition/LiveFlow;ZLjava/util/List;L"
                 + c + "partition/RuleReachNumbering;Ljava/util/Set;L" + c

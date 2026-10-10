@@ -15,10 +15,10 @@ import souther.compiler.numeric.ExactRatio;
  * askings about one written number were two columns of a table that tells them apart nowhere — the
  * occurrence doing identity's work, which is what a decision column exists to stop.
  *
- * <p>What is not here is an argument this reading cannot say: an expression built out of things it
- * has no words for. Such a call leaves the answer unnamed, which is the honest answer — two askings
- * this reading cannot tell apart may be two questions, and running them together would say a body
- * decides less than it does.
+ * <p>And an argument that is neither is a value the model works out, named by how it is worked out
+ * ({@link WorkedOut}). The answer is one a row stands in all the same: a row asks the dependency
+ * the same thing however that value was spelled, and the evaluation is what tells it from every
+ * other answer.
  */
 public sealed interface DecisionArgument {
 
@@ -42,6 +42,32 @@ public sealed interface DecisionArgument {
         @Override
         public String toString() {
             return spelled();
+        }
+    }
+
+    /**
+     * A value the model works out of what a row controls and what the source wrote, named by how it
+     * is worked out: the expression, with each name in it written as what it stands for where the
+     * dependency was asked — a position or an answer as the subject it is, a value handed or given as
+     * that value.
+     *
+     * <p>A row stands the dependency in whatever it was asked, and which evaluation it is tells the
+     * answer from every other ({@link InjectedAnswer}); so what this has to do is name the question
+     * and not tell evaluations apart. Two askings in one evaluation that are two questions — a closure
+     * handed each of the values a list was written with — differ in a value a name stands for, and
+     * so in how it is spelled here.
+     */
+    record WorkedOut(String spelled) implements DecisionArgument {
+
+        public WorkedOut {
+            if (spelled == null || spelled.isEmpty()) {
+                throw new IllegalArgumentException("a value worked out is worked out some way");
+            }
+        }
+
+        @Override
+        public String toString() {
+            return spelled;
         }
     }
 

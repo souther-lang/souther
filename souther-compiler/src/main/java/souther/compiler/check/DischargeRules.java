@@ -2,13 +2,16 @@ package souther.compiler.check;
 
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.ElementShape;
+import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.NumericResult;
+import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.BinOp;
@@ -41,13 +44,6 @@ import java.util.function.Function;
  * standing there in a call — is {@link CallArguments}'.
  */
 final class DischargeRules {
-
-    /** The operation {@code name} of the library module published as {@code alias}, as what a name
-     * reaching it denotes. Written as the two values it is, so that a row here says which library it
-     * is about without a reader splitting a spelling to find out. */
-    private static ValueName op(String alias, String name) {
-        return ValueName.Stdlib.operation(alias, name);
-    }
 
     /** The facts about the language's operations, held to the library this compiler ships. */
     private static BoundOperationFacts facts() {
@@ -83,8 +79,11 @@ final class DischargeRules {
         }
     }
 
-    /** Denial, which the analysis representation keeps as the call it is. */
-    static final ValueName NOT = op("Bool", "not");
+    /** Whether {@code operation} denies its argument, which the analysis representation keeps as
+     *  the call it is: read off the law its truth is settled by. */
+    static boolean denies(ValueName operation) {
+        return facts().deniesItsArgument(operation);
+    }
 
     /** The operations each table has a rule for. */
     static Set<ValueName> builtOperations() {
@@ -221,8 +220,22 @@ final class DischargeRules {
         return facts().boundsOnTheResult();
     }
 
-    static Set<ValueName> choosingOperations() {
+    /** The operations whose definition is written in cases over the values they were given. */
+    static Set<ValueName> definedByCases() {
         return facts().isDefinedByCases();
+    }
+
+    /** Those of them whose cases are a choice between the values a call was given
+     *  ({@link DefinitionCase#choosesAnArgument}), which a reading takes as the choice it is. */
+    static Set<ValueName> choosingOperations() {
+        Set<ValueName> out = new LinkedHashSet<>();
+        for (ValueName operation : definedByCases()) {
+            if (facts().isDefinedByCases(operation).stream()
+                    .allMatch(DefinitionCase::choosesAnArgument)) {
+                out.add(operation);
+            }
+        }
+        return out;
     }
 
     /** Those of them the choosing table has, by name, for the test that holds each case to a
@@ -370,24 +383,22 @@ final class DischargeRules {
     /**
      * The containers {@code e}'s result is no smaller than, in the order the rule names them.
      *
-     * <p>{@code a ++ b} is here beside the table rather than in it. The library declares
-     * {@code List.append} as {@code a ++ b}, so the two spellings are one operation and a rule about
-     * one is a rule about the other; and a {@code String} has no {@code append} at all, so the
-     * operator is the only spelling its concatenation has. A rule keyed by operation reaches neither,
-     * both being written as an operator and not as a call.
+     * <p>Read of the operation applied in whatever shape it is ({@link AnOperationApplied}): the
+     * operator {@code a ++ b} is the append of what it joins, and what is true of that operation is
+     * true of the operator.
      */
     static List<Core> noSmallerThan(Core standing) {
-        Core e = Core.withoutStanding(standing);
-        if (e instanceof Core.Binary b && b.op() == BinOp.CONCAT) {
-            return List.of(b.left(), b.right());
-        }
-        if (!(e instanceof Core.PreservedCall call)) {
+        AnOperationApplied applied = AnOperationApplied.of(standing);
+        if (applied == null) {
             return List.of();
         }
-        List<DeclaredArgument> reads = facts().resultIsNoSmallerThan(call.operation());
+        List<DeclaredArgument> reads = facts().resultIsNoSmallerThan(applied.operation());
         List<Core> containers = new ArrayList<>(reads.size());
         for (DeclaredArgument one : reads) {
-            containers.add(CallArguments.of(one, call));
+            Core argument = applied.argument(one);
+            if (argument != null) {
+                containers.add(argument);
+            }
         }
         return containers;
     }
@@ -445,6 +456,19 @@ final class DischargeRules {
         return facts().meansTheSameAsASizeOfNought(operation);
     }
 
+    /**
+     * What {@code operation}'s answer holding something is the same as, where a law settles it —
+     * one stated of a kernel or proved of a body — or null where none does.
+     */
+    static LawProposition<DeclaredArgument> whereItHoldsSomething(ValueName operation) {
+        return facts().settled(operation, OperationLaw.Observed.of(AnswerAspect.EMPTINESS))
+                instanceof BoundOperationFacts.Settled.ByALaw(
+                        OperationLaw.Observation<DeclaredArgument>(
+                                AnswerAspect aspect, LawProposition<DeclaredArgument> holds),
+                        var _)
+                && aspect == AnswerAspect.EMPTINESS ? holds : null;
+    }
+
     /** What {@code operation} computes and where it answers it, or null where the table says
      * nothing of it. */
     static NumericResult<DeclaredArgument> numericResult(ValueName operation) {
@@ -479,7 +503,7 @@ final class DischargeRules {
     static boolean readsAsATerm(ValueName operation) {
         return answersANumberTakenOfItsArgument(operation) || builtOperations().contains(operation)
                 || carryingOperations().contains(operation) || isQuantifier(operation)
-                || NOT.equals(operation);
+                || denies(operation);
     }
 
     /** The one container {@code e} asks the size of, or null where it is not a size call over one

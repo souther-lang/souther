@@ -30,8 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest {
 
-    private static final WhyUnread OWED =
-            new WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step.A_CHOICE_BY_CASES);
+    private static final WhyUnread STOPPED = new WhyUnread.OutsideTheLinearFragment();
 
     private static final Derivation READ = new Derivation.ATruthOfASubject(
             new DecisionSubject.AnInput(TermPath.of("a")), true);
@@ -59,20 +58,20 @@ class AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest {
     }
 
     /**
-     * A step owed is an obligation until a rule takes it, and then what is stated is the rule's
-     * conclusion, derived by that rule.
+     * A part one rule stops at is unread until a rule takes it, and then what is stated is that
+     * rule's conclusion, derived by that rule.
      */
     @Test
-    void aStepOwedIsReadOnceARuleTakesIt() {
+    void aPartOneRuleStopsAtIsReadOnceARuleTakesIt() {
         List<String> met = new ArrayList<>();
         Derivation before = choose(
-                List.of(meeting(met, "owed", new Derivation.Stopped(OWED, false))), met);
+                List.of(meeting(met, "stopped", new Derivation.Stopped(STOPPED, false))), met);
         assertTrue(concluded(before) instanceof Proposition.Unread unread
-                && unread.why().equals(OWED), "the part is left unread, owed the step it is owed");
+                && unread.why().equals(STOPPED), "the part is left unread, for why it stopped");
 
         met.clear();
         Derivation after = choose(List.of(
-                meeting(met, "owed", new Derivation.Stopped(OWED, false)),
+                meeting(met, "stopped", new Derivation.Stopped(STOPPED, false)),
                 meeting(met, "read", READ)), met);
         assertSame(READ, after, "the rule that took it is the one it is derived by");
         assertEquals(new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("a")), true),
@@ -84,11 +83,11 @@ class AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest {
     @Test
     void whereNoRuleReadsAllOfItTheFirstThatTookItIsKept() {
         List<String> met = new ArrayList<>(List.of("before"));
-        Derivation first = new Derivation.Stopped(OWED, false);
+        Derivation first = new Derivation.Stopped(STOPPED, false);
         Derivation chosen = choose(List.of(
                 AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest::takingNothing,
                 meeting(met, "first", first),
-                meeting(met, "second", new Derivation.Stopped(OWED, true))), met);
+                meeting(met, "second", new Derivation.Stopped(STOPPED, true))), met);
         assertSame(first, chosen);
         assertEquals(List.of("before", "first"), met,
                 "what was met before the choice stays, and only the kept rule's parts join it");
@@ -111,7 +110,7 @@ class AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest {
     void aStopTheConclusionSettlesLeavesNothingUnread() {
         List<String> met = new ArrayList<>();
         Derivation settled = new Derivation.Joined(ConditionJoin.BOTH,
-                new Derivation.WrittenOut(false), new Derivation.Stopped(OWED, false));
+                new Derivation.WrittenOut(false), new Derivation.Stopped(STOPPED, false));
         Derivation chosen = choose(List.of(
                 meeting(met, "settled", settled), meeting(met, "read", READ)), met);
         assertSame(settled, chosen, "false beside anything is read in full");

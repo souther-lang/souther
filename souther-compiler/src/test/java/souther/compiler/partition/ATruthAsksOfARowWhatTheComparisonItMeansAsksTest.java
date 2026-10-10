@@ -13,10 +13,11 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
+import souther.compiler.numeric.Rel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.types.ValueName;
 
@@ -98,8 +99,8 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
             behavior emptyDenied : (o: Order) -> Bool
             let emptyDenied (o) = Bool.not(List.isEmpty(o.lines))
 
-            behavior keyAsked : (o: Order, m: Map<String, Int>, k: String) -> Bool
-            let keyAsked (o, m, k) = Map.containsKey(k, m)
+            behavior wordAsked : (o: Order, s: String) -> Bool
+            let wordAsked (o, s) = String.contains("x", s)
             """;
 
     /** Either way it comes out, an emptiness check asks what the size against nought asks. */
@@ -132,10 +133,11 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
     void aTruthThatMeansNoComparisonIsDeclined() {
         for (boolean holding : List.of(true, false)) {
             OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
-                    only("keyAsked", holding));
+                    only("wordAsked", holding));
             assertEquals(List.of(new WhyNotTaken.MeaningUnread(new WhyUnread.NoWordsFor(
-                    new ValueName.Stdlib.Operation("Map", "containsKey"), AnswerAspect.TRUTH,
-                    Unsayable.A_KEY_OF_A_MAP))),
+                    new ValueName.Stdlib.Operation("String", "contains"),
+                    OperationLaw.Observed.TRUTH,
+                    Unsayable.A_STRING_INSIDE_ANOTHER))),
                     declined.whys());
         }
     }
@@ -164,13 +166,17 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
         assertEquals(1, every.size(), () -> "every element, or none: " + every);
         RowDemand.ForAll each = assertInstanceOf(RowDemand.ForAll.class, every.getFirst(),
                 "what every element meets, which a list holding none does");
-        assertTrue(each.holdingNone().isPresent(), "with the list holding none as a way to it");
+        assertEquals(Rel.LE, assertInstanceOf(TakenConstraint.Affine.class,
+                        each.holdingNone().constraint()).rel(),
+                "with the list holding none as a way to it");
 
         List<RowDemand> some = demandsOf("someDear", true);
         assertEquals(1, some.size(), () -> "an element, with the container holding it: " + some);
         RowDemand.Exists element = assertInstanceOf(RowDemand.Exists.class, some.getFirst(),
                 "an element that meets the predicate");
-        assertTrue(element.holdingOne().isPresent(), "and the container holding at least one");
+        assertEquals(Rel.GE, assertInstanceOf(TakenConstraint.Affine.class,
+                        element.holdingOne().constraint()).rel(),
+                "and the container holding at least one");
         assertNotEquals(each.ofEachElement().getFirst(), element.ofAnElement().getFirst(),
                 "what some element meets is the predicate, and what every element meets when it"
                         + " fails is its denial");
@@ -178,17 +184,22 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
 
     /**
      * What every element has to meet is not narrowed on where it is about more than the element:
-     * an empty list meets it whatever the rest says. It is taken all the same, as a statement the
-     * run of a row decides, since nothing composes elements together with the number beside them.
-     * Where it is about nothing of the element at all, every element meeting it is it or the list
-     * holding none, which is one of two things — asked as its two alternatives.
+     * an empty list meets it whatever the rest says. It is composed as what every element meets,
+     * the number beside the element placed with it, and the list holding none is the other way
+     * to it. Where it is about nothing of the element at all, every element meeting it is it or
+     * the list holding none, which is one of two things — asked as its two alternatives.
      */
     @Test
     void everyElementMeetingWhatIsNotAboutTheElementIsNotNarrowedOn() {
         OnTheWay.TakenIn beside = assertInstanceOf(OnTheWay.TakenIn.class,
                 only("allAboveTheirFloor", true));
-        assertEquals(RowDemand.NoComposer.EVERY_ELEMENT_AND_MORE,
-                assertInstanceOf(RowDemand.ForTheRun.class, beside.demand()).why());
+        RowDemand.ForAll every = assertInstanceOf(RowDemand.ForAll.class, beside.demand(),
+                "what every element meets, with the number beside it");
+        assertTrue(every.positions().stream().anyMatch(each -> each.toString().equals("o.floor")),
+                () -> "the floor is placed with the element: " + every);
+        assertEquals(Rel.LE, assertInstanceOf(TakenConstraint.Affine.class,
+                        every.holdingNone().constraint()).rel(),
+                "and the list holding none is a way to it");
         OnTheWay.OneOf apart = assertInstanceOf(OnTheWay.OneOf.class,
                 only("allAboveTheFloor", true));
         assertEquals(2, apart.alternatives().size(),

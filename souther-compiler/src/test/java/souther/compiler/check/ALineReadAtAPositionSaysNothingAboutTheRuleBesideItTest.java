@@ -81,9 +81,9 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     void aClauseNoEndCameOutOfIsNamedAtEveryFieldItCompares() {
         FieldDomains read = readingOf(BARE, "Parcel");
 
-        assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()),
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                 reasonsAt(read, "length"));
-        assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()),
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                 reasonsAt(read, "width"));
     }
 
@@ -100,9 +100,9 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
         FieldDomains read = readingOf(MEASURED, "Parcel");
 
         assertFalse(read.placedAt(RuleKey.of("length")).isEmpty(), "`Cm` places an end here");
-        assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()),
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                 reasonsAt(read, "length"));
-        assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()),
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                 reasonsAt(read, "width"));
     }
 
@@ -330,8 +330,8 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant low < high
                 """, "Span");
 
-        assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()), reasonsAt(read, "low"));
-        assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()), reasonsAt(read, "high"));
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "low"));
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "high"));
     }
 
     /**
@@ -353,8 +353,8 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant x < y + 1
                 """, "Pair");
 
-        assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()), reasonsAt(read, "x"));
-        assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()), reasonsAt(read, "y"));
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "x"));
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "y"));
     }
 
     /**
@@ -380,9 +380,9 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                         invariant within = %s
                     """.formatted(clause), "Span");
 
-            assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()),
+            assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                     reasonsAt(read, "from"), clause);
-            assertEquals(List.of(new BlockReason.ComparisonBetweenPositions()),
+            assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                     reasonsAt(read, "to"), clause);
         }
     }

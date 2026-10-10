@@ -26,7 +26,7 @@ class AMembershipIsHeldToTheContainerItReadsTest {
 
     @Test
     void theOnesTheLanguageDeclaresAreHeld() {
-        BoundOperationFacts facts = OperationFactBinder.bindAll(DefaultStdlib.get());
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
         for (String library : List.of("List", "Set")) {
             ValueName contains = ValueName.Stdlib.operation(library, "contains");
             BoundOperationFacts.Settled.ByALaw law = assertInstanceOf(

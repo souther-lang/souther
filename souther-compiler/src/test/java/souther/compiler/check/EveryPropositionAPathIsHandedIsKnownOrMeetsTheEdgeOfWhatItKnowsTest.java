@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -48,15 +49,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
 
     /** Where what a path knows stops, and nothing of what a row is written in. */
-    private static final Set<WhyNotTaken.DomainLimit> A_PATHS_EDGES = EnumSet.of(
-            WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES,
-            WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ,
-            WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_CASES,
-            WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_SAMENESS_OF_VALUES,
-            WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER,
-            WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS,
-            WhyNotTaken.DomainLimit.A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN,
-            WhyNotTaken.DomainLimit.A_NUMBER_THE_PATH_CANNOT_HOLD);
+    private static final Set<WhyNotTaken.DomainLimit> A_PATHS_EDGES =
+            EnumSet.allOf(WhyNotTaken.DomainLimit.class).stream()
+                    .filter(each -> each.domain()
+                            == WhyNotTaken.DomainLimit.Domain.WHAT_A_PATH_KNOWS)
+                    .collect(Collectors.toCollection(
+                            () -> EnumSet.noneOf(WhyNotTaken.DomainLimit.class)));
 
     @Test
     void everyKindOfStatementHasASampleHere() {

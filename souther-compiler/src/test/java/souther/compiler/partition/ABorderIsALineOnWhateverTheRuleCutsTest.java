@@ -188,11 +188,12 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         assertTrue(report.contains("read as f/3 * a + 6 * b: = 51"), report);
         // And what it leaves the positions is said in the same words as well. A rule over a quantity
         // that is not one position's own values divides none of them, whoever wrote it.
-        assertTrue(report.contains(
-                "it relates two positions rather than dividing one, about `a`"), report);
+        String relating = "it relates the value here to another value rather than dividing the"
+                + " values here, about `a`";
+        assertTrue(report.contains(relating), report);
         assertTrue(report(guarded(
                         "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 48"))
-                        .contains("it relates two positions rather than dividing one, about `a`"),
+                        .contains(relating),
                 "a body's conditions say it the same way");
     }
 

@@ -143,7 +143,9 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
 
         assertEquals("complete", measured.status());
         assertEquals(List.of(), measured.weakening());
-        assertTrue(measured.says("it relates two positions rather than dividing one"),
+        assertTrue(measured.says(
+                        "it relates the value here to another value rather than dividing the"
+                                + " values here"),
                 measured.human());
         assertFalse(measured.kinds().contains("rule_unaccounted"), measured.kinds().toString());
     }

@@ -5,6 +5,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.core.KernelSignatures;
+import souther.compiler.core.TheWalk;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -190,6 +191,7 @@ public final class Stdlib {
      *  library rather than the declaration it would have to open to find out. */
     private final Map<ValueName.Stdlib.Operation, Intrinsic> kernelOperations;
     private final Map<ValueName.Stdlib.Operation, Hir.FnDef> helpers;
+    private final TheWalk walk;
     /** Every published name with how it is called. The names are its keys, so a name published
      *  with no signature cannot be held. */
     private final SequencedMap<String, PublishedSignature> surface;
@@ -227,6 +229,7 @@ public final class Stdlib {
         this.kernels = KernelSignatures.of(declared);
         this.kernelOperations = kernelOperations;
         this.helpers = helpers;
+        this.walk = TheWalksBody.readOff(THE_WALK, helpers.get(THE_WALK), AN_ELEMENT_AT_AN_INDEX);
         this.surface = surface;
         this.candidates = candidates;
         // Rendered here and not held rendered: resolution is given spellings and answers with
@@ -349,32 +352,20 @@ public final class Stdlib {
         return THE_WALK;
     }
 
+    /** What the walk does and where each of its arguments is, read off its body while the library
+     *  was built ({@link TheWalk}). */
+    public TheWalk walk() {
+        return walk;
+    }
+
     /** Which operation the walk is. Named where the library is described, so a library that
      *  published it under another alias is refused rather than silently lowered as a call. */
     private static final ValueName.Stdlib.Operation THE_WALK =
             ValueName.Stdlib.operation("List", "foldFrom");
 
-    /**
-     * The one operation this library publishes that states elements are distinct: that a list holds
-     * no two of them with the same key.
-     *
-     * <p>The one that states it, not the only one about distinctness — {@code distinct} and
-     * {@code distinctBy} build a list that is, and say nothing of the list they were given. An
-     * invariant is a clause, so what a backend can represent as a constraint is the claim, and this
-     * is the operation that makes it.
-     *
-     * <p>Here for the reason {@link #theWalk} is: it has a Souther body and so no kernel to ask
-     * about, and a pass spelling it out would be deciding what this library publishes it as.
-     *
-     * <p>That this library has it is checked while the library is built.
-     */
-    public ValueName.Stdlib.Operation theDistinctnessPredicate() {
-        return THE_DISTINCTNESS_PREDICATE;
-    }
-
-    /** Which operation states distinctness. Named beside the walk for the same reason. */
-    private static final ValueName.Stdlib.Operation THE_DISTINCTNESS_PREDICATE =
-            ValueName.Stdlib.operation("List", "allDistinctBy");
+    /** What the walk reads the element at an index with. */
+    private static final ValueName.Stdlib.Operation AN_ELEMENT_AT_AN_INDEX =
+            ValueName.Stdlib.operation("List", "get");
 
     /** What the language declares of its kernels, as the one value everything emitting a call to
      *  one reads. What a checked program carries across the boundary and what a backend derives its
@@ -595,12 +586,9 @@ public final class Stdlib {
             Map<String, ValueName.Stdlib.Operation> named = new LinkedHashMap<>(operations);
             SUGARED.forEach(sugar -> named.put(sugar.written().qualified(), sugar.written()));
             SequencedMap<String, PublishedSignature> surface = surface(sugars);
-            for (ValueName.Stdlib.Operation ascribed
-                    : List.of(THE_WALK, THE_DISTINCTNESS_PREDICATE)) {
-                if (!helpers.containsKey(ascribed)) {
-                    throw new IllegalStateException("a library publishes `" + ascribed
-                            + "` as a body of its own, and this one publishes no such body");
-                }
+            if (!helpers.containsKey(THE_WALK)) {
+                throw new IllegalStateException("a library publishes `" + THE_WALK
+                        + "` as a body of its own, and this one publishes no such body");
             }
             return new Stdlib(
                     Collections.unmodifiableSequencedMap(new LinkedHashMap<>(entries)),

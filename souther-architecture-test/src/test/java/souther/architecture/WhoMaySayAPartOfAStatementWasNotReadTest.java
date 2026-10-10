@@ -40,17 +40,13 @@ class WhoMaySayAPartOfAStatementWasNotReadTest {
      * The reading, and only the reading.
      *
      * <p>What a body's conditions state is read in {@code Pullback} and filed by
-     * {@code MeaningsOfABodyReading}; a site nothing was filed at, or two readings of one site that
-     * disagree, is said by {@code MeaningsOfABody}; what a called body answers at a call is moved by
-     * {@code MovedToACall}; and a behavior reaching itself while its answer is read is answered by
-     * the query that reads it ({@code Adequacy}).
+     * {@code MeaningsOfABodyReading}; and a site nothing was filed at, or two readings of one site
+     * that disagree, is said by {@code MeaningsOfABody}.
      */
     private static final List<String> THE_READING = List.of(
             "souther/compiler/meaning/MeaningsOfABody",
-            "souther/compiler/meaning/MovedToACall",
             "souther/compiler/partition/MeaningsOfABodyReading",
-            "souther/compiler/partition/Pullback",
-            "souther/compiler/query/Adequacy");
+            "souther/compiler/partition/Pullback");
 
     @Test
     void onlyTheReadingSaysAPartWasNotRead() {

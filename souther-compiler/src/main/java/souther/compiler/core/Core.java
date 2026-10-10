@@ -1161,9 +1161,9 @@ public sealed interface Core {
          * emitter and by whatever asks which classes an emitted call names, so the two do not come to
          * disagree about which of the three a function is.
          *
-         * @param theWalk what the standard library's one loop is called
+         * @param theWalk the standard library's one loop
          */
-        public FunctionArgument functionArgument(int index, ValueName theWalk) {
+        public FunctionArgument functionArgument(int index, TheWalk theWalk) {
             if (!(args.get(index).type() instanceof Type.FnOf fnType)) {
                 throw new IllegalArgumentException("argument " + index + " of `" + fn.rendered()
                         + "` is not a function");
@@ -1185,11 +1185,15 @@ public sealed interface Core {
          * made for it, and no method is called, so nothing comes back to be cast to the type the
          * call answers.
          *
-         * @param theWalk what the standard library's one loop is called
+         * <p>A walk is run as the loop only where it takes its arguments in the loop's order
+         * ({@link TheWalk#inTheLoopsOrder}), which is the order this reads them in.
+         *
+         * @param theWalk the standard library's one loop
          */
-        public Block stepRunWhereItStands(ValueName theWalk) {
+        public Block stepRunWhereItStands(TheWalk theWalk) {
             boolean walks = fn == Emitted.BUILD_LIST || fn == Emitted.BUILD_MAP
-                    || (fn instanceof Reached reached && theWalk.equals(reached.denotes())
+                    || (fn instanceof Reached reached
+                    && theWalk.operation().equals(reached.denotes()) && theWalk.inTheLoopsOrder()
                     && args.size() > 3 && withoutStanding(args.get(3)) instanceof Int from
                     && from.value() == 0);
             return walks ? runsWhereItStands(args.get(0)) : null;

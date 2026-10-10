@@ -254,7 +254,7 @@ public final class UnreadComparison {
             // writing down what it found, which is a fact about how the rule was written and about
             // nothing the carrier holds.
             case Quantity.NoRatioHolds<K> _ -> new BlockReason.LineAtANumberNoRatioHolds();
-            case Quantity.OverSeveral<K> _ -> new BlockReason.ComparisonBetweenPositions();
+            case Quantity.OverSeveral<K> _ -> new BlockReason.ComparisonRelatingTwoValues();
             // A line on one position that the caller's own reading placed nowhere: that reading
             // stopped, and what it stopped on is the position. The carrier says which limit — a
             // position nothing draws a line on wants the carrier, and one lines are drawn on all

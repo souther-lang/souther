@@ -131,6 +131,30 @@ public final class AffineForms {
         java.util.List<ReadThrough<E>> alternativesOf(Core.Read read, E at);
 
         /**
+         * The value the environment takes {@code node} as — the answer of the arm a reading is on,
+         * where it is a choice; the body a reading entered, where it is a call — or null where it
+         * takes it as nothing else.
+         *
+         * <p>The environment's answer and not a rule here, for the reason a name's is: this walk
+         * chooses nothing and calls nothing. A caller reading something once for each arm of a
+         * choice inside it, or reading a call through what it calls, hands this walk an environment
+         * that says so, and the node is then one value, as a name the environment reads through is.
+         */
+        default ReadThrough<E> taken(Core node, E at) {
+            return null;
+        }
+
+        /**
+         * The form of the values it was given the environment takes the call {@code node} as —
+         * what the case of an operation's definition a reading is on answers — or null where it
+         * takes it as none. The call is then that arithmetic over what it was given, as an
+         * operation the library says answers a form of its arguments is.
+         */
+        default LinearForm<Core> takenAsAForm(Core node, E at) {
+            return null;
+        }
+
+        /**
          * Whether a field access is a newtype's value read off something that is not a place.
          *
          * <p>What it wraps is what it is, so such a read is the target itself. Whether the target is
@@ -330,6 +354,11 @@ public final class AffineForms {
      */
     private static <A, E> Outcome<A, E> of(Core raw, E at, Reading<A, E> reading,
                                            Walk<A, E> following) {
+        // A value the environment takes as another is that value, read where it is.
+        ReadThrough<E> taken = reading.taken(raw, at);
+        if (taken != null) {
+            return of(taken.value(), taken.at(), reading, following);
+        }
         Core e = Terms.asOperator(raw);
         // Where the reading stopped inside what this walk does compose, kept while the questions
         // below are still asked. A name over an expression nothing reads is still a name the caller
@@ -524,6 +553,16 @@ public final class AffineForms {
         }
 
         @Override
+        public ReadThrough<E> taken(Core node, E at) {
+            return of.taken(node, at);
+        }
+
+        @Override
+        public LinearForm<Core> takenAsAForm(Core node, E at) {
+            return of.takenAsAForm(node, at);
+        }
+
+        @Override
         public boolean readsThrough(Core.FieldAccess fa, E at) {
             return of.readsThrough(fa, at);
         }
@@ -547,7 +586,9 @@ public final class AffineForms {
      * plurality and there is no rule here for one, which is what keeps a rule about
      * {@code Big { threshold = 100000 }} from being answered for a position where a second
      * construction can stand as well. That boundary is the absence of a rule and not a refusal, so
-     * nothing has to be kept in step with it.
+     * nothing has to be kept in step with it. Where the environment says which arm a reading is on
+     * ({@link Reading#taken}), the choice is that arm's answer, as a name it reads through is the
+     * value it was given: the environment chose, and this follows.
      *
      * <p><b>Closed under its own eliminations.</b> A projection resolves through whatever the target
      * resolves to, so a construction inside a construction is reached the same way a construction
@@ -625,7 +666,11 @@ public final class AffineForms {
                 }
                 yield each;
             }
-            default -> java.util.List.of(new Standing<>(e, at, reading));
+            default -> {
+                ReadThrough<E> taken = reading.taken(e, at);
+                yield taken == null ? List.of(new Standing<>(e, at, reading))
+                        : standing(taken.value(), taken.at(), reading, following);
+            }
         };
     }
 
@@ -821,10 +866,15 @@ public final class AffineForms {
             // operators, because that is what such an operation is — read at either caller's leaf
             // instead, one of the two would have it and a statement the model makes would be
             // measured by one reader and not the other.
+            // And a call the environment takes as what a case of its operation's definition
+            // answers is that arithmetic over the values it was given, on the reading that is on
+            // the case.
+            case Core.PreservedCall _ when reading.takenAsAForm(e, at) != null ->
+                    overTheValues(e, reading.takenAsAForm(e, at), at, reading, following, stopped);
             case Core.PreservedCall _ when formSaidOf(e) != null ->
-                    answered(e, at, reading, following, stopped);
+                    answered(e, formSaidOf(e), at, reading, following, stopped);
             case Core.Call _ when formSaidOf(e) != null ->
-                    answered(e, at, reading, following, stopped);
+                    answered(e, formSaidOf(e), at, reading, following, stopped);
             // A newtype's construction is the value it wraps. Whether the name is one is asked of
             // the reading of the position, which says the names a value is written under: a
             // newtype puts one there and a data of one field does not — that one wraps its value
@@ -994,17 +1044,43 @@ public final class AffineForms {
     }
 
     /**
-     * {@code call} read as the form the library says it answers, or null where one of the arguments
-     * it is written over does not compose.
+     * {@code call} read as {@code says}, a form of the values it was given — what the case of its
+     * operation's definition a reading is on answers — or null where one of those values does not
+     * compose. A stop is recorded at the call, for the reason {@link #answered} gives.
+     */
+    private static <A, E> LinearForm<A> overTheValues(Core call, LinearForm<Core> says, E at,
+                                                      Reading<A, E> reading, Walk<A, E> following,
+                                                      Stop<A, E> stopped) {
+        Stop<A, E> inside = new Stop<>();
+        LinearForm<A> form = LinearForm.constant(says.constant());
+        for (Map.Entry<Core, ExactRatio> each : says.coefs().entrySet()) {
+            LinearForm<A> value = formOf(each.getKey(), at, reading, following, inside);
+            if (value == null) {
+                return halted(call, at, new Halt.AnArgumentStopped<>(inside.at), stopped);
+            }
+            LinearForm<A> before = form;
+            switch (value.times(each.getValue()).flatMap(before::plus)) {
+                case ExactAnswer.Held<LinearForm<A>>(LinearForm<A> held) -> form = held;
+                case ExactAnswer.Unheld<LinearForm<A>>(UnheldNumber why) -> {
+                    return halted(call, at, new Halt.NotHeld<>(why), stopped);
+                }
+            }
+        }
+        return form;
+    }
+
+    /**
+     * {@code call} read as {@code says}, the form of its arguments the library says it answers,
+     * or null where one of the arguments it is written over does not compose.
      *
      * <p>Over what each argument is counted as, which is the form that argument itself reads as
      * here. So a shift of a position by a written number and a shift of one position by another are
      * one rule with two readings, and neither is a case anybody wrote.
      */
-    private static <A, E> LinearForm<A> answered(Core call, E at, Reading<A, E> reading,
+    private static <A, E> LinearForm<A> answered(Core call, LinearForm<DeclaredArgument> says,
+                                                 E at, Reading<A, E> reading,
                                                  Walk<A, E> following,
                                                  Stop<A, E> stopped) {
-        LinearForm<DeclaredArgument> says = formSaidOf(call);
         java.util.List<Core> args = Terms.argsOf(call);
         // The expansion's own stops, kept off the walk's. What is inside a declared form is not
         // what an author wrote: the arguments stand where they stand because the library says the

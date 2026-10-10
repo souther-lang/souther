@@ -36,6 +36,10 @@ enum TypeRequirement {
     /** A construction holding elements a rule can speak of ({@link Type#elementOfAContainer}). */
     CONTAINER("a container"),
 
+    /** A value holding some number of things, which a bound on how many it holds is about: a
+     *  container, or a string and its characters. */
+    SIZED("something holding a number of things"),
+
     /** A container that files what it holds under keys ({@link Type#keyOf}): a map. */
     KEYED("a map"),
 
@@ -65,6 +69,7 @@ enum TypeRequirement {
             case NUMBER -> NumericAnswers.isANumber(type);
             case COUNTED -> Carrier.countsToANumber(type);
             case CONTAINER -> Type.elementOfAContainer(type) != null;
+            case SIZED -> Type.STRING.equals(type) || Type.elementOfAContainer(type) != null;
             case KEYED -> Type.keyOf(type) != null;
             case CLOSURE -> type instanceof Type.FnOf;
             case ANY -> true;

@@ -299,16 +299,16 @@ class ALineDrawnOnASharedNameFallsUnderEachCaseTest {
     }
 
     /**
-     * A line neither of whose names was filed stays where the model wrote it.
+     * A line on a name the cases share falls under each case past where the reading stops
+     * unfolding a sum, as it does at the top.
      *
-     * <p>Nothing to move it to, and the two ways of that are one answer about the line: a name
-     * already at a position of this reading, and one the reading stopped before reaching. So the
-     * line is drawn once, at the name as written — and where that is a name no row is written at,
-     * the generator is what says it could not build a value there. Which of the two it was is what
-     * the reading says where it stopped, and is not something the number of lines answers.
+     * <p>A sum reached again inside one of its own cases is not unfolded further, and the reading
+     * still goes on along the places a condition names. So a line on the shared field of the inner
+     * one is drawn under each of its cases — the positions a row writes — and none is left at the
+     * name as written.
      */
     @Test
-    void aLineNeitherOfWhoseNamesWasFiledStaysWhereItWasWritten() throws Exception {
+    void aLineOnASharedNamePastWhereASumStopsUnfoldingFallsUnderEachCase() throws Exception {
         String report = report("""
                 module example.line
 
@@ -332,18 +332,14 @@ class ALineDrawnOnASharedNameFallsUnderEachCaseTest {
                           }
                 """);
 
-        assertTrue(report.contains("borders 1"),
-                () -> "one line, not one per case of a sum nothing was filed under:\n" + report);
-        assertTrue(report.contains("read as read/o.q@B.q.limit:"),
-                () -> "and it is at the name the model wrote, which is where it was measured:\n"
-                        + report);
-        assertFalse(report.contains("read/o.q@B.q@A.limit"),
-                () -> "the reading stopped before the cases, so nothing was filed under them:\n"
-                        + report);
-        assertTrue(report.contains("nothing here could build a representative for o.q@B.q.limit"),
-                () -> "and the generator is what says nothing can be written there:\n" + report);
-        assertFalse(report.contains("how those positions pair up is not worked out"),
-                () -> "nothing was filed, so no pairing was ever in question:\n" + report);
+        assertTrue(report.contains("borders 2"), () -> "one line per case:\n" + report);
+        assertTrue(report.contains("read as read/o.q@B.q@A.limit:")
+                        && report.contains("read as read/o.q@B.q@B.limit:"),
+                () -> "under each case of the inner sum:\n" + report);
+        assertFalse(report.contains("read/o.q@B.q.limit"),
+                () -> "and none at the name as written:\n" + report);
+        assertFalse(report.contains("nothing here could build a representative for o.q@B.q.limit"),
+                () -> "so nothing is asked to be written where no row writes:\n" + report);
     }
 
     /**

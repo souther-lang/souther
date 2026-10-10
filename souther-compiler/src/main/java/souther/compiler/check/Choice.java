@@ -3,10 +3,14 @@ package souther.compiler.check;
 import souther.compiler.semantics.ArgumentsStand;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A value that is one of several: which several, and what decides each one.
@@ -80,6 +84,21 @@ public record Choice(Kind kind, List<Arm> arms) {
 
     /** One value a choice may answer, and the node that decides it is the one. */
     public record Arm(Core answers, Decides decidedBy) {}
+
+    /**
+     * One case of the definition an operation is written in, in the values a call of it was
+     * given: the arithmetic over them it answers, and how they stand for it to be reached. Lowered
+     * out of the table's own way of naming an argument, as an arm is.
+     */
+    public record ADefinitionCase(LinearForm<Core> answers, List<FormsStand> given) {
+
+        public ADefinitionCase {
+            given = List.copyOf(given);
+        }
+    }
+
+    /** Two forms of the values a call was given standing in a relation: {@code left rel right}. */
+    public record FormsStand(LinearForm<Core> left, Rel rel, LinearForm<Core> right) {}
 
     /** Two values standing in a relation, as the values themselves. What a case of a library
      * definition is reached under, lowered out of the table's own way of naming an argument: a
@@ -227,6 +246,36 @@ public record Choice(Kind kind, List<Arm> arms) {
     }
 
     /**
+     * The cases {@code call}'s operation is defined in, in the values the call was given — or an
+     * empty list where it is defined in none.
+     *
+     * <p>Every case of the definition, whatever it answers: where each is one of the values and
+     * chosen by how two of them stand, the same cases are the arms of the choice the call is
+     * ({@link #of}), and a reader taking the call as that choice does not read them here as well.
+     */
+    public static List<ADefinitionCase> casesOf(Core.PreservedCall call) {
+        List<ADefinitionCase> out = new ArrayList<>();
+        for (DefinitionCase<DeclaredArgument> one : DischargeRules.chosenBy(call)) {
+            List<FormsStand> given = new ArrayList<>(one.given().size());
+            for (ArgumentsStand<DeclaredArgument> stands : one.given()) {
+                given.add(new FormsStand(atTheCall(stands.left(), call), stands.rel(),
+                        atTheCall(stands.right(), call)));
+            }
+            out.add(new ADefinitionCase(atTheCall(one.answers(), call), given));
+        }
+        return out;
+    }
+
+    /** {@code form}, each argument it names written as the value {@code call} was given there. */
+    private static LinearForm<Core> atTheCall(LinearForm<DeclaredArgument> form,
+                                              Core.PreservedCall call) {
+        Map<Core, ExactRatio> values = new LinkedHashMap<>();
+        form.coefs().forEach((argument, weight) ->
+                values.put(CallArguments.of(argument, call), weight));
+        return new LinearForm<>(form.constant(), values);
+    }
+
+    /**
      * The cases {@code call}'s operation is defined in, as arms, or null where it is defined in none.
      *
      * <p>The table is read through once, here, and what comes out of it is written in the values the
@@ -239,14 +288,24 @@ public record Choice(Kind kind, List<Arm> arms) {
         if (defined.isEmpty()) {
             return null;
         }
+        // An arm is one of the values the call was given, chosen by how two of them stand. A case
+        // answering arithmetic over them, or reached by one standing against a constant, is no
+        // value written at the call, and an operation written in such cases is no choice between
+        // its arguments: it is read case by case where it is read at all.
+        if (!defined.stream().allMatch(DefinitionCase::choosesAnArgument)) {
+            return null;
+        }
         List<Arm> arms = new ArrayList<>(defined.size());
         for (DefinitionCase<DeclaredArgument> one : defined) {
             List<ArgumentRelation> relations = new ArrayList<>(one.given().size());
             for (ArgumentsStand<DeclaredArgument> stands : one.given()) {
-                relations.add(new ArgumentRelation(CallArguments.of(stands.left(), call), stands.rel(),
-                        CallArguments.of(stands.right(), call)));
+                relations.add(new ArgumentRelation(
+                        CallArguments.of(ArgumentsStand.theArgument(stands.left()), call),
+                        stands.rel(),
+                        CallArguments.of(ArgumentsStand.theArgument(stands.right()), call)));
             }
-            arms.add(new Arm(CallArguments.of(one.answers(), call), new Decides.ByArgumentRelations(relations)));
+            arms.add(new Arm(CallArguments.of(ArgumentsStand.theArgument(one.answers()), call),
+                    new Decides.ByArgumentRelations(relations)));
         }
         return new Choice(Kind.THE_ARGUMENTS, arms);
     }

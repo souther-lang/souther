@@ -152,6 +152,36 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
     }
 
     /**
+     * A filter's closure is handed every element and answers whether to keep it, and what the
+     * filter holds is the elements kept: an element of it is the element, and not what the closure
+     * answered on it. The outer comparison draws its line on the element as it stands, beside the
+     * line the inner filter draws.
+     */
+    @Test
+    void anElementAFilterKeptIsNoStep() {
+        assertEquals(List.of("cs[*] = 0", "cs[*] = atLeast"), linesOf("""
+                behavior busy : (cs: List<Int>, atLeast: Int) -> List<Int>
+                let busy (cs, atLeast) =
+                    List.filter(c -> c >= atLeast, List.filter(x -> x > 0, cs))
+                """));
+    }
+
+    /**
+     * A map updated under one key holds the closure's answer on the value there and the values that
+     * were there everywhere else, so a value of it is no step on the value it came from: the closure
+     * is applied to one value at most, and no line is drawn as though it were applied to each.
+     */
+    @Test
+    void aValueOfAMapUpdatedUnderOneKeyIsNoStep() {
+        assertEquals(List.of(), linesOf("""
+                behavior busy : (m: Map<String, Int>, atLeast: Int) -> Map<String, Int>
+                let busy (m, atLeast) =
+                    Map.filterEntries((_, count) -> count >= atLeast,
+                        Map.updateIfPresent("a", v -> v + 1, m))
+                """));
+    }
+
+    /**
      * A count a fold worked out is no step on an element of the list folded, and where it came from
      * is not said here: the position it is compared with keeps its own word and is told nothing
      * about a value made from it.

@@ -57,6 +57,15 @@ public final class OperationFacts {
     /** The closure the signature says is handed the container's elements. */
     private static final ArgumentRef CLOSURE = new ArgumentRef.TheClosure();
 
+    /** All of what a walk carries, inside what a lemma states of it. */
+    private static final ArgumentRef CARRIED = new ArgumentRef.Carried(List.of());
+
+    /** The part of the list a walk has walked so far, inside what a lemma states of it. */
+    private static final ArgumentRef WALKED = new ArgumentRef.Walked();
+
+    /** Any value at all, inside a statement that holds of every one. */
+    private static final ArgumentRef ANY = new ArgumentRef.Every(0);
+
     /**
      * Everything declared here.
      *
@@ -216,6 +225,9 @@ public final class OperationFacts {
             about("List", "sort", keeps(at(0), SizeAgainstItsSource.SAME)),
             about("List", "sortBy", keeps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("List", "map", maps(CONTAINER, SizeAgainstItsSource.SAME)),
+            // And in the order of the list it was handed, which is what a reader writing the
+            // answer out itself takes.
+            about("List", "map", new OperationFact.KeepsTheOrderOf(CONTAINER)),
             about("List", "mapIndexed", maps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("Map", "mapValues", maps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("List", "filter", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
@@ -231,6 +243,10 @@ public final class OperationFacts {
             about("Map", "difference", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
             about("Set", "intersection", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
             about("Set", "difference", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
+            // And the two that put one value in what they are handed: a set holds it once, and a
+            // map holds it under the key, in place of what was there.
+            about("Set", "insert", putsIn(at(0), at(1))),
+            about("Map", "insert", putsIn(at(1), at(2))),
             // Every value in the answer came from the map it was given: the one under the key is
             // what the closure made of it, and every other is the value that was there. Read as a
             // closure result alone, what is true of one value would be said of all of them.
@@ -275,36 +291,131 @@ public final class OperationFacts {
             // held something; `any` is true where some element's answer is, and `all` where none
             // is false. That a filter answers at most as many as it walked is the size fact above;
             // that an element kept is one the closure held of is this.
-            about("List", "filter", law(AnswerAspect.EMPTINESS, some(CONTAINER, answers(true)))),
-            about("Set", "filter", law(AnswerAspect.EMPTINESS, some(CONTAINER, answers(true)))),
-            about("Map", "filterEntries",
-                    law(AnswerAspect.EMPTINESS, some(CONTAINER, answers(true)))),
-            about("List", "filterMap", law(AnswerAspect.EMPTINESS, some(CONTAINER,
-                    closureAnswers(AnswerAspect.PRESENCE)))),
-            about("List", "flatMap", law(AnswerAspect.EMPTINESS, some(CONTAINER,
-                    closureAnswers(AnswerAspect.EMPTINESS)))),
-            about("List", "any", law(AnswerAspect.TRUTH, some(CONTAINER, answers(true)))),
-            about("List", "all", law(AnswerAspect.TRUTH, some(CONTAINER, answers(false)).denied())),
+            //
+            // Each of these walks, so each is a lemma stated with what its walk carries at every
+            // step: what it has kept so far holds something exactly where some element walked so
+            // far was kept, and as many as were.
+            about("List", "filter", lemma(law(AnswerAspect.EMPTINESS,
+                    some(CONTAINER, answers(true))),
+                    iff(holdsSomething(CARRIED), some(WALKED, answers(true))))),
+            about("Set", "filter", lemma(law(AnswerAspect.EMPTINESS,
+                    some(CONTAINER, answers(true))),
+                    iff(holdsSomething(CARRIED), some(WALKED, answers(true))))),
+            about("Map", "filterEntries", lemma(law(AnswerAspect.EMPTINESS,
+                    some(CONTAINER, answers(true))),
+                    iff(holdsSomething(CARRIED), some(WALKED, answers(true))))),
+            about("List", "filterMap", lemma(law(AnswerAspect.EMPTINESS, some(CONTAINER,
+                    closureAnswers(AnswerAspect.PRESENCE))),
+                    iff(holdsSomething(CARRIED),
+                            some(WALKED, closureAnswers(AnswerAspect.PRESENCE))))),
+            about("List", "flatMap", lemma(law(AnswerAspect.EMPTINESS, some(CONTAINER,
+                    closureAnswers(AnswerAspect.EMPTINESS))),
+                    iff(holdsSomething(CARRIED),
+                            some(WALKED, closureAnswers(AnswerAspect.EMPTINESS))))),
+            about("List", "any", lemma(law(AnswerAspect.TRUTH, some(CONTAINER, answers(true))),
+                    iff(isTrue(the(CARRIED)), some(WALKED, answers(true))))),
+            about("List", "all", lemma(law(AnswerAspect.TRUTH,
+                    some(CONTAINER, answers(false)).denied()),
+                    iff(isTrue(the(CARRIED)), some(WALKED, answers(false)).denied()))),
             about("List", "find", law(AnswerAspect.PRESENCE, some(CONTAINER, answers(true)))),
-            // And how many a filter keeps: as many elements as its closure holds of.
-            about("List", "filter", size(howManyMeet(CONTAINER, answers(true)))),
-            about("Set", "filter", size(howManyMeet(CONTAINER, answers(true)))),
-            about("Map", "filterEntries", size(howManyMeet(CONTAINER, answers(true)))),
-            about("List", "filterMap", size(howManyMeet(CONTAINER,
-                    closureAnswers(AnswerAspect.PRESENCE)))),
-            about("List", "append", size(sizeOf(at(0)), sizeOf(at(1)))),
+            // And how many a filter keeps: as many elements as its closure holds of. A set's or a
+            // map's filter puts each kept one in, and one put in is one more only where it was
+            // not there: no element of a set is walked twice, and no key of a map, so what was
+            // kept so far holds exactly the walked elements kept, each once.
+            about("List", "filter", lemma(size(howManyMeet(CONTAINER, answers(true))),
+                    equal(sizeOf(the(CARRIED)), howManyMeet(WALKED, answers(true)), 0))),
+            about("Set", "filter", lemma(size(howManyMeet(CONTAINER, answers(true))),
+                    equal(sizeOf(the(CARRIED)), howManyMeet(WALKED, answers(true)), 0),
+                    iff(isTrue(answerOf("Set", "contains", the(ANY), the(CARRIED))),
+                            some(WALKED, all(alike(new LawSubject.ElementOf<>(WALKED), the(ANY)),
+                                    answers(true)))))),
+            about("Map", "filterEntries", lemma(size(howManyMeet(CONTAINER, answers(true))),
+                    equal(sizeOf(the(CARRIED)), howManyMeet(WALKED, answers(true)), 0),
+                    iff(isTrue(answerOf("Map", "containsKey", the(ANY), the(CARRIED))),
+                            some(WALKED, all(alike(new LawSubject.KeyOf<>(WALKED), the(ANY)),
+                                    answers(true)))))),
+            about("List", "filterMap", lemma(size(howManyMeet(CONTAINER,
+                    closureAnswers(AnswerAspect.PRESENCE))),
+                    equal(sizeOf(the(CARRIED)),
+                            howManyMeet(WALKED, closureAnswers(AnswerAspect.PRESENCE)), 0))),
+            about("List", "append", lemma(size(sizeOf(at(0)), sizeOf(at(1))))),
 
             // What it was handed holding anything, where its size is not its source's: a set
             // made of a list or of what a closure answered holds one of each repeated value, a
             // distinct list one of each, a grouping one key per value it was keyed by.
-            about("Set", "map", law(AnswerAspect.EMPTINESS, holdsSomething(CONTAINER))),
+            about("Set", "map", lemma(law(AnswerAspect.EMPTINESS, holdsSomething(CONTAINER)),
+                    iff(holdsSomething(CARRIED), holdsSomething(WALKED)))),
             about("Set", "fromList", law(AnswerAspect.EMPTINESS, holdsSomething(at(0)))),
             about("Set", "toList", law(AnswerAspect.EMPTINESS, holdsSomething(at(0)))),
             about("Map", "fromList", law(AnswerAspect.EMPTINESS, holdsSomething(at(0)))),
-            about("List", "distinct", law(AnswerAspect.EMPTINESS, holdsSomething(at(0)))),
-            about("List", "distinctBy", law(AnswerAspect.EMPTINESS, holdsSomething(CONTAINER))),
-            about("List", "groupBy", law(AnswerAspect.EMPTINESS, holdsSomething(CONTAINER))),
-            about("List", "indexBy", law(AnswerAspect.EMPTINESS, holdsSomething(CONTAINER))),
+            // And how many: one for each different value the elements come to, or each different
+            // key they are filed under. Built a value at a time, what is built holds a value
+            // exactly where the walk met it so far, and one more than before exactly where the
+            // value it puts in was not there yet — which is one more different value walked.
+            about("Set", "fromList", size(different(at(0), new LawSubject.ElementOf<>(at(0))))),
+            about("Map", "fromList", size(different(at(0), new LawSubject.KeyOf<>(at(0))))),
+            about("List", "distinct", lemma(size(different(at(0),
+                            new LawSubject.ElementOf<>(at(0)))),
+                    equal(sizeOf(carried(1)), sizeOf(carried(0)), 0),
+                    iff(isTrue(answerOf("Set", "contains", the(ANY), the(carried(0)))),
+                            some(WALKED, alike(new LawSubject.ElementOf<>(WALKED), the(ANY)))),
+                    equal(sizeOf(carried(0)), different(WALKED,
+                            new LawSubject.ElementOf<>(WALKED)), 0))),
+            about("List", "distinctBy", lemma(size(different(CONTAINER, keyed())),
+                    equal(sizeOf(carried(1)), sizeOf(carried(0)), 0),
+                    iff(isTrue(answerOf("Set", "contains", the(ANY), the(carried(0)))),
+                            some(WALKED, alike(keyed(), the(ANY)))),
+                    equal(sizeOf(carried(0)), different(WALKED, keyed()), 0))),
+            about("List", "groupBy", lemma(size(different(CONTAINER, keyed())),
+                    iff(isTrue(answerOf("Map", "containsKey", the(ANY), the(CARRIED))),
+                            some(WALKED, alike(keyed(), the(ANY)))),
+                    equal(sizeOf(CARRIED), different(WALKED, keyed()), 0))),
+            about("List", "indexBy", lemma(size(different(CONTAINER, keyed())),
+                    iff(isTrue(answerOf("Map", "containsKey", the(ANY), the(CARRIED))),
+                            some(WALKED, alike(keyed(), the(ANY)))),
+                    equal(sizeOf(CARRIED), different(WALKED, keyed()), 0))),
+            about("Set", "map", lemma(size(different(CONTAINER, keyed())),
+                    iff(isTrue(answerOf("Set", "contains", the(ANY), the(CARRIED))),
+                            some(WALKED, alike(keyed(), the(ANY)))),
+                    equal(sizeOf(CARRIED), different(WALKED, keyed()), 0))),
+            about("List", "distinct", lemma(law(AnswerAspect.EMPTINESS, holdsSomething(at(0))),
+                    iff(holdsSomething(carried(0)), holdsSomething(WALKED)),
+                    iff(holdsSomething(carried(1)), holdsSomething(WALKED)))),
+            about("List", "distinctBy", lemma(law(AnswerAspect.EMPTINESS,
+                    holdsSomething(CONTAINER)),
+                    iff(holdsSomething(carried(0)), holdsSomething(WALKED)),
+                    iff(holdsSomething(carried(1)), holdsSomething(WALKED)))),
+            about("List", "groupBy", lemma(law(AnswerAspect.EMPTINESS, holdsSomething(CONTAINER)),
+                    iff(holdsSomething(CARRIED), holdsSomething(WALKED)))),
+            about("List", "indexBy", lemma(law(AnswerAspect.EMPTINESS, holdsSomething(CONTAINER)),
+                    iff(holdsSomething(CARRIED), holdsSomething(WALKED)))),
+            // What a map is built as one value under each key of: as many as the map it walks,
+            // holding something where that one does, and keyed by its keys at every step.
+            about("List", "map", lemma(law(AnswerAspect.EMPTINESS, holdsSomething(CONTAINER)),
+                    iff(holdsSomething(CARRIED), holdsSomething(WALKED)))),
+            about("List", "map", lemma(size(sizeOf(CONTAINER)),
+                    equal(sizeOf(the(CARRIED)), sizeOf(WALKED), 0))),
+            about("List", "mapIndexed", lemma(law(AnswerAspect.EMPTINESS,
+                    holdsSomething(CONTAINER)),
+                    equal(number(carried(0)), sizeOf(WALKED), 0),
+                    iff(holdsSomething(carried(1)), holdsSomething(WALKED)))),
+            about("List", "mapIndexed", lemma(size(sizeOf(CONTAINER)),
+                    equal(number(carried(0)), sizeOf(WALKED), 0),
+                    equal(sizeOf(the(carried(1))), sizeOf(WALKED), 0))),
+            about("Map", "mapValues", lemma(law(AnswerAspect.EMPTINESS, holdsSomething(CONTAINER)),
+                    iff(holdsSomething(CARRIED), holdsSomething(WALKED)))),
+            about("Map", "mapValues", lemma(size(sizeOf(CONTAINER)),
+                    equal(sizeOf(the(CARRIED)), sizeOf(WALKED), 0),
+                    iff(isTrue(answerOf("Map", "containsKey", the(ANY), the(CARRIED))),
+                            some(WALKED, alike(new LawSubject.KeyOf<>(WALKED), the(ANY)))))),
+            about("Map", "updateIfPresent", lemma(law(AnswerAspect.EMPTINESS,
+                    holdsSomething(CONTAINER)))),
+            about("Map", "updateIfPresent", lemma(size(sizeOf(CONTAINER)))),
+            // An emptiness check written as a size of nought.
+            about("List", "isEmpty", lemma(law(AnswerAspect.TRUTH,
+                    holdsSomething(at(0)).denied()))),
+            about("String", "isEmpty", lemma(law(AnswerAspect.TRUTH,
+                    holdsSomething(at(0)).denied()))),
             // A string's case and order change which characters it holds and never whether it
             // holds any; how many it holds is another matter, since a case mapping can widen one
             // character to several.
@@ -320,20 +431,63 @@ public final class OperationFacts {
             about("List", "min", law(AnswerAspect.PRESENCE, holdsSomething(at(0)))),
 
             // Two of them, either or both.
-            about("List", "append", law(AnswerAspect.EMPTINESS,
-                    any(holdsSomething(at(0)), holdsSomething(at(1))))),
+            about("List", "append", lemma(law(AnswerAspect.EMPTINESS,
+                    any(holdsSomething(at(0)), holdsSomething(at(1)))))),
             about("String", "append", law(AnswerAspect.EMPTINESS,
                     any(holdsSomething(at(0)), holdsSomething(at(1))))),
             about("Set", "union", law(AnswerAspect.EMPTINESS,
                     any(holdsSomething(at(0)), holdsSomething(at(1))))),
-            about("Map", "union", law(AnswerAspect.EMPTINESS,
-                    any(holdsSomething(at(0)), holdsSomething(at(1))))),
-            about("List", "zipShortest", law(AnswerAspect.EMPTINESS,
-                    all(holdsSomething(at(0)), holdsSomething(at(1))))),
+            about("Map", "union", lemma(law(AnswerAspect.EMPTINESS,
+                    any(holdsSomething(at(0)), holdsSomething(at(1)))),
+                    iff(holdsSomething(CARRIED),
+                            any(holdsSomething(at(0)), holdsSomething(WALKED))))),
+            // As many as the first map, and one more for each entry of the second under a key the
+            // first does not have: the walk over the second keeps the first's keys and adds the
+            // ones it meets, each key of a map met once.
+            about("Map", "union", lemma(sizeIs(0, sizeOf(at(0)), 1,
+                    howManyMeet(at(1), some(at(0), sameKeys(at(0), at(1))).denied()), 1),
+                    equalToTheSum(sizeOf(the(CARRIED)), sizeOf(at(0)),
+                            howManyMeet(WALKED, isTrue(answerOf("Map", "containsKey",
+                                    new LawSubject.KeyOf<>(WALKED), the(at(0)))).denied())),
+                    iff(isTrue(answerOf("Map", "containsKey", the(ANY), the(CARRIED))),
+                            any(isTrue(answerOf("Map", "containsKey", the(ANY), the(at(0)))),
+                                    some(WALKED, alike(new LawSubject.KeyOf<>(WALKED),
+                                            the(ANY))))))),
+            // The same said beside what `Map.containsKey` answers. What is stated of a kernel
+            // beside others is taken where that kernel is applied, and a map holding each key once
+            // — so that of another map's entries no more are under keys it holds than it holds —
+            // is stated of `Map.containsKey`; said in its words, the size is one that count is
+            // taken of.
+            about("Map", "union", lemma(related(equalToTheSum(
+                    sizeOf(answerOf("Map", "union", the(at(0)), the(at(1)))), sizeOf(at(0)),
+                    howManyMeet(at(1), isTrue(answerOf("Map", "containsKey",
+                            new LawSubject.KeyOf<>(at(1)), the(at(0)))).denied()))),
+                    equalToTheSum(sizeOf(the(CARRIED)), sizeOf(at(0)),
+                            howManyMeet(WALKED, isTrue(answerOf("Map", "containsKey",
+                                    new LawSubject.KeyOf<>(WALKED), the(at(0)))).denied())),
+                    iff(isTrue(answerOf("Map", "containsKey", the(ANY), the(CARRIED))),
+                            any(isTrue(answerOf("Map", "containsKey", the(ANY), the(at(0)))),
+                                    some(WALKED, alike(new LawSubject.KeyOf<>(WALKED),
+                                            the(ANY))))))),
+            about("List", "zipShortest", lemma(law(AnswerAspect.EMPTINESS,
+                    all(holdsSomething(at(0)), holdsSomething(at(1)))),
+                    equal(number(carried(0)), sizeOf(WALKED), 0),
+                    iff(holdsSomething(carried(1)),
+                            all(holdsSomething(WALKED), holdsSomething(at(1)))))),
             // Some element that holds something, of a list of containers put end to end; and a
             // separator holds something between two of them.
-            about("List", "concat", law(AnswerAspect.EMPTINESS, some(at(0),
-                    holdsSomething(new LawSubject.ElementOf<>(at(0)))))),
+            about("List", "concat", lemma(law(AnswerAspect.EMPTINESS, some(at(0),
+                    holdsSomething(new LawSubject.ElementOf<>(at(0))))),
+                    iff(holdsSomething(CARRIED),
+                            some(WALKED, holdsSomething(new LawSubject.ElementOf<>(WALKED)))))),
+            // As many as the lists put end to end hold between them: what is put together so far
+            // holds what the lists walked so far hold, added up.
+            about("List", "concat", lemma(size(sumOver(at(0),
+                            sizeOf(new LawSubject.ElementOf<>(at(0))))),
+                    equal(sizeOf(CARRIED), sumOver(WALKED,
+                            sizeOf(new LawSubject.ElementOf<>(WALKED))), 0))),
+            about("List", "flatMap", lemma(size(sumOver(CONTAINER, sizeOf(keyed()))),
+                    equal(sizeOf(CARRIED), sumOver(WALKED, sizeOf(keyed())), 0))),
             about("String", "concat", law(AnswerAspect.EMPTINESS, some(at(0),
                     holdsSomething(new LawSubject.ElementOf<>(at(0)))))),
             about("String", "join", law(AnswerAspect.EMPTINESS, any(
@@ -342,10 +496,136 @@ public final class OperationFacts {
 
             // Asked for some and handed some. A count of nought or less takes nothing and drops
             // nothing, and one past the end takes the whole and drops all of it.
-            about("List", "take", law(AnswerAspect.EMPTINESS,
-                    all(atLeast(number(at(0)), 1, -1), holdsSomething(at(1))))),
-            about("List", "drop", law(AnswerAspect.EMPTINESS, all(holdsSomething(at(1)),
-                    atLeast(sizeOf(at(1)), 1, number(at(0)), -1, -1)))),
+            about("List", "take", lemma(law(AnswerAspect.EMPTINESS,
+                    all(atLeast(number(at(0)), 1, -1), holdsSomething(at(1)))),
+                    equal(number(carried(0)), sizeOf(WALKED), 0),
+                    iff(holdsSomething(carried(1)),
+                            all(atLeast(number(at(0)), 1, -1), holdsSomething(WALKED))))),
+            about("List", "drop", lemma(law(AnswerAspect.EMPTINESS, all(holdsSomething(at(1)),
+                    atLeast(sizeOf(at(1)), 1, number(at(0)), -1, -1))),
+                    equal(number(carried(0)), sizeOf(WALKED), 0),
+                    iff(holdsSomething(carried(1)), all(holdsSomething(WALKED),
+                            atLeast(sizeOf(WALKED), 1, number(at(0)), -1, -1))))),
+            // And how many, which turns on how the count stands to how many there are: what is
+            // taken is as many as were asked for where there are that many, and all of them where
+            // there are fewer; what is dropped from is the rest. Walking a list, what is kept so
+            // far stands so to what was walked.
+            about("List", "take", lemma(sizeInCases(
+                    sized(atLeast(number(at(0)), -1, 0), 0),
+                    sized(all(atLeast(number(at(0)), 1, -1),
+                            atLeast(sizeOf(at(1)), 1, number(at(0)), -1, 0)), number(at(0)), 0),
+                    sized(atLeast(number(at(0)), 1, sizeOf(at(1)), -1, -1), sizeOf(at(1)), 0)),
+                    equal(number(carried(0)), sizeOf(WALKED), 0),
+                    any(all(atLeast(number(at(0)), -1, 0), atLeast(sizeOf(carried(1)), -1, 0)),
+                            all(atLeast(number(at(0)), 1, -1),
+                                    atLeast(sizeOf(WALKED), 1, number(at(0)), -1, 0),
+                                    equal(sizeOf(carried(1)), number(at(0)), 0)),
+                            all(atLeast(number(at(0)), 1, sizeOf(WALKED), -1, -1),
+                                    equal(sizeOf(carried(1)), sizeOf(WALKED), 0))))),
+            about("List", "drop", lemma(sizeInCases(
+                    sized(atLeast(number(at(0)), -1, 0), sizeOf(at(1)), 0),
+                    sized(all(atLeast(number(at(0)), 1, -1),
+                                    atLeast(sizeOf(at(1)), 1, number(at(0)), -1, 0)),
+                            sizeOf(at(1)), number(at(0)), 0),
+                    sized(atLeast(number(at(0)), 1, sizeOf(at(1)), -1, -1), 0)),
+                    equal(number(carried(0)), sizeOf(WALKED), 0),
+                    any(all(atLeast(number(at(0)), -1, 0),
+                                    equal(sizeOf(carried(1)), sizeOf(WALKED), 0)),
+                            all(atLeast(number(at(0)), 1, -1),
+                                    atLeast(sizeOf(WALKED), 1, number(at(0)), -1, 0),
+                                    equalToTheDifference(sizeOf(carried(1)), sizeOf(WALKED),
+                                            number(at(0)))),
+                            all(atLeast(number(at(0)), 1, sizeOf(WALKED), -1, -1),
+                                    atLeast(sizeOf(carried(1)), -1, 0))))),
+            // A pair for each element of the shorter: as many as the first where the second has
+            // as many, and as many as the second where it has fewer.
+            about("List", "zipShortest", lemma(sizeInCases(
+                    sized(atLeast(sizeOf(at(1)), 1, sizeOf(at(0)), -1, 0), sizeOf(at(0)), 0),
+                    sized(atLeast(sizeOf(at(0)), 1, sizeOf(at(1)), -1, -1), sizeOf(at(1)), 0)),
+                    equal(number(carried(0)), sizeOf(WALKED), 0),
+                    any(all(atLeast(sizeOf(at(1)), 1, sizeOf(WALKED), -1, 0),
+                                    equal(sizeOf(carried(1)), sizeOf(WALKED), 0)),
+                            all(atLeast(sizeOf(WALKED), 1, sizeOf(at(1)), -1, -1),
+                                    equal(sizeOf(carried(1)), sizeOf(at(1)), 0))))),
+            // Every whole number from the first to the last, where the last is not below the
+            // first, and none where it is.
+            about("List", "rangeInclusive", sizeInCases(
+                    sized(atLeast(number(at(1)), 1, number(at(0)), -1, 0), number(at(1)),
+                            number(at(0)), 1),
+                    sized(atLeast(number(at(0)), 1, number(at(1)), -1, -1), 0))),
+
+            // How many a set or a map holds once one value is put in or taken out: one more, or
+            // one fewer, save where it was there already, or was not — a set holds a value once
+            // and a map a key once. And what the algebra of two keeps: one side, and those of the
+            // other it does not hold; or those of one side the other holds, or does not.
+            about("Set", "singleton", sizeInCases(sized(always(true), 1))),
+            about("Map", "singleton", sizeInCases(sized(always(true), 1))),
+            about("Set", "insert", sizeInCases(
+                    sized(holding(at(1), new LawSubject.ElementOf<>(at(1)), at(0)),
+                            sizeOf(at(1)), 0),
+                    sized(holding(at(1), new LawSubject.ElementOf<>(at(1)), at(0)).denied(),
+                            sizeOf(at(1)), 1))),
+            about("Set", "remove", sizeInCases(
+                    sized(holding(at(1), new LawSubject.ElementOf<>(at(1)), at(0)),
+                            sizeOf(at(1)), -1),
+                    sized(holding(at(1), new LawSubject.ElementOf<>(at(1)), at(0)).denied(),
+                            sizeOf(at(1)), 0))),
+            about("Map", "insert", sizeInCases(
+                    sized(holding(at(2), new LawSubject.KeyOf<>(at(2)), at(0)),
+                            sizeOf(at(2)), 0),
+                    sized(holding(at(2), new LawSubject.KeyOf<>(at(2)), at(0)).denied(),
+                            sizeOf(at(2)), 1))),
+            about("Map", "remove", sizeInCases(
+                    sized(holding(at(1), new LawSubject.KeyOf<>(at(1)), at(0)),
+                            sizeOf(at(1)), -1),
+                    sized(holding(at(1), new LawSubject.KeyOf<>(at(1)), at(0)).denied(),
+                            sizeOf(at(1)), 0))),
+            about("Map", "updateOrInsert", lemma(sizeInCases(
+                    sized(holding(CONTAINER, new LawSubject.KeyOf<>(CONTAINER), at(0)),
+                            sizeOf(CONTAINER), 0),
+                    sized(holding(CONTAINER, new LawSubject.KeyOf<>(CONTAINER), at(0)).denied(),
+                            sizeOf(CONTAINER), 1)))),
+            about("Set", "union", sizeIs(0, sizeOf(at(0)), 1, howManyMeet(at(1),
+                    some(at(0), sameElements(at(0), at(1))).denied()), 1)),
+            about("Set", "intersection", size(howManyMeet(at(0),
+                    some(at(1), sameElements(at(1), at(0)))))),
+            about("Set", "difference", size(howManyMeet(at(0),
+                    some(at(1), sameElements(at(1), at(0))).denied()))),
+            about("Map", "intersection", lemma(size(howManyMeet(at(0),
+                    some(at(1), sameKeys(at(1), at(0))))))),
+            about("Map", "difference", lemma(size(howManyMeet(at(0),
+                    some(at(1), sameKeys(at(1), at(0))).denied())))),
+            about("Set", "toList", size(sizeOf(at(0)))),
+
+            // How long a string is is how many code points it holds: a slice holds the ones
+            // between its ends, and a string's characters and code points are one each.
+            about("String", "slice", sizeInCases(sized(always(true), number(at(1)), number(at(0)),
+                    0))),
+            about("String", "characters", size(sizeOf(at(0)))),
+            about("String", "codePoints", size(sizeOf(at(0)))),
+            // And what the domain has no words for. What is put together, rewritten or padded is
+            // in its canonical form, which a seam can shorten and a case mapping lengthen.
+            about("String", "trim", sizeUnsaid(Unsayable.WHICH_CHARACTERS_ARE_WHITESPACE)),
+            about("String", "words", sizeUnsaid(Unsayable.WHICH_CHARACTERS_ARE_WHITESPACE)),
+            about("String", "split",
+                    sizeUnsaid(Unsayable.HOW_MANY_TIMES_A_STRING_STANDS_INSIDE_ANOTHER)),
+            about("String", "lines",
+                    sizeUnsaid(Unsayable.HOW_MANY_TIMES_A_STRING_STANDS_INSIDE_ANOTHER)),
+            about("String", "replace",
+                    sizeUnsaid(Unsayable.HOW_MANY_TIMES_A_STRING_STANDS_INSIDE_ANOTHER)),
+            about("String", "append", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "concat", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "join", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "reverse", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "repeat", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "padLeft", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "padRight", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "lowercase", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "uppercase", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "fromInt",
+                    sizeUnsaid(Unsayable.HOW_MANY_CHARACTERS_A_NUMBER_IS_WRITTEN_IN)),
+            about("String", "fromDecimal",
+                    sizeUnsaid(Unsayable.HOW_MANY_CHARACTERS_A_NUMBER_IS_WRITTEN_IN)),
             about("String", "repeat", law(AnswerAspect.EMPTINESS,
                     all(atLeast(number(at(0)), 1, -1), holdsSomething(at(1))))),
             about("String", "padLeft", law(AnswerAspect.EMPTINESS, any(holdsSomething(at(2)),
@@ -365,14 +645,46 @@ public final class OperationFacts {
             about("Set", "insert", law(AnswerAspect.EMPTINESS, always(true))),
             about("Map", "singleton", law(AnswerAspect.EMPTINESS, always(true))),
             about("Map", "insert", law(AnswerAspect.EMPTINESS, always(true))),
-            about("Map", "updateOrInsert", law(AnswerAspect.EMPTINESS, always(true))),
+            about("Map", "updateOrInsert", lemma(law(AnswerAspect.EMPTINESS, always(true)))),
             about("String", "fromInt", law(AnswerAspect.EMPTINESS, always(true))),
             about("String", "fromDecimal", law(AnswerAspect.EMPTINESS, always(true))),
             about("String", "split", law(AnswerAspect.EMPTINESS, always(true))),
             about("String", "lines", law(AnswerAspect.EMPTINESS, always(true))),
-            // And what holds nothing whatever it is handed.
+            // And what holds nothing whatever it is handed, and so holds none.
             about("Set", "empty", law(AnswerAspect.EMPTINESS, always(false))),
             about("Map", "empty", law(AnswerAspect.EMPTINESS, always(false))),
+            about("Set", "empty", size()),
+            about("Map", "empty", size()),
+
+            // What a kernel's answer comes to beside what others answer on its arguments, where no
+            // law of one observation says it. A key a map holds is one only where it holds
+            // something. An insert holds exactly what was put in and what it was handed; nothing
+            // holds a key of an empty map. How many an insert or a remove holds beside what the
+            // membership it turns on answers is not written here: the binder says the law of it
+            // in the words of `Map.containsKey` and `Set.contains`.
+            about("Map", "containsKey", related(any(
+                    isTrue(answerOf("Map", "containsKey", the(at(0)), the(at(1)))).denied(),
+                    holdsSomething(at(1))))),
+            // A map holds each of its keys once, so of another map's entries no more are under
+            // keys it holds than it holds: with the ones under keys it does not hold, they are no
+            // more than it and those.
+            about("Map", "containsKey", related(atLeast(sizeOf(at(1)), 1,
+                    howManyMeet(ANY, isTrue(answerOf("Map", "containsKey",
+                            new LawSubject.KeyOf<>(ANY), the(at(1)))).denied()), 1,
+                    sizeOf(ANY), -1, 0))),
+            about("Map", "insert", related(iff(
+                    isTrue(answerOf("Map", "containsKey", the(ANY),
+                            answerOf("Map", "insert", the(at(0)), the(at(1)), the(at(2))))),
+                    any(alike(the(ANY), the(at(0))),
+                            isTrue(answerOf("Map", "containsKey", the(ANY), the(at(2)))))))),
+            about("Map", "empty", related(
+                    isTrue(answerOf("Map", "containsKey", the(ANY), answerOf("Map", "empty")))
+                            .denied())),
+            about("Set", "insert", related(iff(
+                    isTrue(answerOf("Set", "contains", the(ANY),
+                            answerOf("Set", "insert", the(at(0)), the(at(1))))),
+                    any(alike(the(ANY), the(at(0))),
+                            isTrue(answerOf("Set", "contains", the(ANY), the(at(1)))))))),
 
             // Which values of a set are left: some other than the one taken out, some of one also
             // in the other, some of one in no element of the other.
@@ -382,6 +694,18 @@ public final class OperationFacts {
                     some(at(1), sameElements(at(0), at(1)))))),
             about("Set", "difference", law(AnswerAspect.EMPTINESS, some(at(0),
                     some(at(1), sameElements(at(0), at(1))).denied()))),
+            // And which values of a map are left, and whether one is filed under a key: one under
+            // a key other than the one taken out, one under a key the other map files something
+            // under too, or under none it does; a value under the key asked for.
+            about("Map", "remove", law(AnswerAspect.EMPTINESS, some(at(1),
+                    new LawProposition.Same<>(new LawSubject.KeyOf<>(at(1)),
+                            new LawSubject.Argument<>(at(0)), false)))),
+            about("Map", "intersection", lemma(law(AnswerAspect.EMPTINESS, some(at(0),
+                    some(at(1), sameKeys(at(0), at(1))))))),
+            about("Map", "difference", lemma(law(AnswerAspect.EMPTINESS, some(at(0),
+                    some(at(1), sameKeys(at(0), at(1))).denied())))),
+            about("Map", "get", law(AnswerAspect.PRESENCE,
+                    some(at(1), alike(new LawSubject.KeyOf<>(at(1)), the(at(0)))))),
 
             // And what the domain has no words for.
             about("String", "trim", unsaid(AnswerAspect.EMPTINESS,
@@ -390,23 +714,23 @@ public final class OperationFacts {
                     Unsayable.EVERY_CHARACTER_IS_WHITESPACE)),
             about("String", "replace", unsaid(AnswerAspect.EMPTINESS,
                     Unsayable.MADE_UP_OF_COPIES_OF_A_TEXT)),
-            about("Map", "get", unsaid(AnswerAspect.PRESENCE, Unsayable.A_KEY_OF_A_MAP)),
-            about("Map", "remove", unsaid(AnswerAspect.EMPTINESS, Unsayable.A_KEY_OF_A_MAP)),
-            about("Map", "intersection", unsaid(AnswerAspect.EMPTINESS, Unsayable.A_KEY_OF_A_MAP)),
-            about("Map", "difference", unsaid(AnswerAspect.EMPTINESS, Unsayable.A_KEY_OF_A_MAP)),
 
             // What every operation answering a truth comes out true for. A container holding a
             // value is some element being it, and a denial is the other answer of its argument;
             // an emptiness check is read off the size it means, and is not written again here.
-            about("List", "contains", law(AnswerAspect.TRUTH, some(at(1),
+            about("List", "contains", lemma(law(AnswerAspect.TRUTH, some(at(1),
                     new LawProposition.Same<>(new LawSubject.ElementOf<>(at(1)),
-                            new LawSubject.Argument<>(at(0)), true)))),
+                            new LawSubject.Argument<>(at(0)), true))),
+                    iff(isTrue(the(CARRIED)), some(WALKED, alike(
+                            new LawSubject.ElementOf<>(WALKED), the(at(0))))))),
             about("Set", "contains", law(AnswerAspect.TRUTH, some(at(1),
                     new LawProposition.Same<>(new LawSubject.ElementOf<>(at(1)),
                             new LawSubject.Argument<>(at(0)), true)))),
-            about("Bool", "not", law(AnswerAspect.TRUTH, new LawProposition.Observed<>(
-                    new LawSubject.Argument<>(at(0)), new SideAnswered(AnswerAspect.TRUTH, false)))),
-            about("Map", "containsKey", unsaid(AnswerAspect.TRUTH, Unsayable.A_KEY_OF_A_MAP)),
+            about("Bool", "not", lemma(law(AnswerAspect.TRUTH, new LawProposition.Observed<>(
+                    new LawSubject.Argument<>(at(0)),
+                    new SideAnswered(AnswerAspect.TRUTH, false))))),
+            about("Map", "containsKey", law(AnswerAspect.TRUTH,
+                    some(at(1), alike(new LawSubject.KeyOf<>(at(1)), the(at(0)))))),
             about("String", "contains", unsaid(AnswerAspect.TRUTH,
                     Unsayable.A_STRING_INSIDE_ANOTHER)),
             about("String", "startsWith", unsaid(AnswerAspect.TRUTH,
@@ -415,13 +739,20 @@ public final class OperationFacts {
                     Unsayable.A_STRING_INSIDE_ANOTHER)),
             about("String", "matches", unsaid(AnswerAspect.TRUTH,
                     Unsayable.A_STRING_MATCHING_A_PATTERN)),
-            about("List", "allDistinctBy", unsaid(AnswerAspect.TRUTH,
-                    Unsayable.NO_TWO_ELEMENTS_ALIKE)),
+            // No two elements coming to one answer of the closure is as many different answers as
+            // elements.
+            about("List", "allDistinctBy", lemma(law(AnswerAspect.TRUTH,
+                    equal(different(CONTAINER, keyed()), sizeOf(CONTAINER), 0)))),
 
             // The containers a construction's result is never smaller than. A union answers one of
             // what both sides hold and an insert of something already there adds nothing, so
             // neither answers the sum of what it read; appending does, and stating it for that one
             // alone would be a second statement for one operation. The bound is what they share.
+            //
+            // Not a string put beside another. What is answered is the canonical form of the two,
+            // and a mark at the start of the second can join a letter at the end of the first, and
+            // the letter can then take a mark it already had: `"e" ++ "̂́"` is the one
+            // code point `ế`, and `"L̄" ++ "̣"` the one code point `Ḹ`.
             about("List", "append", noSmallerThan(at(0))),
             about("List", "append", noSmallerThan(at(1))),
             about("Set", "union", noSmallerThan(at(0))),
@@ -505,7 +836,16 @@ public final class OperationFacts {
             about("Decimal", "clamp", answers(at(1), stands(at(2), Rel.GE, at(0)),
                     stands(at(2), Rel.GT, at(1)))),
             about("Decimal", "clamp", answers(at(2), stands(at(2), Rel.GE, at(0)),
-                    stands(at(2), Rel.LE, at(1)))));
+                    stands(at(2), Rel.LE, at(1)))),
+            // And the ones that answer arithmetic over what they were given, case by case: the
+            // magnitude is the value turned round below nought and the value itself from there.
+            about("Int", "abs", answers(LinearForm.weighing(at(0), ExactRatio.of(-1)),
+                    standsAgainst(at(0), Rel.LT, 0))),
+            about("Int", "abs", answers(LinearForm.atom(at(0)), standsAgainst(at(0), Rel.GE, 0))),
+            about("Decimal", "abs", answers(LinearForm.weighing(at(0), ExactRatio.of(-1)),
+                    standsAgainst(at(0), Rel.LT, 0))),
+            about("Decimal", "abs", answers(LinearForm.atom(at(0)),
+                    standsAgainst(at(0), Rel.GE, 0))));
     }
 
     /** How many whole minutes the first date-time and the last stand apart, which is as far apart as
@@ -541,20 +881,38 @@ public final class OperationFacts {
     @SafeVarargs
     private static OperationFact answers(ArgumentRef argument,
                                          ArgumentsStand<ArgumentRef>... given) {
+        return answers(LinearForm.atom(argument), given);
+    }
+
+    @SafeVarargs
+    private static OperationFact answers(LinearForm<ArgumentRef> form,
+                                         ArgumentsStand<ArgumentRef>... given) {
         List<ArgumentsStand<ArgumentRef>> reached = new ArrayList<>(given.length);
         for (ArgumentsStand<ArgumentRef> stands : given) {
             reached.add(stands);
         }
-        return new OperationFact.IsDefinedByCases(new DefinitionCase<>(argument, reached));
+        return new OperationFact.IsDefinedByCases(new DefinitionCase<>(form, reached));
     }
 
     private static ArgumentsStand<ArgumentRef> stands(ArgumentRef left, Rel rel,
                                                       ArgumentRef right) {
-        return new ArgumentsStand<>(left, rel, right);
+        return ArgumentsStand.of(left, rel, right);
+    }
+
+    /** {@code argument rel constant}. */
+    private static ArgumentsStand<ArgumentRef> standsAgainst(ArgumentRef argument, Rel rel,
+                                                             long constant) {
+        return new ArgumentsStand<>(LinearForm.atom(argument), rel,
+                LinearForm.constant(ExactRatio.of(constant)));
     }
 
     private static OperationFact noSmallerThan(ArgumentRef container) {
         return new OperationFact.ResultIsNoSmallerThan(container);
+    }
+
+    /** The answer is {@code into} with {@code value} put in. */
+    private static OperationFact putsIn(ArgumentRef value, ArgumentRef into) {
+        return new OperationFact.PutsAValueIn(value, into);
     }
 
     /** The answer is keyed by keys {@code map} was keyed by. */
@@ -606,6 +964,154 @@ public final class OperationFacts {
                 new LinearForm<>(ExactRatio.ZERO, coefs)));
     }
 
+    /** The answer holds {@code constant}, and {@code byA} of {@code a} and {@code byB} of
+     *  {@code b}. */
+    private static OperationFact sizeIs(long constant, LawNumber<ArgumentRef> a, long byA,
+                                        LawNumber<ArgumentRef> b, long byB) {
+        return new OperationFact.HasALaw(new OperationLaw.Size<>(new LinearForm<>(
+                ExactRatio.of(constant), Map.of(a, ExactRatio.of(byA), b, ExactRatio.of(byB)))));
+    }
+
+    /** Some element of {@code container} being, as {@code of} says of it, the argument at
+     *  {@code value}: the container holding that value, or a key of it being that value. */
+    private static LawProposition<ArgumentRef> holding(ArgumentRef container,
+                                                       LawSubject<ArgumentRef> of,
+                                                       ArgumentRef value) {
+        return some(container, alike(of, the(value)));
+    }
+
+    /** How many the answer holds comes to {@code why}, which the domain has no words for. */
+    private static OperationFact sizeUnsaid(Unsayable why) {
+        return new OperationFact.LeavesUnsaid(OperationLaw.Observed.SIZE, why);
+    }
+
+    /** The answer holds as many as the one of {@code cases} the arguments stand as says. */
+    @SafeVarargs
+    private static OperationFact sizeInCases(OperationLaw.Size.Case<ArgumentRef>... cases) {
+        List<OperationLaw.Size.Case<ArgumentRef>> each = new ArrayList<>();
+        for (OperationLaw.Size.Case<ArgumentRef> one : cases) {
+            each.add(one);
+        }
+        return new OperationFact.HasALaw(new OperationLaw.Size<>(each));
+    }
+
+    /** Where {@code where} holds of the arguments, as many as {@code constant}. */
+    private static OperationLaw.Size.Case<ArgumentRef> sized(LawProposition<ArgumentRef> where,
+                                                             long constant) {
+        return new OperationLaw.Size.Case<>(where, LinearForm.constant(ExactRatio.of(constant)));
+    }
+
+    /** Where {@code where} holds of the arguments, as many as {@code a} with
+     *  {@code constant} added. */
+    private static OperationLaw.Size.Case<ArgumentRef> sized(LawProposition<ArgumentRef> where,
+                                                             LawNumber<ArgumentRef> a,
+                                                             long constant) {
+        return new OperationLaw.Size.Case<>(where, new LinearForm<>(ExactRatio.of(constant),
+                Map.of(a, ExactRatio.ONE)));
+    }
+
+    /** Where {@code where} holds of the arguments, as many as {@code a} less {@code b}, with
+     *  {@code constant} added. */
+    private static OperationLaw.Size.Case<ArgumentRef> sized(LawProposition<ArgumentRef> where,
+                                                             LawNumber<ArgumentRef> a,
+                                                             LawNumber<ArgumentRef> b,
+                                                             long constant) {
+        return new OperationLaw.Size.Case<>(where, new LinearForm<>(ExactRatio.of(constant),
+                Map.of(a, ExactRatio.ONE, b, ExactRatio.of(-1))));
+    }
+
+    /**
+     * {@code stated}, a law of an operation the library writes in the language or what it answers
+     * beside what others answer, as the lemma it is: to be proved against the body, with what a
+     * walk in the body carries at every step stated by {@code carries}.
+     */
+    @SafeVarargs
+    private static OperationFact lemma(OperationFact stated,
+                                       LawProposition<ArgumentRef>... carries) {
+        List<LawProposition<ArgumentRef>> clauses = new ArrayList<>();
+        for (LawProposition<ArgumentRef> clause : carries) {
+            clauses.add(clause);
+        }
+        return switch (stated) {
+            case OperationFact.HasALaw law -> new OperationFact.IsALemma(law.law(), clauses);
+            case OperationFact.IsRelated related ->
+                    new OperationFact.IsRelatedInALemma(related.holds(), clauses);
+            default -> throw new IllegalArgumentException(
+                    "a lemma states a law or a relation: " + stated);
+        };
+    }
+
+    /** What a kernel's answer comes to beside what other kernels answer on its arguments. */
+    private static OperationFact related(LawProposition<ArgumentRef> holds) {
+        return new OperationFact.IsRelated(holds);
+    }
+
+    /** The component at {@code index} of what a walk carries. */
+    private static ArgumentRef carried(int index) {
+        return new ArgumentRef.Carried(List.of(index));
+    }
+
+    /** {@code one} exactly where {@code other}. */
+    private static LawProposition<ArgumentRef> iff(LawProposition<ArgumentRef> one,
+                                                   LawProposition<ArgumentRef> other) {
+        return any(all(one, other), all(one.denied(), other.denied()));
+    }
+
+    /** The value at {@code argument} being true. */
+    private static LawProposition<ArgumentRef> isTrue(LawSubject<ArgumentRef> subject) {
+        return new LawProposition.Observed<>(subject, new SideAnswered(AnswerAspect.TRUTH, true));
+    }
+
+    private static LawSubject<ArgumentRef> the(ArgumentRef argument) {
+        return new LawSubject.Argument<>(argument);
+    }
+
+    /** What {@code operation} of the library module {@code alias} answers handed {@code args}. */
+    @SafeVarargs
+    private static LawSubject<ArgumentRef> answerOf(String alias, String name,
+                                                    LawSubject<ArgumentRef>... args) {
+        List<LawSubject<ArgumentRef>> handed = new ArrayList<>();
+        for (LawSubject<ArgumentRef> arg : args) {
+            handed.add(arg);
+        }
+        return new LawSubject.AnswerOf<>(ValueName.Stdlib.operation(alias, name), handed);
+    }
+
+    /** {@code one} and {@code other} being one value. */
+    private static LawProposition<ArgumentRef> alike(LawSubject<ArgumentRef> one,
+                                                     LawSubject<ArgumentRef> other) {
+        return new LawProposition.Same<>(one, other, true);
+    }
+
+    /** {@code a} and {@code b} being the same number, {@code b} counted {@code plus} more. */
+    private static LawProposition<ArgumentRef> equal(LawNumber<ArgumentRef> a,
+                                                     LawNumber<ArgumentRef> b, long plus) {
+        return new LawProposition.Compared<>(new LinearForm<>(ExactRatio.of(-plus),
+                Map.of(a, ExactRatio.ONE, b, ExactRatio.of(-1))), Rel.EQ);
+    }
+
+    private static LawNumber<ArgumentRef> sizeOf(LawSubject<ArgumentRef> subject) {
+        return new LawNumber.SizeOf<>(subject);
+    }
+
+    /** {@code part} being {@code whole} less {@code less}. */
+    private static LawProposition<ArgumentRef> equalToTheDifference(LawNumber<ArgumentRef> part,
+                                                                    LawNumber<ArgumentRef> whole,
+                                                                    LawNumber<ArgumentRef> less) {
+        return new LawProposition.Compared<>(new LinearForm<>(ExactRatio.ZERO,
+                Map.of(part, ExactRatio.ONE, whole, ExactRatio.of(-1), less, ExactRatio.ONE)),
+                Rel.EQ);
+    }
+
+    /** {@code whole} being {@code one} and {@code other} added. */
+    private static LawProposition<ArgumentRef> equalToTheSum(LawNumber<ArgumentRef> whole,
+                                                             LawNumber<ArgumentRef> one,
+                                                             LawNumber<ArgumentRef> other) {
+        return new LawProposition.Compared<>(new LinearForm<>(ExactRatio.ZERO,
+                Map.of(whole, ExactRatio.ONE, one, ExactRatio.of(-1), other, ExactRatio.of(-1))),
+                Rel.EQ);
+    }
+
     /** What an observation of the answer on {@code aspect} comes to is {@code why}, which the
      *  domain has no words for. */
     private static OperationFact unsaid(AnswerAspect aspect, Unsayable why) {
@@ -616,14 +1122,22 @@ public final class OperationFacts {
         return new LawProposition.Always<>(holds);
     }
 
-    private static LawProposition<ArgumentRef> all(LawProposition<ArgumentRef> one,
-                                                   LawProposition<ArgumentRef> other) {
-        return new LawProposition.All<>(List.of(one, other));
+    @SafeVarargs
+    private static LawProposition<ArgumentRef> all(LawProposition<ArgumentRef>... parts) {
+        List<LawProposition<ArgumentRef>> each = new ArrayList<>();
+        for (LawProposition<ArgumentRef> part : parts) {
+            each.add(part);
+        }
+        return new LawProposition.All<>(each);
     }
 
-    private static LawProposition<ArgumentRef> any(LawProposition<ArgumentRef> one,
-                                                   LawProposition<ArgumentRef> other) {
-        return new LawProposition.Any<>(List.of(one, other));
+    @SafeVarargs
+    private static LawProposition<ArgumentRef> any(LawProposition<ArgumentRef>... parts) {
+        List<LawProposition<ArgumentRef>> each = new ArrayList<>();
+        for (LawProposition<ArgumentRef> part : parts) {
+            each.add(part);
+        }
+        return new LawProposition.Any<>(each);
     }
 
     /** The argument at {@code argument} holding something. */
@@ -656,11 +1170,35 @@ public final class OperationFacts {
                 new SideAnswered(aspect, true));
     }
 
+    /** How many different values {@code of} comes to over the elements of {@code container}. */
+    private static LawNumber<ArgumentRef> different(ArgumentRef container,
+                                                    LawSubject<ArgumentRef> of) {
+        return new LawNumber.HowManyDifferent<>(container, of);
+    }
+
+    /** What {@code each}, a number of an element of {@code container}, adds up to over them. */
+    private static LawNumber<ArgumentRef> sumOver(ArgumentRef container,
+                                                  LawNumber<ArgumentRef> each) {
+        return new LawNumber.SumOver<>(container, each);
+    }
+
+    /** What the operation's closure answers of the element it is handed. */
+    private static LawSubject<ArgumentRef> keyed() {
+        return new LawSubject.WhatTheClosureAnswers<>(CLOSURE);
+    }
+
     /** The element of {@code one} the statement is about being the element of {@code other} it
      *  is about. */
     private static LawProposition<ArgumentRef> sameElements(ArgumentRef one, ArgumentRef other) {
         return new LawProposition.Same<>(new LawSubject.ElementOf<>(one),
                 new LawSubject.ElementOf<>(other), true);
+    }
+
+    /** The element of the map {@code one} the statement is about being filed under the key the
+     *  element of the map {@code other} it is about is filed under. */
+    private static LawProposition<ArgumentRef> sameKeys(ArgumentRef one, ArgumentRef other) {
+        return new LawProposition.Same<>(new LawSubject.KeyOf<>(one),
+                new LawSubject.KeyOf<>(other), true);
     }
 
     private static LawNumber<ArgumentRef> number(ArgumentRef argument) {
@@ -681,6 +1219,16 @@ public final class OperationFacts {
                                                        long constant) {
         return new LawProposition.Compared<>(new LinearForm<>(ExactRatio.of(constant),
                 Map.of(a, ExactRatio.of(by))), Rel.GE);
+    }
+
+    /** {@code byA · a + byB · b + byC · c + constant >= 0}. */
+    private static LawProposition<ArgumentRef> atLeast(LawNumber<ArgumentRef> a, long byA,
+                                                       LawNumber<ArgumentRef> b, long byB,
+                                                       LawNumber<ArgumentRef> c, long byC,
+                                                       long constant) {
+        return new LawProposition.Compared<>(new LinearForm<>(ExactRatio.of(constant),
+                Map.of(a, ExactRatio.of(byA), b, ExactRatio.of(byB), c, ExactRatio.of(byC))),
+                Rel.GE);
     }
 
     /** {@code byA · a + byB · b + constant >= 0}. */

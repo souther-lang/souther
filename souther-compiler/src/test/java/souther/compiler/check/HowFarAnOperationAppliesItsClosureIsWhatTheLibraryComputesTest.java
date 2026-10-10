@@ -35,7 +35,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>Every operation that hands a closure what a container holds is asked, and one whose closure
  * answers anything but a truth has nothing to stop on: it is held to being declared as applying its
- * closure to every element.
+ * closure to every element. One applying it to the one value it picks out of a map by a key is run
+ * picking out a key the map does not hold and one whose value aborts the closure: it aborts only on
+ * the second.
  */
 class HowFarAnOperationAppliesItsClosureIsWhatTheLibraryComputesTest {
 
@@ -64,6 +66,19 @@ class HowFarAnOperationAppliesItsClosureIsWhatTheLibraryComputesTest {
             }
             Stdlib.Signature signature = entry.signature();
             String name = operation.alias() + "." + operation.name();
+            if (rule.applied() == HowAClosureIsApplied.AT_MOST_ONE) {
+                String elsewhere = pickingOut(name, signature, rule, "9");
+                String there = pickingOut(name, signature, rule, "3");
+                if (elsewhere == null || there == null) {
+                    unwritten.add(name);
+                    continue;
+                }
+                boolean pastTheOne = aborts(elsewhere);
+                declared.put(name, rule.applied());
+                ran.put(name, pastTheOne ? HowAClosureIsApplied.TO_EVERY_ELEMENT
+                        : aborts(there) ? HowAClosureIsApplied.AT_MOST_ONE : null);
+                continue;
+            }
             if (!(signature.params().get(rule.closureArg()) instanceof Type.FnOf closure)
                     || !Type.BOOL.equals(closure.result())) {
                 declared.put(name, rule.applied());
@@ -119,6 +134,52 @@ class HowFarAnOperationAppliesItsClosureIsWhatTheLibraryComputesTest {
                     return null;
                 }
                 arguments.add(container);
+            } else {
+                return null;
+            }
+        }
+        return """
+                module demo
+
+                data In = { n: Int }
+                data Out = { n: Int }
+
+                behavior run : (i: In) -> Out constructs Out
+                let run (i) = {
+                    let applied = %s(%s)
+                    Out { n = i.n }
+                }
+                """.formatted(name, String.join(", ", arguments));
+    }
+
+    /**
+     * A module running {@code name} over a map whose value under {@code 3} aborts the closure and
+     * whose other value does not, picking out the value under {@code key}: an operation applying its
+     * closure to the one value it picks out aborts only where that is the value under {@code 3}.
+     * Null where an argument is one this does not write.
+     */
+    private static String pickingOut(String name, Stdlib.Signature signature, Combinator rule,
+                                     String key) {
+        if (!(signature.params().get(rule.containerArg()) instanceof Type.MapOf map)
+                || !(signature.params().get(rule.closureArg()) instanceof Type.FnOf closure)) {
+            return null;
+        }
+        List<String> parameters = new ArrayList<>();
+        for (int at = 0; at < closure.params().size(); at++) {
+            parameters.add("p" + at);
+        }
+        List<String> arguments = new ArrayList<>();
+        for (int at = 0; at < signature.params().size(); at++) {
+            Type param = signature.params().get(at);
+            if (at == rule.closureArg()) {
+                arguments.add("(" + String.join(", ", parameters) + ") -> Int.floorMod(1, p"
+                        + rule.elementParam() + ")");
+            } else if (at == rule.containerArg()) {
+                arguments.add("Map.fromList([(2, 1), (3, 0)])");
+            } else if (param.equals(map.key())) {
+                arguments.add(key);
+            } else if (param.equals(map.value())) {
+                arguments.add("1");
             } else {
                 return null;
             }

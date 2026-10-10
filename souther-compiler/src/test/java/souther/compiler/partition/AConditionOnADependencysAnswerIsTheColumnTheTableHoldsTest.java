@@ -9,12 +9,12 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.meaning.DecisionArgument;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
-import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -100,13 +100,36 @@ class AConditionOnADependencysAnswerIsTheColumnTheTableHoldsTest {
                 }""")).stream().allMatch(DecisionAtom.OfAnAnswer.class::isInstance));
     }
 
+    /**
+     * A dependency asked about a value the body works out is still a dependency a row stands in, and
+     * its answer is the column: the row asks it the same thing however the value was worked out,
+     * and the question is named by how — the title, trimmed.
+     */
     @Test
-    void aDependencyAskedAboutAComputedValueIsSaidToBe() {
-        Proposition.Unread unread = assertInstanceOf(Proposition.Unread.class,
-                stated("if exists(Slug(String.trim(d.title))) then 1 else 0"));
-        assertEquals(new WhyUnread.NotYetComposed(
-                        WhyUnread.NotYetComposed.Step.A_DEPENDENCY_ASKED_ABOUT_A_COMPUTED_VALUE),
-                unread.why());
+    void aDependencyAskedAboutAComputedValueIsTheAnswerTheRowStandsIn() {
+        String fork = "if exists(Slug(String.trim(d.title))) then 1 else 0";
+        Proposition.Truth truth = assertInstanceOf(Proposition.Truth.class, stated(fork));
+        DecisionSubject.AnAnswer answer =
+                assertInstanceOf(DecisionSubject.AnAnswer.class, truth.of());
+        assertEquals(List.of(new DecisionArgument.WorkedOut("String.trim[d.title]")),
+                answer.answered().arguments());
+        assertEquals(Set.of(answer), columnsOf(fork));
+    }
+
+    /**
+     * Asked once for each value a list was written with, one call is as many questions as values:
+     * the names they are asked by differ in the value each application handed, so none of them is
+     * read as another.
+     */
+    @Test
+    void oneCallAskedAboutEachValueWrittenOutAsksEachOfThem() {
+        Proposition stated = stated("""
+                if List.any(t -> exists(Slug(String.trim(t))), ["a", "b"]) then 1 else 0""");
+        Set<String> asked = subjectsIn(stated).stream()
+                .map(each -> ((DecisionSubject.AnAnswer) each).answered().arguments().toString())
+                .collect(Collectors.toSet());
+        assertEquals(Set.of("[String.trim[\"a\"]]", "[String.trim[\"b\"]]"), asked,
+                () -> "each application asks its own question: " + stated);
     }
 
     private static Set<DecisionSubject> subjectsIn(Proposition stated) {

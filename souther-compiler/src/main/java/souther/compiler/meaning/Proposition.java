@@ -86,6 +86,11 @@ public sealed interface Proposition {
                     isAnElementOf(counted, container) || each.mayTurnOnAnElementOf(container);
             case Quantity.HowManyHold(List<Proposition> each) -> each.stream()
                     .anyMatch(one -> one.mayTurnOnAnElementOf(container));
+            case Quantity.HowManyDifferent(TermPath counted, TermPath _) ->
+                    isAnElementOf(counted, container);
+            case Quantity.SumOver(TermPath summed, var each) ->
+                    isAnElementOf(summed, container) || each.coefs().keySet().stream()
+                            .anyMatch(one -> mayBeAnElementOf(one, container));
         };
     }
 
@@ -485,6 +490,9 @@ public sealed interface Proposition {
             case Quantity.HowManyMeet count -> aboutAnAnswer(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream()
                     .anyMatch(Proposition::aboutAnAnswer);
+            case Quantity.HowManyDifferent _ -> false;
+            case Quantity.SumOver sum -> sum.ofTheElement().coefs().keySet().stream()
+                    .anyMatch(Proposition::anAnswerIn);
         };
     }
 

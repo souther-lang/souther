@@ -387,9 +387,11 @@ public final class BoundaryConstraints {
         // that, so the clause keeps its own check. Nor is there one where the elements have no
         // message form: the constraint reports the elements it finds repeated, and a decoder
         // library cannot write them.
-        if (base instanceof Type.ListOf list && statesDistinctness(call)
-                && call.args().size() == 2 && isValue(call.args().get(1))
-                && isIdentity(call.args().get(0))) {
+        BoundOperationFacts.NoTwoAlike alike =
+                DefaultBoundOperationFacts.get().statesNoTwoAlike(call.operation());
+        if (base instanceof Type.ListOf list && alike != null
+                && isValue(call.args().get(alike.container().position()))
+                && isIdentity(call.args().get(alike.by().position()))) {
             MessageForm element = messageForm(list.element(), Set.of());
             return element == null ? Optional.empty() : Optional.of(new Unique(element));
         }
@@ -522,13 +524,6 @@ public final class BoundaryConstraints {
     private boolean applies(Core.PreservedCall call, Kernel kernel) {
         return call.operation() instanceof ValueName.Stdlib.Operation operation
                 && symbols.kernelOf(operation) == kernel;
-    }
-
-    /** Whether {@code call} states that the elements are distinct — the library's own predicate for
-     *  it, which has a Souther body rather than a kernel and so is a value the library hands over
-     *  ({@link Symbols#theDistinctnessPredicate}). */
-    private boolean statesDistinctness(Core.PreservedCall call) {
-        return symbols.theDistinctnessPredicate().equals(call.operation());
     }
 
     /** Whether a projection hands back what it was given — {@code x -> x}, however the parameter is

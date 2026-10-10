@@ -7,6 +7,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.numeric.LinearForm;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,6 +50,19 @@ final class NameAnswers {
         List<AffineForms.ReadThrough<InputReads>> each = new ArrayList<>();
         one.alternatives().forEach(stands -> each.add(asked(stands)));
         return each;
+    }
+
+    /** What the reading {@code at} takes {@code node} as, or null where it takes it as nothing
+     *  else ({@link InputReads#taken}). */
+    static AffineForms.ReadThrough<InputReads> taken(Core node, InputReads at) {
+        Denotation as = at.taken(node);
+        return as == null ? null : asked(as);
+    }
+
+    /** The form of the values it was given the reading {@code at} takes the call {@code node} as,
+     *  or null where it takes it as none ({@link InputReads#takenAsAForm}). */
+    static LinearForm<Core> takenAsAForm(Core node, InputReads at) {
+        return at.takenAsAForm(node);
     }
 
     /** A value and what to read it in, as the walks spell that pair. */

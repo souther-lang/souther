@@ -263,9 +263,9 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         // Both sides name a position by itself, so the reading named a term for each.
         assertEquals(List.of(
                         Said.named(TermPath.of("p").then("x"),
-                                new BlockReason.ComparisonBetweenPositions()),
+                                new BlockReason.ComparisonRelatingTwoValues()),
                         Said.named(TermPath.of("p").then("y"),
-                                new BlockReason.ComparisonBetweenPositions())),
+                                new BlockReason.ComparisonRelatingTwoValues())),
                 said(read("p: Pair", "p.x < p.y")));
     }
 

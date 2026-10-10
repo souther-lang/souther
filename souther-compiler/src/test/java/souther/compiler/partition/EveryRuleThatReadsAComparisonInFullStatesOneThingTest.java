@@ -21,7 +21,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.types.ValueName;
 
@@ -95,7 +95,8 @@ class EveryRuleThatReadsAComparisonInFullStatesOneThingTest {
         Proposition.Unread unread = assertInstanceOf(Proposition.Unread.class,
                 pulled.proposition());
         assertEquals(new WhyUnread.NoWordsFor(new ValueName.Stdlib.Operation("String", "trim"),
-                AnswerAspect.EMPTINESS, Unsayable.EVERY_CHARACTER_IS_WHITESPACE), unread.why());
+                OperationLaw.Observed.EMPTINESS, Unsayable.EVERY_CHARACTER_IS_WHITESPACE),
+                unread.why());
         assertEquals(List.of(unread), pulled.leaves().stream().map(Pullback.Leaf::part).toList(),
                 "the one part met is the kept rule's");
     }

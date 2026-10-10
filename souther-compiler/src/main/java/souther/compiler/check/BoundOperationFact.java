@@ -2,11 +2,13 @@ package souther.compiler.check;
 
 import souther.compiler.core.DeclaredOperation;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.proof.Slot;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.ElementShape;
+import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.ResultBound;
@@ -17,6 +19,7 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -92,8 +95,10 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record BuildsItsResultFrom(DeclaredOperation operation, BuiltFrom<DeclaredArgument> built)
             implements OneAboutAnOperation {}
 
-    /** The operation answers a map keyed by keys {@code map} was keyed by, each the same value. */
-    record KeepsTheKeysOf(DeclaredOperation operation, DeclaredArgument map)
+    /** The operation answers a map keyed by keys {@code map} was keyed by, each the same value;
+     *  {@code states} is that, beside what a map answers asked whether it holds a key. */
+    record KeepsTheKeysOf(DeclaredOperation operation, DeclaredArgument map,
+                          LawProposition<Slot> states)
             implements OneAboutAnOperation {}
 
     /**
@@ -103,15 +108,68 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
      * <p>Several to an operation, one to each observation: a filter's answer has a law of whether
      * it holds anything and one of how many it holds, and two laws of one observation would be two
      * answers to one question, refused where these are collected.
+     *
+     * @param beside the law of a kernel said beside what the operations its cases turn on answer,
+     *               in the words of a walk — a case of some element being a value said as
+     *               {@code Set.contains} answering true — or none where it turns on none
      */
-    record HasALaw(DeclaredOperation operation, OperationLaw<DeclaredArgument> law)
-            implements SeveralAboutAnOperation {}
+    record HasALaw(DeclaredOperation operation, OperationLaw<DeclaredArgument> law,
+                   List<LawProposition<Slot>> beside)
+            implements SeveralAboutAnOperation {
+
+        public HasALaw {
+            beside = List.copyOf(beside);
+        }
+    }
 
     /** What the observation {@code observed} of the operation's answer comes to is {@code why},
      *  which no statement over the arguments can say. */
     record LeavesUnsaid(DeclaredOperation operation, OperationLaw.Observed observed,
                         Unsayable why)
             implements SeveralAboutAnOperation {}
+
+    /**
+     * A law of an operation the library writes in the language, to be proved against its body:
+     * {@code states} held to the declaration as a law is, and what a walk in the body carries
+     * ({@code carries}) in the words of a walk ({@link Slot}).
+     */
+    record HasALemma(DeclaredOperation operation, OperationLaw<DeclaredArgument> states,
+                     List<LawProposition<Slot>> carries)
+            implements SeveralAboutAnOperation {
+
+        public HasALemma {
+            carries = List.copyOf(carries);
+        }
+    }
+
+    /**
+     * What an operation the library writes answers stands to what it was handed and what others
+     * answer as {@code holds} says, to be proved against its body, with what a walk in the body
+     * carries ({@code carries}) in the words of a walk ({@link Slot}).
+     */
+    record HasARelatedLemma(DeclaredOperation operation, LawProposition<Slot> holds,
+                            List<LawProposition<Slot>> carries)
+            implements SeveralAboutAnOperation {
+
+        public HasARelatedLemma {
+            carries = List.copyOf(carries);
+        }
+    }
+
+    /** What a kernel answers stands to what others answer on its arguments as {@code holds} says,
+     *  over its arguments by place and any value ({@link Slot}). */
+    record IsRelated(DeclaredOperation operation, LawProposition<Slot> holds)
+            implements SeveralAboutAnOperation {}
+
+    /** The elements of the operation's answer stand in the order of the elements of {@code source}
+     *  they came from. */
+    record KeepsTheOrderOf(DeclaredOperation operation, DeclaredArgument source)
+            implements OneAboutAnOperation {}
+
+    /** The operation answers what {@code into} holds with {@code value} put in: at most one element
+     *  more, each element one of {@code into}'s or {@code value}. */
+    record PutsAValueIn(DeclaredOperation operation, DeclaredArgument value, DeclaredArgument into)
+            implements OneAboutAnOperation {}
 
     /** The operation answers a list of {@code part} of what {@code map} holds. */
     record ListsAPartOf(DeclaredOperation operation, DeclaredArgument map,

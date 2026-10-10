@@ -253,20 +253,26 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
     }
 
     /**
-     * And an operation that can empty what it was handed, or that says nothing either way, stops
-     * the reading where it is.
+     * An operation that can empty what it was handed is seen through where its law says when it
+     * does, and one that says nothing either way stops the reading where it is.
+     *
+     * <p>Taking {@code n} of what was kept is empty where {@code n} is below one or nothing was
+     * kept, which is the law the library's body of {@code List.take} was proved to answer: the
+     * check draws its line on {@code n}, deciding where something was kept, and the closure's
+     * comparison draws its own.
      */
     @Test
-    void anOperationThatCanEmptyWhatItWasHandedIsNotSeenThrough() {
+    void anOperationThatCanEmptyWhatItWasHandedIsSeenThroughOnlyByItsLaw() {
         String list = """
                 behavior pick : (xs: List<Int>, n: Int) -> Int
                 let pick (xs, n) = if List.isEmpty(%s) then 1 else 0
                 """;
-        assertEquals(List.of("n RULE_ABOUT_A_DERIVED_VALUE", "xs[*] RULE_ABOUT_A_DERIVED_VALUE",
-                        "xs RULE_ABOUT_A_DERIVED_VALUE"),
-                notRead(measured(compiled(list.formatted(
-                        "List.take(n, List.filter(x -> x > 0, xs))")))),
-                "taking none of what was kept is empty whatever was kept");
+        PartitionEvidence taken = measured(compiled(list.formatted(
+                "List.take(n, List.filter(x -> x > 0, xs))")));
+        assertEquals(List.of(), notRead(taken),
+                "taking none of what was kept is empty whatever was kept, and nothing else is");
+        assertEquals(List.of("[xs[*]/x <= 0, xs[*]/0 < x]", "[n/x < 1, n/1 <= x]"),
+                classesOf(taken), "a line on n, beside the closure's on each element");
         String text = """
                 behavior pick : (s: String) -> Int
                 let pick (s) = if String.isEmpty(String.trim(s)) then 1 else 0
@@ -278,8 +284,8 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
 
     /**
      * How many were kept of values written out is which of them were: read through, as what the
-     * closure answers for each — and with one of those a truth no row's numbers answer, held as
-     * several lines and not drawn, at each position the rule is about.
+     * closure answers for each — and with one of those a truth of the input, which a row writes,
+     * a line on the cost deciding where the trip is abroad, and nothing left unread.
      */
     @Test
     void howManyWereKeptIsWhichOfThemWere() {
@@ -289,10 +295,11 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
                         if List.length(List.filter(r -> applies(t, r), [High, Abroad])) %s
                         then 2 else 1
                     """.formatted(count)));
-            assertEquals(List.of("t.cost SEVERAL_LINES_IN_ONE_RULE",
-                            "t.abroad SEVERAL_LINES_IN_ONE_RULE"),
+            assertEquals(List.of(),
                     counted.notRead().stream().map(each -> each.at() + " " + each.reason())
                             .toList(), count);
+            assertEquals(List.of("[t.cost/x < 100, t.cost/100 <= x]", "[true, false]"),
+                    classesOf(counted), count);
         }
     }
 
@@ -404,6 +411,10 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
 
     private static List<String> notRead(PartitionEvidence evidence) {
         return evidence.notRead().stream().map(each -> each.at() + " " + each.reason()).toList();
+    }
+
+    private static List<String> classesOf(PartitionEvidence evidence) {
+        return evidence.axes().stream().map(axis -> String.valueOf(axis.classes())).toList();
     }
 
     private static List<String> toldApart(PartitionEvidence evidence) {

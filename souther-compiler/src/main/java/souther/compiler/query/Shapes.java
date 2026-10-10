@@ -2135,13 +2135,13 @@ public final class Shapes {
     }
 
     /**
-     * Which case any behavior's answer is, for a reader of a call to one.
+     * What any behavior's body answers, for a reader of a call to one.
      *
      * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives. A
      * reader taking one depends on the bodies of the behaviors it asks about and on nothing else.
      */
     public static BehaviorAnswers behaviorAnswers(Db db) {
-        return behavior -> Optional.ofNullable(db.ask(new Adequacy.AnswerCases(behavior)).value());
+        return behavior -> Optional.ofNullable(db.ask(new Adequacy.BodyAtACall(behavior)).value());
     }
 
     /**

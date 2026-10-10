@@ -6,6 +6,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.PlacementFiling;
@@ -324,7 +325,7 @@ public final class LinesWhereTheyFall {
         // than with one this worked out for itself.
         souther.compiler.inputs.RuleAddress address = inputs.rootNaming(path);
         if (address == null) {
-            return new WhereTheNameStands.AsWritten(term);
+            return underEachCase(inputs, term, inners, symbols);
         }
         PlacementFiling filing = inputs.file(
                 PlacementSeed.of(address, term, origin.cited()));
@@ -347,6 +348,33 @@ public final class LinesWhereTheyFall {
         return filed.isEmpty() ? new WhereTheNameStands.AsWritten(term)
                 : new WhereTheNameStands.FiledAt(filed.getFirst(),
                         filed.subList(1, filed.size()));
+    }
+
+    /**
+     * Where a term no rule of the parameter's value names stands, as the reading of the names the
+     * cases of a sum spread answers it ({@link NameReach#standingOf}): the element of a container
+     * that a name every case spreads holds is read under each case and stands under each, so it is
+     * filed at each of them that the reading holds — and as written where no name crosses.
+     */
+    private static WhereTheNameStands underEachCase(InputDomain inputs, NumericTerm term,
+                                                    NewtypeInners inners, Symbols symbols) {
+        List<NameReach.CaseStanding> standings = switch (inputs.reach().standingOf(
+                term.subjectPath())) {
+            case NameReach.Standing.AtThePathItself _ -> List.of();
+            case NameReach.Standing.UnderTheCases(var under) -> under;
+            case NameReach.Standing.CasesIncomplete(var under, var _) -> under;
+        };
+        List<NumericTerm> filed = new ArrayList<>();
+        for (NameReach.CaseStanding each : standings) {
+            Position position = inputs.at(each.position());
+            NumericTerm moved = position == null ? null
+                    : term.movedTo(each.position(), position.type(), inners, symbols);
+            if (moved != null) {
+                filed.add(moved);
+            }
+        }
+        return filed.isEmpty() ? new WhereTheNameStands.AsWritten(term)
+                : new WhereTheNameStands.FiledAt(filed.getFirst(), filed.subList(1, filed.size()));
     }
 
     /**

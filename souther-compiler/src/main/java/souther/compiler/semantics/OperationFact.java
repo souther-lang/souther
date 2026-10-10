@@ -1,5 +1,9 @@
 package souther.compiler.semantics;
 
+import souther.compiler.types.ValueName;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -156,6 +160,43 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The elements of the operation's answer stand in the order of the elements of {@code source}
+     * they came from: one stands before another where what it came from stood before what the
+     * other came from.
+     *
+     * <p>The order and nothing else. Where the elements came from is {@link BuildsItsResultFrom},
+     * and the two together are what a reader computing the answer itself needs: as many answers of
+     * the closure as elements, each on a different one ({@link ElementLineage.ClosureResult} with
+     * {@link SizeAgainstItsSource#SAME}), in the order they stand in, is the answer written out.
+     */
+    record KeepsTheOrderOf(ArgumentRef source) implements OperationFact {
+
+        public KeepsTheOrderOf {
+            Objects.requireNonNull(source, "this one names what the order is of");
+        }
+    }
+
+    /**
+     * The operation answers what {@code into} holds with {@code value} put in: every element of the
+     * answer is one of {@code into}'s or {@code value}, it holds at most one element more than
+     * {@code into}, and of {@code into}'s it holds each as many times as {@code into} does or fewer.
+     *
+     * <p>A set put a value it holds answers the set; a map put a value under a key it has answers it
+     * with the value under that key replaced. Both are this statement, which says what each element
+     * of the answer was and nothing about which of {@code into}'s it gave up.
+     *
+     * <p>An axiom of a kernel, read by the proofs of what the library's written operations build out
+     * of what they are handed, and by nothing a reader of a condition is handed.
+     */
+    record PutsAValueIn(ArgumentRef value, ArgumentRef into) implements OperationFact {
+
+        public PutsAValueIn {
+            Objects.requireNonNull(value, "this one names the value put in");
+            Objects.requireNonNull(into, "and what it is put in");
+        }
+    }
+
+    /**
      * The operation answers a map every key of which is a key {@code map} was keyed by — the same
      * value, filed under in the answer as it was there.
      *
@@ -170,6 +211,31 @@ public sealed interface OperationFact {
 
         public KeepsTheKeysOf {
             Objects.requireNonNull(map, "this one names the map the keys were kept from");
+        }
+
+        /**
+         * What this says of {@code operation}, which takes {@code arity} arguments, as a statement
+         * beside what a map answers asked whether it holds a key: any value the answer holds as a
+         * key, {@code map} holds as one. What a proof of it shows, and what a proof of another
+         * operation takes of it.
+         */
+        public LawProposition<ArgumentRef> states(ValueName.Stdlib.Operation operation,
+                                                  int arity) {
+            List<LawSubject<ArgumentRef>> own = new ArrayList<>();
+            for (int at = 0; at < arity; at++) {
+                own.add(new LawSubject.Argument<>(new ArgumentRef.At(at)));
+            }
+            LawSubject<ArgumentRef> any = new LawSubject.Argument<>(new ArgumentRef.Every(0));
+            return new LawProposition.Any<>(List.of(
+                    holdsTheKey(any, new LawSubject.AnswerOf<>(operation, own)).denied(),
+                    holdsTheKey(any, new LawSubject.Argument<>(map))));
+        }
+
+        private static LawProposition<ArgumentRef> holdsTheKey(LawSubject<ArgumentRef> key,
+                                                              LawSubject<ArgumentRef> in) {
+            return new LawProposition.Observed<>(new LawSubject.AnswerOf<>(
+                    ValueName.Stdlib.operation("Map", "containsKey"), List.of(key, in)),
+                    new SideAnswered(AnswerAspect.TRUTH, true));
         }
     }
 
@@ -208,6 +274,64 @@ public sealed interface OperationFact {
         public LeavesUnsaid {
             Objects.requireNonNull(observed, "this one names an observation");
             Objects.requireNonNull(why, "and what it comes to");
+        }
+    }
+
+    /**
+     * A law of an operation the library writes in the language, stated to be proved against its
+     * body: {@code states}, which is a law only once proved, and what a walk the body makes carries
+     * at every step of it ({@code carries}), which the proof goes by.
+     *
+     * <p>Never a law on its own say-so. A law declared beside a body is a second account of what the
+     * body does and is refused there; this is the same statement as an obligation, which the body
+     * discharges or leaves open. A clause of {@code carries} names the walk's parts with
+     * {@link ArgumentRef.Carried}, {@link ArgumentRef.Walked} and {@link ArgumentRef.Every}, and may
+     * name what other operations answer ({@link LawSubject.AnswerOf}).
+     */
+    record IsALemma(OperationLaw<ArgumentRef> states, List<LawProposition<ArgumentRef>> carries)
+            implements OperationFact {
+
+        public IsALemma {
+            Objects.requireNonNull(states, "a lemma states something");
+            carries = List.copyOf(carries);
+        }
+    }
+
+    /**
+     * What an operation the library writes answers stands to what it was handed, and to what
+     * other operations answer on those, as {@code holds} says — stated to be proved against its
+     * body, with what a walk the body makes carries at every step of it ({@code carries}).
+     *
+     * <p>A lemma, as {@link IsALemma} is, about a statement no law can make: one naming what other
+     * operations answer, the answer itself among them ({@link LawSubject.AnswerOf} of the operation
+     * handed its own arguments), and holding of every value ({@link ArgumentRef.Every}). Proved, it
+     * is read by the proofs of the library's other operations where they call this one, as what is
+     * stated of a kernel beside others is ({@link IsRelated}); by no reader of a condition.
+     */
+    record IsRelatedInALemma(LawProposition<ArgumentRef> holds,
+                             List<LawProposition<ArgumentRef>> carries) implements OperationFact {
+
+        public IsRelatedInALemma {
+            Objects.requireNonNull(holds, "a lemma states something");
+            carries = List.copyOf(carries);
+        }
+    }
+
+    /**
+     * What a kernel answers stands to what other kernels answer on its arguments as {@code holds}
+     * says, wherever it answers: a key a map holds is one only where the map holds something; an
+     * insert holds one more than its map unless the key was there.
+     *
+     * <p>An axiom about a kernel, as a law of one is, and held to what it computes the same way. Not
+     * a law: a law says what one observation of an answer comes to over the arguments alone, and
+     * this names other answers ({@link LawSubject.AnswerOf}), the answer itself among them, and may
+     * hold of every value ({@link ArgumentRef.Every}). Read by the proofs of what the library's
+     * written operations keep, and by nothing a reader of a condition is handed.
+     */
+    record IsRelated(LawProposition<ArgumentRef> holds) implements OperationFact {
+
+        public IsRelated {
+            Objects.requireNonNull(holds, "a relation states something");
         }
     }
 

@@ -2733,8 +2733,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + "how those positions pair up is not worked out";
             case SEVERAL_LINES_IN_ONE_RULE -> "what it states was read, and it is several lines"
                     + " held together, which this compiler does not divide the input by here";
-            case UNSUPPORTED_PARTITION_SHAPE ->
-                    "it relates two positions rather than dividing one";
+            case RULE_RELATING_TWO_VALUES ->
+                    "it relates the value here to another value rather than dividing the values here";
             case RULE_ABOUT_A_RUN ->
                     "it is about what the values here come to rather than about any one of them,"
                             + " so it draws its line and divides none of them";
@@ -3800,8 +3800,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 "a condition on a container's elements that no row of elements"
                                         + " written alike meets";
                         // Asked of the run and of nothing composed: the condition was read to the
-                        // end, and what is missing is a composer for its kind.
-                        case ReachabilityGap.Why.NoComposerWritesIt(var what) ->
+                        // end, and what is missing is a composer for its kind — with where the
+                        // reading of what its values were made from stopped, which is what a row
+                        // would have to be composed past.
+                        case ReachabilityGap.Why.NoComposerWritesIt(var what, var past) ->
                                 "a condition the run decides, since nothing here composes a row"
                                         + " for " + switch (what) {
                                     case A_VALUE_THE_BODY_WORKS_OUT ->
@@ -3811,20 +3813,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                     case A_COUNT_AGAINST_A_NUMBER_NOT_HELD ->
                                             "a count of elements held against a number with no"
                                                     + " exact representation";
-                                    case EVERY_ELEMENT_AND_MORE ->
-                                            "every element meeting something about more than the"
-                                                    + " element";
-                                    case A_QUANTIFIER_WITHIN_ONE ->
-                                            "what the elements of each element meet";
-                                    case A_TRUTH_OF_AN_ELEMENT ->
-                                            "a truth or a case of an element";
-                                    case ONE_OF_SEVERAL_FOR_AN_ELEMENT ->
-                                            "one of several things an element meets";
+                                    case A_COUNT_WITHIN_AN_ELEMENT ->
+                                            "how many elements of a container inside an"
+                                                    + " element of another meet something";
+                                    case A_NUMBER_OVER_ELEMENTS ->
+                                            "how many different values the elements of a"
+                                                    + " container come to, or what a number of"
+                                                    + " each adds up to";
                                     case TWO_SUBJECTS_ONE_VALUE -> "two values being one";
                                     case AN_ORDER_OF_NO_ONE_POSITION ->
                                             "a place on an order of a term that is no one"
                                                     + " position";
-                                };
+                                } + (past.isEmpty() ? "" : ", made from what the reading stopped"
+                                        + " at: " + String.join("; ", past.stream()
+                                                .map(AdequacyReport::whyNotRead).toList()));
                         // What stopped the looking, and not that nothing was found. An author does
                         // nothing about the first and may do something about the second.
                         // A value it could not hold is said after the figures and apart from them,
@@ -3908,12 +3910,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit limit) -> switch (limit) {
                 case A_QUANTITY_ON_NO_ORDER ->
                         "a comparison whose quantity stands on no order this compiler measures";
-                case A_SIZE_NOTHING_MEASURES -> "a condition about what a container holds that"
-                        + " comes to how many it holds, which no type measures";
                 case A_PATH_KNOWS_NO_ALTERNATIVES -> "a condition that comes to one of several"
                         + " things, or to some element, which no fact a path knows says";
-                case A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR -> "a condition on a position"
-                        + " under a value the reading of the input does not descend into";
                 case AN_ANSWER_A_ROW_STANDS_IN -> "a condition on what a dependency answered,"
                         + " which a row stands in rather than writes";
                 case A_PLACE_THE_PATH_DOES_NOT_READ -> "a condition on a place the path does not"
@@ -3926,6 +3924,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         + " path knows says";
                 case A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS -> "how many elements of a container meet"
                         + " something, which no fact a path knows says";
+                case A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS -> "how many different values the"
+                        + " elements of a container come to, or what a number of each adds up to,"
+                        + " which no fact a path knows says";
                 case A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN -> "what every element meets, which a"
                         + " path holds only as the closure it was written with";
                 case A_NUMBER_THE_PATH_CANNOT_HOLD -> "a relation of numbers whose weights, added"
@@ -3971,6 +3972,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + " container at once";
             case WhyUnread.NoLawFor(var operation, var _) -> "a condition on what "
                     + operation.qualified() + " answers, whose declaration gives it no such side";
+            case WhyUnread.NotProvedOfItsBody(var operation, var _) -> "a condition on what "
+                    + operation.qualified() + " answers, whose law is stated and not proved of"
+                    + " its body";
             case WhyUnread.WhatARecursiveHelperAnswers _ -> "a condition on what a recursive"
                     + " helper answers";
             case WhyUnread.AClauseOfAnInvariant(var clause, var how) -> "an arm of an attempt,"
@@ -3981,13 +3985,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     };
             case WhyUnread.AnInvariantNotReached _ -> "an arm of an attempt, decided by an"
                     + " invariant whose declarations were not all reached";
-            case WhyUnread.InACalledBody(var what) -> "a case of what another behavior answers, "
+            case WhyUnread.InACalledBody(var what) -> "what another behavior answers, "
                     + switch (what) {
-                        case AN_ARGUMENT_AT_NO_POSITION -> "turning on a value it was handed that"
-                                + " stands at no position";
                         case WHAT_ITS_DEPENDENCY_ANSWERS -> "turning on what its own dependency"
                                 + " answers";
-                        case A_VALUE_IT_BINDS -> "turning on a value its body works out";
                         case ITSELF -> "which reaches itself while it is read";
                         case AN_ANSWER_NOT_READ -> "whose body was not read";
                     };
@@ -4003,19 +4004,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + " different things where the helper is written";
             case WhyUnread.NotMetByTheReading _ -> "a condition the reading of what conditions"
                     + " mean did not meet";
-            // This compiler's: what the condition means follows from rules it has, put together
-            // in a way it does not put them together yet.
-            case WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step step) ->
-                    "not yet read: " + switch (step) {
-                        case A_CHOICE_BY_CASES -> "a value chosen by cases inside arithmetic, or"
-                                + " compared as no number";
-                        case VALUES_WRITTEN_OUT -> "a comparison over one of several values"
-                                + " written out";
-                        case A_DEPENDENCY_ASKED_ABOUT_A_COMPUTED_VALUE -> "what a dependency"
-                                + " answered about a value the body computed";
-                        case A_BEHAVIOR_CALLED_BY_NAME -> "what another behavior answers";
-                        case A_CLOSURE_BY_NAME -> "a closure handed by name";
-                    };
         };
     }
 
@@ -4568,6 +4556,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case WhyUnread.TwoElementsOfOneContainer _ -> "two_elements_of_one_container";
                     case WhyUnread.NoLawFor _ -> "no_law_for_the_operation";
                     case WhyUnread.NoWordsFor _ -> "no_words_for_what_it_comes_to";
+                    case WhyUnread.NotProvedOfItsBody _ -> "not_proved_of_its_body";
                     case WhyUnread.NoFormOfWhatItAnswers _ -> "no_form_of_what_it_answers";
                     case WhyUnread.ANumberOfWhatAnOperationAnswers _ ->
                             "number_of_what_an_operation_answers";
@@ -4579,9 +4568,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     };
                     case WhyUnread.AnInvariantNotReached _ -> "invariant_not_reached";
                     case WhyUnread.InACalledBody(var what) -> switch (what) {
-                        case AN_ARGUMENT_AT_NO_POSITION -> "called_with_an_argument_at_no_position";
                         case WHAT_ITS_DEPENDENCY_ANSWERS -> "called_body_asks_a_dependency";
-                        case A_VALUE_IT_BINDS -> "called_body_binds_a_value";
                         case ITSELF -> "called_body_reaches_itself";
                         case AN_ANSWER_NOT_READ -> "called_body_not_read";
                     };
@@ -4589,32 +4576,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case WhyUnread.CopiesStateDifferentThings _ ->
                             "copies_state_different_things";
                     case WhyUnread.NotMetByTheReading _ -> "not_met_by_the_reading";
-                    case WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step step) ->
-                            switch (step) {
-                                case A_CHOICE_BY_CASES -> "not_yet_composed_choice_by_cases";
-                                case VALUES_WRITTEN_OUT -> "not_yet_composed_values_written_out";
-                                case A_DEPENDENCY_ASKED_ABOUT_A_COMPUTED_VALUE ->
-                                        "not_yet_composed_dependency_of_a_computed_value";
-                                case A_BEHAVIOR_CALLED_BY_NAME ->
-                                        "not_yet_composed_behavior_called_by_name";
-                                case A_CLOSURE_BY_NAME -> "not_yet_composed_closure_by_name";
-                            };
                 });
             }
             case WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit limit) -> {
                 out.put("kind", "outside_domain");
                 out.put("reason", switch (limit) {
                     case A_QUANTITY_ON_NO_ORDER -> "quantity_on_no_order";
-                    case A_SIZE_NOTHING_MEASURES -> "size_nothing_measures";
                     case A_PATH_KNOWS_NO_ALTERNATIVES -> "path_knows_no_alternatives";
-                    case A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR ->
-                            "position_the_reading_holds_no_place_for";
                     case AN_ANSWER_A_ROW_STANDS_IN -> "answer_a_row_stands_in";
                     case A_PLACE_THE_PATH_DOES_NOT_READ -> "place_the_path_does_not_read";
                     case A_PATH_KNOWS_NO_CASES -> "path_knows_no_cases";
                     case A_PATH_KNOWS_NO_SAMENESS_OF_VALUES -> "path_knows_no_sameness_of_values";
                     case A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER -> "path_knows_no_place_on_an_order";
                     case A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS -> "path_knows_no_count_of_elements";
+                    case A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS ->
+                            "path_knows_no_number_over_elements";
                     case A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN ->
                             "path_holds_element_facts_as_written";
                     case A_NUMBER_THE_PATH_CANNOT_HOLD -> "number_the_path_cannot_hold";

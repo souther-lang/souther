@@ -54,23 +54,34 @@ record ContentsAsked(List<Asked> asked) {
                 // written ({@link CardinalityComposer}), and asks no value written into it here.
                 case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
                      RowDemand.ForTheRun _ -> { }
-                case RowDemand.Exists exists -> {
-                    for (RowDemand.OfAnElement one : exists.ofAnElement()) {
-                        if (one instanceof RowDemand.SameAs(TermPath value)) {
-                            out.add(new Asked(exists.container(), value, true));
-                        }
-                    }
-                }
-                case RowDemand.ForAll every -> {
-                    for (RowDemand.OfAnElement one : every.ofEachElement()) {
-                        if (one instanceof RowDemand.DifferentFrom(TermPath value)) {
-                            out.add(new Asked(every.container(), value, false));
-                        }
-                    }
-                }
+                case RowDemand.Exists exists ->
+                        asked(exists.container(), true, exists.ofAnElement(), out);
+                case RowDemand.ForAll every ->
+                        asked(every.container(), false, every.ofEachElement(), out);
             }
         }
         return new ContentsAsked(out);
+    }
+
+    /**
+     * What some element of {@code container} — or every one, not {@code some} — being asked
+     * {@code ofTheElement} asks of the contents of containers: of this one, and of a container
+     * inside its element, which a row writes alike in every element.
+     */
+    private static void asked(TermPath container, boolean some,
+                              List<RowDemand.OfAnElement> ofTheElement, List<Asked> into) {
+        for (RowDemand.OfAnElement one : ofTheElement) {
+            switch (one) {
+                case RowDemand.SameAs(TermPath value) when some ->
+                        into.add(new Asked(container, value, true));
+                case RowDemand.DifferentFrom(TermPath value) when !some ->
+                        into.add(new Asked(container, value, false));
+                case RowDemand.WithinIt(TermPath inner, boolean innerSome, var asked) ->
+                        asked(inner, innerSome, List.of(asked), into);
+                case RowDemand.SameAs _, RowDemand.DifferentFrom _, RowDemand.Relational _,
+                     RowDemand.ATruth _, RowDemand.InCases _ -> { }
+            }
+        }
     }
 
     /**

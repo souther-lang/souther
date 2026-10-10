@@ -14,11 +14,14 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.partition.WhatTheRulesLeave;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.List;
 import java.util.Optional;
@@ -86,15 +89,25 @@ final class NumberWays implements ComparisonWays {
 
     /**
      * A fork of the model is entered where what its condition states can come out that way under
-     * the input's rules ({@link WhatTheRulesLeave}). A fork in a copy of one of the language's
-     * operations states nothing of the model, and its parts answer.
+     * the input's rules ({@link WhatTheRulesLeave}). So is a fork in a copy of one of the
+     * language's operations: it states nothing of the model, and what its condition states, read
+     * where the copy stands, is what the operation's body says at the call
+     * ({@link MeaningsOfABodyReading#ofACopiedCondition}) — read by the rules a model's conditions
+     * are read by, and not by this reader on its own.
      */
     @Override
     public Optional<AWayThrough> stated(Core.If fork, boolean want) {
         Optional<ModelOccurrence> construct = ModelOccurrence.statedAt(fork.place().occurrence());
         // A body with no reading of what its conditions mean has its forks read as they stand.
-        if (construct.isEmpty() || meanings == MeaningsOfABody.NONE) {
+        if (meanings == MeaningsOfABody.NONE) {
             return Optional.empty();
+        }
+        if (construct.isEmpty()) {
+            return insideACopyOfTheLibrary(fork)
+                    ? Optional.of(WhatTheRulesLeave.admits(MeaningsOfABodyReading
+                            .ofACopiedCondition(fork.cond(), reads, numbers.reading()), want,
+                            numbers.reading()))
+                    : Optional.empty();
         }
         // One that has a reading and states nothing at this fork is not read a second way: the
         // fork is not ruled out, for the reason nothing is stated there.
@@ -105,6 +118,13 @@ final class NumberWays implements ComparisonWays {
                         numbers.reading()))
                 .orElseGet(() -> new AWayThrough.NotRuledOut(List.of(
                         new WhyNotTaken.MeaningUnread(meanings.whyNothingAt(site))))));
+    }
+
+    /** Whether {@code fork} stands in a copy of one of the language's operations, the copy made
+     *  where the model called it. */
+    private static boolean insideACopyOfTheLibrary(Core.If fork) {
+        return fork.place().occurrence().lineage() instanceof OccurrenceLineage.Expansion copy
+                && copy.expanded() instanceof ValueName.Stdlib.Operation;
     }
 
     @Override

@@ -150,12 +150,13 @@ public record BuiltFrom<A>(List<ElementLineage.OutputLineage<A>> outputs,
     /**
      * The word for one lineage, given whether the result has as many elements as its source.
      *
-     * <p>Elements that are each one of several things are each of them read, and the word is the one
-     * they all read where they read one — otherwise the word for elements nothing was kept of, which
-     * licenses nothing and so is true of a run holding some of each. {@code Map.updateIfPresent} is
-     * that: every value is the argument's own or what the closure made of it, so neither
-     * {@code PERMUTES} nor {@code MAPS} is true of the run, and what a reader of the four words may
-     * assume of it is nothing.
+     * <p>Elements that are each one of several things take the word for elements nothing was kept
+     * of, which licenses nothing and so is true of a run holding some of each. Each of the other
+     * words says how many of the source's elements the run holds as well as what they are, and
+     * {@link ElementLineage.OneOf} says what each element is and not how many of the source's.
+     * {@code Map.updateIfPresent} is that: every value is the argument's own or what the closure
+     * made of it, so neither {@code PERMUTES} nor {@code MAPS} is true of the run, and what a reader
+     * of the four words may assume of it is nothing.
      */
     private ElementShape wordFor(ElementLineage<A> lineage, boolean asMany) {
         return switch (lineage) {
@@ -173,12 +174,7 @@ public record BuiltFrom<A>(List<ElementLineage.OutputLineage<A>> outputs,
                             "a construction whose elements come from more than one place has no"
                                     + " single source for a shape to be about: " + outputs);
                 }
-                ElementShape word = null;
-                for (ElementLineage<A> alternative : one.alternatives()) {
-                    ElementShape read = wordFor(alternative, asMany);
-                    word = word == null || word == read ? read : ElementShape.COLLAPSES;
-                }
-                yield word;
+                yield ElementShape.COLLAPSES;
             }
         };
     }

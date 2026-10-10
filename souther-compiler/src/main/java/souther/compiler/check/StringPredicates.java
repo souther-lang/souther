@@ -100,7 +100,9 @@ public enum StringPredicates {
      *
      * <p>All four take the text first and the subject second, which is the library's own order
      * ({@code String.contains(sub, s)}). Written per entry it would be four chances to disagree
-     * with the library about a signature nothing here declares.
+     * with the library about a signature nothing here declares. Which of two strings is the subject
+     * is no signature's to say, so it is an axiom about the kernels, held to what they read by
+     * running them.
      */
     public int arity() {
         return 2;
