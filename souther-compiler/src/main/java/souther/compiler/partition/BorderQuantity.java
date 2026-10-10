@@ -16,14 +16,17 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -701,6 +704,8 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
         private final TermPath container;
         private final Proposition meeting;
         private final AStatementAtARow perElement;
+        private final LinearForm<NumericTerm> against;
+        private final Map<NumericTerm, TermOrders> on;
 
         /**
          * The count of what {@code counted} counts.
@@ -708,11 +713,76 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
          * @param counted what is counted, which is the whole of which count this is
          */
         HowMany(CountedElements counted) {
+            this(counted, new LinearForm<>(ExactRatio.ZERO, Map.of()), Map.of());
+        }
+
+        /**
+         * The count of what {@code counted} counts, with what a form of the input's numbers comes to
+         * added: the quantity a rule cuts where it holds the count against a number of the input.
+         *
+         * <p>Two things and kept as two. How many elements meet the statement is a whole number
+         * from none, whatever it is held against; the quantity is that count plus the form, which
+         * takes negative values and, over numbers that fill, fractions. The count is weighed once,
+         * so {@code count >= n} and {@code 2 * count >= 2 * n} are one quantity, and what a rule
+         * holds it against is the level, which is where the form's constant went.
+         *
+         * @param counted what is counted, which is the whole of which count this is
+         * @param against the form of the input's numbers added to the count, with no constant
+         * @param on      the orders each of its numbers is read and written on
+         */
+        HowMany(CountedElements counted, LinearForm<NumericTerm> against,
+                Map<NumericTerm, TermOrders> on) {
+            if (against.constant().signum() != 0) {
+                throw new IllegalArgumentException(
+                        "a quantity carries no constant; it belongs to the level: " + against);
+            }
+            if (!on.keySet().equals(against.coefs().keySet())) {
+                throw new IllegalArgumentException("a form is over the positions it names, and each"
+                        + " of them is read on one order: " + against + " against " + on.keySet());
+            }
+            on.forEach((term, orders) -> {
+                orders.areOf(term);
+                if (!orders.answered().counts()) {
+                    throw new IllegalArgumentException("a count is added to numbers, and this order"
+                            + " has no number under it: " + orders.answered());
+                }
+            });
             this.counted = counted;
             this.behavior = counted.behavior();
             this.container = counted.container();
             this.meeting = counted.meeting();
             this.perElement = counted.perElement();
+            this.against = against;
+            this.on = Map.copyOf(on);
+        }
+
+        /** What is added to the count, with no constant; no coefficient where the quantity is the
+         *  count alone. */
+        LinearForm<NumericTerm> against() {
+            return against;
+        }
+
+        /** The orders each number added to the count is read and written on. */
+        Map<NumericTerm, TermOrders> on() {
+            return on;
+        }
+
+        /** Every number of a row the quantity is read from: what the statement reads, and what is
+         *  added to the count. */
+        List<NumericTerm> allNumbers() {
+            List<NumericTerm> out = new ArrayList<>(perElement.numbers());
+            NumericTerms.inOrder(against.coefs().keySet()).forEach(term -> {
+                if (!out.contains(term)) {
+                    out.add(term);
+                }
+            });
+            return List.copyOf(out);
+        }
+
+        /** The numbers added to the count, as a quantity read off a row; null where there are
+         *  none. */
+        private OverAForm addedForm() {
+            return against.coefs().isEmpty() ? null : new OverAForm(behavior, against, on);
         }
 
         /** What is counted, for a reader asking that and not which quantity a border is on. */
@@ -739,7 +809,21 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
          *  ({@link #runsWithin}). */
         @Override
         public LevelSpace levels() {
-            return counted.levels();
+            if (against.coefs().isEmpty()) {
+                return counted.levels();
+            }
+            // The count steps by one and the form by what its coefficients generate, so the sum
+            // takes what both together do — over positions that step, every multiple of their
+            // common divisor.
+            List<ExactRatio> weights = new ArrayList<>(against.coefs().values());
+            weights.add(ExactRatio.ONE);
+            ExactRatio step = LevelSpace.stepOf(weights);
+            List<Carrier> orders = new ArrayList<>();
+            on.values().forEach(each -> orders.add(each.answered()));
+            orders.add(Carrier.WHOLE);
+            return LevelSpace.addedUpOver(orders) == Granularity.DISCRETE
+                    ? LevelSpace.steppingBy(step)
+                    : LevelSpace.overFiniteDecimals(LevelSpace.generatorOverFiniteDecimals(step));
         }
 
         /**
@@ -753,12 +837,27 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
          */
         @Override
         public Stands standsAt(Criterion where, Observation row) {
+            OverAForm added = addedForm();
+            ExactAnswer<ExactRatio> rest = ExactAnswer.held(ExactRatio.ZERO);
+            if (added != null) {
+                switch (added.valuesOf(added.read(row))) {
+                    case ValuesAtARow.NoneHere _ -> {
+                        return Stands.NO;
+                    }
+                    case ValuesAtARow.CouldNotTell(Set<ReadingGap> why) -> {
+                        return Stands.couldNotTell(why);
+                    }
+                    case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
+                            rest = OrderedAffineBoundary.at(against, values);
+                }
+            }
             AStatementAtARow.HowManyAtARow counted = perElement.howManyMeetIn(container, row);
             if (counted == null) {
                 return Stands.couldNotTell(ReadingGap.COULD_NOT_WALK);
             }
-            return switch (counted.whether(count -> ExactAnswer.held(
-                    where.holds(new Level.OfTheQuantity(ExactRatio.of(count)))))) {
+            ExactAnswer<ExactRatio> addedUp = rest;
+            return switch (counted.whether(count -> addedUp.flatMap(sum -> ExactRatio.of(count)
+                    .plus(sum)).map(at -> where.holds(new Level.OfTheQuantity(at))))) {
                 case AStatementAtARow.Answer.Holds _ -> Stands.YES;
                 case AStatementAtARow.Answer.Fails _ -> Stands.NO;
                 case AStatementAtARow.Answer.CouldNotTell(var why) -> Stands.couldNotTell(why);
@@ -776,11 +875,18 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
         public void lookAt(Observation row) {
             row.eachElementOf(container);
             perElement.lookAt(row, Set.of(container));
+            OverAForm added = addedForm();
+            if (added != null) {
+                added.lookAt(row);
+            }
         }
 
         @Override
         public Standing standingAt(Criterion where) {
-            return new Standing.OfACount(counted, numbers(), where);
+            return against.coefs().isEmpty()
+                    ? new Standing.OfACount(counted, numbers(), where)
+                    : new Standing.OfACountAndAForm(counted, against,
+                            LinearQuantity.answeredOn(on), levels(), where);
         }
 
         @Override
@@ -791,7 +897,13 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
         /** The count as an author would read it: the container, and what its elements meet. */
         @Override
         public String left() {
-            return "#" + container + " [" + said(meeting) + "]";
+            String count = "#" + container + " [" + said(meeting) + "]";
+            if (against.coefs().isEmpty()) {
+                return count;
+            }
+            String added = OrderedAffineBoundary.spelled(against.coefs());
+            return added.startsWith("-") ? count + " - " + added.substring(1)
+                    : count + " + " + added;
         }
 
         /** A statement over the input's own numbers, written the way a comparison is. */
@@ -864,12 +976,13 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof HowMany that && counted.equals(that.counted);
+            return other instanceof HowMany that && counted.equals(that.counted)
+                    && against.equals(that.against);
         }
 
         @Override
         public int hashCode() {
-            return counted.hashCode();
+            return Objects.hash(counted, against);
         }
 
         @Override
@@ -987,7 +1100,7 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
     default List<NumericTerm> numbers() {
         return switch (this) {
             case LinearQuantity form -> form.terms();
-            case HowMany count -> count.perElement.numbers();
+            case HowMany count -> count.allNumbers();
         };
     }
 
@@ -996,7 +1109,10 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
     default NumericDomain.Bounds runsWithin(Quantities quantities) {
         return switch (this) {
             case LinearQuantity form -> quantities.runsBetween(form.direction());
-            case HowMany _ -> NONE_OR_MORE;
+            // The count runs from none and a form added to it runs wherever its numbers do, so the
+            // sum is left unbounded: what the rules leave it is no more than that.
+            case HowMany count -> count.against.coefs().isEmpty() ? NONE_OR_MORE
+                    : NumericDomain.Bounds.OPEN;
         };
     }
 
@@ -1010,7 +1126,8 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
             case LinearQuantity form -> region.projectionOf(form.direction());
             // A region holds relations over a row's numbers, and no relation it holds is about a
             // count of elements: it leaves the count what a count runs between.
-            case HowMany _ -> new NumericDomain.FormProjection.Within(NONE_OR_MORE);
+            case HowMany count -> new NumericDomain.FormProjection.Within(
+                    count.against.coefs().isEmpty() ? NONE_OR_MORE : NumericDomain.Bounds.OPEN);
         };
     }
 

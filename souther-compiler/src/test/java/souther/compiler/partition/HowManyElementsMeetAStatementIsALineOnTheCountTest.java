@@ -126,11 +126,11 @@ class HowManyElementsMeetAStatementIsALineOnTheCountTest {
     }
 
     /**
-     * A count against another of the input's numbers is two numbers held apart, and no line on a
-     * count.
+     * A count against another of the input's numbers is a line on the count with that number added
+     * to it, which comes out where the two are as many.
      */
     @Test
-    void aCountAgainstAnotherNumberOfTheInputIsNoLineOnTheCount() {
+    void aCountAgainstAnotherNumberOfTheInputIsALineOnTheCountAndTheNumber() {
         JsonNode report = reportOf("""
                 module probe
 
@@ -138,7 +138,10 @@ class HowManyElementsMeetAStatementIsALineOnTheCountTest {
                 let asMany (xs, n) =
                     if List.length(List.filter(x -> x > 0, xs)) == n then 1 else 0
                 """);
-        assertTrue(countBorders(report).isEmpty(), () -> "no line on the count: " + report);
+        List<JsonNode> counts = countBorders(report);
+        assertEquals(1, counts.size(), () -> "one line on the count and the number: " + report);
+        assertEquals("#xs [xs[*] > 0] - n",
+                counts.getFirst().at("/lineId/target/quantity/counted").asString());
     }
 
     /** Two counts held together in one statement are two lines of the one rule, each its own. */

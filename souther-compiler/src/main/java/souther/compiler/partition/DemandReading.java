@@ -10,6 +10,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -27,8 +28,10 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -736,9 +739,15 @@ final class DemandReading {
                 yield affine.form().constant().negated().dividedBy(weight)
                         instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level)
                         ? new Read.Demands(new RowDemand.SoMany(count, met, level,
+                                new LinearForm<>(ExactRatio.ZERO, Map.of()),
                                 anElementMeeting(count, read)))
                         : forTheRun(compared, RowDemand.NoComposer.A_COUNT_AGAINST_A_NUMBER_NOT_HELD);
             }
+            // The same count with numbers of the input added to it. Scaled to weigh the count by
+            // one, so what a row is asked for is the count and the form it is to come to together
+            // and not a count against a number that is not yet there.
+            case Relation.Affine affine when countAndNumbers(affine, read) != null ->
+                    soManyAgainstNumbers(compared, affine, met, read);
             case Relation.Affine(LinearForm<Quantity> form, Rel _) -> {
                 LinearForm<NumericTerm> against = WhatTheRulesLeave.ofTheInput(form);
                 if (against == null) {
@@ -760,6 +769,60 @@ final class DemandReading {
             case Relation.Ordered _ ->
                     forTheRun(compared, RowDemand.NoComposer.AN_ORDER_OF_NO_ONE_POSITION);
         };
+    }
+
+    /**
+     * The count {@code affine} weighs beside numbers of the input, or null where it is no such
+     * relation: one count a row is composed for, and nothing but numbers a row writes at one place
+     * each beside it.
+     */
+    private static Quantity.HowManyMeet countAndNumbers(Relation.Affine affine,
+                                                        InputReading read) {
+        if (affine.form().coefs().size() < 2) {
+            return null;
+        }
+        Quantity.HowManyMeet count = null;
+        for (Quantity each : affine.form().coefs().keySet()) {
+            if (each instanceof Quantity.HowManyMeet counted && count == null) {
+                count = counted;
+            } else if (each instanceof DecisionAtom.OfTheInput(NumericTerm term)
+                    && term.atOnePosition() != null) {
+                TermOrders orders = read.quantities().ordersOf(term);
+                if (orders == null || orders.observed() == null || orders.answered() == null
+                        || !orders.answered().counts()) {
+                    return null;
+                }
+            } else {
+                return null;
+            }
+        }
+        return count != null && AStatementAtARow.askable(count.ofTheElement()) ? count : null;
+    }
+
+    /**
+     * That so many elements of a container meet a statement, with numbers of the input added to
+     * the count, as what a row is asked: the relation scaled to weigh the count by one, turned over
+     * where that takes a negative.
+     */
+    private static Read soManyAgainstNumbers(Proposition.Compared compared,
+                                             Relation.Affine affine, Rel met, InputReading read) {
+        Quantity.HowManyMeet count = countAndNumbers(affine, read);
+        ExactRatio weight = affine.form().coefs().get(count);
+        if (!(ExactRatio.ONE.dividedBy(weight) instanceof ExactAnswer.Held<ExactRatio>(
+                ExactRatio scale))
+                || !(affine.form().times(scale) instanceof ExactAnswer.Held<LinearForm<Quantity>>(
+                        LinearForm<Quantity> scaled))) {
+            return forTheRun(compared, RowDemand.NoComposer.A_COUNT_AGAINST_A_NUMBER_NOT_HELD);
+        }
+        Map<NumericTerm, ExactRatio> added = new LinkedHashMap<>();
+        scaled.coefs().forEach((quantity, by) -> {
+            if (quantity instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+                added.put(term, by);
+            }
+        });
+        return new Read.Demands(new RowDemand.SoMany(count,
+                scale.signum() < 0 ? met.turned() : met, scaled.constant().negated(),
+                new LinearForm<>(ExactRatio.ZERO, added), anElementMeeting(count, read)));
     }
 
     /**

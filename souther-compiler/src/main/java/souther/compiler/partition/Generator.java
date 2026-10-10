@@ -18,6 +18,7 @@ import souther.compiler.check.TypeView;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
@@ -30,6 +31,7 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -5168,8 +5170,63 @@ public final class Generator {
             if (cut.demand() instanceof RowDemand.SoMany many) {
                 CountedElements count = CountedElements.of(subject.behavior(), many.count(),
                         subject.quantities(), many.anElementMeeting());
-                countsOnTheWay.merge(count.identity(),
-                        new CountsAsked(count, many.counts().values(), cut), CountsAsked::and);
+                LevelRegion counts;
+                if (many.againstNumbers()) {
+                    // The count is held against what numbers of the row add up to, so which counts
+                    // meet it is known once those numbers stand somewhere: placed here, as numbers
+                    // beside an element are, and the count asked for is the one that goes with them.
+                    List<NumericTerm.FromOnePosition> added = new ArrayList<>();
+                    for (NumericTerm term : NumericTerms.inOrder(many.against().coefs().keySet())) {
+                        added.add(term.atOnePosition());
+                    }
+                    Function<NumericTerm, Carrier> on = term -> {
+                        TermOrders orders = subject.quantities().ordersOf(term);
+                        return orders == null ? null : orders.observed();
+                    };
+                    switch (NumericWitness.of(here, added, on, looking)) {
+                        case NumericWitness.Standing.Found standing -> {
+                            Map<NumericTerm, Place> standingAt = new LinkedHashMap<>();
+                            for (NumericWitness.Standing.Found.Placed placed
+                                    : standing.inFixingOrder()) {
+                                RealizationTarget at = RealizationTarget.of(placed.position());
+                                // A number already standing was given to the region, so it is
+                                // placed where it stands.
+                                if (out.putIfAbsent(at, placed.place()) == null) {
+                                    routed.put(placed.position(), (RealizationTarget.OfANumber) at);
+                                    here = here.given(placed.position(), placed.place());
+                                }
+                                standingAt.put(placed.position(), placed.place());
+                            }
+                            counts = switch (OrderedAffineBoundary.at(many.against(), standingAt)) {
+                                case ExactAnswer.Held<ExactRatio>(ExactRatio sum) ->
+                                        many.countsWhere(sum);
+                                case ExactAnswer.Unheld<ExactRatio> _ -> null;
+                            };
+                            if (counts == null) {
+                                gaps.add(new ReachabilityGap.Uncomposed(cut,
+                                        new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                                continue;
+                            }
+                        }
+                        case NumericWitness.Standing.ProvedImpossible _ -> {
+                            gaps.add(new ReachabilityGap.Uncomposed(cut,
+                                    new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                            continue;
+                        }
+                        case NumericWitness.Standing.NotFound(var by, var unheld) -> {
+                            gaps.add(new ReachabilityGap.Uncomposed(cut,
+                                    by.isEmpty() && unheld.isEmpty()
+                                            ? new ReachabilityGap.Why.NoValueComposedForItsPositions()
+                                            : ReachabilityGap.Why.TheWalkForItsPositionsWasStopped
+                                                    .by(by, unheld)));
+                            continue;
+                        }
+                    }
+                } else {
+                    counts = many.counts().values();
+                }
+                countsOnTheWay.merge(count.identity(), new CountsAsked(count, counts, cut),
+                        CountsAsked::and);
                 continue;
             }
             // A statement no composer writes toward: nothing is placed for it, and the run is what

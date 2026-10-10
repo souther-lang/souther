@@ -135,6 +135,15 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Realization;",
                     "says the counts were offered short where the source of them stopped, as a"
                             + " side's levels are"),
+            Map.entry("souther.compiler.partition.LevelRealizer#ofACountAndAForm("
+                            + "Lsouther/compiler/partition/Standing$OfACountAndAForm;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Ljava/util/Map;"
+                            + "Lsouther/compiler/partition/WitnessSearch;"
+                            + "Lsouther/compiler/partition/ValuesTried;)"
+                            + "Lsouther/compiler/partition/Realization;",
+                    "tries the counts from none up to as many as a container is composed with, and"
+                            + " says that figure where it came to the end of them without a row"),
             Map.entry("souther.compiler.partition.Generator#inputsFrom("
                             + "Lsouther/compiler/partition/Generator$RowBeingComposed;I"
                             + "[Lsouther/compiler/partition/FixtureTemplate;"

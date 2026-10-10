@@ -7,7 +7,9 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.WhyUnread;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 
@@ -491,11 +493,16 @@ public sealed interface RowDemand {
      * @param count             what is counted: the container, and what an element is counted
      *                          for meeting
      * @param met               how the count stands to {@code level} on every row this holds of
-     * @param level             the number the count is held against
+     * @param level             the number the count, with {@code against} added to it, is held
+     *                          against
+     * @param against           what a form of the input's numbers comes to, added to the count
+     *                          before it is held against {@code level}; no coefficient where the
+     *                          count is held against a number alone
      * @param anElementMeeting  what an element meeting what is counted is held to, as relations,
      *                          where it is that ({@link DemandReading#anElementMeeting})
      */
     record SoMany(Quantity.HowManyMeet count, Rel met, ExactRatio level,
+                  LinearForm<NumericTerm> against,
                   Optional<List<TakenConstraint>> anElementMeeting)
             implements OfACondition {
 
@@ -503,8 +510,19 @@ public sealed interface RowDemand {
             Objects.requireNonNull(count, "a count of the elements of some container");
             Objects.requireNonNull(met, "a count held against a number some way");
             Objects.requireNonNull(level, "a count held against some number");
+            Objects.requireNonNull(against, "what is added to the count, or nothing");
             Objects.requireNonNull(anElementMeeting,
                     "what an element meeting it is held to is said, or said to be nothing read");
+            if (against.constant().signum() != 0) {
+                throw new IllegalArgumentException(
+                        "what is added to the count has no constant; it is in the level: " + against);
+            }
+        }
+
+        /** Whether the count is held against numbers of the input, which stand where the row puts
+         *  them, and not against a number alone. */
+        public boolean againstNumbers() {
+            return !against.coefs().isEmpty();
         }
 
         /**
@@ -513,23 +531,47 @@ public sealed interface RowDemand {
          * <p>A region and not one of its counts. Several conditions on one count are met where
          * their regions cross, and which count of that a container is composed at is the
          * composing's to choose.
+         *
+         * <p>Of a count held against a number alone. Where numbers of the input are added to it the
+         * counts it leaves are those of where the row puts them ({@link #countsWhere}).
          */
         public NumbersAskedFor counts() {
-            Level at = new Level.OfTheQuantity(level);
-            return NumbersAskedFor.of(switch (met) {
+            if (againstNumbers()) {
+                throw new IllegalStateException("the counts this leaves are those of where the"
+                        + " numbers added to it stand: " + this);
+            }
+            return NumbersAskedFor.of(regionOf(level));
+        }
+
+        /**
+         * The counts this leaves where the numbers added to it come to {@code added}, or null where
+         * the level less that is a number no exact ratio holds.
+         */
+        public LevelRegion countsWhere(ExactRatio added) {
+            return level.minus(added) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio at)
+                    ? regionOf(at) : null;
+        }
+
+        private LevelRegion regionOf(ExactRatio threshold) {
+            Level at = new Level.OfTheQuantity(threshold);
+            return switch (met) {
                 case EQ -> LevelRegion.point(at);
                 case NE -> LevelRegion.EVERYTHING.without(at);
                 case GE -> LevelRegion.of(new LevelInterval(Bound.at(at, true), null));
                 case GT -> LevelRegion.of(new LevelInterval(Bound.at(at, false), null));
                 case LE -> LevelRegion.of(new LevelInterval(null, Bound.at(at, true)));
                 case LT -> LevelRegion.of(new LevelInterval(null, Bound.at(at, false)));
-            });
+            };
         }
 
-        /** The numbers the statement reads, of the elements and beside them. */
+        /** The numbers the statement reads, of the elements and beside them, and the numbers added
+         *  to the count. */
         @Override
         public Set<NumericTerm> terms() {
-            return AStatementAtARow.numbersOf(count.ofTheElement());
+            Set<NumericTerm> out = new LinkedHashSet<>(AStatementAtARow.numbersOf(
+                    count.ofTheElement()));
+            out.addAll(against.coefs().keySet());
+            return Collections.unmodifiableSet(out);
         }
 
         @Override

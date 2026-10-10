@@ -3,8 +3,10 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
+import souther.compiler.numeric.LinearForm;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * What a row has to satisfy to stand at one coverage item, in the words a search can solve.
@@ -118,6 +120,32 @@ public sealed interface Standing {
 
         public OfACount {
             numbers = List.copyOf(numbers);
+        }
+    }
+
+    /**
+     * How many elements of a container meet a statement, together with what a form of the input's
+     * numbers comes to, at a level of the two added up.
+     *
+     * <p>Two things a row has to be at: so many elements meeting the statement, and the numbers of
+     * the form standing where they add up to what the level leaves. Neither is the item alone, and
+     * the count is the composing's to meet where the numbers are placed ({@link CardinalityComposer}).
+     *
+     * @param count  the count, as {@link OfACount} has it
+     * @param form   what is added to the count, with no constant
+     * @param on     the order each number of the form stands on
+     * @param levels the levels the sum takes
+     */
+    record OfACountAndAForm(CountedElements count, LinearForm<NumericTerm> form,
+                            Map<NumericTerm, Carrier> on, LevelSpace levels,
+                            Criterion where) implements Standing {
+
+        public OfACountAndAForm {
+            on = Map.copyOf(on);
+            if (form.coefs().isEmpty() || !on.keySet().equals(form.coefs().keySet())) {
+                throw new IllegalArgumentException("a form is added to the count over the numbers it"
+                        + " names, each on one order: " + form + " against " + on.keySet());
+            }
         }
     }
 }
