@@ -88,6 +88,18 @@ public record BuiltFrom<A>(List<ElementLineage.OutputLineage<A>> outputs,
     }
 
     /**
+     * The argument whose elements the answer holds all of, each once, or null where it holds some
+     * of them or more than one of each.
+     *
+     * <p>{@link #holdsTheElementsOf} with the count: the answer is the argument's elements in
+     * another order, so any statement about how many of them meet a condition, or whether some
+     * does, is the same statement about the argument.
+     */
+    public A permutesTheElementsOf() {
+        return size == SizeAgainstItsSource.SAME ? holdsTheElementsOf() : null;
+    }
+
+    /**
      * The argument each of whose elements the answer holds exactly one closure result of, or null
      * where it answers no such run.
      *

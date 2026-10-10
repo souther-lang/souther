@@ -72,21 +72,32 @@ public final class WhereTheElementsCameFrom {
                 .equals(ElementLineage.ResultPath.elements())) {
             return new LibraryProver.Outcome.Open(new Unproved.NotOverItsArguments());
         }
-        return prove(operation, built.lineage(), built.size());
+        return prove(operation, built.lineage(), built.size(), false);
     }
 
     /** Whether every element of {@code operation}'s answer came from its source as {@code wanted}
      *  says, how many there are being no part of the statement. */
     public LibraryProver.Outcome proveWhereTheyCameFrom(ValueName.Stdlib.Operation operation,
                                                         ElementLineage<Integer> wanted) {
-        return prove(operation, wanted, null);
+        return prove(operation, wanted, null, false);
+    }
+
+    /**
+     * Whether the answer of {@code operation} holds, for every element of its source, the one value
+     * {@code wanted} says it comes to — and nothing else: every element of the answer came from the
+     * source as {@code wanted} says, and no case of the body leaves an element of the source out.
+     */
+    public LibraryProver.Outcome proveEveryElementIsHeld(ValueName.Stdlib.Operation operation,
+                                                         ElementLineage<Integer> wanted) {
+        return prove(operation, wanted, null, true);
     }
 
     /** As {@link #prove(ValueName.Stdlib.Operation, BuiltFrom)}, with the count held to
-     *  {@code size} where there is one and left alone where it is null. */
+     *  {@code size} where there is one and left alone where it is null, and with no element of the
+     *  source left out where {@code everyElement}. */
     private LibraryProver.Outcome prove(ValueName.Stdlib.Operation operation,
                                         ElementLineage<Integer> wanted,
-                                        SizeAgainstItsSource size) {
+                                        SizeAgainstItsSource size, boolean everyElement) {
         ElementLineage.Source<Integer> source = wanted.source();
         if (source == null || source.elements() != 1) {
             return new LibraryProver.Outcome.Open(new Unproved.NotOverItsArguments());
@@ -107,6 +118,10 @@ public final class WhereTheElementsCameFrom {
                             Unproved.Obligation.WHERE_ITS_ELEMENTS_CAME_FROM));
                 }
                 atMostOneEach &= accounts == Accounts.AT_MOST_ONE;
+            }
+            if (everyElement && building.leavesAnElementOut()) {
+                return new LibraryProver.Outcome.Open(new Unproved.DoesNotFollow(
+                        Unproved.Obligation.WHERE_ITS_ELEMENTS_CAME_FROM));
             }
             boolean asMany = size != null && asManyAs(operation, source.argument(), reading);
             boolean holds = size == null || switch (size) {
@@ -213,6 +228,9 @@ public final class WhereTheElementsCameFrom {
         private final ElementLineage<Integer> asTheyStand;
         private final Reading reading;
         private final TheWalk walk;
+        /** Whether some case of the body may answer without an element of the source — one it
+         *  kept nothing of, a step that carried what it had on, or a building that chose. */
+        private boolean leavesOut;
 
         Building(ValueName.Stdlib.Operation operation, ElementLineage.Source<Integer> source,
                  Reading reading) {
@@ -233,6 +251,7 @@ public final class WhereTheElementsCameFrom {
                 return permits(wanted, Kind.ITSELF) ? Accounts.AT_MOST_ONE : null;
             }
             if (empty(run)) {
+                leavesOut = true;
                 return Accounts.AT_MOST_ONE;
             }
             List<Integer> path = new ArrayList<>();
@@ -253,11 +272,19 @@ public final class WhereTheElementsCameFrom {
                 reading.took(new Proof.Used(called, Proof.Taken.WHAT_IT_LISTS));
                 return explained(args.get(argument), wanted);
             }
+            // What another operation builds may have chosen among what it was handed, and a put
+            // outside a walk does not say which of the source's it took the place of.
+            leavesOut = true;
             Accounts through = throughWhatItBuilds(called, args, wanted);
             if (through != null) {
                 return through;
             }
             return putOutsideAWalk(called, args, wanted);
+        }
+
+        /** Whether some case the body was read in may answer without an element of the source. */
+        boolean leavesAnElementOut() {
+            return leavesOut;
         }
 
         /**
@@ -288,6 +315,7 @@ public final class WhereTheElementsCameFrom {
             for (Reading.Case each : reading.applied(args.get(walk.step()), handed)) {
                 Value after = at(each.is(), path);
                 if (after.equals(before)) {
+                    leavesOut = true;
                     continue;
                 }
                 if (joinsTheClosuresAnswer(after, before, element, wanted)) {

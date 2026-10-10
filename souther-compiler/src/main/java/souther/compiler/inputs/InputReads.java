@@ -446,6 +446,19 @@ public final class InputReads {
         return null;
     }
 
+    /**
+     * The container {@code e} stands for an element of, where it is a parameter a walk hands each
+     * element of one — or null where it is no such parameter.
+     *
+     * <p>Where a walk hands it elements of more than one container the parameter is none of them
+     * in particular, and this says nothing about it.
+     */
+    public Core containerOfTheElement(Core e) {
+        return Core.withoutStanding(e) instanceof Core.Read read && read.binding() != null
+                && names.roleOf(read.binding()) instanceof BindingRole.Element(var held)
+                && held.part() == HeldIn.Part.ELEMENT ? held.container() : null;
+    }
+
     /** The same, as one of {@code readings} readings of one condition. */
     private InputReads readAs(long readings) {
         return new InputReads(names, alternatives, declared, dependencies,

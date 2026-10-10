@@ -139,6 +139,8 @@ sealed interface InputAtom {
                         taken.operation() instanceof souther.compiler.types.ValueName.Stdlib named
                                 ? named.qualified() + taken.arguments().writtenWith(at)
                                 : "|" + at + "|";
+                case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count ->
+                        "#(" + count.counted() + ")(" + at + ")";
             };
         }
     }

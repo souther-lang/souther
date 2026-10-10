@@ -312,6 +312,8 @@ public final class PublicationOrders {
                     // the thing a reader asked about is tried, where the ones before them bound
                     // what building one value is worth.
                     CompositionBudget.NUMBERS_OF_A_SET_TRIED,
+                    CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
+                    CompositionBudget.CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,
                     CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT,
                     CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES,
                     CompositionBudget.TIMES_THE_RULES_ARE_ASKED_AGAIN,

@@ -2,6 +2,7 @@ package souther.compiler.meaning;
 
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
@@ -19,7 +20,36 @@ import java.util.Optional;
  * and only the second leaves a comparison over it with nothing to say.
  */
 public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
-        Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent, Quantity.SumOver {
+        Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent, Quantity.SumOver,
+        Quantity.CodePointsOfAPiece {
+
+    /**
+     * How many of the code points of one piece of a string are in a class.
+     *
+     * <p>Of a piece and of no input position: what a split by one code point leaves of a string
+     * stands at no place a row writes, and the piece is whichever one the statement it is read
+     * inside is about. So it is no number of the input and only appears inside a statement about
+     * some piece, which holds against one of them is what the string holds ({@link
+     * Derivation.SomePieceMeeting}) — and is never compared on its own.
+     */
+    record CodePointsOfAPiece(CodePointClass counted) implements Quantity {
+
+        public CodePointsOfAPiece {
+            if (counted == null) {
+                throw new IllegalArgumentException("code points of a piece are counted by a class");
+            }
+        }
+
+        @Override
+        public String spelled() {
+            return "#(" + counted + ")(a piece)";
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
 
     /**
      * How many different values stand at {@code ofTheElement} over the elements of the container

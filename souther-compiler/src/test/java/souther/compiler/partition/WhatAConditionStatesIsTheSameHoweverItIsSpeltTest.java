@@ -204,18 +204,19 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
     /** What the domain has no words for is not carried, whichever way it is asked. */
     @Test
     void whatTheDomainHasNoWordsForIsNotCarried() {
-        assertInstanceOf(Proposition.Unread.class, stated("String.isEmpty(String.trim(b.s))"));
         assertInstanceOf(Proposition.Unread.class,
-                stated("String.length(String.trim(b.s)) >= 1"));
+                stated("String.isEmpty(String.replace(\"a\", \"b\", b.s))"));
         assertInstanceOf(Proposition.Unread.class,
-                stated("List.isEmpty(String.words(b.s))"));
+                stated("String.length(String.replace(\"a\", \"b\", b.s)) >= 1"));
+        assertInstanceOf(Proposition.Unread.class,
+                stated("String.length(String.replace(\"a\", \"b\", b.s)) == 0"));
     }
 
     /** Two parts nothing read are two parts. */
     @Test
     void twoUnreadPartsAreNotOne() {
-        Proposition two = stated("String.isEmpty(String.trim(b.s))"
-                + " && List.isEmpty(String.words(b.s))");
+        Proposition two = stated("String.isEmpty(String.replace(\"a\", \"b\", b.s))"
+                + " && String.isEmpty(String.replace(\"c\", \"d\", b.s))");
         Proposition.All all = assertInstanceOf(Proposition.All.class, two);
         assertEquals(2, all.parts().size());
     }

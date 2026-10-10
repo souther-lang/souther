@@ -54,6 +54,18 @@ public sealed interface LawNumber<A> {
     }
 
     /**
+     * How many of the code points of the string {@code of} are in {@code counted}. Never fewer
+     * than none and never more than the string holds.
+     */
+    record CodePointsOf<A>(LawSubject<A> of, CodePointClass counted) implements LawNumber<A> {
+
+        public CodePointsOf {
+            Objects.requireNonNull(of, "code points are of a string");
+            Objects.requireNonNull(counted, "and are counted by a class");
+        }
+    }
+
+    /**
      * How many elements of {@code container} meet {@code ofTheElement}. Never fewer than none and
      * never more than the container holds, and nought exactly where no element meets it.
      */

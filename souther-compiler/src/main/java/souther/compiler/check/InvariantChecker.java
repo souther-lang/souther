@@ -1159,6 +1159,9 @@ public final class InvariantChecker {
                 case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
                         NumericMeasures.isMeasure(taken.operation())
                                 ? atomOf(held.get(where.position())) : null;
+                // Nothing a clause is written about either: no declaration says how many of a
+                // string's code points are in a class.
+                case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _ -> null;
             };
             if (atom == null) {
                 continue;

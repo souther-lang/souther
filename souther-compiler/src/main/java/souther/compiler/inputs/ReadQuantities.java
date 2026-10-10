@@ -1628,6 +1628,8 @@ final class ReadQuantities implements Quantities {
             case NumericTerm.ValueOf _ -> NumberAt.valueOf(at.named());
             case NumericTerm.TakenOf taken ->
                     NumberAt.takenOf(at.named(), taken.operation(), taken.arguments());
+            case NumericTerm.CodePointClassCount count ->
+                    NumberAt.countOf(at.named(), count.counted());
             case NumericTerm.TakenOver over ->
                     NumberAt.takenOf(at.named(), over.operation());
         };

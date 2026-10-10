@@ -780,7 +780,8 @@ final class DemandReading {
                     return anAnswerARowStandsIn();
                 }
                 case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> counted = true;
-                case Quantity.HowManyDifferent _, Quantity.SumOver _ -> overElements = true;
+                case Quantity.HowManyDifferent _, Quantity.SumOver _,
+                     Quantity.CodePointsOfAPiece _ -> overElements = true;
                 case Quantity.OfABinding bound -> bound.madeOf().ifPresent(past::add);
                 case DecisionAtom.OfTheInput _ -> { }
             }

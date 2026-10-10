@@ -248,6 +248,9 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                         .OfWhatAnOperationAnswers taken ->
                                         named(taken.operation())
                                                 + taken.arguments().writtenWith(at());
+                                case NumberAt.OfWhatNumber
+                                        .OfHowManyCodePointsAreIn count ->
+                                        "#(" + count.counted() + ")(" + at() + ")";
                             };
                 };
                 // The number the walk had named when it stopped, where it named one. Not what the

@@ -342,6 +342,33 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "how many counts a container is asked to hold, and whether they were all the"
                             + " set admits"),
+            Map.entry("souther.compiler.partition.TermRealizations#holdingThatManyOfAClass("
+                            + "Lsouther/compiler/semantics/CodePointClass;"
+                            + "Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/partition/AskedAt;"
+                            + "Lsouther/compiler/inputs/TermOrders;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "how many counts a string is asked to hold of a class, and whether they were"
+                            + " all the set admits"),
+            Map.entry("souther.compiler.partition.TermRealizations#stringsHoldingThatManyOf("
+                            + "Lsouther/compiler/semantics/CodePointClass;"
+                            + "Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/numeric/Place;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "how far past a count a string the type admits is looked for; a plain string"
+                            + " is offered whichever is found, so reaching it gives up no count"),
+            Map.entry("souther.compiler.partition.TermRealizations#stringsHoldingTheirCounts("
+                            + "Ljava/util/Map;Lsouther/compiler/types/Type;"
+                            + "Ljava/util/SequencedMap;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "how many numbers of each demand are tried, up to which count every way of"
+                            + " writing a string is looked at, and how many steps the search may"
+                            + " take: each is handed over as what stopped it where nothing was"
+                            + " found"),
             Map.entry("souther.compiler.partition.TermRealizations#dateOn("
                             + "Ljava/util/Map;Lsouther/compiler/check/Carrier;)"
                             + "Lsouther/compiler/partition/TermRealizations$Search;",

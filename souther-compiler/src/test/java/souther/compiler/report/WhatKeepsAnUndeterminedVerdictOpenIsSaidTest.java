@@ -38,9 +38,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * A verdict of {@code undetermined} says whether measuring again with more would answer any of it.
  *
  * <p>The model here forks on whether a string computed from its input is empty, where the library
- * has no words for what that emptiness turns on: {@code String.trim} answers the string without
- * the white space at its ends, and it is empty exactly where every character was white space,
- * which is no statement this compiler reads. Both arms are reached and both outputs are specified
+ * has no words for what that emptiness turns on: {@code String.replace} answers the string with a
+ * text replaced in it, and it is empty exactly where the string was made up of copies of what was
+ * replaced, which is no statement this compiler reads. Both arms are reached and both outputs are specified
  * — and the measure stays partial, because the fork is about a value made from the position and
  * nothing works out what it says about the values there.
  *
@@ -63,10 +63,10 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
 
             behavior 判定する : (申請: 申請) -> 理由あり | 理由なし
             let 判定する (申請) =
-                if String.isEmpty(String.trim(申請.理由)) then 理由なし else 理由あり
+                if String.isEmpty(String.replace("a", "b", 申請.理由)) then 理由なし else 理由あり
 
             example 判定する
-                | "空白だけなら理由がない" : (申請 { 理由 = " " })    -> 理由なし
+                | "空なら理由がない" : (申請 { 理由 = "" })    -> 理由なし
                 | "書いてあれば理由がある" : (申請 { 理由 = "出張" }) -> 理由あり
             """;
 

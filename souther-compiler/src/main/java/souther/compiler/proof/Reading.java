@@ -6,6 +6,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ClosurePositions;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
@@ -588,6 +589,12 @@ final class Reading {
                 case LawNumber.AnArgument<A>(A at) -> number(argument.apply(at));
                 case LawNumber.SizeOf<A>(LawSubject<A> of) ->
                         size(subject(of, operation, argument, elements));
+                // Nothing a body is shown to compute says how many of a string's code points are
+                // in a class, so it is the number of that value and no more: a proof that needs
+                // it to be something else stops there.
+                case LawNumber.CodePointsOf<A>(LawSubject<A> of, CodePointClass counted) ->
+                        LinearForm.atom(new LawNumber.CodePointsOf<>(new LawSubject.Argument<>(
+                                subject(of, operation, argument, elements)), counted));
                 case LawNumber.HowManyMeet<A>(A container, LawProposition<A> ofTheElement) ->
                         howMany(argument.apply(container), each ->
                                 proposition(ofTheElement, operation, argument,

@@ -101,6 +101,18 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record ElementsComeFrom(DeclaredOperation operation, ElementLineage<DeclaredArgument> lineage)
             implements OneAboutAnOperation {}
 
+    /** The operation answers the pieces {@code string} falls into where {@code separator}, a code
+     *  point, stands in it. */
+    record HoldsThePiecesOf(DeclaredOperation operation, DeclaredArgument separator,
+                            DeclaredArgument string)
+            implements OneAboutAnOperation {}
+
+    /** The operation's answer holds the image, under {@code image}, of every element of the
+     *  argument the lineage names, and nothing else. */
+    record HoldsTheImageOfEveryElement(DeclaredOperation operation,
+                                       ElementLineage<DeclaredArgument> image)
+            implements OneAboutAnOperation {}
+
     /** The operation answers a map keyed by keys {@code map} was keyed by, each the same value;
      *  {@code states} is that, beside what a map answers asked whether it holds a key. */
     record KeepsTheKeysOf(DeclaredOperation operation, DeclaredArgument map,
