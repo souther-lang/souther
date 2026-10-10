@@ -432,9 +432,11 @@ final class DemandReading {
         List<AnElementsWay> ways = List.of(AnElementsWay.ASKING_NOTHING);
         for (Proposition part : parts) {
             // What a container holding a value asks of an element is that it be that value, which
-            // a composer writes into the container and no region narrows by.
-            List<AnElementsWay> choices = part instanceof Proposition.SameValue(var _,
-                    DecisionSubject.AnInput(TermPath at), boolean holds, var _)
+            // a composer writes into the container and no region narrows by. The element itself:
+            // the key a map files it under being a value is no value the map holds.
+            List<AnElementsWay> choices = part instanceof Proposition.SameValue(
+                    DecisionSubject.AnInput(TermPath one), DecisionSubject.AnInput(TermPath at),
+                    boolean holds, var _) && one.equals(held.element())
                     ? List.of(AnElementsWay.asking(holds ? new RowDemand.SameAs(at)
                             : new RowDemand.DifferentFrom(at)))
                     : waysOf(projected(part, read), element, everyElement, some, read);

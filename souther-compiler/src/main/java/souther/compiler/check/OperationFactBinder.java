@@ -1199,10 +1199,24 @@ final class OperationFactBinder {
                 }
                 yield new LawSubject.WhatTheClosureAnswers<>(closure);
             }
-            case LawSubject.KeyOf<ArgumentRef> _, LawSubject.AnswerOf<ArgumentRef> _ ->
+            case LawSubject.KeyOf<ArgumentRef>(ArgumentRef at) -> {
+                DeclaredArgument map = holdToTheDeclaration(declaration, at,
+                        new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                        "a map a law of it names the key of an element of");
+                if (!(map.stands() instanceof Type.MapOf) || !over.contains(map)) {
+                    throw new IllegalStateException("a law of " + library.qualified()
+                            + " names a key of argument " + (map.position() + 1)
+                            + " outside a statement about some element of it, or of what is"
+                            + " filed under no key");
+                }
+                yield new LawSubject.KeyOf<>(map);
+            }
+            // What another operation answers is no argument of this one, and a law says what this
+            // one's answer comes to over its own.
+            case LawSubject.AnswerOf<ArgumentRef> _ ->
                     throw new IllegalStateException("a law of " + library.qualified() + " names "
-                            + subject + ", which no reader of a law reads: only a lemma about a"
-                            + " body, or what is stated of kernels beside one another, may");
+                            + subject + ": only a lemma about a body, or what is stated of"
+                            + " kernels beside one another, may");
         };
     }
 

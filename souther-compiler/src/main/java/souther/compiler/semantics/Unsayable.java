@@ -16,10 +16,6 @@ public enum Unsayable {
      *  made of each of. */
     EVERY_CHARACTER_IS_WHITESPACE("every character of a string being whitespace"),
 
-    /** That a value is one a map is keyed by. What an element of a map is is its value, so its keys
-     *  are no container a statement can be made of each of. */
-    A_KEY_OF_A_MAP("a value being a key of a map"),
-
     /** That a string is made up of copies of another. What a replacement leaves is empty for that,
      *  and a string is no container of parts. */
     MADE_UP_OF_COPIES_OF_A_TEXT("a string being made up of copies of another"),
@@ -56,7 +52,7 @@ public enum Unsayable {
     public boolean standsOn(Unsayable reached) {
         return switch (this) {
             case NO_TWO_ELEMENTS_ALIKE -> reached == this || reached == HOW_MANY_DIFFERENT_VALUES;
-            case EVERY_CHARACTER_IS_WHITESPACE, A_KEY_OF_A_MAP, MADE_UP_OF_COPIES_OF_A_TEXT,
+            case EVERY_CHARACTER_IS_WHITESPACE, MADE_UP_OF_COPIES_OF_A_TEXT,
                  A_STRING_INSIDE_ANOTHER, A_STRING_MATCHING_A_PATTERN, HOW_MANY_DIFFERENT_VALUES ->
                     reached == this;
         };
@@ -77,7 +73,7 @@ public enum Unsayable {
                 case PERMUTES, SUBSET -> true;
                 case MAPS, COLLAPSES -> false;
             };
-            case EVERY_CHARACTER_IS_WHITESPACE, A_KEY_OF_A_MAP, MADE_UP_OF_COPIES_OF_A_TEXT,
+            case EVERY_CHARACTER_IS_WHITESPACE, MADE_UP_OF_COPIES_OF_A_TEXT,
                  A_STRING_INSIDE_ANOTHER, A_STRING_MATCHING_A_PATTERN, HOW_MANY_DIFFERENT_VALUES ->
                     false;
         };

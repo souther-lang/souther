@@ -87,6 +87,9 @@ final class Reading {
     /** The values made by an operation something was asked of that nothing settles, with why: each
      *  is known of nothing but itself where it is read. */
     private final Map<Value, Library.Settled> unsettled = new LinkedHashMap<>();
+    /** The values made by an operation that were read as what its law says rather than named: what
+     *  is stated of the operation beside others is as true of each of them as of one named. */
+    private final Set<Value.Made> readByALaw = new LinkedHashSet<>();
 
     Reading(Library library, Set<ValueName.Stdlib.Operation> readThrough) {
         this.library = library;
@@ -96,6 +99,11 @@ final class Reading {
     /** What this reading has taken of other operations so far. */
     Set<Proof.Used> used() {
         return Set.copyOf(used);
+    }
+
+    /** The values made by an operation this reading has read as what the operation's law says. */
+    Set<Value.Made> readByALaw() {
+        return Set.copyOf(readByALaw);
     }
 
     /** That what is read rests on {@code taken} as well, where a proof took it beside the
@@ -378,6 +386,7 @@ final class Reading {
                 && law instanceof OperationLaw.Observation<Integer>(var _,
                         LawProposition<Integer> holds)) {
             used.add(Proof.Used.law(operation, observed));
+            readByALaw.add(new Value.Made(operation, args));
             return proposition(holds, operation, args);
         }
         if (aspect == AnswerAspect.EMPTINESS && listed(operation, args) instanceof Value source) {

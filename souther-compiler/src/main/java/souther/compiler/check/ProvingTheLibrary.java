@@ -225,7 +225,7 @@ final class ProvingTheLibrary {
     private static boolean aboutTheContainer(Unsayable why) {
         return switch (why) {
             case NO_TWO_ELEMENTS_ALIKE -> true;
-            case EVERY_CHARACTER_IS_WHITESPACE, A_KEY_OF_A_MAP, MADE_UP_OF_COPIES_OF_A_TEXT,
+            case EVERY_CHARACTER_IS_WHITESPACE, MADE_UP_OF_COPIES_OF_A_TEXT,
                  A_STRING_INSIDE_ANOTHER, A_STRING_MATCHING_A_PATTERN, HOW_MANY_DIFFERENT_VALUES ->
                     false;
         };

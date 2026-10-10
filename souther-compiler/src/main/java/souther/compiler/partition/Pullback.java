@@ -1078,21 +1078,8 @@ final class Pullback {
                             // A value the element is is read as itself, where it was given.
                             case ElementAt.AValue(Core value, InputReads in) ->
                                     observe(value, aspect, in);
-                            case ElementAt.AtAPosition(TermPath container) -> {
-                                TermPath element = container.element();
-                                yield switch (aspect) {
-                                    case TRUTH -> leaf(new Derivation.ATruthOfASubject(
-                                            new DecisionSubject.AnInput(element), true), e, reads);
-                                    case PRESENCE -> leaf(new Derivation.PresentInASubject(
-                                            new DecisionSubject.AnInput(element)), e, reads);
-                                    case EMPTINESS -> {
-                                        Derivation some = holdsSomethingAt(element);
-                                        yield leaf(some != null ? some : new Derivation.Stopped(
-                                                new WhyUnread.NoMeasureOfItsSize(), false), e,
-                                                reads);
-                                    }
-                                };
-                            }
+                            case ElementAt.AtAPosition(TermPath container) ->
+                                    observedAt(container.element(), aspect);
                         };
                 case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(DeclaredArgument at) -> {
                     Denotation closure = reads.denotes(applied.argument(at),
@@ -1102,9 +1089,38 @@ final class Pullback {
                                     application != null ? application : closure.at())
                             : unread(e, reads, aClosureNotMet());
                 }
-                case LawSubject.KeyOf<DeclaredArgument> _,
-                     LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(subject);
+                case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) -> {
+                    TermPath key = keyAt(at);
+                    yield key != null ? observedAt(key, aspect) : unread(e, reads,
+                            new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT));
+                }
+                case LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(subject);
             };
+        }
+
+        /** The value standing at {@code at} coming out on {@code aspect}'s holding side. */
+        private Derivation observedAt(TermPath at, AnswerAspect aspect) {
+            return switch (aspect) {
+                case TRUTH -> leaf(new Derivation.ATruthOfASubject(new DecisionSubject.AnInput(at),
+                        true), e, reads);
+                case PRESENCE -> leaf(new Derivation.PresentInASubject(
+                        new DecisionSubject.AnInput(at)), e, reads);
+                case EMPTINESS -> {
+                    Derivation some = holdsSomethingAt(at);
+                    yield leaf(some != null ? some : new Derivation.Stopped(
+                            new WhyUnread.NoMeasureOfItsSize(), false), e, reads);
+                }
+            };
+        }
+
+        /**
+         * The position the key the element of the map at {@code at} is filed under stands at, or
+         * null where the element is a value written out rather than one standing at a position —
+         * a value is handed on without the key it was filed under.
+         */
+        private TermPath keyAt(DeclaredArgument at) {
+            return elements.get(at) instanceof ElementAt.AtAPosition(TermPath map)
+                    ? map.key() : null;
         }
 
         /** The subject a row controls {@code subject} is, or null where it is none. */
@@ -1127,8 +1143,11 @@ final class Pullback {
                                             : answerAt(value, in);
                         };
                 case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ -> null;
-                case LawSubject.KeyOf<DeclaredArgument> _,
-                     LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(subject);
+                case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) -> {
+                    TermPath key = keyAt(at);
+                    yield key == null ? null : new DecisionSubject.AnInput(key);
+                }
+                case LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(subject);
             };
         }
 
@@ -1407,8 +1426,8 @@ final class Pullback {
                             case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) -> at;
                             case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(
                                     DeclaredArgument at) -> at;
-                            case LawSubject.KeyOf<DeclaredArgument> _,
-                                 LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(of);
+                            case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) -> at;
+                            case LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(of);
                         };
                 case LawNumber.HowManyMeet<DeclaredArgument>(DeclaredArgument at, var _) -> at;
             };
@@ -1423,10 +1442,10 @@ final class Pullback {
                             case LawSubject.Argument<DeclaredArgument> _ -> 1;
                             case LawSubject.ElementOf<DeclaredArgument> _ -> 2;
                             case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ -> 3;
-                            case LawSubject.KeyOf<DeclaredArgument> _,
-                                 LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(of);
+                            case LawSubject.KeyOf<DeclaredArgument> _ -> 4;
+                            case LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(of);
                         };
-                case LawNumber.HowManyMeet<DeclaredArgument> _ -> 4;
+                case LawNumber.HowManyMeet<DeclaredArgument> _ -> 5;
             };
         }
 
@@ -1494,22 +1513,29 @@ final class Pullback {
                                     switch (elements.get(at)) {
                                         case ElementAt.AValue(Core value, InputReads in) ->
                                                 sizeOf(value, in);
-                                        case ElementAt.AtAPosition(TermPath container) -> {
-                                            NumericTerm.TakenOf size = sizeAt(container.element());
-                                            yield size == null ? new Sized.NotSized(
-                                                    new WhyUnread.NoMeasureOfItsSize())
-                                                    : new Sized.AsAForm(LinearForm.atom(
-                                                            new DecisionAtom.OfTheInput(size)));
-                                        }
+                                        case ElementAt.AtAPosition(TermPath container) ->
+                                                sizedAt(container.element());
                                     };
                             case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ ->
                                     new Sized.NotSized(new WhyUnread.AtNoPosition(
                                             WhyUnread.AtNoPosition.Place.SUBJECT));
-                            case LawSubject.KeyOf<DeclaredArgument> _,
-                                 LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(of);
+                            case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) -> {
+                                TermPath key = keyAt(at);
+                                yield key != null ? sizedAt(key) : new Sized.NotSized(
+                                        new WhyUnread.AtNoPosition(
+                                                WhyUnread.AtNoPosition.Place.SUBJECT));
+                            }
+                            case LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(of);
                         };
                 case LawNumber.HowManyMeet<DeclaredArgument> counted -> count(counted);
             };
+        }
+
+        /** How many what stands at {@code at} holds, as a number of the input. */
+        private Sized sizedAt(TermPath at) {
+            NumericTerm.TakenOf size = sizeAt(at);
+            return size == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
+                    : new Sized.AsAForm(LinearForm.atom(new DecisionAtom.OfTheInput(size)));
         }
 
         /** How many elements of a container meet a statement, as one count of the quantities a

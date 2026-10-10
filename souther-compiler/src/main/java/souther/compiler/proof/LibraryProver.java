@@ -350,6 +350,9 @@ public final class LibraryProver {
                     made.add(one);
                 }
             }));
+            // And the ones read as what their operation's law says, which no statement names any
+            // more and which are made all the same.
+            made.addAll(reading.readByALaw());
             for (Value.Made one : made) {
                 if (related.add(one)) {
                     known.addAll(linked(reading, one));

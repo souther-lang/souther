@@ -11,6 +11,8 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
@@ -75,6 +77,11 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
             behavior filtered : (lead: Lead, priority: Name) -> Bool
             let filtered (lead, priority) =
                 Set.contains(priority, Set.filter(n -> n /= lead.picked, lead.campaigns))
+
+            data Ledger = { totals: Map<String, Int> }
+
+            behavior keyed : (ledger: Ledger, wanted: String) -> Bool
+            let keyed (ledger, wanted) = Map.containsKey(wanted, ledger.totals)
             """;
 
     @Test
@@ -181,6 +188,46 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                 held.constraint().terms().iterator().next().toString());
         assertEquals(List.of(atNoPosition), assertInstanceOf(OnTheWay.Declined.class,
                 stated("written", false)).whys());
+    }
+
+    /**
+     * A map holding a key is some entry filed under it, which is read at the keys of the map: the
+     * condition is taken whole, both ways round, and nothing it asks is that a value the map holds
+     * be the key.
+     */
+    @Test
+    void aKeyAMapFilesSomethingUnderIsReadAtItsKeys() {
+        TermPath totals = TermPath.of("ledger").then("totals");
+        TermPath wanted = TermPath.of("wanted");
+        for (boolean holding : List.of(true, false)) {
+            List<OnTheWay> stated = statedAll("keyed", holding);
+            for (OnTheWay each : stated) {
+                RowDemand.OfACondition demand = assertInstanceOf(OnTheWay.TakenIn.class, each,
+                        () -> "a key is read whole: " + stated).demand();
+                List<RowDemand.OfAnElement> ofAnElement = switch (demand) {
+                    case RowDemand.Exists some -> some.ofAnElement();
+                    case RowDemand.ForAll every -> every.ofEachElement();
+                    case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
+                         RowDemand.ForTheRun _ -> List.of();
+                };
+                assertTrue(ofAnElement.stream().noneMatch(one ->
+                                one.equals(new RowDemand.SameAs(wanted))
+                                        || one.equals(new RowDemand.DifferentFrom(wanted))),
+                        () -> "no value the map holds is asked to be the key: " + demand);
+            }
+            assertTrue(stated.stream().anyMatch(each -> each instanceof OnTheWay.TakenIn taken
+                            && (taken.demand().positions().contains(totals.key())
+                                    || taken.demand() instanceof RowDemand.ForTheRun(
+                                            Proposition.Some(TermPath over,
+                                                    Proposition.SameValue(
+                                                            DecisionSubject.AnInput(TermPath one),
+                                                            DecisionSubject.AnInput(TermPath other),
+                                                            var _, var _), var _, var _),
+                                            var _, var _)
+                                    && over.equals(totals) && one.equals(totals.key())
+                                    && other.equals(wanted))),
+                    () -> "the key is what is asked: " + stated);
+        }
     }
 
     /** A container built out of another asks nothing of the other. */

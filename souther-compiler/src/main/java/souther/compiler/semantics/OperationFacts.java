@@ -488,15 +488,12 @@ public final class OperationFacts {
 
             // What a kernel's answer comes to beside what others answer on its arguments, where no
             // law of one observation says it. A key a map holds is one only where it holds
-            // something, and what is got under a key is there exactly where the key is. An insert
-            // holds one more than what it was handed unless what was put in was there, and holds
-            // exactly that and what it was handed; nothing holds a key of an empty map.
+            // something. An insert holds one more than what it was handed unless what was put in
+            // was there, and holds exactly that and what it was handed; nothing holds a key of an
+            // empty map.
             about("Map", "containsKey", related(any(
                     isTrue(answerOf("Map", "containsKey", the(at(0)), the(at(1)))).denied(),
                     holdsSomething(at(1))))),
-            about("Map", "containsKey", related(iff(
-                    isTrue(answerOf("Map", "containsKey", the(at(0)), the(at(1)))),
-                    some(at(1), alike(new LawSubject.KeyOf<>(at(1)), the(at(0))))))),
             // A map holds each of its keys once, so of another map's entries no more are under
             // keys it holds than it holds: with the ones under keys it does not hold, they are no
             // more than it and those.
@@ -504,9 +501,6 @@ public final class OperationFacts {
                     howManyMeet(ANY, isTrue(answerOf("Map", "containsKey",
                             new LawSubject.KeyOf<>(ANY), the(at(1)))).denied()), 1,
                     sizeOf(ANY), -1, 0))),
-            about("Map", "get", related(iff(
-                    holdsAValue(answerOf("Map", "get", the(at(0)), the(at(1)))),
-                    isTrue(answerOf("Map", "containsKey", the(at(0)), the(at(1))))))),
             about("Map", "insert", related(any(
                     all(isTrue(answerOf("Map", "containsKey", the(at(0)), the(at(2)))),
                             equal(sizeOf(answerOf("Map", "insert", the(at(0)), the(at(1)),
@@ -543,6 +537,18 @@ public final class OperationFacts {
                     some(at(1), sameElements(at(0), at(1)))))),
             about("Set", "difference", law(AnswerAspect.EMPTINESS, some(at(0),
                     some(at(1), sameElements(at(0), at(1))).denied()))),
+            // And which values of a map are left, and whether one is filed under a key: one under
+            // a key other than the one taken out, one under a key the other map files something
+            // under too, or under none it does; a value under the key asked for.
+            about("Map", "remove", law(AnswerAspect.EMPTINESS, some(at(1),
+                    new LawProposition.Same<>(new LawSubject.KeyOf<>(at(1)),
+                            new LawSubject.Argument<>(at(0)), false)))),
+            about("Map", "intersection", lemma(law(AnswerAspect.EMPTINESS, some(at(0),
+                    some(at(1), sameKeys(at(0), at(1))))))),
+            about("Map", "difference", lemma(law(AnswerAspect.EMPTINESS, some(at(0),
+                    some(at(1), sameKeys(at(0), at(1))).denied())))),
+            about("Map", "get", law(AnswerAspect.PRESENCE,
+                    some(at(1), alike(new LawSubject.KeyOf<>(at(1)), the(at(0)))))),
 
             // And what the domain has no words for.
             about("String", "trim", unsaid(AnswerAspect.EMPTINESS,
@@ -551,10 +557,6 @@ public final class OperationFacts {
                     Unsayable.EVERY_CHARACTER_IS_WHITESPACE)),
             about("String", "replace", unsaid(AnswerAspect.EMPTINESS,
                     Unsayable.MADE_UP_OF_COPIES_OF_A_TEXT)),
-            about("Map", "get", unsaid(AnswerAspect.PRESENCE, Unsayable.A_KEY_OF_A_MAP)),
-            about("Map", "remove", unsaid(AnswerAspect.EMPTINESS, Unsayable.A_KEY_OF_A_MAP)),
-            about("Map", "intersection", unsaid(AnswerAspect.EMPTINESS, Unsayable.A_KEY_OF_A_MAP)),
-            about("Map", "difference", unsaid(AnswerAspect.EMPTINESS, Unsayable.A_KEY_OF_A_MAP)),
 
             // What every operation answering a truth comes out true for. A container holding a
             // value is some element being it, and a denial is the other answer of its argument;
@@ -570,7 +572,8 @@ public final class OperationFacts {
             about("Bool", "not", lemma(law(AnswerAspect.TRUTH, new LawProposition.Observed<>(
                     new LawSubject.Argument<>(at(0)),
                     new SideAnswered(AnswerAspect.TRUTH, false))))),
-            about("Map", "containsKey", unsaid(AnswerAspect.TRUTH, Unsayable.A_KEY_OF_A_MAP)),
+            about("Map", "containsKey", law(AnswerAspect.TRUTH,
+                    some(at(1), alike(new LawSubject.KeyOf<>(at(1)), the(at(0)))))),
             about("String", "contains", unsaid(AnswerAspect.TRUTH,
                     Unsayable.A_STRING_INSIDE_ANOTHER)),
             about("String", "startsWith", unsaid(AnswerAspect.TRUTH,
@@ -844,12 +847,6 @@ public final class OperationFacts {
         return new LawProposition.Observed<>(subject, new SideAnswered(AnswerAspect.TRUTH, true));
     }
 
-    /** The value at {@code argument} holding a value. */
-    private static LawProposition<ArgumentRef> holdsAValue(LawSubject<ArgumentRef> subject) {
-        return new LawProposition.Observed<>(subject,
-                new SideAnswered(AnswerAspect.PRESENCE, true));
-    }
-
     private static LawSubject<ArgumentRef> the(ArgumentRef argument) {
         return new LawSubject.Argument<>(argument);
     }
@@ -946,6 +943,13 @@ public final class OperationFacts {
     private static LawProposition<ArgumentRef> sameElements(ArgumentRef one, ArgumentRef other) {
         return new LawProposition.Same<>(new LawSubject.ElementOf<>(one),
                 new LawSubject.ElementOf<>(other), true);
+    }
+
+    /** The element of the map {@code one} the statement is about being filed under the key the
+     *  element of the map {@code other} it is about is filed under. */
+    private static LawProposition<ArgumentRef> sameKeys(ArgumentRef one, ArgumentRef other) {
+        return new LawProposition.Same<>(new LawSubject.KeyOf<>(one),
+                new LawSubject.KeyOf<>(other), true);
     }
 
     private static LawNumber<ArgumentRef> number(ArgumentRef argument) {
