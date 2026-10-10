@@ -224,10 +224,6 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
                 warned.toString(StandardCharsets.UTF_8), exit);
     }
 
-    private static String reportOn(String model) throws Exception {
-        return run(model, false).report();
-    }
-
     @Test
     void anArmTheNarrowerInputOfItsCallerRulesOutIsNotCounted() throws Exception {
         Output output = run(NARROW, true);
