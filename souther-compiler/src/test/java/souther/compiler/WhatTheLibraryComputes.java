@@ -7,7 +7,9 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.proof.ByPlace;
 import souther.compiler.proof.Slot;
+import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
@@ -426,6 +428,7 @@ public final class WhatTheLibraryComputes {
             switch (number) {
                 case LawNumber.AnArgument<Slot>(Slot at) -> slot(at);
                 case LawNumber.SizeOf<Slot>(var of) -> subject(of);
+                case LawNumber.CodePointsOf<Slot>(var of, var _) -> subject(of);
                 case LawNumber.HowManyMeet<Slot>(Slot container, var ofTheElement) -> {
                     slot(container);
                     proposition(ofTheElement);
@@ -637,6 +640,8 @@ public final class WhatTheLibraryComputes {
                     .append(switch (number) {
                         case LawNumber.AnArgument<Slot>(Slot at) -> named(at);
                         case LawNumber.SizeOf<Slot>(var of) -> sizeOf(subject(of), typeOf(of));
+                        case LawNumber.CodePointsOf<Slot>(var of, var counted) ->
+                                codePointsIn(subject(of), counted);
                         case LawNumber.HowManyMeet<Slot> counted ->
                                 "List.length(List.filter(" + element(counted.container(),
                                         within(counted.ofTheElement(), counted.container()))
@@ -654,6 +659,22 @@ public final class WhatTheLibraryComputes {
                                         + ", " + listed(sum.container()) + "))";
                     }));
             return out.toString();
+        }
+
+        /**
+         * How many code points of {@code text}, a string written out, are in {@code counted}:
+         * the characters the library takes a string apart into, kept where one of them is no
+         * whitespace — which is what {@code String.words} leaving nothing of one says — and is not
+         * the separator the class leaves out.
+         */
+        private String codePointsIn(String text, CodePointClass counted) {
+            String notWhitespace = "Bool.not(List.isEmpty(String.words(c)))";
+            String kept = switch (counted) {
+                case CodePointClass.NotWhitespace _ -> notWhitespace;
+                case CodePointClass.NotWhitespaceNorEqualTo apart -> notWhitespace + " && c /= "
+                        + FixtureTemplate.quoted(new String(Character.toChars(apart.separator())));
+            };
+            return "List.length(List.filter(c -> " + kept + ", String.characters(" + text + ")))";
         }
 
         /** What {@code write} writes of the element of {@code container}. */

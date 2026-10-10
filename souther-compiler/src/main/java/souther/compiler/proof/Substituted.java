@@ -84,6 +84,8 @@ final class Substituted {
             case LawNumber.AnArgument<Value>(Value value) ->
                     new LawNumber.AnArgument<>(value(value, from, to));
             case LawNumber.SizeOf<Value>(var of) -> new LawNumber.SizeOf<>(subject(of, from, to));
+            case LawNumber.CodePointsOf<Value>(var of, var counted) ->
+                    new LawNumber.CodePointsOf<>(subject(of, from, to), counted);
             case LawNumber.HowManyMeet<Value>(Value container, var ofTheElement) ->
                     new LawNumber.HowManyMeet<>(value(container, from, to),
                             proposition(ofTheElement, from, to));

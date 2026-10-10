@@ -65,6 +65,7 @@ final class Triggers {
                            Map<ValueName.Stdlib.Operation, Integer> out) {
         switch (number) {
             case LawNumber.SizeOf<Slot>(LawSubject<Slot> of) -> in(of, which, out);
+            case LawNumber.CodePointsOf<Slot>(LawSubject<Slot> of, var _) -> in(of, which, out);
             case LawNumber.HowManyMeet<Slot>(var _, var ofTheElement) ->
                     in(ofTheElement, which, out);
             case LawNumber.HowManyDifferent<Slot>(var _, var ofTheElement) ->

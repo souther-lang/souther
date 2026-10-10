@@ -36,6 +36,7 @@ public final class LawArguments {
         switch (number) {
             case LawNumber.AnArgument<A>(A argument) -> out.add(argument);
             case LawNumber.SizeOf<A>(LawSubject<A> of) -> into(of, out);
+            case LawNumber.CodePointsOf<A>(LawSubject<A> of, var _) -> into(of, out);
             case LawNumber.HowManyMeet<A>(A container, LawProposition<A> ofTheElement) -> {
                 out.add(container);
                 into(ofTheElement, out);

@@ -96,6 +96,11 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
      * author wrote there however they spelled it, exactly as the operation is the name their call
      * resolved to. Nothing about a reading is in it: a taking whose arguments this compiler could
      * not read raises the question all the same, as the rule with no line does.
+     *
+     * <p>{@code CodePointClass} belongs to the number of a string's code points in a class, which
+     * is a number of the place as a length is: which code points a count is of is what makes two
+     * counts of one string two numbers, and it is the whitespace the library trims at and one
+     * separator the author wrote.
      */
     private static final Set<String> THE_QUESTIONS_OWN_VOCABULARY = Set.of(
             "souther/compiler/check/Owed",
@@ -105,11 +110,15 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
             "souther/compiler/check/NumberAt$OfWhatNumber",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfItsOwnValue",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfWhatAnOperationAnswers",
+            "souther/compiler/check/NumberAt$OfWhatNumber$OfHowManyCodePointsAreIn",
             "souther/compiler/check/RuleKey",
             "souther/compiler/inputs/InputQuestion",
             "souther/compiler/inputs/InputQuestion$AboutAPosition",
             "souther/compiler/inputs/InputQuestion$AboutANumber",
             "souther/compiler/inputs/TermPath",
+            "souther/compiler/semantics/CodePointClass",
+            "souther/compiler/semantics/CodePointClass$NotWhitespace",
+            "souther/compiler/semantics/CodePointClass$NotWhitespaceNorEqualTo",
             "souther/compiler/semantics/TakenArguments",
             "souther/compiler/types/ValueName");
 

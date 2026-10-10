@@ -79,6 +79,7 @@ public final class NumericTerms {
             case NumericTerm.ValueOf _ -> "1";
             case NumericTerm.TakenOf _ -> "2";
             case NumericTerm.TakenOver _ -> "3";
+            case NumericTerm.CodePointClassCount _ -> "4";
         };
     }
 }

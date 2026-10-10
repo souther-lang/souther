@@ -9,6 +9,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.Arithmetic;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 
@@ -75,7 +76,23 @@ final class TermReading {
         return switch (term) {
             case NumericTerm.ValueOf _ -> asItStands(at, observed);
             case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(), at, on);
+            case NumericTerm.CodePointClassCount count -> codePointsOfAClass(count.counted(), at);
         };
+    }
+
+    /**
+     * How many of the code points a string holds are in a class.
+     *
+     * <p>Counted in scalar values, as {@code String.length} counts, and against the one whitespace
+     * alphabet the library's own operations scan with ({@link CodePointClass}). What is read is the
+     * string as the row wrote it, so a count read here is the count the run time's own scan of that
+     * string comes to.
+     */
+    private static Reading codePointsOfAClass(CodePointClass counted, ObservedValue at) {
+        return at instanceof ObservedValue.Text text
+                ? new Reading.Number(Count.of(text.value().codePoints()
+                        .filter(counted::contains).count()))
+                : new Reading.NotNumber();
     }
 
     /**

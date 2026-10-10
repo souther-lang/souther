@@ -516,6 +516,11 @@ final class Validity {
         return switch (number) {
             case LawNumber.SizeOf<Value> _ ->
                     List.of(Props.compared(LinearForm.atom(number), Rel.GE));
+            // Never fewer than none and never more than the string holds.
+            case LawNumber.CodePointsOf<Value>(LawSubject<Value> of, var _) -> List.of(
+                    Props.compared(LinearForm.atom(number), Rel.GE),
+                    Props.compared(Props.minus(LinearForm.atom(new LawNumber.SizeOf<>(of)),
+                            LinearForm.atom(number)), Rel.GE));
             case LawNumber.HowManyMeet<Value>(Value container, LawProposition<Value> ofTheElement)
                     when container instanceof Value.Listed(List<Value> alone)
                     && alone.size() == 1 -> List.of(Props.either(
@@ -574,8 +579,9 @@ final class Validity {
      *  elements add up to is spaced as they are. */
     private Granularity spacingOf(LawNumber<Value> number) {
         return switch (number) {
-            case LawNumber.SizeOf<Value> _, LawNumber.HowManyMeet<Value> _,
-                 LawNumber.HowManyDifferent<Value> _ -> Granularity.DISCRETE;
+            case LawNumber.SizeOf<Value> _, LawNumber.CodePointsOf<Value> _,
+                 LawNumber.HowManyMeet<Value> _, LawNumber.HowManyDifferent<Value> _ ->
+                    Granularity.DISCRETE;
             case LawNumber.AnArgument<Value>(Value value) -> spacing.apply(value);
             case LawNumber.SumOver<Value>(var _, LawNumber<Value> each) -> spacingOf(each);
         };

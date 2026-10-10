@@ -70,6 +70,8 @@ public final class ByPlace {
             case LawNumber.AnArgument<A>(A argument) -> new LawNumber.AnArgument<>(
                     word.apply(argument));
             case LawNumber.SizeOf<A>(LawSubject<A> of) -> new LawNumber.SizeOf<>(subject(of, word));
+            case LawNumber.CodePointsOf<A>(LawSubject<A> of, var counted) ->
+                    new LawNumber.CodePointsOf<>(subject(of, word), counted);
             case LawNumber.HowManyMeet<A>(A container, LawProposition<A> ofTheElement) ->
                     new LawNumber.HowManyMeet<>(word.apply(container),
                             proposition(ofTheElement, word));

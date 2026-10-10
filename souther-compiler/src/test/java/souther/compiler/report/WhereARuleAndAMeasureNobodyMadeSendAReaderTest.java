@@ -29,11 +29,11 @@ class WhereARuleAndAMeasureNobodyMadeSendAReaderTest {
     /**
      * A fork on a value worked out from the input, which nothing classifies.
      *
-     * <p>Both arms are reached; what stops is the reading of the fork, because whether the trimmed
-     * string holds anything is a value made from the position, empty exactly where every character
-     * was white space, and nothing the library says of {@code String.trim} works out what that says
-     * about the values there. That is a rule this compiler could not read, and a rule is somewhere
-     * a reader can be sent.
+     * <p>Both arms are reached; what stops is the reading of the fork, because whether the string
+     * with a text replaced in it holds anything is a value made from the position, empty exactly
+     * where the string was made up of copies of what was replaced, and nothing the library says of
+     * {@code String.replace} works out what that says about the values there. That is a rule this
+     * compiler could not read, and a rule is somewhere a reader can be sent.
      */
     private static final String A_RULE_NOTHING_READ = """
             module probe.ruleunread
@@ -45,11 +45,12 @@ class WhereARuleAndAMeasureNobodyMadeSendAReaderTest {
 
             behavior decide : (request: Request) -> Reasoned | Unreasoned
             let decide (request) =
-                if String.isEmpty(String.trim(request.reason)) then Unreasoned else Reasoned
+                if String.isEmpty(String.replace("a", "b", request.reason))
+                then Unreasoned else Reasoned
 
             example decide
                 | "a written reason is a reason" : (Request { reason = "travel" }) -> Reasoned
-                | "white space is none" : (Request { reason = " " }) -> Unreasoned
+                | "nothing written is none" : (Request { reason = "" }) -> Unreasoned
             """;
 
     /**

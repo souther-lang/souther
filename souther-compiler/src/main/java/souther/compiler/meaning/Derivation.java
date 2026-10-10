@@ -98,6 +98,30 @@ public sealed interface Derivation {
     }
 
     /**
+     * What is stated of an element of a container together with what the operations that kept it
+     * stated of it: an element of what was kept is one of those it was handed that met each
+     * statement it was kept by.
+     */
+    record OfWhatWasKept(Derivation ofTheElement, List<Derivation> kept) implements Derivation {
+
+        public OfWhatWasKept {
+            Objects.requireNonNull(ofTheElement, "an element has something stated of it");
+            kept = List.copyOf(kept);
+            if (kept.isEmpty()) {
+                throw new IllegalArgumentException("an element was kept by some statement");
+            }
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            List<Proposition> each = new ArrayList<>();
+            each.add(numbering.of(ofTheElement));
+            kept.forEach(one -> each.add(numbering.of(one)));
+            return Proposition.all(each);
+        }
+    }
+
+    /**
      * What a behavior a call names answers, read off its body where the call stands: the body's
      * parameters stand for what the call handed, so what the body states of them is what it states
      * of the call's arguments.
@@ -598,6 +622,10 @@ public sealed interface Derivation {
                 if (read instanceof Stopped) {
                     return true;
                 }
+                // What the operations that kept the element state of it is no part of the law.
+                if (read instanceof OfWhatWasKept(Derivation ofTheElement, var _)) {
+                    return reads(law, ofTheElement);
+                }
                 return switch (law) {
                     case LawProposition.Always<DeclaredArgument> _ ->
                             read instanceof ALawSettles(var part) && part.equals(law);
@@ -649,6 +677,8 @@ public sealed interface Derivation {
                                             boolean holds, var _) ->
                             holds && standsAt(some.container(), container)
                                     && reads(some.ofTheElement(), ofTheElement);
+                    case SomePieceMeeting(var _, Derivation ofThePiece) ->
+                            reads(some.ofTheElement(), ofThePiece);
                     case OverElementsWrittenOut(List<Derivation> ofEach, boolean holds) -> {
                         Set<DeclaredArgument> inside = new HashSet<>(writtenOut);
                         inside.add(some.container());
@@ -775,6 +805,14 @@ public sealed interface Derivation {
                     case LawNumber.SizeOf<DeclaredArgument>(var of) -> {
                         TermPath at = positionOf(of);
                         yield at == null || howManyAt(atom, at);
+                    }
+                    case LawNumber.CodePointsOf<DeclaredArgument>(var of, var counted) -> {
+                        TermPath at = positionOf(of);
+                        yield at == null || (atom instanceof DecisionAtom.OfTheInput(
+                                NumericTerm term)
+                                && term instanceof NumericTerm.CodePointClassCount count
+                                && count.position().equals(at)
+                                && count.counted().equals(counted));
                     }
                     case LawNumber.HowManyDifferent<DeclaredArgument>(var container, var each) -> {
                         TermPath at = positionOf(container);
@@ -1333,6 +1371,41 @@ public sealed interface Derivation {
         public Proposition conclusion(Conclusion numbering) {
             return new Proposition.Compared(new Relation.Affine(
                     LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(size)), Rel.GT), true);
+        }
+    }
+
+    /**
+     * That some piece of a string, parted at one code point, holds a code point of a class: the
+     * string holding one that is in the class and is not that code point.
+     *
+     * <p>The pieces together hold every code point of the string but the separator, so one of them
+     * holds a code point of the class exactly where the string does. What the piece was read as is
+     * kept, and is held to be that and nothing more: a statement about a piece that is not the
+     * existence of such a code point — how many it holds, that it holds none — is no statement about
+     * the string, and is not concluded here.
+     *
+     * @param counted the count of the string's code points that are in the class and are not the
+     *                separator, which is what the pieces holding one comes to
+     * @param ofThePiece what was read of a piece: that it holds a code point of the class
+     */
+    record SomePieceMeeting(NumericTerm.CodePointClassCount counted, Derivation ofThePiece)
+            implements Derivation {
+
+        public SomePieceMeeting {
+            Objects.requireNonNull(counted, "the pieces' code points are counted of a string");
+            Objects.requireNonNull(ofThePiece, "a piece is read as holding some code point");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return new Proposition.Compared(new Relation.Affine(
+                    LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(counted)), Rel.GT),
+                    true);
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(ofThePiece);
         }
     }
 

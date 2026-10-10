@@ -231,6 +231,9 @@ final class Intervals {
             case NumericTerm.TakenOf taken ->
                     taken.arguments().none() ? taken.operation().qualified() : taken.toString();
             case NumericTerm.ValueOf _ -> "value";
+            // The class of code points counted, which the term says and the place does not.
+            case NumericTerm.CodePointClassCount count -> "number of code points that are "
+                    + count.counted();
         };
     }
 

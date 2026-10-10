@@ -21,7 +21,6 @@ import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.semantics.Unsayable;
 
 import java.util.Collections;
 import java.util.List;
@@ -124,14 +123,24 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
                 stated("if Bool.not(Set.isEmpty(Set.remove(b.n, b.set))) then 1 else 0"));
     }
 
-    /** A trimmed string being empty comes to every character being whitespace, which no condition
-     *  here says: the reading stops on that, and not on a law nobody wrote. */
+    /**
+     * A trimmed string being empty comes to every code point of the string being whitespace: how
+     * many are not, held against nought. So does a string with no words, and a string lowercased
+     * after it was trimmed, which holds something exactly where what it was made of does.
+     */
     @Test
-    void aTrimmedStringBeingEmptyStopsOnWhatTheDomainHasNoWordsFor() {
+    void aTrimmedStringBeingEmptyIsEveryCodePointOfTheStringBeingWhitespace() {
         Proposition stated = stated("if String.isEmpty(String.trim(b.s)) then 1 else 0");
-        WhyUnread why = Proposition.firstStopIn(stated);
-        WhyUnread.NoWordsFor closed = assertInstanceOf(WhyUnread.NoWordsFor.class, why);
-        assertEquals(Unsayable.EVERY_CHARACTER_IS_WHITESPACE, closed.proposition());
+        assertNull(Proposition.firstStopIn(stated));
+        Proposition.Compared compared = assertInstanceOf(Proposition.Compared.class, stated);
+        Relation.Affine affine = assertInstanceOf(Relation.Affine.class, compared.relation());
+        assertEquals(List.of("#(not whitespace)(b.s)"), affine.form().coefs().keySet().stream()
+                .map(Object::toString).toList(), "the one number it is about");
+        assertEquals(stated, stated("if List.isEmpty(String.words(b.s)) then 1 else 0"));
+        assertEquals(stated, stated(
+                "if String.isEmpty(String.lowercase(String.trim(b.s))) then 1 else 0"));
+        assertEquals(stated.denied(), stated(
+                "if Bool.not(String.isEmpty(String.trim(b.s))) then 1 else 0"));
     }
 
     /**

@@ -144,6 +144,10 @@ final class ProvingTheLibrary implements LibraryProofs {
                     elements.proveWhereTheyCameFrom(operation,
                             comes.lineage().withArguments(DeclaredArgument::position))
                             instanceof LibraryProver.Outcome.Proved;
+            case BoundOperationFact.HoldsTheImageOfEveryElement holds ->
+                    elements.proveEveryElementIsHeld(operation,
+                            holds.image().withArguments(DeclaredArgument::position))
+                            instanceof LibraryProver.Outcome.Proved;
             case BoundOperationFact.KeepsTheOrderOf kept ->
                     elements.inOrder(operation, kept.source().position())
                             instanceof LibraryProver.Outcome.Proved;
@@ -170,6 +174,7 @@ final class ProvingTheLibrary implements LibraryProofs {
             // A kernel's, which an operation with a body is refused where the facts are bound, or
             // a statement no body here is proved to make.
             case BoundOperationFact.HasALaw _ -> false;
+            case BoundOperationFact.HoldsThePiecesOf _ -> false;
             case BoundOperationFact.IsRelated _ -> false;
             case BoundOperationFact.PutsAValueIn _ -> false;
             case BoundOperationFact.ListsAPartOf _ -> false;
