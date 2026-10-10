@@ -586,10 +586,13 @@ public final class OperationFacts {
             // what both sides hold and an insert of something already there adds nothing, so
             // neither answers the sum of what it read; appending does, and stating it for that one
             // alone would be a second statement for one operation. The bound is what they share.
+            //
+            // Not a string put beside another. What is answered is the canonical form of the two,
+            // and a mark at the start of the second can join a letter at the end of the first, and
+            // the letter can then take a mark it already had: `"e" ++ "̂́"` is the one
+            // code point `ế`, and `"L̄" ++ "̣"` the one code point `Ḹ`.
             about("List", "append", noSmallerThan(at(0))),
             about("List", "append", noSmallerThan(at(1))),
-            about("String", "append", noSmallerThan(at(0))),
-            about("String", "append", noSmallerThan(at(1))),
             about("Set", "union", noSmallerThan(at(0))),
             about("Set", "union", noSmallerThan(at(1))),
             about("Map", "union", noSmallerThan(at(0))),

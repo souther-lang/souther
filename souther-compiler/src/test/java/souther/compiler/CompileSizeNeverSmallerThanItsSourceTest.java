@@ -119,30 +119,22 @@ class CompileSizeNeverSmallerThanItsSourceTest {
         assertEquals(0, warnings(Compiler.compileWithWarnings(m)));
     }
 
-    /** A string has no {@code append} to be the other spelling of, so the operator is the only way
-     * this is written and the only place the rule can reach it. */
+    /**
+     * A string put beside another is not credited with being as long as either. What the operator
+     * answers is the canonical form of the two, and a mark at the start of the second can join the
+     * last letter of the first: {@code "L̄" ++ "̣"} is the one code point {@code Ḹ}, shorter
+     * than the first of the two. So a length the first already has is not shown of what they make.
+     */
     @Test
-    void concatenatingNonEmptyStringsStaysNonEmpty() {
+    void aStringPutBesideAnotherIsNotCreditedWithBeingAsLongAsEither() {
         String m = """
                 module demo
-                data S = String
-                    invariant String.length(value) >= 1
-                behavior joined : (a: S, b: S) -> S
-                let joined (a, b) = S(a.value ++ b.value)
+                data Two = String
+                    invariant String.length(value) >= 2
+                behavior joined : (a: Two, b: String) -> Two
+                let joined (a, b) = Two(a.value ++ b)
                 """;
-        assertEquals(0, warnings(Compiler.compileWithWarnings(m)));
-    }
-
-    @Test
-    void concatenatingWithANonEmptyStringOnEitherSideIsEnough() {
-        String m = """
-                module demo
-                data S = String
-                    invariant String.length(value) >= 1
-                behavior prefixed : (a: String, b: S) -> S
-                let prefixed (a, b) = S(a ++ b.value)
-                """;
-        assertEquals(0, warnings(Compiler.compileWithWarnings(m)));
+        assertEquals(1, warnings(Compiler.compileWithWarnings(m)));
     }
 
     // --- what it must not discharge ---------------------------------------------------------------
