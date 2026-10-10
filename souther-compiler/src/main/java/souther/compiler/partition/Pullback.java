@@ -1065,17 +1065,26 @@ final class Pullback {
      * own — or null where it takes none.
      */
     private SizedByCases measuredByCases(Denotation value) {
-        return measuredByCases(value, new HashSet<>());
+        return measuredByCases(value, new IdentityHashMap<>());
     }
 
-    /** The same, walking each value once however many names stand for it: {@code walked} holds
-     *  what this search has walked already. */
-    private SizedByCases measuredByCases(Denotation value, Set<Denotation> walked) {
+    /**
+     * The same, walking each value once however many names stand for it: {@code walked} holds
+     * each value this search has walked already, with each reading it was walked in.
+     *
+     * <p>By identity, the node and the reading both. What is asked is whether this search has been
+     * here, and the place is the node itself; told by its contents, every visit hashed the whole
+     * tree under it and the reading round it, and a search over a value of many choices spent its
+     * time doing that.
+     */
+    private SizedByCases measuredByCases(Denotation value,
+                                         Map<Core, Set<InputReads>> walked) {
         Denotation stands = value.at().standing(value.value(), read.rules().symbols(),
                 read.rules().newtypes());
         Core e = Core.withoutStanding(stands.value());
         // A closure's body is read where it is applied, and is no part of this value.
-        if (e instanceof Core.Block || !walked.add(stands)) {
+        if (e instanceof Core.Block || !walked.computeIfAbsent(stands.value(),
+                _ -> Collections.newSetFromMap(new IdentityHashMap<>())).add(stands.at())) {
             return null;
         }
         SizedByCases[] inner = {null};
