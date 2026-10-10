@@ -37,7 +37,7 @@ class ARowThatTellsALineFromTheOneBesideItIsComposedTest {
             "no row tells `-2 * x + y = 0` from `-3 * x + y = 0`,"
                     + " and a row at `x = 1, y = 3` would",
             "no row tells `y = x` from `y = 0`, and a row at `x = 1, y = 0` would",
-            "no row tells `x + 2 * y = 60` from `y = 23`, and a row at `x = 20, y = 20` would");
+            "no row tells `x + 2 * y = 60` from `y = 23`, and a row at `x = 14, y = 23` would");
 
     /** Rows at every point of every line this model draws, and at nothing else. */
     private static final String ROWS = """
@@ -61,7 +61,7 @@ class ARowThatTellsALineFromTheOneBesideItIsComposedTest {
                         + " stand:\n" + report);
         // The same inputs, and in the same words the sentences above use. A row offered at a place
         // the sentence does not name is a person shown one input and handed another.
-        assertEquals(List.of("(1, 3)", "(1, 0)", "(20, 20)"), offered(report),
+        assertEquals(List.of("(1, 3)", "(1, 0)", "(14, 23)"), offered(report),
                 () -> "and a row is offered at each of the inputs those sentences name:\n"
                         + report);
     }
@@ -72,15 +72,17 @@ class ARowThatTellsALineFromTheOneBesideItIsComposedTest {
 
                   | (1, 3)   -> false
                   | (1, 0)   -> false
-                  | (20, 20) -> false"""));
+                  | (14, 23) -> false"""));
 
         assertEquals(List.of("no row tells `y = x` from `-x + 2 * y = 0`,"
-                        + " and a row at `x = 2, y = 1` would"), findings(report),
+                                + " and a row at `x = 2, y = 1` would",
+                        "no row tells `x + 2 * y = 60` from `x + 3 * y = 82`,"
+                                + " and a row at `x = 16, y = 22` would"), findings(report),
                 () -> "the three rows tell the three lines from the ones that stood beside them,"
-                        + " and the one left is the next line the family puts beside `y = x`:\n"
-                        + report);
-        assertEquals(List.of("(2, 1)"), offered(report),
-                () -> "which is offered a row of its own:\n" + report);
+                        + " and what is left is the next line the family puts beside `y = x`"
+                        + " and the one beside `x + 2 * y = 60`:\n" + report);
+        assertEquals(List.of("(2, 1)", "(16, 22)"), offered(report),
+                () -> "each of which is offered a row of its own:\n" + report);
         assertTrue(report.contains("obligations 12/12"),
                 () -> "and the points the rows were already at are where they were:\n" + report);
     }

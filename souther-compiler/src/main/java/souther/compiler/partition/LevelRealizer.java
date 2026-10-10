@@ -15,6 +15,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
+import souther.compiler.numeric.Rel;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.values.ValueSet;
 import java.math.BigDecimal;
@@ -556,8 +557,14 @@ public final class LevelRealizer {
             stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
         }
         for (Level level : offered.levels()) {
-            Search search = new Search(terms, over.on(), within, runs, tried);
-            Reached reached = search.solve(level.asAnExactNumber());
+            ExactRatio target = level.asAnExactNumber();
+            AtTheLevel here = atTheLevel(over.form(), target, within, runs);
+            if (here == null) {
+                // The rules leave nothing at this level: a proof about it and about no other.
+                continue;
+            }
+            Search search = new Search(terms, over.on(), here.region(), here.runs(), tried);
+            Reached reached = search.solve(target);
             stoppedBy.addAll(search.stoppedBy());
             unheld.addAll(search.unheld());
             if (reached == Reached.FOUND) {
@@ -588,6 +595,43 @@ public final class LevelRealizer {
         return Realization.Unknown.leftOpen(
                 Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                 stoppedBy, Set.of(), unheld);
+    }
+
+    /** The region a walk of one level is held to, and where each position runs in it. */
+    private record AtTheLevel(SearchRegion region, Map<NumericTerm, NumericDomain.Bounds> runs) {}
+
+    /**
+     * The rules with the form's own equation at {@code target} taken in, or null where they are
+     * then left nothing.
+     *
+     * <p>Each position's run is read from a region that already carries the relation between the
+     * positions, so what the walk offers a position is a value the others can still complete.
+     * Narrowing, and only for this level: the region is no statement about the side. Where the
+     * region cannot carry the equation, the walk is handed what it had.
+     */
+    private static AtTheLevel atTheLevel(LinearForm<NumericTerm> form, ExactRatio target,
+                                         SearchRegion within,
+                                         Map<NumericTerm, NumericDomain.Bounds> runs) {
+        LinearForm<NumericTerm> equation = new LinearForm<>(target.negated(), form.coefs());
+        if (!(within.assuming(equation, Rel.EQ) instanceof SearchRegion.Assumption.Taken(
+                SearchRegion narrowed))) {
+            return new AtTheLevel(within, runs);
+        }
+        if (narrowed.emptiness().isPresent()) {
+            return null;
+        }
+        Map<NumericTerm, NumericDomain.Bounds> narrowedRuns = new LinkedHashMap<>();
+        for (NumericTerm term : form.coefs().keySet()) {
+            switch (narrowed.projectionOf(term)) {
+                case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                        narrowedRuns.put(term, held == null ? NumericDomain.Bounds.OPEN : held);
+                case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                    return null;
+                }
+                case null -> narrowedRuns.put(term, NumericDomain.Bounds.OPEN);
+            }
+        }
+        return new AtTheLevel(narrowed, narrowedRuns);
     }
 
     /** How many assignments the search will try before it stops and says it did not settle it. */
