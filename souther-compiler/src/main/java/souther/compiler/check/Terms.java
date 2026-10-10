@@ -1810,6 +1810,11 @@ final class Terms {
             Given built = sizedBy(container, at);
             carrying(atom, IntrinsicNumericFacts.ofSize(size, built.value(), atom, built.at(),
                     this));
+            Derivation held = IntrinsicNumericFacts.heldWhereItsLawSays(built.value(), built.at(),
+                    this);
+            if (held != null) {
+                computedBy(atom, new AtomKnowledge.Computation.Derived(held));
+            }
         }
         return atom;
     }

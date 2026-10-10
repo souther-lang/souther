@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -310,5 +311,95 @@ sealed interface Derivation {
                     && same.extents(divisorExtent, it.divisorExtent());
         }
 
+    }
+
+    /**
+     * How many a container holds, where the law of the operation that answered it says whether it
+     * holds anything by whether its arguments do: {@code a ++ b} holds something exactly where
+     * {@code a} or {@code b} does.
+     *
+     * <p>Not a relation between the sizes. Where text is put beside text its canonical form can be
+     * shorter than either half, so the count is tied to its arguments' counts only at nought, and
+     * which side of nought each argument is on is where the path puts it. So what is recorded is the
+     * law, over the counts it reads, and what it comes to is read under each domain.
+     *
+     * @param holds when the answer holds something, as a statement over the counts of the arguments
+     */
+    record HoldsSomethingWhere(Holding holds) implements Derivation {
+
+        /** A statement about which of some counts are above nought. */
+        sealed interface Holding {
+
+            /** The container {@code count} counts holds something. */
+            record Something(LinearForm<FactSubject> count) implements Holding {}
+
+            /** One of {@code ways} holds. */
+            record AnyOf(List<Holding> ways) implements Holding {
+                public AnyOf {
+                    ways = List.copyOf(ways);
+                }
+            }
+
+            /** Each of {@code ways} holds. */
+            record AllOf(List<Holding> ways) implements Holding {
+                public AllOf {
+                    ways = List.copyOf(ways);
+                }
+            }
+
+            /** {@code denied} does not hold. */
+            record Not(Holding denied) implements Holding {}
+        }
+
+        @Override
+        public List<LinearForm<FactSubject>> formsRead() {
+            List<LinearForm<FactSubject>> out = new ArrayList<>();
+            counts(holds, out);
+            return List.copyOf(out);
+        }
+
+        @Override
+        public boolean sameAs(Derivation other, Same same) {
+            return other instanceof HoldsSomethingWhere it && same(holds, it.holds(), same);
+        }
+
+        @Override
+        public NumericDomain.Bounds divisorExtent() {
+            return null;
+        }
+
+        private static void counts(Holding holding, List<LinearForm<FactSubject>> out) {
+            switch (holding) {
+                case Holding.Something(LinearForm<FactSubject> count) -> out.add(count);
+                case Holding.AnyOf(List<Holding> ways) -> ways.forEach(way -> counts(way, out));
+                case Holding.AllOf(List<Holding> ways) -> ways.forEach(way -> counts(way, out));
+                case Holding.Not(Holding denied) -> counts(denied, out);
+            }
+        }
+
+        private static boolean same(Holding a, Holding b, Same same) {
+            return switch (a) {
+                case Holding.Something(LinearForm<FactSubject> count) ->
+                        b instanceof Holding.Something it && same.forms(count, it.count());
+                case Holding.AnyOf(List<Holding> ways) ->
+                        b instanceof Holding.AnyOf it && same(ways, it.ways(), same);
+                case Holding.AllOf(List<Holding> ways) ->
+                        b instanceof Holding.AllOf it && same(ways, it.ways(), same);
+                case Holding.Not(Holding denied) ->
+                        b instanceof Holding.Not it && same(denied, it.denied(), same);
+            };
+        }
+
+        private static boolean same(List<Holding> a, List<Holding> b, Same same) {
+            if (a.size() != b.size()) {
+                return false;
+            }
+            for (int i = 0; i < a.size(); i++) {
+                if (!same(a.get(i), b.get(i), same)) {
+                    return false;
+                }
+            }
+            return true;
+        }
     }
 }

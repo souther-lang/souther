@@ -221,9 +221,35 @@ class WhatARecipeIsReadFromIsWhatAReadingReachesTest {
         if (type.isRecord()) {
             return record(type, put);
         }
+        if (type.isSealed()) {
+            return oneOf(type, put);
+        }
         return fail(type + " stands in a recipe and this test cannot build one. What it is decides"
                 + " whether a form can stand inside it: teach this test to build it, and if one can,"
                 + " teach that recipe's formsRead() to answer with it.");
+    }
+
+    /** The kinds of a sum being built, outermost first. */
+    private final Set<Class<?>> building = new LinkedHashSet<>();
+
+    /**
+     * One value of the sum {@code type}: the last of its kinds, as declared, that is not already
+     * being built further out. A kind holding the sum again is built inside another, so every kind
+     * of it stands somewhere in what is built and a form under any of them is asked for, and a kind
+     * is never built inside itself, so the building ends.
+     */
+    private Object oneOf(Class<?> type, Set<FactSubject> put) {
+        Class<?>[] kinds = type.getPermittedSubclasses();
+        for (int i = kinds.length - 1; i >= 0; i--) {
+            if (building.add(kinds[i])) {
+                try {
+                    return build(kinds[i], put);
+                } finally {
+                    building.remove(kinds[i]);
+                }
+            }
+        }
+        return fail("every kind of " + type.getSimpleName() + " is already being built");
     }
 
     /** {@code type}'s canonical constructor, called with one value built for each component. */

@@ -2,13 +2,16 @@ package souther.compiler.check;
 
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.ElementShape;
+import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.NumericResult;
+import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.BinOp;
@@ -458,6 +461,19 @@ final class DischargeRules {
      */
     static BoundOperationFact.MeansTheSameAsASizeOfNought sizeMeantBy(ValueName operation) {
         return facts().meansTheSameAsASizeOfNought(operation);
+    }
+
+    /**
+     * What {@code operation}'s answer holding something is the same as, where a law settles it —
+     * one stated of a kernel or proved of a body — or null where none does.
+     */
+    static LawProposition<DeclaredArgument> whereItHoldsSomething(ValueName operation) {
+        return facts().settled(operation, OperationLaw.Observed.of(AnswerAspect.EMPTINESS))
+                instanceof BoundOperationFacts.Settled.ByALaw(
+                        OperationLaw.Observation<DeclaredArgument>(
+                                AnswerAspect aspect, LawProposition<DeclaredArgument> holds),
+                        var _)
+                && aspect == AnswerAspect.EMPTINESS ? holds : null;
     }
 
     /** What {@code operation} computes and where it answers it, or null where the table says

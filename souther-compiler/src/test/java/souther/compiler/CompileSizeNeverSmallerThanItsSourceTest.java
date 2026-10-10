@@ -120,6 +120,50 @@ class CompileSizeNeverSmallerThanItsSourceTest {
     }
 
     /**
+     * A string put beside a non-empty one holds something: the law of what the operator answers says
+     * it holds something exactly where either side does, which is true of the canonical form too.
+     */
+    @Test
+    void concatenatingNonEmptyStringsStaysNonEmpty() {
+        String m = """
+                module demo
+                data S = String
+                    invariant String.length(value) >= 1
+                behavior joined : (a: S, b: S) -> S
+                let joined (a, b) = S(a.value ++ b.value)
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)));
+    }
+
+    @Test
+    void concatenatingWithANonEmptyStringOnEitherSideIsEnough() {
+        String m = """
+                module demo
+                data S = String
+                    invariant String.length(value) >= 1
+                behavior prefixed : (a: String, b: S) -> S
+                let prefixed (a, b) = S(a ++ b.value)
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)));
+    }
+
+    /**
+     * And the side neither shows non-empty leaves the answer unsettled: {@code a ++ b} with both
+     * left open is possibly empty.
+     */
+    @Test
+    void concatenatingStringsNeitherOfWhichIsShownNonEmptyIsNotEnough() {
+        String m = """
+                module demo
+                data S = String
+                    invariant String.length(value) >= 1
+                behavior joined : (a: String, b: String) -> S
+                let joined (a, b) = S(a ++ b)
+                """;
+        assertEquals(1, warnings(Compiler.compileWithWarnings(m)));
+    }
+
+    /**
      * A string put beside another is not credited with being as long as either. What the operator
      * answers is the canonical form of the two, and a mark at the start of the second can join the
      * last letter of the first: {@code "L̄" ++ "̣"} is the one code point {@code Ḹ}, shorter
