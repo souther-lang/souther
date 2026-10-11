@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.AnswerAsAnInput;
+import souther.compiler.semantics.TakenArguments;
+import souther.compiler.types.ValueName;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.InjectedAnswer;
@@ -295,11 +297,13 @@ final class DecisionPath {
      * <p>Not which evaluation of the dependency it is. A row writes one value for a dependency,
      * so two calls reading one place read the value held against itself.
      */
-    private record Place(Object taken, List<TermPath.Step> steps) {}
+    private record Place(ValueName.Stdlib operation, TakenArguments arguments,
+                         List<TermPath.Step> steps) {}
 
     private static Place placeOf(DecisionAtom atom, DecisionSubject.AnAnswer at) {
-        return new Place(atom instanceof DecisionAtom.TakenOfAnAnswer taken
-                ? List.of(taken.operation(), taken.arguments()) : List.of(), at.steps());
+        return atom instanceof DecisionAtom.TakenOfAnAnswer taken
+                ? new Place(taken.operation(), taken.arguments(), at.steps())
+                : new Place(null, null, at.steps());
     }
 
     /** Both paths' conditions, or null where between them they answer one column two ways. */

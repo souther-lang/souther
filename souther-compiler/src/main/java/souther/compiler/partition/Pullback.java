@@ -1729,8 +1729,7 @@ final class Pullback {
             Core value = over;
             InputReads where = in;
             while (true) {
-                DecisionSubject standing = subjectOf(value, where);
-                if (standing != null) {
+                DecisionSubject standing = subjectOf(value, where);                if (standing != null) {
                     ElementAt each = new ElementAt.AtASubject(standing);
                     settle(pending, each, null, located);
                     Type heldType = Core.withoutStanding(value).type();

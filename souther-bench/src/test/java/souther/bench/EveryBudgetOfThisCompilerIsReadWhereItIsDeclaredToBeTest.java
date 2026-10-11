@@ -222,6 +222,16 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // The pairs of a number of the input and the answer composed for it. The figure bounds
             // how many are offered, and what it hands over is whether some were left out, which the
             // search that composed for none of them answers with.
+            // The ways a statement about an answer is looked along where it asks one of several
+            // things. Past the figure they are not split, and what asked for them is said to be a
+            // demand no value was composed against.
+            Map.entry("souther.compiler.partition.AnAnswerComposed#of("
+                            + "Lsouther/compiler/partition/MeasuredInput;"
+                            + "Lsouther/compiler/partition/AnswerStatements;"
+                            + "Ljava/util/Map;Ljava/util/List;)"
+                            + "Lsouther/compiler/partition/AnAnswerComposed$Attempt;",
+                    "past the figure does not look along the ways of a statement, and says that"
+                            + " nothing was composed against it"),
             Map.entry("souther.compiler.partition.InputNumbersAnAnswerTurnsOn#of("
                             + "Lsouther/compiler/partition/AnswersDemanded;"
                             + "Lsouther/compiler/partition/Reachability$Reaching;"

@@ -159,9 +159,10 @@ public final class AnAnswerComposed {
             }
         }
         // What a statement asks, said of the input that stands for the answer and asked of a row
-        // as any statement about an input is.
+        // as any statement about an input is. A statement that asks one of several things is
+        // looked along each of them, as a way over the input is.
         List<DemandGap> unaccounted = new ArrayList<>();
-        List<Taken> ofStatements = new ArrayList<>();
+        List<Pending> pending = new ArrayList<>();
         for (AnswerDemand each : demands) {
             if (!(each instanceof AnswerDemand.AStatement statement)) {
                 continue;
@@ -169,19 +170,122 @@ public final class AnAnswerComposed {
             Proposition over = AnswerAsAnInput.of(statement.statement(), at,
                     subject.rules().inners(), subject.symbols(), pinned);
             List<DemandReading.Read> reads = over == null ? null : statements.asked(over);
-            if (reads == null || !reads.stream().allMatch(AnAnswerComposed::composedAgainst)) {
+            List<List<DemandReading.Read>> options = reads == null ? null : eachWay(reads);
+            if (options == null) {
                 unaccounted.add(new DemandGap.Uncomposed(each,
                         new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions()));
                 continue;
             }
-            for (DemandReading.Read read : reads) {
+            pending.add(new Pending(statement, options));
+        }
+        // Every way the statements together can be taken, and no more of them than the figure lets
+        // a way be split into: past it they are not looked along, and what asked for them is a
+        // demand no value was composed against.
+        int ways = 1;
+        for (Pending each : pending) {
+            ways = Math.multiplyExact(ways, each.options().size());
+            if (ways > CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO.maximum()) {
+                pending.forEach(one -> unaccounted.add(new DemandGap.Uncomposed(one.statement(),
+                        new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions())));
+                return Attempt.nothing(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, unaccounted);
+            }
+        }
+        Attempt first = null;
+        for (List<List<DemandReading.Read>> choice : eachChoice(pending)) {
+            Attempt here = composedAlong(subject, at, required, asked, unaccounted, pending,
+                    choice, demands);
+            if (here.outcome() instanceof Outcome.Composed && here.unaccounted().isEmpty()) {
+                return here;
+            }
+            first = first == null ? here : first;
+        }
+        return first;
+    }
+
+    /** One statement and each way it may be taken, which is one thing it asks and not several. */
+    private record Pending(AnswerDemand.AStatement statement,
+                           List<List<DemandReading.Read>> options) {}
+
+    /**
+     * What {@code reads} comes to along each way it may be taken: a choice between things is each
+     * of them in turn. Null where some read is one a composer writes toward in no way — a
+     * narrowing of a case is what a way over the input carries, and nothing here puts it under a
+     * value composed for an answer.
+     */
+    private static List<List<DemandReading.Read>> eachWay(List<DemandReading.Read> reads) {
+        List<List<DemandReading.Read>> ways = new ArrayList<>();
+        ways.add(List.of());
+        for (DemandReading.Read each : reads) {
+            List<List<DemandReading.Read>> these;
+            if (each instanceof DemandReading.Read.OneOf(var alternatives)) {
+                these = new ArrayList<>();
+                for (List<DemandReading.Read> alternative : alternatives) {
+                    List<List<DemandReading.Read>> inside = eachWay(alternative);
+                    if (inside == null) {
+                        return null;
+                    }
+                    these.addAll(inside);
+                }
+            } else if (composedAgainst(each)) {
+                these = List.of(List.of(each));
+            } else {
+                return null;
+            }
+            List<List<DemandReading.Read>> wider = new ArrayList<>();
+            for (List<DemandReading.Read> before : ways) {
+                for (List<DemandReading.Read> more : these) {
+                    List<DemandReading.Read> both = new ArrayList<>(before);
+                    both.addAll(more);
+                    wider.add(both);
+                }
+            }
+            ways = wider;
+        }
+        return ways;
+    }
+
+    /** Each way of taking every statement, the first statement's ways changing slowest. */
+    private static List<List<List<DemandReading.Read>>> eachChoice(List<Pending> pending) {
+        List<List<List<DemandReading.Read>>> out = new ArrayList<>();
+        out.add(List.of());
+        for (Pending each : pending) {
+            List<List<List<DemandReading.Read>>> wider = new ArrayList<>();
+            for (List<List<DemandReading.Read>> before : out) {
+                for (List<DemandReading.Read> one : each.options()) {
+                    List<List<DemandReading.Read>> both = new ArrayList<>(before);
+                    both.add(one);
+                    wider.add(both);
+                }
+            }
+            out = wider;
+        }
+        return out;
+    }
+
+    /**
+     * A value for the answer, composed along one way of taking each statement it is asked.
+     *
+     * @param choice what each statement of {@code pending} asks along this way, in the same order
+     */
+    private static Attempt composedAlong(MeasuredInput subject, String at, Requirements required,
+                                         List<RowDemand.ATruth> truthsAsked,
+                                         List<DemandGap> unaccountedBefore, List<Pending> pending,
+                                         List<List<DemandReading.Read>> choice,
+                                         List<AnswerDemand> demands) {
+        List<RowDemand.ATruth> asked = new ArrayList<>(truthsAsked);
+        List<DemandGap> unaccounted = new ArrayList<>(unaccountedBefore);
+        List<Taken> ofStatements = new ArrayList<>();
+        for (int which = 0; which < pending.size(); which++) {
+            AnswerDemand.AStatement statement = pending.get(which).statement();
+            for (DemandReading.Read read : choice.get(which)) {
                 switch (read) {
                     case DemandReading.Read.Demands(RowDemand.OfACondition demand) -> {
                         if (demand instanceof RowDemand.ATruth written) {
                             asked.add(written);
                         }
                         ofStatements.add(new Taken(
-                                new OnTheWay.TakenIn(statement.anchor(), demand), each));
+                                new OnTheWay.TakenIn(statement.anchor(), demand), statement));
                     }
                     case DemandReading.Read.Settled(boolean thisWay) -> {
                         if (!thisWay) {

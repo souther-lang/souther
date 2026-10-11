@@ -2920,9 +2920,10 @@ public final class Adequacy {
                 // pair: the number is put at a value, the answer is composed for that, and the row
                 // is held to the same value. Which value suits is not known until the answer is
                 // composed for it, so each is tried in turn and the first pair every part of which
-                // composed is the one taken — and where none did, the first pair's attempts, which
-                // say what it was short of.
-                List<Generator.BoundaryAttempt> first = null;
+                // composed is the one taken — and where none did, the pair that came nearest, which
+                // says what it was short of.
+                List<Generator.BoundaryAttempt> nearest = null;
+                long nearestComposed = -1;
                 InputNumbersAnAnswerTurnsOn.Pairs pairs =
                         InputNumbersAnAnswerTurnsOn.of(demands, reaching, answers::subjectOf);
                 for (InputNumbersAnAnswerTurnsOn pinned : pairs.tried()) {
@@ -2935,11 +2936,16 @@ public final class Adequacy {
                     if (out.stream().allMatch(Adequacy::composedAgainstEverythingAsked)) {
                         return List.copyOf(out);
                     }
-                    first = first == null ? out : first;
+                    long composed = out.stream()
+                            .filter(Adequacy::composedAgainstEverythingAsked).count();
+                    if (composed > nearestComposed) {
+                        nearest = out;
+                        nearestComposed = composed;
+                    }
                 }
                 // Every pair tried composed short of something, and there were more than the figure
                 // lets this try. That is the answer this has — a budget ended the search — and
-                // not that the first pair was the best there is.
+                // not that the pair that came nearest was the best there is.
                 if (pairs.someLeftUntried()) {
                     CompositionBudget budget =
                             CompositionBudget.PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED;
@@ -2947,9 +2953,9 @@ public final class Adequacy {
                             new Generator.UnresolvedCombination(List.of(label),
                                     Generator.UnresolvedCombination.Reason.wordFor(Set.of(budget))),
                             CompositionShortfall.of(EnumSet.of(budget)),
-                            first.getFirst().unrepresented()));
+                            nearest.getFirst().unrepresented()));
                 }
-                return List.copyOf(first);
+                return List.copyOf(nearest);
             } catch (LinkageError _) {
                 // The generated classes would not link, so nothing can be built to find out what a
                 // model admits. Nothing was tried, which is not the same as everything tried being

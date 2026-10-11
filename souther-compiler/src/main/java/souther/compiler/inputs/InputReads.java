@@ -1,8 +1,10 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.CalledBody;
+import souther.compiler.check.CallArguments;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Location;
@@ -740,8 +742,8 @@ public final class InputReads {
             // What a walk hands each element of an answer is a place inside that answer: the
             // element, under the places the container is.
             if (under instanceof Core.Read element && reads.containerOfTheElement(element) != null) {
-                AnAnswerAt container = reads.answerAt(reads.containerOfTheElement(element),
-                        symbols, newtypes);
+                AnAnswerAt container = reads.answerHoldingTheElementsOf(
+                        reads.containerOfTheElement(element), symbols, newtypes);
                 if (container == null) {
                     return null;
                 }
@@ -762,6 +764,47 @@ public final class InputReads {
         Optional<ModelOccurrence> written = ModelOccurrence.statedAt(call.occurrence());
         return written.isEmpty() ? null : new AnAnswerAt(
                 new AnEvaluation(dependency, written.get()), call.args(), reads, steps);
+    }
+
+    /**
+     * The answer of a dependency whose very elements {@code container} holds, or null where it holds
+     * none's.
+     *
+     * <p>Through the operations that answer the elements of what they were given — a reordered list,
+     * a filtered one — as a walk to the position an element stands at goes through them
+     * ({@link InputPath#argumentWhoseElementsItHolds}), so an element of either is where it was
+     * whether the list it came from is a position of the input or an answer.
+     */
+    private AnAnswerAt answerHoldingTheElementsOf(Core container, Symbols symbols,
+                                                  DeclarationNewtypes newtypes) {
+        Denotation at = standing(container, symbols, newtypes);
+        while (true) {
+            AnAnswerAt found = at.at().answerAt(at.value(), symbols, newtypes);
+            if (found != null) {
+                return found;
+            }
+            ValueName operation;
+            List<Core> args;
+            switch (Core.withoutStanding(at.value())) {
+                case Core.Call call when call.fn() instanceof Core.Reached reached -> {
+                    operation = reached.denotes();
+                    args = call.args();
+                }
+                case Core.PreservedCall kept -> {
+                    operation = kept.declared().operation();
+                    args = kept.args();
+                }
+                default -> {
+                    return null;
+                }
+            }
+            DeclaredArgument holds = InputPath.argumentWhoseElementsItHolds(operation);
+            int position = holds == null ? -1 : CallArguments.positionOf(holds, operation);
+            if (position < 0 || position >= args.size()) {
+                return null;
+            }
+            at = at.at().standing(args.get(position), symbols, newtypes);
+        }
     }
 
     /**

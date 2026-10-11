@@ -593,9 +593,16 @@ final class InputPath {
         };
     }
 
-    /** The argument whose elements {@code operation}'s answer holds, as far as this walk's question
-     *  crosses, or null where it crosses to none. */
-    private DeclaredArgument holdingTheElements(ValueName operation) {
+    /**
+     * The argument whose very elements {@code operation}'s answer holds, or null where it holds no
+     * argument's.
+     *
+     * <p>The one statement of it, for every walk that crosses an operation to the value it was
+     * given: where a position stands and where a dependency's answer does are asked of the same
+     * fact, so an element of a reordered or filtered list is an element of the list it came from
+     * whichever of the two that list is.
+     */
+    static DeclaredArgument argumentWhoseElementsItHolds(ValueName operation) {
         BuiltFrom<DeclaredArgument> built =
                 DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
         DeclaredArgument holds = built == null ? null : built.holdsTheElementsOf();
@@ -604,6 +611,15 @@ final class InputPath {
                 instanceof ElementLineage.SameAs<DeclaredArgument> same) {
             holds = same.source().argument();
         }
+        return holds;
+    }
+
+    /** The argument whose elements {@code operation}'s answer holds, as far as this walk's question
+     *  crosses, or null where it crosses to none. */
+    private DeclaredArgument holdingTheElements(ValueName operation) {
+        BuiltFrom<DeclaredArgument> built =
+                DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
+        DeclaredArgument holds = argumentWhoseElementsItHolds(operation);
         // What is made from a position came from it and is not it, so an answer holding only that
         // is crossed by the walk after where a value came from and not by the walk after which
         // position an expression names — the same two licences an edge written by an expansion

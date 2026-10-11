@@ -70,7 +70,7 @@ public final class AnswerAsAnInput {
     public static Proposition ofAComparison(LinearForm<? extends Quantity> form, Rel proposition,
                                             boolean held) {
         Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>(form.coefs());
-        return new Proposition.Compared(
+        return Proposition.compared(
                 new Relation.Affine(new LinearForm<>(form.constant(), coefs), proposition), held);
     }
 
@@ -143,9 +143,11 @@ public final class AnswerAsAnInput {
                 }
                 // Spelled for another input, its atoms come in another order, so the form is turned
                 // to face the one way again.
+                // And a count held against nought is the statement that some element meets what is
+                // counted, which {@link Proposition#compared} is what writes.
                 Relation.OneWay<Quantity> one =
                         Relation.OneWay.of(over, holds ? rel : rel.denied());
-                yield new Proposition.Compared(
+                yield Proposition.compared(
                         new Relation.Affine(one.form(), one.proposition()), one.holds());
             }
             case Proposition.Truth(DecisionSubject of, boolean holds, var _) -> {
@@ -186,6 +188,15 @@ public final class AnswerAsAnInput {
                         : new Proposition.Some(container, element, some.holds());
             }
         };
+    }
+
+    /**
+     * Whether this was made only to ask what a statement is about, with no reading of the types to
+     * take a number of an answer by. The place stands for the number then: which statements can be
+     * put to a composer does not turn on which number it is.
+     */
+    private boolean hasNoReadingToTakeTheNumberBy() {
+        return inners == null;
     }
 
     private List<Proposition> propositions(List<Proposition> parts) {
@@ -258,9 +269,7 @@ public final class AnswerAsAnInput {
             case DecisionAtom.TakenOfAnAnswer taken -> {
                 answers.add(taken.of().answered());
                 TermPath place = new TermPath(head, taken.of().steps());
-                // Without a reading to take the number by, which is how a statement is only asked
-                // whether it can be put to a composer: the place stands for the number.
-                NumericTerm term = inners == null ? new NumericTerm.ValueOf(place)
+                NumericTerm term = hasNoReadingToTakeTheNumberBy() ? new NumericTerm.ValueOf(place)
                         : NumericTerm.TakenOf.asItStands(taken.operation(), place,
                                 taken.arguments(), taken.at(), inners, symbols);
                 yield term == null ? null : new DecisionAtom.OfTheInput(term);
