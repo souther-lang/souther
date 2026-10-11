@@ -1,8 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -16,6 +18,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -88,9 +91,9 @@ final class AStatementAtARow {
 
     /**
      * Whether a row's own values say whether {@code stated} holds at it: relations over the
-     * input's own numbers, whether a position of the input is true or holds a value, joined,
-     * statements about the elements of a container the input holds — some element meeting
-     * something, or how many do, against a number — or nothing asked at all.
+     * input's own numbers, whether a position of the input is true, holds a value or is one of
+     * some cases of a sum, joined, statements about the elements of a container the input holds —
+     * some element meeting something, or how many do, against a number — or nothing asked at all.
      *
      * <p>Anything else is no statement a row can be asked about. Something nobody read, a truth of
      * what a dependency answered, or a count against another of the input's numbers is not settled
@@ -102,6 +105,11 @@ final class AStatementAtARow {
             case Proposition.Always _ -> true;
             case Proposition.Truth(DecisionSubject.AnInput _, boolean _, String _),
                  Proposition.Present(DecisionSubject.AnInput _, boolean _, String _) -> true;
+            // A row names the case it wrote at a position, and that answers only cases of a sum:
+            // whether an optional holds a value is asked as whether it is present.
+            case Proposition.InCases(DecisionSubject.AnInput _, CasesLeft cases, boolean _,
+                                     String _) ->
+                    cases.atoms().stream().allMatch(Refinement.SumCase.class::isInstance);
             case Proposition.SameValue(DecisionSubject.AnInput _, DecisionSubject.AnInput _,
                                        boolean _, String _) -> true;
             case Proposition.LastToHold _ -> true;
@@ -116,7 +124,10 @@ final class AStatementAtARow {
                         term.atOnePosition() != null;
                 case Relation.Ordered _ -> false;
             };
-            default -> false;
+            case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
+                 Proposition.SameValue _, Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _ -> false;
+            case Proposition.Carried carried -> throw carried.handedToAReader();
         };
     }
 
@@ -150,6 +161,8 @@ final class AStatementAtARow {
                     positions.add(at);
             case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _, String _) ->
                     positions.add(at);
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft _,
+                                     boolean _, String _) -> positions.add(at);
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
                                        DecisionSubject.AnInput(TermPath other), boolean _,
                                        String _) -> {
@@ -171,8 +184,11 @@ final class AStatementAtARow {
                             of(count.ofTheElement(), behavior, quantities)));
             case Proposition.Compared compared -> into.computeIfAbsent(compared.relation(),
                     relation -> OneRelation.of(relation, behavior, quantities));
-            default -> throw new IllegalStateException("a statement put to rows is over relations"
-                    + " of the input's own numbers, and this is " + stated);
+            case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
+                 Proposition.SameValue _, Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _, Proposition.Carried _ ->
+                    throw new IllegalStateException("a statement put to rows is over relations"
+                            + " of the input's own numbers, and this is " + stated);
         }
     }
 
@@ -370,6 +386,11 @@ final class AStatementAtARow {
             case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean holds,
                                      String _) -> heldAs(holds, ofItsValue(at, row,
                     value -> !(value instanceof ObservedValue.Absent)));
+            // A value no declaration names is no case the row could be said to be in or out of.
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
+                                     boolean holds, String _) -> heldAs(holds, ofItsValue(at, row,
+                    value -> value.declaredAs() instanceof TypeSymbol leaf
+                            ? cases.leaves(leaf) : null));
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
                                        DecisionSubject.AnInput(TermPath other), boolean holds,
                                        String _) -> heldAs(holds, theSame(one, other, row));
@@ -405,8 +426,11 @@ final class AStatementAtARow {
                 yield compared.holds() || held instanceof Answer.CouldNotTell ? held
                         : held instanceof Answer.Holds ? Answer.FAILS : Answer.HOLDS;
             }
-            default -> throw new IllegalStateException("a statement put to rows is over relations"
-                    + " of the input's own numbers, and this is " + part);
+            case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
+                 Proposition.SameValue _, Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _, Proposition.Carried _ ->
+                    throw new IllegalStateException("a statement put to rows is over relations"
+                            + " of the input's own numbers, and this is " + part);
         };
     }
 
