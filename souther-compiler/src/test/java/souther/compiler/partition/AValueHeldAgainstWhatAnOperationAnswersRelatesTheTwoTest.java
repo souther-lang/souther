@@ -110,6 +110,20 @@ class AValueHeldAgainstWhatAnOperationAnswersRelatesTheTwoTest {
     }
 
     @Test
+    void anAnswerThatCountsToANumberRelatesWhereItIsOneValueAndNotWhereItIsHeldInOrder() {
+        assertEquals(List.of(relates("3:18", "d"), relates("3:18", "t")), said(measured("""
+                module w1
+                behavior m : (d: Date, t: DateTime) -> Bool
+                let m (d, t) = d == DateTime.toDate(t)
+                """)));
+        assertTrue(said(measured("""
+                module w1
+                behavior m : (d: Date, t: DateTime) -> Bool
+                let m (d, t) = d < DateTime.toDate(t)
+                """)).stream().allMatch(line -> line.startsWith("· not read")));
+    }
+
+    @Test
     void twoAnswersOfOnePositionOrOneAgainstAConstantAreNotARelation() {
         assertEquals(List.of(madeFrom("3:33", "s")), said(measured("""
                 module w1

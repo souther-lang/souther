@@ -3403,7 +3403,7 @@ final class Pullback {
         }
         LinearForm<Quantity> form = null;
         if (calls.stream().anyMatch(Objects::nonNull)) {
-            Related related = answeredApart(sides, calls);
+            Related related = answeredApart(sides, calls, states);
             if (related != null) {
                 sides = related.sides();
                 form = related.form();
@@ -3436,24 +3436,36 @@ final class Pullback {
      * they come to one value against another made of positions apart
      * ({@link #relatesPositionsApart}) or to one value on both — or null where they do not.
      *
-     * <p>{@code read} is what each side was read as, null where the reading stopped in it, and
+     * <p>{@code asRead} is what each side was read as, null where the reading stopped in it, and
      * {@code calls} the call each may be read as instead, null where there is none.
+     *
+     * <p>Not where {@code states} draws a line. Two values that count to a number held in order
+     * are a line on their difference, as {@code x < y} is, and a row at a point of it needs a value
+     * of each side there — which nothing here writes for what an operation answers, so the
+     * arithmetic says where it stopped. Two values being one, or not, draws no line whatever they
+     * count to, and two values that count to nothing draw none however they are held.
      *
      * <p>Asked once both sides were read, so nothing of the comparison is read after what this
      * meets reading the arguments. Those are read beside what the sides met, so an argument naming
      * another element of a container already read of is refused there, as it is in any reading of
      * the two.
      */
-    private Related answeredApart(List<LinearForm<Quantity>> read, List<Denotation> calls) {
+    private Related answeredApart(List<LinearForm<Quantity>> asRead, List<Denotation> calls,
+                                  Rel states) {
+        if (states != Rel.EQ && states != Rel.NE && calls.stream().anyMatch(call -> call != null
+                && Carrier.ofValue(call.value().type(), read.rules().declarations())
+                        instanceof Carrier carrier && carrier.counts())) {
+            return null;
+        }
         List<LinearForm<Quantity>> sides = new ArrayList<>();
         boolean answered = false;
-        for (int i = 0; i < read.size(); i++) {
+        for (int i = 0; i < asRead.size(); i++) {
             Quantity.WhatAnOperationAnswers answers =
                     calls.get(i) == null ? null : whatAnOperationAnswers(calls.get(i));
-            if (answers == null && read.get(i) == null) {
+            if (answers == null && asRead.get(i) == null) {
                 return null;
             }
-            sides.add(answers != null ? LinearForm.atom(answers) : read.get(i));
+            sides.add(answers != null ? LinearForm.atom(answers) : asRead.get(i));
             answered |= answers != null;
         }
         LinearForm<Quantity> form = sides.get(0).minus(sides.get(1)).orNull();
@@ -3492,20 +3504,15 @@ final class Pullback {
      * nothing of its answer as a number of them — or null where it does.
      *
      * <p>An operation that takes a number of its argument, or is defined by cases, is read as that
-     * number or on each case, and is none of these; nor is one answering a value that counts to a
-     * number, which the arithmetic reads or says it could not. Every argument has to be one value of
-     * the input, or another such answer: an argument that comes to anything else — a constant, a
-     * sum, what a dependency answered — leaves the call unread.
+     * number or on each case, and is none of these. Every argument has to be one value of the
+     * input, or another such answer: an argument that comes to anything else — a constant, a sum,
+     * what a dependency answered — leaves the call unread.
      */
     private Quantity.WhatAnOperationAnswers whatAnOperationAnswers(Denotation call) {
         AnOperationApplied applied = AnOperationApplied.of(Core.withoutStanding(call.value()));
         ValueName.Stdlib operation = (ValueName.Stdlib) applied.operation();
-        // A value that counts to a number is the arithmetic's: what it could not read of one is
-        // said where it stopped.
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
-        if (facts.takenAs(operation) != null || !facts.isDefinedByCases(operation).isEmpty()
-                || (Carrier.ofValue(call.value().type(), read.rules().declarations())
-                        instanceof Carrier carrier && carrier.counts())) {
+        if (facts.takenAs(operation) != null || !facts.isDefinedByCases(operation).isEmpty()) {
             return null;
         }
         List<Quantity> of = new ArrayList<>();
