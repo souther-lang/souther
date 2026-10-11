@@ -131,6 +131,9 @@ public final class WhatTheRulesLeave {
             case Proposition.Some some when some.container() instanceof DecisionSubject.AnAnswer ->
                     LEFT;
             case Proposition.Some some -> someElement(some, some.holds() == want, read);
+            // The rules are of what a row writes, and a search goes on below as deep as a value
+            // does: a node it reaches may meet what the one at the top cannot.
+            case Proposition.SomeReachable _ -> LEFT;
         };
     }
 

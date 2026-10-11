@@ -185,6 +185,7 @@ public final class WhereEachLineDecides {
             case Proposition.SameValue same -> same.holds();
             case Proposition.Unread unread -> unread.holds();
             case Proposition.Some some -> some.holds();
+            case Proposition.SomeReachable reached -> reached.holds();
             case Proposition.LastToHold last -> last.holds();
             case Proposition.OnAnApplication _, Proposition.Always _ -> true;
             case Proposition.All _, Proposition.Any _ -> throw new IllegalArgumentException(

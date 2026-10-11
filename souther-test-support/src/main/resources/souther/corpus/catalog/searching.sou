@@ -1,11 +1,14 @@
-// A list searched for an element, written as a recursion and as a fold.
+// A list searched for an element, written as a recursion and as a fold, and a tree searched for a
+// node.
 //
 // A recursive helper is not expanded where it is called, so what decides on its answer is read off
 // its body: a walk of the list by its head, which answers something exactly where some element it
 // reaches meets what the step asks of it. The fold says the same with what it carries. Both behaviors
-// decide the same thing about the same list, which is what this file is for.
+// decide the same thing about the same list, which is what this file is for. A search of a tree goes
+// down every node's zones and answers by what some node it reaches meets, or what every node does.
 module conformance.searching exposing
-    ( Shelf, Restock, Fine, restockByRecursion, restockByFold )
+    ( Shelf, Restock, Fine, Zone, restockByRecursion, restockByFold, restockAnyZone
+    , everyZoneStocked )
 
 data Shelf = { counts: List<Int> }
 
@@ -50,3 +53,37 @@ example restockByFold
         (Shelf { counts = [ 3, 4 ] }) -> Fine
     | "an empty shelf is fine" :
         (Shelf { counts = [] }) -> Fine
+
+// A zone and the zones inside it, as deep as a warehouse is laid out.
+data Zone = { count: Int, zones: List<Zone> }
+
+// Whether some zone at or under this one is below the floor: this one, or one reached from a zone
+// inside it.
+let anyShort (zone: Zone): Bool =
+    zone.count < 3 || List.any(inner -> anyShort(inner), zone.zones)
+
+behavior restockAnyZone : (zone: Zone) -> Restock | Fine
+let restockAnyZone (zone) = if anyShort(zone) then Restock else Fine
+
+example restockAnyZone
+    | "a zone below the floor is restocked" :
+        (Zone { count = 1, zones = [] }) -> Restock
+    | "a zone inside one below the floor is restocked" :
+        (Zone { count = 5, zones = [ Zone { count = 0, zones = [] } ] }) -> Restock
+    | "zones at the floor everywhere are fine" :
+        (Zone { count = 3, zones = [ Zone { count = 4, zones = [] } ] }) -> Fine
+
+// Whether every zone at or under this one is at the floor.
+let stocked (zone: Zone): Bool =
+    zone.count >= 3 && List.all(inner -> stocked(inner), zone.zones)
+
+behavior everyZoneStocked : (zone: Zone) -> Restock | Fine
+let everyZoneStocked (zone) = if stocked(zone) then Fine else Restock
+
+example everyZoneStocked
+    | "zones at the floor everywhere are fine" :
+        (Zone { count = 3, zones = [ Zone { count = 4, zones = [] } ] }) -> Fine
+    | "a zone inside one below the floor is restocked" :
+        (Zone { count = 5, zones = [ Zone { count = 0, zones = [] } ] }) -> Restock
+    | "a zone below the floor is restocked" :
+        (Zone { count = 1, zones = [] }) -> Restock

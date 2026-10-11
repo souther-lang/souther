@@ -106,7 +106,7 @@ public record RecursionOverAList(int walked, Core.Case none, Core.Case some,
     }
 
     /** Which of {@code parameters} {@code e} names as it was handed, or -1 where it names none. */
-    private static int parameterAt(Core e, List<Core.Binder> parameters) {
+    static int parameterAt(Core e, List<Core.Binder> parameters) {
         if (!(Core.withoutStanding(e) instanceof Core.Read read) || read.binding() == null) {
             return -1;
         }
@@ -131,7 +131,7 @@ public record RecursionOverAList(int walked, Core.Case none, Core.Case some,
     }
 
     /** Every call of {@code self} in {@code e}, into {@code out}. */
-    private static void callsOf(Core e, ValueName.Helper self, List<Core.Call> out) {
+    static void callsOf(Core e, ValueName.Helper self, List<Core.Call> out) {
         if (e instanceof Core.Call call && call.fn() instanceof Core.Reached.OfDeclaration reached
                 && self.equals(reached.denotes())) {
             out.add(call);

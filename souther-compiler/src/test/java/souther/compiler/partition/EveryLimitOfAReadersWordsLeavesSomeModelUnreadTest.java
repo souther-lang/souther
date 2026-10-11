@@ -108,6 +108,12 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
             behavior twoTexts : (o: O) -> A | B | C
             let twoTexts (o) = if o.name == o.other then (if o.a > 5 then A else B) else C
 
+            data Node = { v: Int, below: List<Node> }
+            let reaches (node: Node): Bool = node.v > 5 || List.any(c -> reaches(c), node.below)
+
+            behavior aSearch : (t: Node) -> A | B | C
+            let aSearch (t) = if reaches(t) then (if t.v > 9 then A else B) else C
+
             let sq (d: Decimal): Decimal = d * d
             %s
             let tight (n: Decimal, m: Decimal): Bool = n + t62 * m > 0.5m
@@ -141,6 +147,8 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
         out.put(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER, "twoRecords");
         // What a dependency answered, which a row stands in and does not write.
         out.put(WhyNotTaken.DomainLimit.AN_ANSWER_A_ROW_STANDS_IN, "askedOfADependency");
+        // A search from a node, which some node further down than a row is written may settle.
+        out.put(WhyNotTaken.DomainLimit.A_NODE_BELOW_WHAT_A_ROW_WRITES, "aSearch");
         // A helper whose answer is one of two comparisons: a path holds facts that all hold.
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES, "oneOfTwo");
         // A helper whose answer is every element meeting something, which a path holds only as

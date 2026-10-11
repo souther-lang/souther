@@ -75,6 +75,11 @@ public sealed interface Proposition {
                     .anyMatch(one -> one.mayTurnOnAnElementOf(container));
             case Some some -> isAnElementOf(some.container(), container)
                     || some.ofTheElement().mayTurnOnAnElementOf(container);
+            // What it is written over is not what it is about, so it is taken to turn on an element
+            // wherever it might, as a part nothing sees into is.
+            case SomeReachable reached ->
+                    isAnElementOf(new DecisionSubject.AnInput(reached.at()), container)
+                            || reached.atANode().mayTurnOnAnElementOf(container);
         };
     }
 
@@ -379,6 +384,71 @@ public sealed interface Proposition {
     }
 
     /**
+     * Some node reachable from the one at {@code at} meeting {@code atANode} — the node itself, or
+     * one an element of a container under {@code through} on a node reached — or, where
+     * {@code holds} is false, none doing so.
+     *
+     * <p>{@code atANode} is written of the node at {@code writtenAt}, and it binds that place: a
+     * subject under {@code writtenAt} there is the same place under the node reached, and every
+     * other subject is the one it names wherever the node is. So the subjects it is written over do
+     * not say what it is about, and nothing reads them as a statement of the input: a reader of what
+     * holds where takes {@link #surely}, which says it of the subjects as they stand.
+     *
+     * <p>How deep a run goes is not bounded here. A reader that sees only so far into the input has
+     * {@link #surely} for each side, which holds of a row only where the search comes out that way
+     * whatever lies further down, and holding of neither says nothing of which way it comes out.
+     *
+     * @param through   the fields of a node whose elements are the nodes below it, in one order
+     * @param noneBelow that the node at {@code at} has no node below it, where {@code at} is
+     *                  {@code writtenAt} and the containers under it are measured
+     * @param key       spelled from the rest when it is made, whatever is handed in
+     */
+    record SomeReachable(TermPath at, TermPath writtenAt, List<String> through,
+                         Proposition atANode, Optional<Proposition> noneBelow, boolean holds,
+                         String key) implements Proposition {
+
+        public SomeReachable(TermPath at, TermPath writtenAt, List<String> through,
+                             Proposition atANode, Optional<Proposition> noneBelow, boolean holds) {
+            this(at, writtenAt, through, atANode, noneBelow, holds, null);
+        }
+
+        public SomeReachable {
+            if (at == null || writtenAt == null || atANode == null || noneBelow == null) {
+                throw new IllegalArgumentException("a search is from a node, of something on one");
+            }
+            through = List.copyOf(through);
+            if (through.isEmpty()) {
+                throw new IllegalArgumentException("a search goes below a node through something");
+            }
+            key = (holds ? "reachable " : "unreachable ") + at + " from " + writtenAt + " through "
+                    + through + " [" + atANode.key() + "]";
+        }
+
+        @Override
+        public Proposition denied() {
+            return new SomeReachable(at, writtenAt, through, atANode, noneBelow, !holds);
+        }
+
+        /**
+         * What holds of a row only where this comes out as {@code outcome} whatever lies below the
+         * node — the node meeting the statement for a search that some node does, the node meeting
+         * it not and having nothing below for one that none does — and never holds where that is not
+         * said of the subjects as they stand.
+         */
+        public Proposition surely(boolean outcome) {
+            if (!at.equals(writtenAt)) {
+                return new Always(false);
+            }
+            // The outcome asked is the one some node meeting the statement gives.
+            if (outcome == holds) {
+                return atANode;
+            }
+            return noneBelow.<Proposition>map(none -> all(List.of(atANode.denied(), none)))
+                    .orElse(new Always(false));
+        }
+    }
+
+    /**
      * Part of a condition nothing read the meaning of, told apart by where the reading stopped.
      *
      * <p>The one proposition told apart by a name. Two parts nothing could read mean nothing to be
@@ -501,6 +571,7 @@ public sealed interface Proposition {
             case OnAnApplication applications ->
                     applications.each().forEach(one -> stopsIn(one, into));
             case Some some -> stopsIn(some.ofTheElement(), into);
+            case SomeReachable reached -> stopsIn(reached.atANode(), into);
             case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
                  LastToHold _ -> { }
         }
@@ -518,6 +589,7 @@ public sealed interface Proposition {
             case OnAnApplication applications ->
                     applications.each().stream().anyMatch(Proposition::saysTheLastToHold);
             case Some some -> saysTheLastToHold(some.ofTheElement());
+            case SomeReachable reached -> saysTheLastToHold(reached.atANode());
             case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, Unread _ ->
                     false;
         };
@@ -550,6 +622,7 @@ public sealed interface Proposition {
                     applications.each().stream().anyMatch(Proposition::aboutAnAnswer);
             case Some some -> some.container() instanceof DecisionSubject.AnAnswer
                     || aboutAnAnswer(some.ofTheElement());
+            case SomeReachable reached -> aboutAnAnswer(reached.atANode());
         };
     }
 

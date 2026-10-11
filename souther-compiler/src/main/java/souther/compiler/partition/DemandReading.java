@@ -419,6 +419,13 @@ final class DemandReading {
                     when some.container() instanceof DecisionSubject.AnAnswer ->
                     List.of(anAnswerARowStandsIn());
             case Proposition.Some some -> ofSomeElement(some, read);
+            // What the search asks of the node it starts at, where that settles it, or some node
+            // further down settling it, which no row is written toward.
+            case Proposition.SomeReachable reached -> oneOf(List.of(
+                    projected(reached.surely(true), read),
+                    List.of(new Read.Unread(new WhyNotTaken.OutsideDomain(
+                            WhyNotTaken.DomainLimit.A_NODE_BELOW_WHAT_A_ROW_WRITES)))),
+                    each -> each, each -> each);
         };
     }
 

@@ -59,8 +59,11 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
             data B
             data Kind = A | B
             data Held = { o: Int? }
+            data Node = { v: Int, below: List<Node> }
             data In = { n: Int, m: Int, b: Bool, s: String, h: Held, k: Kind, xs: List<Int>,
-                        key: String, keys: List<String> }
+                        key: String, keys: List<String>, t: Node }
+
+            let reaches (node: Node): Bool = node.v > 5 || List.any(c -> reaches(c), node.below)
             """;
 
     /** One condition for each way a statement can come out, each read to the end but the last. */
@@ -82,6 +85,7 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
         out.put("both, in one check", "List.length(if i.b then i.xs else []) >= 1");
         out.put("some element", "List.any(x -> x > 0, i.xs)");
         out.put("joined over values written out", "List.any(x -> x > 5, [i.n, i.m])");
+        out.put("some node a search reaches", "reaches(i.t)");
         out.put("unread", "String.isEmpty(String.replace(\"a\", \"b\", i.s))");
         return out;
     }
@@ -129,6 +133,7 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
             case Proposition.All all -> all.parts().forEach(each -> kindsIn(each, into));
             case Proposition.Any any -> any.parts().forEach(each -> kindsIn(each, into));
             case Proposition.Some some -> kindsIn(some.ofTheElement(), into);
+            case Proposition.SomeReachable reached -> kindsIn(reached.atANode(), into);
             case Proposition.OnAnApplication each -> each.each().forEach(one -> kindsIn(one, into));
             case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,

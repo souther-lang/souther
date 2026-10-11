@@ -170,6 +170,13 @@ final class TruthOutcomes {
                 };
                 yield some.holds() ? found : found.denied();
             }
+            // The node it starts at is one it reaches, and one with nothing below reaches no
+            // other: what that node can give, the search can.
+            case Proposition.SomeReachable reached -> {
+                Outcomes atANode = of(reached.atANode());
+                Outcomes found = atANode == Outcomes.FIXED_UNNAMED ? Outcomes.UNKNOWN : atANode;
+                yield reached.holds() ? found : found.denied();
+            }
         };
     }
 }

@@ -1385,6 +1385,129 @@ public sealed interface Derivation {
         }
     }
 
+    /**
+     * What a search from a node answers, coming out on the side asked of it, read by induction over
+     * the nodes below it: some node reachable from it meeting what the body states with every call
+     * of itself supposed to have come out the other way ({@link Proposition.SomeReachable}).
+     *
+     * <p>The body is read twice. Read with every call it makes of itself on a node below supposed
+     * to have come out the way that leaves the answer to the node itself, it is what a node has to
+     * meet ({@code atANode}). Read with each of those calls standing for the search from the node it
+     * is on ({@link AReachedNode}), it is {@code unfoldedOnce}, which was found to be the node
+     * meeting that or some node below it from which the search does, whatever its parts are
+     * ({@link #unfoldsOnce}). Each call goes to an element of a container the node holds, so a run
+     * goes down a finite value, and where it ends every call it made answered what the search from
+     * its node does: the search is the least such answer, and the one the run gives.
+     *
+     * <p>Where {@code how} is {@link ConditionJoin#BOTH} it is read the other way round: the calls
+     * supposed to have held, and the answer holding where every reachable node meets that — no node
+     * failing it.
+     *
+     * @param node          where the node the search is from stands
+     * @param through       the fields of a node whose elements are the nodes below it
+     * @param atANode       the body with every call of itself supposed to have come out the way that
+     *                      leaves the answer to the node: failed where {@code how} is either, held
+     *                      where it is both
+     * @param below         whether each container under {@code through} on the node holds
+     *                      something, where each is measured
+     * @param unfoldedOnce  the body with each call of itself standing for the search from its node
+     * @param how           which side a call of itself coming out the other way leaves to the node
+     */
+    record ATreeSearched(TermPath node, List<String> through, Derivation atANode,
+                         Optional<List<Derivation>> below, Derivation unfoldedOnce,
+                         ConditionJoin how) implements Derivation {
+
+        public ATreeSearched {
+            Objects.requireNonNull(node, "a search is from a node");
+            through = List.copyOf(through);
+            Objects.requireNonNull(atANode, "of what a node meets");
+            below = below.map(List::copyOf);
+            Objects.requireNonNull(unfoldedOnce, "found by reading the body one step down");
+            Objects.requireNonNull(how, "one way or the other");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            Proposition read = numbering.of(atANode);
+            Optional<Proposition> noneBelow = below.map(each -> Proposition.all(each.stream()
+                    .map(one -> numbering.of(one).denied()).toList()));
+            return searchFrom(node, node, through, read, noneBelow, how);
+        }
+
+        /**
+         * Whether {@code unfolded}, the body read with each call of itself on a node below standing
+         * for the search from there, says what the search from the node at {@code node} does one
+         * step down, whatever its parts are: the node meeting {@code atANode} or some node below
+         * from which the search does — or, the other way round, the node meeting it and every node
+         * below doing so.
+         *
+         * <p>Which quantifier a container of nodes below is read under is part of what is compared:
+         * some node below and every node below are two parts, and one is never taken for the other.
+         */
+        public static boolean unfoldsOnce(Proposition unfolded, Proposition atANode, TermPath node,
+                                          List<String> through, ConditionJoin how) {
+            List<Proposition> parts = new ArrayList<>();
+            parts.add(atANode);
+            for (String field : through) {
+                Proposition reached = searchFrom(node.then(field).element(), node, through,
+                        atANode, Optional.empty(), how);
+                DecisionSubject nodes = new DecisionSubject.AnInput(node.then(field));
+                parts.add(switch (how) {
+                    case EITHER -> new Proposition.Some(nodes, reached, true);
+                    case BOTH -> new Proposition.Some(nodes, reached.denied(), false);
+                });
+            }
+            Proposition expected = switch (how) {
+                case EITHER -> Proposition.any(parts);
+                case BOTH -> Proposition.all(parts);
+            };
+            return TruthTable.holdsWhateverItsPartsAre(Proposition.any(List.of(
+                    Proposition.all(List.of(unfolded, expected)),
+                    Proposition.all(List.of(unfolded.denied(), expected.denied())))));
+        }
+    }
+
+    /**
+     * A call a search makes of itself on a node below the one it is from, standing for the search
+     * from there while the body is read one step down ({@link ATreeSearched}).
+     *
+     * @param at       where the node the call is on stands
+     * @param from     where the node the search is read from stands
+     * @param through  the fields of a node whose elements are the nodes below it
+     * @param atANode  the body with every call of itself supposed to have come out the way that
+     *                 leaves the answer to the node
+     * @param how      which side that is
+     */
+    record AReachedNode(TermPath at, TermPath from, List<String> through, Derivation atANode,
+                        ConditionJoin how) implements Derivation {
+
+        public AReachedNode {
+            Objects.requireNonNull(at, "a call is on a node");
+            Objects.requireNonNull(from, "below the one the search is read from");
+            through = List.copyOf(through);
+            Objects.requireNonNull(atANode, "of what a node meets");
+            Objects.requireNonNull(how, "one way or the other");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return searchFrom(at, from, through, numbering.of(atANode), Optional.empty(), how);
+        }
+    }
+
+    /** The search from the node at {@code at} coming out as the body read with every call of itself
+     *  supposed to have come out the way {@code how} leaves to the node, {@code read}, says. */
+    private static Proposition searchFrom(TermPath at, TermPath writtenAt, List<String> through,
+                                          Proposition read, Optional<Proposition> noneBelow,
+                                          ConditionJoin how) {
+        return switch (how) {
+            case EITHER -> new Proposition.SomeReachable(at, writtenAt, through, read, noneBelow,
+                    true);
+            case BOTH -> new Proposition.SomeReachable(at, writtenAt, through, read.denied(),
+                    noneBelow, false);
+        };
+    }
+
     // The grounds: a part made from what one kind of thing says, and nothing else.
 
     /** A truth, a container's holding anything or an optional's holding a value, written out. */

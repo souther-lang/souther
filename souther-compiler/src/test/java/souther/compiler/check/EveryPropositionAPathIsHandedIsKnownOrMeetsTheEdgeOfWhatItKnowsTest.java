@@ -128,6 +128,12 @@ class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
         out.put("either", new Proposition.Any(List.of(above, truth)));
         out.put("some element", new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("xs")),element, true));
         out.put("on some application", new Proposition.OnAnApplication(List.of(above, truth)));
+        TermPath node = TermPath.of("t");
+        out.put("some node a search reaches", new Proposition.SomeReachable(node, node,
+                List.of("below"), new Proposition.Compared(new Relation.Affine(
+                        LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(
+                                new NumericTerm.ValueOf(node.then("v")))), Rel.GT), true),
+                Optional.empty(), true));
         out.put("unread", new Proposition.Unread(Optional.empty(), 0,
                 new WhyUnread.NotMetByTheReading(), false, true));
         return out;

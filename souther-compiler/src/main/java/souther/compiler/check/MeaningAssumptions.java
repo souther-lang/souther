@@ -192,6 +192,13 @@ final class MeaningAssumptions {
                     some.holds() ? WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES
                             : WhyNotTaken.DomainLimit.A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN),
                     asked).forEach(this::notTaken);
+            // Some node of a search is one of several, and every node of one is what the body
+            // states of each, the same way.
+            case Proposition.SomeReachable reached -> WhyNotTaken.declinedWhole(
+                    new WhyNotTaken.OutsideDomain(reached.holds()
+                            ? WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES
+                            : WhyNotTaken.DomainLimit.A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN),
+                    asked).forEach(this::notTaken);
             case Proposition.Unread unread ->
                     notTaken(new WhyNotTaken.MeaningUnread(unread.why()));
             case Proposition.Compared(Relation.Ordered _, boolean _, var _) ->

@@ -611,11 +611,29 @@ public final class InputReads {
      */
     public InputReads steppingThrough(CalledBody body, List<Core> args, BindingId element,
                                       TermPath at, DeclarationNewtypes newtypes) {
+        return recursing(body, args,
+                names.entering(body.elements()).overStandingCalls().naming(element, at), newtypes);
+    }
+
+    /**
+     * Where the body of a search from a node is read: the body a call of it names, with its
+     * parameters standing for what the call handed as {@link #calling} has them — or null where the
+     * call hands another number of values than the body takes.
+     *
+     * <p>What the body's own calls of the search answer is no binding here; a reader of the body
+     * says what it takes them to answer.
+     */
+    public InputReads searching(CalledBody body, List<Core> args, DeclarationNewtypes newtypes) {
+        return recursing(body, args, names.entering(body.elements()).overStandingCalls(),
+                newtypes);
+    }
+
+    private InputReads recursing(CalledBody body, List<Core> args, BindingEnvironment entered,
+                                 DeclarationNewtypes newtypes) {
         if (args.size() != body.parameters().size()) {
             return null;
         }
-        BindingEnvironment inside =
-                names.entering(body.elements()).overStandingCalls().naming(element, at);
+        BindingEnvironment inside = entered;
         Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
         for (int i = 0; i < args.size(); i++) {
             Core.Binder parameter = body.parameters().get(i);
