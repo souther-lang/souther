@@ -27,7 +27,7 @@ import java.util.Set;
  * one entry are two names for one element, which is what an entry is.
  *
  * <p>One of these for one comparison, shared by every number it names. Which element a name is of
- * is the environment's ({@link InputReads#elementStoodFor}); this holds what one comparison has
+ * is the environment's ({@link InputReads#elementsStoodForIn}); this holds what one comparison has
  * met of it. A reading of a number that stands alone, and names no other, has no comparison to be
  * held to and is asked with {@link #NONE}.
  */
