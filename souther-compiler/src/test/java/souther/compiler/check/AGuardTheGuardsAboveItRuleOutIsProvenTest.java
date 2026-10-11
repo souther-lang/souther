@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -215,8 +216,9 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
      * <p>{@code Int.max} is a fork, and {@code Int.max(0, c.value)} over a {@code Count} never takes
      * the side that answers zero. It is not this author's to act on: the fork is written in another
      * module, and the same fork is alive wherever else that module is used. Its condition is no
-     * condition of the model, so a path through it takes nothing in there and nothing about its
-     * arms is proven — and nothing is reported.
+     * rule of the model, but it is what the path runs through, so it is taken in and the arm this
+     * call cannot reach is proven unreachable here — and nothing is reported, because the author
+     * cannot take a branch out of another module.
      */
     private static final String A_LIBRARY_FORK = """
             module d
@@ -234,7 +236,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
             """;
 
     @Test
-    void aForkAnotherModuleWroteIsNotThisModulesToProveOrBeToldAbout() {
+    void aForkAnotherModuleWroteIsProvenHereAndNotToldAbout() {
         Compilation c = Compilation.ofSource(A_LIBRARY_FORK, "d");
         Map<String, PathReachability.Answers> byBehavior =
                 c.db().ask(new Adequacy.PathReached("d")).value();
@@ -244,8 +246,8 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                 .filter(ControlPlace.Arm.class::isInstance)
                 .map(ControlPlace.Arm.class::cast)
                 .toList();
-        assertEquals(List.of(), proven,
-                "the library's fork is no condition of the model, so nothing of it is proven");
+        assertFalse(proven.isEmpty(),
+                "the side of the library's fork this call cannot take is proven unreachable");
         assertTrue(c.db().ask(new Adequacy.DeadBranches("d")).reports().stream()
                         .noneMatch(report -> "E1327".equals(report.diagnostic().code())),
                 "so nothing is reported: the author cannot take a branch out of another module");

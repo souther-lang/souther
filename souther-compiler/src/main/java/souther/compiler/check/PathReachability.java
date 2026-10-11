@@ -469,15 +469,15 @@ public final class PathReachability {
      * of — comes out {@code positive}.
      *
      * <p>What a condition of the model states is read off {@link #meanings}. One inside a copy of
-     * one of the language's operations is no condition of the model, and the path takes nothing in
-     * there. One the reading of the model has nothing filed for is read as it stands here.
+     * one of the language's operations is no rule of the model, so nothing is filed for it, but it
+     * is what the path runs through and is read as it stands here. One the reading of the model has nothing filed for is read as it stands here.
      */
     private Predicates.Assumed assuming(ConstructOccurrence at, MeaningsOfABody.Part.Asked part,
                                         Core cond, Known k, Denotations in, InputReads reads,
                                         boolean positive) {
         Optional<ModelOccurrence> construct = ModelOccurrence.statedAt(at);
         if (construct.isEmpty()) {
-            return new Predicates.Assumed(k, false, true);
+            return engine.assuming(cond, k, in, positive);
         }
         MeaningsOfABody.Site site = new MeaningsOfABody.Site(construct.get(), part);
         Optional<Proposition> stated = meanings.at(site);
