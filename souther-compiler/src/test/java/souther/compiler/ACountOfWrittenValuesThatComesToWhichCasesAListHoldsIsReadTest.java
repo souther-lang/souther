@@ -200,6 +200,111 @@ class ACountOfWrittenValuesThatComesToWhichCasesAListHoldsIsReadTest {
         assertEquals(List.of(), measured.leftByTheComparison());
     }
 
+    /**
+     * One comparison read on each value a closure is handed, where on one it comes to which cases
+     * the clues are and on the other to what {@code onTheSecond} is compared as.
+     */
+    private static String readOnTwoApplications(String onTheSecond) {
+        return """
+                module p
+                import List ( filter, any, length )
+                data IsA = { v: Int }
+                data IsB = { v: Int }
+                data Clue = IsA | IsB
+                behavior f : (clues: List<Clue>, n: Int) -> Int
+                let f (clues, n) =
+                    if any(k -> (if k == 1
+                        then length(filter(c -> match c with
+                            | IsA { v } -> true
+                            | IsB { v } -> false, clues))
+                        else %s) >= 1, [1, 2])
+                    then 1
+                    else 2
+                example f
+                    | "a" : ([IsA { v = 1 }], 0) -> 1
+                    | "b" : ([], 0) -> 2
+                    | "c" : ([], 3) -> 1
+                """.formatted(onTheSecond);
+    }
+
+    /** A line on the other application: the statement holds a line and a part that is none, and
+     *  the line drawn alone would be drawn as though the comparison were only it. */
+    @Test
+    void besideALineOnAnotherApplicationItIsSeveralLinesHeldTogether() {
+        assertEquals(List.of("several_lines_in_one_rule", "several_lines_in_one_rule",
+                        "several_lines_in_one_rule"),
+                measured(readOnTwoApplications("n")).leftByTheComparison().stream()
+                        .filter(each -> !each.isEmpty()).toList());
+    }
+
+    /** The same answer for every row on the other application: nothing beside the cases, and no
+     *  stop. */
+    @Test
+    void besideAnApplicationSettledForEveryRowItIsNoStop() {
+        assertEquals(List.of(), measured(readOnTwoApplications("5")).leftByTheComparison());
+    }
+
+    /** A form nothing reads on the other application: the reading stopped there, and that is what
+     *  each place is told. */
+    @Test
+    void besideAnApplicationNothingReadTheStopIsWhatIsSaid() {
+        assertEquals(List.of("non_affine_product", "non_affine_product", "non_affine_product"),
+                measured(readOnTwoApplications("n * n")).leftByTheComparison().stream()
+                        .filter(each -> !each.isEmpty()).toList());
+    }
+
+    /**
+     * Ten worlds written as two, five times each: five kept is either the one or the other kept
+     * and not both, which is two choices of which of two statements hold — and not one for each
+     * way ten writings could come out, which is past the readings one condition is read in.
+     */
+    @Test
+    void aStatementWrittenManyTimesIsOneStatementWeighedThatMany() {
+        String worlds = String.join(", ", List.of(
+                "W { a = 3, b = 1 }", "W { a = 0, b = 2 }", "W { a = 3, b = 1 }",
+                "W { a = 0, b = 2 }", "W { a = 3, b = 1 }", "W { a = 0, b = 2 }",
+                "W { a = 3, b = 1 }", "W { a = 0, b = 2 }", "W { a = 3, b = 1 }",
+                "W { a = 0, b = 2 }"));
+        Measured measured = measured(model(worlds, """
+                    | "a" : ([IsA { v = 1 }]) -> 1
+                    | "b" : ([IsB { v = 1 }]) -> 1
+                    | "c" : ([]) -> 2
+                    | "d" : ([IsA { v = 1 }, IsB { v = 1 }]) -> 2
+                """).replace("length(fitting) == 1", "length(fitting) == 5"));
+
+        assertEquals("complete", measured.status());
+
+        assertEquals(List.of(), measured.leftByTheComparison());
+    }
+
+    /**
+     * Some element meeting two matches over its cases is some element along one choice of each,
+     * and a choice under one case for the first and under the other for the second is no element:
+     * read as a way no element meets, and not a question about a number no row has. Asked as that
+     * question, the measure ended in an exception and said nothing.
+     */
+    @Test
+    void aWayAskingAnElementToBeTwoCasesIsNoElement() {
+        Measured measured = measured("""
+                module p
+                import List ( any )
+                data A = { x: Int }
+                data B = { y: Int }
+                data C = A | B
+                behavior f : (cs: List<C>) -> Int
+                let f (cs) =
+                    if any(c -> (match c with | A { x } -> x > 1 | B { y } -> y > 2)
+                            && (match c with | A { x } -> x < 5 | B { y } -> y < 3), cs)
+                    then 1
+                    else 2
+                example f
+                    | "a" : ([A { x = 2 }]) -> 1
+                    | "b" : ([]) -> 2
+                """);
+
+        assertEquals("partial", measured.status());
+    }
+
     /** A match whose arms both hold states that it holds, so a list every element of which meets
      *  it is every list, and the arm for one that does not is one nothing reaches. */
     @Test

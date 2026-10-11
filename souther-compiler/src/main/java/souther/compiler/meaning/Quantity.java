@@ -219,13 +219,19 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * statement of its own about the input, and how many of them hold against a number is which of
      * them hold — said that way where it is compared ({@link Proposition#compared}). Of statements
      * none of which is settled: one that is settled is already a number, and is added beside this.
+     *
+     * @param mostChoices how many choices of which of them hold the reading that counted them makes
+     *                    of one comparison; one that would take more is kept as the relation
      */
-    record HowManyHold(List<Proposition> each) implements Quantity {
+    record HowManyHold(List<Proposition> each, long mostChoices) implements Quantity {
 
         public HowManyHold {
             each = List.copyOf(each);
             if (each.isEmpty()) {
                 throw new IllegalArgumentException("how many of no statements hold is none");
+            }
+            if (mostChoices < 1) {
+                throw new IllegalArgumentException("a count of statements is read in some choice");
             }
             if (each.stream().anyMatch(one -> one instanceof Proposition.Always)) {
                 throw new IllegalArgumentException("a settled statement is a number, and not one"

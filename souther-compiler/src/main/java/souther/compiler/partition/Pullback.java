@@ -3093,14 +3093,12 @@ final class Pullback {
                         if (unsettled.isEmpty()) {
                             yield new Sized.AsAForm(settled);
                         }
-                        // Which of them hold is a choice for each, so the readings double with
-                        // every one; past the readings one condition is read in, it is not read.
-                        if (unsettled.size() >= Long.SIZE - 1
-                                || (1L << unsettled.size()) > READINGS.maximum()) {
-                            yield new Sized.NotSized(new WhyUnread.MoreReadingsThanAreMade());
-                        }
+                        // How many choices of which of them hold a comparison is read as turns on
+                        // the number it is compared with, and is held to the readings of one
+                        // condition where it is ({@link #aRelation}).
                         yield new Sized.AsAForm(new LinearForm<>(settled.constant(),
-                                Map.of(new Quantity.HowManyHold(unsettled), ExactRatio.ONE)));
+                                Map.of(new Quantity.HowManyHold(unsettled, READINGS.maximum()),
+                                        ExactRatio.ONE)));
                     }
                 };
             }
@@ -3391,9 +3389,7 @@ final class Pullback {
      *  comes to ({@link Relation.OneWay}). */
     private static Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
                                         Rel states) {
-        Relation.OneWay<Quantity> one = Relation.OneWay.of(form, states);
-        return new Derivation.AComparisonRead(by,
-                new Relation.Affine(one.form(), one.proposition()), one.holds());
+        return aRelation(by, form, states, Map.of());
     }
 
     /**
@@ -3405,14 +3401,19 @@ final class Pullback {
                                         Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted>
                                                 read) {
         Relation.OneWay<Quantity> one = Relation.OneWay.of(form, states);
+        Relation.Affine relation = new Relation.Affine(one.form(), one.proposition());
+        // A count of statements about values written out is read as which of them hold, and past
+        // the readings one condition is read in, it is not read.
+        if (Proposition.choicesIn(relation, READINGS.maximum()) > READINGS.maximum()) {
+            return new Derivation.Stopped(new WhyUnread.MoreReadingsThanAreMade(), false);
+        }
         List<Derivation.AComparisonRead.Counted> named = new ArrayList<>();
         read.forEach((count, how) -> {
             if (one.form().coefs().containsKey(count)) {
                 named.add(how);
             }
         });
-        return new Derivation.AComparisonRead(by,
-                new Relation.Affine(one.form(), one.proposition()), one.holds(), named);
+        return new Derivation.AComparisonRead(by, relation, one.holds(), named);
     }
 
     /** The block a closure is, read where {@code container} stands. */

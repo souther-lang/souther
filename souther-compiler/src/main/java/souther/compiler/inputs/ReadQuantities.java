@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -136,6 +137,15 @@ final class ReadQuantities implements Quantities {
      * the same answer from the same value.
      */
     private volatile Optional<EmptyInput> emptiness;
+    /**
+     * Which cases what is fixed and taken in stands under, worked out the first time anybody asks;
+     * null until then.
+     *
+     * <p>A function of this value alone, as {@link #emptiness} is, and asked by every question
+     * about where a form runs: a search that narrows a region one relation at a time asks each
+     * region it makes once for each number the relation names.
+     */
+    private volatile StructuralContext.Merge accumulated;
     /**
      * What the declarations leave under each context, before anything is fixed or taken in.
      *
@@ -602,9 +612,14 @@ final class ReadQuantities implements Quantities {
                     "a form weighing no term is no constraint to take in: " + form);
         }
         form.coefs().keySet().forEach(this::held);
-        // Refused where the form is over positions no one value has, the same as a question about
-        // where it runs: what would be taken in is a condition on a row nobody can write.
-        StructuralContext under = asked(form.coefs().keySet());
+        // Over positions no one value has together with what was taken in, it is a condition no
+        // row meets, as two fixings under two cases are: taken in, the region holds nothing, and
+        // that is said where it is asked ({@link #emptiness}). Nothing is spaced in a region that
+        // holds nothing, so there is nothing to refuse.
+        if (!(asking(form.coefs().keySet())
+                instanceof StructuralContext.Merge.Together(StructuralContext under))) {
+            return new Taking.Taken(alsoAssuming(new Assumed.OverAForm(form, rel)));
+        }
         // Walked by the terms, because which term is named in the refusal is the answer here and a
         // form holds its terms without holding an order they were written in.
         for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
@@ -917,16 +932,33 @@ final class ReadQuantities implements Quantities {
      * way round for one caller and the other way round for the next.
      */
     private StructuralContext.Merge accumulated() {
+        StructuralContext.Merge had = accumulated;
+        if (had != null) {
+            return had;
+        }
+        StructuralContext.Merge made = whereItStands();
+        accumulated = made;
+        return made;
+    }
+
+    /** {@link #accumulated}, worked out. */
+    private StructuralContext.Merge whereItStands() {
+        // Each term spelled once to be put in order, and each place once: a place put together with
+        // itself is what it was.
+        List<Map.Entry<String, TermPath>> said = new ArrayList<>();
+        fixed.keySet().forEach(term -> said.add(Map.entry(term.toString(), term.subjectPath())));
+        assumed.forEach(each -> each.terms().forEach(
+                term -> said.add(Map.entry(term.toString(), term.subjectPath()))));
+        said.sort(Map.Entry.comparingByKey());
+        Set<TermPath> places = new LinkedHashSet<>();
+        said.forEach(each -> places.add(each.getValue()));
         StructuralContext.Merge merged = new StructuralContext.Merge.Together(
                 StructuralContext.NONE);
-        List<NumericTerm> said = new ArrayList<>(fixed.keySet());
-        assumed.forEach(each -> said.addAll(each.terms()));
-        said.sort(java.util.Comparator.comparing(NumericTerm::toString));
-        for (NumericTerm term : said) {
+        for (TermPath place : places) {
             if (!(merged instanceof StructuralContext.Merge.Together it)) {
                 return merged;
             }
-            merged = it.context().merge(StructuralContext.of(term.subjectPath()));
+            merged = it.context().merge(StructuralContext.of(place));
         }
         return merged;
     }
@@ -938,6 +970,13 @@ final class ReadQuantities implements Quantities {
      * <p>The question's own and what has already been taken in, together. Built from the question
      * alone, a region that has fixed a number under one case would answer about another as though
      * nothing had been said.
+     *
+     * <p>A disagreement is an answer and not a misuse. Numbers under two cases of one sum, asked of
+     * together or taken in one after another, are numbers no row gives values to at once — which is
+     * what a reader asking whether some element can meet two relations is asking — so a question
+     * over them runs nowhere ({@link #projectionOf}), and a region they were taken into holds
+     * nothing ({@link #emptiness}). Answered wide instead, "nothing bounds it" would be read as the
+     * rules leaving them open.
      */
     private StructuralContext.Merge asking(Collection<NumericTerm> terms) {
         StructuralContext.Merge merged = accumulated();
@@ -948,26 +987,6 @@ final class ReadQuantities implements Quantities {
             merged = it.context().merge(StructuralContext.of(term.subjectPath()));
         }
         return merged;
-    }
-
-    /**
-     * The same, where the question is one no value of this input stands for.
-     *
-     * <p>Refused rather than answered wide. What was asked is where a quantity runs, and a quantity
-     * over positions no one value has is one nothing runs between — an answer of "nothing bounds it"
-     * would be read as the rules leaving it open. That two fixings cannot both hold is the other
-     * question and is an emptiness ({@link #emptiness}), because there the caller said something
-     * about the input rather than asking for a number.
-     */
-    private StructuralContext asked(Collection<NumericTerm> terms) {
-        return switch (asking(terms)) {
-            case StructuralContext.Merge.Together it -> it.context();
-            case StructuralContext.Merge.Disagreeing it -> throw new IllegalArgumentException(
-                    "`" + it.why().at().discriminated() + "` is asked to be "
-                            + it.why().one().discriminated() + " and "
-                            + it.why().other().discriminated() + ", which no value of this input"
-                            + " is, so there is nothing here to answer about " + terms);
-        };
     }
 
     /**
@@ -1218,8 +1237,14 @@ final class ReadQuantities implements Quantities {
         // answers — assembling is what a rule spanning two parameters cannot survive.
         //
         // Under the context this question is asked in, which is what says which of those rules are
-        // about the row being asked about at all.
-        return runsIn(asked(form.coefs().keySet()), form, andTheDeclared);
+        // about the row being asked about at all. Where no one value has these numbers together
+        // with what was taken in, no row gives the form a value, and it runs nowhere.
+        return switch (asking(form.coefs().keySet())) {
+            case StructuralContext.Merge.Together(StructuralContext under) ->
+                    runsIn(under, form, andTheDeclared);
+            case StructuralContext.Merge.Disagreeing _ ->
+                    new NumericDomain.FormProjection.NothingIsLeft();
+        };
     }
 
     /**
@@ -1416,10 +1441,12 @@ final class ReadQuantities implements Quantities {
         // Two things fixed under cases no one value is both of. Said here rather than by the rules,
         // for the reason a position fixed at two values is: what contradicts is the pair of
         // assignments, and the declarations were never asked.
-        if (accumulated() instanceof StructuralContext.Merge.Disagreeing it) {
+        StructuralContext.Merge merged = accumulated();
+        if (merged instanceof StructuralContext.Merge.Disagreeing it) {
             return Optional.of(new EmptyInput.TwoRefinementsAtOnePosition(
                     it.why().at(), it.why().one(), it.why().other()));
         }
+        StructuralContext under = ((StructuralContext.Merge.Together) merged).context();
         // And what the rules leave once they are all said together, which is the one thing that
         // answers it. Every parameter's reading is in here, renamed, so there is nothing a
         // per-parameter reading could add — and a contradiction between two parameters, or between a
@@ -1429,7 +1456,7 @@ final class ReadQuantities implements Quantities {
         // that can see what they contradict. The sentences above hold a fixing against the position
         // it is at; what a rule relating two positions refuses is a fact about the assignment, and
         // neither position's own range holds it.
-        return switch (viability(asked(List.of()), null)) {
+        return switch (viability(under, null)) {
             case Viability.ProvedImpossible it ->
                     Optional.of(new EmptyInput.ProvedByTheRules(it.why()));
             // Neither of these is a proof. One says nothing showed the input empty and the other
@@ -1852,7 +1879,10 @@ final class ReadQuantities implements Quantities {
             return null;
         }
         OpenedRules opened = byRoot.get(at.root());
-        return opened == null || !asked(Set.of(here)).holds(opened.opening()) ? null
+        return opened == null
+                || !(asking(Set.of(here)) instanceof StructuralContext.Merge.Together(
+                        StructuralContext under))
+                || !under.holds(opened.opening()) ? null
                 : opened.rules().bounds().valueClassAt(at.named());
     }
 

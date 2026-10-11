@@ -288,7 +288,7 @@ public final class AnswerAsAnInput {
             }
             case Quantity.HowManyHold held -> {
                 List<Proposition> each = propositions(held.each());
-                yield each == null ? null : new Quantity.HowManyHold(each);
+                yield each == null ? null : new Quantity.HowManyHold(each, held.mostChoices());
             }
             case Quantity.HowManyDifferent different -> {
                 DecisionSubject container = subject(different.container());
