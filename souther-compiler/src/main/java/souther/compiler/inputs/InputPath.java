@@ -17,6 +17,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Which position of a behavior's input an expression names, and that it names none where it names
@@ -70,11 +71,31 @@ final class InputPath {
 
     private final DeclarationNewtypes newtypes;
     private final ElementQuestion asked;
+    /** What the reading this walk is asked on takes a node as ({@link InputReads#taking}). */
+    private final Function<Core, Denotation> taken;
     private final BindingTrail trail = new BindingTrail();
 
-    private InputPath(DeclarationNewtypes newtypes, ElementQuestion asked) {
+    private InputPath(DeclarationNewtypes newtypes, ElementQuestion asked,
+                      Function<Core, Denotation> taken) {
         this.newtypes = newtypes;
         this.asked = asked;
+        this.taken = taken;
+    }
+
+    /**
+     * {@code e} where the reading takes it as another value: that value, read where it was given,
+     * by a walk asking the same question there — or null where it is not taken. A node taken is
+     * the value on that reading wherever it is reached from, so the container a choice answered on
+     * the arm a reading is on is the container an element handed from it is in.
+     */
+    private PathResolution whereTaken(Core e, Wanted wanted) {
+        Denotation as = taken.apply(e);
+        if (as == null || Core.withoutStanding(as.value()) == Core.withoutStanding(e)) {
+            return null;
+        }
+        InputPath there = new InputPath(newtypes, asked, as.at()::taken);
+        return wanted == null ? there.named(as.value(), as.at().names())
+                : there.heldAt(as.value(), wanted, as.at().names());
     }
 
     /**
@@ -96,8 +117,9 @@ final class InputPath {
      * only the outermost name would leave every claim inside an expanded helper about a position
      * nothing here can name.
      */
-    static PathResolution of(Core e, BindingEnvironment names, DeclarationNewtypes newtypes) {
-        return new InputPath(newtypes, ElementQuestion.NAMED_POSITION).named(e, names);
+    static PathResolution of(Core e, BindingEnvironment names, DeclarationNewtypes newtypes,
+                             Function<Core, Denotation> taken) {
+        return new InputPath(newtypes, ElementQuestion.NAMED_POSITION, taken).named(e, names);
     }
 
     /**
@@ -116,8 +138,9 @@ final class InputPath {
      * follow.
      */
     static PathResolution cameFrom(Core e, BindingEnvironment names,
-                                   DeclarationNewtypes newtypes) {
-        return new InputPath(newtypes, ElementQuestion.VALUE_ORIGIN).named(e, names);
+                                   DeclarationNewtypes newtypes,
+                                   Function<Core, Denotation> taken) {
+        return new InputPath(newtypes, ElementQuestion.VALUE_ORIGIN, taken).named(e, names);
     }
 
     /**
@@ -129,8 +152,10 @@ final class InputPath {
      * handed to the next names no position of its own, and the elements are the same elements.
      */
     static PathResolution elementAt(BindingId binding, BindingEnvironment names,
-                                    DeclarationNewtypes newtypes) {
-        return new InputPath(newtypes, ElementQuestion.NAMED_POSITION).elementOf(binding, names);
+                                    DeclarationNewtypes newtypes,
+                                    Function<Core, Denotation> taken) {
+        return new InputPath(newtypes, ElementQuestion.NAMED_POSITION, taken)
+                .elementOf(binding, names);
     }
 
     /**
@@ -148,19 +173,25 @@ final class InputPath {
      * @return the position of the elements of {@code e}
      */
     static PathResolution everyElementOf(Core e, BindingEnvironment names,
-                                         DeclarationNewtypes newtypes) {
-        return new InputPath(newtypes, ElementQuestion.EVERY_OCCURRENCE)
+                                         DeclarationNewtypes newtypes,
+                                         Function<Core, Denotation> taken) {
+        return new InputPath(newtypes, ElementQuestion.EVERY_OCCURRENCE, taken)
                 .heldAt(e, new Wanted.APart(HeldIn.Part.ELEMENT), names).heldAt();
     }
 
     /** The same, of the elements handed to {@code binding}. */
     static PathResolution everyElementAt(BindingId binding, BindingEnvironment names,
-                                         DeclarationNewtypes newtypes) {
-        return new InputPath(newtypes, ElementQuestion.EVERY_OCCURRENCE)
+                                         DeclarationNewtypes newtypes,
+                                         Function<Core, Denotation> taken) {
+        return new InputPath(newtypes, ElementQuestion.EVERY_OCCURRENCE, taken)
                 .elementOf(binding, names).heldAt();
     }
 
     private PathResolution named(Core e, BindingEnvironment names) {
+        PathResolution where = whereTaken(e, null);
+        if (where != null) {
+            return where;
+        }
         return switch (e) {
             // What the name is, asked once, and the step that answers is the answer. An element is
             // answered by the container it came from even where that container is at no position:
@@ -478,6 +509,10 @@ final class InputPath {
      * from a line their model states.
      */
     private PathResolution heldAt(Core e, Wanted wanted, BindingEnvironment names) {
+        PathResolution where = whereTaken(e, wanted);
+        if (where != null) {
+            return where;
+        }
         // And where the expression names no position, what it holds may still be at one, so the
         // ways an operation's answer holds it are tried beside it.
         return switch (named(e, names)) {
@@ -542,6 +577,34 @@ final class InputPath {
                     yield held == null ? new PathResolution.NotAPosition()
                             : trail.through(r.binding(), () -> heldAt(held, wanted, names));
                 }
+            };
+        }
+        // What a binding's body answers is read with the binding in scope, as a body a call was
+        // expanded into binds its parameters around what it answers.
+        if (e instanceof Core.LetIn let) {
+            return heldAt(let.body(), wanted, names.inside(let.binder(), let.value()));
+        }
+        // A container chosen by cases holds, on each run, what the one the case taken answers
+        // holds. How the cases come together is the question's.
+        List<Core> arms = switch (e) {
+            case Core.If iff -> List.of(iff.then(), iff.els());
+            case Core.Match match -> match.cases().stream().map(Core.Case::body).toList();
+            default -> null;
+        };
+        if (arms != null) {
+            List<PathResolution> each = new ArrayList<>();
+            for (Core arm : arms) {
+                // Where a value stands or came from, a list written empty holds none for it to
+                // be; every occurrence of a position is held on every run or by none.
+                boolean holdsNone = Core.withoutStanding(arm) instanceof Core.ListLit written
+                        && written.elements().isEmpty();
+                if (!holdsNone || asked == ElementQuestion.EVERY_OCCURRENCE) {
+                    each.add(heldAt(arm, wanted, names));
+                }
+            }
+            return switch (asked) {
+                case NAMED_POSITION, VALUE_ORIGIN -> PathResolution.anyOf(each);
+                case EVERY_OCCURRENCE -> PathResolution.inEveryCase(each);
             };
         }
         // Or through an operation that answers what it was given, in either of the two shapes a

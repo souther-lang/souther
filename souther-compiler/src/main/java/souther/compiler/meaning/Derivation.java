@@ -13,12 +13,14 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
+import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
@@ -674,10 +676,26 @@ public sealed interface Derivation {
                 };
             }
 
-            /** Whether {@code read} joins a reading of each of {@code parts}, in order, as
-             *  {@code law} joins them. */
+            /**
+             * Whether {@code read} joins a reading of each of {@code parts}, in order, as
+             * {@code law} joins them — or, for an "or", of each part it did not leave out for
+             * implying another ({@link ALawJoinsWithoutWhatImpliesAnother}, which holds what was
+             * left out to that).
+             */
             private boolean joins(LawProposition<DeclaredArgument> law,
                                   List<LawProposition<DeclaredArgument>> parts, Derivation read) {
+                if (read instanceof ALawJoinsWithoutWhatImpliesAnother(var part, var each)) {
+                    if (!part.equals(law)) {
+                        return false;
+                    }
+                    for (int i = 0; i < parts.size(); i++) {
+                        if (each.get(i) instanceof ALawJoinsWithoutWhatImpliesAnother.Disjunct
+                                .Read(Derivation one) && !reads(parts.get(i), one)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
                 if (!(read instanceof ALawJoins(var part, List<Derivation> joined))
                         || !part.equals(law) || joined.size() != parts.size()) {
                     return false;
@@ -693,12 +711,18 @@ public sealed interface Derivation {
             /**
              * Whether {@code read} is some element meeting a reading of what {@code some} says it
              * meets: of the element standing at the container's element, or of each value the
-             * container was written with.
+             * container was written with — or a step that states what one of the steps under it
+             * states, a container chosen by cases or answered through a body, every one of which
+             * is some element meeting it in its turn.
              */
             private boolean meets(LawProposition.SomeElement<DeclaredArgument> some,
                                   Derivation read) {
                 return switch (read) {
                     case Stopped _ -> true;
+                    // What the container holding something was read as is a reading of what made
+                    // the container, held to that call where it was made.
+                    case EveryElementMeetsIt(var part, var _, Derivation ofTheElement, var _) ->
+                            part.equals(some) && reads(some.ofTheElement(), ofTheElement);
                     case SomeElementMeeting(DecisionSubject container, Derivation ofTheElement,
                                             boolean holds, var _) ->
                             holds && standsAt(some.container(), container)
@@ -712,7 +736,11 @@ public sealed interface Derivation {
                         yield holds && ofEach.stream()
                                 .allMatch(each -> within.reads(some.ofTheElement(), each));
                     }
-                    default -> false;
+                    default -> {
+                        List<Derivation> oneOf = read.oneOf();
+                        yield oneOf != null && !oneOf.isEmpty()
+                                && oneOf.stream().allMatch(each -> meets(some, each));
+                    }
                 };
             }
 
@@ -727,6 +755,11 @@ public sealed interface Derivation {
                                      Derivation read) {
                 if (read instanceof Stopped) {
                     return true;
+                }
+                // The same statement of what the operation that made the string was handed, read
+                // at that call and held to it there.
+                if (read instanceof WhereAnOperationKeepsIt(var part, var _, var _)) {
+                    return part.equals(law);
                 }
                 if (read instanceof ALawComparison leaf) {
                     return leaf.part().equals(law) && law.form().coefs().keySet().stream()
@@ -908,7 +941,7 @@ public sealed interface Derivation {
     /** A step that reads one part of a law, which it holds. */
     sealed interface ALawPart extends Derivation
             permits ALawSettles, ALawJoins, OnTheSideALawNames, TheSameValue, ALawQuantifies,
-                    ALawComparison {
+                    ALawComparison, ALawJoinsWithoutWhatImpliesAnother, WhereAnOperationKeepsIt {
 
         /** The part of the law this reads. */
         LawProposition<?> part();
@@ -1497,6 +1530,233 @@ public sealed interface Derivation {
         @Override
         public List<Derivation> oneOf() {
             return List.of(ofThePiece);
+        }
+    }
+
+    /**
+     * Some element of what {@code operation} answered meeting what {@code part} asks of it, where
+     * that comes out the same for every element: {@code ofTheElement} is it read of an element
+     * known only by the side every element of the answer comes out on, and it settles one way.
+     * Some element meets it exactly where the answer holds something, read as
+     * {@code holdsSomething}, and it holds.
+     *
+     * <p>Whether the statement is written of the element ({@code w} holds something) or of what a
+     * closure answers on it ({@code w -> Bool.not(String.isEmpty(w))}) is no part of this: both
+     * are read of the same element. A statement it does not settle — how long a word is — is no
+     * statement this reads.
+     */
+    record EveryElementMeetsIt(LawProposition.SomeElement<?> part, ValueName operation,
+                               Derivation ofTheElement, Derivation holdsSomething)
+            implements Derivation {
+
+        public EveryElementMeetsIt {
+            Objects.requireNonNull(part, "some element meets a statement");
+            Objects.requireNonNull(operation, "of what an operation answered");
+            Objects.requireNonNull(ofTheElement, "which is read of an element of it");
+            Objects.requireNonNull(holdsSomething, "which is read as holding something");
+            if (DefaultBoundOperationFacts.get().everyElementOfItsAnswerIs(operation) == null) {
+                throw new IllegalArgumentException(operation
+                        + " says nothing of every element of what it answers");
+            }
+            if (!(ofTheElement.concludes(Optional.empty()) instanceof Proposition.Always)) {
+                throw new IllegalArgumentException(ofTheElement
+                        + " comes out differently for different elements");
+            }
+        }
+
+        /** Whether {@code part} asks of the element of its container the side every element of
+         *  what {@code operation} answers comes out on. */
+        public static boolean askedOfEveryElement(LawProposition.SomeElement<?> part,
+                                                  ValueName operation) {
+            return DefaultBoundOperationFacts.get().everyElementOfItsAnswerIs(operation)
+                    instanceof SideAnswered side
+                    && part.ofTheElement() instanceof LawProposition.Observed<?>(
+                            LawSubject.ElementOf<?>(var container), SideAnswered asked)
+                    && container.equals(part.container()) && asked.equals(side);
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return Proposition.all(List.of(numbering.of(holdsSomething),
+                    numbering.of(ofTheElement)));
+        }
+    }
+
+    /**
+     * An element of what {@code operation} answered coming out on {@code side}'s holding side, which
+     * is the side every element of that answer comes out on: the answer {@code side} says.
+     *
+     * <p>The side is the operation's, taken from what is bound of it and never handed in.
+     */
+    record OfAnElementOfAnAnswer(ValueName operation, SideAnswered side) implements Derivation {
+
+        public OfAnElementOfAnAnswer {
+            Objects.requireNonNull(operation, "an element of what an operation answered");
+            Objects.requireNonNull(side, "comes out on a side");
+            if (!side.equals(DefaultBoundOperationFacts.get().everyElementOfItsAnswerIs(
+                    operation))) {
+                throw new IllegalArgumentException(operation
+                        + " says no element of what it answers comes out " + side);
+            }
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return new Proposition.Always(side.holds());
+        }
+    }
+
+    /**
+     * A part of a law joining its parts by "or", read without the parts that each imply another of
+     * them: the "or" of the rest is the same statement, and that is what this concludes.
+     *
+     * <p>A part is left out where it holds only where a container an argument stands for holds
+     * something, and another part, read here, is some element of that container meeting what
+     * every element of it — what an operation answered — meets. Wherever the first holds the
+     * container has an element, that element meets it, and the second holds; so the first adds
+     * nothing to the "or". Which part implies which, and by what, is held here, and what is
+     * concluded is the whole "or", never a part on its own.
+     *
+     * @param each for each part of {@code part}, in its order, its reading or what it implies
+     */
+    record ALawJoinsWithoutWhatImpliesAnother(LawProposition.Any<?> part, List<Disjunct> each)
+            implements ALawPart {
+
+        /** One part of the "or": read, or left out for implying another. */
+        public sealed interface Disjunct {
+
+            /** A part read as {@code read}. */
+            record Read(Derivation read) implements Disjunct {
+
+                public Read {
+                    Objects.requireNonNull(read, "a part kept is read");
+                }
+            }
+
+            /** A part left out: it implies {@code implied}, some element of what
+             *  {@code operation} answered meeting what every element of that meets. */
+            record ImpliesAnother(LawProposition.SomeElement<?> implied, ValueName operation)
+                    implements Disjunct {
+
+                public ImpliesAnother {
+                    Objects.requireNonNull(implied, "a part left out implies another");
+                    Objects.requireNonNull(operation, "by what an operation answers");
+                }
+            }
+        }
+
+        public ALawJoinsWithoutWhatImpliesAnother {
+            Objects.requireNonNull(part, "a step reads a part of a law");
+            each = List.copyOf(each);
+            if (each.size() != part.parts().size()) {
+                throw new IllegalArgumentException("a law joining " + part.parts().size()
+                        + " statements is read as " + each.size());
+            }
+            boolean leftOut = false;
+            for (int i = 0; i < each.size(); i++) {
+                if (each.get(i) instanceof Disjunct.ImpliesAnother(var implied, var operation)) {
+                    int at = part.parts().indexOf(implied);
+                    if (at < 0 || !(each.get(at) instanceof Disjunct.Read) || !implied.holds()
+                            || !EveryElementMeetsIt.askedOfEveryElement(implied, operation)
+                            || !holdsOnlyWhereItHoldsSomething(part.parts().get(i),
+                                    implied.container())) {
+                        throw new IllegalArgumentException(part.parts().get(i)
+                                + " does not imply a part of " + part + " that is read");
+                    }
+                    leftOut = true;
+                }
+            }
+            if (!leftOut) {
+                throw new IllegalArgumentException("an \"or\" read whole is joined as it is");
+            }
+        }
+
+        /**
+         * Whether {@code part} holds only where {@code container} holds something: it is, or
+         * joins with "and", a comparison of how many {@code container} holds alone that fails
+         * where it holds none.
+         */
+        public static boolean holdsOnlyWhereItHoldsSomething(LawProposition<?> part,
+                                                             Object container) {
+            return switch (part) {
+                case LawProposition.All<?>(var parts) -> parts.stream()
+                        .anyMatch(each -> holdsOnlyWhereItHoldsSomething(each, container));
+                case LawProposition.Compared<?>(var form, Rel states) ->
+                        form.coefs().size() == 1 && form.coefs().containsKey(
+                                new LawNumber.SizeOf<>(new LawSubject.Argument<>(container)))
+                                && !states.holds(form.constant().signum());
+                default -> false;
+            };
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            List<Proposition> kept = new ArrayList<>();
+            for (Disjunct one : each) {
+                if (one instanceof Disjunct.Read(Derivation read)) {
+                    kept.add(numbering.of(read));
+                }
+            }
+            return Proposition.any(kept);
+        }
+    }
+
+    /**
+     * A part of a law that says only whether a string holds a code point of a class — the same for
+     * every count of them of one or more — where the string is what {@code operation} answered, and
+     * that holds one exactly where its argument does: read as {@code ofWhatItWasHanded}, the same
+     * statement of that argument at the call of {@code operation}.
+     */
+    record WhereAnOperationKeepsIt(LawProposition.Compared<?> part, ValueName operation,
+                                   Derivation ofWhatItWasHanded) implements ALawPart {
+
+        public WhereAnOperationKeepsIt {
+            Objects.requireNonNull(part, "a step reads a part of a law");
+            Objects.requireNonNull(operation, "about what an operation answers");
+            Objects.requireNonNull(ofWhatItWasHanded, "read of what it was handed");
+            CodePointClass counted = whetherItHoldsOne(part);
+            if (counted == null || !(DefaultBoundOperationFacts.get()
+                    .keepsWhetherItHoldsACodePointOf(operation)
+                    instanceof BoundOperationFacts.KeptCodePoints kept)
+                    || !kept.counted().equals(counted)) {
+                throw new IllegalArgumentException(part + " is not kept by " + operation);
+            }
+        }
+
+        /**
+         * The class {@code part} asks whether a string holds a code point of, where it says that
+         * and nothing more — or null where it says anything else.
+         *
+         * <p>A relation over the one count: it comes out one way at none and the other at one, and
+         * as at one at two. A relation over one number that does is the same at every count of one
+         * or more, since a half-line, one point or all but one point that parts nought from one and
+         * not one from two parts nought from everything above it.
+         */
+        public static CodePointClass whetherItHoldsOne(LawProposition.Compared<?> part) {
+            if (part.form().coefs().size() != 1) {
+                return null;
+            }
+            Map.Entry<? extends LawNumber<?>, ExactRatio> only =
+                    part.form().coefs().entrySet().iterator().next();
+            if (!(only.getKey() instanceof LawNumber.CodePointsOf<?>(
+                    LawSubject.Argument<?> _, CodePointClass counted))) {
+                return null;
+            }
+            boolean[] holds = new boolean[3];
+            for (int count = 0; count < holds.length; count++) {
+                ExactRatio value = only.getValue().times(ExactRatio.of(count))
+                        .flatMap(part.form().constant()::plus).orNull();
+                if (value == null) {
+                    return null;
+                }
+                holds[count] = part.states().holds(value.signum());
+            }
+            return holds[0] != holds[1] && holds[1] == holds[2] ? counted : null;
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(ofWhatItWasHanded);
         }
     }
 

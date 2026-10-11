@@ -6,6 +6,7 @@ import souther.compiler.proof.Slot;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.ElementShape;
@@ -14,6 +15,7 @@ import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.OperationLaw;
+import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
@@ -111,6 +113,16 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
      *  point, stands in it. */
     record HoldsThePiecesOf(DeclaredOperation operation, DeclaredArgument separator,
                             DeclaredArgument string)
+            implements OneAboutAnOperation {}
+
+    /** Every element of the operation's answer comes out on {@code side}. */
+    record EveryElementOfItsAnswerIs(DeclaredOperation operation, SideAnswered side)
+            implements OneAboutAnOperation {}
+
+    /** The operation's answer holds a code point of {@code counted} exactly where {@code string}
+     *  does. */
+    record KeepsWhetherItHoldsACodePointOf(DeclaredOperation operation, CodePointClass counted,
+                                           DeclaredArgument string)
             implements OneAboutAnOperation {}
 
     /** The operation's answer holds the image, under {@code image}, of every element of the
