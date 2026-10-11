@@ -93,6 +93,10 @@ final class Subjects {
             // The behavior one of whose rules was read short. Which rule is each rule's own
             // answer, and one fact of the reading is one subject however many rules it bears on.
             case Weakening.DecisionRuleReadShort it -> new Subject.OfABehavior(it.behavior());
+            // The behavior whose body looks values up in a map filed from a list. Which decisions
+            // rest on the order of its repeated keys is not said: none was measured.
+            case Weakening.KeyedOverwriteCasesUnmeasured it ->
+                    new Subject.OfABehavior(it.behavior());
             // The behavior whose body the rewrite is of. Which rewrite, and why it was left open,
             // is the rewrite's own entry under the replacement measure.
             case Weakening.RewriteUndecided it -> new Subject.OfABehavior(it.behavior());

@@ -222,6 +222,12 @@ public record TermPath(String head, List<Step> steps) {
         return append(new Step.Key());
     }
 
+    /** The map this position is the keys of, or null where it is not at a map's keys. */
+    public TermPath mapOfTheKeys() {
+        return !steps.isEmpty() && steps.getLast() instanceof Step.Key
+                ? new TermPath(head, steps.subList(0, steps.size() - 1)) : null;
+    }
+
     /** The same position, narrowed to the values {@code refinement} leaves. */
     public TermPath refine(Refinement refinement) {
         return refine(CasesLeft.of(refinement));

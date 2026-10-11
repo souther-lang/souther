@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -41,9 +42,15 @@ record ContentsAsked(List<Asked> asked) {
 
     /**
      * That the container at {@code container} holds the value at {@code value}, or holds nothing
-     * equal to it.
+     * equal to it — as an element, or as a key where {@code ofTheKey}.
      */
-    record Asked(TermPath container, TermPath value, boolean holding) {}
+    record Asked(TermPath container, TermPath value, boolean holding, boolean ofTheKey) {
+
+        Asked {
+            Objects.requireNonNull(container, "what is asked is asked of some container");
+            Objects.requireNonNull(value, "a container is asked about the value at some position");
+        }
+    }
 
     /** What {@code way} asks of containers' contents. */
     static ContentsAsked of(List<OnTheWay.TakenIn> way) {
@@ -73,13 +80,18 @@ record ContentsAsked(List<Asked> asked) {
         for (RowDemand.OfAnElement one : ofTheElement) {
             switch (one) {
                 case RowDemand.SameAs(TermPath value) when some ->
-                        into.add(new Asked(container, value, true));
+                        into.add(new Asked(container, value, true, false));
                 case RowDemand.DifferentFrom(TermPath value) when !some ->
-                        into.add(new Asked(container, value, false));
+                        into.add(new Asked(container, value, false, false));
+                case RowDemand.KeyedAs(TermPath value) when some ->
+                        into.add(new Asked(container, value, true, true));
+                case RowDemand.NotKeyedAs(TermPath value) when !some ->
+                        into.add(new Asked(container, value, false, true));
                 case RowDemand.WithinIt(TermPath inner, boolean innerSome, var asked) ->
                         asked(inner, innerSome, List.of(asked), into);
-                case RowDemand.SameAs _, RowDemand.DifferentFrom _, RowDemand.Relational _,
-                     RowDemand.ATruth _, RowDemand.InCases _ -> { }
+                case RowDemand.SameAs _, RowDemand.DifferentFrom _, RowDemand.KeyedAs _,
+                     RowDemand.NotKeyedAs _, RowDemand.Relational _, RowDemand.ATruth _,
+                     RowDemand.InCases _ -> { }
             }
         }
     }
@@ -198,7 +210,7 @@ record ContentsAsked(List<Asked> asked) {
                 List<Asked> under = new ArrayList<>();
                 for (Asked each : asked.asked()) {
                     under.add(new Asked(at.get(each.container()), at.get(each.value()),
-                            each.holding()));
+                            each.holding(), each.ofTheKey()));
                 }
                 return composes.test(new Way(new ContentsAsked(under), taken, at))
                         ? Walked.COMPOSED : Walked.EVERY_WAY_TRIED;
@@ -311,6 +323,8 @@ record ContentsAsked(List<Asked> asked) {
                                  Function<TermPath, FixtureTemplate> valueAt) {
         List<FixtureTemplate> holding = new ArrayList<>();
         List<FixtureTemplate> keptOut = new ArrayList<>();
+        List<FixtureTemplate> keysHeld = new ArrayList<>();
+        List<FixtureTemplate> keysKeptOut = new ArrayList<>();
         for (Asked each : asked) {
             if (!each.container().equals(container)) {
                 continue;
@@ -319,8 +333,11 @@ record ContentsAsked(List<Asked> asked) {
             if (value == null) {
                 return null;
             }
-            (each.holding() ? holding : keptOut).add(value);
+            List<FixtureTemplate> into = each.ofTheKey()
+                    ? (each.holding() ? keysHeld : keysKeptOut)
+                    : (each.holding() ? holding : keptOut);
+            into.add(value);
         }
-        return new ContainerContents(holding, keptOut);
+        return new ContainerContents(holding, keptOut, keysHeld, keysKeptOut);
     }
 }

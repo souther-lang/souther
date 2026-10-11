@@ -94,7 +94,8 @@ public final class WhereEachLineDecides {
      * each element, and what a closure says on each application, are one part each here: a relation
      * inside one is about an element or an application and not about the row.
      */
-    public static List<Decides> in(Proposition stated) {
+    public static List<Decides> in(Proposition writtenAs) {
+        Proposition stated = openedUp(writtenAs);
         Map<String, Proposition> parts = new TreeMap<>();
         Map<String, Literal> leaves = new TreeMap<>();
         gather(stated, parts, leaves);
@@ -116,6 +117,39 @@ public final class WhereEachLineDecides {
                     : List.of(heldAgainstItsDenial(stated, line))));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * {@code stated} with each element some container is quantified over that states a relation
+     * put in the statement's own place.
+     *
+     * <p>A row stands at a line of such a relation through an element it chose, and the parts that
+     * element is asked beside the relation are asked of that same element. Said as the quantifier,
+     * the relation and those parts would be read of different elements, since the quantifier is
+     * one part and counts every element. A quantifier that holds no relation, and one denied, is
+     * about the elements together and stays one part.
+     */
+    private static Proposition openedUp(Proposition stated) {
+        return switch (stated) {
+            case Proposition.All all -> Proposition.all(all.parts().stream()
+                    .map(WhereEachLineDecides::openedUp).toList());
+            case Proposition.Any any -> Proposition.any(any.parts().stream()
+                    .map(WhereEachLineDecides::openedUp).toList());
+            case Proposition.Some some when some.holds() && statesARelation(some.ofTheElement()) ->
+                    openedUp(some.ofTheElement());
+            default -> stated;
+        };
+    }
+
+    private static boolean statesARelation(Proposition stated) {
+        return switch (stated) {
+            case Proposition.Compared _ -> true;
+            case Proposition.All all -> all.parts().stream()
+                    .anyMatch(WhereEachLineDecides::statesARelation);
+            case Proposition.Any any -> any.parts().stream()
+                    .anyMatch(WhereEachLineDecides::statesARelation);
+            default -> false;
+        };
     }
 
     /**
@@ -151,6 +185,7 @@ public final class WhereEachLineDecides {
             case Proposition.SameValue same -> same.holds();
             case Proposition.Unread unread -> unread.holds();
             case Proposition.Some some -> some.holds();
+            case Proposition.LastToHold last -> last.holds();
             case Proposition.OnAnApplication _, Proposition.Always _ -> true;
             case Proposition.All _, Proposition.Any _ -> throw new IllegalArgumentException(
                     "a part is what a conjunction or a disjunction joins: " + part);

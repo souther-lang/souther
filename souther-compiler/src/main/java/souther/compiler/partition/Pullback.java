@@ -26,9 +26,11 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.check.WholeUnitsBetween;
 import souther.compiler.core.Core;
+import souther.compiler.check.AnIndexedMap;
 import souther.compiler.inputs.AnIdentityMap;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -87,6 +89,7 @@ import java.util.LinkedHashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
@@ -230,6 +233,12 @@ final class Pullback {
      */
     private List<Derivation.AComparisonRead.Counted> alike;
     /**
+     * The elements of the containers the comparison being read is read of, which name stands for
+     * each — held to one name for each container ({@link ElementsMet}). Nothing where what is read
+     * is no comparison of two numbers.
+     */
+    private ElementsMet elementsMet = ElementsMet.NONE;
+    /**
      * How many each answer an operation sized by cases holds, in the case of it the comparison
      * being read is read in ({@link #inEachCaseOf}): a number of the input, where the arguments
      * stand as that case says.
@@ -254,6 +263,13 @@ final class Pullback {
         return reading.pulled(reading.observe(truth, AnswerAspect.TRUTH, reads));
     }
 
+    /** What {@code optional} holding a value states. */
+    static Pulled ofAPresence(Core optional, InputReads reads, InputReading read,
+                              Optional<ModelOccurrence> where) {
+        Pullback reading = new Pullback(read, where);
+        return reading.pulled(reading.observe(optional, AnswerAspect.PRESENCE, reads));
+    }
+
     /**
      * What a comparison the source wrote states, read as any truth is: a size held where it parts
      * nought from every size above it is whether the container holds anything.
@@ -261,7 +277,43 @@ final class Pullback {
     static Pulled ofAComparison(StatedComparison comparison, InputReads reads, InputReading read,
                                 Optional<ModelOccurrence> where) {
         Pullback reading = new Pullback(read, where);
-        return reading.pulled(reading.comparison(comparison, null, false, reads));
+        return reading.pulled(reading.underTheEntriesLookedUp(
+                reading.comparison(comparison, null, false, reads), comparison, reads));
+    }
+
+    /**
+     * {@code about}, with what picked out each entry it states something of: a lookup answers one
+     * entry, and a statement about its value is about that one.
+     */
+    private Derivation underTheEntriesLookedUp(Derivation about, StatedComparison comparison,
+                                               InputReads reads) {
+        Map<BindingId, InputReads.EntryLookedUp> entries = reads.entriesLookedUp();
+        if (entries.isEmpty()) {
+            return about;
+        }
+        // The entries of the names the comparison is written through, and not of every name in
+        // force: two names for two entries of one map are one position, and which of them a
+        // number is a number of is the name it was written with.
+        Set<BindingId> written = ElementsMet.namesOfElementsIn(
+                List.of(comparison.left(), comparison.right()), reads, read.rules().newtypes());
+        Derivation out = about;
+        for (Map.Entry<BindingId, InputReads.EntryLookedUp> each : entries.entrySet()) {
+            if (!written.contains(each.getKey())) {
+                continue;
+            }
+            Derivation picked = observe(each.getValue().lookup(), AnswerAspect.PRESENCE, reads);
+            // A lookup whose key no position holds says nothing of which entry it is, and a
+            // statement about an entry it does not pick out is about another.
+            if (!(picked.concludes(Optional.empty()) instanceof Proposition.Some some
+                    && some.holds())) {
+                WhyUnread stopped = Proposition.firstStopIn(picked.concludes(Optional.empty()));
+                return new Derivation.Stopped(stopped != null ? stopped
+                        : new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT),
+                        false);
+            }
+            out = new Derivation.OfTheEntryUnderTheKey(picked, out);
+        }
+        return out;
     }
 
     /**
@@ -278,8 +330,11 @@ final class Pullback {
                                               InputReading read) {
         Pullback reading = new Pullback(read, Optional.empty());
         Once<AffineReading.OfAComparison> arithmetic = reading.arithmeticOf(comparison, reads);
-        return new OnTheInput(reading.pulled(reading.firstThatReadsIt(
-                reading.rulesFor(comparison, null, false, reads, arithmetic))), arithmetic);
+        return new OnTheInput(reading.pulled(reading.underTheEntriesLookedUp(
+                reading.firstThatReadsIt(
+                        reading.rulesFor(comparison, null, false, reads, arithmetic)),
+                comparison, reads)),
+                arithmetic);
     }
 
     /**
@@ -679,7 +734,9 @@ final class Pullback {
             InputReads inside = reads.choosing(Choice.Decides.ofCase(match, arm),
                     read.rules().symbols(), read.rules().newtypes());
             arms.add(new Derivation.MatchArms.Arm(selections.get(i),
-                    states.apply(arm.body(), inside)));
+                    states.apply(arm.body(), inside),
+                    reads.valueOfTheEntryLookedUp(match.scrutinee(), arm,
+                            read.rules().symbols(), read.rules().newtypes()) != null));
         }
         return new Derivation.MatchArms(arms);
     }
@@ -1044,6 +1101,19 @@ final class Pullback {
          * how often its key occurs.
          */
         record AnEntry() implements ElementAt {}
+
+        /**
+         * An entry of a map filed from the list at {@code list}: the list's own element, under the
+         * key {@code key} makes of it. Of two elements of one key the later is the entry, so what
+         * a statement is about is the last element of its key.
+         */
+        record AFiledElement(TermPath list, Core.Block key) implements ElementAt {
+
+            public AFiledElement {
+                Objects.requireNonNull(list, "an entry is an element of some list");
+                Objects.requireNonNull(key, "an element is filed under what some closure makes");
+            }
+        }
     }
 
     /**
@@ -1337,6 +1407,8 @@ final class Pullback {
                                     observe(value, aspect, in);
                             case ElementAt.AtAPosition(TermPath container) ->
                                     observedAt(container.element(), aspect);
+                            case ElementAt.AFiledElement(TermPath list, Core.Block _) ->
+                                    observedAt(list.element(), aspect);
                             // A piece, and an entry filed by a fold, stand at no position of the
                             // input to be observed there.
                             case ElementAt.APiece _, ElementAt.AnEntry _ -> unread(e, reads,
@@ -1381,8 +1453,15 @@ final class Pullback {
          * a value is handed on without the key it was filed under.
          */
         private TermPath keyAt(DeclaredArgument at) {
-            return elements.get(at) instanceof ElementAt.AtAPosition(TermPath map)
-                    ? map.key() : null;
+            return switch (elements.get(at)) {
+                case ElementAt.AtAPosition(TermPath map) -> map.key();
+                // The entry under a key is an element of the list, so the key it stands under is
+                // what the closure makes of that element.
+                case ElementAt.AFiledElement(TermPath list, Core.Block key) ->
+                        reads.keyOfTheElement(key, list.element(), read.rules().newtypes());
+                case ElementAt.AValue _, ElementAt.APiece _, ElementAt.AnEntry _ -> null;
+                case null -> null;
+            };
         }
 
         /** The subject a row controls {@code subject} is, or null where it is none. */
@@ -1398,6 +1477,8 @@ final class Pullback {
                         switch (elements.get(at)) {
                             case ElementAt.AtAPosition(TermPath container) ->
                                     new DecisionSubject.AnInput(container.element());
+                            case ElementAt.AFiledElement(TermPath list, Core.Block _) ->
+                                    new DecisionSubject.AnInput(list.element());
                             case ElementAt.AValue(Core value, InputReads in) ->
                                     in.pathOf(value, read.rules().newtypes())
                                             instanceof PathResolution.At(TermPath held)
@@ -1464,6 +1545,18 @@ final class Pullback {
                             located.handed());
             if (answered == null) {
                 return unread(e, reads, new WhyUnread.TwoElementsOfOneContainer());
+            }
+            // The entry a map holds under a key is the last element the key was made of, so what
+            // is stated of an entry is stated of the last element of its key.
+            if (located.each() instanceof ElementAt.AFiledElement(TermPath list, Core.Block key)) {
+                TermPath filedUnder = reads.keyOfTheElement(key, list.element(),
+                        read.rules().newtypes());
+                if (filedUnder == null) {
+                    return unread(e, reads, new WhyUnread.AtNoPosition(
+                            WhyUnread.AtNoPosition.Place.SUBJECT));
+                }
+                answered = leaf(new Derivation.OfTheLastToHoldItsValue(answered, held, filedUnder),
+                        e, reads);
             }
             answered = alsoWhatWasKept(answered, located.kept());
             Proposition element = trying.of(answered);
@@ -1757,6 +1850,12 @@ final class Pullback {
                     if (entries != null) {
                         return entries;
                     }
+                    // A map holding the elements of a list under their keys: an entry is one of
+                    // the list's elements, the last of its key.
+                    Located filed = filedElementsOf(at, pending, located, outerEach, outerHanded);
+                    if (filed != null) {
+                        return filed;
+                    }
                 }
                 if (walk == null) {
                     return null;
@@ -1850,6 +1949,32 @@ final class Pullback {
                 return null;
             }
             ElementAt each = new ElementAt.AnEntry();
+            settle(pending, each, null, located);
+            return outerEach == null ? new Located(held, each, null, located, null)
+                    : new Located(held, outerEach, outerHanded, located, null);
+        }
+
+        /**
+         * Where the entries of {@code container} stand, where it is a map holding each element of a
+         * list standing at a position under the key a closure makes of it ({@link AnIndexedMap})
+         * — or null where it is not. Only whether some entry meets a statement is asked of them:
+         * how many do is not how many elements do, since of two elements of one key one is an
+         * entry.
+         */
+        private Located filedElementsOf(Denotation container, List<Kept> pending,
+                                        List<Kept> located, ElementAt outerEach,
+                                        Denotation outerHanded) {
+            AnIndexedMap indexed = AnIndexedMap.of(container.value(), blockIn(container));
+            if (indexed == null) {
+                return null;
+            }
+            Denotation walked = container.at().standing(indexed.walked(),
+                    read.rules().symbols(), read.rules().newtypes());
+            if (!(walked.at().pathOf(walked.value(), read.rules().newtypes())
+                    instanceof PathResolution.At(TermPath held))) {
+                return null;
+            }
+            ElementAt each = new ElementAt.AFiledElement(held, indexed.key());
             settle(pending, each, null, located);
             return outerEach == null ? new Located(held, each, null, located, null)
                     : new Located(held, outerEach, outerHanded, located, null);
@@ -2173,6 +2298,9 @@ final class Pullback {
                                                 sizeOf(value, in);
                                         case ElementAt.AtAPosition(TermPath container) ->
                                                 sizedAt(container.element());
+                                        case ElementAt.AFiledElement(TermPath list,
+                                                                     Core.Block _) ->
+                                                sizedAt(list.element());
                                         case ElementAt.APiece _, ElementAt.AnEntry _ ->
                                                 new Sized.NotSized(new WhyUnread.AtNoPosition(
                                                         WhyUnread.AtNoPosition.Place.SUBJECT));
@@ -2289,6 +2417,7 @@ final class Pullback {
             TermPath each = switch (ofTheElement) {
                 case LawSubject.ElementOf<DeclaredArgument> _ -> switch (located.each()) {
                     case ElementAt.AtAPosition(TermPath container) -> container.element();
+                    case ElementAt.AFiledElement(TermPath list, Core.Block _) -> list.element();
                     case ElementAt.AValue(Core value, InputReads in) ->
                             in.pathOf(value, read.rules().newtypes())
                                     instanceof PathResolution.At(TermPath inside)
@@ -2583,13 +2712,16 @@ final class Pullback {
     private Derivation overQuantities(Denotation left, Denotation right, Rel states) {
         Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
         List<Derivation.AComparisonRead.Counted> outerAlike = alike;
+        ElementsMet outerElements = elementsMet;
         counting = new LinkedHashMap<>();
         alike = null;
+        elementsMet = new ElementsMet();
         try {
             return overQuantitiesCounting(left, right, states);
         } finally {
             counting = outer;
             alike = outerAlike;
+            elementsMet = outerElements;
         }
     }
 
@@ -2613,7 +2745,10 @@ final class Pullback {
             switch (AffineForms.outcome(side.value(), side.at(), quantities())) {
                 case AffineForms.Outcome.Composed<Quantity, InputReads>(var form) -> sides.add(form);
                 case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
-                    return new Derivation.Stopped(noFormOf(stopped), false);
+                    // A comparison of two elements of one container is read of neither: they
+                    // stand at one position, and a form would hold them as one number.
+                    return new Derivation.Stopped(elementsMet.crowded()
+                            ? new WhyUnread.TwoElementsOfOneContainer() : noFormOf(stopped), false);
                 }
             }
         }
@@ -2798,9 +2933,15 @@ final class Pullback {
                 if (added != null) {
                     return added;
                 }
-                NumericTerm term = InputNumber.of(node, read.domain(), at, read.rules());
+                NumericTerm term = InputNumber.of(node, read.domain(), at, read.rules(),
+                        elementsMet);
                 if (term != null) {
                     return LinearForm.atom(new DecisionAtom.OfTheInput(term));
+                }
+                // A name for another element of a container the comparison is already read of is
+                // no number of the input, and what it is made of is not followed further.
+                if (elementsMet.crowded()) {
+                    return null;
                 }
                 // How many an operation's answer holds, as its law says of its arguments.
                 if (AnOperationApplied.of(Core.withoutStanding(node)) instanceof AnOperationApplied

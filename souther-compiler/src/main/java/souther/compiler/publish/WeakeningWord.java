@@ -248,6 +248,18 @@ public enum WeakeningWord {
     DECISION_RULE_READ_SHORT,
 
     /**
+     * The overwrite order of a repeated key in a map the body files from a list may bear on a
+     * condition's boundary or branch, and what that decides has not been measured.
+     *
+     * <p>The last value for a key is read as the last one. What is missing is the rows: the ones
+     * written hold each key once, so a distinction only a repeated key makes — an earlier element
+     * meeting a condition the last does not, and the other way round — has no row. Apart from
+     * {@link #DECISION_RULE_READ_SHORT}, which is a rule read with fewer of its distinctions: the
+     * rules here are read whole, and a capacity to write rows is what is short.
+     */
+    KEYED_OVERWRITE_CASES_UNMEASURED,
+
+    /**
      * A rewrite of a body nothing here could decide about: whether a row tells it from the body is
      * not known. Which of the ways that happens it was is the reason the rewrite's own entry gives.
      */

@@ -7421,6 +7421,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // policy and travels as the reason.
             case Weakening.DecisionReadingIncomplete _ -> WeakeningWord.DECISION_NOT_FULLY_READ;
             case Weakening.DecisionRuleReadShort _ -> WeakeningWord.DECISION_RULE_READ_SHORT;
+            case Weakening.KeyedOverwriteCasesUnmeasured _ ->
+                    WeakeningWord.KEYED_OVERWRITE_CASES_UNMEASURED;
             case Weakening.RewriteUndecided _ -> WeakeningWord.REWRITE_UNDECIDED;
         };
     }

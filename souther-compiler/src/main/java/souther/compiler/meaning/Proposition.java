@@ -65,6 +65,7 @@ public sealed interface Proposition {
             case Present present -> mayBeAnElementOf(present.of(), container);
             case SameValue same -> mayBeAnElementOf(same.one(), container)
                     || mayBeAnElementOf(same.other(), container);
+            case LastToHold last -> isAnElementOf(last.position(), container);
             case All all -> all.parts().stream()
                     .anyMatch(part -> part.mayTurnOnAnElementOf(container));
             case Any any -> any.parts().stream()
@@ -253,6 +254,40 @@ public sealed interface Proposition {
         @Override
         public Proposition denied() {
             return new SameValue(one, other, !holds);
+        }
+    }
+
+    /**
+     * The element of the container at {@code container} that a statement is about is the last of
+     * those holding, at {@code position}, the value it holds there — or, where not {@code holds},
+     * one that a later element holds the same value as.
+     *
+     * <p>Said of the element a quantifier over the container is about, so it is a part of what is
+     * asked of that element and names no other. It is what a map filed from a list adds to the
+     * element it answers: the entry under a key is the last element of that key, and an earlier
+     * one is in no entry.
+     *
+     * @param position a position under the container's element, which an element is told apart
+     *                 from the others by
+     * @param key      spelled from the rest when it is made, whatever is handed in
+     */
+    record LastToHold(TermPath container, TermPath position, boolean holds, String key)
+            implements Proposition {
+
+        public LastToHold(TermPath container, TermPath position, boolean holds) {
+            this(container, position, holds, null);
+        }
+
+        public LastToHold {
+            if (container == null || position == null) {
+                throw new IllegalArgumentException("a last is of a container's element by a place");
+            }
+            key = (holds ? "last " : "not last ") + container + " by " + position;
+        }
+
+        @Override
+        public Proposition denied() {
+            return new LastToHold(container, position, !holds);
         }
     }
 
@@ -461,15 +496,33 @@ public sealed interface Proposition {
             case OnAnApplication applications ->
                     applications.each().forEach(one -> stopsIn(one, into));
             case Some some -> stopsIn(some.ofTheElement(), into);
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _ -> { }
+            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
+                 LastToHold _ -> { }
         }
+    }
+
+    /**
+     * Whether {@code stated} says of some element that it is the last of those holding a value —
+     * which a map filed from a list says of the entry under a key.
+     */
+    static boolean saysTheLastToHold(Proposition stated) {
+        return switch (stated) {
+            case LastToHold _ -> true;
+            case All all -> all.parts().stream().anyMatch(Proposition::saysTheLastToHold);
+            case Any any -> any.parts().stream().anyMatch(Proposition::saysTheLastToHold);
+            case OnAnApplication applications ->
+                    applications.each().stream().anyMatch(Proposition::saysTheLastToHold);
+            case Some some -> saysTheLastToHold(some.ofTheElement());
+            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, Unread _ ->
+                    false;
+        };
     }
 
     /** Whether some part of {@code stated} is about what a dependency answered, rather than about
      *  the input alone. */
     static boolean aboutAnAnswer(Proposition stated) {
         return switch (stated) {
-            case Always _, Unread _ -> false;
+            case Always _, Unread _, LastToHold _ -> false;
             case Compared(Relation relation, boolean _, String _) -> switch (relation) {
                 case Relation.Affine affine -> affine.form().coefs().keySet().stream()
                         .anyMatch(Proposition::anAnswerIn);

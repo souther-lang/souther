@@ -766,8 +766,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     BlockReason.WhatItStatesIsNoLine.Why.A_NUMBER_NO_POSITION_HOLDS;
             case Proposition.Always _, Proposition.Unread _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                 Proposition.All _, Proposition.Any _, Proposition.Some _,
-                 Proposition.OnAnApplication _ ->
+                 Proposition.LastToHold _, Proposition.All _, Proposition.Any _,
+                 Proposition.Some _, Proposition.OnAnApplication _ ->
                     BlockReason.WhatItStatesIsNoLine.Why.NO_RELATION_OF_NUMBERS;
         });
     }
@@ -853,6 +853,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 yield true;
             }
             case Proposition.Some some -> relates(some.ofTheElement(), out);
+            // Which of the elements holding a value is the one meant names no place beside the
+            // value's own, which the sameness has already filed.
+            case Proposition.LastToHold _ -> true;
             case Proposition.All all -> all.parts().stream().allMatch(each -> relates(each, out));
             case Proposition.Any any -> any.parts().stream().allMatch(each -> relates(each, out));
             default -> false;
@@ -936,6 +939,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Compared _ -> true;
             case Proposition.All all -> all.parts().stream().anyMatch(Cutting::holdsARelation);
             case Proposition.Any any -> any.parts().stream().anyMatch(Cutting::holdsARelation);
+            case Proposition.Some some -> some.holds() && holdsARelation(some.ofTheElement());
             default -> false;
         };
     }

@@ -48,13 +48,27 @@ public final class InputNumber {
     }
 
     /**
-     * The number {@code e} names.
+     * The number {@code e} names, as one of the numbers a comparison is read of: none where it
+     * names an element of a container that another name stands for in {@code met}.
+     *
+     * <p>The way in for a reader that puts numbers into one form. A form holds a number once, so
+     * two names for two elements of one container, which are one position, would be merged into it.
+     */
+    public static NumericTerm of(Core e, InputDomain inputs, InputReads reads,
+                                 RuleReadingSource source, ElementsMet met) {
+        return met.admits(e, reads, source.newtypes())
+                ? ofAlone(e, inputs, reads, source) : null;
+    }
+
+    /**
+     * The number {@code e} names, for a reader that asks of a side by itself and combines no two
+     * numbers into one form: a line drawn on one position against a value written out.
      *
      * <p>The argument of a taking has to be a location: {@code List.length(List.map(f, xs))} counts
      * something no path names, and a boundary on it could not be looked for in a row.
      */
-    public static NumericTerm of(Core e, InputDomain inputs, InputReads reads,
-                                 RuleReadingSource source) {
+    public static NumericTerm ofAlone(Core e, InputDomain inputs, InputReads reads,
+                                      RuleReadingSource source) {
         Symbols symbols = source.symbols();
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols);
         if (measured != null) {

@@ -102,6 +102,9 @@ final class AStatementAtARow {
             case Proposition.Always _ -> true;
             case Proposition.Truth(DecisionSubject.AnInput _, boolean _, String _),
                  Proposition.Present(DecisionSubject.AnInput _, boolean _, String _) -> true;
+            case Proposition.SameValue(DecisionSubject.AnInput _, DecisionSubject.AnInput _,
+                                       boolean _, String _) -> true;
+            case Proposition.LastToHold _ -> true;
             case Proposition.All all -> all.parts().stream().allMatch(AStatementAtARow::askable);
             case Proposition.Any any -> any.parts().stream().allMatch(AStatementAtARow::askable);
             case Proposition.Some some -> askable(some.ofTheElement());
@@ -142,11 +145,17 @@ final class AStatementAtARow {
                                Map<Relation, OneRelation> into,
                                Map<String, OverTheElements> elements, Set<TermPath> positions) {
         switch (stated) {
-            case Proposition.Always _ -> { }
+            case Proposition.Always _, Proposition.LastToHold _ -> { }
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, String _) ->
                     positions.add(at);
             case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _, String _) ->
                     positions.add(at);
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
+                                       DecisionSubject.AnInput(TermPath other), boolean _,
+                                       String _) -> {
+                positions.add(one);
+                positions.add(other);
+            }
             case Proposition.All all -> all.parts().forEach(part ->
                     gather(part, behavior, quantities, into, elements, positions));
             case Proposition.Any any -> any.parts().forEach(part ->
@@ -344,12 +353,25 @@ final class AStatementAtARow {
     private Answer at(Proposition part, BorderQuantity.Observation row) {
         return switch (part) {
             case Proposition.Always(boolean holds) -> holds ? Answer.HOLDS : Answer.FAILS;
+            // Of the element this row is read with chosen: the last of those holding the value it
+            // holds at the position.
+            case Proposition.LastToHold(TermPath container, TermPath position, boolean holds,
+                                        String _) -> heldAs(holds, switch (
+                    row.lastToHold(container, position)) {
+                case BorderQuantity.Lastness.Last _ -> Answer.HOLDS;
+                case BorderQuantity.Lastness.NotLast _ -> Answer.FAILS;
+                case BorderQuantity.Lastness.CouldNotTell(ReadingGap why) ->
+                        new Answer.CouldNotTell(Set.of(why));
+            });
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds,
                                    String _) -> heldAs(holds, ofItsValue(at, row,
                     value -> value instanceof ObservedValue.Bool(boolean truth) ? truth : null));
             case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean holds,
                                      String _) -> heldAs(holds, ofItsValue(at, row,
                     value -> !(value instanceof ObservedValue.Absent)));
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
+                                       DecisionSubject.AnInput(TermPath other), boolean holds,
+                                       String _) -> heldAs(holds, theSame(one, other, row));
             case Proposition.All all -> joined(all.parts().stream()
                     .map(each -> at(each, row)).toList(), true);
             case Proposition.Any any -> joined(any.parts().stream()
@@ -414,9 +436,7 @@ final class AStatementAtARow {
                     new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
             case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
                 case ObservationAtPoint.Value(ObservedValue value) -> {
-                    Boolean answer = (value instanceof ObservedValue.Unknown
-                            || value instanceof ObservedValue.Truncated) ? null
-                            : asked.apply(value);
+                    Boolean answer = value.unread() != null ? null : asked.apply(value);
                     if (answer == null) {
                         yield new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));
                     }
@@ -428,6 +448,38 @@ final class AStatementAtARow {
                         new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));
             };
         };
+    }
+
+    /**
+     * Whether a row put one value at both {@code one} and {@code other}: holding where it is the
+     * same value, failing where it is two or where the row put nothing at either, and not read
+     * where the walk did not get to one of them or what stands there is no value to compare.
+     */
+    private static Answer theSame(TermPath one, TermPath other, BorderQuantity.Observation row) {
+        if (!(row.at(one) instanceof WalkResult.Reached<ObservationAtPoint>(
+                ObservationAtPoint first))
+                || !(row.at(other) instanceof WalkResult.Reached<ObservationAtPoint>(
+                ObservationAtPoint second))) {
+            return new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
+        }
+        if (first instanceof ObservationAtPoint.WroteNothing
+                || second instanceof ObservationAtPoint.WroteNothing) {
+            return Answer.FAILS;
+        }
+        if (!(first instanceof ObservationAtPoint.Value(ObservedValue left))
+                || !(second instanceof ObservationAtPoint.Value(ObservedValue right))) {
+            return new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));
+        }
+        // A value any part of which could not be read is no value to be equal or unequal to
+        // another.
+        ReadingGap notRead = ReadingGap.ofAComparisonOf(left);
+        if (notRead == null) {
+            notRead = ReadingGap.ofAComparisonOf(right);
+        }
+        if (notRead != null) {
+            return new Answer.CouldNotTell(Set.of(notRead));
+        }
+        return left.equals(right) ? Answer.HOLDS : Answer.FAILS;
     }
 
     /** {@code answered} where the part is held, and the other way round where it is denied. */

@@ -369,6 +369,9 @@ public sealed interface ObligationDisposition {
                      Weakening.DecisionReadingIncomplete _,
                      // And a rule of a decision read short, which is about what that rule is.
                      Weakening.DecisionRuleReadShort _,
+                     // And the order a map's repeated keys were filed in, which is about the rows
+                     // this compiler writes and not about where a value stands against a line.
+                     Weakening.KeyedOverwriteCasesUnmeasured _,
                      // And a rewrite of the body nothing decided about, which is whether the rows
                      // depend on what the body says and not where a value stands.
                      Weakening.RewriteUndecided _,

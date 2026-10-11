@@ -8,6 +8,7 @@ import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
@@ -156,7 +157,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      */
     static LinearForm<NumericTerm> formOf(Core expression, InputReads reads, InputReading read) {
         AffineForms.Outcome<NumericTerm, InputReads> outcome = AffineForms.outcome(expression,
-                reads, reading(read.domain(), read.rules(), new LinkedHashSet<>()));
+                reads, reading(read.domain(), read.rules(), new LinkedHashSet<>(),
+                        new ElementsMet()));
         return outcome instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> composed
                 ? composed.form() : null;
     }
@@ -172,11 +174,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         // What this reading names as it goes, kept so that a reading which ran to the end can say
         // what it was about without anybody reading the comparison again.
         java.util.Set<NumericTerm> named = new java.util.LinkedHashSet<>();
+        // One element of each container for the whole comparison, whichever side names it.
+        ElementsMet met = new ElementsMet();
         // The left first where both stop, which is the side a threshold would be read off.
         LinearForm<NumericTerm> left = null;
         for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
             AffineForms.Outcome<NumericTerm, InputReads> read =
-                    AffineForms.outcome(side, reads, reading(inputs, ruleSource, named));
+                    AffineForms.outcome(side, reads, reading(inputs, ruleSource, named, met));
             if (read instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped) {
                 return new OfAComparison.Stopped(stopped);
             }
@@ -281,7 +285,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * for the whole reading of one comparison, and this reader lives exactly that long.
      */
     private static AffineForms.Reading<NumericTerm, InputReads> reading(
-            InputDomain inputs, RuleReadingSource ruleSource, java.util.Set<NumericTerm> named) {
+            InputDomain inputs, RuleReadingSource ruleSource, Set<NumericTerm> named,
+            ElementsMet met) {
         return new AffineForms.Reading<NumericTerm, InputReads>() {
 
             @Override
@@ -296,7 +301,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             @Override
             public LinearForm<NumericTerm> leafOf(Core node, InputReads at) {
-                NumericTerm term = InputNumber.of(node, inputs, at, ruleSource);
+                NumericTerm term = InputNumber.of(node, inputs, at, ruleSource, met);
                 if (term == null) {
                     return null;
                 }

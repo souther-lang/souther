@@ -823,7 +823,7 @@ public final class GuardThresholds {
      * border nothing could meet (#1018).
      */
     static Named namedBy(Core e, InputReading read, InputReads reads) {
-        NumericTerm term = InputNumber.of(e, read.domain(), reads, read.rules());
+        NumericTerm term = InputNumber.ofAlone(e, read.domain(), reads, read.rules());
         if (term == null) {
             return null;
         }
