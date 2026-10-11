@@ -2246,19 +2246,60 @@ final class Pullback {
         }
 
         /**
+         * Where the elements of the argument {@code at} stand, beneath what only put them in
+         * another order and through every walk answering one value for each of them — or null
+         * where they stand at no position.
+         *
+         * <p>The same reading {@link #count} makes, so that what is asked of the elements of a
+         * container does not turn on which number of them it is. How many of them there are, what
+         * a number of each adds up to and how many differ are three numbers over one container.
+         *
+         * @param counting whether how often a value stands is asked, which a set made of what a
+         *                 closure answered does not say
+         */
+        private Located elementsOf(DeclaredArgument at, boolean counting) {
+            Core given = applied.argument(at);
+            Denotation container = reads.standing(given, read.rules().symbols(),
+                    read.rules().newtypes());
+            Beneath beneath = beneath(container, counting);
+            Core over = beneath == null ? given : beneath.at().value();
+            InputReads in = beneath == null ? reads : beneath.at().at();
+            return locate(beneath == null ? container : beneath.at(), over, in,
+                    beneath == null ? List.of() : beneath.kept(), counting);
+        }
+
+        /**
          * How many different values {@code ofTheElement} comes to over the elements of the
-         * container at {@code at}, where the container stands at a position and what is taken of
-         * each element stands at one inside it.
+         * container at {@code at}, where they stand at a position and what is taken of each stands
+         * at one inside it.
+         *
+         * <p>Of every element and not of some: a filter that kept the elements meeting something
+         * leaves a number of the ones it kept, which no quantity of the container says. And a
+         * closure's answer on an element is a place only where it reads one inside that element —
+         * {@code .currency} is {@code fs[*].currency}, and a value worked out of it is none.
          */
         private Sized different(DeclaredArgument at, LawSubject<DeclaredArgument> ofTheElement) {
-            if (!(reads.pathOf(applied.argument(at), read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath held))) {
+            Located located = elementsOf(at, false);
+            if (located == null || !located.kept().isEmpty()) {
                 return new Sized.NotSized(
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
+            TermPath held = located.held();
             TermPath each = switch (ofTheElement) {
-                case LawSubject.ElementOf<DeclaredArgument> _ -> held.element();
-                case LawSubject.KeyOf<DeclaredArgument> _ -> held.key();
+                case LawSubject.ElementOf<DeclaredArgument> _ -> switch (located.each()) {
+                    case ElementAt.AtAPosition(TermPath container) -> container.element();
+                    case ElementAt.AValue(Core value, InputReads in) ->
+                            in.pathOf(value, read.rules().newtypes())
+                                    instanceof PathResolution.At(TermPath inside)
+                                    && inside.isAtOrUnder(held.element()) ? inside : null;
+                    case ElementAt.APiece _, ElementAt.AnEntry _ -> null;
+                };
+                // The key of an entry is a place of a map. Where the entries are a list's, a
+                // component of each is no place of an input at all.
+                case LawSubject.KeyOf<DeclaredArgument> _ ->
+                        located.each() instanceof ElementAt.AtAPosition(TermPath map)
+                                && read.domain().typeAt(map, read.rules()) instanceof Type.MapOf
+                                ? map.key() : null;
                 // What a closure answers stands at no position a row writes.
                 case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _,
                      LawSubject.Argument<DeclaredArgument> _ -> null;
@@ -2271,18 +2312,22 @@ final class Pullback {
 
         /**
          * What {@code ofTheElement}, a number of each element of the container at {@code at}, adds
-         * up to over them, where the container stands at a position.
+         * up to over them, where the elements stand at a position ({@link #elementsOf}).
+         *
+         * <p>Of every element, as {@link #different} is: a number over some of them is no sum a
+         * quantity of the container states.
          */
         private Sized sumOver(DeclaredArgument at, LawNumber<DeclaredArgument> ofTheElement) {
-            if (!(reads.pathOf(applied.argument(at), read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath held))) {
+            Located located = elementsOf(at, true);
+            if (located == null || !located.kept().isEmpty()) {
                 return new Sized.NotSized(
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
+            TermPath held = located.held();
             if (!quantifying.add(held)) {
                 return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
             }
-            elements.put(at, new ElementAt.AtAPosition(held));
+            elements.put(at, located.each());
             Sized each;
             try {
                 each = number(LinearForm.atom(ofTheElement));

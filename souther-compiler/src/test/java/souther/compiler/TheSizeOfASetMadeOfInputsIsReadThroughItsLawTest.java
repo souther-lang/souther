@@ -124,6 +124,57 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
                 """, "f"), List.of("xs[*]"));
     }
 
+    @Test
+    void howManyDifferentValuesAProjectionOfAListComesToIsAskedOfTheListItIsTakenOf() {
+        String model = """
+                data Forecast = { currency: String, amount: Int }
+
+                behavior %s : (fs: List<Forecast>) -> Int
+                let %s (fs) = if %s then 1 else 0
+                """;
+        for (String condition : List.of(
+                "Set.size(Set.fromList(List.map(.currency, fs))) == 1",
+                "List.length(List.distinct(List.map(.currency, fs))) == 1",
+                "List.length(List.distinct(List.map(f -> f.currency, fs))) == 1")) {
+            relatesValues(of(model.formatted("f", "f", condition), "f"),
+                    List.of("fs[*].currency"));
+        }
+    }
+
+    @Test
+    void theSameCountOfAProjectionIsReadWhereAGuardAsksIt() {
+        relatesValues(of("""
+                data Forecast = { currency: String, amount: Int }
+
+                behavior f : (fs: List<Forecast>) -> Int | Mixed
+                let f (fs) = {
+                    guard Set.size(Set.fromList(List.map(.currency, fs))) == 1 else Mixed { n = 1 }
+                    1
+                }
+                """, "f"), List.of("fs[*].currency"));
+    }
+
+    /**
+     * Only what is read is said to be read: of the elements a filter kept, or of a value worked
+     * out of each, the number is no number of the container and the rule stays a rule nobody read.
+     */
+    @Test
+    void aProjectionOfSomeElementsOrOfAValueWorkedOutOfEachIsStillARuleNobodyRead() {
+        String model = """
+                data Forecast = { currency: String, amount: Int }
+
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if %s then 1 else 0
+                """;
+        for (String condition : List.of(
+                "Set.size(Set.fromList(List.map(f -> f.amount + 1, fs))) == 1",
+                "Set.size(Set.fromList(List.map(.currency,"
+                        + " List.filter(f -> f.amount > 0, fs)))) == 1")) {
+            Said said = of(model.formatted(condition), "f");
+            assertEquals(List.of("rule_unread"), said.weakening(), condition);
+        }
+    }
+
     /**
      * What a call answering a truth inside the closure states is its own, and the emptiness check
      * around it does not state it a second time.
@@ -135,6 +186,22 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
                 let f (xs, ys) =
                     if List.isEmpty(List.filter(x -> List.contains(x, ys), xs)) then 1 else 0
                 """, "f"), List.of("xs[*]", "ys[*]"));
+        relatesValues(of("""
+                behavior f : (xs: List<String>, shipped: Set<String>) -> Int
+                let f (xs, shipped) =
+                    if List.isEmpty(List.filter(x -> Set.contains(x, shipped), xs)) then 1 else 0
+                """, "f"), List.of("xs[*]", "shipped[*]"));
+    }
+
+    /** And a comparison the closure writes keeps its own rule, as it did. */
+    @Test
+    void aComparisonAClosureWritesIsStillItsOwnRule() {
+        Said said = of("""
+                behavior f : (xs: List<Int>) -> Int
+                let f (xs) = if List.isEmpty(List.filter(x -> x > 0, xs)) then 1 else 0
+                """, "f");
+        assertEquals(List.of(), said.notRead());
+        assertEquals(List.of(), said.weakening());
     }
 
     @Test
