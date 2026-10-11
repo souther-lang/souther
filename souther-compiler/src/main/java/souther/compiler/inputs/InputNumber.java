@@ -5,18 +5,23 @@ import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.SeededWalk;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.WalkElements;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.DateTranslation;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 
 /**
  * Which number of a behavior's input an expression names, or nothing where it names none.
@@ -224,6 +229,12 @@ public final class InputNumber {
         // occurrences of its path, and a term made of it would state of every one of them what the
         // model says of those.
         RunSource over = RunSource.overTheOccurrencesAt(under);
+        // A walk inside a container of containers is over some of the occurrences of its path,
+        // unless what it walked is every one of them: the lists of an outer list put end to end.
+        if (over == null && where.everyElementAt(element, source.newtypes())
+                instanceof PathResolution.At(TermPath every) && every.equals(at)) {
+            over = RunSource.overEveryOccurrenceAt(under);
+        }
         if (over == null) {
             return null;
         }
@@ -231,6 +242,85 @@ public final class InputNumber {
         return stands == null ? null
                 : NumericTerm.TakenOver.of(measured.operation(), over, stands, source.inners(),
                         symbols);
+    }
+
+    /**
+     * What a walk from a seed answers where its step only adds to the answer so far: the seed and
+     * the total of what the step adds for each element.
+     *
+     * @param seed  what the walk starts from
+     * @param total the total of what each element adds, the term {@code List.sum} of the same
+     *              values is
+     */
+    public record SeedAndTotal(ExactRatio seed, NumericTerm total) {}
+
+    /**
+     * What {@code e} is, where it is a walk from a seed ({@link SeededWalk}) whose step answers the
+     * answer so far and something of the element alone: the seed, and the total of those somethings
+     * over the elements at one position. Null where it is any other walk, or where the elements are
+     * not read from a place.
+     *
+     * <p>By induction over the walk, which visits every element of what it walks once — that is
+     * what the library's one loop does, and what the walks defined over it hand it — the answer is
+     * {@code seed + Σ w(x)} where the step is {@code 1·answer + w(x)}. That is asked of the step as
+     * a form of the answer so far and the element's fields together ({@link
+     * ElementValue#addedTo}), so a step is accepted where the arithmetic composes it that way and
+     * for every answer. {@code acc + x}, {@code x + acc} and {@code Decimal.add(acc, x)} are one
+     * step; a step that is merely right at some answers, like {@code acc * acc + x} at nought and
+     * at one, is none.
+     *
+     * <p>The total is the term {@code List.sum} of those values is, so a rule over a fold and a rule
+     * over a sum of the same numbers are about one number.
+     *
+     * @param blockOf the block a closure argument stands for, where the call stands
+     */
+    public static SeedAndTotal ofAWalkAdding(Core e, InputDomain inputs, InputReads reads,
+                                             RuleReadingSource source,
+                                             Function<Core, Core.Block> blockOf) {
+        SeededWalk walk = SeededWalk.of(e, blockOf);
+        if (walk == null) {
+            return null;
+        }
+        Denotation container =
+                reads.standing(walk.container(), source.symbols(), source.newtypes());
+        // Every occurrence of the position and each as often, which a total of what each element
+        // adds is a total of.
+        if (!(container.at().everyElementOf(container.value(), source.newtypes())
+                instanceof PathResolution.At(TermPath at))) {
+            return null;
+        }
+        BindingId element = walk.element().binding();
+        Map<BindingId, Core> held = reads.heldByTheBody();
+        ElementValue.Affine adds = ElementValue.addedTo(
+                new ElementAnswer(element, walk.step().body()), walk.accumulator().binding(), held,
+                source);
+        ElementValue.Affine seed = affine(ElementValue.read(
+                new ElementAnswer(element, walk.seed()), held, source));
+        if (adds == null || seed == null || !seed.form().coefs().isEmpty()) {
+            return null;
+        }
+        ElementProjection place = adds.asAPlace();
+        NumericTerm total;
+        if (place != null && TypeOps.base(walk.step().body().type(), source.inners()).equals(
+                TypeOps.base(inputs.typeAt(place.from(at), source), source.inners()))) {
+            RunSource over = RunSource.overEveryOccurrenceAt(place.from(at));
+            total = over == null ? null
+                    : NumericTerm.TakenOver.of(SUM, over, inputs.typeAt(place.from(at), source),
+                            source.inners(), source.symbols());
+        } else {
+            Type each = walk.step().body().type();
+            RunSource over = RunSource.computedOverTheElementsAt(at, adds, each);
+            total = over == null ? null
+                    : NumericTerm.TakenOver.of(SUM, over, each, source.inners(), source.symbols());
+        }
+        return total == null ? null : new SeedAndTotal(seed.form().constant(), total);
+    }
+
+    private static final ValueName.Stdlib.Operation SUM =
+            ValueName.Stdlib.operation("List", "sum");
+
+    private static ElementValue.Affine affine(ElementValue read) {
+        return read instanceof ElementValue.Affine form ? form : null;
     }
 
     /**

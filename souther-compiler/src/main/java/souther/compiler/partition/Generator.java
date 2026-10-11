@@ -6082,87 +6082,101 @@ public final class Generator {
         return switch (subject.inputs().valuesAt(row, target.term().subjectPath())) {
             case WalkResult.CouldNotWalk<List<souther.compiler.observe.ObservedValue>> _ ->
                     new RealizationReadback.CouldNotTell(new ReadbackGap.WalkAndTypeDisagree());
-            case WalkResult.Reached(List<souther.compiler.observe.ObservedValue> values) -> {
-                if (values.isEmpty()) {
-                    yield new RealizationReadback.CouldNotTell(
-                            new ReadbackGap.NoValueAtThePosition());
-                }
-                // What the number is of, asked the way the term's own reader asks it. A number one
-                // position answers is read at each value standing there, and a row stands at a
-                // point where one of its readings does; a number over a run is read of all of them
-                // at once, since that is what the walk was given and any one of them is not it.
-                //
-                // Asked of the number and not of the target realizing it. Which location the row
-                // rebuilt to move the number says nothing about how the number is read back, and a
-                // way of writing one added later is not a reading of its own.
-                Set<Incompleteness.Code> unread = EnumSet.noneOf(Incompleteness.Code.class);
-                Set<UnheldNumber> notWorkedOut = EnumSet.noneOf(UnheldNumber.class);
-                boolean stands = switch (target.term()) {
-                    // How often a value occurs among the values standing there: a row stands at a
-                    // point where some element's value is that frequent.
-                    case NumericTerm.Multiplicity _ -> {
-                        boolean any = false;
-                        for (ObservedValue value : values) {
-                            switch (on.readAmong(value, values)) {
-                                case NumericTerm.Reading.Number number ->
-                                        any |= number.value().compareTo(at) == 0;
-                                case NumericTerm.Reading.Missing missing ->
-                                        unread.add(missing.code());
-                                case NumericTerm.Reading.NotNumber _ -> { }
-                                case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
-                                        notWorkedOut.add(why);
-                            }
-                        }
-                        yield any;
-                    }
-                    case NumericTerm.FromOnePosition _ -> {
-                        boolean any = false;
-                        for (souther.compiler.observe.ObservedValue value : values) {
-                            switch (on.read(value)) {
-                                case NumericTerm.Reading.Number number ->
-                                        any |= number.value().compareTo(at) == 0;
-                                case NumericTerm.Reading.Missing missing ->
-                                        unread.add(missing.code());
-                                case NumericTerm.Reading.NotNumber _ -> { }
-                                case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
-                                        notWorkedOut.add(why);
-                            }
-                        }
-                        yield any;
-                    }
-                    case NumericTerm.TakenOver _ -> switch (readRun(on, values)) {
-                        case NumericTerm.Reading.Number number ->
-                                number.value().compareTo(at) == 0;
-                        case NumericTerm.Reading.Missing missing -> {
-                            unread.add(missing.code());
-                            yield false;
-                        }
-                        case NumericTerm.Reading.NotNumber _ -> false;
-                        case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) -> {
-                            notWorkedOut.add(why);
-                            yield false;
-                        }
-                    };
-                };
-                if (stands) {
-                    yield new RealizationReadback.AtRequestedPlace();
-                }
-                // Asked before the observation gap and before the definite negative below: a number
-                // the exact arithmetic could not hold is neither an observation that came back short
-                // nor a value proven to stand elsewhere, and reading it as either would tell a reader
-                // more than this compiler worked out.
-                if (!notWorkedOut.isEmpty()) {
-                    yield new RealizationReadback.CouldNotTell(
-                            new ReadbackGap.NotWorkedOut(notWorkedOut));
-                }
-                if (!unread.isEmpty()) {
-                    yield new RealizationReadback.CouldNotTell(
-                            new ReadbackGap.Observation(unread));
-                }
-                yield new RealizationReadback.Elsewhere("it was composed to put " + target.term()
-                        + " at " + at + " and does not stand there");
-            }
+            case WalkResult.Reached(List<souther.compiler.observe.ObservedValue> values) ->
+                    readBack(on, values, at);
         };
+    }
+
+    /**
+     * What the values the walk stood at the term's path come to, read back as the term reads them,
+     * against the place the candidate was built for.
+     *
+     * <p>No value standing there is an answer for a number one position answers, which has no number
+     * of nothing. It is not for a number over a run: a run over no values is what the walk starts
+     * from, and the term's own reader says what that comes to ({@link TermOrders#readOver}). Asked
+     * of the term's kind with no {@code default}, so a kind of term added is one this has to say
+     * something of.
+     */
+    static RealizationReadback readBack(TermOrders on,
+                                        List<souther.compiler.observe.ObservedValue> values,
+                                        Place at) {
+        NumericTerm term = on.term();
+        boolean nothingToRead = switch (term) {
+            case NumericTerm.Multiplicity _, NumericTerm.FromOnePosition _ -> values.isEmpty();
+            case NumericTerm.TakenOver _ -> false;
+        };
+        if (nothingToRead) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.NoValueAtThePosition());
+        }
+        // What the number is of, asked the way the term's own reader asks it. A number one position
+        // answers is read at each value standing there, and a row stands at a point where one of
+        // its readings does; a number over a run is read of all of them at once, since that is what
+        // the walk was given and any one of them is not it.
+        //
+        // Asked of the number and not of the target realizing it. Which location the row rebuilt
+        // to move the number says nothing about how the number is read back, and a way of writing
+        // one added later is not a reading of its own.
+        Set<Incompleteness.Code> unread = EnumSet.noneOf(Incompleteness.Code.class);
+        Set<UnheldNumber> notWorkedOut = EnumSet.noneOf(UnheldNumber.class);
+        boolean stands = switch (term) {
+            // How often a value occurs among the values standing there: a row stands at a point
+            // where some element's value is that frequent.
+            case NumericTerm.Multiplicity _ -> {
+                boolean any = false;
+                for (ObservedValue value : values) {
+                    switch (on.readAmong(value, values)) {
+                        case NumericTerm.Reading.Number number ->
+                                any |= number.value().compareTo(at) == 0;
+                        case NumericTerm.Reading.Missing missing -> unread.add(missing.code());
+                        case NumericTerm.Reading.NotNumber _ -> { }
+                        case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
+                                notWorkedOut.add(why);
+                    }
+                }
+                yield any;
+            }
+            case NumericTerm.FromOnePosition _ -> {
+                boolean any = false;
+                for (souther.compiler.observe.ObservedValue value : values) {
+                    switch (on.read(value)) {
+                        case NumericTerm.Reading.Number number ->
+                                any |= number.value().compareTo(at) == 0;
+                        case NumericTerm.Reading.Missing missing -> unread.add(missing.code());
+                        case NumericTerm.Reading.NotNumber _ -> { }
+                        case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
+                                notWorkedOut.add(why);
+                    }
+                }
+                yield any;
+            }
+            case NumericTerm.TakenOver _ -> switch (readRun(on, values)) {
+                case NumericTerm.Reading.Number number -> number.value().compareTo(at) == 0;
+                case NumericTerm.Reading.Missing missing -> {
+                    unread.add(missing.code());
+                    yield false;
+                }
+                case NumericTerm.Reading.NotNumber _ -> false;
+                case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) -> {
+                    notWorkedOut.add(why);
+                    yield false;
+                }
+            };
+        };
+        if (stands) {
+            return new RealizationReadback.AtRequestedPlace();
+        }
+        // Asked before the observation gap and before the definite negative below: a number the
+        // exact arithmetic could not hold is neither an observation that came back short nor a
+        // value proven to stand elsewhere, and reading it as either would tell a reader more than
+        // this compiler worked out.
+        if (!notWorkedOut.isEmpty()) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.NotWorkedOut(notWorkedOut));
+        }
+        if (!unread.isEmpty()) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.Observation(unread));
+        }
+        return new RealizationReadback.Elsewhere("it was composed to put " + term + " at " + at
+                + " and does not stand there");
     }
 
     /**
@@ -6193,7 +6207,7 @@ public final class Generator {
      * the point. What settles that is the whole row, read after it is composed, and what the
      * <em>account</em> then says is written in the account's words.
      */
-    private sealed interface RealizationReadback {
+    sealed interface RealizationReadback {
 
         /** The value reads back as the number it was built for. */
         record AtRequestedPlace() implements RealizationReadback {}
@@ -6214,7 +6228,7 @@ public final class Generator {
      * offered as reasons a point cannot be shown writable, and three of these have nothing to do
      * with that.
      */
-    private sealed interface ReadbackGap {
+    sealed interface ReadbackGap {
 
         /** The fixing's edge kept no orders, so there is nothing to read the value on. */
         record NoOrdersOnTheEdge() implements ReadbackGap {}

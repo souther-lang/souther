@@ -24,5 +24,9 @@ public enum ElementQuestion {
 
     /** Which position a value came from, which is what says a rule was written at all where the
      *  rule is about something made from those values. */
-    VALUE_ORIGIN
+    VALUE_ORIGIN,
+
+    /** Which position holds these very values, every occurrence of it and each as often as the
+     *  container holds it, so that a total of them is a total of everything standing there. */
+    EVERY_OCCURRENCE
 }

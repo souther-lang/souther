@@ -215,6 +215,57 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
         assertTrue(json(another).contains("multiplicity(xs[*])"), () -> report(another));
     }
 
+    /** The keys {@code xs} holds, as the list the fold is handed is written. */
+    private static String modelOver(String keys) {
+        return modelOf(COUNTING, "count >= atLeast", "").replace("countsOf(xs))",
+                "countsOf(" + keys + "))");
+    }
+
+    /**
+     * A list a map answered with each element as it is holds the keys of the list it walked, each
+     * as often, so it is counted as that list is.
+     */
+    @Test
+    void keysAMapAnsweredAsTheyAreAreCountedAsTheListIs() {
+        List<String> plain = axisOf(measured(modelOf(COUNTING, "count >= atLeast", "")));
+        for (String keys : List.of("List.map(k -> k, xs)", "List.map(k -> k, List.map(j -> j, xs))",
+                "List.reverse(List.map(k -> k, xs))", "List.map(k -> k, List.sort(xs))")) {
+            Compilation compilation = measured(modelOver(keys));
+            assertEquals(plain, axisOf(compilation), () -> keys + ": " + report(compilation));
+            assertTrue(json(compilation).contains("multiplicity(xs[*])"),
+                    () -> keys + ": " + report(compilation));
+            assertFalse(report(compilation).contains("not read"),
+                    () -> keys + ": " + report(compilation));
+        }
+    }
+
+    /** The rows offered for keys a map answered as they are are the rows offered for the keys. */
+    @Test
+    void theRowsOfferedForKeysAMapAnsweredAsTheyAreAreTheRowsOfferedForTheKeys() {
+        List<Row> plain = offeredRows(measured(modelOf(COUNTING, "count >= atLeast", "")));
+        List<Row> offered = offeredRows(measured(modelOver("List.map(k -> k, xs)")));
+        assertFalse(offered.isEmpty(), () -> "rows are offered: " + offered);
+        assertEquals(plain, offered);
+        assertTrue(offered.stream().anyMatch(row -> top(row.filed(1, 1)) == row.atLeast()),
+                () -> "a row at the line: " + offered);
+    }
+
+    /**
+     * A list a map made something else of, or one that kept some of the elements, is not the list
+     * it was made from: what is counted in it is not what the keys hold.
+     */
+    @Test
+    void keysAMapChangedOrAFilterKeptAreNotCountedAsTheListIs() {
+        for (String keys : List.of(
+                "List.map(k -> String.append(k, \"!\"), xs)",
+                "List.filter(k -> String.length(k) > 1, xs)",
+                "List.map(k -> k, List.filter(k -> String.length(k) > 1, xs))")) {
+            Compilation compilation = measured(modelOver(keys));
+            assertFalse(json(compilation).contains("multiplicity(xs[*])"),
+                    () -> keys + ": " + report(compilation));
+        }
+    }
+
     /** The lookup and the filing written out are the operation that does both. */
     @Test
     void aCounterWrittenAsALookupAndAFilingMeansTheSameCounters() {

@@ -110,7 +110,10 @@ final class RunReach {
         orders.areOf(over);
         Accumulation walk = DefaultBoundOperationFacts.get().accumulation(over.operation());
         NumericDomain.Bounds element = switch (over.source()) {
-            case RunSource.ProjectedOccurrences run -> ofTheValuesWalked(run, typeAt, reading);
+            case RunSource.ProjectedOccurrences run ->
+                    ofTheValuesWalked(run.subjectPath(), typeAt, reading);
+            case RunSource.FlattenedOccurrences run ->
+                    ofTheValuesWalked(run.subjectPath(), typeAt, reading);
             case RunSource.ComputedOccurrences run ->
                     ofWhatWasComputed(run.computation(), run.elements(), orders, typeAt, reading);
         };
@@ -152,10 +155,10 @@ final class RunReach {
      * is asked for, and a reader wiring some other source of element bounds in here owes that
      * filter.
      */
-    private static NumericDomain.Bounds ofTheValuesWalked(RunSource.ProjectedOccurrences source,
+    private static NumericDomain.Bounds ofTheValuesWalked(TermPath source,
                                                           Function<TermPath, Type> typeAt,
                                                           RuleReadingContext reading) {
-        Type walked = typeAt.apply(source.subjectPath());
+        Type walked = typeAt.apply(source);
         return walked == null ? null
                 : ValueGuarantees.of(walked, reading).get(RuleKey.THE_VALUE);
     }
