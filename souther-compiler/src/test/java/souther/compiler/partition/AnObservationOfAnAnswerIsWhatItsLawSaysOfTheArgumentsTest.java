@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.BooleanMeaning;
@@ -22,6 +23,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -98,18 +100,53 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
     }
 
     /**
-     * Which of them meet it is a choice for each value that does not settle it, so the readings
-     * double with every one, and past the readings one condition is read in the count is not read
-     * — said as that, and not as a statement nothing could read.
+     * One value written many times is one statement met as many times, however many that is.
      */
     @Test
-    void aCountOfMoreValuesThanTheReadingsOfACondition() {
-        String eight = String.join(", ", Collections.nCopies(8, "b.n"));
-        assertEquals(stated("if b.n > 0 then 1 else 0"), stated(
-                "if List.length(List.filter(x -> x > 0, [" + eight + "])) == 8 then 1 else 0"));
+    void aValueWrittenManyTimesIsOneStatement() {
         String nine = String.join(", ", Collections.nCopies(9, "b.n"));
+        assertEquals(stated("if b.n > 0 then 1 else 0"), stated(
+                "if List.length(List.filter(x -> x > 0, [" + nine + "])) == 9 then 1 else 0"));
+    }
+
+    /**
+     * Which of them meet it is read as the choices the comparison admits, and past the readings
+     * one condition is read in the count is not read — said as that, and not as a statement
+     * nothing could read. Exactly one of eighteen is a choice for each; half of them is every way
+     * of picking nine.
+     */
+    @Test
+    void aCountOfMoreChoicesThanTheReadingsOfACondition() {
+        List<String> eighteen = new ArrayList<>();
+        for (int i = 0; i < 18; i++) {
+            eighteen.add("b.n + " + i);
+        }
+        String written = "[" + String.join(", ", eighteen) + "]";
+        assertNull(Proposition.firstStopIn(stated(
+                "if List.length(List.filter(x -> x > 0, " + written + ")) == 1 then 1 else 0")));
         assertInstanceOf(WhyUnread.MoreReadingsThanAreMade.class, Proposition.firstStopIn(stated(
-                "if List.length(List.filter(x -> x > 0, [" + nine + "])) == 9 then 1 else 0")));
+                "if List.length(List.filter(x -> x > 0, " + written + ")) == 9 then 1 else 0")));
+    }
+
+    /**
+     * A count compared by an operation's law and not as written is held to the same figure: what
+     * {@code List.drop} leaves is empty by how many the list holds against how many it drops, so
+     * dropping ten of thirty values written out is eleven or more of them kept, every way of
+     * picking eleven. Read where the law's comparison is made, past the readings of a condition it
+     * is said to be — and not written out however many ways that is.
+     */
+    @Test
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void aCountALawComparesIsHeldToTheFigureToo() {
+        List<String> thirty = new ArrayList<>();
+        for (int i = 0; i < 30; i++) {
+            thirty.add("b.n + " + i);
+        }
+        String kept = "List.filter(x -> x > 0, [" + String.join(", ", thirty) + "])";
+        assertInstanceOf(WhyUnread.MoreReadingsThanAreMade.class, Proposition.firstStopIn(stated(
+                "if List.isEmpty(List.drop(10, " + kept + ")) then 1 else 0")));
+        assertNull(Proposition.firstStopIn(stated(
+                "if List.isEmpty(List.drop(0, " + kept + ")) then 1 else 0")));
     }
 
     /** What a set holds once a value is taken out is some other value, read as the quantifier over

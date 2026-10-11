@@ -40,24 +40,61 @@ public final class AnswerAsAnInput {
     private final Set<NumericTerm> inputs = new LinkedHashSet<>();
     private final List<LinearForm<Quantity>> comparisons = new ArrayList<>();
 
+    /**
+     * How many choices of which statements hold a comparison remade here is written out as.
+     *
+     * <p>A number put at a value can leave a count of statements alone against a constant, where
+     * the reading that formed the comparison held it to its figure with the number still beside
+     * it; so the figure comes with whoever puts numbers at values. A walk that only asks what a
+     * statement is about puts none, and a relation keeps the shape its reading held it to.
+     */
+    private final long mostChoices;
+    /** Whether a comparison remade here came to more choices than {@link #mostChoices}. */
+    private boolean pastTheFigure;
+
     private AnswerAsAnInput(String head, NewtypeInners inners, Symbols symbols,
-                            Map<NumericTerm, ExactRatio> pinned, boolean askingWhatItIsAbout) {
+                            Map<NumericTerm, ExactRatio> pinned, boolean askingWhatItIsAbout,
+                            long mostChoices) {
         this.head = head;
         this.inners = inners;
         this.symbols = symbols;
         this.pinned = pinned;
         this.askingWhatItIsAbout = askingWhatItIsAbout;
+        this.mostChoices = mostChoices;
     }
 
     /**
      * {@code stated} over the input named {@code head}, with each number of the behavior's own
-     * input put at the value in {@code pinned}, or null where some part of it is about something
-     * other than the answer and those numbers.
+     * input put at the value in {@code pinned}.
      */
-    public static Proposition of(Proposition stated, String head, NewtypeInners inners,
-                                 Symbols symbols, Map<NumericTerm, ExactRatio> pinned) {
-        return new AnswerAsAnInput(head, inners, symbols, new LinkedHashMap<>(pinned), false)
-                .proposition(stated);
+    public static Remade of(Proposition stated, String head, NewtypeInners inners,
+                            Symbols symbols, Map<NumericTerm, ExactRatio> pinned,
+                            long mostChoices) {
+        AnswerAsAnInput reading = new AnswerAsAnInput(head, inners, symbols,
+                new LinkedHashMap<>(pinned), false, mostChoices);
+        Proposition remade = reading.proposition(stated);
+        if (reading.pastTheFigure) {
+            return new Remade.PastTheFigure();
+        }
+        return remade == null ? new Remade.NotAboutTheAnswer() : new Remade.Stated(remade);
+    }
+
+    /** What a statement came to with the answer standing as an input. */
+    public sealed interface Remade {
+
+        /** The statement, over the input that stands for the answer. */
+        record Stated(Proposition statement) implements Remade {}
+
+        /** A part of it is about something other than the answer and the numbers put at
+         *  values. */
+        record NotAboutTheAnswer() implements Remade {}
+
+        /**
+         * A comparison in it came to a count of statements written out as more choices of which
+         * of them hold than the figure handed in; what the rest of it is about was not looked at
+         * past it.
+         */
+        record PastTheFigure() implements Remade {}
     }
 
     /**
@@ -65,7 +102,8 @@ public final class AnswerAsAnInput {
      * {@code proposition} nought, holding or not as {@code held} says.
      *
      * <p>Made here, where a statement is, for a comparison that was read as a column and is asked of
-     * an answer as one.
+     * an answer as one. Such a form names the answer and a number of the input beside it, and puts
+     * neither at a value, so it is never a count of statements alone to be written out as choices.
      */
     public static Proposition ofAComparison(LinearForm<? extends Quantity> form, Rel proposition,
                                             boolean held) {
@@ -113,13 +151,14 @@ public final class AnswerAsAnInput {
     public static List<LinearForm<Quantity>> comparisonsIn(Proposition stated, String head,
                                                            NewtypeInners inners,
                                                            Symbols symbols) {
-        AnswerAsAnInput reading = new AnswerAsAnInput(head, inners, symbols, Map.of(), true);
+        AnswerAsAnInput reading = new AnswerAsAnInput(head, inners, symbols, Map.of(), true,
+                Long.MAX_VALUE);
         return reading.proposition(stated) == null ? null : List.copyOf(reading.comparisons);
     }
 
     private static AnswerAsAnInput asking(Proposition stated) {
         AnswerAsAnInput reading =
-                new AnswerAsAnInput("$answer", null, null, Map.of(), true);
+                new AnswerAsAnInput("$answer", null, null, Map.of(), true, Long.MAX_VALUE);
         return reading.proposition(stated) == null ? null : reading;
     }
 
@@ -147,8 +186,11 @@ public final class AnswerAsAnInput {
                 // counted, which {@link Proposition#compared} is what writes.
                 Relation.OneWay<Quantity> one =
                         Relation.OneWay.of(over, holds ? rel : rel.denied());
-                yield Proposition.compared(
-                        new Relation.Affine(one.form(), one.proposition()), one.holds());
+                Proposition remade = Proposition.compared(
+                        new Relation.Affine(one.form(), one.proposition()), one.holds(),
+                        mostChoices);
+                pastTheFigure |= remade == null;
+                yield remade;
             }
             case Proposition.Truth(DecisionSubject of, boolean holds, var _) -> {
                 DecisionSubject at = subject(of);

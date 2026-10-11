@@ -2500,9 +2500,15 @@ final class Pullback {
                 return switch (numbers(form)) {
                     case Numbers.NotRead(WhyUnread why) ->
                             leaf(new Derivation.Stopped(why, fixed(e, reads)), e, reads);
-                    case Numbers.EachNumber(Map<LawNumber<?>, LinearForm<Quantity>> each) ->
-                            leaf(Derivation.ALawComparison.of(compared, each, counting, alike), e,
-                                    reads);
+                    case Numbers.EachNumber(Map<LawNumber<?>, LinearForm<Quantity>> each) -> {
+                        Relation.OneWay<Quantity> stated =
+                                Derivation.ALawComparison.relationOf(compared, each);
+                        yield leaf(stated != null && pastTheReadings(new Relation.Affine(
+                                        stated.form(), stated.proposition()))
+                                ? pastTheReadings(fixed(e, reads))
+                                : Derivation.ALawComparison.of(compared, each, counting, alike,
+                                        READINGS.maximum()), e, reads);
+                    }
                 };
             } finally {
                 counting = outer;
@@ -3093,12 +3099,9 @@ final class Pullback {
                         if (unsettled.isEmpty()) {
                             yield new Sized.AsAForm(settled);
                         }
-                        // Which of them hold is a choice for each, so the readings double with
-                        // every one; past the readings one condition is read in, it is not read.
-                        if (unsettled.size() >= Long.SIZE - 1
-                                || (1L << unsettled.size()) > READINGS.maximum()) {
-                            yield new Sized.NotSized(new WhyUnread.MoreReadingsThanAreMade());
-                        }
+                        // How many choices of which of them hold a comparison is read as turns on
+                        // the number it is compared with, and is held to the readings of one
+                        // condition where it is ({@link #aRelation}).
                         yield new Sized.AsAForm(new LinearForm<>(settled.constant(),
                                 Map.of(new Quantity.HowManyHold(unsettled), ExactRatio.ONE)));
                     }
@@ -3391,9 +3394,7 @@ final class Pullback {
      *  comes to ({@link Relation.OneWay}). */
     private static Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
                                         Rel states) {
-        Relation.OneWay<Quantity> one = Relation.OneWay.of(form, states);
-        return new Derivation.AComparisonRead(by,
-                new Relation.Affine(one.form(), one.proposition()), one.holds());
+        return aRelation(by, form, states, Map.of());
     }
 
     /**
@@ -3405,14 +3406,32 @@ final class Pullback {
                                         Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted>
                                                 read) {
         Relation.OneWay<Quantity> one = Relation.OneWay.of(form, states);
+        Relation.Affine relation = new Relation.Affine(one.form(), one.proposition());
+        if (pastTheReadings(relation)) {
+            return pastTheReadings(false);
+        }
         List<Derivation.AComparisonRead.Counted> named = new ArrayList<>();
         read.forEach((count, how) -> {
             if (one.form().coefs().containsKey(count)) {
                 named.add(how);
             }
         });
-        return new Derivation.AComparisonRead(by,
-                new Relation.Affine(one.form(), one.proposition()), one.holds(), named);
+        return new Derivation.AComparisonRead(by, relation, one.holds(), named,
+                READINGS.maximum());
+    }
+
+    /**
+     * Whether {@code relation} is a count of statements about values written out that is written
+     * out as more choices of which of them hold than one condition is read in — which a comparison
+     * a reading concludes is never made as ({@link Derivation.AComparisonRead}).
+     */
+    private static boolean pastTheReadings(Relation relation) {
+        return Derivation.AComparisonRead.pastTheChoicesRead(relation, READINGS.maximum());
+    }
+
+    /** A comparison stopped at for being {@link #pastTheReadings}. */
+    private static Derivation pastTheReadings(boolean fixed) {
+        return new Derivation.Stopped(new WhyUnread.MoreReadingsThanAreMade(), fixed);
     }
 
     /** The block a closure is, read where {@code container} stands. */
@@ -3826,7 +3845,7 @@ final class Pullback {
         return new Derivation.AComparisonRead(Derivation.ComparisonReading.ON_AN_ORDER,
                 new Relation.Ordered(new DecisionAtom.OfTheInput(drawn.term()), drawn.value(),
                         proposition),
-                states == proposition);
+                states == proposition, READINGS.maximum());
     }
 
     /**
@@ -4059,7 +4078,11 @@ final class Pullback {
                     case Inside.ACallDefinedByCases(Core call, var _, var _, var _) ->
                             number.at().isTaken(call);
                     // A name an application handed a value is that one value, and stops nothing.
-                    case Inside.OneOfTheValues _ -> false;
+                    // Met again as several, it was reached through a value handed another name and
+                    // read where that value was written, which no application handed it: handed
+                    // here once more, it would be met there again without end.
+                    case Inside.OneOfTheValues(Core.Read name, var _) ->
+                            number.at().hands(name.binding());
                 };
                 if (!goneInto) {
                     return found;

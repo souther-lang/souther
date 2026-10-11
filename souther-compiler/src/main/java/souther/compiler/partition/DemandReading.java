@@ -28,6 +28,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -350,6 +351,19 @@ final class DemandReading {
      * the elements are in ({@link #ofSomeElement}).
      */
     private static List<Read> projected(Proposition stated, InputReading read) {
+        return projected(stated, read, new HashMap<>());
+    }
+
+    /**
+     * The same, with what some element meeting each statement already asked kept in {@code met}
+     * by the statement's key.
+     *
+     * <p>A count of statements about values written out is read as which of them hold, and every
+     * choice names each statement, holding or failing — so one element statement is met once in
+     * every choice, and the walk of the ways an element meets it is the dear part.
+     */
+    private static List<Read> projected(Proposition stated, InputReading read,
+                                        Map<String, List<Read>> met) {
         return switch (stated) {
             case Proposition.Always(boolean holds) -> List.of(new Read.Settled(holds));
             // A relation over anything an answer holds, a count of a list it holds among them, is
@@ -390,11 +404,11 @@ final class DemandReading {
             case Proposition.Carried carried -> throw carried.handedToAReader();
             case Proposition.All all -> {
                 List<Read> out = new ArrayList<>();
-                all.parts().forEach(part -> out.addAll(projected(part, read)));
+                all.parts().forEach(part -> out.addAll(projected(part, read, met)));
                 yield List.copyOf(out);
             }
             case Proposition.Any any -> oneOf(any.parts().stream()
-                    .map(part -> projected(part, read)).toList(), each -> each, each -> each);
+                    .map(part -> projected(part, read, met)).toList(), each -> each, each -> each);
             // One of several statements, which one turning on which application a run meets the
             // condition on: one alternative per statement that can hold, as a disjunction is. A
             // statement of an application no run makes is an alternative too many and never one
@@ -403,7 +417,7 @@ final class DemandReading {
             case Proposition.OnAnApplication applications -> {
                 List<List<Read>> open = new ArrayList<>();
                 for (Proposition each : applications.each()) {
-                    List<Read> asked = projected(each, read);
+                    List<Read> asked = projected(each, read, met);
                     if (Settling.of(asked) != Settling.NEVER) {
                         open.add(asked);
                     }
@@ -419,11 +433,18 @@ final class DemandReading {
             case Proposition.Some some
                     when some.container() instanceof DecisionSubject.AnAnswer ->
                     List.of(anAnswerARowStandsIn());
-            case Proposition.Some some -> ofSomeElement(some, read);
+            case Proposition.Some some -> {
+                List<Read> had = met.get(some.key());
+                if (had == null) {
+                    had = ofSomeElement(some, read, met);
+                    met.put(some.key(), had);
+                }
+                yield had;
+            }
             // What the search asks of the node it starts at, where that settles it, or some node
             // further down settling it, which no row is written toward.
             case Proposition.SomeReachable reached -> oneOf(List.of(
-                    projected(reached.surely(true), read),
+                    projected(reached.surely(true), read, met),
                     List.of(new Read.Unread(new WhyNotTaken.OutsideDomain(
                             WhyNotTaken.DomainLimit.A_NODE_BELOW_WHAT_A_ROW_WRITES)))),
                     each -> each, each -> each);
@@ -461,7 +482,8 @@ final class DemandReading {
      * <p>The element is what stands at the container's elements — and of a map, at its keys as
      * well, since an entry is its key and its value.
      */
-    private static List<Read> ofSomeElement(Proposition.Some some, InputReading read) {
+    private static List<Read> ofSomeElement(Proposition.Some some, InputReading read,
+                                            Map<String, List<Read>> met) {
         TermPath held = some.container().inputPosition();
         List<TermPath> element = elementOf(held);
         boolean everyElement = !some.holds();
@@ -480,7 +502,7 @@ final class DemandReading {
                             : new RowDemand.DifferentFrom(at)))
                     : keyedWays(part, held, element);
             choices.add(these != null ? these
-                    : waysOf(projected(part, read), element, everyElement, some, read));
+                    : waysOf(projected(part, read, met), element, everyElement, some, read));
         }
         List<AnElementsWay> ways = AnElementsWay.eachWhole(choices, read);
         List<List<Read>> alternatives = new ArrayList<>();

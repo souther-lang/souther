@@ -219,6 +219,10 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * statement of its own about the input, and how many of them hold against a number is which of
      * them hold — said that way where it is compared ({@link Proposition#compared}). Of statements
      * none of which is settled: one that is settled is already a number, and is added beside this.
+     *
+     * <p>How many choices a comparison of it is written out as is held to a figure by the reading
+     * that compares it ({@link Proposition#compared(Relation, boolean, long)}), and is no part of
+     * what is counted.
      */
     record HowManyHold(List<Proposition> each) implements Quantity {
 
