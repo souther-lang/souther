@@ -642,27 +642,12 @@ public final class InputReads {
      */
     public InputReads calling(ValueName.Behavior behavior, CalledBody body, List<Core> args,
                               DeclarationNewtypes newtypes) {
-        if (applied.entered().contains(behavior) || args.size() != body.parameters().size()) {
+        if (applied.entered().contains(behavior)) {
             return null;
-        }
-        BindingEnvironment inside = names.entering(body.elements());
-        Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
-        for (int at = 0; at < args.size(); at++) {
-            Core.Binder parameter = body.parameters().get(at);
-            if (parameter == null || parameter.binding() == null) {
-                continue;
-            }
-            if (pathOf(args.get(at), newtypes) instanceof PathResolution.At(TermPath stands)) {
-                inside = inside.naming(parameter.binding(), stands);
-            } else {
-                given.put(parameter.binding(), new Denotation(args.get(at), this));
-            }
         }
         Set<ValueName.Behavior> entered = new HashSet<>(applied.entered());
         entered.add(behavior);
-        return new InputReads(inside, alternatives, declared,
-                souther.compiler.carrier.Membership.none(),
-                new Applied(applied.handed(), applied.readings(), applied.taken(), given, entered));
+        return calledWith(body, args, names.entering(body.elements()), entered, newtypes);
     }
 
     /**
@@ -676,8 +661,9 @@ public final class InputReads {
      */
     public InputReads steppingThrough(CalledBody body, List<Core> args, BindingId element,
                                       TermPath at, DeclarationNewtypes newtypes) {
-        return recursing(body, args,
-                names.entering(body.elements()).overStandingCalls().naming(element, at), newtypes);
+        return calledWith(body, args,
+                names.entering(body.elements()).overStandingCalls().naming(element, at),
+                applied.entered(), newtypes);
     }
 
     /**
@@ -689,16 +675,22 @@ public final class InputReads {
      * says what it takes them to answer.
      */
     public InputReads searching(CalledBody body, List<Core> args, DeclarationNewtypes newtypes) {
-        return recursing(body, args, names.entering(body.elements()).overStandingCalls(),
-                newtypes);
+        return calledWith(body, args, names.entering(body.elements()).overStandingCalls(),
+                applied.entered(), newtypes);
     }
 
-    private InputReads recursing(CalledBody body, List<Core> args, BindingEnvironment entered,
-                                 DeclarationNewtypes newtypes) {
+    /**
+     * Where {@code body} is read in {@code entering} with its parameters standing for what a call
+     * handed it, {@code entered} the bodies entered on the way — or null where the call hands
+     * another number of values than the body takes. A parameter handed a value at a position
+     * stands at it, and one handed anything else is given it as read here.
+     */
+    private InputReads calledWith(CalledBody body, List<Core> args, BindingEnvironment entering,
+                                  Set<ValueName.Behavior> entered, DeclarationNewtypes newtypes) {
         if (args.size() != body.parameters().size()) {
             return null;
         }
-        BindingEnvironment inside = entered;
+        BindingEnvironment inside = entering;
         Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
         for (int i = 0; i < args.size(); i++) {
             Core.Binder parameter = body.parameters().get(i);
@@ -714,7 +706,7 @@ public final class InputReads {
         return new InputReads(inside, alternatives, declared,
                 souther.compiler.carrier.Membership.none(),
                 new Applied(applied.handed(), applied.readings(), applied.taken(), given,
-                        applied.entered()));
+                        entered));
     }
 
     /** Whether the body of {@code behavior} was entered on the way here ({@link #calling}). */
