@@ -132,6 +132,36 @@ class AValueHeldAgainstWhatAnOperationAnswersRelatesTheTwoTest {
     }
 
     @Test
+    void answersOfTwoElementsOfOneContainerAreNotReadAsTheElementsThemselvesAreNot() {
+        for (String compared : List.of("x.a == y.b",
+                "String.lowercase(x.a) == String.uppercase(y.b)",
+                "{ let l = String.lowercase(y.b)\n x.a == l }")) {
+            String report = measured("""
+                    module w1
+                    data E = { a: String, b: String }
+                    behavior m : (xs: List<E>) -> Bool
+                    let m (xs) = List.any(x -> List.any(y -> %s, xs), xs)
+                    """.formatted(compared));
+            List<String> said = said(report);
+            assertEquals(2, said.size(), report);
+            assertTrue(said.stream().allMatch(line -> line.startsWith("· not read")), report);
+        }
+    }
+
+    @Test
+    void aRowThroughTheRelationIsTheRunsToDecideForWhatTheOperationAnswers() {
+        String report = measured("""
+                module w1
+                behavior m : (s: String, d: String) -> Int
+                let m (s, d) = if d == String.lowercase(s) then 1 else 0
+                example m
+                    | ("A", "a") -> 1
+                """);
+        assertTrue(report.contains("a condition the run decides, since nothing here composes a row"
+                + " for what an operation answers of the input, which no position holds"), report);
+    }
+
+    @Test
     void oneAnswerOnBothSidesCutsNothing() {
         assertEquals(List.of("· no line: comparison@3:33 — it was read to the end and cuts nothing"
                 + " this position appears in, about `s`"), said(measured("""

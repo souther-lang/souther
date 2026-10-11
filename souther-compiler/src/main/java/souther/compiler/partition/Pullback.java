@@ -3346,14 +3346,17 @@ final class Pullback {
         }
     }
 
-    /** The numbers of the input {@code forms} are over, which is what a comparison read through
-     *  them names however much of it cancels. */
+    /** The numbers of the input {@code forms} are over, the ones what an operation answers is
+     *  made of among them, which is what a comparison read through them names however much of it
+     *  cancels. */
     private static Set<NumericTerm> ofTheInputIn(List<LinearForm<Quantity>> forms) {
         Set<NumericTerm> out = new LinkedHashSet<>();
         for (LinearForm<Quantity> form : forms) {
             for (Quantity atom : form.coefs().keySet()) {
                 if (atom instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
                     out.add(term);
+                } else if (atom instanceof Quantity.WhatAnOperationAnswers answers) {
+                    out.addAll(answers.positionsItIsMadeOf());
                 }
             }
         }
@@ -3361,53 +3364,49 @@ final class Pullback {
     }
 
     /**
-     * {@code left states right} over the quantities a condition is read over, where a side the
-     * reading stopped in may be what an operation answers of the input
-     * ({@link Quantity.WhatAnOperationAnswers}) — read as that only where the two sides come to one
-     * value against another made of positions apart ({@link #relatesPositionsApart}), or to the same
-     * value on both. Anywhere else the side is read as it was: a constant or a sum beside such an
-     * answer is a line on it, which nothing here draws.
+     * {@code left states right} over the quantities a condition is read over.
      *
-     * <p>A side stopped in is one no form was read of, or a name for a value whose making the
-     * reading stopped at, which is the same value under a name.
+     * <p>A side the reading stopped in may be what an operation answers of the input
+     * ({@link Quantity.WhatAnOperationAnswers}), and is read as that where the two sides come to
+     * one value against another made of positions apart, or to one value on both
+     * ({@link #answeredApart}). A side stopped in is one no form was read of, or a name for a value
+     * whose making the reading stopped at, which is the same value under a name. A constant or a
+     * sum beside such an answer is a line on it, which nothing here draws, so the side stays where
+     * the reading stopped.
      */
     private Derivation overQuantitiesCounting(Denotation left, Denotation right, Rel states) {
         List<LinearForm<Quantity>> sides = new ArrayList<>();
-        List<LinearForm<Quantity>> answering = new ArrayList<>();
+        List<Denotation> calls = new ArrayList<>();
         Derivation unread = null;
-        boolean answered = false;
         for (Denotation side : List.of(left, right)) {
             switch (AffineForms.outcome(side.value(), side.at(), quantities())) {
                 case AffineForms.Outcome.Composed<Quantity, InputReads>(var form) -> {
                     sides.add(form);
-                    Quantity.WhatAnOperationAnswers answers = madeOfWhereItStopped(form)
-                            ? whatAnOperationAnswers(side.value(), side.at()) : null;
-                    answering.add(answers != null ? LinearForm.atom(answers) : form);
-                    answered |= answers != null;
+                    calls.add(madeOfWhereItStopped(form) ? callOf(side) : null);
                 }
                 case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
                     // A comparison of two elements of one container is read of neither: they
                     // stand at one position, and a form would hold them as one number.
                     Derivation stop = new Derivation.Stopped(elementsMet.crowded()
                             ? new WhyUnread.TwoElementsOfOneContainer() : noFormOf(stopped), false);
-                    Quantity.WhatAnOperationAnswers answers = elementsMet.crowded() ? null
-                            : whatAnOperationAnswers(side.value(), side.at());
-                    if (answers == null) {
+                    // Only the call of an operation may be what one answers, and nothing is
+                    // read past any other stop.
+                    Denotation call = elementsMet.crowded() ? null : callOf(side);
+                    if (call == null) {
                         return unread != null ? unread : stop;
                     }
                     unread = unread != null ? unread : stop;
-                    answering.add(LinearForm.atom(answers));
-                    answered = true;
+                    sides.add(null);
+                    calls.add(call);
                 }
             }
         }
         LinearForm<Quantity> form = null;
-        if (answered) {
-            LinearForm<Quantity> relating = answering.get(0).minus(answering.get(1)).orNull();
-            if (relating != null
-                    && (relating.coefs().isEmpty() || relatesPositionsApart(relating))) {
-                sides = answering;
-                form = relating;
+        if (calls.stream().anyMatch(Objects::nonNull)) {
+            Related related = answeredApart(sides, calls);
+            if (related != null) {
+                sides = related.sides();
+                form = related.form();
             } else if (unread != null) {
                 return unread;
             }
@@ -3428,19 +3427,69 @@ final class Pullback {
         return aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, form, states, counting);
     }
 
+    /** The two sides of a comparison read with what an operation answers, and the form they come
+     *  to. */
+    private record Related(List<LinearForm<Quantity>> sides, LinearForm<Quantity> form) {}
+
+    /**
+     * The sides of a comparison with each of {@code calls} read as what its operation answers, where
+     * they come to one value against another made of positions apart
+     * ({@link #relatesPositionsApart}) or to one value on both — or null where they do not.
+     *
+     * <p>{@code read} is what each side was read as, null where the reading stopped in it, and
+     * {@code calls} the call each may be read as instead, null where there is none.
+     *
+     * <p>Asked once both sides were read, so nothing of the comparison is read after what this
+     * meets reading the arguments. Those are read beside what the sides met, so an argument naming
+     * another element of a container already read of is refused there, as it is in any reading of
+     * the two.
+     */
+    private Related answeredApart(List<LinearForm<Quantity>> read, List<Denotation> calls) {
+        List<LinearForm<Quantity>> sides = new ArrayList<>();
+        boolean answered = false;
+        for (int i = 0; i < read.size(); i++) {
+            Quantity.WhatAnOperationAnswers answers =
+                    calls.get(i) == null ? null : whatAnOperationAnswers(calls.get(i));
+            if (answers == null && read.get(i) == null) {
+                return null;
+            }
+            sides.add(answers != null ? LinearForm.atom(answers) : read.get(i));
+            answered |= answers != null;
+        }
+        LinearForm<Quantity> form = sides.get(0).minus(sides.get(1)).orNull();
+        return !answered || form == null
+                || !(form.coefs().isEmpty() || relatesPositionsApart(form))
+                ? null : new Related(sides, form);
+    }
+
+    /** The one quantity {@code form} is, weighed by one and moved by nothing — or null where it
+     *  is anything else. */
+    private static Quantity soleQuantity(LinearForm<Quantity> form) {
+        return form.constant().signum() == 0 && form.coefs().size() == 1
+                && ExactRatio.ONE.equals(form.coefs().values().iterator().next())
+                ? form.coefs().keySet().iterator().next() : null;
+    }
+
     /** Whether {@code form} is a name for a value whose making the reading stopped at, and
      *  nothing besides. */
     private static boolean madeOfWhereItStopped(LinearForm<Quantity> form) {
-        return form.constant().signum() == 0 && form.coefs().size() == 1
-                && ExactRatio.ONE.equals(form.coefs().values().iterator().next())
-                && form.coefs().keySet().iterator().next() instanceof Quantity.OfABinding bound
-                && bound.madeOf().isPresent();
+        return soleQuantity(form) instanceof Quantity.OfABinding bound && bound.madeOf().isPresent();
+    }
+
+    /** Where {@code side} stands, where that is the application of an operation of the library to
+     *  something — or null where it is not. */
+    private Denotation callOf(Denotation side) {
+        Denotation stands = side.at().standing(side.value(), read.rules().symbols(),
+                read.rules().newtypes());
+        return AnOperationApplied.of(Core.withoutStanding(stands.value()))
+                instanceof AnOperationApplied applied
+                && applied.operation() instanceof ValueName.Stdlib && !applied.args().isEmpty()
+                ? stands : null;
     }
 
     /**
-     * What an operation of the library answers of values of the input, where {@code node} stands
-     * for an application of one that says nothing of its answer as a number of them — or null where
-     * it is no such application.
+     * What the operation applied at {@code call} answers of values of the input, where it says
+     * nothing of its answer as a number of them — or null where it does.
      *
      * <p>An operation that takes a number of its argument, or is defined by cases, is read as that
      * number or on each case, and is none of these; nor is one answering a value that counts to a
@@ -3448,32 +3497,26 @@ final class Pullback {
      * the input, or another such answer: an argument that comes to anything else — a constant, a
      * sum, what a dependency answered — leaves the call unread.
      */
-    private Quantity.WhatAnOperationAnswers whatAnOperationAnswers(Core node, InputReads at) {
-        Denotation stands = at.standing(node, read.rules().symbols(), read.rules().newtypes());
-        if (!(AnOperationApplied.of(Core.withoutStanding(stands.value()))
-                instanceof AnOperationApplied applied)
-                || !(applied.operation() instanceof ValueName.Stdlib operation)
-                || applied.args().isEmpty()) {
-            return null;
-        }
+    private Quantity.WhatAnOperationAnswers whatAnOperationAnswers(Denotation call) {
+        AnOperationApplied applied = AnOperationApplied.of(Core.withoutStanding(call.value()));
+        ValueName.Stdlib operation = (ValueName.Stdlib) applied.operation();
         // A value that counts to a number is the arithmetic's: what it could not read of one is
         // said where it stopped.
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
         if (facts.takenAs(operation) != null || !facts.isDefinedByCases(operation).isEmpty()
-                || (Carrier.ofValue(stands.value().type(), read.rules().declarations())
+                || (Carrier.ofValue(call.value().type(), read.rules().declarations())
                         instanceof Carrier carrier && carrier.counts())) {
             return null;
         }
         List<Quantity> of = new ArrayList<>();
         for (Core argument : applied.args()) {
-            Quantity one = AffineForms.outcome(argument, stands.at(), quantities())
+            Denotation given = new Denotation(argument, call.at());
+            Quantity one = AffineForms.outcome(argument, call.at(), quantities())
                     instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
                             LinearForm<Quantity> form)
-                    && form.constant().signum() == 0 && form.coefs().size() == 1
-                    && ExactRatio.ONE.equals(form.coefs().values().iterator().next())
-                    && form.coefs().keySet().iterator().next() instanceof DecisionAtom.OfTheInput
-                            input
-                    ? input : whatAnOperationAnswers(argument, stands.at());
+                    && soleQuantity(form) instanceof DecisionAtom.OfTheInput input ? input
+                    : callOf(given) instanceof Denotation inner ? whatAnOperationAnswers(inner)
+                    : null;
             if (one == null) {
                 return null;
             }

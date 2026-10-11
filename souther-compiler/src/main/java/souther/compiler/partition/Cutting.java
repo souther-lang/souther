@@ -596,9 +596,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                Supplier<AffineReading.OfAComparison> arithmetic,
                                InputReading read, InputReads reads, Arrivals answering) {
         List<FilingCoordinate> against = heldAgainstAnotherValue(stated);
-        if (against == null) {
-            against = heldAgainstWhatAnOperationAnswers(stated);
-        }
         if (against != null) {
             return new Read.AgainstAnotherValue(against);
         }
@@ -661,6 +658,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * <p>One of those may be what a dependency answered, which a row stands in; whose relation it
      * is then is the decision table's, asked where the reading is assessed
      * ({@link ComparisonAssessment#of}).
+     *
+     * <p>Or what an operation answers of the input, filed at the numbers it is made of. Such an
+     * answer is read only as one side of a relation between values made of positions apart
+     * ({@code Pullback}), so a statement over one relates those positions as {@code d == s} does
+     * and divides none of them.
      */
     private static List<FilingCoordinate> heldAgainstAnotherValue(Proposition stated) {
         if (!(stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, String _))
@@ -673,42 +675,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             switch (each) {
                 case DecisionAtom.OfTheInput(NumericTerm term) -> input.add(term);
                 case Quantity.OfABinding bound when bound.madeOf().isEmpty() -> another = true;
+                case Quantity.WhatAnOperationAnswers answers -> {
+                    input.addAll(answers.positionsItIsMadeOf());
+                    another = true;
+                }
                 default -> {
                     return null;
                 }
             }
         }
         return input.isEmpty() || !another ? null : AffineReading.filedAt(input);
-    }
-
-    /**
-     * Where {@code stated} holds a value against what an operation answers of the input, the
-     * coordinates of the positions the two are made of — or null where it is no such relation.
-     *
-     * <p>Such an answer is read only as one side of a relation between values made of positions
-     * apart ({@code Pullback}), so a statement over one relates those positions as {@code d == s}
-     * does and divides none of them.
-     */
-    private static List<FilingCoordinate> heldAgainstWhatAnOperationAnswers(Proposition stated) {
-        if (!(stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, String _))
-                || !Proposition.stopsIn(stated).isEmpty()) {
-            return null;
-        }
-        List<NumericTerm> related = new ArrayList<>();
-        boolean answered = false;
-        for (Quantity each : affine.form().coefs().keySet()) {
-            switch (each) {
-                case DecisionAtom.OfTheInput(NumericTerm term) -> related.add(term);
-                case Quantity.WhatAnOperationAnswers answers -> {
-                    related.addAll(answers.positionsItIsMadeOf());
-                    answered = true;
-                }
-                default -> {
-                    return null;
-                }
-            }
-        }
-        return answered ? AffineReading.filedAt(related) : null;
     }
 
     /**

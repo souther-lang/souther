@@ -256,6 +256,18 @@ public final class AnswerAsAnInput {
                 coefs.merge(each.getKey(), each.getValue(), (a, b) -> a.plus(b).orNull());
                 continue;
             }
+            // What an operation answers of numbers of the input is kept as those numbers are,
+            // and only while none of them is fixed: what it answers of a fixed value is a value
+            // nothing here works out.
+            if (each.getKey() instanceof Quantity.WhatAnOperationAnswers answers) {
+                List<NumericTerm> madeOf = answers.positionsItIsMadeOf();
+                if (!askingWhatItIsAbout || madeOf.stream().anyMatch(pinned::containsKey)) {
+                    return null;
+                }
+                inputs.addAll(madeOf);
+                coefs.merge(answers, each.getValue(), (a, b) -> a.plus(b).orNull());
+                continue;
+            }
             Quantity atom = quantity(each.getKey());
             if (atom == null) {
                 return null;

@@ -3833,6 +3833,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                         + " for " + switch (what) {
                                     case A_VALUE_THE_BODY_WORKS_OUT ->
                                             "a value the body works out, which no position holds";
+                                    case A_VALUE_AN_OPERATION_ANSWERS ->
+                                            "what an operation answers of the input, which no"
+                                                    + " position holds";
                                     case A_COUNT_OF_ELEMENTS ->
                                             "how many elements of a container meet something";
                                     case A_COUNT_AGAINST_A_NUMBER_NOT_HELD ->
