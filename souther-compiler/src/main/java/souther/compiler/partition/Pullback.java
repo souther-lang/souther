@@ -44,6 +44,7 @@ import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.Derivation.ALawJoinsWithoutWhatImpliesAnother.Disjunct;
 import souther.compiler.meaning.MeaningsOfABody.Meaning;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
@@ -1409,12 +1410,20 @@ final class Pullback {
                 case LawProposition.All<DeclaredArgument> all ->
                         new Derivation.ALawJoins(all, all.parts().stream().map(this::of).toList());
                 case LawProposition.Any<DeclaredArgument> any -> {
-                    List<Derivation> parts = new ArrayList<>();
+                    List<Disjunct.ImpliesAnother> implies = new ArrayList<>();
                     for (LawProposition<DeclaredArgument> part : any.parts()) {
-                        Derivation nothing = addingNothingTo(any, part);
-                        parts.add(nothing != null ? nothing : of(part));
+                        implies.add(anotherItImplies(any, part));
                     }
-                    yield new Derivation.ALawJoins(any, parts);
+                    if (implies.stream().allMatch(Objects::isNull)) {
+                        yield new Derivation.ALawJoins(any,
+                                any.parts().stream().map(this::of).toList());
+                    }
+                    List<Disjunct> each = new ArrayList<>();
+                    for (int i = 0; i < implies.size(); i++) {
+                        each.add(implies.get(i) != null ? implies.get(i)
+                                : new Disjunct.Read(of(any.parts().get(i))));
+                    }
+                    yield new Derivation.ALawJoinsWithoutWhatImpliesAnother(any, each);
                 }
                 case LawProposition.Observed<DeclaredArgument> observed ->
                         new Derivation.OnTheSideALawNames(observed,
@@ -1436,20 +1445,19 @@ final class Pullback {
         }
 
         /**
-         * {@code part} of {@code any} read as adding nothing to the others, where it implies one of
-         * them at this call ({@link Derivation.ImpliesAnotherPart}) — or null where it implies
-         * none.
+         * The part of {@code any} that {@code part} implies at this call, where there is one
+         * ({@link Derivation.ALawJoinsWithoutWhatImpliesAnother}) — or null where it implies none.
          */
-        private Derivation addingNothingTo(LawProposition.Any<DeclaredArgument> any,
-                                           LawProposition<DeclaredArgument> part) {
+        private Disjunct.ImpliesAnother anotherItImplies(LawProposition.Any<DeclaredArgument> any,
+                                                         LawProposition<DeclaredArgument> part) {
             for (LawProposition<DeclaredArgument> other : any.parts()) {
                 if (other instanceof LawProposition.SomeElement<DeclaredArgument> some
-                        && some.holds() && Derivation.ImpliesAnotherPart
+                        && some.holds() && Derivation.ALawJoinsWithoutWhatImpliesAnother
                                 .holdsOnlyWhereItHoldsSomething(part, some.container())) {
                     ValueName made = answeredBy(applied.argument(some.container()), reads);
                     if (made != null
                             && Derivation.EveryElementMeetsIt.askedOfEveryElement(some, made)) {
-                        return new Derivation.ImpliesAnotherPart(part, some, made);
+                        return new Disjunct.ImpliesAnother(some, made);
                     }
                 }
             }
@@ -1461,10 +1469,13 @@ final class Pullback {
          * what every element of the operation's answer {@code made} is meets
          * ({@link Derivation.EveryElementMeetsIt}): the answer holding something — or null where
          * {@code made} is no such answer.
+         *
+         * @param standing what {@code made} stands for, once the names it is are followed
          */
-        private Derivation everyElementMeets(Denotation made,
+        private Derivation everyElementMeets(Denotation made, Denotation standing,
                                              LawProposition.SomeElement<DeclaredArgument> some) {
-            ValueName operation = answeredBy(made.value(), made.at());
+            AnOperationApplied answering = AnOperationApplied.of(standing.value());
+            ValueName operation = answering == null ? null : answering.operation();
             return operation == null
                     || !Derivation.EveryElementMeetsIt.askedOfEveryElement(some, operation) ? null
                     : new Derivation.EveryElementMeetsIt(some, operation,
@@ -1584,9 +1595,11 @@ final class Pullback {
          */
         Derivation someElementOf(Denotation made,
                                  LawProposition.SomeElement<DeclaredArgument> some) {
+            Denotation container = made.at().standing(made.value(), read.rules().symbols(),
+                    read.rules().newtypes());
             return firstThatReadsIt(List.of(
-                    () -> meeting(made, some),
-                    () -> everyElementMeets(made, some),
+                    () -> meeting(made, container, some),
+                    () -> everyElementMeets(made, container, some),
                     () -> inTheCalledBody(made.value(), new Asked.SomeElement(this, some),
                             made.at())));
         }
@@ -1594,12 +1607,13 @@ final class Pullback {
         /**
          * Some element of a container meeting a statement, read as the quantifier over the
          * container's element where it stands, or element by element where it was written out.
+         *
+         * @param standing what {@code made} stands for, once the names it is are followed
          */
-        private Derivation meeting(Denotation made,
+        private Derivation meeting(Denotation made, Denotation standing,
                                    LawProposition.SomeElement<DeclaredArgument> some) {
             Core given = made.value();
-            Denotation container = made.at().standing(given, read.rules().symbols(),
-                    read.rules().newtypes());
+            Denotation container = standing;
             // Another order of the same elements has some element meeting a statement where they
             // do, and what an operation kept of them has one where some element it was handed
             // meets that and what it kept by.

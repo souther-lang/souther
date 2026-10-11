@@ -549,8 +549,8 @@ final class InputPath {
         if (e instanceof Core.LetIn let) {
             return heldAt(let.body(), wanted, names.inside(let.binder(), let.value()));
         }
-        // A container chosen by cases holds what the one each case answers holds, and a list
-        // written empty holds nothing for any of them to be.
+        // A container chosen by cases holds, on each run, what the one the case taken answers
+        // holds. How the cases come together is the question's.
         List<Core> arms = switch (e) {
             case Core.If iff -> List.of(iff.then(), iff.els());
             case Core.Match match -> match.cases().stream().map(Core.Case::body).toList();
@@ -559,12 +559,18 @@ final class InputPath {
         if (arms != null) {
             List<PathResolution> each = new ArrayList<>();
             for (Core arm : arms) {
-                if (!(Core.withoutStanding(arm) instanceof Core.ListLit written
-                        && written.elements().isEmpty())) {
+                // Where a value stands or came from, a list written empty holds none for it to
+                // be; every occurrence of a position is held on every run or by none.
+                boolean holdsNone = Core.withoutStanding(arm) instanceof Core.ListLit written
+                        && written.elements().isEmpty();
+                if (!holdsNone || asked == ElementQuestion.EVERY_OCCURRENCE) {
                     each.add(heldAt(arm, wanted, names));
                 }
             }
-            return PathResolution.anyOf(each);
+            return switch (asked) {
+                case NAMED_POSITION, VALUE_ORIGIN -> PathResolution.anyOf(each);
+                case EVERY_OCCURRENCE -> PathResolution.inEveryCase(each);
+            };
         }
         // Or through an operation that answers what it was given, in either of the two shapes a
         // representation gives an application: the call a name reached where the operation has been

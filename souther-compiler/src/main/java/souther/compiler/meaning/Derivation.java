@@ -676,23 +676,31 @@ public sealed interface Derivation {
                 };
             }
 
-            /** Whether {@code read} joins a reading of each of {@code parts}, in order, as
-             *  {@code law} joins them. */
+            /**
+             * Whether {@code read} joins a reading of each of {@code parts}, in order, as
+             * {@code law} joins them — or, for an "or", of each part it did not leave out for
+             * implying another ({@link ALawJoinsWithoutWhatImpliesAnother}, which holds what was
+             * left out to that).
+             */
             private boolean joins(LawProposition<DeclaredArgument> law,
                                   List<LawProposition<DeclaredArgument>> parts, Derivation read) {
+                if (read instanceof ALawJoinsWithoutWhatImpliesAnother(var part, var each)) {
+                    if (!part.equals(law)) {
+                        return false;
+                    }
+                    for (int i = 0; i < parts.size(); i++) {
+                        if (each.get(i) instanceof ALawJoinsWithoutWhatImpliesAnother.Disjunct
+                                .Read(Derivation one) && !reads(parts.get(i), one)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
                 if (!(read instanceof ALawJoins(var part, List<Derivation> joined))
                         || !part.equals(law) || joined.size() != parts.size()) {
                     return false;
                 }
                 for (int i = 0; i < parts.size(); i++) {
-                    // A part that adds nothing is read so only where it is joined by "or".
-                    if (joined.get(i) instanceof ImpliesAnotherPart(var adds, var implied, var _)) {
-                        if (!(law instanceof LawProposition.Any<?>) || !adds.equals(parts.get(i))
-                                || !parts.contains(implied)) {
-                            return false;
-                        }
-                        continue;
-                    }
                     if (!reads(parts.get(i), joined.get(i))) {
                         return false;
                     }
@@ -932,7 +940,7 @@ public sealed interface Derivation {
     /** A step that reads one part of a law, which it holds. */
     sealed interface ALawPart extends Derivation
             permits ALawSettles, ALawJoins, OnTheSideALawNames, TheSameValue, ALawQuantifies,
-                    ALawComparison, ImpliesAnotherPart, WhereAnOperationKeepsIt {
+                    ALawComparison, ALawJoinsWithoutWhatImpliesAnother, WhereAnOperationKeepsIt {
 
         /** The part of the law this reads. */
         LawProposition<?> part();
@@ -1563,26 +1571,67 @@ public sealed interface Derivation {
     }
 
     /**
-     * A part of a law joined to others by "or" that adds nothing to them. It holds only where the
-     * container {@code implied} is about holds something, and every element of that container —
-     * what {@code operation} answered — meets what {@code implied} asks of some element of it; so
-     * wherever it holds, {@code implied} does, and the two joined are {@code implied}.
+     * A part of a law joining its parts by "or", read without the parts that each imply another of
+     * them: the "or" of the rest is the same statement, and that is what this concludes.
      *
-     * <p>Read as holding nowhere, which is what it adds to what it is joined to. On its own that
-     * would say less than it does, so it is made only as a part of "or", and a reading of a law is
-     * held to that ({@link ByALaw}).
+     * <p>A part is left out where it holds only where a container an argument stands for holds
+     * something, and another part, read here, is some element of that container meeting what
+     * every element of it — what an operation answered — meets. Wherever the first holds the
+     * container has an element, that element meets it, and the second holds; so the first adds
+     * nothing to the "or". Which part implies which, and by what, is held here, and what is
+     * concluded is the whole "or", never a part on its own.
+     *
+     * @param each for each part of {@code part}, in its order, its reading or what it implies
      */
-    record ImpliesAnotherPart(LawProposition<?> part, LawProposition.SomeElement<?> implied,
-                              ValueName operation) implements ALawPart {
+    record ALawJoinsWithoutWhatImpliesAnother(LawProposition.Any<?> part, List<Disjunct> each)
+            implements ALawPart {
 
-        public ImpliesAnotherPart {
+        /** One part of the "or": read, or left out for implying another. */
+        public sealed interface Disjunct {
+
+            /** A part read as {@code read}. */
+            record Read(Derivation read) implements Disjunct {
+
+                public Read {
+                    Objects.requireNonNull(read, "a part kept is read");
+                }
+            }
+
+            /** A part left out: it implies {@code implied}, some element of what
+             *  {@code operation} answered meeting what every element of that meets. */
+            record ImpliesAnother(LawProposition.SomeElement<?> implied, ValueName operation)
+                    implements Disjunct {
+
+                public ImpliesAnother {
+                    Objects.requireNonNull(implied, "a part left out implies another");
+                    Objects.requireNonNull(operation, "by what an operation answers");
+                }
+            }
+        }
+
+        public ALawJoinsWithoutWhatImpliesAnother {
             Objects.requireNonNull(part, "a step reads a part of a law");
-            Objects.requireNonNull(implied, "which implies another part");
-            Objects.requireNonNull(operation, "by what an operation answers");
-            if (!implied.holds() || !EveryElementMeetsIt.askedOfEveryElement(implied, operation)
-                    || !holdsOnlyWhereItHoldsSomething(part, implied.container())) {
-                throw new IllegalArgumentException(part + " does not imply " + implied
-                        + " of what " + operation + " answers");
+            each = List.copyOf(each);
+            if (each.size() != part.parts().size()) {
+                throw new IllegalArgumentException("a law joining " + part.parts().size()
+                        + " statements is read as " + each.size());
+            }
+            boolean leftOut = false;
+            for (int i = 0; i < each.size(); i++) {
+                if (each.get(i) instanceof Disjunct.ImpliesAnother(var implied, var operation)) {
+                    int at = part.parts().indexOf(implied);
+                    if (at < 0 || !(each.get(at) instanceof Disjunct.Read) || !implied.holds()
+                            || !EveryElementMeetsIt.askedOfEveryElement(implied, operation)
+                            || !holdsOnlyWhereItHoldsSomething(part.parts().get(i),
+                                    implied.container())) {
+                        throw new IllegalArgumentException(part.parts().get(i)
+                                + " does not imply a part of " + part + " that is read");
+                    }
+                    leftOut = true;
+                }
+            }
+            if (!leftOut) {
+                throw new IllegalArgumentException("an \"or\" read whole is joined as it is");
             }
         }
 
@@ -1606,7 +1655,13 @@ public sealed interface Derivation {
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return new Proposition.Always(false);
+            List<Proposition> kept = new ArrayList<>();
+            for (Disjunct one : each) {
+                if (one instanceof Disjunct.Read(Derivation read)) {
+                    kept.add(numbering.of(read));
+                }
+            }
+            return Proposition.any(kept);
         }
     }
 

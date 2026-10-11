@@ -140,6 +140,22 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
     }
 
     /**
+     * A list chosen by cases holds every element of the list one case answers only on that case: on
+     * the other it holds none, so a total over it is no total of everything that list holds. A list
+     * that every case answers is.
+     */
+    @Test
+    void aTotalOverAListChosenByCasesIsNoTotalOfTheListOneCaseChose() {
+        String total = "List.fold((acc, x) -> acc + x, 0, %s) >= 10";
+        Proposition ofTheList = stated(total.formatted("b.xs"));
+        assertNotEquals(ofTheList, stated(total.formatted("if b.open then b.xs else []")),
+                "on a closed box the total is nought whatever the list holds");
+        assertNotEquals(ofTheList, stated(total.formatted("if b.open then b.xs else [1]")));
+        assertEquals(ofTheList, stated(total.formatted("if b.open then b.xs else b.xs")),
+                "a list every case answers is that list on every run");
+    }
+
+    /**
      * A string put together from the words or the characters of another holds something where some
      * of them does, and each of them holds something; so it holds something where the other falls
      * into any, whatever stands between them. A case mapping before it keeps whether there is a
