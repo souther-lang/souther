@@ -236,6 +236,31 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         assertTrue(offered.contains("Date(\"2026-07-01\")"), offered);
     }
 
+    /**
+     * The last month there is, asked beside a year moved a day back, has a date that answers both,
+     * and it is a row like any other.
+     */
+    @Test
+    void theLastMonthThereIsAskedBesideAMovedYearIsOneQuestion() {
+        Compilation compilation = compiled("""
+                module p
+
+                behavior f : (birthday: Date) -> Bool
+                let f (birthday) =
+                    Date.year(Date.addDays(0 - 1, birthday)) == 999999999
+                            && Date.month(birthday) == 12
+                """);
+        String report = report(compilation);
+        String offered = GeneratedRows.of(
+                Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("p")),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
+                .text();
+
+        assertTrue(report.contains("measurement: complete"), report);
+        assertFalse(offered.contains("THREW"), offered);
+        assertTrue(offered.contains("Date(\"+999999999-12-01\")"), offered);
+    }
+
     /** A date moved by nothing is the date: its year is the number the date's own year is. */
     @Test
     void aDateMovedByNothingIsTheDate() {

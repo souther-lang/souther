@@ -35,7 +35,6 @@ import souther.compiler.types.Type;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDate;
-import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -44,6 +43,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.SortedSet;
@@ -2997,33 +2997,12 @@ final class TermRealizations {
             for (long edge : new long[] {moved.first(), moved.last() + 1}) {
                 addIfBetween(cuts, edge, from, to);
             }
-            long low = clamped(from + moved.offsetDays());
             long high = clamped(to + moved.offsetDays());
-            switch (part) {
-                case YEAR -> {
-                    for (int year = LocalDate.ofEpochDay(low).getYear() + 1;
-                            year <= LocalDate.ofEpochDay(high).getYear(); year++) {
-                        addMoved(cuts, LocalDate.of(year, 1, 1), from, to);
-                    }
-                }
-                case MONTH -> {
-                    YearMonth last = YearMonth.from(LocalDate.ofEpochDay(high));
-                    for (YearMonth month = YearMonth.from(LocalDate.ofEpochDay(low)).plusMonths(1);
-                            !month.isAfter(last); month = month.plusMonths(1)) {
-                        addMoved(cuts, month.atDay(1), from, to);
-                    }
-                }
-                // Every day starts a new day of its month.
-                case DAY -> {
-                    for (long day = low + 1; day <= high; day++) {
-                        addMoved(cuts, LocalDate.ofEpochDay(day), from, to);
-                    }
-                }
+            for (OptionalLong start = nextStartAfter(part, clamped(from + moved.offsetDays()));
+                    start.isPresent() && start.getAsLong() <= high;
+                    start = nextStartAfter(part, start.getAsLong())) {
+                addIfBetween(cuts, start.getAsLong() - moved.offsetDays(), from, to);
             }
-        }
-
-        private void addMoved(SortedSet<Long> cuts, LocalDate movedDate, long from, long to) {
-            addIfBetween(cuts, movedDate.toEpochDay() - moved.offsetDays(), from, to);
         }
 
         private static void addIfBetween(SortedSet<Long> cuts, long day, long from, long to) {
@@ -3035,6 +3014,31 @@ final class TermRealizations {
         private static long clamped(long day) {
             return Math.max(LocalDate.MIN.toEpochDay(), Math.min(LocalDate.MAX.toEpochDay(), day));
         }
+    }
+
+    /**
+     * The first day after {@code day} at which {@code part} starts a new run — the first of a
+     * year, the first of a month, any day for the day of the month — or nothing where the calendar
+     * has no such day.
+     *
+     * <p>Total over the calendar. A walk that makes the next year or month and then asks whether it
+     * is still inside is one that makes a date the calendar does not have in the last month there
+     * is; this answers nothing there, and no caller makes the successor.
+     */
+    private static OptionalLong nextStartAfter(TakenAs.DatePart part, long day) {
+        if (day >= LocalDate.MAX.toEpochDay()) {
+            return OptionalLong.empty();
+        }
+        LocalDate date = LocalDate.ofEpochDay(day);
+        return switch (part) {
+            case YEAR -> date.getYear() == LocalDate.MAX.getYear() ? OptionalLong.empty()
+                    : OptionalLong.of(LocalDate.of(date.getYear() + 1, 1, 1).toEpochDay());
+            case MONTH -> date.getYear() == LocalDate.MAX.getYear() && date.getMonthValue() == 12
+                    ? OptionalLong.empty()
+                    : OptionalLong.of(date.withDayOfMonth(1).plusMonths(1).toEpochDay());
+            // Every day starts a new day of its month.
+            case DAY -> OptionalLong.of(day + 1);
+        };
     }
 
     /** The part of the date that {@code day} counts to, with a day the calendar does not have read

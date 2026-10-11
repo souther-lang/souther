@@ -58,6 +58,8 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
         };
     }
 
+    private static final List<DatePart> PARTS = List.of(DatePart.values());
+
     private static final long[] MOVES = {0, 1, -1, 30, -30, 365, -366};
 
     /** What a chain of moves is defined at, for the chains this walks: defined everywhere, or only
@@ -110,7 +112,7 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
                     numbers(random, DatePart.YEAR, true)));
             int more = random.nextInt(3);
             for (int each = 0; each < more; each++) {
-                DatePart part = DatePart.values()[random.nextInt(DatePart.values().length)];
+                DatePart part = PARTS.get(random.nextInt(PARTS.size()));
                 asks.add(new TermRealizations.DatePartAsk(part, chain(random),
                         numbers(random, part, false)));
             }
@@ -190,6 +192,45 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
                         new NumericSet.At(Count.of(17)))), Carrier.DATE);
 
         assertEquals(LocalDate.of(2026, 1, 17), found.on());
+    }
+
+    private static TermRealizations.DatePartAsk part(DatePart part, int value) {
+        return new TermRealizations.DatePartAsk(part, DateTranslation.none(),
+                new NumericSet.At(Count.of(value)));
+    }
+
+    /**
+     * The ends of the calendar are dates like any other: asking for the part of a date in the last
+     * month there is, or the first, does not step past what the calendar holds.
+     */
+    @Test
+    void thePartsOfTheLastDatesAreAskedWithoutSteppingPastTheCalendar() {
+        int last = LocalDate.MAX.getYear();
+        DateTranslation back = DateTranslation.none().thenAddDays(-1);
+
+        assertEquals(LocalDate.of(last, 12, 1), TermRealizations.dateAnsweringMovedParts(
+                List.of(year(back, last), part(DatePart.MONTH, 12)), Carrier.DATE).on());
+        assertEquals(LocalDate.of(last, 1, 31), TermRealizations.dateAnsweringMovedParts(
+                List.of(year(back, last), part(DatePart.DAY, 31)), Carrier.DATE).on());
+        assertEquals(LocalDate.MAX, TermRealizations.dateAnsweringMovedParts(
+                List.of(year(back, last), part(DatePart.MONTH, 12), part(DatePart.DAY, 31)),
+                Carrier.DATE).on());
+    }
+
+    @Test
+    void thePartsOfTheFirstDatesAreAskedWithoutSteppingBeforeTheCalendar() {
+        int first = LocalDate.MIN.getYear();
+        DateTranslation on = DateTranslation.none().thenAddDays(1);
+
+        assertEquals(LocalDate.MIN, TermRealizations.dateAnsweringMovedParts(
+                List.of(year(on, first), part(DatePart.MONTH, 1)), Carrier.DATE).on());
+        assertEquals(LocalDate.of(first, 1, 1), TermRealizations.dateAnsweringMovedParts(
+                List.of(year(on, first), part(DatePart.DAY, 1)), Carrier.DATE).on());
+        // Moved a day on, the last of December is in the next year: the thirtieth is the last day
+        // of the first year there is that answers.
+        assertEquals(LocalDate.of(first, 12, 30), TermRealizations.dateAnsweringMovedParts(
+                List.of(year(on, first), part(DatePart.MONTH, 12), part(DatePart.DAY, 30)),
+                Carrier.DATE).on());
     }
 
     /** A shift of centuries is as exact as one of a day. */
