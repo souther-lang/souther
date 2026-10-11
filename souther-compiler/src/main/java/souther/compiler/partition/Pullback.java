@@ -2294,11 +2294,12 @@ final class Pullback {
                                     && inside.isAtOrUnder(held.element()) ? inside : null;
                     case ElementAt.APiece _, ElementAt.AnEntry _ -> null;
                 };
-                // The key of an entry is a place of a map. Where the entries are a list's, a
-                // component of each is no place of an input at all.
+                // The key of an entry is a place of a map, which the declarations say where there
+                // is one. Where the entries are a list's, a component of each is no place of an
+                // input at all.
                 case LawSubject.KeyOf<DeclaredArgument> _ ->
                         located.each() instanceof ElementAt.AtAPosition(TermPath map)
-                                && read.domain().typeAt(map, read.rules()) instanceof Type.MapOf
+                                && read.domain().typeAt(map.key(), read.rules()) != null
                                 ? map.key() : null;
                 // What a closure answers stands at no position a row writes.
                 case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _,
