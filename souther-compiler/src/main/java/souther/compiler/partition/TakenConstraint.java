@@ -7,7 +7,9 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * What a condition on the way states, in a vocabulary a search can compose a row against.
@@ -81,17 +83,25 @@ public sealed interface TakenConstraint {
      * Whether {@code within}, which has {@code these} taken in, leaves nothing for some number
      * they name or some form one of them is over — the second half of {@link #nothingMeetsAll},
      * for a reader that narrows a region one constraint at a time and asks after each.
+     *
+     * <p>Each number once, however many of them name it, and a form only where it is over more
+     * than one number: a form of one number is left nothing exactly where that number is, so the
+     * second question would be the first asked again, and a projection is what this costs.
      */
     static boolean nothingIsLeftFor(List<TakenConstraint> these, SearchRegion within) {
+        Set<NumericTerm> asked = new LinkedHashSet<>();
         for (TakenConstraint one : these) {
             for (NumericTerm term : one.terms()) {
-                if (within.projectionOf(term)
+                if (asked.add(term) && within.projectionOf(term)
                         instanceof NumericDomain.FormProjection.NothingIsLeft) {
                     return true;
                 }
             }
-            if (one instanceof Affine affine && within.projectionOf(affine.form())
-                    instanceof NumericDomain.FormProjection.NothingIsLeft) {
+        }
+        for (TakenConstraint one : these) {
+            if (one instanceof Affine affine && affine.form().coefs().size() > 1
+                    && within.projectionOf(affine.form())
+                            instanceof NumericDomain.FormProjection.NothingIsLeft) {
                 return true;
             }
         }
