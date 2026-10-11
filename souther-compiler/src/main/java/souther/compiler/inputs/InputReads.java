@@ -1,5 +1,7 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.AnIndexedMap;
+import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.CallArguments;
 import souther.compiler.check.Choice;
@@ -87,6 +89,8 @@ import java.util.Set;
  * nothing stands a dependency in for, is read where none is.
  */
 public final class InputReads {
+
+    private static final ValueName.Stdlib.Operation GET = ValueName.Stdlib.operation("Map", "get");
 
     private final BindingEnvironment names;
     private final Map<BindingId, java.util.List<Denotation>> alternatives;
@@ -868,6 +872,12 @@ public final class InputReads {
         if (arm.binder() == null || arm.binder().binding() == null) {
             return this;
         }
+        EntryLookedUp entry = entryLookedUp(scrutinee, arm, symbols, newtypes);
+        if (entry != null) {
+            return new InputReads(names.naming(arm.binder().binding(), entry.element())
+                    .selecting(arm.binder().binding(), entry), alternatives, declared,
+                    dependencies, applied);
+        }
         // An arm over an optional's two carriers at once leaves a position nothing to narrow it to.
         CasesLeft selected = CasesLeft.selectedBy(arm.pattern());
         if (selected == null) {
@@ -912,6 +922,182 @@ public final class InputReads {
         // that stands for a place no row reaches — which the reading refuses when it is asked.
         return new InputReads(names.naming(arm.binder().binding(), narrowed), alternatives,
                 declared, dependencies, applied);
+    }
+
+    /**
+     * The value of an entry of the input's map, where {@code arm} opens what a lookup in that map
+     * answered — or null where it opens anything else.
+     *
+     * <p>The name under the arm stands at the map's elements. Which entry is the one whose key was
+     * asked for, and that the arm's condition is about that entry, is what the proposition over the
+     * arm says; the position is only where the value is read.
+     */
+    public TermPath valueOfTheEntryLookedUp(Core scrutinee, Core.Case arm, Symbols symbols,
+                                            DeclarationNewtypes newtypes) {
+        EntryLookedUp entry = entryLookedUp(scrutinee, arm, symbols, newtypes);
+        return entry == null ? null : entry.element();
+    }
+
+    /**
+     * Where an entry a lookup answered stands, and the lookup that picked it out.
+     *
+     * @param element where the entry's value stands: the element of the map or of the list the
+     *                map was filed from
+     * @param lookup  the call that asked for the key, as the tree has it
+     */
+    public record EntryLookedUp(TermPath element, Core lookup) {
+
+        public EntryLookedUp {
+            Objects.requireNonNull(element, "an entry's value stands at some element");
+            Objects.requireNonNull(lookup, "an entry was picked out by some lookup");
+        }
+    }
+
+    private EntryLookedUp entryLookedUp(Core scrutinee, Core.Case arm, Symbols symbols,
+                                        DeclarationNewtypes newtypes) {
+        if (!(arm.binding() instanceof Core.ArmBinding.Payload)) {
+            return null;
+        }
+        Denotation looked = standing(scrutinee, symbols, newtypes);
+        if (!(AnOperationApplied.of(Core.withoutStanding(looked.value()))
+                instanceof AnOperationApplied(ValueName operation, List<Core> args))
+                || !GET.equals(operation) || args.size() != 2) {
+            return null;
+        }
+        if (looked.at().forkedOn(args.get(1), newtypes) instanceof PathResolution.At(
+                TermPath map)) {
+            return new EntryLookedUp(map.element(), looked.value());
+        }
+        // A map filed from a list holds the list's own elements, so what a lookup in it answers is
+        // one of them.
+        Denotation held = looked.at().standing(args.get(1), symbols, newtypes);
+        AnIndexedMap indexed = AnIndexedMap.of(held.value(), closure ->
+                Core.withoutStanding(held.at().standing(closure, symbols, newtypes).value())
+                        instanceof Core.Block block ? block : null);
+        if (indexed == null) {
+            return null;
+        }
+        Denotation walked = held.at().standing(indexed.walked(), symbols, newtypes);
+        return walked.at().forkedOn(walked.value(), newtypes) instanceof PathResolution.At(
+                TermPath list) ? new EntryLookedUp(list.element(), looked.value()) : null;
+    }
+
+    /**
+     * Which part of which container a name is the element of, and the name that was given it.
+     *
+     * @param name      the binding that was handed the element, which is not an alias of another
+     * @param container the container it is held in: by its position where it has one, and by what
+     *                  it is made of otherwise, so that the elements of what a walk answered are
+     *                  not the elements of what the walk was given
+     * @param part      whether the name is the element or the key of its entry
+     */
+    record ElementStood(BindingId name, ContainerOf container, HeldIn.Part part) {
+
+        ElementStood {
+            Objects.requireNonNull(name, "an element is stood for by some name");
+            Objects.requireNonNull(container, "an element is held in some container");
+            Objects.requireNonNull(part, "an element is the element or the key of its entry");
+        }
+    }
+
+    /** The container an element is held in. */
+    sealed interface ContainerOf {
+
+        /** One that stands at a position of the input. */
+        record AtAPosition(TermPath at) implements ContainerOf {
+
+            public AtAPosition {
+                Objects.requireNonNull(at, "a container at a position is at one");
+            }
+        }
+
+        /** One that stands at none, which an operation answered: told from another by what it is
+         *  made of. */
+        record Made(Core expression) implements ContainerOf {
+
+            public Made {
+                Objects.requireNonNull(expression, "a container made is made of something");
+            }
+        }
+    }
+
+    /**
+     * Each element of a container that {@code e} reads a name for: the elements, and not the
+     * names for a position that is no container's element or for a value an operation made.
+     *
+     * <p>What tells two names for two elements of one container from one name met twice, and a
+     * name for an entry's key from one for its value. A position inside a container says an element
+     * and not which one, so that is the position's to say and not this's.
+     */
+    List<ElementStood> elementsStoodForIn(Core e, DeclarationNewtypes newtypes) {
+        Set<BindingId> made = new HashSet<>();
+        Set<BindingId> read = new LinkedHashSet<>();
+        walkNames(e, made, read);
+        List<ElementStood> out = new ArrayList<>();
+        for (BindingId each : read) {
+            ElementStood stood = elementStoodBy(each, newtypes, 0);
+            if (stood != null) {
+                out.add(stood);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** The element {@code name} is a name for, through the names it was only given. */
+    private ElementStood elementStoodBy(BindingId name, DeclarationNewtypes newtypes, int depth) {
+        return switch (names.roleOf(name)) {
+            case BindingRole.Element(HeldIn held) -> new ElementStood(name,
+                    pathOf(held.container(), newtypes) instanceof PathResolution.At(TermPath at)
+                            ? new ContainerOf.AtAPosition(at)
+                            : new ContainerOf.Made(Core.withoutStanding(held.container())),
+                    held.part());
+            // A name given the position of an element, as the value of an entry a lookup
+            // answered is.
+            case BindingRole.Root(TermPath path) -> stoodAt(name, path);
+            // A name only given another is that one, so that the same element met under two names
+            // is not two. Bounded by how far names are given names, which is a few.
+            case BindingRole.Alias(Core given) -> depth < KEPT_NAMES_APART
+                    && Core.withoutStanding(given) instanceof Core.Read root
+                    ? elementStoodBy(root.binding(), newtypes, depth + 1) : null;
+            case BindingRole.ElementOfSeveral _, BindingRole.Unknown _ -> null;
+        };
+    }
+
+    /** How many names given names are followed to the element. */
+    private static final int KEPT_NAMES_APART = 16;
+
+    private static ElementStood stoodAt(BindingId name, TermPath path) {
+        if (path.steps().isEmpty()) {
+            return null;
+        }
+        TermPath held = new TermPath(path.head(), path.steps().subList(0, path.steps().size() - 1));
+        ContainerOf in = new ContainerOf.AtAPosition(held);
+        return switch (path.steps().getLast()) {
+            case TermPath.Step.Element _ -> new ElementStood(name, in, HeldIn.Part.ELEMENT);
+            case TermPath.Step.Key _ -> new ElementStood(name, in, HeldIn.Part.KEY);
+            case TermPath.Step.Field _, TermPath.Step.Refine _ -> null;
+        };
+    }
+
+    /**
+     * The entries the names in force are the value of, by the name: what is stated of such a name
+     * is stated of the entry the lookup answered, and of no other element of the container.
+     */
+    public Map<BindingId, EntryLookedUp> entriesLookedUp() {
+        return names.selected();
+    }
+
+    /**
+     * The position the key {@code key} makes of the element at {@code element} stands at, or null
+     * where it is no position: a closure answering a field of its parameter, which is what each
+     * entry of a map filed from a list is under.
+     */
+    public TermPath keyOfTheElement(Core.Block key, TermPath element,
+                                    DeclarationNewtypes newtypes) {
+        InputReads handed = new InputReads(names.naming(key.params().getFirst().binding(),
+                element), alternatives, declared, dependencies, applied);
+        return handed.forkedOn(key.body(), newtypes) instanceof PathResolution.At(TermPath at)
+                ? at : null;
     }
 
     /**

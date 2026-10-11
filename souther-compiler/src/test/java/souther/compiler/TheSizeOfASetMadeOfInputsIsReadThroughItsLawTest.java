@@ -73,12 +73,47 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
         assertFalse(said.weakening().contains("rule_unread"), said.weakening().toString());
     }
 
+    /**
+     * What a row writes says whether an element of one set is equal to an element of the other, so
+     * the size of the union is the size of one set and how many elements of the other are in none
+     * of its: a count over the row, which is a line, and only the size of the set it is added to is
+     * left said as a rule about a run.
+     */
     @Test
-    void theSizeOfAUnionStandsTheValuesOfTwoSetsAgainstOneAnother() {
-        relatesValues(of("""
+    void theSizeOfAUnionIsTheSizeOfOneSetAndHowManyOfTheOthersElementsAreNotInIt() {
+        Said said = of("""
                 behavior f : (a: Set<String>, b: Set<String>) -> Int
                 let f (a, b) = if Set.size(Set.union(a, b)) <= 1 then 1 else 0
-                """, "f"), List.of("Set.size(a)", "a[*]", "b[*]"));
+                """, "f");
+
+        assertEquals(List.of("Set.size(a) RULE_ABOUT_A_RUN"), said.notRead());
+        assertFalse(said.weakening().contains("rule_unread"), said.weakening().toString());
+    }
+
+    /**
+     * And what the line counts is the union's size as the language computes it: an element in both
+     * sets is one, so the same two sets answer by how many are not in the other.
+     */
+    @Test
+    void theCountIsTheUnionsSizeWhetherOrNotTheSetsShareAnElement() {
+        Compilation compilation = Compilation.ofSource(HEAD + """
+                behavior g : (a: Set<String>, b: Set<String>) -> Int
+                let g (a, b) = if Set.size(Set.union(a, b)) <= 1 then 1 else 0
+
+                example g
+                    | "both empty" : ([], []) -> 1
+                    | "one element in both" : (["x"], ["x"]) -> 1
+                    | "two different elements" : (["x"], ["y"]) -> 0
+                    | "the second inside the first" : (["x", "y"], ["x"]) -> 0
+                    | "the first inside the second" : (["x"], ["x", "y"]) -> 0
+                    | "the second empty" : (["x"], []) -> 1
+                    | "the first empty" : ([], ["y"]) -> 1
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
     }
 
     @Test

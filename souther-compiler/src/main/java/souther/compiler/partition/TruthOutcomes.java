@@ -152,7 +152,8 @@ final class TruthOutcomes {
         return switch (stated) {
             case Proposition.Always(boolean holds) -> Outcomes.only(holds);
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
-                 Proposition.Present _, Proposition.SameValue _ -> Outcomes.EITHER;
+                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _ ->
+                    Outcomes.EITHER;
             case Proposition.Unread unread ->
                     unread.fixed() ? Outcomes.FIXED_UNNAMED : Outcomes.EITHER;
             case Proposition.All all -> all.parts().stream().map(TruthOutcomes::of)

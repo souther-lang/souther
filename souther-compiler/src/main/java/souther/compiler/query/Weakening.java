@@ -555,6 +555,37 @@ public sealed interface Weakening {
     }
 
     /**
+     * A decision of a body turns on which of several elements of one key a map filed from a list
+     * holds — the last — and what that decides was not measured.
+     *
+     * <p>The last value for a key is read as it is: what a statement says of an entry is said of
+     * the last element of its key. What is not established is which distinctions the body draws
+     * are told apart by that order — a row where an earlier element of a key meets a condition and
+     * the last does not, and the other way round. The rows this compiler writes hold one element
+     * of each key, so a distinction that only a repeated key makes is one nothing here has a row
+     * for, and a measurement that said it was whole would be saying the rows it has are every row
+     * the model distinguishes.
+     *
+     * <p>About the behavior and not about a rule: the order is a property of the map the body
+     * looks values up in, and each decision downstream of the lookup rests on it.
+     */
+    record KeyedOverwriteCasesUnmeasured(String behavior) implements Weakening {
+
+        public KeyedOverwriteCasesUnmeasured {
+            Objects.requireNonNull(behavior, "an overwrite order is that of some body's map");
+        }
+
+        /**
+         * What is missing is a capacity: this compiler writes no row holding a key twice, and a
+         * run allowed more of everything writes none either.
+         */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
      * A rewrite of one behavior's body nothing here could decide about: whether a row tells it from
      * the body is not known, and not that none does.
      *

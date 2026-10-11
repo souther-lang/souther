@@ -372,8 +372,19 @@ final class DemandReading {
             case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
                     List.of(new Read.Narrows(at,
                             CasesLeft.of(Refinement.of(new Case.Presence(holds)))));
+            // A map's key being another position's value, read at one element of the map: the
+            // map holds an entry filed under it.
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
+                                       DecisionSubject.AnInput(TermPath other), boolean _, var _)
+                    when keyOf(one, other) != null -> ofAnEntryKeyedAs(keyOf(one, other), stated,
+                    read);
             case Proposition.SameValue _ ->
                     List.of(forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
+            // The elements of a container are written alike, so the last of them is the last of
+            // its value as well; that a later element holds the same value is two of them being
+            // one, which no composer writes.
+            case Proposition.LastToHold last -> List.of(last.holds() ? new Read.Settled(true)
+                    : forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
             case Proposition.Unread unread -> List.of(new Read.Unread(
                     new WhyNotTaken.MeaningUnread(unread.why())));
             case Proposition.All all -> {
@@ -459,7 +470,10 @@ final class DemandReading {
                     boolean holds, var _) && one.equals(held.element())
                     ? List.of(AnElementsWay.asking(holds ? new RowDemand.SameAs(at)
                             : new RowDemand.DifferentFrom(at)))
-                    : waysOf(projected(part, read), element, everyElement, some, read);
+                    : keyedWays(part, held, element);
+            if (choices == null) {
+                choices = waysOf(projected(part, read), element, everyElement, some, read);
+            }
             ways = choices == null ? null : AnElementsWay.eachOf(ways, choices, read);
             // More ways an element may meet it than a reading of one condition makes: not taken
             // one by one, and said to be where this compiler's work stopped, which is neither the
@@ -684,6 +698,52 @@ final class DemandReading {
     }
 
     /**
+     * What an entry of the map at {@code map} being filed under a key — or under another than it —
+     * asks of a row: the map holds one, which is some element of it asked this.
+     */
+    private static List<Read> ofAnEntryKeyedAs(TermPath map, Proposition stated,
+                                                InputReading read) {
+        List<AnElementsWay> ways = keyedWays(stated, map, elementOf(map));
+        if (ways == null) {
+            return List.of(forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
+        }
+        List<List<Read>> alternatives = new ArrayList<>();
+        for (AnElementsWay way : ways) {
+            alternatives.add(someElementMeeting(map, way, read));
+        }
+        return oneOf(alternatives, each -> each, each -> each);
+    }
+
+    /**
+     * The map one of {@code one} and {@code other} is the keys of, where the other is no position
+     * of it — or null where neither is a map's keys, or both stand at the same map.
+     */
+    private static TermPath keyOf(TermPath one, TermPath other) {
+        TermPath map = one.mapOfTheKeys() != null ? one.mapOfTheKeys() : other.mapOfTheKeys();
+        TermPath at = one.mapOfTheKeys() != null ? other : one;
+        return map == null || at.isAtOrUnder(map) ? null : map;
+    }
+
+    /**
+     * What an element of the map at {@code held} is asked where {@code part} says its key is, or is
+     * not, the value at another position — or null where {@code part} says no such thing.
+     */
+    private static List<AnElementsWay> keyedWays(Proposition part, TermPath held,
+                                                 List<TermPath> element) {
+        if (!(part instanceof Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
+                DecisionSubject.AnInput(TermPath other), boolean holds, var _))) {
+            return null;
+        }
+        TermPath key = held.key();
+        TermPath at = one.equals(key) ? other : other.equals(key) ? one : null;
+        if (at == null || inside(at, element)) {
+            return null;
+        }
+        return List.of(AnElementsWay.asking(holds ? new RowDemand.KeyedAs(at)
+                : new RowDemand.NotKeyedAs(at)));
+    }
+
+    /**
      * What a quantifier over the container at {@code container} asks of its elements, as what is
      * asked of positions inside the element of the outer one: what names its own position as it
      * is, and an element being another position's value as that of the inner container.
@@ -693,8 +753,8 @@ final class DemandReading {
         List<RowDemand.OfAnElement> out = new ArrayList<>();
         for (RowDemand.OfAnElement each : asked) {
             out.add(switch (each) {
-                case RowDemand.SameAs _, RowDemand.DifferentFrom _ ->
-                        new RowDemand.WithinIt(container, some, each);
+                case RowDemand.SameAs _, RowDemand.DifferentFrom _, RowDemand.KeyedAs _,
+                     RowDemand.NotKeyedAs _ -> new RowDemand.WithinIt(container, some, each);
                 case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.InCases _,
                      RowDemand.WithinIt _ -> each;
             });

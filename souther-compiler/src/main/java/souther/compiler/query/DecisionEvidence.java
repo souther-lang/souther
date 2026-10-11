@@ -64,7 +64,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
         // And every rule read short, because the measure is of all the rules: a count of the rules
         // the rows took is short of whatever rule a run could not be placed at. Which rule that
         // was is each rule's own answer (readShortOf), and not this list's.
-        WeakeningSet unread = derivationOf(read);
+        WeakeningSet unread = derivationOf(read).union(unmeasuredOf(read));
         for (DecisionReading.Ruled ruled : read.found()) {
             unread = unread.union(readShortOf(read, ruled));
         }
@@ -227,6 +227,19 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                 ? WeakeningSet.of(
                         new Weakening.DecisionReadingIncomplete(read.behavior(),
                                 read.enumeration()))
+                : WeakeningSet.none();
+    }
+
+    /**
+     * What the rules of the decision, read in full, leave unmeasured of the rows.
+     *
+     * <p>A decision resting on which of several elements of one key a map holds is read as it is,
+     * and none of the rows written holds a key twice. Not part of {@link #derivation}: every rule
+     * is in hand, and what is short is the rows that would tell them apart.
+     */
+    private static WeakeningSet unmeasuredOf(DecisionReading read) {
+        return read.consultsWhichElementOfAKeyIsLast()
+                ? WeakeningSet.of(new Weakening.KeyedOverwriteCasesUnmeasured(read.behavior()))
                 : WeakeningSet.none();
     }
 

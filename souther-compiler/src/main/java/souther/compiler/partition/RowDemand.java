@@ -235,13 +235,15 @@ public sealed interface RowDemand {
      *
      * @param container the container inside the element
      * @param some      whether some element of it is asked this, or every one
-     * @param asked     what that element is asked: a {@link SameAs} or a {@link DifferentFrom}
+     * @param asked     what that element is asked: a {@link SameAs}, a {@link DifferentFrom}, a
+     *                  {@link KeyedAs} or a {@link NotKeyedAs}
      */
     record WithinIt(TermPath container, boolean some, OfAnElement asked) implements OfAnElement {
 
         public WithinIt {
             Objects.requireNonNull(container, "the container inside an element");
-            if (!(asked instanceof SameAs) && !(asked instanceof DifferentFrom)) {
+            if (!(asked instanceof SameAs) && !(asked instanceof DifferentFrom)
+                    && !(asked instanceof KeyedAs) && !(asked instanceof NotKeyedAs)) {
                 throw new IllegalArgumentException("what names a position of the element names"
                         + " it already, and is asked of the element as it is: " + asked);
             }
@@ -300,6 +302,58 @@ public sealed interface RowDemand {
         public Set<TermPath> valuesRead() {
             return Set.of(value);
         }
+    }
+
+    /**
+     * That the key of the element — an entry of a map — is the value at {@code value}.
+     *
+     * <p>Not {@link SameAs}, which is asked of the element and is met by writing the value into
+     * the container as an element of its own. A key is no element: it names the entry whose value
+     * is asked whatever else of it, so what else the element is asked of its value — a relation
+     * over it — is asked of the entry under that key.
+     */
+    record KeyedAs(TermPath value) implements OfAnElement {
+
+        public KeyedAs {
+            Objects.requireNonNull(value, "the position whose value the key is");
+        }
+
+        @Override
+        public Set<TermPath> positions(TermPath element) {
+            return keyAndValue(element, value);
+        }
+
+        @Override
+        public Set<TermPath> valuesRead() {
+            return Set.of(value);
+        }
+    }
+
+    /** That the key of the element is unequal to the value at {@code value}. */
+    record NotKeyedAs(TermPath value) implements OfAnElement {
+
+        public NotKeyedAs {
+            Objects.requireNonNull(value, "the position whose value the key is not");
+        }
+
+        @Override
+        public Set<TermPath> positions(TermPath element) {
+            return keyAndValue(element, value);
+        }
+
+        @Override
+        public Set<TermPath> valuesRead() {
+            return Set.of(value);
+        }
+    }
+
+    /** The key of the entry {@code element} is the value of, and then {@code value}. */
+    private static Set<TermPath> keyAndValue(TermPath element, TermPath value) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        List<TermPath.Step> steps = element.steps();
+        out.add(new TermPath(element.head(), steps.subList(0, steps.size() - 1)).key());
+        out.add(value);
+        return Collections.unmodifiableSet(out);
     }
 
     /** {@code element} and then {@code value}, in that order whatever run it is. */

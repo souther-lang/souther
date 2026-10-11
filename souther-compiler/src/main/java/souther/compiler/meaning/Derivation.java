@@ -209,12 +209,22 @@ public sealed interface Derivation {
             arms = List.copyOf(arms);
         }
 
-        /** One arm: whether it selects the value, and what it states once taken. */
-        public record Arm(Derivation selects, Derivation states) {
+        /**
+         * One arm: whether it selects the value, and what it states once taken.
+         *
+         * @param aboutTheEntry whether the arm states something of the value of the entry that
+         *                      selecting it picked out, so that what it states holds of that entry
+         *                      and not of some other
+         */
+        public record Arm(Derivation selects, Derivation states, boolean aboutTheEntry) {
 
             public Arm {
                 Objects.requireNonNull(selects, "an arm selects some values");
                 Objects.requireNonNull(states, "an arm states something");
+            }
+
+            public Arm(Derivation selects, Derivation states) {
+                this(selects, states, false);
             }
         }
 
@@ -226,8 +236,19 @@ public sealed interface Derivation {
                 Proposition selects = numbering.of(arm.selects());
                 List<Proposition> arrives = new ArrayList<>(before.stream()
                         .map(Proposition::denied).toList());
-                arrives.add(selects);
-                arrives.add(numbering.of(arm.states()));
+                Proposition states = numbering.of(arm.states());
+                // The entry an arm picks out is the one its statement is about: the statement
+                // sits inside the quantifier that selected it, where its subjects under the
+                // container's elements are that entry's.
+                if (arm.aboutTheEntry() && selects instanceof Proposition.Some(
+                        DecisionSubject container, Proposition ofTheEntry, boolean holds, var _)
+                        && holds) {
+                    arrives.add(new Proposition.Some(container,
+                            Proposition.all(List.of(ofTheEntry, states)), true));
+                } else {
+                    arrives.add(selects);
+                    arrives.add(states);
+                }
                 taken.add(Proposition.all(arrives));
                 before.add(selects);
             }
@@ -624,6 +645,11 @@ public sealed interface Derivation {
                 }
                 // What the operations that kept the element state of it is no part of the law.
                 if (read instanceof OfWhatWasKept(Derivation ofTheElement, var _)) {
+                    return reads(law, ofTheElement);
+                }
+                // And what a map filed from a list adds to the element each entry is.
+                if (read instanceof OfTheLastToHoldItsValue(Derivation ofTheElement, var _,
+                        var _)) {
                     return reads(law, ofTheElement);
                 }
                 return switch (law) {
@@ -1334,6 +1360,56 @@ public sealed interface Derivation {
         @Override
         public Proposition conclusion(Conclusion numbering) {
             return new Proposition.Present(of, true);
+        }
+    }
+
+    /**
+     * What is stated of the value of an entry a lookup answered, and with it what picked the entry
+     * out: that the element stated of is the one under the key asked for.
+     *
+     * <p>A statement about an entry's value is about the one entry the lookup answered. Said alone
+     * it is about every element of the container, and a row would stand at it through an element
+     * the lookup never reaches.
+     *
+     * @param selection whether the lookup answered a value, read as the quantifier it is: some
+     *                  element holds the key
+     * @param about     what is stated of the value
+     */
+    record OfTheEntryUnderTheKey(Derivation selection, Derivation about) implements Derivation {
+
+        public OfTheEntryUnderTheKey {
+            Objects.requireNonNull(selection, "an entry is picked out by a lookup");
+            Objects.requireNonNull(about, "something is stated of the entry");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            Proposition stated = numbering.of(about);
+            return numbering.of(selection) instanceof Proposition.Some(
+                    DecisionSubject _, Proposition ofTheEntry, boolean holds, var _) && holds
+                    ? Proposition.all(List.of(stated, ofTheEntry)) : stated;
+        }
+    }
+
+    /**
+     * What is stated of an element, where the element is the last of the container's to hold the
+     * value it holds at {@code position}: what a map filed from a list holds under a key is the
+     * element that came last of those the key was made of, so what is said of an entry is said
+     * of that one.
+     */
+    record OfTheLastToHoldItsValue(Derivation ofTheElement, TermPath container,
+                                   TermPath position) implements Derivation {
+
+        public OfTheLastToHoldItsValue {
+            Objects.requireNonNull(ofTheElement, "something is stated of the element");
+            Objects.requireNonNull(container, "a last is of some container's elements");
+            Objects.requireNonNull(position, "an element is told apart by some place");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return Proposition.all(List.of(numbering.of(ofTheElement),
+                    new Proposition.LastToHold(container, position, true)));
         }
     }
 

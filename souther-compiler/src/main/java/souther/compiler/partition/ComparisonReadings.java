@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.Choice;
 import souther.compiler.check.BooleanMeaning;
+import souther.compiler.check.BoundOperationFacts;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.diag.Citation;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ScopeStep;
@@ -19,6 +21,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.semantics.OperationLaw;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -718,9 +721,22 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     : new StatedAt(written, new Stated.AComparison(compared.get()));
         }
         Cutting.Read answered = e instanceof Core.PreservedCall call
-                && Type.BOOL.equals(call.type()) ? here.ofAnApplication(call, names) : null;
+                && (Type.BOOL.equals(call.type()) || statesWhetherItHoldsAValue(call))
+                ? here.ofAnApplication(call, names) : null;
         return answered == null ? null
                 : new StatedAt(written, new Stated.AnApplication(e, answered));
+    }
+
+    /**
+     * Whether the library says by a law when {@code call} answers a value rather than nothing,
+     * which is what an operation answering an optional states of the input.
+     *
+     * <p>Asked of the operation's facts and not of the type of what it answers: an optional is
+     * what holds a value or none, and which operations say when are the library's to declare.
+     */
+    private static boolean statesWhetherItHoldsAValue(Core.PreservedCall call) {
+        return DefaultBoundOperationFacts.get().settled(call.operation(),
+                OperationLaw.Observed.PRESENCE) instanceof BoundOperationFacts.Settled.ByALaw;
     }
 
     /**
@@ -781,8 +797,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                      Supplier<WhatNamesStandFor> names) {
             WhatNamesStandFor standing = names.get();
             return applications.computeIfAbsent(new Asked(application, standing.reads()), _ -> {
-                Pullback.Pulled stated = WhatConditionsState.of(standing.read())
-                        .truth(application, standing.reads(), standing.read());
+                // Whether an optional holds a value is what it states, as a truth is what it
+                // answers.
+                WhatConditionsState state = WhatConditionsState.of(standing.read());
+                Pullback.Pulled stated = Type.BOOL.equals(application.type())
+                        ? state.truth(application, standing.reads(), standing.read())
+                        : state.presence(application, standing.reads(), standing.read());
                 boolean itsOwn = stated.turnsOn().stream().anyMatch(leaf ->
                         Core.withoutStanding(leaf.from().value()) == application);
                 if (!itsOwn || Proposition.leavesSomethingUnread(stated.proposition())) {

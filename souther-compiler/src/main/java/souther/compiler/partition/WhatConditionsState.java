@@ -41,6 +41,7 @@ final class WhatConditionsState {
     private final InputReading read;
     private final Map<AComparison, Pullback.OnTheInput> comparisons = new HashMap<>();
     private final Map<ANode, Pullback.Pulled> truths = new HashMap<>();
+    private final Map<ANode, Pullback.Pulled> presences = new HashMap<>();
     private final Map<ANode, List<Pullback.Pulled>> arms = new HashMap<>();
 
     private WhatConditionsState(InputReading read) {
@@ -100,6 +101,14 @@ final class WhatConditionsState {
         heldTo(read);
         return truths.computeIfAbsent(new ANode(truth, reads),
                 _ -> Pullback.ofATruth(truth, reads, read, Optional.empty()));
+    }
+
+    /** What {@code optional} holding a value states with its names as {@code reads} has them,
+     *  under {@code read}. */
+    Pullback.Pulled presence(Core optional, InputReads reads, InputReading read) {
+        heldTo(read);
+        return presences.computeIfAbsent(new ANode(optional, reads),
+                _ -> Pullback.ofAPresence(optional, reads, read, Optional.empty()));
     }
 
     /** What a run entering arm {@code part} of {@code fork} states with its names as {@code reads}

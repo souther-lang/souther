@@ -10,6 +10,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReads;
@@ -90,8 +91,10 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
     /** The quantity {@code comparison} states, or null where it is not one over an answer. */
     private LinearForm<DecisionAtom> overAnAnswer(StatedComparison comparison, InputReads reads) {
         LinearForm<DecisionAtom> left = null;
+        // One element of each container for the whole comparison, whichever side names it.
+        ElementsMet met = new ElementsMet();
         for (Core side : List.of(comparison.left(), comparison.right())) {
-            if (!(AffineForms.outcome(side, reads, reading())
+            if (!(AffineForms.outcome(side, reads, reading(met))
                     instanceof AffineForms.Outcome.Composed<DecisionAtom, InputReads>(
                             LinearForm<DecisionAtom> form))) {
                 return null;
@@ -144,7 +147,7 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
      * and a second answer to either would be this reading disagreeing with the one a line is drawn
      * with about a body they are both reading.
      */
-    private AffineForms.Reading<DecisionAtom, InputReads> reading() {
+    private AffineForms.Reading<DecisionAtom, InputReads> reading(ElementsMet met) {
         return new AffineForms.Reading<DecisionAtom, InputReads>() {
 
             @Override
@@ -159,7 +162,7 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
 
             @Override
             public LinearForm<DecisionAtom> leafOf(Core node, InputReads at) {
-                NumericTerm term = InputNumber.of(node, inputs, at, rules);
+                NumericTerm term = InputNumber.of(node, inputs, at, rules, met);
                 if (term != null) {
                     return LinearForm.atom(new DecisionAtom.OfTheInput(term));
                 }

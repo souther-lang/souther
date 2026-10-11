@@ -208,7 +208,7 @@ final class MeaningAssumptions {
             }
             case Proposition.InCases _, Proposition.Present _ ->
                     outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_CASES);
-            case Proposition.SameValue _ ->
+            case Proposition.SameValue _, Proposition.LastToHold _ ->
                     outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_SAMENESS_OF_VALUES);
         }
     }

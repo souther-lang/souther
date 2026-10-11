@@ -51,7 +51,7 @@ record ElementWrites(List<RowDemand.ATruth> truths, List<RowDemand.InCases> case
                     case RowDemand.ATruth truth -> truths.add(truth);
                     case RowDemand.InCases inCases -> cases.add(inCases);
                     case RowDemand.Relational _, RowDemand.SameAs _, RowDemand.DifferentFrom _,
-                         RowDemand.WithinIt _ -> { }
+                         RowDemand.KeyedAs _, RowDemand.NotKeyedAs _, RowDemand.WithinIt _ -> { }
                 }
             }
         }

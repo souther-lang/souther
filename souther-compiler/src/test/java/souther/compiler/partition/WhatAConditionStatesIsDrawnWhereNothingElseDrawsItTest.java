@@ -101,18 +101,42 @@ class WhatAConditionStatesIsDrawnWhereNothingElseDrawsItTest {
         assertEquals(Set.of("o.floor", "o.ceil"), positions(walked.comparisons().getFirst()));
     }
 
+    /**
+     * What an entry of the input's map answers is a number at the map's values, so a relation of it
+     * to another number of the input is a relation across the two positions.
+     */
+    @Test
+    void aValueAMapLookupAnswersIsReadAtTheMapsValues() {
+        Walked walked = walked("""
+                match Map.get(o.key, o.prices) with
+                    | Some p -> p > o.floor
+                    | None -> false""");
+        ComparisonReadings.Reading compared = walked.comparisons().stream()
+                .filter(each -> each.statement() instanceof ComparisonReadings.Stated.AComparison)
+                .findFirst().orElseThrow();
+        ComparisonAssessment read = assertInstanceOf(
+                BoundaryPolicy.Standing.Admitted.class, compared.standing()).read();
+        // The relation, and which entry it is of: the one under the key asked for.
+        ComparisonAssessment.Several several = assertInstanceOf(
+                ComparisonAssessment.Several.class, read, read::toString);
+        ComparisonAssessment line = several.parts().getFirst().line();
+        assertInstanceOf(ComparisonAssessment.AcrossPositions.class, line, read::toString);
+        assertTrue(line.toString().contains("TermOrders[o.prices[*]")
+                && line.toString().contains("TermOrders[o.floor"), read::toString);
+    }
+
+    /** A value no position holds is still a value related to another: a lookup in a map built
+     *  from a list of another's. */
     @Test
     void aRelationToAValueNoPositionHoldsRelatesTwoValues() {
         Walked walked = walked("""
-                match Map.get(o.key, o.prices) with
+                match Map.get(o.key, Map.fromList([(o.key, o.ceil)])) with
                     | Some p -> p > o.floor
                     | None -> false""");
         ComparisonReadings.Reading compared = walked.comparisons().getFirst();
         ComparisonAssessment read = assertInstanceOf(
                 BoundaryPolicy.Standing.Admitted.class, compared.standing()).read();
         assertInstanceOf(ComparisonAssessment.AgainstAnotherValue.class, read, read::toString);
-        assertEquals(List.of("o.floor"), read.whatEachPlaceIsLeftWith().stream()
-                .map(each -> String.valueOf(each.at().path())).toList());
         assertTrue(read.whatEachPlaceIsLeftWith().stream().allMatch(each ->
                 each.why() instanceof BlockReason.ComparisonRelatingTwoValues), read::toString);
     }

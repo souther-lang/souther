@@ -162,6 +162,9 @@ public final class AnswerAsAnInput {
                 DecisionSubject at = subject(of);
                 yield at == null ? null : new Proposition.Present(at, holds);
             }
+            // Which element of a list the input holds is the last of its key: a place of the
+            // input and of no answer, which the input that stands for the answer does not have.
+            case Proposition.LastToHold _ -> null;
             case Proposition.SameValue(DecisionSubject one, DecisionSubject other,
                                        boolean holds, var _) -> {
                 DecisionSubject left = subject(one);
