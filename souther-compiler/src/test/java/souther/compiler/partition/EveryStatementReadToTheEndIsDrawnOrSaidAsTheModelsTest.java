@@ -44,11 +44,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * read to the end would be this reader's shortfall passed off as the statement's.
  *
  * <p>The kinds are taken from the sealed hierarchy, every kind met anywhere inside a sample, so a
- * kind of statement added without a condition stating it here is a failure. All but one: what a
+ * kind of statement added without a condition stating it here is a failure. All but two: what a
  * condition states on one of several applications ({@link Proposition.OnAnApplication}) is no
  * statement this reader is handed, because a comparison inside a closure applied to values written
  * out is read on each application it is handed ({@code Cutting#onEachApplication}), and what it
- * states on each is one of the others.
+ * states on each is one of the others; and what a walk carried ({@link Proposition.Carried}) is
+ * supposed wherever a condition is concluded whole, so no condition states it.
  */
 class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
 
@@ -98,6 +99,7 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
                 new LinkedHashSet<>(Arrays.asList(Proposition.class.getPermittedSubclasses()));
         missing.removeAll(met);
         missing.remove(Proposition.OnAnApplication.class);
+        missing.remove(Proposition.Carried.class);
         assertEquals(Set.of(), missing, "a kind of statement no condition here states");
     }
 
@@ -135,7 +137,8 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
             case Proposition.Some some -> kindsIn(some.ofTheElement(), into);
             case Proposition.SomeReachable reached -> kindsIn(reached.atANode(), into);
             case Proposition.OnAnApplication each -> each.each().forEach(one -> kindsIn(one, into));
-            case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
+            case Proposition.Carried _, Proposition.Always _, Proposition.Compared _,
+                 Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
                  Proposition.LastToHold _, Proposition.Unread _ -> { }
         }

@@ -26,10 +26,19 @@ public final class WrittenOfANode {
         this.staying = staying;
     }
 
+    /**
+     * Whether a place that stays put at {@code stays} is apart from the node at {@code node}:
+     * neither under the other. Asked of the places before anything is read of the node, since it
+     * turns on nothing else.
+     */
+    public static boolean apart(TermPath stays, TermPath node) {
+        return !stays.isAtOrUnder(node) && !node.isAtOrUnder(stays);
+    }
+
     /** Whether {@code stated}, read of the node at {@code node}, says the same of any node. */
     public static boolean movesWithIt(Proposition stated, TermPath node, List<TermPath> staying) {
         for (TermPath stays : staying) {
-            if (stays.isAtOrUnder(node) || node.isAtOrUnder(stays)) {
+            if (!apart(stays, node)) {
                 return false;
             }
         }
@@ -39,7 +48,7 @@ public final class WrittenOfANode {
     private boolean reads(Proposition stated) {
         return switch (stated) {
             case Proposition.Always _ -> true;
-            case Proposition.Unread _, Proposition.SomeReachable _ -> false;
+            case Proposition.Unread _, Proposition.SomeReachable _, Proposition.Carried _ -> false;
             case Proposition.Compared compared -> switch (compared.relation()) {
                 case Relation.Affine affine -> affine.form().coefs().keySet().stream()
                         .allMatch(this::reads);

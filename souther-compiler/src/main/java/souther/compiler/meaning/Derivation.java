@@ -1520,14 +1520,36 @@ public sealed interface Derivation {
     }
 
     /**
-     * What a walk carried into its step, supposed to have come out as {@code holds} on the side the
-     * walk's end is asked about, while the step is read ({@link AcrossAWalk}).
+     * What a walk carried into its step, on the side the walk's end is asked about: what the
+     * concluding supposes it came out as ({@link Supposing}), and a part nothing read where it
+     * supposes nothing of it.
      */
-    record WhatAWalkCarried(boolean holds) implements Derivation {
+    record WhatAWalkCarried(ACarriedValue carried) implements Derivation {
+
+        public WhatAWalkCarried {
+            Objects.requireNonNull(carried, "a walk carried something");
+        }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return new Proposition.Always(holds);
+            return numbering.carried(carried);
+        }
+    }
+
+    /**
+     * What {@code step} states where what a walk carried into it came out as {@code holds}: the
+     * step read once, and concluded under each way its walk needs it ({@link AcrossAWalk}).
+     */
+    record Supposing(Derivation step, ACarriedValue carried, boolean holds) implements Derivation {
+
+        public Supposing {
+            Objects.requireNonNull(step, "something is read under a supposition");
+            Objects.requireNonNull(carried, "of something a walk carried");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.supposing(carried, holds).of(step);
         }
     }
 

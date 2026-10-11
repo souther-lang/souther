@@ -167,6 +167,7 @@ public final class AnswerAsAnInput {
             case Proposition.LastToHold _ -> null;
             // A search is read from a node of the input, and of no answer.
             case Proposition.SomeReachable _ -> null;
+            case Proposition.Carried carried -> throw carried.handedToAReader();
             case Proposition.SameValue(DecisionSubject one, DecisionSubject other,
                                        boolean holds, var _) -> {
                 DecisionSubject left = subject(one);

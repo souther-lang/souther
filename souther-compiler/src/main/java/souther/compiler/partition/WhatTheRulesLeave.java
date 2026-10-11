@@ -110,6 +110,7 @@ public final class WhatTheRulesLeave {
                     some(applications.each(), want, read);
             case Proposition.Unread unread ->
                     notAsked(new WhyNotTaken.MeaningUnread(unread.why()));
+            case Proposition.Carried carried -> throw carried.handedToAReader();
             // What a dependency answered is what a row stands it in with, and the input's rules
             // say nothing of that.
             case Proposition.Truth(DecisionSubject.AnAnswer _, boolean _, var _),

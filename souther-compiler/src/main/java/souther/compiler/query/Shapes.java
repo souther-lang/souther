@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.ARecursion;
 import souther.compiler.check.BehaviorAnswers;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.BehaviorBodies;
@@ -2150,7 +2151,7 @@ public final class Shapes {
             }
 
             @Override
-            public Optional<CalledBody> bodyOf(ValueName.Helper recursion) {
+            public Optional<ARecursion> recursionOf(ValueName.Helper recursion) {
                 return Optional.ofNullable(db.ask(new Bodies.RecursionAtACall(recursion.module(),
                         recursion.name())).value());
             }

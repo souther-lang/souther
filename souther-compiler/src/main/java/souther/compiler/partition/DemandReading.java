@@ -387,6 +387,7 @@ final class DemandReading {
                     : forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
             case Proposition.Unread unread -> List.of(new Read.Unread(
                     new WhyNotTaken.MeaningUnread(unread.why())));
+            case Proposition.Carried carried -> throw carried.handedToAReader();
             case Proposition.All all -> {
                 List<Read> out = new ArrayList<>();
                 all.parts().forEach(part -> out.addAll(projected(part, read)));

@@ -156,6 +156,7 @@ final class TruthOutcomes {
                     Outcomes.EITHER;
             case Proposition.Unread unread ->
                     unread.fixed() ? Outcomes.FIXED_UNNAMED : Outcomes.EITHER;
+            case Proposition.Carried carried -> throw carried.handedToAReader();
             case Proposition.All all -> all.parts().stream().map(TruthOutcomes::of)
                     .reduce(Outcomes.ONLY_TRUE, Outcomes::and);
             case Proposition.Any any -> any.parts().stream().map(TruthOutcomes::of)

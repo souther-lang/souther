@@ -769,6 +769,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  Proposition.LastToHold _, Proposition.All _, Proposition.Any _,
                  Proposition.Some _, Proposition.OnAnApplication _, Proposition.SomeReachable _ ->
                     BlockReason.WhatItStatesIsNoLine.Why.NO_RELATION_OF_NUMBERS;
+            case Proposition.Carried carried -> throw carried.handedToAReader();
         });
     }
 

@@ -26,7 +26,7 @@ public interface BehaviorAnswers {
         }
 
         @Override
-        public Optional<CalledBody> bodyOf(ValueName.Helper recursion) {
+        public Optional<ARecursion> recursionOf(ValueName.Helper recursion) {
             return Optional.empty();
         }
     };
@@ -34,7 +34,7 @@ public interface BehaviorAnswers {
     /** The body of {@code behavior} as a call of it is read, where it has one. */
     Optional<CalledBody> bodyOf(ValueName.Behavior behavior);
 
-    /** The body of the recursive helper {@code recursion} as a call of it is read, where it has
-     *  one. */
-    Optional<CalledBody> bodyOf(ValueName.Helper recursion);
+    /** The body of the recursive helper {@code recursion} as a call of it is read, with what it
+     *  walks, where it has one. */
+    Optional<ARecursion> recursionOf(ValueName.Helper recursion);
 }

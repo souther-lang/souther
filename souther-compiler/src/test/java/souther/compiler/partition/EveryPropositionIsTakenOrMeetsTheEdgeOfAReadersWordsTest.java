@@ -11,6 +11,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.ACarriedValue;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
@@ -39,6 +40,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -91,8 +93,18 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
     void everyKindOfStatementHasASampleHere() {
         Set<Class<?>> sampled = new LinkedHashSet<>();
         samples().values().forEach(each -> sampled.add(each.getClass()));
-        assertEquals(new LinkedHashSet<>(Arrays.asList(Proposition.class.getPermittedSubclasses())),
-                sampled, "a kind of statement no reader below was handed");
+        Set<Class<?>> kinds =
+                new LinkedHashSet<>(Arrays.asList(Proposition.class.getPermittedSubclasses()));
+        // What a walk carried is supposed wherever a condition is concluded whole, and handed to
+        // a reader of a row it is refused (below).
+        kinds.remove(Proposition.Carried.class);
+        assertEquals(kinds, sampled, "a kind of statement no reader below was handed");
+    }
+
+    @Test
+    void whatAWalkCarriedIsNeverAskedOfARow() {
+        assertThrows(IllegalStateException.class, () -> DemandReading.asked(
+                new Proposition.Carried(ACarriedValue.made(), true), reading()));
     }
 
     @Test

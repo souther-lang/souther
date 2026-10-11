@@ -201,6 +201,7 @@ final class MeaningAssumptions {
                     asked).forEach(this::notTaken);
             case Proposition.Unread unread ->
                     notTaken(new WhyNotTaken.MeaningUnread(unread.why()));
+            case Proposition.Carried carried -> throw carried.handedToAReader();
             case Proposition.Compared(Relation.Ordered _, boolean _, var _) ->
                     outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER);
             case Proposition.Truth(DecisionSubject.AnAnswer answer, boolean holds, var _) -> {

@@ -9,6 +9,7 @@ import souther.compiler.check.StandingSignature;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.ARecursion;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.ElementProvenance;
@@ -2647,18 +2648,19 @@ public final class Bodies {
     }
 
     /**
-     * The body of the recursive helper {@code fn} as a call of it is read ({@link CalledBody}): the
-     * tree the analysis reads, typed with the language's operations standing, the bindings its
-     * parameters arrive on, and what it binds to the elements of what.
+     * The body of the recursive helper {@code fn} as a call of it is read ({@link CalledBody}), with
+     * what it walks ({@link ARecursion}): the tree the analysis reads, typed with the language's
+     * operations standing, the bindings its parameters arrive on, and what it binds to the
+     * elements of what.
      *
-     * <p>Asked of the helper and not of a body that calls it, so it is typed once however many
-     * calls read it. Absent where the expansion or its check is, or where a parameter declares no
-     * type.
+     * <p>Asked of the helper and not of a body that calls it, so it is typed and what it walks is
+     * found once however many calls read it. Absent where the expansion or its check is, or where
+     * a parameter declares no type.
      */
-    public record RecursionAtACall(String module, String fn) implements Key<CalledBody> {
+    public record RecursionAtACall(String module, String fn) implements Key<ARecursion> {
 
         @Override
-        public Answer<CalledBody> compute(Db db) {
+        public Answer<ARecursion> compute(Db db) {
             Answer<Expansion<Hir.FnDef>> lowered = db.ask(new BodyForInvariantDischarge(module, fn));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
             Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(module));
@@ -2698,8 +2700,9 @@ public final class Bodies {
             }
             AnalysisBody analysis = new AnalysisBody(typed.body(), elements,
                     new ValueTemplates(templates));
-            return Answer.of(new CalledBody(typed.body(), typed.parameters(),
-                    ElementBindings.of(analysis, reading.value().newtypes())));
+            return Answer.of(ARecursion.of(new ValueName.Helper(module, fn),
+                    new CalledBody(typed.body(), typed.parameters(),
+                            ElementBindings.of(analysis, reading.value().newtypes()))));
         }
     }
 

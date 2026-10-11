@@ -53,7 +53,7 @@ public sealed interface Proposition {
      */
     default boolean mayTurnOnAnElementOf(DecisionSubject container) {
         return switch (this) {
-            case Always _ -> false;
+            case Always _, Carried _ -> false;
             case Unread unread -> !unread.fixed();
             case Compared compared -> switch (compared.relation()) {
                 case Relation.Affine affine -> affine.form().coefs().keySet().stream()
@@ -384,6 +384,43 @@ public sealed interface Proposition {
     }
 
     /**
+     * What a walk carried into the step being read coming out on the side its end is asked about —
+     * or, where {@code holds} is false, not.
+     *
+     * <p>Made only while a walk's step is concluded with nothing supposing what it carried, which a
+     * reading does to decide how the walk closes: the same for every element the walk is handed,
+     * and either way as far as anything here knows. Every concluding of a whole condition supposes
+     * it ({@link Derivation.Supposing}), so no reader of what a condition states is handed one.
+     *
+     * @param key spelled from the rest when it is made, whatever is handed in
+     */
+    record Carried(ACarriedValue value, boolean holds, String key) implements Proposition {
+
+        public Carried(ACarriedValue value, boolean holds) {
+            this(value, holds, null);
+        }
+
+        public Carried {
+            if (value == null) {
+                throw new IllegalArgumentException("a walk carried something");
+            }
+            key = (holds ? "" : "!") + value;
+        }
+
+        @Override
+        public Proposition denied() {
+            return new Carried(value, !holds);
+        }
+
+        /** What a reader of what a condition states throws, handed one: a walk's step concluded
+         *  outside every supposition of what it carried. */
+        public IllegalStateException handedToAReader() {
+            return new IllegalStateException(value + " is supposed wherever a condition is"
+                    + " concluded whole, and reached a reader of it unsupposed");
+        }
+    }
+
+    /**
      * Some node reachable from the one at {@code at} meeting {@code atANode} — the node itself, or
      * one an element of a container under {@code through} on a node reached — or, where
      * {@code holds} is false, none doing so.
@@ -573,7 +610,7 @@ public sealed interface Proposition {
             case Some some -> stopsIn(some.ofTheElement(), into);
             case SomeReachable reached -> stopsIn(reached.atANode(), into);
             case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
-                 LastToHold _ -> { }
+                 LastToHold _, Carried _ -> { }
         }
     }
 
@@ -590,8 +627,8 @@ public sealed interface Proposition {
                     applications.each().stream().anyMatch(Proposition::saysTheLastToHold);
             case Some some -> saysTheLastToHold(some.ofTheElement());
             case SomeReachable reached -> saysTheLastToHold(reached.atANode());
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, Unread _ ->
-                    false;
+            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, Unread _,
+                 Carried _ -> false;
         };
     }
 
@@ -605,7 +642,7 @@ public sealed interface Proposition {
      */
     static boolean aboutAnAnswer(Proposition stated) {
         return switch (stated) {
-            case Always _, Unread _, LastToHold _ -> false;
+            case Always _, Unread _, LastToHold _, Carried _ -> false;
             case Compared(Relation relation, boolean _, String _) -> switch (relation) {
                 case Relation.Affine affine -> affine.form().coefs().keySet().stream()
                         .anyMatch(Proposition::anAnswerIn);
