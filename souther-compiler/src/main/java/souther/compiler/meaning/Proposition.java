@@ -92,6 +92,8 @@ public sealed interface Proposition {
             case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _ -> true;
             case DecisionAtom.TakenOfAnAnswer(var _, var _, var taken, var _) ->
                     isAnElementOf(taken, container);
+            case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
+                    .anyMatch(each -> mayBeAnElementOf(each, container));
             // A piece of a string is whatever the statement it is read inside says it is, and
             // that statement is about the string and no container's element.
             case Quantity.CodePointsOfAPiece _ -> false;
@@ -668,7 +670,8 @@ public sealed interface Proposition {
         return switch (quantity) {
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _ -> true;
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
-                 Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _ -> false;
+                 Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
+                 Quantity.WhatAnOperationAnswers _ -> false;
             case Quantity.HowManyMeet count -> count.container() instanceof DecisionSubject.AnAnswer
                     || aboutAnAnswer(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream()

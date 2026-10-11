@@ -308,7 +308,8 @@ public final class AnswerAsAnInput {
                         : new Quantity.SumOver(container, each.coefs().keySet().iterator().next());
             }
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
-                 Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _ -> null;
+                 Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
+                 Quantity.WhatAnOperationAnswers _ -> null;
         };
     }
 }

@@ -1048,7 +1048,9 @@ final class DemandReading {
                      Quantity.CodePointsOfAPiece _ -> overElements = true;
                 case Quantity.RemainderOfADividend _ -> remainder = true;
                 case Quantity.OfABinding bound -> bound.madeOf().ifPresent(past::add);
-                case DecisionAtom.OfTheInput _ -> { }
+                // What an operation answers of the input is a value a row comes to, and no
+                // composer writes a row for one.
+                case DecisionAtom.OfTheInput _, Quantity.WhatAnOperationAnswers _ -> { }
             }
         }
         if (overElements) {

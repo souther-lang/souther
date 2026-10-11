@@ -1,0 +1,176 @@
+package souther.compiler.partition;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.ElementBindings;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.core.Core;
+import souther.compiler.diag.SourceRendering;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReads;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
+
+import java.util.List;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A value held against what an operation of the library answers of another value of the input
+ * relates the two positions, as holding the two values against each other does.
+ *
+ * <p>{@code d == String.lowercase(s)} says nothing of which {@code d} or which {@code s} stands
+ * there: whatever one holds, some value of the other meets it and some does not. So it is read to
+ * the end and divides neither, the way {@code d == s} is — however the answer reaches the
+ * comparison, written there, under a name, or handed to a helper.
+ *
+ * <p>What the answer is is the operation and what it was handed, and not where it was made from:
+ * {@code String.lowercase(s)} and {@code String.uppercase(s)} are made of one position and are two
+ * values. A statement holding two values made of one position against each other, or one against
+ * a constant, says which values that position holds, and is not read here.
+ */
+class AValueHeldAgainstWhatAnOperationAnswersRelatesTheTwoTest {
+
+    private static String measured(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    private static List<String> said(String report) {
+        return report.lines().map(String::strip).filter(line -> line.startsWith("· not read")
+                || line.startsWith("· no line")).toList();
+    }
+
+    private static String relates(String at, String position) {
+        return "· no line: comparison@" + at + " — it relates the value here to another value rather"
+                + " than dividing the values here, about `" + position + "`";
+    }
+
+    private static String madeFrom(String at, String position) {
+        return "· not read: comparison@" + at + " — it is about a value made from this one, and"
+                + " what it says about the values here is not worked out, about `" + position + "`";
+    }
+
+    @Test
+    void aDomainHeldAgainstALowercasedAddressHandedToAHelperRelatesTheTwo() {
+        String report = measured("""
+                module w1
+                data Account = { id: Int, domain: String? }
+                let hasDomain (d: String, a: Account): Bool =
+                    match a.domain with
+                        | Some own -> own == d
+                        | None     -> false
+                behavior m : (s: String, a: Account) -> Bool
+                let m (s, a) = hasDomain(String.lowercase(s), a)
+                """);
+        assertEquals(List.of(relates("5:27", "a.domain@Some"), relates("5:27", "s")),
+                said(report), report);
+        assertTrue(report.contains("measurement: complete"), report);
+    }
+
+    @Test
+    void theAnswerWrittenThereOrUnderANameRelatesTheSameTwo() {
+        assertEquals(List.of(relates("3:18", "d"), relates("3:18", "s")), said(measured("""
+                module w1
+                behavior m : (s: String, d: String) -> Bool
+                let m (s, d) = d == String.lowercase(s)
+                """)));
+        assertEquals(List.of(relates("4:4", "d"), relates("4:4", "s")), said(measured("""
+                module w1
+                behavior m : (s: String, d: String) -> Bool
+                let m (s, d) = { let l = String.lowercase(s)
+                 d == l }
+                """)));
+        assertEquals(List.of(relates("3:18", "d"), relates("3:18", "s")), said(measured("""
+                module w1
+                behavior m : (s: String, d: String) -> Bool
+                let m (s, d) = d < String.trim(String.lowercase(s))
+                """)));
+    }
+
+    @Test
+    void twoAnswersOfPositionsApartRelateThePositions() {
+        assertEquals(List.of(relates("3:36", "s"), relates("3:36", "t")), said(measured("""
+                module w1
+                behavior m : (s: String, t: String) -> Bool
+                let m (s, t) = String.lowercase(t) == String.uppercase(s)
+                """)));
+    }
+
+    @Test
+    void twoAnswersOfOnePositionOrOneAgainstAConstantAreNotARelation() {
+        assertEquals(List.of(madeFrom("3:33", "s")), said(measured("""
+                module w1
+                behavior m : (s: String) -> Bool
+                let m (s) = String.lowercase(s) == String.uppercase(s)
+                """)));
+        assertEquals(List.of(madeFrom("3:33", "s")), said(measured("""
+                module w1
+                behavior m : (s: String) -> Bool
+                let m (s) = String.lowercase(s) == "abc"
+                """)));
+        String againstItself = measured("""
+                module w1
+                data P = { s: String, n: Int }
+                behavior m : (p: P) -> Bool
+                let m (p) = p.s == String.lowercase(p.s)
+                """);
+        assertTrue(said(againstItself).stream().allMatch(line -> line.contains("not read")),
+                againstItself);
+    }
+
+    @Test
+    void oneAnswerOnBothSidesCutsNothing() {
+        assertEquals(List.of("· no line: comparison@3:33 — it was read to the end and cuts nothing"
+                + " this position appears in, about `s`"), said(measured("""
+                module w1
+                behavior m : (s: String) -> Bool
+                let m (s) = String.lowercase(s) == String.lowercase(s)
+                """)));
+    }
+
+    @Test
+    void theAnswerIsTheOperationAndWhatItWasHanded() {
+        Proposition lower = stated("b.t == String.lowercase(b.s)");
+        assertInstanceOf(Proposition.Compared.class, lower);
+        assertEquals(lower, stated("{ let l = String.lowercase(b.s)\n l == b.t }"));
+        assertNotEquals(lower, stated("b.t == String.uppercase(b.s)"));
+        assertNotEquals(lower, stated("b.t == b.s"));
+        assertNotEquals(lower, stated("b.t == String.lowercase(b.u)"));
+    }
+
+    private static Proposition stated(String condition) {
+        String model = """
+                module demo
+                data Box = { s: String, t: String, u: String }
+                behavior f : (b: Box) -> Int
+                let f (b) = if %s then 1 else 0
+                """.formatted(condition);
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + condition);
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
+        AnalysisBody analysis = checked.analysisBodies().get("f");
+        RuleReadingSource rules = RuleReadings.of(compilation, "demo");
+        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("f");
+        InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
+                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
+                inputs.dependencies());
+        Core.If fork = assertInstanceOf(Core.If.class, Core.withoutStanding(analysis.core()),
+                "the body is the fork");
+        return Pullback.ofATruth(fork.cond(), reads, inputs.reading(rules), Optional.empty())
+                .proposition();
+    }
+}

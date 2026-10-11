@@ -3360,17 +3360,54 @@ final class Pullback {
         return out;
     }
 
+    /**
+     * {@code left states right} over the quantities a condition is read over, where a side the
+     * reading stopped in may be what an operation answers of the input
+     * ({@link Quantity.WhatAnOperationAnswers}) — read as that only where the two sides come to one
+     * value against another made of positions apart ({@link #relatesPositionsApart}), or to the same
+     * value on both. Anywhere else the side is read as it was: a constant or a sum beside such an
+     * answer is a line on it, which nothing here draws.
+     *
+     * <p>A side stopped in is one no form was read of, or a name for a value whose making the
+     * reading stopped at, which is the same value under a name.
+     */
     private Derivation overQuantitiesCounting(Denotation left, Denotation right, Rel states) {
         List<LinearForm<Quantity>> sides = new ArrayList<>();
+        List<LinearForm<Quantity>> answering = new ArrayList<>();
+        Derivation unread = null;
+        boolean answered = false;
         for (Denotation side : List.of(left, right)) {
             switch (AffineForms.outcome(side.value(), side.at(), quantities())) {
-                case AffineForms.Outcome.Composed<Quantity, InputReads>(var form) -> sides.add(form);
+                case AffineForms.Outcome.Composed<Quantity, InputReads>(var form) -> {
+                    sides.add(form);
+                    Quantity.WhatAnOperationAnswers answers = madeOfWhereItStopped(form)
+                            ? whatAnOperationAnswers(side.value(), side.at()) : null;
+                    answering.add(answers != null ? LinearForm.atom(answers) : form);
+                    answered |= answers != null;
+                }
                 case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
                     // A comparison of two elements of one container is read of neither: they
                     // stand at one position, and a form would hold them as one number.
-                    return new Derivation.Stopped(elementsMet.crowded()
+                    Derivation stop = new Derivation.Stopped(elementsMet.crowded()
                             ? new WhyUnread.TwoElementsOfOneContainer() : noFormOf(stopped), false);
+                    Quantity.WhatAnOperationAnswers answers = elementsMet.crowded() ? null
+                            : whatAnOperationAnswers(side.value(), side.at());
+                    if (answers == null) {
+                        return unread != null ? unread : stop;
+                    }
+                    unread = unread != null ? unread : stop;
+                    answering.add(LinearForm.atom(answers));
+                    answered = true;
                 }
+            }
+        }
+        if (answered) {
+            LinearForm<Quantity> relating = answering.get(0).minus(answering.get(1)).orNull();
+            if (relating != null
+                    && (relating.coefs().isEmpty() || relatesPositionsApart(relating))) {
+                sides = answering;
+            } else if (unread != null) {
+                return unread;
             }
         }
         LinearForm<Quantity> form;
@@ -3385,6 +3422,109 @@ final class Pullback {
                     ofTheInputIn(sides));
         }
         return aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, form, states, counting);
+    }
+
+    /** Whether {@code form} is a name for a value whose making the reading stopped at, and
+     *  nothing besides. */
+    private static boolean madeOfWhereItStopped(LinearForm<Quantity> form) {
+        return form.constant().signum() == 0 && form.coefs().size() == 1
+                && ExactRatio.ONE.equals(form.coefs().values().iterator().next())
+                && form.coefs().keySet().iterator().next() instanceof Quantity.OfABinding bound
+                && bound.madeOf().isPresent();
+    }
+
+    /**
+     * What an operation of the library answers of values of the input, where {@code node} stands
+     * for an application of one that says nothing of its answer as a number of them — or null where
+     * it is no such application.
+     *
+     * <p>An operation that takes a number of its argument, or is defined by cases, is read as that
+     * number or on each case, and is none of these; nor is one answering a value that counts to a
+     * number, which the arithmetic reads or says it could not. Every argument has to be one value of
+     * the input, or another such answer: an argument that comes to anything else — a constant, a
+     * sum, what a dependency answered — leaves the call unread.
+     */
+    private Quantity.WhatAnOperationAnswers whatAnOperationAnswers(Core node, InputReads at) {
+        Denotation stands = at.standing(node, read.rules().symbols(), read.rules().newtypes());
+        if (!(AnOperationApplied.of(Core.withoutStanding(stands.value()))
+                instanceof AnOperationApplied applied)
+                || !(applied.operation() instanceof ValueName.Stdlib operation)
+                || applied.args().isEmpty()) {
+            return null;
+        }
+        // A value that counts to a number is the arithmetic's: what it could not read of one is
+        // said where it stopped.
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        Carrier carrier = Carrier.ofValue(stands.value().type(), read.rules().declarations());
+        if (facts.takenAs(operation) != null || !facts.isDefinedByCases(operation).isEmpty()
+                || carrier != null && carrier.counts()) {
+            return null;
+        }
+        List<Quantity> of = new ArrayList<>();
+        for (Core argument : applied.args()) {
+            Quantity one = AffineForms.outcome(argument, stands.at(), quantities())
+                    instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                            LinearForm<Quantity> form)
+                    && form.constant().signum() == 0 && form.coefs().size() == 1
+                    && ExactRatio.ONE.equals(form.coefs().values().iterator().next())
+                    && form.coefs().keySet().iterator().next() instanceof DecisionAtom.OfTheInput
+                            input
+                    ? input : whatAnOperationAnswers(argument, stands.at());
+            if (one == null) {
+                return null;
+            }
+            of.add(one);
+        }
+        return new Quantity.WhatAnOperationAnswers(operation, of);
+    }
+
+    /**
+     * Whether {@code form} weighs one value against another and nothing else, each a number of the
+     * input or what an operation answers of the input, the two made of positions apart.
+     *
+     * <p>{@code d == String.lowercase(s)} relates {@code d} to {@code s} as {@code d == s} does:
+     * whatever {@code s} holds, some {@code d} meets it and some does not. Under {@code
+     * String.lowercase(s) == String.uppercase(s)} both values are made of {@code s}, and what holds
+     * there is which values {@code s} holds — a division of {@code s} this does not read. A position
+     * under the other is the same position for this: a field of {@code s} is a part of what
+     * {@code s} holds.
+     */
+    private static boolean relatesPositionsApart(LinearForm<Quantity> form) {
+        if (form.constant().signum() != 0 || form.coefs().size() != 2) {
+            return false;
+        }
+        List<List<NumericTerm>> sides = new ArrayList<>();
+        ExactRatio weighed = null;
+        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+            switch (each.getKey()) {
+                case DecisionAtom.OfTheInput(NumericTerm term) -> sides.add(List.of(term));
+                case Quantity.WhatAnOperationAnswers answers ->
+                        sides.add(answers.positionsItIsMadeOf());
+                default -> {
+                    return false;
+                }
+            }
+            if (weighed == null) {
+                weighed = each.getValue();
+                continue;
+            }
+            ExactRatio cancelled = weighed.plus(each.getValue()).orNull();
+            if (cancelled == null || cancelled.signum() != 0) {
+                return false;
+            }
+        }
+        for (NumericTerm one : sides.get(0)) {
+            for (NumericTerm other : sides.get(1)) {
+                for (TermPath p : one.placesReadOff()) {
+                    for (TermPath q : other.placesReadOff()) {
+                        if (p.isAtOrUnder(q) || q.isAtOrUnder(p)) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        return true;
     }
 
     /** {@code form states 0}, read by {@code by}, written the one way every writing of a relation

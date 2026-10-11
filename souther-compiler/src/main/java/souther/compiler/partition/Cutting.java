@@ -596,6 +596,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                Supplier<AffineReading.OfAComparison> arithmetic,
                                InputReading read, InputReads reads, Arrivals answering) {
         List<FilingCoordinate> against = heldAgainstAnotherValue(stated);
+        if (against == null) {
+            against = heldAgainstWhatAnOperationAnswers(stated);
+        }
         if (against != null) {
             return new Read.AgainstAnotherValue(against);
         }
@@ -676,6 +679,36 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
         }
         return input.isEmpty() || !another ? null : AffineReading.filedAt(input);
+    }
+
+    /**
+     * Where {@code stated} holds a value against what an operation answers of the input, the
+     * coordinates of the positions the two are made of — or null where it is no such relation.
+     *
+     * <p>Such an answer is read only as one side of a relation between values made of positions
+     * apart ({@code Pullback}), so a statement over one relates those positions as {@code d == s}
+     * does and divides none of them.
+     */
+    private static List<FilingCoordinate> heldAgainstWhatAnOperationAnswers(Proposition stated) {
+        if (!(stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, String _))
+                || !Proposition.stopsIn(stated).isEmpty()) {
+            return null;
+        }
+        List<NumericTerm> related = new ArrayList<>();
+        boolean answered = false;
+        for (Quantity each : affine.form().coefs().keySet()) {
+            switch (each) {
+                case DecisionAtom.OfTheInput(NumericTerm term) -> related.add(term);
+                case Quantity.WhatAnOperationAnswers answers -> {
+                    related.addAll(answers.positionsItIsMadeOf());
+                    answered = true;
+                }
+                default -> {
+                    return null;
+                }
+            }
+        }
+        return answered ? AffineReading.filedAt(related) : null;
     }
 
     /**

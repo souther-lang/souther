@@ -8,8 +8,10 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +30,75 @@ import java.util.function.Predicate;
  */
 public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent, Quantity.SumOver,
-        Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend {
+        Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend,
+        Quantity.WhatAnOperationAnswers {
+
+    /**
+     * What an operation the library declares answers of values of the input, where nothing here
+     * says what that answer is in terms of them: {@code String.lowercase(s)}, {@code
+     * String.trim(String.lowercase(s))}.
+     *
+     * <p>One value, told apart by the operation and what it was handed, and by nothing else. Two of
+     * them of one position are one value only where they are one operation of the same arguments:
+     * {@code String.lowercase(s)} and {@code String.uppercase(s)} are both made of {@code s} and
+     * are different values, so where they are made from is no part of which value this is. The
+     * positions are asked for apart ({@link #positionsItIsMadeOf}), by a reader filing a relation
+     * at them.
+     *
+     * <p>Every argument is a number of the input or another of these, so the value is one the input
+     * settles: an operation of the library answers the same of the same arguments on every run.
+     * Something past the input — what a dependency answered, a value the body bound — is no
+     * argument of one, and a call handed it is not read as one.
+     *
+     * @param operation the operation applied
+     * @param of        what it was handed, in the order it was handed them
+     */
+    record WhatAnOperationAnswers(ValueName.Stdlib operation, List<Quantity> of)
+            implements Quantity {
+
+        public WhatAnOperationAnswers {
+            if (operation == null || of == null || of.isEmpty()) {
+                throw new IllegalArgumentException("an answer is some operation's, of something");
+            }
+            of = List.copyOf(of);
+            for (Quantity each : of) {
+                if (!(each instanceof DecisionAtom.OfTheInput)
+                        && !(each instanceof WhatAnOperationAnswers)) {
+                    throw new IllegalArgumentException("an operation's answer read here is of"
+                            + " values of the input: " + each);
+                }
+            }
+        }
+
+        /** The numbers of the input this answer is made of, each once, in the order they are
+         *  handed in. */
+        public List<NumericTerm> positionsItIsMadeOf() {
+            List<NumericTerm> out = new ArrayList<>();
+            for (Quantity each : of) {
+                List<NumericTerm> these = switch (each) {
+                    case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                    case WhatAnOperationAnswers inner -> inner.positionsItIsMadeOf();
+                    default -> throw new IllegalStateException("held out by the constructor");
+                };
+                these.stream().filter(term -> !out.contains(term)).forEach(out::add);
+            }
+            return List.copyOf(out);
+        }
+
+        @Override
+        public String spelled() {
+            StringBuilder out = new StringBuilder(operation.qualified()).append('(');
+            for (int i = 0; i < of.size(); i++) {
+                out.append(i == 0 ? "" : ", ").append(of.get(i).spelled());
+            }
+            return out.append(')').toString();
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
 
     /**
      * What a division by a written number leaves of a form of the input's numbers: the remainder of
