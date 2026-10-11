@@ -13,6 +13,7 @@ import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -241,17 +242,7 @@ public sealed interface ElementValue {
         /** What an atom of an element is called: the way to it from the element, and what a name on
          *  the way holds. */
         private AffineForms.Reading<ElementProjection, Map<BindingId, Core>> atoms() {
-            return new AffineForms.Reading<>() {
-
-                @Override
-                public Symbols symbols() {
-                    return source.symbols();
-                }
-
-                @Override
-                public DeclarationAccess declarations() {
-                    return source.declarations();
-                }
+            return new Names<>() {
 
                 @Override
                 public LinearForm<ElementProjection> leafOf(Core e, Map<BindingId, Core> at) {
@@ -259,30 +250,110 @@ public sealed interface ElementValue {
                             ElementProjection.read(e, element, at, source.newtypes());
                     return place == null ? null : LinearForm.atom(place);
                 }
-
-                @Override
-                public Map<BindingId, Core> inside(Core.LetIn li, Map<BindingId, Core> at) {
-                    return at;
-                }
-
-                @Override
-                public AffineForms.ReadThrough<Map<BindingId, Core>> readThrough(
-                        Core.Read read, Map<BindingId, Core> at) {
-                    Core value = element.equals(read.binding()) ? null : at.get(read.binding());
-                    return value == null ? null : new AffineForms.ReadThrough<>(value, at);
-                }
-
-                @Override
-                public List<AffineForms.ReadThrough<Map<BindingId, Core>>> alternativesOf(
-                        Core.Read read, Map<BindingId, Core> at) {
-                    return null;
-                }
-
-                @Override
-                public boolean readsThrough(Core.FieldAccess fa, Map<BindingId, Core> at) {
-                    return false;
-                }
             };
         }
+
+        /**
+         * What a closure answers of one element and of the answer so far, as a form of both, and
+         * what it adds to the answer so far where it is that answer and something of the element
+         * alone.
+         *
+         * <p>The answer so far is an atom of the form like any field of the element, and the step
+         * is that form only where the arithmetic composes it. So the step is shown to be
+         * {@code 1·answer + w(element)} for every answer there is, where a step read at two answers
+         * and found to agree there would be shown it for those two: {@code answer * answer + x} is
+         * {@code x} at nought and {@code 1 + x} at one, and is no addition at two.
+         *
+         * <p>Null where the form has the answer so far at any weight but exactly one — which is
+         * where it is multiplied, ignored or chosen between — and where nothing of the element is
+         * in what is added, which is a count and no total.
+         */
+        private Affine addedTo(Core answer, BindingId accumulator) {
+            LinearForm<TheStep> form = AffineForms.of(answer, held, new Names<TheStep>() {
+
+                @Override
+                public LinearForm<TheStep> leafOf(Core e, Map<BindingId, Core> at) {
+                    if (Core.withoutStanding(e) instanceof Core.Read read
+                            && read.binding().equals(accumulator)) {
+                        return LinearForm.atom(new TheStep.TheAnswerSoFar());
+                    }
+                    ElementProjection place =
+                            ElementProjection.read(e, element, at, source.newtypes());
+                    return place == null ? null : LinearForm.atom(new TheStep.OfTheElement(place));
+                }
+            });
+            if (form == null
+                    || !ExactRatio.ONE.equals(form.coefs().get(new TheStep.TheAnswerSoFar()))) {
+                return null;
+            }
+            Map<ElementProjection, ExactRatio> added = new LinkedHashMap<>();
+            form.coefs().forEach((atom, weight) -> {
+                if (atom instanceof TheStep.OfTheElement(ElementProjection place)) {
+                    added.put(place, weight);
+                }
+            });
+            return added.isEmpty() ? null : new Affine(new LinearForm<>(form.constant(), added));
+        }
+
+        /** What an atom of a step is: the answer so far, or a place of the element. */
+        private sealed interface TheStep {
+
+            record TheAnswerSoFar() implements TheStep {}
+
+            record OfTheElement(ElementProjection place) implements TheStep {}
+        }
+
+        /**
+         * How a closure's body is read through the names it holds, whatever its atoms are: a name
+         * is what the body bound it to, and the element is no name that holds anything.
+         *
+         * @param <A> what an atom is called
+         */
+        private abstract class Names<A> implements AffineForms.Reading<A, Map<BindingId, Core>> {
+
+            @Override
+            public Symbols symbols() {
+                return source.symbols();
+            }
+
+            @Override
+            public DeclarationAccess declarations() {
+                return source.declarations();
+            }
+
+            @Override
+            public Map<BindingId, Core> inside(Core.LetIn li, Map<BindingId, Core> at) {
+                return at;
+            }
+
+            @Override
+            public AffineForms.ReadThrough<Map<BindingId, Core>> readThrough(
+                    Core.Read read, Map<BindingId, Core> at) {
+                Core value = element.equals(read.binding()) ? null : at.get(read.binding());
+                return value == null ? null : new AffineForms.ReadThrough<>(value, at);
+            }
+
+            @Override
+            public List<AffineForms.ReadThrough<Map<BindingId, Core>>> alternativesOf(
+                    Core.Read read, Map<BindingId, Core> at) {
+                return null;
+            }
+
+            @Override
+            public boolean readsThrough(Core.FieldAccess fa, Map<BindingId, Core> at) {
+                return false;
+            }
+        }
+    }
+
+    /**
+     * What a step answering the answer so far and something of the element adds to it, or null
+     * where it adds anything but that ({@link Reader#addedTo}).
+     *
+     * @param accumulator the parameter the answer so far arrives on
+     */
+    static Affine addedTo(ElementAnswer step, BindingId accumulator, Map<BindingId, Core> held,
+                          RuleReadingSource source) {
+        return new Reader(step.parameter(), held, source).addedTo(step.body(), accumulator);
     }
 }

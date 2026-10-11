@@ -38,9 +38,32 @@ public sealed interface RunSource {
         TermPath at = moved.apply(subjectPath());
         return switch (this) {
             case ProjectedOccurrences _ -> overTheOccurrencesAt(at);
+            // Moved inside another container the run would be over some of the occurrences of the
+            // path it was over every one of, so it keeps the containers it was in.
+            case FlattenedOccurrences flat -> at != null
+                    && at.containersHoldingIt().size() == flat.subjectPath().containersHoldingIt().size()
+                    ? new FlattenedOccurrences(at) : null;
             case ComputedOccurrences computed ->
                     computedOverTheElementsAt(at, computed.computation(), computed.each());
         };
+    }
+
+    /**
+     * Every value standing at {@code where}, where the walk was shown to be over every occurrence
+     * of it — or null where {@code where} is no position inside a container.
+     *
+     * <p>Asked of a position some reader certified, and not of any position ({@link
+     * InputReads#everyElementOf}): a path inside more than one container is the path of every
+     * list's elements in every element of the outer one, and a walk over one of those lists is over
+     * some of them. {@link #overTheOccurrencesAt} stays the question about a position that is not
+     * certified, and refuses what this accepts.
+     */
+    static RunSource overEveryOccurrenceAt(TermPath where) {
+        if (where == null || !where.insideAContainer()) {
+            return null;
+        }
+        return where.containersHoldingIt().size() == 1 ? new ProjectedOccurrences(where)
+                : new FlattenedOccurrences(where);
     }
 
     /**
@@ -91,6 +114,34 @@ public sealed interface RunSource {
 
         public ProjectedOccurrences {
             requireOneRun(subjectPath);
+        }
+
+        @Override
+        public String toString() {
+            return subjectPath.toString();
+        }
+    }
+
+    /**
+     * The values standing at one position inside more than one container, every occurrence of it:
+     * what each of the lists of an outer list holds, put end to end.
+     *
+     * <p>As many values as the position has in all, each of the walk's elements one of them. That
+     * is the whole of what is claimed, and it is made only where the walk was shown to be over every
+     * occurrence ({@link #overEveryOccurrenceAt}). The path alone says no such thing — a walk over
+     * one element's list stands at the same path — so what makes this a run is where it was
+     * made and not the path it holds, and a run made anywhere else would total some of the values
+     * a rule is about the whole of.
+     */
+    record FlattenedOccurrences(TermPath subjectPath) implements RunSource {
+
+        public FlattenedOccurrences {
+            Objects.requireNonNull(subjectPath, "a run is read from somewhere");
+            if (subjectPath.containersHoldingIt().size() < 2) {
+                throw new IllegalArgumentException("`" + subjectPath + "` stands inside "
+                        + subjectPath.containersHoldingIt().size()
+                        + " containers, and a run over one is a ProjectedOccurrences");
+            }
         }
 
         @Override

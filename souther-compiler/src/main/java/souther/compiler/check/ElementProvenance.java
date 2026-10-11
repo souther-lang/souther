@@ -189,13 +189,18 @@ public final class ElementProvenance {
     private ElementStep elementStepFrom(BindingId binding, ElementQuestion question) {
         return switch (binding == null ? null : edges.get(binding)) {
             case null -> new ElementStep.NoEdge();
-            // The two bindings hold the same values, so either question goes on through.
-            case ElementEdge.TheSameAs(var container) -> new ElementStep.Through(container);
+            // The two bindings hold the same values, so a walk after the position or the origin goes
+            // on through. They need not hold them as often — an operation that keeps some of what it
+            // was given has this edge — so a walk after every occurrence stops.
+            case ElementEdge.TheSameAs(var container) -> switch (question) {
+                case NAMED_POSITION, VALUE_ORIGIN -> new ElementStep.Through(container);
+                case EVERY_OCCURRENCE -> new ElementStep.Refused();
+            };
             // What is made from a position came from it and is not it, so the walk after which
             // position an expression names stops where the elements stop being the same ones —
             // stops, rather than arrives at a binding it does not have.
             case ElementEdge.MadeFrom(var container) -> switch (question) {
-                case NAMED_POSITION -> new ElementStep.Refused();
+                case NAMED_POSITION, EVERY_OCCURRENCE -> new ElementStep.Refused();
                 case VALUE_ORIGIN -> new ElementStep.Through(container);
             };
         };
