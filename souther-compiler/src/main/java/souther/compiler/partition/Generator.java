@@ -4362,7 +4362,7 @@ public final class Generator {
          */
         default BoundaryAttempt withAccount(CompositionAccount account) {
             return switch (this) {
-                case Built built -> new Built(built.row(), account);
+                case BoundaryAttempt.Built built -> new BoundaryAttempt.Built(built.row(), account);
                 case Unresolved none -> new Unresolved(none.why(), account);
                 case Stopped stopped -> new Stopped(stopped.why(), stopped.met(), account);
                 case Unexhausted unexhausted ->
