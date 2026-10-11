@@ -1805,10 +1805,7 @@ final class Pullback {
                 return somePiece(located.pieces(), answered, element, over, in);
             }
             Optional<Derivation> holdsSomething = Optional.empty();
-            // A part not read here may be what a walk carried, which the walk's step is concluded
-            // with supposed either way: the same for every element there, and then asking it.
-            if (Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(heldAt, element)
-                    || Proposition.leavesSomethingUnread(element)) {
+            if (Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(heldAt, element)) {
                 DecisionAtom size = sizeOfSubject(heldAt, located.heldType());
                 holdsSomething = Optional.of(size != null
                         ? leaf(new Derivation.SizeAboveNought(size),

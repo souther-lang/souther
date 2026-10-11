@@ -86,12 +86,7 @@ public final class WrittenOfANode {
 
     /** Whether every place {@code term} is read off is the node's or stays put. */
     private boolean reads(NumericTerm term) {
-        boolean[] placed = {true};
-        term.movedTo(at -> {
-            placed[0] &= reads(at);
-            return at;
-        });
-        return placed[0];
+        return term.placesReadOff().stream().allMatch(this::reads);
     }
 
     private boolean reads(DecisionSubject subject) {

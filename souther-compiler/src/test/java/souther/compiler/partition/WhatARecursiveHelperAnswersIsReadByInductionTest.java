@@ -39,7 +39,7 @@ class WhatARecursiveHelperAnswersIsReadByInductionTest {
             module demo
 
             data Node = { v: Int, below: List<Node> }
-            data In = { xs: List<Int>, t: Node, w: Int }
+            data In = { xs: List<Int>, ys: List<Int>, t: Node, w: Int }
             """;
 
     private static final TermPath T = TermPath.of("i").then("t");
@@ -67,6 +67,22 @@ class WhatARecursiveHelperAnswersIsReadByInductionTest {
                                     else go(List.drop(1, xs))
                 """, "Bool.not(List.isEmpty(go(i.xs)))");
         assertTrue(Proposition.leavesSomethingUnread(stated), () -> "read as " + stated);
+    }
+
+    @Test
+    void whatAWalkCarriedAskedInsideAClosureOfItsStepIsTheSameForEveryElementThere() {
+        // The step reads what it carried inside a closure over another list: read once with that
+        // standing as itself, it is no part of any one element there, and concluded either way
+        // the closure's container holding anything is what is left of it.
+        Proposition stated = stated("", """
+                Bool.not(List.isEmpty(List.fold((found, x) ->
+                    if List.isEmpty(found)
+                        then (if List.any(y -> y > x || Bool.not(List.isEmpty(found)), i.ys)
+                              then [ x ] else [])
+                        else found,
+                    [], i.xs)))""");
+        assertFalse(Proposition.leavesSomethingUnread(stated), () -> "read as " + stated);
+        assertInstanceOf(Proposition.Some.class, stated);
     }
 
     @Test
