@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.AnswerAsAnInput;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.InjectedAnswer;
@@ -213,11 +214,19 @@ final class DecisionPath {
             };
             // A statement of several parts: the input's where it is about nothing a dependency
             // answered, and otherwise one this side composes no value to whole.
-            case DecidedCondition.Held(var condition, var _) ->
-                    Proposition.aboutAnAnswer(condition.statement())
-                            ? new Asked.NotStated(
-                                    new DemandGap.WhyNotStated.AStatementOfSeveralParts())
-                            : OF_THE_INPUT;
+            case DecidedCondition.Held(var condition, var held) -> {
+                if (!Proposition.aboutAnAnswer(condition.statement())) {
+                    yield OF_THE_INPUT;
+                }
+                // The side the path took, as a comparison's is: what a row has to satisfy is that,
+                // and not the column's own reading.
+                Proposition taken = held ? condition.statement() : condition.statement().denied();
+                InjectedAnswer only = AnswerAsAnInput.onlyAnswerIn(taken);
+                yield only == null
+                        ? new Asked.NotStated(
+                                new DemandGap.WhyNotStated.AStatementOfSeveralParts())
+                        : new Asked.Stated(new AnswerDemand.AStatement(only, anchor, taken));
+            }
             case DecidedCondition.Unread _ -> OF_THE_INPUT;
         };
     }
@@ -243,17 +252,18 @@ final class DecisionPath {
     private static Asked compared(DecisionCondition.AComparison condition, boolean held,
                                   ConditionReportAnchor anchor) {
         InjectedAnswer only = null;
-        Set<List<TermPath.Step>> places = new HashSet<>();
+        Set<Place> places = new HashSet<>();
         boolean anyOfAnAnswer = false;
         boolean everyAtomIsOfIt = true;
         for (DecisionAtom atom : condition.form().coefs().keySet()) {
-            if (!(atom instanceof DecisionAtom.OfAnAnswer(var at))) {
+            DecisionSubject.AnAnswer at = atom.ofTheAnswer();
+            if (at == null) {
                 everyAtomIsOfIt = false;
                 continue;
             }
             anyOfAnAnswer = true;
             if ((only != null && !only.dependency().equals(at.answered().dependency()))
-                    || !places.add(at.steps())) {
+                    || !places.add(placeOf(atom, at))) {
                 everyAtomIsOfIt = false;
                 break;
             }
@@ -271,6 +281,20 @@ final class DecisionPath {
         // for a composer to work out from a flag travelling beside the form.
         return new Asked.Stated(new AnswerDemand.AComparison(only, anchor, condition.form(),
                 held ? condition.proposition() : condition.proposition().denied()));
+    }
+
+    /**
+     * A place inside an answer, and how a number is taken of it where one is taken: the place read
+     * as itself and the same place counted are two numbers.
+     *
+     * <p>Not which evaluation of the dependency it is. A row writes one value for a dependency,
+     * so two calls reading one place read the value held against itself.
+     */
+    private record Place(Object taken, List<TermPath.Step> steps) {}
+
+    private static Place placeOf(DecisionAtom atom, DecisionSubject.AnAnswer at) {
+        return new Place(atom instanceof DecisionAtom.TakenOfAnAnswer taken
+                ? List.of(taken.operation(), taken.arguments()) : List.of(), at.steps());
     }
 
     /** Both paths' conditions, or null where between them they answer one column two ways. */

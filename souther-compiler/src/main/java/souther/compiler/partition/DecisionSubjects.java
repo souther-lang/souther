@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -15,6 +16,7 @@ import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionArgument;
+import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.InjectedAnswer;
 import souther.compiler.types.BindingId;
@@ -95,6 +97,24 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
         }
         return new DecisionSubject.AnAnswer(new InjectedAnswer(found.evaluation(), arguments),
                 found.steps());
+    }
+
+    /**
+     * The number an operation takes of what a dependency answered that {@code e} is, or null where
+     * it is no such number.
+     *
+     * <p>Which calls take a number of a value is {@link NumericMeasures#takenIn}'s answer, the one
+     * the input's numbers are read by, so a count of a list is one wherever the list stands. What
+     * this adds is only whose value it is taken of.
+     */
+    DecisionAtom.TakenOfAnAnswer takenOfAnAnswer(Core e, InputReads at) {
+        NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols);
+        if (measured == null || !(anAnswer(measured.of(), at) instanceof DecisionSubject.AnAnswer
+                answer)) {
+            return null;
+        }
+        return new DecisionAtom.TakenOfAnAnswer(measured.operation(), measured.arguments(),
+                answer, Core.withoutStanding(measured.of()).type());
     }
 
     /**

@@ -82,6 +82,8 @@ public sealed interface Proposition {
             case DecisionAtom.OfTheInput(var term) ->
                     isAnElementOf(new DecisionSubject.AnInput(term.subjectPath()), container);
             case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _ -> true;
+            case DecisionAtom.TakenOfAnAnswer(var _, var _, var taken, var _) ->
+                    isAnElementOf(taken, container);
             // A piece of a string is whatever the statement it is read inside says it is, and
             // that statement is about the string and no container's element.
             case Quantity.CodePointsOfAPiece _ -> false;
@@ -491,7 +493,7 @@ public sealed interface Proposition {
 
     private static boolean anAnswerIn(Quantity quantity) {
         return switch (quantity) {
-            case DecisionAtom.OfAnAnswer _ -> true;
+            case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _ -> true;
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _ -> false;
             case Quantity.HowManyMeet count -> aboutAnAnswer(count.ofTheElement());

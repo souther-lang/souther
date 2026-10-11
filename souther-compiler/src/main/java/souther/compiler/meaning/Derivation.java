@@ -1365,17 +1365,27 @@ public sealed interface Derivation {
         }
     }
 
-    /** That a container at a position of the input holds something: its size above nought. */
-    record SizeAboveNought(NumericTerm.TakenOf size) implements Derivation {
+    /**
+     * That a container holds something: its size above nought. The container is one at a position
+     * of the input or one a dependency answered, and the size is the count of either.
+     */
+    record SizeAboveNought(DecisionAtom size) implements Derivation {
 
         public SizeAboveNought {
             Objects.requireNonNull(size, "a size is taken of something");
+            if (size instanceof DecisionAtom.OfTheInput(var term)
+                    && !(term instanceof NumericTerm.TakenOf)) {
+                throw new IllegalArgumentException(size + " is no size of a container");
+            }
+            if (size instanceof DecisionAtom.OfAnAnswer) {
+                throw new IllegalArgumentException(size + " is no size of a container");
+            }
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
             return new Proposition.Compared(new Relation.Affine(
-                    LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(size)), Rel.GT), true);
+                    LinearForm.<Quantity>atom(size), Rel.GT), true);
         }
     }
 

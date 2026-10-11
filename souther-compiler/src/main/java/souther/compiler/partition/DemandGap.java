@@ -92,11 +92,12 @@ public sealed interface DemandGap {
         record APlaceOnTheAnswersOwnOrder() implements WhyNotStated {}
 
         /**
-         * A statement about an answer that is no one comparison, truth or case of it: some element
-         * of what it holds meeting something, several things asked of it at once.
+         * A statement about an answer that is not about that answer alone: it also names a number
+         * of the input, a value the body bound, or a second answer.
          *
-         * <p>What this stage composes an answer against is one column of it at a time, so a
-         * statement made of several has nowhere to go whole.
+         * <p>Which value the answer may take turns on what the other took, for the reason a
+         * comparison over the pair does, and what this stage composes is a value of one answer
+         * from what is asked of it.
          */
         record AStatementOfSeveralParts() implements WhyNotStated {}
     }

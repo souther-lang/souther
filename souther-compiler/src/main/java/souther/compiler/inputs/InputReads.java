@@ -728,6 +728,20 @@ public final class InputReads {
                 reads = through.denotes().at();
                 continue;
             }
+            // What a walk hands each element of an answer is a place inside that answer: the
+            // element, under the places the container is.
+            if (under instanceof Core.Read element && reads.containerOfTheElement(element) != null) {
+                AnAnswerAt container = reads.answerAt(reads.containerOfTheElement(element),
+                        symbols, newtypes);
+                if (container == null) {
+                    return null;
+                }
+                List<TermPath.Step> inside = new ArrayList<>(container.steps());
+                inside.add(new TermPath.Step.Element());
+                inside.addAll(steps);
+                return new AnAnswerAt(container.evaluation(), container.arguments(),
+                        container.at(), inside);
+            }
             break;
         }
         if (!(under instanceof Core.Call call && call.fn() instanceof Core.Reached reached

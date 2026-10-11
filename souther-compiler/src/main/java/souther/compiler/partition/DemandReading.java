@@ -390,6 +390,11 @@ final class DemandReading {
                     default -> List.of(new Read.OneOf(open));
                 };
             }
+            // The elements of a container a dependency answered are what a row stands the
+            // dependency in with and writes no value at, as the answer's own numbers are.
+            case Proposition.Some some
+                    when some.container() instanceof DecisionSubject.AnAnswer ->
+                    List.of(anAnswerARowStandsIn());
             case Proposition.Some some -> ofSomeElement(some, read);
         };
     }
@@ -840,7 +845,7 @@ final class DemandReading {
         List<WhyUnread> past = new ArrayList<>();
         for (Quantity atom : form.coefs().keySet()) {
             switch (atom) {
-                case DecisionAtom.OfAnAnswer _ -> {
+                case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _ -> {
                     return anAnswerARowStandsIn();
                 }
                 case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> counted = true;

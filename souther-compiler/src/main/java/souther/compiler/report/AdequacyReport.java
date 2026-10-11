@@ -3760,8 +3760,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case DemandGap.WhyNotStated.APlaceOnTheAnswersOwnOrder _ ->
                         "a place on the order an answer's own values stand on";
                 case DemandGap.WhyNotStated.AStatementOfSeveralParts _ ->
-                        "a statement about an answer made of several parts, which is composed"
-                                + " one part at a time";
+                        "a statement about an answer that is also about the input or another"
+                                + " answer, which nothing here composes values to together";
             };
             case DemandGap.Uncomposed(var _, var why) -> switch (why) {
                 // The term the region named is not said. What it is spelled in is the subject the

@@ -126,6 +126,10 @@ public final class WhatTheRulesLeave {
             // Whether two values are one is no rule of either position alone, so asked of each
             // on its own, nothing rules it out.
             case Proposition.SameValue _ -> LEFT;
+            // The elements of what a dependency answered are what a row stands it in with, the
+            // same as the answer itself.
+            case Proposition.Some some when some.container() instanceof DecisionSubject.AnAnswer ->
+                    LEFT;
             case Proposition.Some some -> someElement(some, some.holds() == want, read);
         };
     }

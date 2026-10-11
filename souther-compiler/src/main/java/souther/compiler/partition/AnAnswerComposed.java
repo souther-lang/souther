@@ -4,7 +4,9 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.AnswerAsAnInput;
 import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import java.util.ArrayList;
@@ -91,6 +93,17 @@ public final class AnAnswerComposed {
      * @param demands what the way asks of it, every one of them about this answer
      */
     public static Attempt of(MeasuredInput subject, List<AnswerDemand> demands) {
+        return of(subject, AnswerStatements.NONE, demands);
+    }
+
+    /**
+     * The same, where a statement about what the answer holds is asked too.
+     *
+     * @param statements what a statement made over the subject asks of a row, which is the reading
+     *                   of the type the subject stands for
+     */
+    public static Attempt of(MeasuredInput subject, AnswerStatements statements,
+                             List<AnswerDemand> demands) {
         if (subject.parameters().size() != 1) {
             throw new IllegalArgumentException(
                     "an answer is one value, and this stands for " + subject.parameters().size());
@@ -133,6 +146,42 @@ public final class AnAnswerComposed {
                 asked.add(new RowDemand.ATruth(path(at, steps), held));
             }
         }
+        // What a statement asks, said of the input that stands for the answer and asked of a row
+        // as any statement about an input is.
+        List<DemandGap> unaccounted = new ArrayList<>();
+        List<Taken> ofStatements = new ArrayList<>();
+        for (AnswerDemand each : demands) {
+            if (!(each instanceof AnswerDemand.AStatement statement)) {
+                continue;
+            }
+            Proposition over = AnswerAsAnInput.of(statement.statement(), at,
+                    subject.rules().inners(), subject.symbols());
+            List<DemandReading.Read> reads = over == null ? null : statements.asked(over);
+            if (reads == null || !reads.stream().allMatch(AnAnswerComposed::composedAgainst)) {
+                unaccounted.add(new DemandGap.Uncomposed(each,
+                        new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions()));
+                continue;
+            }
+            for (DemandReading.Read read : reads) {
+                switch (read) {
+                    case DemandReading.Read.Demands(RowDemand.OfACondition demand) -> {
+                        if (demand instanceof RowDemand.ATruth written) {
+                            asked.add(written);
+                        }
+                        ofStatements.add(new Taken(
+                                new OnTheWay.TakenIn(statement.anchor(), demand), each));
+                    }
+                    case DemandReading.Read.Settled(boolean thisWay) -> {
+                        if (!thisWay) {
+                            return Attempt.nothing(
+                                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                                    List.of());
+                        }
+                    }
+                    default -> { }
+                }
+            }
+        }
         TruthsAsked truths;
         switch (TruthsAsked.of(asked)) {
             case TruthsAsked.Merge.Merged(var merged) -> truths = merged;
@@ -143,12 +192,22 @@ public final class AnAnswerComposed {
         }
         SearchRegion region = subject.quantities().region();
         List<Taken> cuts = new ArrayList<>();
-        List<DemandGap> unaccounted = new ArrayList<>();
+        for (Taken each : ofStatements) {
+            region = new WayToTheBorder(List.of(each.cut())).narrowing(region);
+            cuts.add(each);
+        }
         for (AnswerDemand each : demands) {
             if (!(each instanceof AnswerDemand.AComparison(var _, var anchor, var form, var rel))) {
                 continue;
             }
-            LinearForm<NumericTerm> over = overThisAnswer(at, form);
+            LinearForm<NumericTerm> over = overThisAnswer(subject, at, form);
+            if (over == null) {
+                // A number the library takes of what stands there by no account this has a term
+                // for, so nothing says what a value would have to be.
+                unaccounted.add(new DemandGap.Uncomposed(each,
+                        new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions()));
+                continue;
+            }
             // Nothing composed where the region cannot carry what was asked. A demand dropped here
             // and the composition carried on would look for a value in a region wider than the
             // demand — and what came back would be offered as a value that answers it, which is
@@ -178,6 +237,17 @@ public final class AnAnswerComposed {
         }
         return composed(subject, cuts, new Reachability.Reaching(region, required, truths,
                 cuts.stream().map(Taken::cut).toList(), Reachability.Ways.ONE));
+    }
+
+    /**
+     * Whether a composer writes toward what {@code read} says: a demand it can build a value
+     * against, or a statement that holds whatever the value is. A narrowing of a case and a choice
+     * between alternatives are what a way over the input carries, and nothing here puts them under
+     * a value composed for an answer.
+     */
+    private static boolean composedAgainst(DemandReading.Read read) {
+        return read instanceof DemandReading.Read.Demands
+                || (read instanceof DemandReading.Read.Settled settled && settled.thisWay());
     }
 
     /**
@@ -298,12 +368,27 @@ public final class AnAnswerComposed {
      * dependency's answer is what it states about that position, spelled in the vocabulary the
      * realization works in.
      */
-    private static LinearForm<NumericTerm> overThisAnswer(String head,
+    private static LinearForm<NumericTerm> overThisAnswer(MeasuredInput subject, String head,
                                                           LinearForm<DecisionAtom> form) {
         Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
-        form.coefs().forEach((atom, coefficient) -> coefs.put(
-                new NumericTerm.ValueOf(path(head, ((DecisionAtom.OfAnAnswer) atom).at().steps())),
-                coefficient));
+        for (Map.Entry<DecisionAtom, ExactRatio> each : form.coefs().entrySet()) {
+            TermPath place = path(head, each.getKey().ofTheAnswer().steps());
+            NumericTerm term = switch (each.getKey()) {
+                case DecisionAtom.OfAnAnswer _ -> new NumericTerm.ValueOf(place);
+                // The number the library takes of what stands at the place, which is the term
+                // the same call over a position of an input is.
+                case DecisionAtom.TakenOfAnAnswer taken -> NumericTerm.TakenOf.asItStands(
+                        taken.operation(), place, taken.arguments(), taken.at(),
+                        subject.rules().inners(), subject.symbols());
+                case DecisionAtom.OfTheInput _ -> throw new IllegalStateException(
+                        "a demand of one answer is over what that answer holds, and "
+                                + each.getKey() + " is a number of the input");
+            };
+            if (term == null) {
+                return null;
+            }
+            coefs.put(term, each.getValue());
+        }
         return new LinearForm<>(form.constant(), coefs);
     }
 }

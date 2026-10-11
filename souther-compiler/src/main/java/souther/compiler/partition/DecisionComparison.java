@@ -105,7 +105,7 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
             LinearForm<DecisionAtom> whole = left.minus(form).orNull();
             if (whole == null || whole.coefs().isEmpty()
                     || whole.coefs().keySet().stream()
-                            .noneMatch(DecisionAtom.OfAnAnswer.class::isInstance)) {
+                            .allMatch(atom -> atom.ofTheAnswer() == null)) {
                 return null;
             }
             return whole;
@@ -160,10 +160,15 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
             @Override
             public LinearForm<DecisionAtom> leafOf(Core node, InputReads at) {
                 NumericTerm term = InputNumber.of(node, inputs, at, rules);
-                DecisionAtom atom = term != null ? new DecisionAtom.OfTheInput(term)
-                        : subjects.of(node, at) instanceof DecisionSubject.AnAnswer answered
-                                ? new DecisionAtom.OfAnAnswer(answered) : null;
-                return atom == null ? null : LinearForm.atom(atom);
+                if (term != null) {
+                    return LinearForm.atom(new DecisionAtom.OfTheInput(term));
+                }
+                DecisionAtom taken = subjects.takenOfAnAnswer(node, at);
+                if (taken != null) {
+                    return LinearForm.atom(taken);
+                }
+                return subjects.of(node, at) instanceof DecisionSubject.AnAnswer answered
+                        ? LinearForm.atom(new DecisionAtom.OfAnAnswer(answered)) : null;
             }
 
             @Override

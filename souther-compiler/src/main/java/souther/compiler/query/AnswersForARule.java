@@ -426,7 +426,8 @@ record AnswersForARule(RequiredDependencies requires,
         List<DemandGap> written = new ArrayList<>();
         for (AnswerSubjects.Feasible each : over) {
             AnAnswerComposed.Attempt attempt =
-                    AnAnswerComposed.of(each.standing(), each.demands());
+                    AnAnswerComposed.of(each.standing().subject(),
+                            each.standing().statements(), each.demands());
             written.addAll(attempt.unaccounted());
             if (attempt.outcome() instanceof AnAnswerComposed.Outcome.Composed(var value)) {
                 // This value's own evidence, and never the asking's: what another case could not

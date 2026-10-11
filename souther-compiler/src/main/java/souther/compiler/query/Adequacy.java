@@ -2958,7 +2958,7 @@ public final class Adequacy {
      * <p>Null where the module did not build far enough to say how a declaration is read, which is
      * a value nothing composes rather than a value composed out of less.
      */
-    private static souther.compiler.partition.MeasuredInput standingFor(
+    private static AnswerSubjects.Standing standingFor(
             Db db, String module, souther.compiler.partition.MeasuredInput beside,
             souther.compiler.types.Type answers) {
         RuleReadingSource reading = Shapes.ruleReading(db, module).value();
@@ -2971,8 +2971,9 @@ public final class Adequacy {
                 RuleReadingContext.of(reading, policy, beside.machines()),
                 // An answer, which no row stands anything in for.
                 Membership.none()).reading(reading);
-        return souther.compiler.partition.MeasuredInput.of(ANSWER, read,
-                souther.compiler.partition.Partitions.of(ANSWER, read, policy));
+        return new AnswerSubjects.Standing(souther.compiler.partition.MeasuredInput.of(ANSWER,
+                read, souther.compiler.partition.Partitions.of(ANSWER, read, policy)),
+                souther.compiler.partition.AnswerStatements.of(read));
     }
 
     /**
@@ -2996,8 +2997,8 @@ public final class Adequacy {
             // apiece rather than refused, since a row standing nothing in for such a dependency is
             // a row nothing applies.
             if (each.signature().out() instanceof BoundaryOutput.Cases cases) {
-                Map<souther.compiler.types.TypeSymbol,
-                        souther.compiler.partition.MeasuredInput> byCase = new LinkedHashMap<>();
+                Map<souther.compiler.types.TypeSymbol, AnswerSubjects.Standing> byCase =
+                        new LinkedHashMap<>();
                 List<souther.compiler.types.TypeSymbol> ordered =
                         cases.members().stream().sorted().toList();
                 // In the order the cases themselves come in, which is the one a case carries and
@@ -3006,8 +3007,8 @@ public final class Adequacy {
                 // composes one case and the next composes another — and a block that offers
                 // different rows for one model twice is one nobody can read against the last.
                 for (souther.compiler.types.TypeSymbol member : ordered) {
-                    souther.compiler.partition.MeasuredInput standing = standingFor(db, module,
-                            beside, new souther.compiler.types.Type.Ref(member));
+                    AnswerSubjects.Standing standing = standingFor(db, module, beside,
+                            new souther.compiler.types.Type.Ref(member));
                     if (standing != null) {
                         byCase.put(member, standing);
                     }
@@ -3017,7 +3018,7 @@ public final class Adequacy {
                 }
                 continue;
             }
-            souther.compiler.partition.MeasuredInput standing =
+            AnswerSubjects.Standing standing =
                     standingFor(db, module, beside, each.signature().out().type());
             if (standing != null) {
                 out.put(each.dependency(), new AnswerSubjects(standing, List.of(), Map.of()));
