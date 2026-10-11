@@ -64,6 +64,33 @@ class HowManyAListMadeFromOthersHoldsIsWrittenByThoseListsTest {
         }
     }
 
+    /**
+     * The model as it was reported: the list bound before the guard and answered in the result
+     * too, so the size is read where the guard compares it and where the construction writes it.
+     */
+    @Test
+    void theModelAsReportedIsReadAndHasItsRowsWritten() {
+        Compilation compilation = compiled("""
+                module j1
+
+                data Dup = { n: Int }
+                data None1 = { z: Int }
+
+                behavior m : (ds: List<String>, cs: List<String>) -> Dup | None1
+                let m (ds, cs) = {
+                    let ma = List.flatMap(e -> [ e ], ds)
+                    guard List.length(ma) + List.length(cs) >= 1 else None1 { z = 0 }
+                    Dup { n = List.length(ma) }
+                }
+                """);
+        String report = report(compilation);
+        assertFalse(report.contains("not read"), report);
+        assertFalse(report.contains("made from this one"), report);
+        List<Integer> held = heldByEachRow(rowsOf(compilation));
+        assertTrue(held.contains(1), () -> "the point on the line: " + held);
+        assertTrue(held.contains(0), () -> "the point just off it: " + held);
+    }
+
     /** As many as a mapping was handed, whether its closure answers the element or works
      *  something out of it. */
     @Test

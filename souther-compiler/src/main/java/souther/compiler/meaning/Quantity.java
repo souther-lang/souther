@@ -3,13 +3,16 @@ package souther.compiler.meaning;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
 import java.math.BigInteger;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -137,9 +140,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * adds up to over all of them: how many the lists inside a list hold between them, say. The
      * input's own totals are of a value standing at one position inside each element
      * ({@code NumericTerm.TakenOver}); this is of any number of the element.
+     *
+     * <p>Of one number of the element. A sum is linear, so a sum of a form is the form's weights
+     * over the sums of its numbers and its constant times how many elements there are
+     * ({@link #over}); held whole, one sum written two ways would be two quantities.
      */
-    record SumOver(DecisionSubject container, LinearForm<Quantity> ofTheElement)
-            implements Quantity {
+    record SumOver(DecisionSubject container, Quantity ofTheElement) implements Quantity {
 
         public SumOver {
             if (container == null || ofTheElement == null) {
@@ -147,13 +153,28 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             }
         }
 
+        /**
+         * What {@code each}, a form over numbers of each element of the container at
+         * {@code container}, adds up to over all of them: each number's weight on the sum of that
+         * number, and the constant on {@code size}, how many elements there are — or null where
+         * the constant is not nought and no size is in hand.
+         */
+        public static LinearForm<Quantity> over(DecisionSubject container,
+                                                LinearForm<Quantity> each, Quantity size) {
+            Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+            each.coefs().forEach((number, by) -> coefs.put(new SumOver(container, number), by));
+            if (each.constant().signum() != 0) {
+                if (size == null) {
+                    return null;
+                }
+                coefs.put(size, each.constant());
+            }
+            return new LinearForm<>(ExactRatio.ZERO, coefs);
+        }
+
         @Override
         public String spelled() {
-            StringBuilder out = new StringBuilder("#sum " + container + " [");
-            out.append(ofTheElement.constant());
-            ofTheElement.coefs().forEach((each, by) -> out.append(" + ").append(by).append('·')
-                    .append(each.spelled()));
-            return out.append(']').toString();
+            return "#sum " + container + " [" + ofTheElement.spelled() + "]";
         }
 
         @Override

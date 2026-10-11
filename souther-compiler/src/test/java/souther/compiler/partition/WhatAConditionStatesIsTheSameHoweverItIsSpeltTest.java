@@ -11,6 +11,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -298,15 +299,48 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
      */
     @Test
     void whatAClosureAnswersAsManyOfAsTheElementSaysIsNoMultipleOfTheElements() {
+        Proposition flattened = stated("List.length(List.flatMap(i -> i.parts, b.items))"
+                + " + List.length(b.xs) >= 1");
+        Proposition.Compared compared = assertInstanceOf(Proposition.Compared.class, flattened);
+        assertTrue(((Relation.Affine) compared.relation()).form().coefs().keySet().stream()
+                        .anyMatch(Quantity.SumOver.class::isInstance),
+                () -> "a sum over the items: " + flattened);
         assertEquals(stated("List.length(List.concat(List.map(i -> i.parts, b.items)))"
-                        + " + List.length(b.xs) >= 1"),
-                stated("List.length(List.flatMap(i -> i.parts, b.items))"
-                        + " + List.length(b.xs) >= 1"));
+                + " + List.length(b.xs) >= 1"), flattened);
         for (String byCases : List.of("e -> if e > 0 then [e] else []",
                 "e -> if e > 0 then [e] else [e, e]")) {
             assertInstanceOf(Proposition.Unread.class, stated("List.length(List.flatMap("
                     + byCases + ", b.xs)) + List.length(b.items) >= 1"), byCases);
         }
+    }
+
+    /**
+     * A sum over the elements is spread over what each element adds: a sum of a number and a
+     * constant is the sum of the number and the constant times how many elements there are, and a
+     * sum of twice a number is twice its sum. Two spellings of one sum are one number, so a
+     * comparison of them settles.
+     */
+    @Test
+    void aSumOfWhatEachElementAddsIsTheSumOfEachPartOfIt() {
+        String parts = "List.length(List.flatMap(i -> i.parts, b.items))";
+        assertEquals(new Proposition.Always(true), stated(
+                "List.length(List.flatMap(i -> List.append(i.parts, [1]), b.items)) == "
+                        + parts + " + List.length(b.items)"));
+        assertEquals(new Proposition.Always(true), stated(
+                "List.length(List.flatMap(i -> List.append(i.parts, i.parts), b.items)) == 2 * "
+                        + parts));
+    }
+
+    /**
+     * An element a closure is handed inside a number is summed over, so it is no element the
+     * comparison is read of: two sums over one container in one comparison are two numbers, and
+     * not two elements of the container.
+     */
+    @Test
+    void twoSumsOverOneContainerAreReadInOneComparison() {
+        assertEquals(stated("2 * List.sum(List.map(i -> i.price, b.items)) >= 1"),
+                stated("List.sum(List.map(i -> i.price, b.items))"
+                        + " + List.sum(List.map(j -> j.price, b.items)) >= 1"));
     }
 
     /** One container quantified inside itself would make its two elements one subject. */

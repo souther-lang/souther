@@ -96,9 +96,8 @@ public sealed interface Proposition {
                     .anyMatch(one -> one.mayTurnOnAnElementOf(container));
             case Quantity.HowManyDifferent(DecisionSubject counted, DecisionSubject _) ->
                     isAnElementOf(counted, container);
-            case Quantity.SumOver(DecisionSubject summed, var each) ->
-                    isAnElementOf(summed, container) || each.coefs().keySet().stream()
-                            .anyMatch(one -> mayBeAnElementOf(one, container));
+            case Quantity.SumOver(DecisionSubject summed, Quantity each) ->
+                    isAnElementOf(summed, container) || mayBeAnElementOf(each, container);
             case Quantity.RemainderOfADividend(var dividend, var _) -> dividend.coefs().keySet()
                     .stream().anyMatch(term -> isAnElementOf(
                             new DecisionSubject.AnInput(term.subjectPath()), container));
@@ -568,8 +567,7 @@ public sealed interface Proposition {
                     different.container() instanceof DecisionSubject.AnAnswer
                             || different.ofTheElement() instanceof DecisionSubject.AnAnswer;
             case Quantity.SumOver sum -> sum.container() instanceof DecisionSubject.AnAnswer
-                    || sum.ofTheElement().coefs().keySet().stream()
-                            .anyMatch(Proposition::anAnswerIn);
+                    || anAnswerIn(sum.ofTheElement());
         };
     }
 

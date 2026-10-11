@@ -2739,23 +2739,12 @@ final class Pullback {
             if (!(each instanceof Sized.AsAForm(LinearForm<Quantity> form))) {
                 return each;
             }
-            if (!form.coefs().isEmpty()) {
-                return new Sized.AsAForm(LinearForm.atom(new Quantity.SumOver(held, form)));
-            }
-            // The same number for every element adds up to that many times how many there are.
-            if (form.constant().signum() == 0) {
-                return new Sized.AsAForm(LinearForm.constant(ExactRatio.ZERO));
-            }
-            return switch (sizedAt(held)) {
-                case Sized.NotSized notSized -> notSized;
-                case Sized.AsAForm(LinearForm<Quantity> size) ->
-                        switch (size.times(form.constant())) {
-                            case ExactAnswer.Held<LinearForm<Quantity>>(var times) ->
-                                    new Sized.AsAForm(times);
-                            case ExactAnswer.Unheld<LinearForm<Quantity>>(var why) ->
-                                    new Sized.NotSized(new WhyUnread.ANumberNotHeld(why));
-                        };
-            };
+            // What every element adds alike is that many times how many elements there are, which
+            // is asked only where there is such a part.
+            DecisionAtom size = form.constant().signum() == 0 ? null : sizeOfSubject(held, null);
+            LinearForm<Quantity> summed = Quantity.SumOver.over(held, form, size);
+            return summed == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
+                    : new Sized.AsAForm(summed);
         }
 
         /**

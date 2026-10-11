@@ -1098,6 +1098,10 @@ public final class InputReads {
         Set<BindingId> made = new HashSet<>();
         Set<BindingId> read = new LinkedHashSet<>();
         walkNames(e, made, read);
+        // A name bound inside the expression is a different value on each application of what
+        // binds it, as a closure's parameter is on each element it is handed, and so no one
+        // element the comparison is read of.
+        read.removeAll(made);
         List<ElementStood> out = new ArrayList<>();
         for (BindingId each : read) {
             ElementStood stood = elementStoodBy(each, newtypes, 0);
