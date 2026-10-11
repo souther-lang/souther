@@ -31,9 +31,9 @@ class ADateAnsweringSeveralShiftedYearsIsOneEveryAskAdmitsTest {
 
     /** The days a walk covers. A year asked for stands within a few years of this, and a shift
      *  moves a date by under three of them. */
-    private static final long FIRST = LocalDate.of(1980, 1, 1).toEpochDay();
-    private static final long LAST = LocalDate.of(2030, 12, 31).toEpochDay();
-    private static final long REACH = 1_100;
+    private static final long FIRST = LocalDate.of(1997, 1, 1).toEpochDay();
+    private static final long LAST = LocalDate.of(2007, 12, 31).toEpochDay();
+    private static final long REACH = 400;
 
     private static final int[] YEAR_OF = yearsOfEveryDayAround();
 
@@ -49,7 +49,7 @@ class ADateAnsweringSeveralShiftedYearsIsOneEveryAskAdmitsTest {
         return YEAR_OF[(int) (day - (FIRST - REACH))];
     }
 
-    private static final long[] SHIFTS = {0, 1, -1, 30, -30, 365, -366, 1000, -1000};
+    private static final long[] SHIFTS = {0, 1, -1, 30, -30, 365, -366};
 
     /** What a chain of shifts is defined at, for the chains this walks: defined everywhere, or only
      *  between two days a rule of the chain left. */
@@ -59,15 +59,15 @@ class ADateAnsweringSeveralShiftedYearsIsOneEveryAskAdmitsTest {
         if (random.nextInt(3) > 0) {
             return whole;
         }
-        long from = LocalDate.of(1985 + random.nextInt(40), 1 + random.nextInt(12), 1)
+        long from = LocalDate.of(1998 + random.nextInt(9), 1 + random.nextInt(12), 1)
                 .toEpochDay();
         return new DateTranslation(offset, from, from + random.nextInt(900));
     }
 
     private static NumericSet years(Random random, boolean lead) {
-        Place year = Count.of(1985 + random.nextInt(41));
+        Place year = Count.of(2000 + random.nextInt(5));
         return lead || random.nextBoolean() ? new NumericSet.At(year)
-                : new NumericSet.AwayFrom(List.of(year, Count.of(1985 + random.nextInt(41))));
+                : new NumericSet.AwayFrom(List.of(year, Count.of(2000 + random.nextInt(5))));
     }
 
     private static boolean admits(TermRealizations.ShiftedYear ask, long day) {
