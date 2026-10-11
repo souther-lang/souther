@@ -102,8 +102,12 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.FixtureTemplate;
+import souther.compiler.partition.CompositionAccount;
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputClassifications;
+import souther.compiler.partition.InputNumbersAnAnswerTurnsOn;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.BodyReading;
 import souther.compiler.partition.FillResult;
@@ -2912,10 +2916,45 @@ public final class Adequacy {
                 // One per way of standing the dependencies in. Which of them answers what was asked
                 // is not something this can tell — where a row goes is read by whoever asked — so
                 // all of them go back and none is chosen here.
+                // A statement about an answer that also names a number of the input is met by the
+                // pair: the number is put at a value, the answer is composed for that, and the row
+                // is held to the same value. Which value suits is not known until the answer is
+                // composed for it, so each is tried in turn, and the first pair that a row was
+                // composed for in every demand is the one taken, with every way of standing the
+                // dependencies in that came with it: a row built whole is a row, and another way
+                // of standing in that came to nothing beside it takes nothing from it.
+                List<Generator.BoundaryAttempt> nearest = null;
+                long nearestBuilt = -1;
+                InputNumbersAnAnswerTurnsOn.Pairs pairs =
+                        InputNumbersAnAnswerTurnsOn.of(demands, reaching, answers::subjectOf);
+                for (InputNumbersAnAnswerTurnsOn pinned : pairs.tried()) {
+                    List<Generator.BoundaryAttempt> out = new ArrayList<>();
+                    for (souther.compiler.partition.StandInAttempt stood
+                            : answers.of(demands, pinned.values())) {
+                        out.add(Generator.probeFixing(subject, label, fixing, asking,
+                                pinned.reaching(), check, stood));
+                    }
+                    if (out.stream().anyMatch(Adequacy::composedAgainstEverythingAsked)) {
+                        return List.copyOf(out);
+                    }
+                    long built = out.stream()
+                            .filter(Generator.BoundaryAttempt.Built.class::isInstance).count();
+                    if (built > nearestBuilt) {
+                        nearest = out;
+                        nearestBuilt = built;
+                    }
+                }
+                // No pair composed a row whole. What the pair that came nearest built stays, since
+                // the run of a row built short may still say something, and where a figure ended
+                // the walk with some left unlooked at that is said of the demands that were not
+                // composed against, in the account that goes with each attempt: what was built is
+                // not replaced by the stop, and the stop is not hidden by what was built.
+                if (!pairs.someLeftUntried()) {
+                    return List.copyOf(nearest);
+                }
                 List<Generator.BoundaryAttempt> out = new ArrayList<>();
-                for (souther.compiler.partition.StandInAttempt stood : answers.of(demands)) {
-                    out.add(Generator.probeFixing(subject, label, fixing, asking, reaching, check,
-                            stood));
+                for (Generator.BoundaryAttempt each : nearest) {
+                    out.add(endedBy(each, label, pairs.stoppedBy()));
                 }
                 return List.copyOf(out);
             } catch (LinkageError _) {
@@ -2940,6 +2979,32 @@ public final class Adequacy {
 
 
     /**
+     * {@code attempt} with a figure said to be why the statements that name a number of the input
+     * were not composed against.
+     *
+     * <p>A row it built stays as it is, with the account saying so. What came to no row is a
+     * search a figure ended, and is said in the word such a search has always come back with.
+     */
+    private static Generator.BoundaryAttempt endedBy(Generator.BoundaryAttempt attempt,
+                                                     String label,
+                                                     Set<CompositionBudget> figures) {
+        CompositionAccount said =
+                attempt.unrepresented().sayingAFigureEndedTheLookingOverNumbers(figures);
+        return attempt instanceof Generator.BoundaryAttempt.Unresolved
+                ? new Generator.BoundaryAttempt.Stopped(
+                        new Generator.UnresolvedCombination(List.of(label),
+                                Generator.UnresolvedCombination.Reason.wordFor(figures)),
+                        CompositionShortfall.of(figures), said)
+                : attempt.withAccount(said);
+    }
+
+    /** Whether a row was built and nothing asked of an answer was left uncomposed. */
+    private static boolean composedAgainstEverythingAsked(Generator.BoundaryAttempt attempt) {
+        return attempt instanceof Generator.BoundaryAttempt.Built built
+                && built.unrepresented().onAnAnswer().isEmpty();
+    }
+
+    /**
      * A subject of one position for what one dependency answers.
      *
      * <p>Made here because this is where a behavior's input is read and paired with what is
@@ -2958,7 +3023,7 @@ public final class Adequacy {
      * <p>Null where the module did not build far enough to say how a declaration is read, which is
      * a value nothing composes rather than a value composed out of less.
      */
-    private static souther.compiler.partition.MeasuredInput standingFor(
+    private static AnswerSubjects.Standing standingFor(
             Db db, String module, souther.compiler.partition.MeasuredInput beside,
             souther.compiler.types.Type answers) {
         RuleReadingSource reading = Shapes.ruleReading(db, module).value();
@@ -2971,8 +3036,9 @@ public final class Adequacy {
                 RuleReadingContext.of(reading, policy, beside.machines()),
                 // An answer, which no row stands anything in for.
                 Membership.none()).reading(reading);
-        return souther.compiler.partition.MeasuredInput.of(ANSWER, read,
-                souther.compiler.partition.Partitions.of(ANSWER, read, policy));
+        return new AnswerSubjects.Standing(souther.compiler.partition.MeasuredInput.of(ANSWER,
+                read, souther.compiler.partition.Partitions.of(ANSWER, read, policy)),
+                souther.compiler.partition.AnswerStatements.of(read));
     }
 
     /**
@@ -2996,8 +3062,8 @@ public final class Adequacy {
             // apiece rather than refused, since a row standing nothing in for such a dependency is
             // a row nothing applies.
             if (each.signature().out() instanceof BoundaryOutput.Cases cases) {
-                Map<souther.compiler.types.TypeSymbol,
-                        souther.compiler.partition.MeasuredInput> byCase = new LinkedHashMap<>();
+                Map<souther.compiler.types.TypeSymbol, AnswerSubjects.Standing> byCase =
+                        new LinkedHashMap<>();
                 List<souther.compiler.types.TypeSymbol> ordered =
                         cases.members().stream().sorted().toList();
                 // In the order the cases themselves come in, which is the one a case carries and
@@ -3006,8 +3072,8 @@ public final class Adequacy {
                 // composes one case and the next composes another — and a block that offers
                 // different rows for one model twice is one nobody can read against the last.
                 for (souther.compiler.types.TypeSymbol member : ordered) {
-                    souther.compiler.partition.MeasuredInput standing = standingFor(db, module,
-                            beside, new souther.compiler.types.Type.Ref(member));
+                    AnswerSubjects.Standing standing = standingFor(db, module, beside,
+                            new souther.compiler.types.Type.Ref(member));
                     if (standing != null) {
                         byCase.put(member, standing);
                     }
@@ -3017,7 +3083,7 @@ public final class Adequacy {
                 }
                 continue;
             }
-            souther.compiler.partition.MeasuredInput standing =
+            AnswerSubjects.Standing standing =
                     standingFor(db, module, beside, each.signature().out().type());
             if (standing != null) {
                 out.put(each.dependency(), new AnswerSubjects(standing, List.of(), Map.of()));

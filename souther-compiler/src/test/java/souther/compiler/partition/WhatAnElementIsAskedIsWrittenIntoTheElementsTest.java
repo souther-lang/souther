@@ -151,17 +151,20 @@ class WhatAnElementIsAskedIsWrittenIntoTheElementsTest {
                 () -> "a row is written along one of them: " + along);
     }
 
-    /** And where the rules leave no element either of them, each way is closed by the rules. */
+    /**
+     * And where the rules leave no element either of them, each way is closed by the rules — and
+     * the condition with them, since a way no element meets is closed where the reading meets it
+     * and no way is left to split into.
+     */
     @Test
     void oneOfSeveralThingsNoElementCanBeIsClosedAlongEach() {
-        List<Generator.BoundaryAttempt> along = composedAlongEach("someBeyondTheRules");
-        assertEquals(2, along.size(), () -> "a way for each of the two: " + along);
-        for (Generator.BoundaryAttempt each : along) {
-            Generator.BoundaryAttempt.Unresolved closed =
-                    assertInstanceOf(Generator.BoundaryAttempt.Unresolved.class, each);
-            assertEquals(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE,
-                    closed.why().reason(), () -> "the rules leave it nothing: " + closed);
-        }
+        List<OnTheWay> stated = stated("someBeyondTheRules");
+        OnTheWay.Settled settled = assertInstanceOf(OnTheWay.Settled.class, stated.getFirst(),
+                "neither of them is met by any element the rules allow");
+        assertFalse(settled.thisWay(), () -> "never this way: " + settled);
+        assertInstanceOf(Reachability.NothingComesOutThatWay.class,
+                Reachability.of(new WayToTheBorder(stated), declarations()),
+                "and the way is closed");
     }
 
     /** What some element's own elements meet is written into the elements of an element. */

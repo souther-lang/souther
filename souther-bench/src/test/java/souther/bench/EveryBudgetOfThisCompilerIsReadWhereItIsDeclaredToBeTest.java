@@ -227,6 +227,34 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "past the figure looks along the way whole, which every row past it is on,"
                             + " and keeps the conditions it did not split at, which the row's"
                             + " account says"),
+            // The pairs of a number of the input and the answer composed for it. The figure bounds
+            // how many are offered, and what it hands over is whether some were left out, which the
+            // search that composed for none of them answers with.
+            // The ways a statement about an answer is looked along where it asks one of several
+            // things. Past the figure they are not split, and what asked for them is said to be a
+            // demand no value was composed against.
+            Map.entry("souther.compiler.partition.AnAnswerComposed#of("
+                            + "Lsouther/compiler/partition/MeasuredInput;"
+                            + "Lsouther/compiler/partition/AnswerStatements;"
+                            + "Ljava/util/Map;Ljava/util/List;)"
+                            + "Lsouther/compiler/partition/AnAnswerComposed$Attempt;",
+                    "past the figure does not look along the ways of a statement, and says that"
+                            + " nothing was composed against it"),
+            Map.entry("souther.compiler.partition.InputNumbersAnAnswerTurnsOn#solvedAtTheEnds("
+                            + "Lsouther/compiler/numeric/ExactRatio;"
+                            + "Lsouther/compiler/numeric/ExactRatio;"
+                            + "Ljava/util/List;Ljava/util/List;"
+                            + "Lsouther/compiler/inputs/SearchRegion;Ljava/util/Set;)"
+                            + "Ljava/util/List;",
+                    "stops the walk over the ends of an answer's places at the figure, says so to"
+                            + " the caller, and offers what it had solved for — values to put a"
+                            + " number at, which the pairs' own figure then bounds again"),
+            Map.entry("souther.compiler.partition.InputNumbersAnAnswerTurnsOn#of("
+                            + "Lsouther/compiler/partition/AnswersDemanded;"
+                            + "Lsouther/compiler/partition/Reachability$Reaching;"
+                            + "Lsouther/compiler/partition/InputNumbersAnAnswerTurnsOn$AnswerSubjectOf;)"
+                            + "Lsouther/compiler/partition/InputNumbersAnAnswerTurnsOn$Pairs;",
+                    "stops offering pairs at the figure and says whether some were left out"),
             Map.entry("souther.compiler.query.Coverages$2#endedBy("
                             + "Lsouther/compiler/query/SearchOutcomes;"
                             + "Lsouther/compiler/partition/Realization;)"
@@ -334,6 +362,23 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // of them -- so what is carried out is the figure itself.
             Map.entry("souther.compiler.partition.Pullback#<clinit>()V",
                     "how many readings of one condition the reading of what it means makes"),
+            Map.entry("souther.compiler.partition.DemandReading#<clinit>()V",
+                    "how many ways an element may meet what a quantifier asks are read one by one"),
+            Map.entry("souther.compiler.partition.DemandReading$AnElementsWay#walk("
+                            + "Ljava/util/List;I"
+                            + "Lsouther/compiler/partition/DemandReading$AnElementsWay;"
+                            + "Lsouther/compiler/inputs/SearchRegion;Ljava/util/Set;[I)Z",
+                    "past the figure stops making ways whole, keeps the ones made and says the"
+                            + " rest are where this compiler's work stopped"),
+            Map.entry("souther.compiler.partition.DemandReading$AnElementsWay#oneOfEach("
+                            + "Ljava/util/List;)Ljava/util/List;",
+                    "past the figure stops taking the ways of one of several things, keeps the"
+                            + " ones taken and says the rest stopped, the same way"),
+            Map.entry("souther.compiler.partition.AnAnswerComposed#eachWay("
+                            + "Ljava/util/List;)"
+                            + "Lsouther/compiler/partition/AnAnswerComposed$Ways;",
+                    "past the figure keeps the ways it made and names the figure as what left the"
+                            + " rest, and names the reading's figure where a part was not read"),
             Map.entry("souther.compiler.partition.Pullback#applicationsOf("
                             + "Lsouther/compiler/core/Core$Block;"
                             + "Lsouther/compiler/inputs/InputReads;"

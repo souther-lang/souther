@@ -31,6 +31,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Every kind of statement a condition can mean, handed to what a path knows past it, is known or
@@ -78,6 +79,11 @@ class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
                         case WhyNotTaken.MeaningUnread _ -> assertTrue(!readToTheEnd,
                                 () -> name + " coming out " + positive
                                         + " was read to the end: " + why);
+                        // A path takes no statement apart into the ways an element may meet it,
+                        // so no figure of that taking apart is one it stops at.
+                        case WhyNotTaken.MoreWaysThanAreRead _ -> fail(() -> name
+                                + " coming out " + positive + " met a figure a path has no use"
+                                + " for: " + why);
                     }
                 }
             }
@@ -120,7 +126,7 @@ class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
                 TermPath.of("xs").element(), true));
         out.put("both", new Proposition.All(List.of(above, truth)));
         out.put("either", new Proposition.Any(List.of(above, truth)));
-        out.put("some element", new Proposition.Some(TermPath.of("xs"), element, true));
+        out.put("some element", new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("xs")),element, true));
         out.put("on some application", new Proposition.OnAnApplication(List.of(above, truth)));
         out.put("unread", new Proposition.Unread(Optional.empty(), 0,
                 new WhyUnread.NotMetByTheReading(), false, true));

@@ -100,6 +100,31 @@ public enum CompositionBudget {
      *  them, and nothing is proved of it from its alternatives. */
     WAYS_A_WAY_IS_SPLIT_INTO(16),
 
+    /**
+     * How many values of the numbers of the input a statement about an answer names are tried, each
+     * with the answer composed for it.
+     *
+     * <p>A pair and not a number: what suits the way for one number need not suit the answer, so
+     * each value is tried by composing the answer for it, and the first pair every part of which
+     * composed is the one taken. A search that went through every pair and found none says the
+     * statement was composed against nothing; one that was ended here says this was why, and that a
+     * pair past it was not looked at.
+     */
+    PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED(8),
+
+    /**
+     * How many choices of a value for each of the input's numbers a statement names are looked at
+     * to find the pairs above.
+     *
+     * <p>The looking beside the trying, held apart from
+     * {@link #PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED} for the reason
+     * {@link #PLACES_A_PAIR_IS_LOOKED_AT} is held apart from its own: a choice the way refuses a
+     * value of is looked at and is no pair to compose an answer for, and costs a question of the
+     * region and not a composing. Counted by what is looked at, whether or not it came to a pair,
+     * so that the walk is bounded and not only what it finds.
+     */
+    CHOICES_OF_INPUT_NUMBERS_LOOKED_AT(256),
+
     /** How many places along a line a pair is tried at, which is places the walk offered and not
      *  places it went past. What it costs to step over a place the anchored position may not stand
      *  at is {@link #PLACES_A_PAIR_IS_LOOKED_AT}. */
@@ -223,6 +248,12 @@ public enum CompositionBudget {
      * than this is not read one by one at all, and is carried out as a part nothing read, naming
      * this as why ({@link souther.compiler.meaning.WhyUnread.MoreReadingsThanAreMade}): a reader is
      * told that the compiler declined the work, and never that the model states nothing there.
+     *
+     * <p>And the same count bounds what a quantifier asks of an element, taken apart into the ways
+     * an element may meet it: the ways no element meets are proved closed and not counted, and
+     * past this many open ones the quantifier is not taken into a row's words at all and says so
+     * ({@link souther.compiler.meaning.WhyNotTaken.MoreWaysThanAreRead}) — the meaning was read
+     * and a row has the words, so neither the reading nor the domain is named.
      */
     READINGS_OF_ONE_CONDITION(256),
 
@@ -351,7 +382,9 @@ public enum CompositionBudget {
     public CompositionBudget splitFrom() {
         return switch (this) {
             // The walking beside the trying. Both halves of one walk over a line, and of one walk
-            // over the run a position on the way stands on.
+            // over the run a position on the way stands on, and of the one over what the input's
+            // numbers may be put at.
+            case CHOICES_OF_INPUT_NUMBERS_LOOKED_AT -> PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED;
             case PLACES_A_PAIR_IS_LOOKED_AT -> PLACES_A_PAIR_IS_TRIED_AT;
             case PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT ->
                     VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT;
@@ -360,6 +393,7 @@ public enum CompositionBudget {
                  ELEMENTS_A_COUNT_IS_COMPOSED_WITH, CONTAINERS_A_COUNT_IS_OFFERED,
                  SHARES_A_COUNT_IS_TRIED_AT,
                  WAYS_DOWN_TO_A_TOTAL_TRIED, WAYS_UNDER_THE_CASES_TRIED,
+                 PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
                  PLACES_A_PAIR_IS_TRIED_AT, STEPS_A_SEARCH_MAY_TAKE,
                  ASSIGNMENTS_A_SEARCH_COMPOSES, VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                  LEVELS_A_SIDE_IS_ASKED_AT, TIMES_THE_RULES_ARE_ASKED_AGAIN,

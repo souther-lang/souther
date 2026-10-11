@@ -65,6 +65,7 @@ import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.types.BinOp;
@@ -210,7 +211,7 @@ final class Pullback {
     private final List<Met> met = new ArrayList<>();
     /** What the candidates for each expression state, concluded once a step ({@link RuleChoice}). */
     private final Conclusion trying = Conclusion.reusing();
-    private final Set<TermPath> quantifying = new HashSet<>();
+    private final Set<DecisionSubject> quantifying = new HashSet<>();
     /**
      * Where whether a container holds anything was asked, while what it holds is being read.
      *
@@ -626,11 +627,13 @@ final class Pullback {
                 () -> byALaw(applied, e, AnswerAspect.EMPTINESS, reads, asked),
                 () -> inTheCalledBody(e, AnswerAspect.EMPTINESS, reads),
                 () -> {
-                    if (!(reads.pathOf(e, read.rules().newtypes())
-                            instanceof PathResolution.At(TermPath held))) {
+                    DecisionSubject held = reads.pathOf(e, read.rules().newtypes())
+                            instanceof PathResolution.At(TermPath at)
+                            ? new DecisionSubject.AnInput(at) : answerAt(e, reads);
+                    if (held == null) {
                         return null;
                     }
-                    Derivation some = holdsSomethingAt(held);
+                    Derivation some = holdsSomethingAt(held, e.type());
                     return leaf(some != null ? some : new Derivation.Stopped(
                             new WhyUnread.NoMeasureOfItsSize(), fixed(e, reads)), asked);
                 }));
@@ -1082,8 +1085,9 @@ final class Pullback {
     /** What an element a law names is, inside a statement about some element of its container. */
     private sealed interface ElementAt {
 
-        /** The element of the container at {@code container}, which a row writes. */
-        record AtAPosition(TermPath container) implements ElementAt {}
+        /** The element of the container {@code container} is: one a row writes, or one inside what
+         *  a dependency answered. */
+        record AtASubject(DecisionSubject container) implements ElementAt {}
 
         /**
          * A value the element is, read in {@code at}: one the source wrote out, or what a walk
@@ -1132,9 +1136,11 @@ final class Pullback {
 
     /** Where a container's elements stand, what each is there for the statement quantified over
      *  them, and what was kept of them on the way — and, where they are the pieces of a string
-     *  rather than something standing at a position, which pieces. */
-    private record Located(TermPath held, ElementAt each, Denotation handed, List<Kept> kept,
-                           Pieces pieces) {}
+     *  rather than something standing at a position, which pieces. What stands there is held only
+     *  for a value a dependency answered, whose type nothing else says; a position of the input has
+     *  its type from the declarations, which is asked where it is wanted. */
+    private record Located(DecisionSubject held, Type heldType, ElementAt each,
+                           Denotation handed, List<Kept> kept, Pieces pieces) {}
 
     /** The pieces of the string at {@code string} that a split at {@code separator}, one code
      *  point, leaves. */
@@ -1156,6 +1162,13 @@ final class Pullback {
             NumericTerm.TakenOf size = sizeAt(held);
             return size == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
                     : new Sized.AsAForm(LinearForm.atom(new DecisionAtom.OfTheInput(size)));
+        }
+        // What a dependency answered holds as many as the library counts of it.
+        DecisionSubject.AnAnswer answered = answerAt(made.value(), made.at());
+        if (answered != null) {
+            DecisionAtom size = sizeOfSubject(answered, made.value().type());
+            return size == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
+                    : new Sized.AsAForm(LinearForm.atom(size));
         }
         // A list written out holds as many as it was written with.
         if (Core.withoutStanding(made.value()) instanceof Core.ListLit written) {
@@ -1405,10 +1418,11 @@ final class Pullback {
                             // A value the element is is read as itself, where it was given.
                             case ElementAt.AValue(Core value, InputReads in) ->
                                     observe(value, aspect, in);
-                            case ElementAt.AtAPosition(TermPath container) ->
+                            case ElementAt.AtASubject(DecisionSubject container) ->
                                     observedAt(container.element(), aspect);
                             case ElementAt.AFiledElement(TermPath list, Core.Block _) ->
-                                    observedAt(list.element(), aspect);
+                                    observedAt(new DecisionSubject.AnInput(list.element()),
+                                            aspect);
                             // A piece, and an entry filed by a fold, stand at no position of the
                             // input to be observed there.
                             case ElementAt.APiece _, ElementAt.AnEntry _ -> unread(e, reads,
@@ -1424,7 +1438,7 @@ final class Pullback {
                             : unread(e, reads, aClosureNotMet());
                 }
                 case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) -> {
-                    TermPath key = keyAt(at);
+                    DecisionSubject key = keyAt(at);
                     yield key != null ? observedAt(key, aspect) : unread(e, reads,
                             new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT));
                 }
@@ -1433,14 +1447,12 @@ final class Pullback {
         }
 
         /** The value standing at {@code at} coming out on {@code aspect}'s holding side. */
-        private Derivation observedAt(TermPath at, AnswerAspect aspect) {
+        private Derivation observedAt(DecisionSubject at, AnswerAspect aspect) {
             return switch (aspect) {
-                case TRUTH -> leaf(new Derivation.ATruthOfASubject(new DecisionSubject.AnInput(at),
-                        true), e, reads);
-                case PRESENCE -> leaf(new Derivation.PresentInASubject(
-                        new DecisionSubject.AnInput(at)), e, reads);
+                case TRUTH -> leaf(new Derivation.ATruthOfASubject(at, true), e, reads);
+                case PRESENCE -> leaf(new Derivation.PresentInASubject(at), e, reads);
                 case EMPTINESS -> {
-                    Derivation some = holdsSomethingAt(at);
+                    Derivation some = holdsSomethingAt(at, null);
                     yield leaf(some != null ? some : new Derivation.Stopped(
                             new WhyUnread.NoMeasureOfItsSize(), false), e, reads);
                 }
@@ -1452,13 +1464,16 @@ final class Pullback {
          * null where the element is a value written out rather than one standing at a position —
          * a value is handed on without the key it was filed under.
          */
-        private TermPath keyAt(DeclaredArgument at) {
+        private DecisionSubject keyAt(DeclaredArgument at) {
             return switch (elements.get(at)) {
-                case ElementAt.AtAPosition(TermPath map) -> map.key();
+                case ElementAt.AtASubject(DecisionSubject map) -> map.key();
                 // The entry under a key is an element of the list, so the key it stands under is
                 // what the closure makes of that element.
-                case ElementAt.AFiledElement(TermPath list, Core.Block key) ->
-                        reads.keyOfTheElement(key, list.element(), read.rules().newtypes());
+                case ElementAt.AFiledElement(TermPath list, Core.Block key) -> {
+                    TermPath filed =
+                            reads.keyOfTheElement(key, list.element(), read.rules().newtypes());
+                    yield filed == null ? null : new DecisionSubject.AnInput(filed);
+                }
                 case ElementAt.AValue _, ElementAt.APiece _, ElementAt.AnEntry _ -> null;
                 case null -> null;
             };
@@ -1475,8 +1490,8 @@ final class Pullback {
                 }
                 case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) ->
                         switch (elements.get(at)) {
-                            case ElementAt.AtAPosition(TermPath container) ->
-                                    new DecisionSubject.AnInput(container.element());
+                            case ElementAt.AtASubject(DecisionSubject container) ->
+                                    container.element();
                             case ElementAt.AFiledElement(TermPath list, Core.Block _) ->
                                     new DecisionSubject.AnInput(list.element());
                             case ElementAt.AValue(Core value, InputReads in) ->
@@ -1487,10 +1502,7 @@ final class Pullback {
                             case ElementAt.APiece _, ElementAt.AnEntry _ -> null;
                         };
                 case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ -> null;
-                case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) -> {
-                    TermPath key = keyAt(at);
-                    yield key == null ? null : new DecisionSubject.AnInput(key);
-                }
+                case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) -> keyAt(at);
                 case LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(subject);
             };
         }
@@ -1538,10 +1550,11 @@ final class Pullback {
                 return unread(over, in,
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
-            TermPath held = located.held();
+            DecisionSubject heldAt = located.held();
             Derivation answered = located.handed() == null
-                    ? aboutAnElement(some.container(), held, located.each(), some.ofTheElement())
-                    : aboutTheValue(some.container(), held, some.ofTheElement(),
+                    ? aboutAnElement(some.container(), heldAt, located.each(),
+                            some.ofTheElement())
+                    : aboutTheValue(some.container(), heldAt, some.ofTheElement(),
                             located.handed());
             if (answered == null) {
                 return unread(e, reads, new WhyUnread.TwoElementsOfOneContainer());
@@ -1555,7 +1568,7 @@ final class Pullback {
                     return unread(e, reads, new WhyUnread.AtNoPosition(
                             WhyUnread.AtNoPosition.Place.SUBJECT));
                 }
-                answered = leaf(new Derivation.OfTheLastToHoldItsValue(answered, held, filedUnder),
+                answered = leaf(new Derivation.OfTheLastToHoldItsValue(answered, list, filedUnder),
                         e, reads);
             }
             answered = alsoWhatWasKept(answered, located.kept());
@@ -1564,14 +1577,14 @@ final class Pullback {
                 return somePiece(located.pieces(), answered, element, over, in);
             }
             Optional<Derivation> holdsSomething = Optional.empty();
-            if (Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(held, element)) {
-                NumericTerm.TakenOf size = sizeAt(held);
+            if (Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(heldAt, element)) {
+                DecisionAtom size = sizeOfSubject(heldAt, located.heldType());
                 holdsSomething = Optional.of(size != null
                         ? leaf(new Derivation.SizeAboveNought(size),
                                 askedAt != null ? askedAt : new Denotation(e, reads))
                         : unread(over, reads, new WhyUnread.NoMeasureOfItsSize()));
             }
-            return new Derivation.SomeElementMeeting(held, answered, true, holdsSomething);
+            return new Derivation.SomeElementMeeting(heldAt, answered, true, holdsSomething);
         }
 
         /**
@@ -1642,7 +1655,7 @@ final class Pullback {
          * element, so the same container quantified inside itself would name two elements one
          * subject.
          */
-        private Derivation aboutAnElement(DeclaredArgument container, TermPath held,
+        private Derivation aboutAnElement(DeclaredArgument container, DecisionSubject held,
                                           ElementAt element,
                                           LawProposition<DeclaredArgument> ofTheElement) {
             if (!quantifying.add(held)) {
@@ -1659,7 +1672,7 @@ final class Pullback {
 
         /** As {@link #aboutAnElement}, of the element that is {@code value}
          *  ({@link #ofTheValue}). */
-        private Derivation aboutTheValue(DeclaredArgument container, TermPath held,
+        private Derivation aboutTheValue(DeclaredArgument container, DecisionSubject held,
                                          LawProposition<DeclaredArgument> ofTheElement,
                                          Denotation value) {
             if (!quantifying.add(held)) {
@@ -1814,12 +1827,14 @@ final class Pullback {
             Core value = over;
             InputReads where = in;
             while (true) {
-                if (where.pathOf(value, read.rules().newtypes()) instanceof PathResolution.At(
-                        TermPath path)) {
-                    ElementAt each = new ElementAt.AtAPosition(path);
+                DecisionSubject standing = subjectOf(value, where);                if (standing != null) {
+                    ElementAt each = new ElementAt.AtASubject(standing);
                     settle(pending, each, null, located);
-                    return outerEach == null ? new Located(path, each, null, located, null)
-                            : new Located(path, outerEach, outerHanded, located, null);
+                    Type heldType = Core.withoutStanding(value).type();
+                    return outerEach == null
+                            ? new Located(standing, heldType, each, null, located, null)
+                            : new Located(standing, heldType, outerEach, outerHanded, located,
+                                    null);
                 }
                 // The pieces of a string at a position, each of which is one of the elements and
                 // no place a row writes. Only whether some piece meets a statement is asked of
@@ -1829,10 +1844,10 @@ final class Pullback {
                 if (pieces != null) {
                     ElementAt each = new ElementAt.APiece(pieces);
                     settle(pending, each, null, located);
+                    DecisionSubject string = new DecisionSubject.AnInput(pieces.string());
                     return outerEach == null
-                            ? new Located(pieces.string(), each, null, located, pieces)
-                            : new Located(pieces.string(), outerEach, outerHanded, located,
-                                    pieces);
+                            ? new Located(string, null, each, null, located, pieces)
+                            : new Located(string, null, outerEach, outerHanded, located, pieces);
                 }
                 ElementBindings.StepOnEachElement walk = aWalk(at);
                 boolean answers = false;
@@ -1950,8 +1965,9 @@ final class Pullback {
             }
             ElementAt each = new ElementAt.AnEntry();
             settle(pending, each, null, located);
-            return outerEach == null ? new Located(held, each, null, located, null)
-                    : new Located(held, outerEach, outerHanded, located, null);
+            DecisionSubject heldAt = new DecisionSubject.AnInput(held);
+            return outerEach == null ? new Located(heldAt, null, each, null, located, null)
+                    : new Located(heldAt, null, outerEach, outerHanded, located, null);
         }
 
         /**
@@ -1976,8 +1992,9 @@ final class Pullback {
             }
             ElementAt each = new ElementAt.AFiledElement(held, indexed.key());
             settle(pending, each, null, located);
-            return outerEach == null ? new Located(held, each, null, located, null)
-                    : new Located(held, outerEach, outerHanded, located, null);
+            DecisionSubject heldAt = new DecisionSubject.AnInput(held);
+            return outerEach == null ? new Located(heldAt, null, each, null, located, null)
+                    : new Located(heldAt, null, outerEach, outerHanded, located, null);
         }
 
         /** What was kept at one level of a container, as the elements of that level are read. */
@@ -2296,11 +2313,12 @@ final class Pullback {
                                     switch (elements.get(at)) {
                                         case ElementAt.AValue(Core value, InputReads in) ->
                                                 sizeOf(value, in);
-                                        case ElementAt.AtAPosition(TermPath container) ->
+                                        case ElementAt.AtASubject(DecisionSubject container) ->
                                                 sizedAt(container.element());
                                         case ElementAt.AFiledElement(TermPath list,
                                                                      Core.Block _) ->
-                                                sizedAt(list.element());
+                                                sizedAt(new DecisionSubject.AnInput(
+                                                        list.element()));
                                         case ElementAt.APiece _, ElementAt.AnEntry _ ->
                                                 new Sized.NotSized(new WhyUnread.AtNoPosition(
                                                         WhyUnread.AtNoPosition.Place.SUBJECT));
@@ -2309,7 +2327,7 @@ final class Pullback {
                                     new Sized.NotSized(new WhyUnread.AtNoPosition(
                                             WhyUnread.AtNoPosition.Place.SUBJECT));
                             case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) -> {
-                                TermPath key = keyAt(at);
+                                DecisionSubject key = keyAt(at);
                                 yield key != null ? sizedAt(key) : new Sized.NotSized(
                                         new WhyUnread.AtNoPosition(
                                                 WhyUnread.AtNoPosition.Place.SUBJECT));
@@ -2341,10 +2359,11 @@ final class Pullback {
                         reads.pathOf(applied.argument(argument), read.rules().newtypes())
                                 instanceof PathResolution.At(TermPath held) ? held : null;
                 case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument container) ->
-                        elements.get(container) instanceof ElementAt.AtAPosition(
-                                TermPath held) ? held.element() : null;
+                        elements.get(container) instanceof ElementAt.AtASubject(
+                                DecisionSubject.AnInput(TermPath held)) ? held.element() : null;
                 case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument container) ->
-                        keyAt(container);
+                        keyAt(container) instanceof DecisionSubject.AnInput(TermPath key)
+                                ? key : null;
                 case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ -> null;
                 case LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(of);
             };
@@ -2413,10 +2432,17 @@ final class Pullback {
                 return new Sized.NotSized(
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
-            TermPath held = located.held();
+            // How many different values the elements come to is a number of the input's own
+            // places, which what a dependency answered has none of.
+            if (!(located.held() instanceof DecisionSubject.AnInput(TermPath held))) {
+                return new Sized.NotSized(
+                        new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
+            }
             TermPath each = switch (ofTheElement) {
                 case LawSubject.ElementOf<DeclaredArgument> _ -> switch (located.each()) {
-                    case ElementAt.AtAPosition(TermPath container) -> container.element();
+                    case ElementAt.AtASubject(DecisionSubject.AnInput(TermPath container)) ->
+                            container.element();
+                    case ElementAt.AtASubject(DecisionSubject.AnAnswer _) -> null;
                     case ElementAt.AFiledElement(TermPath list, Core.Block _) -> list.element();
                     case ElementAt.AValue(Core value, InputReads in) ->
                             in.pathOf(value, read.rules().newtypes())
@@ -2428,7 +2454,8 @@ final class Pullback {
                 // is one. Where the entries are a list's, a component of each is no place of an
                 // input at all.
                 case LawSubject.KeyOf<DeclaredArgument> _ ->
-                        located.each() instanceof ElementAt.AtAPosition(TermPath map)
+                        located.each() instanceof ElementAt.AtASubject(
+                                DecisionSubject.AnInput(TermPath map))
                                 && read.domain().typeAt(map.key(), read.rules()) != null
                                 ? map.key() : null;
                 // What a closure answers stands at no position a row writes.
@@ -2438,7 +2465,8 @@ final class Pullback {
             };
             return each == null ? new Sized.NotSized(
                     new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT))
-                    : new Sized.AsAForm(LinearForm.atom(new Quantity.HowManyDifferent(held, each)));
+                    : new Sized.AsAForm(LinearForm.atom(new Quantity.HowManyDifferent(
+                            new DecisionSubject.AnInput(held), new DecisionSubject.AnInput(each))));
         }
 
         /**
@@ -2454,7 +2482,12 @@ final class Pullback {
                 return new Sized.NotSized(
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
-            TermPath held = located.held();
+            // A sum over the elements is a number of the input's own places, which what a
+            // dependency answered has none of.
+            if (!(located.held() instanceof DecisionSubject.AnInput held)) {
+                return new Sized.NotSized(
+                        new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
+            }
             if (!quantifying.add(held)) {
                 return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
             }
@@ -2467,14 +2500,17 @@ final class Pullback {
                 quantifying.remove(held);
             }
             return each instanceof Sized.AsAForm(LinearForm<Quantity> form)
-                    ? new Sized.AsAForm(LinearForm.atom(new Quantity.SumOver(held, form))) : each;
+                    ? new Sized.AsAForm(LinearForm.atom(new Quantity.SumOver(held, form)))
+                    : each;
         }
 
-        /** How many what stands at {@code at} holds, as a number of the input. */
-        private Sized sizedAt(TermPath at) {
-            NumericTerm.TakenOf size = sizeAt(at);
+        /** How many what stands at {@code at} holds, as a number of the input. A place inside what
+         *  a dependency answered has no type here to be counted by, and is none the declarations
+         *  measure. */
+        private Sized sizedAt(DecisionSubject at) {
+            DecisionAtom size = sizeOfSubject(at, null);
             return size == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
-                    : new Sized.AsAForm(LinearForm.atom(new DecisionAtom.OfTheInput(size)));
+                    : new Sized.AsAForm(LinearForm.atom(size));
         }
 
         /** How many elements of a container meet a statement, as one count of the quantities a
@@ -2542,8 +2578,8 @@ final class Pullback {
                 return new Sized.NotSized(
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
-            TermPath held = located.held();
-            Derivation answered = aboutAnElement(counted.container(), held, located.each(),
+            DecisionSubject heldAt = located.held();
+            Derivation answered = aboutAnElement(counted.container(), heldAt, located.each(),
                     counted.ofTheElement());
             if (answered == null) {
                 return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
@@ -2555,20 +2591,20 @@ final class Pullback {
                 return new Sized.NotSized(stopped);
             }
             // What is the same for every element counts all of them or none.
-            if (!element.mayTurnOnAnElementOf(held)) {
+            if (!element.mayTurnOnAnElementOf(heldAt)) {
                 if (element instanceof Proposition.Always(boolean holds)) {
                     if (alike != null) {
-                        alike.add(new Derivation.AComparisonRead.Counted(held, answered));
+                        alike.add(new Derivation.AComparisonRead.Counted(heldAt, answered));
                     }
-                    NumericTerm.TakenOf size = sizeAt(held);
+                    DecisionAtom size = sizeOfSubject(heldAt, located.heldType());
                     return !holds ? new Sized.AsAForm(LinearForm.constant(ExactRatio.ZERO))
                             : size == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
-                            : new Sized.AsAForm(LinearForm.atom(new DecisionAtom.OfTheInput(size)));
+                            : new Sized.AsAForm(LinearForm.atom(size));
                 }
                 return new Sized.NotSized(new WhyUnread.NotArithmetic());
             }
-            Quantity.HowManyMeet count = new Quantity.HowManyMeet(held, element);
-            counting.putIfAbsent(count, new Derivation.AComparisonRead.Counted(held, answered));
+            Quantity.HowManyMeet count = new Quantity.HowManyMeet(heldAt, element);
+            counting.putIfAbsent(count, new Derivation.AComparisonRead.Counted(heldAt, answered));
             return new Sized.AsAForm(LinearForm.atom(count));
         }
     }
@@ -2665,9 +2701,33 @@ final class Pullback {
 
     /** That the container at {@code held} holds something, as its size above nought — or null
      *  where its size is no term of this input. */
-    private Derivation holdsSomethingAt(TermPath held) {
-        NumericTerm.TakenOf count = sizeAt(held);
+    private Derivation holdsSomethingAt(DecisionSubject held, Type type) {
+        DecisionAtom count = sizeOfSubject(held, type);
         return count == null ? null : new Derivation.SizeAboveNought(count);
+    }
+
+    /**
+     * How many what stands at {@code held} holds, as a number of the quantities a condition is read
+     * over: a count of the input where it stands at a position, and the count of what a dependency
+     * answered where it is that. Null where no type measures it.
+     *
+     * @param type what stands there, which an answer's count is taken by; the input's own type is
+     *             what the declarations say of the position
+     */
+    private DecisionAtom sizeOfSubject(DecisionSubject held, Type type) {
+        return switch (held) {
+            case DecisionSubject.AnInput(TermPath at) -> {
+                NumericTerm.TakenOf size = sizeAt(at);
+                yield size == null ? null : new DecisionAtom.OfTheInput(size);
+            }
+            case DecisionSubject.AnAnswer answer -> {
+                ValueName.Stdlib measure = type == null ? null
+                        : NumericMeasures.takenOf(type, read.rules().inners());
+                yield measure == null ? null
+                        : new DecisionAtom.TakenOfAnAnswer(measure, TakenArguments.NONE, answer,
+                                type);
+            }
+        };
     }
 
     /**
@@ -2967,6 +3027,10 @@ final class Pullback {
                         break;
                     }
                 }
+                DecisionAtom takenOfAnAnswer = subjects.takenOfAnAnswer(node, at);
+                if (takenOfAnAnswer != null) {
+                    return LinearForm.atom(takenOfAnAnswer);
+                }
                 // A number a dependency answered, which a row stands in and so controls, named as
                 // the decision table names it: the evaluation of the call, whether it is written
                 // here or a name for it is.
@@ -3098,6 +3162,13 @@ final class Pullback {
     private DecisionSubject truthAt(Core e, InputReads reads) {
         TermPath position = InputTruth.positionOf(e, reads, read.rules().newtypes());
         return position != null ? new DecisionSubject.AnInput(position) : answerAt(e, reads);
+    }
+
+    /** The subject a row controls that {@code e} stands for: a position the input is written at, or
+     *  what a dependency answered — or null where it is neither. */
+    private DecisionSubject subjectOf(Core e, InputReads reads) {
+        return reads.pathOf(e, read.rules().newtypes()) instanceof PathResolution.At(TermPath at)
+                ? new DecisionSubject.AnInput(at) : answerAt(e, reads);
     }
 
     /** What a dependency answered, or a place inside it, that {@code e} is — or null where it is

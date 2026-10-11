@@ -1,6 +1,10 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
+
+import java.util.Collection;
 
 /**
  * A condition about an answer that the value standing a dependency in was not composed against, and
@@ -92,11 +96,12 @@ public sealed interface DemandGap {
         record APlaceOnTheAnswersOwnOrder() implements WhyNotStated {}
 
         /**
-         * A statement about an answer that is no one comparison, truth or case of it: some element
-         * of what it holds meeting something, several things asked of it at once.
+         * A statement about an answer that is not about that answer alone: it also names a number
+         * of the input, a value the body bound, or a second answer.
          *
-         * <p>What this stage composes an answer against is one column of it at a time, so a
-         * statement made of several has nowhere to go whole.
+         * <p>Which value the answer may take turns on what the other took, for the reason a
+         * comparison over the pair does, and what this stage composes is a value of one answer
+         * from what is asked of it.
          */
         record AStatementOfSeveralParts() implements WhyNotStated {}
     }
@@ -167,5 +172,60 @@ public sealed interface DemandGap {
          * of them is one the row does not meet.
          */
         record OneValueAnswersEveryCall() implements WhyNotComposed {}
+
+        /**
+         * No value was composed under it before a figure of this compiler's ended the search over
+         * the values of the input's numbers it names.
+         *
+         * <p>Said of the statement and not of the pair that came nearest: what a figure ended is the
+         * looking, so a pair past it may be one an answer composes for. A demand with this was not
+         * composed against, and raising the figure is what looks further.
+         *
+         * @param figures what ended the walk
+         */
+        record NoPairComposedBeforeAFigureEnded(CanonicalSelection<CompositionBudget> figures)
+                implements WhyNotComposed {
+
+            public NoPairComposedBeforeAFigureEnded {
+                if (figures == null || figures.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a walk a figure ended says which figure ended it");
+                }
+            }
+
+            /** What ended a walk, in the order a report says it. */
+            public static NoPairComposedBeforeAFigureEnded by(
+                    Collection<CompositionBudget> met) {
+                return new NoPairComposedBeforeAFigureEnded(
+                        PublicationOrders.COMPOSITION_BUDGETS.keep(met));
+            }
+        }
+
+        /**
+         * No value was composed under it because the statement asks of more ways than a figure of
+         * this compiler's lets a way be split into, and none of them was looked along.
+         *
+         * <p>Said apart from {@link NoValueComposedAtItsPositions}: that one is about positions
+         * nothing here writes a value at, which more looking does not change, and this one is about
+         * how much was looked along, which raising the figure does.
+         *
+         * @param figures what ended the splitting
+         */
+        record NoWayComposedBeforeAFigureEnded(CanonicalSelection<CompositionBudget> figures)
+                implements WhyNotComposed {
+
+            public NoWayComposedBeforeAFigureEnded {
+                if (figures == null || figures.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a splitting a figure ended says which figure ended it");
+                }
+            }
+
+            /** What ended a splitting, in the order a report says it. */
+            public static NoWayComposedBeforeAFigureEnded by(Collection<CompositionBudget> met) {
+                return new NoWayComposedBeforeAFigureEnded(
+                        PublicationOrders.COMPOSITION_BUDGETS.keep(met));
+            }
+        }
     }
 }

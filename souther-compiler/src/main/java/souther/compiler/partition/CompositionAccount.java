@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.meaning.AnswerAsAnInput;
+
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -82,6 +84,30 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
         Set<ConditionOccurrence> taken = new LinkedHashSet<>(takenUpByAnAnswer);
         taken.addAll(answers.takenUpByAnAnswer);
         return new CompositionAccount(input, demands, taken);
+    }
+
+    /**
+     * This account with a figure said to be why the statements about an answer that name a number
+     * of the input were not composed against.
+     *
+     * <p>Only those: a statement that names no such number was not composed against for a reason
+     * that is not the looking over a number's values, and a figure said of it would send a reader
+     * to raise something that changes nothing.
+     */
+    public CompositionAccount sayingAFigureEndedTheLookingOverNumbers(
+            Set<CompositionBudget> figures) {
+        List<DemandGap> said = new ArrayList<>();
+        for (DemandGap each : onAnAnswer) {
+            said.add(each instanceof DemandGap.Uncomposed(
+                    AnswerDemand.AStatement statement, var why)
+                    && !(why instanceof DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded)
+                    && !(why instanceof DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded)
+                    && !AnswerAsAnInput.inputNumbersIn(statement.statement()).isEmpty()
+                    ? new DemandGap.Uncomposed(statement,
+                            DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded.by(figures))
+                    : each);
+        }
+        return new CompositionAccount(onTheWay, said, takenUpByAnAnswer);
     }
 
     /** Whether this says nothing at all, which is a composing with nothing written down on either

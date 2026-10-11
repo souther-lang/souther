@@ -1,6 +1,10 @@
 package souther.compiler.meaning;
 
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.semantics.TakenArguments;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 /**
  * One quantity a comparison of a decision is written over.
@@ -14,6 +18,9 @@ import souther.compiler.inputs.NumericTerm;
  */
 public sealed interface DecisionAtom extends Quantity {
 
+    /** The answer of a dependency this is a number of, or null where it is a number of the input. */
+    DecisionSubject.AnAnswer ofTheAnswer();
+
     /** A number of the behavior's input. */
     record OfTheInput(NumericTerm term) implements DecisionAtom {
 
@@ -24,8 +31,52 @@ public sealed interface DecisionAtom extends Quantity {
         }
 
         @Override
+        public DecisionSubject.AnAnswer ofTheAnswer() {
+            return null;
+        }
+
+        @Override
         public String spelled() {
             return term.toString();
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * A number {@code operation} takes of what a dependency answered, at the place inside its
+     * answer the body read: how many it holds, how long it is, the hour it is at.
+     *
+     * <p>Which operations take a number of a value is what the library says of them, asked of the
+     * same {@link NumericMeasures} the input's numbers are, so a count of a list is the count the
+     * library defines wherever the list stands. What differs is whose value it is: one a row
+     * stands a dependency in for, which no line of the input is drawn on.
+     *
+     * @param arguments what the call was given beside the value, as the library's account reads it
+     * @param at        what stands at the place the number is taken of, which the account is
+     *                  taken by
+     */
+    record TakenOfAnAnswer(ValueName.Stdlib operation, TakenArguments arguments,
+                           DecisionSubject.AnAnswer of, Type at) implements DecisionAtom {
+
+        public TakenOfAnAnswer {
+            if (operation == null || arguments == null || of == null || at == null) {
+                throw new IllegalArgumentException("a number taken of an answer is some"
+                        + " operation's, of some answer");
+            }
+        }
+
+        @Override
+        public DecisionSubject.AnAnswer ofTheAnswer() {
+            return of;
+        }
+
+        @Override
+        public String spelled() {
+            return operation + arguments.byPosition().toString() + "(" + of.spelled() + ")";
         }
 
         @Override
@@ -41,6 +92,11 @@ public sealed interface DecisionAtom extends Quantity {
             if (at == null) {
                 throw new IllegalArgumentException("an answered number is some answer's");
             }
+        }
+
+        @Override
+        public DecisionSubject.AnAnswer ofTheAnswer() {
+            return at;
         }
 
         @Override

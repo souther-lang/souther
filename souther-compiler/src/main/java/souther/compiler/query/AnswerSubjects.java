@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.partition.AnswerDemand;
+import souther.compiler.partition.AnswerStatements;
 import souther.compiler.partition.MeasuredInput;
 import souther.compiler.types.TypeSymbol;
 
@@ -32,8 +33,16 @@ import java.util.Map;
  *               one nothing could be read for has no entry, and is not a case this quietly moves
  *               past
  */
-record AnswerSubjects(MeasuredInput whole, List<TypeSymbol> cases,
-                      Map<TypeSymbol, MeasuredInput> byCase) {
+record AnswerSubjects(Standing whole, List<TypeSymbol> cases,
+                      Map<TypeSymbol, Standing> byCase) {
+
+    /**
+     * What a value of one type is composed over, and what a statement about it asks of the value.
+     *
+     * <p>The two beside each other and not one inside the other: a subject is held apart from the
+     * reading it was made by, and a statement made over it is turned into demands by that reading.
+     */
+    record Standing(MeasuredInput subject, AnswerStatements statements) {}
 
     AnswerSubjects {
         cases = List.copyOf(cases);
@@ -78,7 +87,7 @@ record AnswerSubjects(MeasuredInput whole, List<TypeSymbol> cases,
         // demand stays in hand, and no value meets it.
         List<Feasible> out = new ArrayList<>();
         for (TypeSymbol each : cases) {
-            MeasuredInput standing = byCase.get(each);
+            Standing standing = byCase.get(each);
             if (standing != null && (left == null || left.leaves(each))) {
                 out.add(new Feasible(each, standing, left == null ? demands : rest));
             }
@@ -97,6 +106,6 @@ record AnswerSubjects(MeasuredInput whole, List<TypeSymbol> cases,
      * @param caseOfTheAnswer which case of the union this composes a value of, or null where the
      *                        answer is not a union and there is one subject for the whole of it
      */
-    record Feasible(TypeSymbol caseOfTheAnswer, MeasuredInput standing,
+    record Feasible(TypeSymbol caseOfTheAnswer, Standing standing,
                     List<AnswerDemand> demands) {}
 }

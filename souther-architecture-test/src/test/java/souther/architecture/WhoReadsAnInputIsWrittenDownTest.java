@@ -61,7 +61,8 @@ class WhoReadsAnInputIsWrittenDownTest {
                     + " -> " + READ,
             AMethod.of(QUERY + "Adequacy", "standingFor",
                     "(L" + QUERY + "Db;Ljava/lang/String;Lsouther/compiler/partition/MeasuredInput;"
-                            + "Lsouther/compiler/types/Type;)Lsouther/compiler/partition/MeasuredInput;")
+                            + "Lsouther/compiler/types/Type;)L" + QUERY
+                            + "AnswerSubjects$Standing;")
                     + " -> " + READ);
 
     @Test

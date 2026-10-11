@@ -126,6 +126,10 @@ public final class WhatTheRulesLeave {
             // Whether two values are one is no rule of either position alone, so asked of each
             // on its own, nothing rules it out.
             case Proposition.SameValue _, Proposition.LastToHold _ -> LEFT;
+            // The elements of what a dependency answered are what a row stands it in with, the
+            // same as the answer itself.
+            case Proposition.Some some when some.container() instanceof DecisionSubject.AnAnswer ->
+                    LEFT;
             case Proposition.Some some -> someElement(some, some.holds() == want, read);
         };
     }
@@ -213,11 +217,12 @@ public final class WhatTheRulesLeave {
                                            InputReading read) {
         AWayThrough element = admits(some.ofTheElement(), someMeets, read);
         if (someMeets) {
-            return element instanceof AWayThrough.RuledOut || mayHold(some.container(), true, read)
+            TermPath container = some.container().inputPosition();
+            return element instanceof AWayThrough.RuledOut || mayHold(container, true, read)
                     ? element : new AWayThrough.RuledOut(
-                            new WhyRuledOut.NothingIsHeldIn(some.container()));
+                            new WhyRuledOut.NothingIsHeldIn(container));
         }
-        return mayHold(some.container(), false, read) ? LEFT : element;
+        return mayHold(some.container().inputPosition(), false, read) ? LEFT : element;
     }
 
     /**

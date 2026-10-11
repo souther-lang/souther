@@ -139,6 +139,12 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
                 notComposed(new DemandGap.WhyNotComposed.NothingComposedAValueOfTheAnswer()));
         out.put(DemandGap.WhyNotComposed.OneValueAnswersEveryCall.class,
                 notComposed(new DemandGap.WhyNotComposed.OneValueAnswersEveryCall()));
+        out.put(DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded.class,
+                notComposed(DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded.by(
+                        Set.of(CompositionBudget.PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED))));
+        out.put(DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.class,
+                notComposed(DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(
+                        Set.of(CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO))));
         return out;
     }
 

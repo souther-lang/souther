@@ -25,9 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * run is what says it reached the line behind the fork.
  *
  * <p>And where the ways the conditions of several ways split it into are more than are looked
- * along, the way is looked along whole and the row's account says which conditions it was not
- * split at, and at which figure — since along one of them a row would have been composed against
- * more.
+ * along, the ones the figure lets through are looked along first and the way whole past them; a row
+ * of the way whole says which conditions it was not split at, and at which figure — since along one
+ * of them a row would have been composed against more.
  */
 class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
 
@@ -72,6 +72,31 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
             }
             """;
 
+    /** The same, with the first alternative of the first condition closed by a rule, so every way
+     *  the figure lets through takes it and none of them reaches. */
+    private static final String TOO_MANY_FIRST_CLOSED = """
+            module example.either
+
+            data N = Int
+                invariant value >= 0 && value <= 100
+
+            data Yes
+            data No
+
+            behavior f : (a: N, b: N, c: N, d: N, e: N, g: N, h: N, i: N, j: N, k: N, n: N)
+                -> Yes | No
+
+            let f (a, b, c, d, e, g, h, i, j, k, n) = {
+                guard a == 0 else No
+                guard a > 0 || b > 0 else No
+                guard c > 0 || d > 0 else No
+                guard e > 0 || g > 0 else No
+                guard h > 0 || i > 0 else No
+                guard j > 0 || k > 0 else No
+                if n > 5 then Yes else No
+            }
+            """;
+
     private static final Count BEHIND_THE_FORK = Count.of(5);
 
     @Test
@@ -85,9 +110,28 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
         }
     }
 
+    /**
+     * Past the figure the ways it lets through are still looked along first: any of them is enough
+     * for a row, and the way whole past them is no reason to give them up.
+     */
+    @Test
+    void pastTheFigureARowAlongOneOfTheWaysLookedAlongIsOffered() {
+        List<ItemAssessment.Owed> owed = pointsOfTheInnerLine(TOO_MANY);
+        assertFalse(owed.isEmpty(), "the line behind the guards is owed rows");
+        for (ItemAssessment.Owed item : owed) {
+            assertTrue(item.searches().rowToOffer().isPresent(),
+                    () -> "a row along one of the ways looked along is offered: "
+                            + item.searches());
+        }
+    }
+
+    /**
+     * And where none of the ways the figure let through reaches, the way is looked along whole,
+     * and the account of what that came to says which conditions it was not split at.
+     */
     @Test
     void pastTheFigureTheAccountSaysWhichConditionsTheWayWasNotSplitAt() {
-        List<ItemAssessment.Owed> owed = pointsOfTheInnerLine(TOO_MANY);
+        List<ItemAssessment.Owed> owed = pointsOfTheInnerLine(TOO_MANY_FIRST_CLOSED);
         assertFalse(owed.isEmpty(), "the line behind the guards is owed rows");
         for (ItemAssessment.Owed item : owed) {
             List<ReachabilityGap.LookedAlongWhole> said = new ArrayList<>();

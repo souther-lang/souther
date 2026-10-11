@@ -302,7 +302,8 @@ final class MeaningAssumptions {
             }
             // Taken of a form of several places, which is a fact about none of them: a path would
             // have to know the remainder of a sum it holds no name for.
-            case Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _ -> {
+            case Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
+                 DecisionAtom.TakenOfAnAnswer _ -> {
                 return new AtomAt.AtTheEdge(
                         WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
             }

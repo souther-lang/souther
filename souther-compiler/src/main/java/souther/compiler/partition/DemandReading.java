@@ -56,6 +56,12 @@ final class DemandReading {
     }
 
     /**
+     * How many ways an element may meet what a quantifier asks are read one by one
+     * ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}), read here and nowhere else.
+     */
+    private static final CompositionBudget READINGS = CompositionBudget.READINGS_OF_ONE_CONDITION;
+
+    /**
      * What a condition asks of a row, or why this reading has no words for it.
      *
      * <p>Two halves, and no third. What was taken ({@link Taken}) is the condition said in a row's
@@ -346,6 +352,12 @@ final class DemandReading {
     private static List<Read> projected(Proposition stated, InputReading read) {
         return switch (stated) {
             case Proposition.Always(boolean holds) -> List.of(new Read.Settled(holds));
+            // A relation over anything an answer holds, a count of a list it holds among them, is
+            // one a row writes no value toward. Asked once here and not of each kind of number a
+            // relation weighs: a count over an answer's list is no number of the answer itself,
+            // and asked by the kind it would be read as a count a row composes.
+            case Proposition.Compared compared when Proposition.aboutAnAnswer(compared) ->
+                    List.of(anAnswerARowStandsIn());
             case Proposition.Compared compared -> List.of(ofARelation(compared, read));
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
                     List.of(new Read.Demands(new RowDemand.ATruth(at, holds)));
@@ -401,6 +413,11 @@ final class DemandReading {
                     default -> List.of(new Read.OneOf(open));
                 };
             }
+            // The elements of a container a dependency answered are what a row stands the
+            // dependency in with and writes no value at, as the answer's own numbers are.
+            case Proposition.Some some
+                    when some.container() instanceof DecisionSubject.AnAnswer ->
+                    List.of(anAnswerARowStandsIn());
             case Proposition.Some some -> ofSomeElement(some, read);
         };
     }
@@ -437,28 +454,27 @@ final class DemandReading {
      * well, since an entry is its key and its value.
      */
     private static List<Read> ofSomeElement(Proposition.Some some, InputReading read) {
-        TermPath held = some.container();
+        TermPath held = some.container().inputPosition();
         List<TermPath> element = elementOf(held);
         boolean everyElement = !some.holds();
         Proposition asked = everyElement ? some.ofTheElement().denied() : some.ofTheElement();
         List<Proposition> parts = asked instanceof Proposition.All all ? all.parts()
                 : List.of(asked);
-        List<AnElementsWay> ways = List.of(AnElementsWay.ASKING_NOTHING);
+        List<List<AnElementsWay>> choices = new ArrayList<>();
         for (Proposition part : parts) {
             // What a container holding a value asks of an element is that it be that value, which
             // a composer writes into the container and no region narrows by. The element itself:
             // the key a map files it under being a value is no value the map holds.
-            List<AnElementsWay> choices = part instanceof Proposition.SameValue(
+            List<AnElementsWay> these = part instanceof Proposition.SameValue(
                     DecisionSubject.AnInput(TermPath one), DecisionSubject.AnInput(TermPath at),
                     boolean holds, var _) && one.equals(held.element())
                     ? List.of(AnElementsWay.asking(holds ? new RowDemand.SameAs(at)
                             : new RowDemand.DifferentFrom(at)))
                     : keyedWays(part, held, element);
-            if (choices == null) {
-                choices = waysOf(projected(part, read), element, everyElement, some, read);
-            }
-            ways = AnElementsWay.eachOf(ways, choices);
+            choices.add(these != null ? these
+                    : waysOf(projected(part, read), element, everyElement, some, read));
         }
+        List<AnElementsWay> ways = AnElementsWay.eachWhole(choices, read);
         List<List<Read>> alternatives = new ArrayList<>();
         for (AnElementsWay way : ways) {
             alternatives.add(everyElement ? everyElementMeeting(held, way, read)
@@ -501,19 +517,135 @@ final class DemandReading {
             return new AnElementsWay(List.of(), List.of(one), false);
         }
 
-        /** Every way of {@code ways} taken together with every one of {@code choices}. */
-        static List<AnElementsWay> eachOf(List<AnElementsWay> ways, List<AnElementsWay> choices) {
-            List<AnElementsWay> out = new ArrayList<>();
-            for (AnElementsWay way : ways) {
-                for (AnElementsWay choice : choices) {
-                    List<RowDemand.OfAnElement> element = new ArrayList<>(way.ofTheElement);
-                    element.addAll(choice.ofTheElement);
-                    List<Read> row = new ArrayList<>(way.ofTheRow);
-                    row.addAll(choice.ofTheRow);
-                    out.add(new AnElementsWay(element, row, way.never || choice.never));
+        /**
+         * The ways a figure of this compiler's work left unlooked at, as one way of their own: the
+         * row is asked something nothing here read, which is neither a way no element meets nor
+         * one an element is composed for. Kept beside the ways that were looked at, so those are
+         * composed for and a way past all of them is not said to be closed.
+         */
+        static final AnElementsWay LEFT_UNREAD = ofTheRow(
+                new Read.Unread(new WhyNotTaken.MoreWaysThanAreRead()));
+
+        /**
+         * Every way of taking one choice of each of {@code parts} together, each whole.
+         *
+         * <p>Any of them meeting is enough, whether some element is asked it or every element is:
+         * a row along one way meets what all of them ask together. So the ways are made whole one
+         * at a time and those made are kept however many are not, with {@link #LEFT_UNREAD} beside
+         * them where a figure stopped the making — what is kept is composed for, and what was not
+         * looked at is said to be so rather than lost or taken as closed.
+         *
+         * <p>A way no element meets is not taken further: some element meeting it is no row's, and
+         * every element meeting it is the container holding none, whatever else is asked beside
+         * it. Which ways those are is proved and not guessed: what the declarations leave, which is
+         * what every element holds, with the relations the way asks of the element taken in, left
+         * with nothing ({@link TakenConstraint#nothingMeetsAll}). A choice between relations of one
+         * number written as a conjunction of disjunctions is, taken apart, mostly ways like that.
+         *
+         * <p>What is looked at is held to the figure — each way a choice of several opens — whether
+         * or not it turns out closed, so a walk among closed ways stops where it is told to.
+         */
+        static List<AnElementsWay> eachWhole(List<List<AnElementsWay>> parts, InputReading read) {
+            Set<AnElementsWay> open = new LinkedHashSet<>();
+            int[] looked = {0};
+            if (!walk(parts, 0, ASKING_NOTHING, read.quantities().region(), open, looked)) {
+                open.add(LEFT_UNREAD);
+            }
+            return open.isEmpty() ? List.of(NEVER) : List.copyOf(open);
+        }
+
+        /**
+         * {@code so} taken one choice of each part from {@code at} on, each way made whole put in
+         * {@code open}.
+         *
+         * @param within what the declarations leave with every relation {@code so} asks of the
+         *               element taken in, carried down the walk so each choice narrows it by what
+         *               it adds and no more
+         * @return whether every way was looked at, which is false where the figure stopped it
+         */
+        private static boolean walk(List<List<AnElementsWay>> parts, int at, AnElementsWay so,
+                                    SearchRegion within, Set<AnElementsWay> open, int[] looked) {
+            if (at == parts.size()) {
+                open.add(so);
+                return true;
+            }
+            int most = READINGS.maximum();
+            List<AnElementsWay> choices = parts.get(at);
+            // A part with one choice is taken and not chosen, so a long conjunction of single
+            // relations costs nothing of the figure: what is counted is each way a choice opens.
+            boolean aChoice = choices.size() > 1;
+            for (AnElementsWay choice : choices) {
+                if (aChoice) {
+                    if (looked[0] == most) {
+                        return false;
+                    }
+                    looked[0]++;
+                }
+                if (choice.never) {
+                    continue;
+                }
+                List<TakenConstraint> added = relationsOf(choice);
+                SearchRegion further = added.isEmpty() ? within
+                        : TakenConstraint.narrowedBy(added, within);
+                if (!added.isEmpty() && TakenConstraint.nothingIsLeftFor(added, further)) {
+                    continue;
+                }
+                if (!walk(parts, at + 1, so.with(choice), further, open, looked)) {
+                    return false;
                 }
             }
-            return List.copyOf(out);
+            return true;
+        }
+
+        /** The relations {@code way} asks of the element, which are what a region is narrowed
+         *  by. */
+        private static List<TakenConstraint> relationsOf(AnElementsWay way) {
+            List<TakenConstraint> out = new ArrayList<>();
+            for (RowDemand.OfAnElement each : way.ofTheElement) {
+                if (each instanceof RowDemand.Relational(TakenConstraint relation)) {
+                    out.add(relation);
+                }
+            }
+            return out;
+        }
+
+        /**
+         * The ways of every one of {@code alternatives}, any of which is enough.
+         *
+         * <p>One no element meets is none of them, and only where every one is closed is the
+         * whole. Those left open are held to the figure, and past it the rest are said to be
+         * {@link #LEFT_UNREAD} and not dropped: the ones kept are composed for all the same.
+         */
+        static List<AnElementsWay> oneOfEach(List<List<AnElementsWay>> alternatives) {
+            int most = READINGS.maximum();
+            Set<AnElementsWay> open = new LinkedHashSet<>();
+            boolean someLeft = false;
+            for (List<AnElementsWay> alternative : alternatives) {
+                for (AnElementsWay way : alternative) {
+                    if (way.never || open.contains(way)) {
+                        continue;
+                    }
+                    if (open.size() == most) {
+                        someLeft = true;
+                        break;
+                    }
+                    open.add(way);
+                }
+            }
+            if (someLeft) {
+                open.add(LEFT_UNREAD);
+            }
+            return open.isEmpty() ? List.of(NEVER) : List.copyOf(open);
+        }
+
+        /** This way and {@code choice} together; whether an element meets them is the walk's to
+         *  ask ({@link #walk}). */
+        private AnElementsWay with(AnElementsWay choice) {
+            List<RowDemand.OfAnElement> element = new ArrayList<>(ofTheElement);
+            element.addAll(choice.ofTheElement);
+            List<Read> row = new ArrayList<>(ofTheRow);
+            row.addAll(choice.ofTheRow);
+            return new AnElementsWay(element, row, false);
         }
     }
 
@@ -527,12 +659,11 @@ final class DemandReading {
     private static List<AnElementsWay> waysOf(List<Read> reads, List<TermPath> element,
                                               boolean everyElement, Proposition.Some whole,
                                               InputReading read) {
-        List<AnElementsWay> ways = List.of(AnElementsWay.ASKING_NOTHING);
+        List<List<AnElementsWay>> choices = new ArrayList<>();
         for (Read each : reads) {
-            ways = AnElementsWay.eachOf(ways,
-                    choicesOf(each, element, everyElement, whole, read));
+            choices.add(choicesOf(each, element, everyElement, whole, read));
         }
-        return ways;
+        return AnElementsWay.eachWhole(choices, read);
     }
 
     /**
@@ -582,12 +713,14 @@ final class DemandReading {
                             : AnElementsWay.ofTheRow(each));
             case Read.Demands(RowDemand.ForTheRun(var _, var why, var past)) ->
                     List.of(AnElementsWay.ofTheRow(forTheRun(whole, why, past)));
+            // Each way of each alternative: one alternative a figure stopped is said to be, and
+            // the others are the ways they are.
             case Read.OneOf(var alternatives) -> {
-                List<AnElementsWay> out = new ArrayList<>();
+                List<List<AnElementsWay>> ofEach = new ArrayList<>();
                 for (List<Read> alternative : alternatives) {
-                    out.addAll(waysOf(alternative, element, everyElement, whole, read));
+                    ofEach.add(waysOf(alternative, element, everyElement, whole, read));
                 }
-                yield List.copyOf(out);
+                yield AnElementsWay.oneOfEach(ofEach);
             }
         };
     }
@@ -825,7 +958,6 @@ final class DemandReading {
                     new Read.Demands(new RowDemand.Relational(TakenConstraint.Ordered.isABound(met)
                             ? new TakenConstraint.Ordered(term, at, met)
                             : new TakenConstraint.AwayFrom(term, at)));
-            case Relation.Ordered(DecisionAtom.OfAnAnswer _, var _, Rel _) -> anAnswerARowStandsIn();
             case Relation.Ordered _ ->
                     forTheRun(compared, RowDemand.NoComposer.AN_ORDER_OF_NO_ONE_POSITION);
         };
@@ -900,7 +1032,7 @@ final class DemandReading {
         List<WhyUnread> past = new ArrayList<>();
         for (Quantity atom : form.coefs().keySet()) {
             switch (atom) {
-                case DecisionAtom.OfAnAnswer _ -> {
+                case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _ -> {
                     return anAnswerARowStandsIn();
                 }
                 case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> counted = true;

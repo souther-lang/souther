@@ -2,6 +2,7 @@ package souther.compiler.meaning;
 
 import souther.compiler.inputs.TermPath;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -31,6 +32,31 @@ public sealed interface DecisionSubject {
     String spelled();
 
     /**
+     * The position of the input this is, for a reader that can only ask of what a row writes.
+     *
+     * <p>Not a way of asking whether this is one: a reader that may meet an answer asks with
+     * {@code instanceof} and says what it does with the answer. This is for the reader that was
+     * handed only what it was already told was written at a position.
+     *
+     * @throws IllegalStateException where this is a place inside what a dependency answered
+     */
+    TermPath inputPosition();
+
+    /** The same subject, inside the container it has reached. */
+    DecisionSubject element();
+
+    /** The same subject, inside the map it has reached, at its keys. */
+    DecisionSubject key();
+
+    /**
+     * Whether this is {@code other} or a place inside it.
+     *
+     * <p>Of one source only: a position of the input is never inside what a dependency answered,
+     * and two answers are one only where they are the same evaluation.
+     */
+    boolean isAtOrUnder(DecisionSubject other);
+
+    /**
      * A position of the behavior's input, where a row writes a value.
      *
      * <p>The position before any arm narrows it: what the arms of one fork answer is one question
@@ -48,6 +74,26 @@ public sealed interface DecisionSubject {
         @Override
         public String spelled() {
             return at.toString();
+        }
+
+        @Override
+        public TermPath inputPosition() {
+            return at;
+        }
+
+        @Override
+        public DecisionSubject element() {
+            return new AnInput(at.element());
+        }
+
+        @Override
+        public DecisionSubject key() {
+            return new AnInput(at.key());
+        }
+
+        @Override
+        public boolean isAtOrUnder(DecisionSubject other) {
+            return other instanceof AnInput input && at.isAtOrUnder(input.at);
         }
 
         @Override
@@ -85,6 +131,36 @@ public sealed interface DecisionSubject {
             StringBuilder out = new StringBuilder(answered.spelled());
             steps.forEach(step -> out.append('.').append(step));
             return out.toString();
+        }
+
+        @Override
+        public TermPath inputPosition() {
+            throw new IllegalStateException(spelled() + " is a place inside what a dependency"
+                    + " answered, which a row stands in for and writes no value at");
+        }
+
+        @Override
+        public DecisionSubject element() {
+            return then(new TermPath.Step.Element());
+        }
+
+        @Override
+        public DecisionSubject key() {
+            return then(new TermPath.Step.Key());
+        }
+
+        @Override
+        public boolean isAtOrUnder(DecisionSubject other) {
+            return other instanceof AnAnswer answer
+                    && answered.equals(answer.answered)
+                    && steps.size() >= answer.steps.size()
+                    && steps.subList(0, answer.steps.size()).equals(answer.steps);
+        }
+
+        private AnAnswer then(TermPath.Step step) {
+            List<TermPath.Step> more = new ArrayList<>(steps);
+            more.add(step);
+            return new AnAnswer(answered, more);
         }
 
         @Override

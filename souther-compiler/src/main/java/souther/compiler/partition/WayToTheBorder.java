@@ -231,49 +231,69 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
 
     /**
      * The ways this one is, each with one alternative of every condition of several ways taken in
-     * where it stands ({@link OnTheWay.OneOf}) — just itself where it has none — or empty where that
-     * is more than {@code most} ways.
+     * where it stands ({@link OnTheWay.OneOf}) — just itself where it has none — as many as
+     * {@code most}, the first condition's alternatives changing slowest.
      *
      * <p>Every row past this way is past one of them, since a row past a condition of several ways
      * met one of its alternatives. So a row is looked for along each, and nothing reaches the border
-     * only where nothing reaches along any of them.
+     * only where nothing reaches along any of them — which only a split that holds every way can
+     * say, so it is told apart from one the figure cut ({@link Split#everyWay}).
      */
-    public Optional<List<WayToTheBorder>> eachWay(int most) {
-        List<List<OnTheWay>> ways = expanded(onTheWay, most);
-        return ways == null ? Optional.empty()
-                : Optional.of(ways.stream().map(WayToTheBorder::new).toList());
+    public Split eachWay(int most) {
+        List<List<OnTheWay>> out = new ArrayList<>();
+        boolean every = waysFrom(onTheWay, new ArrayList<>(), out, most);
+        return new Split(out.stream().map(WayToTheBorder::new).toList(), every);
     }
 
-    /** {@code entries} with each condition of several ways read as one of its alternatives, every
-     *  choice of them — or null where that is more than {@code most}. */
-    private static List<List<OnTheWay>> expanded(List<OnTheWay> entries, int most) {
-        List<List<OnTheWay>> ways = new ArrayList<>(List.of(List.of()));
-        for (OnTheWay each : entries) {
-            List<List<OnTheWay>> taken = new ArrayList<>();
-            List<List<OnTheWay>> choices = new ArrayList<>();
-            if (each instanceof OnTheWay.OneOf several) {
-                for (List<OnTheWay> alternative : several.alternatives()) {
-                    List<List<OnTheWay>> inside = expanded(alternative, most);
-                    if (inside == null) {
-                        return null;
-                    }
-                    choices.addAll(inside);
-                }
-            } else {
-                choices.add(List.of(each));
-            }
-            for (List<OnTheWay> way : ways) {
-                for (List<OnTheWay> choice : choices) {
-                    if (taken.size() == most) {
-                        return null;
-                    }
-                    List<OnTheWay> longer = new ArrayList<>(way);
-                    longer.addAll(choice);
-                    taken.add(longer);
-                }
-            }
-            ways = taken;
+    /**
+     * The ways this one was split into, and whether they are every way it is.
+     *
+     * @param ways     the first of them, one or more
+     * @param everyWay whether they are all of them; where not, the figure stopped the splitting and
+     *                 a row past this way may be on a way not among them
+     */
+    public record Split(List<WayToTheBorder> ways, boolean everyWay) {
+
+        public Split {
+            ways = List.copyOf(ways);
         }
-        return ways;
+    }
+
+    /**
+     * Each way of {@code entries}, after {@code so}, put in {@code into} until it holds
+     * {@code most}: a condition of several ways is each of its alternatives in its place in turn,
+     * read as the entries it holds, so one inside an alternative is split where it stands too.
+     *
+     * <p>Made whole one at a time and never as a product first: how many there are is the figure's
+     * to bound, and a list of every one would be the size of what it stops.
+     *
+     * @return whether every way was put, which is false where {@code most} stopped it
+     */
+    private static boolean waysFrom(List<OnTheWay> entries, List<OnTheWay> so,
+                                    List<List<OnTheWay>> into, int most) {
+        int at = 0;
+        while (at < entries.size() && !(entries.get(at) instanceof OnTheWay.OneOf)) {
+            at++;
+        }
+        if (at == entries.size()) {
+            if (into.size() == most) {
+                return false;
+            }
+            List<OnTheWay> whole = new ArrayList<>(so);
+            whole.addAll(entries);
+            into.add(List.copyOf(whole));
+            return true;
+        }
+        List<OnTheWay> before = new ArrayList<>(so);
+        before.addAll(entries.subList(0, at));
+        List<OnTheWay> after = entries.subList(at + 1, entries.size());
+        for (List<OnTheWay> alternative : ((OnTheWay.OneOf) entries.get(at)).alternatives()) {
+            List<OnTheWay> rest = new ArrayList<>(alternative);
+            rest.addAll(after);
+            if (!waysFrom(rest, before, into, most)) {
+                return false;
+            }
+        }
+        return true;
     }
 }

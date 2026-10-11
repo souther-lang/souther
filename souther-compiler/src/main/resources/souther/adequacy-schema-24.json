@@ -2640,7 +2640,7 @@
               "notRead": {
                 "type": "array",
                 "minItems": 1,
-                "description": "Why a condition nothing read was not, every reason once — written only for `not_read`, beside the identity and no part of it. `meaning_unread` is what the condition means not having been read, and `outside_domain` the domain the reader writes in having no words for what it means. A condition read to the end and in the reader's words is taken, whether or not anything composes a row for it, so neither is written for what composing reaches.",
+                "description": "Why a condition nothing read was not, every reason once — written only for `not_read`, beside the identity and no part of it. `meaning_unread` is what the condition means not having been read, `outside_domain` the domain the reader writes in having no words for what it means, and `past_a_figure` the reader having the words and stopping at a figure of this compiler's work before saying it in them. A condition read to the end and in the reader's words is taken, whether or not anything composes a row for it, so neither is written for what composing reaches.",
                 "items": {
                   "$ref": "#/$defs/conditionNotReadReason"
                 }
@@ -2671,7 +2671,7 @@
     },
     "conditionNotReadReason": {
       "type": "object",
-      "description": "One reason a condition nothing read was not: which of the two kinds, and the word within it. The kinds are told apart by what lifts one — a rule of the reading of what a condition means, or a wider domain. Each `outside_domain` word names the reader whose domain stops: what a row is asked is written at the input's positions, so `answer_a_row_stands_in` is what a dependency answered; what a path knows is relations of numbers, truths and what every element was written to meet, about the places of the tree it walks, so the `path_` words and `place_the_path_does_not_read` are where that stops. `size_nothing_measures` and `position_the_reading_holds_no_place_for` are no longer written — every container a condition asks about has a size that is a number of the input, and the reading of the input holds every position a condition names — and a document of this version may still carry them.",
+      "description": "One reason a condition nothing read was not: which of the three kinds, and the word within it. The kinds are told apart by what lifts one — a rule of the reading of what a condition means, a wider domain, or a higher figure. `more_ways_than_are_read` is some or every element meeting the condition coming, taken apart, to more ways an element may meet it than a reading of one condition makes; nothing about the model or about either domain is short. Each `outside_domain` word names the reader whose domain stops: what a row is asked is written at the input's positions, so `answer_a_row_stands_in` is what a dependency answered; what a path knows is relations of numbers, truths and what every element was written to meet, about the places of the tree it walks, so the `path_` words and `place_the_path_does_not_read` are where that stops. `size_nothing_measures` and `position_the_reading_holds_no_place_for` are no longer written — every container a condition asks about has a size that is a number of the input, and the reading of the input holds every position a condition names — and a document of this version may still carry them.",
       "required": [
         "kind",
         "reason"
@@ -2681,7 +2681,8 @@
         "kind": {
           "enum": [
             "meaning_unread",
-            "outside_domain"
+            "outside_domain",
+            "past_a_figure"
           ]
         },
         "reason": {
@@ -2757,6 +2758,24 @@
                   "path_knows_no_number_over_elements",
                   "path_holds_element_facts_as_written",
                   "number_the_path_cannot_hold"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "past_a_figure"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason": {
+                "enum": [
+                  "more_ways_than_are_read"
                 ]
               }
             }

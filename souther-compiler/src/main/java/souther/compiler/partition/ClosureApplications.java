@@ -9,6 +9,7 @@ import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.semantics.HowAClosureIsApplied;
@@ -119,7 +120,9 @@ sealed interface ClosureApplications {
                     }
                 }
                 case InputReads.Applications.NoneHanded _ -> {
-                    List<TermPath> appliedOver = positionsAppliedOver(block, around.reads(), read);
+                    List<DecisionSubject> appliedOver =
+                            positionsAppliedOver(block, around.reads(), read).stream()
+                                    .<DecisionSubject>map(DecisionSubject.AnInput::new).toList();
                     asked |= !appliedOver.isEmpty();
                     out.add(new Application(around.reads().entering(step, symbols, newtypes),
                             appliedOver.isEmpty() ? around.reached()

@@ -631,7 +631,7 @@ public sealed interface RowDemand {
         @Override
         public Set<TermPath> positions() {
             Set<TermPath> out = new LinkedHashSet<>();
-            out.add(count.container());
+            out.add(count.container().inputPosition());
             terms().forEach(term -> out.add(term.subjectPath()));
             return Collections.unmodifiableSet(out);
         }

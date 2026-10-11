@@ -3,8 +3,10 @@ package souther.compiler.inputs;
 import souther.compiler.check.AnIndexedMap;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.CalledBody;
+import souther.compiler.check.CallArguments;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Location;
@@ -688,6 +690,18 @@ public final class InputReads {
     }
 
     /**
+     * Whether any value read here may be an answer of a dependency.
+     *
+     * <p>A body that stands nothing in has no answer anywhere in it, and the names it reads are not
+     * walked to find that out — unless it is a body a call entered, whose parameters are read where
+     * the call stands. Asked first by a reader that would otherwise do work to find an answer in a
+     * body that has none.
+     */
+    public boolean mayHoldAnAnswer() {
+        return !dependencies.isEmpty() || !applied.given().isEmpty();
+    }
+
+    /**
      * What a dependency answered that {@code e} is, at a place inside the answer — or null where
      * it is no such thing.
      *
@@ -702,10 +716,7 @@ public final class InputReads {
      *         the fields read off the answer in the order they are written
      */
     public AnAnswerAt answerAt(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
-        // A body that stands nothing in has no answer anywhere in it, and the names it reads are
-        // not walked to find that out — unless it is a body a call entered, whose parameters are
-        // read where the call stands.
-        if (dependencies.isEmpty() && applied.given().isEmpty()) {
+        if (!mayHoldAnAnswer()) {
             return null;
         }
         List<TermPath.Step> steps = new ArrayList<>();
@@ -732,6 +743,20 @@ public final class InputReads {
                 reads = through.denotes().at();
                 continue;
             }
+            // What a walk hands each element of an answer is a place inside that answer: the
+            // element, under the places the container is.
+            if (under instanceof Core.Read element && reads.containerOfTheElement(element) != null) {
+                AnAnswerAt container = reads.answerHoldingTheElementsOf(
+                        reads.containerOfTheElement(element), symbols, newtypes);
+                if (container == null) {
+                    return null;
+                }
+                List<TermPath.Step> inside = new ArrayList<>(container.steps());
+                inside.add(new TermPath.Step.Element());
+                inside.addAll(steps);
+                return new AnAnswerAt(container.evaluation(), container.arguments(),
+                        container.at(), inside);
+            }
             break;
         }
         if (!(under instanceof Core.Call call && call.fn() instanceof Core.Reached reached
@@ -743,6 +768,47 @@ public final class InputReads {
         Optional<ModelOccurrence> written = ModelOccurrence.statedAt(call.occurrence());
         return written.isEmpty() ? null : new AnAnswerAt(
                 new AnEvaluation(dependency, written.get()), call.args(), reads, steps);
+    }
+
+    /**
+     * The answer of a dependency whose very elements {@code container} holds, or null where it holds
+     * none's.
+     *
+     * <p>Through the operations that answer the elements of what they were given — a reordered list,
+     * a filtered one — as a walk to the position an element stands at goes through them
+     * ({@link InputPath#argumentWhoseElementsItHolds}), so an element of either is where it was
+     * whether the list it came from is a position of the input or an answer.
+     */
+    private AnAnswerAt answerHoldingTheElementsOf(Core container, Symbols symbols,
+                                                  DeclarationNewtypes newtypes) {
+        Denotation at = standing(container, symbols, newtypes);
+        while (true) {
+            AnAnswerAt found = at.at().answerAt(at.value(), symbols, newtypes);
+            if (found != null) {
+                return found;
+            }
+            ValueName operation;
+            List<Core> args;
+            switch (Core.withoutStanding(at.value())) {
+                case Core.Call call when call.fn() instanceof Core.Reached reached -> {
+                    operation = reached.denotes();
+                    args = call.args();
+                }
+                case Core.PreservedCall kept -> {
+                    operation = kept.declared().operation();
+                    args = kept.args();
+                }
+                default -> {
+                    return null;
+                }
+            }
+            DeclaredArgument holds = InputPath.argumentWhoseElementsItHolds(operation);
+            int position = holds == null ? -1 : CallArguments.positionOf(holds, operation);
+            if (position < 0 || position >= args.size()) {
+                return null;
+            }
+            at = at.at().standing(args.get(position), symbols, newtypes);
+        }
     }
 
     /**

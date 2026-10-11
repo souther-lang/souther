@@ -7,6 +7,7 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.flow.AWayThrough;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
@@ -87,7 +88,7 @@ class AWayNotRuledOutIsNeverAProofTest {
     @Test
     void aQuantifierOverAPartNothingReadSaysWhatStoppedThePart() {
         InputReading read = reading();
-        Proposition some = new Proposition.Some(TermPath.of("xs"), new Proposition.Any(List.of(
+        Proposition some = new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("xs")),new Proposition.Any(List.of(
                 unread(0, NO_SIZE), unread(1, NOT_LINEAR))), true);
         assertEquals(List.of(new WhyNotTaken.MeaningUnread(NO_SIZE),
                         new WhyNotTaken.MeaningUnread(NOT_LINEAR)),

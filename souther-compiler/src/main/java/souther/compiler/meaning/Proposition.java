@@ -51,7 +51,7 @@ public sealed interface Proposition {
      * container holding something — and a quantifier left holding it would turn on the container
      * without any part of it saying so.
      */
-    default boolean mayTurnOnAnElementOf(TermPath container) {
+    default boolean mayTurnOnAnElementOf(DecisionSubject container) {
         return switch (this) {
             case Always _ -> false;
             case Unread unread -> !unread.fixed();
@@ -65,7 +65,8 @@ public sealed interface Proposition {
             case Present present -> mayBeAnElementOf(present.of(), container);
             case SameValue same -> mayBeAnElementOf(same.one(), container)
                     || mayBeAnElementOf(same.other(), container);
-            case LastToHold last -> isAnElementOf(last.position(), container);
+            case LastToHold last ->
+                    isAnElementOf(new DecisionSubject.AnInput(last.position()), container);
             case All all -> all.parts().stream()
                     .anyMatch(part -> part.mayTurnOnAnElementOf(container));
             case Any any -> any.parts().stream()
@@ -79,37 +80,41 @@ public sealed interface Proposition {
 
     /** Whether {@code quantity} may be read off an element of {@code container}. A value a body
      *  bound or a dependency answered is computed from something nothing here names, so it may. */
-    private static boolean mayBeAnElementOf(Quantity quantity, TermPath container) {
+    private static boolean mayBeAnElementOf(Quantity quantity, DecisionSubject container) {
         return switch (quantity) {
-            case DecisionAtom.OfTheInput(var term) -> isAnElementOf(term.subjectPath(), container);
+            case DecisionAtom.OfTheInput(var term) ->
+                    isAnElementOf(new DecisionSubject.AnInput(term.subjectPath()), container);
             case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _ -> true;
+            case DecisionAtom.TakenOfAnAnswer(var _, var _, var taken, var _) ->
+                    isAnElementOf(taken, container);
             // A piece of a string is whatever the statement it is read inside says it is, and
             // that statement is about the string and no container's element.
             case Quantity.CodePointsOfAPiece _ -> false;
-            case Quantity.HowManyMeet(TermPath counted, Proposition each) ->
+            case Quantity.HowManyMeet(DecisionSubject counted, Proposition each) ->
                     isAnElementOf(counted, container) || each.mayTurnOnAnElementOf(container);
             case Quantity.HowManyHold(List<Proposition> each) -> each.stream()
                     .anyMatch(one -> one.mayTurnOnAnElementOf(container));
-            case Quantity.HowManyDifferent(TermPath counted, TermPath _) ->
+            case Quantity.HowManyDifferent(DecisionSubject counted, DecisionSubject _) ->
                     isAnElementOf(counted, container);
-            case Quantity.SumOver(TermPath summed, var each) ->
+            case Quantity.SumOver(DecisionSubject summed, var each) ->
                     isAnElementOf(summed, container) || each.coefs().keySet().stream()
                             .anyMatch(one -> mayBeAnElementOf(one, container));
             case Quantity.RemainderOfADividend(var dividend, var _) -> dividend.coefs().keySet()
-                    .stream().anyMatch(term -> isAnElementOf(term.subjectPath(), container));
+                    .stream().anyMatch(term -> isAnElementOf(
+                            new DecisionSubject.AnInput(term.subjectPath()), container));
         };
     }
 
     /** Whether {@code subject} may be an element of {@code container}, the same way. */
-    private static boolean mayBeAnElementOf(DecisionSubject subject, TermPath container) {
+    private static boolean mayBeAnElementOf(DecisionSubject subject, DecisionSubject container) {
         return switch (subject) {
-            case DecisionSubject.AnInput(TermPath at) -> isAnElementOf(at, container);
+            case DecisionSubject.AnInput _ -> isAnElementOf(subject, container);
             case DecisionSubject.AnAnswer _ -> true;
         };
     }
 
     /** Whether {@code at} is an element of {@code container}, or a key of it, or under one. */
-    private static boolean isAnElementOf(TermPath at, TermPath container) {
+    private static boolean isAnElementOf(DecisionSubject at, DecisionSubject container) {
         return at.isAtOrUnder(container.element()) || at.isAtOrUnder(container.key());
     }
 
@@ -353,10 +358,10 @@ public sealed interface Proposition {
      *
      * @param key spelled from the rest when it is made, whatever is handed in
      */
-    record Some(TermPath container, Proposition ofTheElement, boolean holds, String key)
+    record Some(DecisionSubject container, Proposition ofTheElement, boolean holds, String key)
             implements Proposition {
 
-        public Some(TermPath container, Proposition ofTheElement, boolean holds) {
+        public Some(DecisionSubject container, Proposition ofTheElement, boolean holds) {
             this(container, ofTheElement, holds, null);
         }
 
@@ -518,8 +523,14 @@ public sealed interface Proposition {
         };
     }
 
-    /** Whether some part of {@code stated} is about what a dependency answered, rather than about
-     *  the input alone. */
+    /**
+     * Whether some part of {@code stated} is about what a dependency answered, rather than about
+     * the input alone.
+     *
+     * <p>A container a quantifier or a count is over is a part as much as what each element is
+     * asked: an element of a list an answer holds is a place inside that answer whatever the
+     * statement about it names.
+     */
     static boolean aboutAnAnswer(Proposition stated) {
         return switch (stated) {
             case Always _, Unread _, LastToHold _ -> false;
@@ -537,21 +548,28 @@ public sealed interface Proposition {
             case Any any -> any.parts().stream().anyMatch(Proposition::aboutAnAnswer);
             case OnAnApplication applications ->
                     applications.each().stream().anyMatch(Proposition::aboutAnAnswer);
-            case Some some -> aboutAnAnswer(some.ofTheElement());
+            case Some some -> some.container() instanceof DecisionSubject.AnAnswer
+                    || aboutAnAnswer(some.ofTheElement());
         };
     }
 
-    private static boolean anAnswerIn(Quantity quantity) {
+    /** Whether {@code quantity} is about what a dependency answered: a number of an answer, or a
+     *  number over a container an answer holds or over elements asked something of one. */
+    static boolean anAnswerIn(Quantity quantity) {
         return switch (quantity) {
-            case DecisionAtom.OfAnAnswer _ -> true;
+            case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _ -> true;
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _ -> false;
-            case Quantity.HowManyMeet count -> aboutAnAnswer(count.ofTheElement());
+            case Quantity.HowManyMeet count -> count.container() instanceof DecisionSubject.AnAnswer
+                    || aboutAnAnswer(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream()
                     .anyMatch(Proposition::aboutAnAnswer);
-            case Quantity.HowManyDifferent _ -> false;
-            case Quantity.SumOver sum -> sum.ofTheElement().coefs().keySet().stream()
-                    .anyMatch(Proposition::anAnswerIn);
+            case Quantity.HowManyDifferent different ->
+                    different.container() instanceof DecisionSubject.AnAnswer
+                            || different.ofTheElement() instanceof DecisionSubject.AnAnswer;
+            case Quantity.SumOver sum -> sum.container() instanceof DecisionSubject.AnAnswer
+                    || sum.ofTheElement().coefs().keySet().stream()
+                            .anyMatch(Proposition::anAnswerIn);
         };
     }
 
@@ -625,7 +643,7 @@ public sealed interface Proposition {
         if (!(relation instanceof Relation.Affine(LinearForm<Quantity> form, Rel rel))
                 || form.coefs().size() != 1
                 || !(form.coefs().keySet().iterator().next()
-                        instanceof Quantity.HowManyMeet(TermPath container, Proposition each))) {
+                        instanceof Quantity.HowManyMeet(DecisionSubject container, Proposition each))) {
             return null;
         }
         // a·count + k rel 0 with a positive, as a relation is written: count rel t.

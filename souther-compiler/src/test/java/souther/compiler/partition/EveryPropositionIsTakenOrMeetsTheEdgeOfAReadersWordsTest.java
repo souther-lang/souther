@@ -150,7 +150,7 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
                 LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(
                         new NumericTerm.ValueOf(TermPath.of("xs").element()))), Rel.GT), true);
         RowDemand.ATruth beside = new RowDemand.ATruth(TermPath.of("b"), true);
-        Proposition some = new Proposition.Some(TermPath.of("xs"), new Proposition.All(List.of(
+        Proposition some = new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("xs")),new Proposition.All(List.of(
                 new Proposition.Any(List.of(element, element.denied())),
                 new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("b")), true))),
                 true);
@@ -231,7 +231,7 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
                 TermPath.of("xs").element(), true));
         out.put("both", new Proposition.All(List.of(above, truth)));
         out.put("either", new Proposition.Any(List.of(above, truth)));
-        out.put("some element", new Proposition.Some(TermPath.of("xs"), element, true));
+        out.put("some element", new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("xs")), element, true));
         out.put("on some application", new Proposition.OnAnApplication(List.of(above, truth)));
         out.put("unread", new Proposition.Unread(Optional.empty(), 0,
                 new WhyUnread.NotMetByTheReading(), false, true));

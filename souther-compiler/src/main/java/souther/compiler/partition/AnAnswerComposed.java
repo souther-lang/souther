@@ -4,13 +4,20 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.AnswerAsAnInput;
 import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A value for one answer a rule asks something of.
@@ -91,6 +98,29 @@ public final class AnAnswerComposed {
      * @param demands what the way asks of it, every one of them about this answer
      */
     public static Attempt of(MeasuredInput subject, List<AnswerDemand> demands) {
+        return of(subject, AnswerStatements.NONE, demands);
+    }
+
+    /**
+     * The same, where a statement about what the answer holds is asked too.
+     *
+     * @param statements what a statement made over the subject asks of a row, which is the reading
+     *                   of the type the subject stands for
+     */
+    public static Attempt of(MeasuredInput subject, AnswerStatements statements,
+                             List<AnswerDemand> demands) {
+        return of(subject, statements, Map.of(), demands);
+    }
+
+    /**
+     * The same, where a statement also names numbers of the behavior's own input.
+     *
+     * @param pinned the value each such number is put at, which is the row the value is composed
+     *               to stand in: what the answer has to be turns on them, and a number left out
+     *               is a statement this does not compose against
+     */
+    public static Attempt of(MeasuredInput subject, AnswerStatements statements,
+                             Map<NumericTerm, ExactRatio> pinned, List<AnswerDemand> demands) {
         if (subject.parameters().size() != 1) {
             throw new IllegalArgumentException(
                     "an answer is one value, and this stands for " + subject.parameters().size());
@@ -133,22 +163,312 @@ public final class AnAnswerComposed {
                 asked.add(new RowDemand.ATruth(path(at, steps), held));
             }
         }
+        // What a statement asks, said of the input that stands for the answer and asked of a row
+        // as any statement about an input is. A statement that asks one of several things is
+        // looked along each of them, as a way over the input is.
+        List<DemandGap> unaccounted = new ArrayList<>();
+        List<Pending> pending = new ArrayList<>();
+        for (AnswerDemand each : demands) {
+            if (!(each instanceof AnswerDemand.AStatement statement)) {
+                continue;
+            }
+            Proposition over = AnswerAsAnInput.of(statement.statement(), at,
+                    subject.rules().inners(), subject.symbols(), pinned);
+            List<DemandReading.Read> reads = over == null ? null : statements.asked(over);
+            // Past a figure nothing was looked along, which is not the same as there being nothing
+            // a composer writes: only the first is cured by looking further.
+            switch (reads == null ? new Ways.Unwritable() : eachWay(reads)) {
+                case Ways.Each(var options, var stoppedBy) ->
+                        pending.add(new Pending(statement, options, stoppedBy));
+                case Ways.Stopped(var by) -> unaccounted.add(new DemandGap.Uncomposed(each,
+                        DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(by)));
+                case Ways.Unwritable _ -> unaccounted.add(new DemandGap.Uncomposed(each,
+                        new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions()));
+            }
+        }
+        // Every way the statements together can be taken, as many as the figure lets a way be split
+        // into: one way of all of them is enough, so those are looked along, and past them each
+        // statement is one a figure stopped the looking for.
+        CompositionBudget splitFigure = CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO;
+        List<List<List<DemandReading.Read>>> choices = new ArrayList<>();
+        boolean someLeft = !eachChoice(pending, 0, new ArrayList<>(), choices,
+                splitFigure.maximum());
+        Attempt first = null;
+        for (List<List<DemandReading.Read>> choice : choices) {
+            Attempt here = composedAlong(subject, at, required, asked, unaccounted, pending,
+                    choice, demands);
+            if (here.outcome() instanceof Outcome.Composed && here.unaccounted().isEmpty()) {
+                return here;
+            }
+            first = first == null ? here : first;
+        }
+        return sayingWhatStoppedTheLooking(first, pending, someLeft ? splitFigure : null);
+    }
+
+    /**
+     * {@code failed}, with each statement some of whose ways a figure left unlooked at, and that
+     * no value met, said to be one that figure stopped the looking for.
+     *
+     * <p>Not one nothing composes for: the ways looked along came to no value, and a way past the
+     * figure may be one that does. So the figure is what is said of it, as it is where the values of
+     * the input's numbers ran out ({@link CompositionAccount#sayingAFigureEndedTheLookingOverNumbers}).
+     *
+     * <p>Said whether or not the way looked along wrote anything down about the statement. A way
+     * can come to no value for a reason that is about no statement — two truths asked of one place
+     * — and a figure ridden on whatever the failure happened to say would go where nothing was
+     * said, leaving the statement to be read as one nothing composes for. Where a value was
+     * composed, a statement it is not said to be short of is one it met, and nothing is added.
+     *
+     * @param jointly the figure that cut the ways the statements were taken together along, or
+     *                null where every one of them was looked along
+     */
+    private static Attempt sayingWhatStoppedTheLooking(Attempt failed, List<Pending> pending,
+                                                       CompositionBudget jointly) {
+        Map<AnswerDemand, Set<CompositionBudget>> stopped = new LinkedHashMap<>();
+        for (Pending each : pending) {
+            Set<CompositionBudget> by = EnumSet.noneOf(CompositionBudget.class);
+            by.addAll(each.stoppedBy());
+            if (jointly != null) {
+                by.add(jointly);
+            }
+            if (!by.isEmpty()) {
+                stopped.put(each.statement(), by);
+            }
+        }
+        if (stopped.isEmpty()) {
+            return failed;
+        }
+        List<DemandGap> said = new ArrayList<>();
+        Set<AnswerDemand> named = new HashSet<>();
+        for (DemandGap gap : failed.unaccounted()) {
+            if (gap instanceof DemandGap.Uncomposed(AnswerDemand demand, var why)
+                    && stopped.containsKey(demand)) {
+                named.add(demand);
+                if (!(why instanceof DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded)
+                        && !(why instanceof DemandGap.WhyNotComposed
+                                .NoPairComposedBeforeAFigureEnded)) {
+                    said.add(new DemandGap.Uncomposed(demand,
+                            DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(
+                                    stopped.get(demand))));
+                    continue;
+                }
+            }
+            said.add(gap);
+        }
+        if (failed.outcome() instanceof Outcome.NothingComposed) {
+            stopped.forEach((demand, by) -> {
+                if (!named.contains(demand)) {
+                    said.add(new DemandGap.Uncomposed(demand,
+                            DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(by)));
+                }
+            });
+        }
+        return new Attempt(failed.outcome(), said);
+    }
+
+    /**
+     * One statement and each way it may be taken, which is one thing it asks and not several.
+     *
+     * @param stoppedBy the figures that left some of its ways unlooked at, empty where none did
+     */
+    private record Pending(AnswerDemand.AStatement statement,
+                           List<List<DemandReading.Read>> options,
+                           Set<CompositionBudget> stoppedBy) {}
+
+    /** What the reads of a statement come to along each way they may be taken, or why they come to
+     *  none to compose for. */
+    sealed interface Ways {
+
+        /**
+         * Each way looked at, which is one thing it asks and not several, and the figures that
+         * left others unlooked at.
+         *
+         * <p>Any one way is enough for the statement to hold, so the ways looked at are composed
+         * along whether or not others were left: a choice one of whose alternatives a figure
+         * stopped is the other alternatives still.
+         */
+        record Each(List<List<DemandReading.Read>> each, Set<CompositionBudget> stoppedBy)
+                implements Ways {
+
+            public Each {
+                each = List.copyOf(each);
+                stoppedBy = Set.copyOf(stoppedBy);
+            }
+        }
+
+        /** A read a composer writes toward in no way: a narrowing of a case is what a way over the
+         *  input carries, and nothing here puts it under a value composed for an answer. */
+        record Unwritable() implements Ways {}
+
+        /** No way looked at, and some left unlooked at by {@code by}: none is known to be one a
+         *  composer writes nothing toward. */
+        record Stopped(Set<CompositionBudget> by) implements Ways {
+
+            public Stopped {
+                by = Set.copyOf(by);
+            }
+        }
+    }
+
+    /**
+     * What {@code reads} comes to along each way it may be taken: a choice between things is each
+     * of them in turn, as many as a way is split into.
+     *
+     * <p>An alternative no way of which is written toward is passed over and the others are
+     * taken; only where none is left is the choice what stopped them. Every read beside a choice
+     * is asked along every way, so one of those no way is written toward stops all of them.
+     */
+    static Ways eachWay(List<DemandReading.Read> reads) {
+        CompositionBudget splitFigure = CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO;
+        CompositionBudget readingsFigure = CompositionBudget.READINGS_OF_ONE_CONDITION;
+        int most = splitFigure.maximum();
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
+        List<List<DemandReading.Read>> ways = new ArrayList<>();
+        ways.add(List.of());
+        for (DemandReading.Read each : reads) {
+            List<List<DemandReading.Read>> these = new ArrayList<>();
+            if (each instanceof DemandReading.Read.OneOf(var alternatives)) {
+                for (List<DemandReading.Read> alternative : alternatives) {
+                    switch (eachWay(alternative)) {
+                        case Ways.Each(var found, var by) -> {
+                            stoppedBy.addAll(by);
+                            for (List<DemandReading.Read> one : found) {
+                                if (these.size() == most) {
+                                    stoppedBy.add(splitFigure);
+                                    break;
+                                }
+                                these.add(one);
+                            }
+                        }
+                        case Ways.Stopped(var by) -> stoppedBy.addAll(by);
+                        case Ways.Unwritable _ -> { }
+                    }
+                }
+                if (these.isEmpty()) {
+                    return stoppedBy.isEmpty() ? new Ways.Unwritable()
+                            : new Ways.Stopped(stoppedBy);
+                }
+            } else if (composedAgainst(each)) {
+                these.add(List.of(each));
+            } else if (each instanceof DemandReading.Read.Unread(var whys)
+                    && whys.stream().allMatch(why -> why instanceof WhyNotTaken.MoreWaysThanAreRead
+                            || why instanceof WhyNotTaken.MeaningUnread(
+                                    WhyUnread.MoreReadingsThanAreMade _))) {
+                // Only where the figure is every reason: a part also left for a reason more
+                // reading does not change is one no value is written toward either way.
+                stoppedBy.add(readingsFigure);
+                return new Ways.Stopped(stoppedBy);
+            } else {
+                return new Ways.Unwritable();
+            }
+            // The ways so far with each of this read's, made whole one at a time and no more of
+            // them than the figure: each is enough by itself, so the ones made are taken.
+            List<List<DemandReading.Read>> wider = new ArrayList<>();
+            product:
+            for (List<DemandReading.Read> before : ways) {
+                for (List<DemandReading.Read> more : these) {
+                    if (wider.size() == most) {
+                        stoppedBy.add(splitFigure);
+                        break product;
+                    }
+                    List<DemandReading.Read> both = new ArrayList<>(before);
+                    both.addAll(more);
+                    wider.add(both);
+                }
+            }
+            ways = wider;
+        }
+        return new Ways.Each(ways, stoppedBy);
+    }
+
+    /**
+     * Each way of taking every statement from {@code at} on, the first statement's ways changing
+     * slowest, put in {@code into} until it holds {@code most}.
+     *
+     * @return whether every way was put, which is false where {@code most} stopped it
+     */
+    private static boolean eachChoice(List<Pending> pending, int at,
+                                      List<List<DemandReading.Read>> chosen,
+                                      List<List<List<DemandReading.Read>>> into, int most) {
+        if (at == pending.size()) {
+            if (into.size() == most) {
+                return false;
+            }
+            into.add(List.copyOf(chosen));
+            return true;
+        }
+        for (List<DemandReading.Read> one : pending.get(at).options()) {
+            chosen.add(one);
+            boolean more = eachChoice(pending, at + 1, chosen, into, most);
+            chosen.removeLast();
+            if (!more) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * A value for the answer, composed along one way of taking each statement it is asked.
+     *
+     * @param choice what each statement of {@code pending} asks along this way, in the same order
+     */
+    private static Attempt composedAlong(MeasuredInput subject, String at, Requirements required,
+                                         List<RowDemand.ATruth> truthsAsked,
+                                         List<DemandGap> unaccountedBefore, List<Pending> pending,
+                                         List<List<DemandReading.Read>> choice,
+                                         List<AnswerDemand> demands) {
+        List<RowDemand.ATruth> asked = new ArrayList<>(truthsAsked);
+        List<DemandGap> unaccounted = new ArrayList<>(unaccountedBefore);
+        List<Taken> ofStatements = new ArrayList<>();
+        for (int which = 0; which < pending.size(); which++) {
+            AnswerDemand.AStatement statement = pending.get(which).statement();
+            for (DemandReading.Read read : choice.get(which)) {
+                switch (read) {
+                    case DemandReading.Read.Demands(RowDemand.OfACondition demand) -> {
+                        if (demand instanceof RowDemand.ATruth written) {
+                            asked.add(written);
+                        }
+                        ofStatements.add(new Taken(
+                                new OnTheWay.TakenIn(statement.anchor(), demand), statement));
+                    }
+                    case DemandReading.Read.Settled(boolean thisWay) -> {
+                        if (!thisWay) {
+                            return Attempt.nothing(
+                                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                                    unaccounted);
+                        }
+                    }
+                    default -> { }
+                }
+            }
+        }
         TruthsAsked truths;
         switch (TruthsAsked.of(asked)) {
             case TruthsAsked.Merge.Merged(var merged) -> truths = merged;
             case TruthsAsked.Merge.Conflict _ -> {
-                return Attempt.of(new Outcome.NothingComposed(
-                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
+                return Attempt.nothing(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                        unaccounted);
             }
         }
         SearchRegion region = subject.quantities().region();
         List<Taken> cuts = new ArrayList<>();
-        List<DemandGap> unaccounted = new ArrayList<>();
+        for (Taken each : ofStatements) {
+            region = new WayToTheBorder(List.of(each.cut())).narrowing(region);
+            cuts.add(each);
+        }
         for (AnswerDemand each : demands) {
             if (!(each instanceof AnswerDemand.AComparison(var _, var anchor, var form, var rel))) {
                 continue;
             }
-            LinearForm<NumericTerm> over = overThisAnswer(at, form);
+            LinearForm<NumericTerm> over = overThisAnswer(subject, at, form);
+            if (over == null) {
+                // A number the library takes of what stands there by no account this has a term
+                // for, so nothing says what a value would have to be.
+                unaccounted.add(new DemandGap.Uncomposed(each,
+                        new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions()));
+                continue;
+            }
             // Nothing composed where the region cannot carry what was asked. A demand dropped here
             // and the composition carried on would look for a value in a region wider than the
             // demand — and what came back would be offered as a value that answers it, which is
@@ -178,6 +498,17 @@ public final class AnAnswerComposed {
         }
         return composed(subject, cuts, new Reachability.Reaching(region, required, truths,
                 cuts.stream().map(Taken::cut).toList(), Reachability.Ways.ONE));
+    }
+
+    /**
+     * Whether a composer writes toward what {@code read} says: a demand it can build a value
+     * against, or a statement that holds whatever the value is. A narrowing of a case and a choice
+     * between alternatives are what a way over the input carries, and nothing here puts them under
+     * a value composed for an answer.
+     */
+    private static boolean composedAgainst(DemandReading.Read read) {
+        return read instanceof DemandReading.Read.Demands
+                || (read instanceof DemandReading.Read.Settled settled && settled.thisWay());
     }
 
     /**
@@ -298,12 +629,27 @@ public final class AnAnswerComposed {
      * dependency's answer is what it states about that position, spelled in the vocabulary the
      * realization works in.
      */
-    private static LinearForm<NumericTerm> overThisAnswer(String head,
+    private static LinearForm<NumericTerm> overThisAnswer(MeasuredInput subject, String head,
                                                           LinearForm<DecisionAtom> form) {
         Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
-        form.coefs().forEach((atom, coefficient) -> coefs.put(
-                new NumericTerm.ValueOf(path(head, ((DecisionAtom.OfAnAnswer) atom).at().steps())),
-                coefficient));
+        for (Map.Entry<DecisionAtom, ExactRatio> each : form.coefs().entrySet()) {
+            TermPath place = path(head, each.getKey().ofTheAnswer().steps());
+            NumericTerm term = switch (each.getKey()) {
+                case DecisionAtom.OfAnAnswer _ -> new NumericTerm.ValueOf(place);
+                // The number the library takes of what stands at the place, which is the term
+                // the same call over a position of an input is.
+                case DecisionAtom.TakenOfAnAnswer taken -> NumericTerm.TakenOf.asItStands(
+                        taken.operation(), place, taken.arguments(), taken.at(),
+                        subject.rules().inners(), subject.symbols());
+                case DecisionAtom.OfTheInput _ -> throw new IllegalStateException(
+                        "a demand of one answer is over what that answer holds, and "
+                                + each.getKey() + " is a number of the input");
+            };
+            if (term == null) {
+                return null;
+            }
+            coefs.put(term, each.getValue());
+        }
         return new LinearForm<>(form.constant(), coefs);
     }
 }

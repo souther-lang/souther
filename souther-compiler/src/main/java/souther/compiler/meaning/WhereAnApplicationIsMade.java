@@ -1,6 +1,5 @@
 package souther.compiler.meaning;
 
-import souther.compiler.inputs.TermPath;
 import souther.compiler.semantics.HowAClosureIsApplied;
 
 import java.util.ArrayList;
@@ -74,7 +73,7 @@ public final class WhereAnApplicationIsMade {
      *                    closure
      */
     public static Proposition whereOneOfTheContainersHoldsSomething(Proposition outer,
-                                                                    List<TermPath> appliedOver) {
+                                                                    List<DecisionSubject> appliedOver) {
         return past(outer, Proposition.any(appliedOver.stream()
                 .<Proposition>map(at -> new Proposition.Some(at, nothingAsked(), true))
                 .toList()));

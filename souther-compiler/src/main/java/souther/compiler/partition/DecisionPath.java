@@ -1,6 +1,9 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.AnswerAsAnInput;
+import souther.compiler.semantics.TakenArguments;
+import souther.compiler.types.ValueName;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.InjectedAnswer;
@@ -213,11 +216,19 @@ final class DecisionPath {
             };
             // A statement of several parts: the input's where it is about nothing a dependency
             // answered, and otherwise one this side composes no value to whole.
-            case DecidedCondition.Held(var condition, var _) ->
-                    Proposition.aboutAnAnswer(condition.statement())
-                            ? new Asked.NotStated(
-                                    new DemandGap.WhyNotStated.AStatementOfSeveralParts())
-                            : OF_THE_INPUT;
+            case DecidedCondition.Held(var condition, var held) -> {
+                if (!Proposition.aboutAnAnswer(condition.statement())) {
+                    yield OF_THE_INPUT;
+                }
+                // The side the path took, as a comparison's is: what a row has to satisfy is that,
+                // and not the column's own reading.
+                Proposition taken = held ? condition.statement() : condition.statement().denied();
+                InjectedAnswer only = AnswerAsAnInput.onlyAnswerIn(taken);
+                yield only == null
+                        ? new Asked.NotStated(
+                                new DemandGap.WhyNotStated.AStatementOfSeveralParts())
+                        : new Asked.Stated(new AnswerDemand.AStatement(only, anchor, taken));
+            }
             case DecidedCondition.Unread _ -> OF_THE_INPUT;
         };
     }
@@ -232,10 +243,11 @@ final class DecisionPath {
      * agree. Not where two calls read one place: that is the value held against itself, which two
      * answers are not, and it is left as what it says.
      *
-     * <p>A form over two dependencies, or over an answer and a number of the input, is one statement
-     * about the pair and nothing here composes two values to it together — so it is left unstated,
-     * which is what a way carries as a condition a row may not satisfy rather than as one that is
-     * not there.
+     * <p>A form over two dependencies is one statement about the pair and nothing here composes two
+     * values to it together — so it is left unstated, which is what a way carries as a condition a
+     * row may not satisfy rather than as one that is not there. A form over an answer and a number
+     * of the input is a statement of the answer: the number is put at a value the way leaves it, and
+     * the answer composed for that ({@link InputNumbersAnAnswerTurnsOn}).
      *
      * <p>A form naming no answer at all is neither of those. It is the input's, and this side has
      * nothing to say about it.
@@ -243,34 +255,55 @@ final class DecisionPath {
     private static Asked compared(DecisionCondition.AComparison condition, boolean held,
                                   ConditionReportAnchor anchor) {
         InjectedAnswer only = null;
-        Set<List<TermPath.Step>> places = new HashSet<>();
+        Set<Place> places = new HashSet<>();
         boolean anyOfAnAnswer = false;
-        boolean everyAtomIsOfIt = true;
+        boolean namesTheInput = false;
         for (DecisionAtom atom : condition.form().coefs().keySet()) {
-            if (!(atom instanceof DecisionAtom.OfAnAnswer(var at))) {
-                everyAtomIsOfIt = false;
+            DecisionSubject.AnAnswer at = atom.ofTheAnswer();
+            if (at == null) {
+                namesTheInput = true;
                 continue;
             }
             anyOfAnAnswer = true;
             if ((only != null && !only.dependency().equals(at.answered().dependency()))
-                    || !places.add(at.steps())) {
-                everyAtomIsOfIt = false;
-                break;
+                    || !places.add(placeOf(atom, at))) {
+                return new Asked.NotStated(
+                        new DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer());
             }
             only = only == null ? at.answered() : only;
         }
         if (!anyOfAnAnswer) {
             return OF_THE_INPUT;
         }
-        if (!everyAtomIsOfIt) {
-            return new Asked.NotStated(
-                    new DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer());
+        // A number of the input beside the answer's is a statement about the pair, which is met by
+        // putting that number at a value and composing the answer for it, as any statement that
+        // names one is.
+        if (namesTheInput) {
+            return new Asked.Stated(new AnswerDemand.AStatement(only, anchor,
+                    AnswerAsAnInput.ofAComparison(condition.form(), condition.proposition(),
+                            held)));
         }
         // The side the path took, which is what a row has to satisfy. The column faces the way its
         // proposition does whichever side was taken, so the denial is taken here rather than left
         // for a composer to work out from a flag travelling beside the form.
         return new Asked.Stated(new AnswerDemand.AComparison(only, anchor, condition.form(),
                 held ? condition.proposition() : condition.proposition().denied()));
+    }
+
+    /**
+     * A place inside an answer, and how a number is taken of it where one is taken: the place read
+     * as itself and the same place counted are two numbers.
+     *
+     * <p>Not which evaluation of the dependency it is. A row writes one value for a dependency,
+     * so two calls reading one place read the value held against itself.
+     */
+    private record Place(ValueName.Stdlib operation, TakenArguments arguments,
+                         List<TermPath.Step> steps) {}
+
+    private static Place placeOf(DecisionAtom atom, DecisionSubject.AnAnswer at) {
+        return atom instanceof DecisionAtom.TakenOfAnAnswer taken
+                ? new Place(taken.operation(), taken.arguments(), at.steps())
+                : new Place(null, null, at.steps());
     }
 
     /** Both paths' conditions, or null where between them they answer one column two ways. */
