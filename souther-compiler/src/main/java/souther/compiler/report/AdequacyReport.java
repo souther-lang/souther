@@ -154,6 +154,7 @@ import souther.compiler.publish.WeakeningVocabulary;
 import souther.compiler.publish.WeakeningWord;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BehaviorEvidence;
@@ -171,6 +172,7 @@ import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -4930,6 +4932,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     argument.put("at", at);
                     argument.put("value", ExactRatio.of(read).spelled());
                 });
+                // What the value was made from the one at the position, where it was made into
+                // anything: the year of a date and the year of it a day on are two numbers.
+                if (it.transformation() instanceof ValueTransformation.DateShift shifted) {
+                    ObjectNode from = into.putObject("from");
+                    from.put("kind", "date_shift");
+                    from.put("days", shifted.translation().offsetDays());
+                    from.put("defined_from", LocalDate.ofEpochDay(shifted.translation().first())
+                            .toString());
+                    from.put("defined_to", LocalDate.ofEpochDay(shifted.translation().last())
+                            .toString());
+                }
             }
             // The code points counted, by the class and, where the class leaves one out, which.
             case NumericTerm.CodePointClassCount it -> {

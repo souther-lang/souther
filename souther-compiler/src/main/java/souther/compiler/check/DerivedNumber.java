@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.ValueName;
 
@@ -24,13 +25,17 @@ import souther.compiler.types.ValueName;
  * @param arguments what the operation was given beside the value at {@code position}, which is part
  *                  of which number this is: two takings differing only there are two numbers, and a
  *                  reading keyed by these without them would hold one order for both
+ * @param from      what the value the operation took its number of was made from the one at
+ *                  {@code position}: the year of a date and the year of it a day on are two numbers
  */
-record DerivedNumber(RuleKey position, ValueName operation, TakenArguments arguments) {
+record DerivedNumber(RuleKey position, ValueName operation, TakenArguments arguments,
+                     ValueTransformation from) {
 
     DerivedNumber {
-        if (position == null || operation == null || arguments == null) {
+        if (position == null || operation == null || arguments == null || from == null) {
             throw new IllegalArgumentException("a derived number is what some operation answers"
-                    + " of somewhere, with whatever it was given beside that value");
+                    + " of somewhere, with whatever it was given beside that value and whatever"
+                    + " the value was made from the one standing there");
         }
     }
 
@@ -38,16 +43,18 @@ record DerivedNumber(RuleKey position, ValueName operation, TakenArguments argum
      *  something answered of it. */
     static DerivedNumber of(NumberAt<RuleKey> at) {
         return at.of() instanceof NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken
-                ? new DerivedNumber(at.position(), taken.operation(), taken.arguments()) : null;
+                ? new DerivedNumber(at.position(), taken.operation(), taken.arguments(),
+                        taken.from())
+                : null;
     }
 
     /** The same number as the subject every other reader knows it by. */
     NumberAt<RuleKey> asNumber() {
-        return NumberAt.takenOf(position, operation, arguments);
+        return NumberAt.takenOf(position, operation, arguments, from);
     }
 
     @Override
     public String toString() {
-        return operation + arguments.writtenWith(position.toString());
+        return operation + arguments.writtenWith(from.writtenAround(position.toString()));
     }
 }

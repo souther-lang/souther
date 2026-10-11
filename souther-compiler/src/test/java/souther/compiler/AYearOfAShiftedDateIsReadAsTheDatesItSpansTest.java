@@ -140,7 +140,8 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
         String report = about("Date.year(Date.addDays(1, b)) >= 2027");
 
         assertTrue(report.contains("measurement: complete"), report);
-        assertTrue(report.contains("read as f/b: = 2026-12-31"), report);
+        assertTrue(report.contains("read as f/Date.year((b +1 days)): = 2027"), report);
+        assertTrue(report.contains("read as f/Date.year((b +1 days)): = 2026"), report);
     }
 
     @Test
@@ -148,7 +149,7 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
         String report = about("Date.year(Date.addDays(-1, b)) < 2027");
 
         assertTrue(report.contains("measurement: complete"), report);
-        assertTrue(report.contains("read as f/b: = 2027-01-01"), report);
+        assertTrue(report.contains("read as f/Date.year((b -1 days)): = 2026"), report);
     }
 
     @Test
@@ -161,12 +162,13 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
     }
 
     @Test
-    void anEqualityIsTheDatesOfTheYearAndSoDrawsBothEnds() {
+    void anEqualityIsOneYearAndSoOneBorderWithAYearOnEachSideOfIt() {
         String report = about("Date.year(Date.addDays(1, b)) == 2027");
 
-        assertTrue(report.contains("borders 2"), report);
-        assertTrue(report.contains("= 2026-12-31"), report);
-        assertTrue(report.contains("= 2027-12-31"), report);
+        assertTrue(report.contains("borders 1"), report);
+        assertTrue(report.contains("Date.year((b +1 days)): = 2027"), report);
+        assertTrue(report.contains("Date.year((b +1 days)): = 2026"), report);
+        assertTrue(report.contains("Date.year((b +1 days)): = 2028"), report);
     }
 
     @Test
@@ -275,17 +277,30 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
 
     @Test
     void aLineBeyondTheLastDateIsReportedAndNotRefused() {
-        Map<String, LocalDate> beginning = Map.of(
-                "Date.year(Date.addDays(-366, b)) >= 999999999", LocalDate.of(999999999, 1, 1),
-                "Date.addDays(-366, b) >= Date(\"+999999999-06-01\")",
-                LocalDate.of(999999999, 6, 1));
-        beginning.forEach((comparison, from) -> {
-            String report = about(comparison);
-            String past = "day " + (from.toEpochDay() + 366);
+        // No date moved back that far is in the last year, so the year the line is drawn at is one
+        // the number never takes: no point is owed at it, as none is for the last year of any date
+        // that is one past the end.
+        String year = about("Date.year(Date.addDays(-366, b)) >= 999999999");
 
-            assertTrue(report.contains("measurement: complete"), comparison + "\n" + report);
-            assertTrue(report.contains(past), past + "\n" + comparison + "\n" + report);
-        });
+        assertTrue(year.contains("measurement: complete"), year);
+        assertTrue(year.contains("no ON point is owed at Date.year((b -366 days)) = 999999999"),
+                year);
+        assertTrue(year.contains("excluded — the rules leave no value there"), year);
+        assertFalse(year.contains("read as f/Date.year((b -366 days)): = 999999999"), year);
+
+        // One a year less is one it takes, at the last date it can be moved from.
+        String last = about("Date.year(Date.addDays(-366, b)) >= 999999998");
+
+        assertTrue(last.contains("measurement: complete"), last);
+        assertTrue(last.contains("Date.year((b -366 days)): = 999999998"), last);
+
+        LocalDate from = LocalDate.of(999999999, 6, 1);
+        String comparison = "Date.addDays(-366, b) >= Date(\"+999999999-06-01\")";
+        String date = about(comparison);
+        String past = "day " + (from.toEpochDay() + 366);
+
+        assertTrue(date.contains("measurement: complete"), comparison + "\n" + date);
+        assertTrue(date.contains(past), past + "\n" + comparison + "\n" + date);
     }
 
     @Test

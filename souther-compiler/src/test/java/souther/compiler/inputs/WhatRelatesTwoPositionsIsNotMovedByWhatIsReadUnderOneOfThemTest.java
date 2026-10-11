@@ -126,7 +126,7 @@ class WhatRelatesTwoPositionsIsNotMovedByWhatIsReadUnderOneOfThemTest {
     private static NumericTerm size(Read read, String field) {
         TermPath at = TermPath.of("p").then(field);
         souther.compiler.types.Type type = read.inputs().at(at).type();
-        NumericTerm.TakenOf made = NumericTerm.TakenOf.of(
+        NumericTerm.TakenOf made = NumericTerm.TakenOf.asItStands(
                 souther.compiler.check.NumericMeasures.takenOf(type, read.rules().inners()),
                 at, type, read.rules().inners(), read.rules().symbols());
         assertNotNull(made, at + " is counted by what its type is counted by");

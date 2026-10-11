@@ -56,7 +56,7 @@ class AReadingAnswersAboutItsOwnTermsAndNoOthersTest {
 
     /** How long the string at {@code s} is, which is a term of the first reading. */
     private static NumericTerm lengthOfS() {
-        NumericTerm.TakenOf made = NumericTerm.TakenOf.of(
+        NumericTerm.TakenOf made = NumericTerm.TakenOf.asItStands(
                 ValueName.Stdlib.operation("String", "length"), TermPath.of("s"), Type.STRING,
                 souther.compiler.check.ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS);
         assertNotNull(made, "a length is taken of a string");

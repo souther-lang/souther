@@ -405,7 +405,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
 
         /** How many that container holds, which is a number read off the value standing there. */
         private RealizationTarget howManyItHolds() {
-            NumericTerm.TakenOf many = NumericTerm.TakenOf.of(
+            NumericTerm.TakenOf many = NumericTerm.TakenOf.asItStands(
                     ValueName.Stdlib.operation("List", "length"), theContainer(),
                     subject.inputs().typeAtWrittenPath(theContainer()),
                     subject.ruleReading().source().inners(),

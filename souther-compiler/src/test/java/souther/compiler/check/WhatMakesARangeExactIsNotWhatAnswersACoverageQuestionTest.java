@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
@@ -300,7 +301,7 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
                 domains.placedAt(RuleKey.THE_VALUE).stream().filter(FieldDomains.Placed::lower)
                         .findFirst().orElseThrow().end(),
                 "`floor` writes the end at none");
-        assertEquals(Endpoint.inclusive(Count.of(1)), domains.leftAt(RuleKey.THE_VALUE, new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(souther.compiler.types.ValueName.Stdlib.operation("List", "length"), souther.compiler.semantics.TakenArguments.NONE)).min(),
+        assertEquals(Endpoint.inclusive(Count.of(1)), domains.leftAt(RuleKey.THE_VALUE, new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(souther.compiler.types.ValueName.Stdlib.operation("List", "length"), souther.compiler.semantics.TakenArguments.NONE, ValueTransformation.NONE)).min(),
                 "and the rules leave the count at one");
         assertEquals(null, domains.leftAt(RuleKey.THE_VALUE, new NumberAt.OfWhatNumber.OfItsOwnValue()),
                 "while the position's own values have no range for a line to be clamped by");

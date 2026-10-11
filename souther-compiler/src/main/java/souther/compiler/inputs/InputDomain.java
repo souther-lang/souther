@@ -21,6 +21,7 @@ import souther.compiler.check.ReadableFields;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
@@ -1716,7 +1717,7 @@ public final class InputDomain {
         NumberAt.OfWhatNumber own = new NumberAt.OfWhatNumber.OfItsOwnValue();
         return taken == null ? List.of(own)
                 : List.of(own, new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(taken,
-                        TakenArguments.NONE));
+                        TakenArguments.NONE, ValueTransformation.NONE));
     }
 
     /** What the rules leave one of a position's numbers, or null where the position has no such
@@ -1757,8 +1758,9 @@ public final class InputDomain {
                                            boolean nothingExists) {
         NumericTerm.FromOnePosition term = switch (kind) {
             case NumberAt.OfWhatNumber.OfItsOwnValue _ -> new NumericTerm.ValueOf(path);
-            case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers _ ->
-                    NumericTerm.TakenOf.of(taken, path, type, source.inners(), source.symbols());
+            case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers answered ->
+                    NumericTerm.TakenOf.of(taken, new ObservationSource(path, answered.from()),
+                            TakenArguments.NONE, type, source.inners(), source.symbols());
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count ->
                     NumericTerm.CodePointClassCount.of(path, count.counted(), type,
                             source.inners());
@@ -1891,7 +1893,8 @@ public final class InputDomain {
         return switch (at.of()) {
             case NumberAt.OfWhatNumber.OfItsOwnValue _ -> new NumericTerm.ValueOf(path);
             case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers answered ->
-                    takenBy(answered.operation(), path, type, source);
+                    takenBy(answered.operation(),
+                            new ObservationSource(path, answered.from()), type, source);
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count -> {
                 NumericTerm.CodePointClassCount counted = NumericTerm.CodePointClassCount.of(path,
                         count.counted(), type, source.inners());
@@ -1920,7 +1923,9 @@ public final class InputDomain {
      * <p>Both refusals are this compiler contradicting itself rather than something the model left
      * out, which is why neither is an answer a caller can act on.
      */
-    private static NumericTerm takenBy(ValueName by, TermPath path, Type type, RuleReadingSource source) {
+    private static NumericTerm takenBy(ValueName by, ObservationSource of, Type type,
+                                       RuleReadingSource source) {
+        TermPath path = of.position();
         // The operation a count is taken by is one the library declares, which is what the reading
         // that recorded the count went to. Anything else here is that reading and this one holding
         // different ideas of what an operation is.
@@ -1928,8 +1933,8 @@ public final class InputDomain {
             throw new IllegalStateException("a clause of `" + path + "` was read as a rule about `"
                     + by + "`, which is not an operation a number is taken by");
         }
-        NumericTerm.TakenOf taken =
-                NumericTerm.TakenOf.of(operation, path, type, source.inners(), source.symbols());
+        NumericTerm.TakenOf taken = NumericTerm.TakenOf.of(operation, of, TakenArguments.NONE,
+                type, source.inners(), source.symbols());
         if (taken == null) {
             throw new IllegalStateException("a clause of `" + path + "` was read as a rule about `"
                     + by + "`, and that takes no number of what stands there");

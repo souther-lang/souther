@@ -10,6 +10,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -976,7 +977,7 @@ public final class FieldDomains {
         Map<FactSubject, NumberAt<RuleKey>> where = new LinkedHashMap<>();
         atomAt.forEach((path, atom) -> at(where, atom, NumberAt.valueOf(path)));
         countAt.forEach((path, counted) -> at(where, counted.atom(),
-                NumberAt.takenOf(path, counted.by())));
+                NumberAt.takenAsItStands(path, counted.by())));
         // And every other subject this reading knows a name for, which is what a caller can
         // name and what these two maps are narrower than: they hold the numbers, and a name
         // holds whatever stands there. Left to `otherwise`, a subject of a name would be
@@ -1626,7 +1627,7 @@ public final class FieldDomains {
     private NumberAt<RuleKey> numberOf(RuleKey path, FactSubject position) {
         Counted counted = countAt.get(path);
         return counted != null && counted.atom().equals(position)
-                ? NumberAt.takenOf(path, counted.by()) : NumberAt.valueOf(path);
+                ? NumberAt.takenAsItStands(path, counted.by()) : NumberAt.valueOf(path);
     }
 
     /**
@@ -1760,7 +1761,7 @@ public final class FieldDomains {
      */
     public NumberAt<RuleKey> countedAt(RuleKey path) {
         Counted counted = countAt.get(path);
-        return counted == null ? null : NumberAt.takenOf(path, counted.by());
+        return counted == null ? null : NumberAt.takenAsItStands(path, counted.by());
     }
 
     /**
@@ -2118,7 +2119,7 @@ public final class FieldDomains {
         }
         return new CountLeft(counted.by(), leftAt(path,
                 new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(counted.by(),
-                        TakenArguments.NONE)));
+                        TakenArguments.NONE, ValueTransformation.NONE)));
     }
 
     /**

@@ -692,7 +692,7 @@ final class DemandReading {
         Type container = read.domain().typeAt(held, read.rules());
         ValueName.Stdlib size = container == null ? null
                 : NumericMeasures.takenOf(container, read.rules().inners());
-        NumericTerm.TakenOf count = size == null ? null : NumericTerm.TakenOf.of(size, held,
+        NumericTerm.TakenOf count = size == null ? null : NumericTerm.TakenOf.asItStands(size, held,
                 container, read.rules().inners(), read.rules().symbols());
         if (count == null) {
             throw new IllegalStateException("a statement about the elements of `" + held

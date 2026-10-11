@@ -93,7 +93,7 @@ class ATotalNothingReachesIsNotOneThisCompilerStoppedAtTest {
     /** Containers of whole numbers adding up to {@code total}, under a region that bounds both how
      *  many the container holds and what each of them is. */
     private static TermRealizations.Realization totalOf(Count total) {
-        NumericTerm.TakenOf sum = NumericTerm.TakenOf.of(
+        NumericTerm.TakenOf sum = NumericTerm.TakenOf.asItStands(
                 ValueName.Stdlib.operation("List", "sum"), TermPath.of("ns"), OF_WHOLE_NUMBERS,
                 souther.compiler.check.ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS);
         assertNotNull(sum, "a walk that adds up a list of whole numbers is a number of it");

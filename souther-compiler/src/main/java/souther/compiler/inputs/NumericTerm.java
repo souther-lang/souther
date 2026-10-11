@@ -11,6 +11,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ConstantArguments;
@@ -151,7 +152,7 @@ public sealed interface NumericTerm
     final class TakenOf implements FromOnePosition {
 
         private final ValueName.Stdlib operation;
-        private final TermPath position;
+        private final ObservationSource source;
         private final TakenArguments arguments;
 
         /**
@@ -168,18 +169,43 @@ public sealed interface NumericTerm
          * this package rather than of the term — and this package's own tests were already going
          * round it (#1027).
          */
-        private TakenOf(ValueName.Stdlib operation, TermPath position, TakenArguments arguments) {
+        private TakenOf(ValueName.Stdlib operation, ObservationSource source,
+                        TakenArguments arguments) {
             this.operation = java.util.Objects.requireNonNull(operation,
                     "a taken number is taken by an operation");
-            this.position = java.util.Objects.requireNonNull(position, "and taken of somewhere");
+            this.source = java.util.Objects.requireNonNull(source, "and taken of somewhere");
             this.arguments = java.util.Objects.requireNonNull(arguments,
                     "and with whatever it was given beside that value, which is nothing where it"
                             + " was given nothing");
         }
 
         /**
-         * The term for what {@code operation} answers of what stands at {@code path}, or null where
-         * the two do not go together.
+         * The term for what {@code operation} answers of the value at {@code position} as it
+         * stands, given nothing beside it, or null where the two do not go together.
+         *
+         * <p>Named for what it says of the value: the one the operation takes its number of is the
+         * one at the position and nothing made of it. A caller that has what the value was made
+         * into takes {@link #of} and says so, and cannot hand over the position alone and be read
+         * as taking the number of it as it stands.
+         */
+        public static TakenOf asItStands(ValueName.Stdlib operation, TermPath position, Type at,
+                                         NewtypeInners inners, Symbols symbols) {
+            return of(operation, ObservationSource.asItStands(position), TakenArguments.NONE, at,
+                    inners, symbols);
+        }
+
+        /** The same, for a taking the operation was given {@code arguments} beside the value at
+         *  {@code position}. */
+        public static TakenOf asItStands(ValueName.Stdlib operation, TermPath position,
+                                         TakenArguments arguments, Type at, NewtypeInners inners,
+                                         Symbols symbols) {
+            return of(operation, ObservationSource.asItStands(position), arguments, at, inners,
+                    symbols);
+        }
+
+        /**
+         * The term for what {@code operation} answers of the value {@code source} says — the one
+         * at its position, or what it was made into — or null where the two do not go together.
          *
          * <p><b>The one way one of these is made.</b> Four things have to hold and each of them is
          * a proposition somebody already owns: there is an account of what such a call takes, from
@@ -191,6 +217,10 @@ public sealed interface NumericTerm
          * operation and the location agree, by construction" — which is a claim about who happens
          * to build one today and not an invariant (#1027).
          *
+         * <p>And a value made into something is one the account reads
+         * ({@link TakenAs#readsWhatItWasMadeFrom}): the year of a moved date is a number a row is
+         * written for and a month of one is not.
+         *
          * <p>Null and not a refusal. Whether a call names a number the model has a term for is a
          * question every reader of an expression asks, and the answer "it does not" is one they all
          * have somewhere to put: no line is drawn and the rule is reported as one nothing read.
@@ -198,14 +228,7 @@ public sealed interface NumericTerm
          * <p>Asked of what the names wrap, since a name around a list is still a list — the same
          * reach {@link Carrier#ofValue} takes, and taken here so that no caller takes it itself.
          */
-        public static TakenOf of(ValueName.Stdlib operation, TermPath position, Type at,
-                                 NewtypeInners inners, Symbols symbols) {
-            return of(operation, position, TakenArguments.NONE, at, inners, symbols);
-        }
-
-        /** The same, for a taking the operation was given {@code arguments} beside the value at
-         *  {@code position}. */
-        public static TakenOf of(ValueName.Stdlib operation, TermPath position,
+        public static TakenOf of(ValueName.Stdlib operation, ObservationSource source,
                                  TakenArguments arguments, Type at, NewtypeInners inners,
                                  Symbols symbols) {
             TakenAs how = DefaultBoundOperationFacts.get().takenAs(operation, arguments);
@@ -213,12 +236,14 @@ public sealed interface NumericTerm
             // what the container holds. Asked of the operation alone, a sum answered no number this
             // could name and no term was made for any rule written on one.
             Type answers = NumericAnswers.typeOf(operation, at, inners, symbols);
-            if (how == null || answers == null || at == null || arguments == null) {
+            if (how == null || answers == null || at == null || arguments == null
+                    || source == null) {
                 return null;
             }
             return how.takenOf(souther.compiler.check.TypeOps.base(at, inners), answers)
                     && how.settledBy(arguments)
-                    ? new TakenOf(operation, position, arguments) : null;
+                    && how.readsWhatItWasMadeFrom(source.transformation())
+                    ? new TakenOf(operation, source, arguments) : null;
         }
 
         /** The operation whose answer this term is. */
@@ -231,10 +256,10 @@ public sealed interface NumericTerm
          *  as it did here. */
         @Override
         public TakenOf movedTo(UnaryOperator<TermPath> moved) {
-            return new TakenOf(operation, moved.apply(position), arguments);
+            return new TakenOf(operation, source.movedTo(moved), arguments);
         }
 
-        /** What it was given beside the value at {@link #position()}, read as constants — and
+        /** What it was given beside the value it takes its number of, read as constants — and
          *  nothing where it was given nothing. */
         public TakenArguments arguments() {
             return arguments;
@@ -242,7 +267,19 @@ public sealed interface NumericTerm
 
         @Override
         public TermPath position() {
-            return position;
+            return source.position();
+        }
+
+        /** What the value the operation took its number of was made from the one at
+         *  {@link #position()}, which is nothing where it is that one. */
+        public ValueTransformation transformation() {
+            return source.transformation();
+        }
+
+        /** The value the operation takes its number of: where it stands and what it was made
+         *  into. */
+        public ObservationSource source() {
+            return source;
         }
 
         /** What this operation takes of the value at {@link #position()}, given what it was handed
@@ -251,23 +288,24 @@ public sealed interface NumericTerm
             return DefaultBoundOperationFacts.get().takenAs(operation, arguments);
         }
 
-        /** By the operation, the location and what it was given beside it, which is what makes two
-         *  of these one term. */
+        /** By the operation, the value it takes its number of and what it was given beside it,
+         *  which is what makes two of these one term. */
         @Override
         public boolean equals(Object other) {
             return other instanceof TakenOf taken
-                    && operation.equals(taken.operation) && position.equals(taken.position)
+                    && operation.equals(taken.operation) && source.equals(taken.source)
                     && arguments.equals(taken.arguments);
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(operation, position, arguments);
+            return java.util.Objects.hash(operation, source, arguments);
         }
 
         @Override
         public String toString() {
-            return operation.qualified() + arguments.writtenWith(position.toString());
+            return operation.qualified() + arguments.writtenWith(
+                    source.transformation().writtenAround(source.position().toString()));
         }
     }
 
@@ -593,7 +631,8 @@ public sealed interface NumericTerm
             case ValueOf _ -> new ValueOf(other);
             // With what it was given beside the value, which is part of which number it is: a
             // quotient is the one its divisor says, and a taking given none is no quotient.
-            case TakenOf taken -> TakenOf.of(taken.operation(), other, taken.arguments(), at,
+            case TakenOf taken -> TakenOf.of(taken.operation(),
+                    new ObservationSource(other, taken.transformation()), taken.arguments(), at,
                     inners, symbols);
             case CodePointClassCount count ->
                     CodePointClassCount.of(other, count.counted(), at, inners);
@@ -631,9 +670,13 @@ public sealed interface NumericTerm
     default NumericDomain.Bounds intrinsicBounds() {
         return switch (this) {
             case ValueOf _ -> NumericDomain.Bounds.OPEN;
+            // And what the value it was taken of can be: a date moved a year's days back is never
+            // the last date, so its year is never the last year, whatever the operation answers of
+            // any date.
             case TakenOf taken -> ResultRange.of(
                     DefaultBoundOperationFacts.get().boundsOnTheResult(taken.operation()),
-                    argument -> Optional.ofNullable(taken.arguments().at(argument.position())));
+                    argument -> Optional.ofNullable(taken.arguments().at(argument.position())))
+                    .meet(taken.takenAs().reachedFrom(taken.transformation()));
             // A count of some of a string's code points is never negative, as how many it holds is
             // not. What it is at most is the string's own length, which is another number of the
             // same place and is held where the two are realized together.

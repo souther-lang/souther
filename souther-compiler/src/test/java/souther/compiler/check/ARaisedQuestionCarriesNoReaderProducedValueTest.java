@@ -102,6 +102,11 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
      * counts of one string two numbers, and it is the whitespace the library trims at and one
      * separator the author wrote.
      *
+     * <p>{@code ValueTransformation} and {@code DateTranslation} belong to the year of a date moved
+     * by days: which number of one place it is turns on the days the date was moved by and the
+     * dates the move is defined at, which are whole numbers the author's own calls wrote and
+     * nothing a reading produced.
+     *
      * <p>{@code OfItsMultiplicity} belongs to how often an element's value occurs among the
      * elements beside it, which carries nothing: the place says which value, and the container it
      * stands inside says which elements are counted.
@@ -125,6 +130,10 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
             "souther/compiler/semantics/CodePointClass$NotWhitespace",
             "souther/compiler/semantics/CodePointClass$NotWhitespaceNorEqualTo",
             "souther/compiler/semantics/TakenArguments",
+            "souther/compiler/numeric/ValueTransformation",
+            "souther/compiler/numeric/ValueTransformation$Identity",
+            "souther/compiler/numeric/ValueTransformation$DateShift",
+            "souther/compiler/numeric/DateTranslation",
             "souther/compiler/types/ValueName");
 
     @Test

@@ -228,7 +228,7 @@ public final class WhatTheRulesLeave {
         Type container = read.domain().typeAt(at, read.rules());
         ValueName.Stdlib size = container == null ? null
                 : NumericMeasures.takenOf(container, read.rules().inners());
-        NumericTerm.TakenOf count = size == null ? null : NumericTerm.TakenOf.of(size, at,
+        NumericTerm.TakenOf count = size == null ? null : NumericTerm.TakenOf.asItStands(size, at,
                 container, read.rules().inners(), read.rules().symbols());
         return count == null || someValue(read.quantities().runsBetween(count),
                 atLeastOne ? Rel.GE : Rel.LE, atLeastOne ? Count.of(1) : Count.ZERO);

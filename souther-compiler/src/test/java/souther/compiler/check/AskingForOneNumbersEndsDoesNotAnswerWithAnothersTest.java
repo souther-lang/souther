@@ -70,9 +70,9 @@ class AskingForOneNumbersEndsDoesNotAnswerWithAnothersTest {
     }
 
     private static final NumberAt<RuleKey> HOW_LONG =
-            NumberAt.takenOf(RuleKey.of("names"), LENGTH);
+            NumberAt.takenAsItStands(RuleKey.of("names"), LENGTH);
     private static final NumberAt<RuleKey> HOW_MANY =
-            NumberAt.takenOf(RuleKey.of("names"), SIZE);
+            NumberAt.takenAsItStands(RuleKey.of("names"), SIZE);
     private static final NumberAt<RuleKey> ITSELF =
             NumberAt.valueOf(RuleKey.of("names"));
 

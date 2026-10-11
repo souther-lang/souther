@@ -81,7 +81,7 @@ class ATotalReadsItsElementsOnOneOrderWhereverItIsReadTest {
     }
 
     /** {@code List.sum} of what a place holds. */
-    private static final NumericTerm.FromOnePosition AT_A_POSITION = NumericTerm.TakenOf.of(
+    private static final NumericTerm.FromOnePosition AT_A_POSITION = NumericTerm.TakenOf.asItStands(
             ValueName.Stdlib.operation("List", "sum"), TermPath.of("ns"),
             new Type.ListOf(Type.INT), souther.compiler.check.NewtypeInners.NONE,
             Symbols.none(souther.compiler.DefaultStdlib.get()));

@@ -2047,7 +2047,7 @@ public final class InvariantChecker {
         // it: dropped here and rebuilt as "a number was taken", two operations over one path were
         // one coordinate and a report could not tell them apart.
         held.forEach((path, counted) -> byName.put(counted.atom(),
-                new Coordinate(NumberAt.takenOf(path, counted.by()),
+                new Coordinate(NumberAt.takenAsItStands(path, counted.by()),
                         Carrier.WHOLE)));
         return Coordinates.of(byName);
     }

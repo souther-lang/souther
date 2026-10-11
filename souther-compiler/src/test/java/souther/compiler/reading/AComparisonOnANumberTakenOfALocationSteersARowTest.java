@@ -343,7 +343,7 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
         }
 
         NumericTerm lengthAt(TermPath at) {
-            NumericTerm.TakenOf taken = NumericTerm.TakenOf.of(
+            NumericTerm.TakenOf taken = NumericTerm.TakenOf.asItStands(
                     NumericMeasures.takenOf(Type.STRING, souther.compiler.check.ScopedDeclarations.wrapsOf(symbols)),
                 at, Type.STRING, souther.compiler.check.ScopedDeclarations.wrapsOf(symbols),
                 symbols);

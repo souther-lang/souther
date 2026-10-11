@@ -2,11 +2,13 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.Arithmetic;
@@ -76,7 +78,8 @@ final class TermReading {
         }
         return switch (term) {
             case NumericTerm.ValueOf _ -> asItStands(at, observed);
-            case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(), at, on);
+            case NumericTerm.TakenOf taken ->
+                    taken(taken.takenAs(), taken.arguments(), taken.transformation(), at, on);
             case NumericTerm.CodePointClassCount count -> codePointsOfAClass(count.counted(), at);
         };
     }
@@ -339,13 +342,13 @@ final class TermReading {
      * nothing to say so with — and a container is written on no order at all, so the one that adds
      * its elements up is handed nothing.
      */
-    private static Reading taken(TakenAs how, TakenArguments arguments, ObservedValue at,
-                                 TermOrders on) {
+    private static Reading taken(TakenAs how, TakenArguments arguments, ValueTransformation from,
+                                 ObservedValue at, TermOrders on) {
         return switch (how) {
             case TakenAs.HowManyItHolds _ -> howMany(at);
             case TakenAs.TheSumOfWhatItHolds _ -> addedUp(at, on);
             case TakenAs.PartOfTime taken -> partOfTime(taken.part(), at, on.observed());
-            case TakenAs.PartOfDate taken -> partOfDate(taken.part(), at, on.observed());
+            case TakenAs.PartOfDate taken -> partOfDate(taken.part(), from, at, on.observed());
             case TakenAs.TheTruncatingQuotient taken ->
                     quotient(taken.read(arguments), at, on.observed());
             case TakenAs.TheFloorRemainder taken ->
@@ -562,7 +565,8 @@ final class TermReading {
      * travels on, and for the same reason: a line at the twelfth month is not a line at the twelfth
      * day.
      */
-    private static Reading partOfDate(TakenAs.DatePart part, ObservedValue at, Carrier observed) {
+    private static Reading partOfDate(TakenAs.DatePart part, ValueTransformation from,
+                                      ObservedValue at, Carrier observed) {
         if (observed == null) {
             return new Reading.NotNumber();
         }
@@ -573,11 +577,36 @@ final class TermReading {
         if (!(read instanceof Count count) || observed.onTheGrid(count) == null) {
             return new Reading.NotNumber();
         }
-        java.time.LocalDate date = Dates.dateAt(count);
+        Count moved = from instanceof ValueTransformation.Identity ? count : movedBy(from, count);
+        if (moved == null) {
+            // The date is one the shifts that made the value this is taken of stop at: the program
+            // aborts before there is a date to take a part of, as it does for a quotient past what
+            // a whole number holds.
+            return new Reading.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS);
+        }
+        java.time.LocalDate date = Dates.dateAt(moved);
         return new Reading.Number(Count.of(switch (part) {
             case YEAR -> date.getYear();
             case MONTH -> date.getMonthValue();
             case DAY -> date.getDayOfMonth();
         }));
+    }
+
+    /**
+     * The day {@code day} becomes under {@code from}, or null where some step of it is not defined
+     * there.
+     *
+     * <p>Null is the answer of the program the value was made by and not a gap in what is read: the
+     * date is one it never gets past, so there is no date to take a part of.
+     */
+    private static Count movedBy(ValueTransformation from, Count day) {
+        DateTranslation translation = from.translation();
+        // A day of a date the carrier holds, which is a whole number inside the calendar's range,
+        // so the whole number it truncates to is the day itself.
+        if (!(day.exactly().truncated() instanceof ExactAnswer.Held<BigInteger> whole)) {
+            return null;
+        }
+        long origin = whole.value().longValue();
+        return translation.definedAt(origin) ? Count.of(origin + translation.offsetDays()) : null;
     }
 }

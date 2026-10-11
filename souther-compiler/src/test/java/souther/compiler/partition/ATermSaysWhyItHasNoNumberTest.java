@@ -35,7 +35,7 @@ class ATermSaysWhyItHasNoNumberTest {
 
     private static final NumericTerm.FromOnePosition VALUE =
             new NumericTerm.ValueOf(TermPath.of("x"));
-    private static final NumericTerm.FromOnePosition LENGTH = NumericTerm.TakenOf.of(
+    private static final NumericTerm.FromOnePosition LENGTH = NumericTerm.TakenOf.asItStands(
             ValueName.Stdlib.operation("String", "length"), TermPath.of("x"),
             souther.compiler.types.Type.STRING,
             souther.compiler.check.NewtypeInners.NONE,

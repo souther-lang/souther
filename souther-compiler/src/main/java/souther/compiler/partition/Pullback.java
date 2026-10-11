@@ -1238,7 +1238,7 @@ final class Pullback {
         Type container = read.domain().typeAt(held, read.rules());
         ValueName.Stdlib size = container == null ? null
                 : NumericMeasures.takenOf(container, read.rules().inners());
-        return size == null ? null : NumericTerm.TakenOf.of(size, held, container,
+        return size == null ? null : NumericTerm.TakenOf.asItStands(size, held, container,
                 read.rules().inners(), read.rules().symbols());
     }
 
@@ -3269,15 +3269,17 @@ final class Pullback {
      * comparison of that date with where the year begins — or null where it is no such comparison.
      *
      * <p>A year is a run of days, so the years from one on are the dates from the first day of it
-     * on, and {@code Date.year(Date.addDays(1, b)) >= 2027} says what
-     * {@code Date.addDays(1, b) >= Date("2027-01-01")} does. That comparison is read where the date
+     * on, and {@code Date.year(Date.addDays(n, b)) >= 2027} says what
+     * {@code Date.addDays(n, b) >= Date("2027-01-01")} does. That comparison is read where the date
      * is a form of the input's own, which is where a year of it has no term of its own: a taking is
-     * of a position. A date that is one is left to the term that stands for its year.
+     * of a position, or of a position's date moved by a count of days written out
+     * ({@link NumericTerm.TakenOf#transformation()}). A date that is either is left to the term
+     * that stands for its year, and what is read here is a date moved by a count an input supplies.
      *
      * <p>Equality is the dates of that year, and a difference is the dates outside it. A date the
      * shift takes off the end of the range is no date, and which inputs make it so is not this
      * reading's: the comparison is read over the dates it is about, as
-     * {@code Date.addDays(1, b) >= Date("2027-01-01")} is, and a row that would abort there is
+     * {@code Date.addDays(n, b) >= Date("2027-01-01")} is, and a row that would abort there is
      * never a row that reached a line.
      *
      * <p>Only the parts that are runs of days. A month or a day of the month repeats every year,

@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.ValueName;
@@ -67,18 +68,19 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return new NumberAt<>(position, new OfWhatNumber.OfItsOwnValue());
     }
 
-    /** The number {@code operation} answers of what stands at {@code position}, given nothing
-     *  beside it. */
-    public static <P> NumberAt<P> takenOf(P position, ValueName operation) {
-        return takenOf(position, operation, TakenArguments.NONE);
+    /** The number {@code operation} answers of what stands at {@code position} as it stands,
+     *  given nothing beside it. What the value was made into is {@link #takenOf}'s, and a caller
+     *  that has one does not take this. */
+    public static <P> NumberAt<P> takenAsItStands(P position, ValueName operation) {
+        return takenOf(position, operation, TakenArguments.NONE, ValueTransformation.NONE);
     }
 
-    /** The number {@code operation} answers of what stands at {@code position} when it is given
-     *  {@code arguments} as well. */
+    /** The number {@code operation} answers of {@code from} the value at {@code position} became,
+     *  when it is given {@code arguments} as well. */
     public static <P> NumberAt<P> takenOf(P position, ValueName operation,
-                                          TakenArguments arguments) {
+                                          TakenArguments arguments, ValueTransformation from) {
         return new NumberAt<>(position,
-                new OfWhatNumber.OfWhatAnOperationAnswers(operation, arguments));
+                new OfWhatNumber.OfWhatAnOperationAnswers(operation, arguments, from));
     }
 
     /** How many of the code points of the string at {@code position} are in {@code counted}. */
@@ -125,8 +127,14 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
          * beside the one it takes its number of, and those decide which number it takes: the
          * quotient of a position by two and its quotient by three are two numbers at one place.
          * Named by the operation alone, a line drawn on either would fall on both.
+         *
+         * <p>So is what the value it takes its number of was made from the value at the place. The
+         * year of a date and the year of that date a day on are two numbers at one place, and
+         * what tells them apart is the date the operation was given and not anything it was handed
+         * beside it.
          */
-        record OfWhatAnOperationAnswers(ValueName operation, TakenArguments arguments)
+        record OfWhatAnOperationAnswers(ValueName operation, TakenArguments arguments,
+                                        ValueTransformation from)
                 implements OfWhatNumber {
 
             public OfWhatAnOperationAnswers {
@@ -134,6 +142,9 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                 java.util.Objects.requireNonNull(arguments,
                         "and says what it was given beside the value, which is nothing where it"
                                 + " was given nothing");
+                java.util.Objects.requireNonNull(from,
+                        "and says what the value it takes its number of was made from the one at"
+                                + " the place, which is nothing where it is that one");
             }
         }
 
@@ -176,7 +187,8 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return switch (of) {
             case OfWhatNumber.OfItsOwnValue _ -> position.toString();
             case OfWhatNumber.OfWhatAnOperationAnswers taken ->
-                    taken.operation() + taken.arguments().writtenWith(position.toString());
+                    taken.operation() + taken.arguments().writtenWith(
+                            taken.from().writtenAround(position.toString()));
             case OfWhatNumber.OfHowManyCodePointsAreIn count ->
                     "#(" + count.counted() + ")(" + position + ")";
             case OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + position + ")";

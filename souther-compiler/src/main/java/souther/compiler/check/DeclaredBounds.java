@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -237,7 +238,7 @@ public final class DeclaredBounds {
         NumberAt.OfWhatNumber kind = measure == null
                 ? new NumberAt.OfWhatNumber.OfItsOwnValue()
                 : new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(measure,
-                        TakenArguments.NONE);
+                        TakenArguments.NONE, ValueTransformation.NONE);
         FieldDomains own = FieldDomains.of(outermost, reading);
         Bounds bounds = placed(own.placedAt(RuleKey.THE_VALUE), kind, carrier);
         return bounds == null ? everything : bounds.range();

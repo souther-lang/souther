@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.DateShifts;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.NumericMeasures;
@@ -8,9 +9,14 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.WalkElements;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.DateTranslation;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Which number of a behavior's input an expression names, or nothing where it names none.
@@ -47,19 +53,12 @@ public final class InputNumber {
         Symbols symbols = source.symbols();
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols);
         if (measured != null) {
-            // A taking is of a location, so an argument that stands at none is one there is no
-            // location to take it of.
-            TermPath of = switch (reads.pathOf(measured.of(), source.newtypes())) {
-                case PathResolution.At(var at) -> at;
-                case PathResolution.NotAPosition _ -> null;
-                // A taking is of one location, and a name that only may stand at one is no one of
-                // them. Taken of any, the number would be a size of a container the run it is on
-                // never walked.
-                case PathResolution.MayStandAt _ -> null;
-            };
+            // A taking is of a location, or of what a location's value was moved into, so an
+            // argument that is neither is one there is no location to take it of.
+            ObservationSource of = sourceOf(measured.of(), reads, source);
             if (of != null) {
                 return NumericTerm.TakenOf.of(measured.operation(), of, measured.arguments(),
-                        inputs.typeAt(of, source), source.inners(), symbols);
+                        inputs.typeAt(of.position(), source), source.inners(), symbols);
             }
             // A location the operation is not taken of, or a value standing at none. The second is
             // a walk's answer, and a number over the values it walked is a term of its own where
@@ -76,6 +75,66 @@ public final class InputNumber {
             // it would fall at a place the rule may say nothing about.
             case PathResolution.MayStandAt _ -> null;
         };
+    }
+
+    /**
+     * The value a taking is of: the one standing at a location, or one a chain of shifts of a date
+     * written out made of it. Null where it is neither.
+     *
+     * <p>A location is asked first and is what a taking is of wherever it is one. A call that is no
+     * location is then asked what the library says of it ({@link DateShifts}), so that a date moved
+     * by days is a value of the place it was moved from and not a place of its own: a name that
+     * only may stand at a location is still no one of them.
+     */
+    private static ObservationSource sourceOf(Core of, InputReads reads,
+                                              RuleReadingSource source) {
+        return switch (reads.pathOf(of, source.newtypes())) {
+            case PathResolution.At(var at) -> ObservationSource.asItStands(at);
+            case PathResolution.NotAPosition _ -> movedFromALocation(of, reads, source);
+            // A taking is of one location, and a name that only may stand at one is no one of
+            // them. Taken of any, the number would be a size of a container the run it is on
+            // never walked.
+            case PathResolution.MayStandAt _ -> null;
+        };
+    }
+
+    /**
+     * The location a chain of shifts of a date starts from and what the chain comes to, or null
+     * where {@code of} is no shift of a date or what it shifts is no location.
+     *
+     * <p>Each step is read where the date inside it stands, since a name given a shifted date is
+     * the shift and the binding is where its date is read.
+     */
+    private static ObservationSource movedFromALocation(Core of, InputReads reads,
+                                                        RuleReadingSource source) {
+        // A shift of a date answers a date, so anything else is no chain and the walk below, which
+        // resolves names, is not spent on it.
+        if (!Type.DATE.equals(Core.withoutStanding(of).type())) {
+            return null;
+        }
+        Symbols symbols = source.symbols();
+        List<Long> days = new ArrayList<>();
+        Denotation met = reads.denotes(of, symbols, source.newtypes());
+        for (DateShifts.Step step = DateShifts.stepOf(met.value(), symbols); step != null;
+                step = DateShifts.stepOf(met.value(), symbols)) {
+            days.add(step.days());
+            met = met.at().denotes(step.date(), symbols, source.newtypes());
+        }
+        if (days.isEmpty()
+                || !(met.at().pathOf(met.value(), source.newtypes())
+                        instanceof PathResolution.At(var from))) {
+            return null;
+        }
+        // The innermost shift first: each one is defined only at the dates the ones inside it
+        // leave, which is what the translation keeps and the days alone would not.
+        DateTranslation translation = DateTranslation.none();
+        for (Long each : days.reversed()) {
+            translation = translation.thenAddDays(each);
+            if (translation == null) {
+                return null;
+            }
+        }
+        return new ObservationSource(from, ValueTransformation.of(translation));
     }
 
     /**

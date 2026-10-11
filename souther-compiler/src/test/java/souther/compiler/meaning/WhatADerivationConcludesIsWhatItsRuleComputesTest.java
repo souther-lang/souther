@@ -532,7 +532,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     private static final Quantity NUMBER_AT_B =
             new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(B));
     private static final Quantity INDEX = NUMBER_AT_A;
-    private static final Quantity LENGTH = new DecisionAtom.OfTheInput(NumericTerm.TakenOf.of(
+    private static final Quantity LENGTH = new DecisionAtom.OfTheInput(NumericTerm.TakenOf.asItStands(
             LIST_LENGTH, B, Type.list(Type.INT), ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS));
 
     /** A call of {@code operation} with the argument {@code argument} of its law at {@code at}. */
