@@ -272,9 +272,9 @@ public sealed interface Derivation {
             // stated, whichever arm selects. Not where an arm's statement is about the entry it
             // picked out, which is a different entry under each arm.
             Proposition first = stating.getFirst();
-            if (Proposition.firstStopIn(first) == null
+            if (stating.stream().allMatch(each -> each.key().equals(first.key()))
                     && arms.stream().noneMatch(Arm::aboutTheEntry)
-                    && stating.stream().allMatch(each -> each.key().equals(first.key()))) {
+                    && Proposition.firstStopIn(first) == null) {
                 return first;
             }
             List<Proposition> taken = new ArrayList<>();

@@ -681,7 +681,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static List<FilingCoordinate> heldAgainstAnotherValue(Proposition stated) {
         if (!(stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, String _))
-                || !Proposition.stopsIn(stated).isEmpty()) {
+                || Proposition.leavesSomethingUnread(stated)) {
             return null;
         }
         List<NumericTerm> input = new ArrayList<>();
@@ -734,7 +734,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         // Asked last: the walk of the whole statement is the dear part, and most comparisons
         // are dropped above for weighing something that is neither.
-        if (related.isEmpty() || !Proposition.stopsIn(stated).isEmpty()) {
+        if (related.isEmpty() || Proposition.leavesSomethingUnread(stated)) {
             return null;
         }
         List<FilingCoordinate> out = new ArrayList<>(AffineReading.filedAt(input));

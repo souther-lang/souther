@@ -588,29 +588,42 @@ public sealed interface Proposition {
     /** Why the first part of {@code stated} nothing read stopped, in the order its parts are
      *  kept, or null where every part was read. */
     static WhyUnread firstStopIn(Proposition stated) {
-        List<WhyUnread> stops = stopsIn(stated);
+        List<WhyUnread> stops = new ArrayList<>(1);
+        stopsIn(stated, stops, true);
         return stops.isEmpty() ? null : stops.getFirst();
     }
 
     /** Why each part of {@code stated} nothing read stopped, in the order its parts are kept. */
     static List<WhyUnread> stopsIn(Proposition stated) {
         List<WhyUnread> out = new ArrayList<>();
-        stopsIn(stated, out);
+        stopsIn(stated, out, false);
         return List.copyOf(out);
     }
 
-    private static void stopsIn(Proposition stated, List<WhyUnread> into) {
-        switch (stated) {
+    /** Each stop in {@code stated} added to {@code into} in the order its parts are kept, or the
+     *  first alone where {@code first}; whether one was added. */
+    private static boolean stopsIn(Proposition stated, List<WhyUnread> into, boolean first) {
+        return switch (stated) {
             case Unread unread -> into.add(unread.why());
-            case All all -> all.parts().forEach(part -> stopsIn(part, into));
-            case Any any -> any.parts().forEach(part -> stopsIn(part, into));
-            case OnAnApplication applications ->
-                    applications.each().forEach(one -> stopsIn(one, into));
-            case Some some -> stopsIn(some.ofTheElement(), into);
-            case SomeReachable reached -> stopsIn(reached.atANode(), into);
+            case All all -> stopsIn(all.parts(), into, first);
+            case Any any -> stopsIn(any.parts(), into, first);
+            case OnAnApplication applications -> stopsIn(applications.each(), into, first);
+            case Some some -> stopsIn(some.ofTheElement(), into, first);
+            case SomeReachable reached -> stopsIn(reached.atANode(), into, first);
             case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
-                 LastToHold _, Carried _ -> { }
+                 LastToHold _, Carried _ -> false;
+        };
+    }
+
+    private static boolean stopsIn(List<Proposition> parts, List<WhyUnread> into, boolean first) {
+        boolean added = false;
+        for (Proposition part : parts) {
+            added |= stopsIn(part, into, first);
+            if (added && first) {
+                return true;
+            }
         }
+        return added;
     }
 
     /**
