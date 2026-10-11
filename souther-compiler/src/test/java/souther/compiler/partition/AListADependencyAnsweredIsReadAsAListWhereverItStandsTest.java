@@ -398,9 +398,12 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
         assertEquals(1, notComposed.size(), "the rule that needs the statement to hold");
         assertTrue(notComposed.getFirst().account().onAnAnswer().stream().anyMatch(gap ->
                         gap instanceof DemandGap.Uncomposed(AnswerDemand.AStatement _,
-                                DemandGap.WhyNotComposed.NoValueComposedAtItsPositions _)),
-                () -> "and its statement is said to be one nothing was composed against: "
-                        + notComposed.getFirst().account());
+                                DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded(
+                                        var figures))
+                                && figures.written().equals(
+                                        List.of(CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO))),
+                () -> "and its statement is said to be one a figure stopped the looking along, and"
+                        + " not one with no value to write: " + notComposed.getFirst().account());
     }
 
     /** A number of the answer compared with one of the input is met by the same pair. */

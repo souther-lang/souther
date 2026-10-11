@@ -101,6 +101,7 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
             said.add(each instanceof DemandGap.Uncomposed(
                     AnswerDemand.AStatement statement, var why)
                     && !(why instanceof DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded)
+                    && !(why instanceof DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded)
                     && !AnswerAsAnInput.inputNumbersIn(statement.statement()).isEmpty()
                     ? new DemandGap.Uncomposed(statement,
                             DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded.by(figures))

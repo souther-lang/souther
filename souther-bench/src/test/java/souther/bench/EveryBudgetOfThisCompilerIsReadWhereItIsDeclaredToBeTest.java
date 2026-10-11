@@ -244,10 +244,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/numeric/ExactRatio;"
                             + "Lsouther/compiler/numeric/ExactRatio;"
                             + "Ljava/util/List;Ljava/util/List;"
-                            + "Lsouther/compiler/inputs/SearchRegion;)Ljava/util/List;",
-                    "stops the walk over the ends of an answer's places at the figure, and offers"
-                            + " what it had solved for — values to put a number at, which the"
-                            + " pairs' own figure then bounds again"),
+                            + "Lsouther/compiler/inputs/SearchRegion;Ljava/util/Set;)"
+                            + "Ljava/util/List;",
+                    "stops the walk over the ends of an answer's places at the figure, says so to"
+                            + " the caller, and offers what it had solved for — values to put a"
+                            + " number at, which the pairs' own figure then bounds again"),
             Map.entry("souther.compiler.partition.InputNumbersAnAnswerTurnsOn#of("
                             + "Lsouther/compiler/partition/AnswersDemanded;"
                             + "Lsouther/compiler/partition/Reachability$Reaching;"

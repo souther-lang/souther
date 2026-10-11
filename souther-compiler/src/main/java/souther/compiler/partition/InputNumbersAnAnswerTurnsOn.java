@@ -119,6 +119,7 @@ public final class InputNumbersAnAnswerTurnsOn {
         InputNumbersAnAnswerTurnsOn unpinned =
                 new InputNumbersAnAnswerTurnsOn(Map.of(), reaching);
         Map<NumericTerm, List<ExactRatio>> offered = new LinkedHashMap<>();
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
         ConditionReportAnchor anchor = null;
         for (AnswerDemand each : demands.stated()) {
             if (!(each instanceof AnswerDemand.AStatement statement)) {
@@ -132,7 +133,7 @@ public final class InputNumbersAnAnswerTurnsOn {
             MeasuredInput subject = answers.of(statement.of().dependency());
             for (NumericTerm term : named) {
                 offered.computeIfAbsent(term, _ -> new ArrayList<>())
-                        .addAll(boundedByTheAnswer(statement, term, subject));
+                        .addAll(boundedByTheAnswer(statement, term, subject, stoppedBy));
             }
         }
         if (offered.isEmpty()) {
@@ -151,7 +152,6 @@ public final class InputNumbersAnAnswerTurnsOn {
         int mostPairs = pairsFigure.maximum();
         int mostLooked = lookedFigure.maximum();
         List<InputNumbersAnAnswerTurnsOn> out = new ArrayList<>();
-        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
         int[] looked = {0};
         ConditionReportAnchor at = anchor;
         eachChoice(candidates, 0, new ArrayList<>(), choice -> {
@@ -240,9 +240,13 @@ public final class InputNumbersAnAnswerTurnsOn {
      * holds from {@code on = 10}. The value itself and the ones beside it, since a strict relation
      * holds one past. A comparison that names another number of the input is not solved here — that
      * number's value is not known yet.
+     *
+     * <p>Where the ends of the places were more than the figure lets be looked at, {@code stoppedBy}
+     * gains that figure: the values returned are then not every one the answer's bounds offer.
      */
     private static List<ExactRatio> boundedByTheAnswer(AnswerDemand.AStatement statement,
-                                                       NumericTerm term, MeasuredInput subject) {
+                                                       NumericTerm term, MeasuredInput subject,
+                                                       Set<CompositionBudget> stoppedBy) {
         if (subject == null) {
             return List.of();
         }
@@ -278,7 +282,7 @@ public final class InputNumbersAnAnswerTurnsOn {
                 continue;
             }
             for (ExactRatio solved : solvedAtTheEnds(form.constant(), by, places, weights,
-                    answerRegion)) {
+                    answerRegion, stoppedBy)) {
                 // The value and the ones beside it, each only where it is a number a ratio holds.
                 out.add(solved);
                 ExactRatio above = plusOne(solved);
@@ -311,7 +315,8 @@ public final class InputNumbersAnAnswerTurnsOn {
     private static List<ExactRatio> solvedAtTheEnds(ExactRatio constant, ExactRatio by,
                                                     List<NumericTerm> places,
                                                     List<ExactRatio> weights,
-                                                    SearchRegion answerRegion) {
+                                                    SearchRegion answerRegion,
+                                                    Set<CompositionBudget> stoppedBy) {
         List<List<ExactRatio>> ends = new ArrayList<>();
         for (NumericTerm place : places) {
             List<ExactRatio> here = new ArrayList<>();
@@ -332,9 +337,11 @@ public final class InputNumbersAnAnswerTurnsOn {
         // The ends of every place, which is as many choices as the places have ends multiplied, so
         // the walk over them is held to what a walk over the input's numbers is.
         int[] looked = {0};
-        int mostLooked = CompositionBudget.CHOICES_OF_INPUT_NUMBERS_LOOKED_AT.maximum();
+        CompositionBudget lookedFigure = CompositionBudget.CHOICES_OF_INPUT_NUMBERS_LOOKED_AT;
+        int mostLooked = lookedFigure.maximum();
         eachChoice(ends, 0, new ArrayList<>(), choice -> {
             if (looked[0]++ == mostLooked) {
+                stoppedBy.add(lookedFigure);
                 return false;
             }
             ExactRatio rest = constant;

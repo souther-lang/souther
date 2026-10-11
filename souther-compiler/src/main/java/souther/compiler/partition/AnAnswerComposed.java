@@ -163,6 +163,10 @@ public final class AnAnswerComposed {
         // looked along each of them, as a way over the input is.
         List<DemandGap> unaccounted = new ArrayList<>();
         List<Pending> pending = new ArrayList<>();
+        CompositionBudget splitFigure = CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO;
+        int most = splitFigure.maximum();
+        DemandGap.WhyNotComposed tooMany =
+                DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(List.of(splitFigure));
         for (AnswerDemand each : demands) {
             if (!(each instanceof AnswerDemand.AStatement statement)) {
                 continue;
@@ -170,10 +174,13 @@ public final class AnAnswerComposed {
             Proposition over = AnswerAsAnInput.of(statement.statement(), at,
                     subject.rules().inners(), subject.symbols(), pinned);
             List<DemandReading.Read> reads = over == null ? null : statements.asked(over);
-            int most = CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO.maximum();
-            if (!(reads != null && eachWay(reads, most) instanceof Ways.Each(var options))) {
-                unaccounted.add(new DemandGap.Uncomposed(each,
-                        new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions()));
+            Ways ways = reads == null ? new Ways.Unwritable() : eachWay(reads, most);
+            if (!(ways instanceof Ways.Each(var options))) {
+                // Past the figure nothing was looked along, which is not the same as there being
+                // nothing a composer writes: only the first is cured by looking further.
+                unaccounted.add(new DemandGap.Uncomposed(each, ways instanceof Ways.TooMany
+                        ? tooMany
+                        : new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions()));
                 continue;
             }
             pending.add(new Pending(statement, options));
@@ -183,16 +190,15 @@ public final class AnAnswerComposed {
         // demand no value was composed against. Said before any is built, and without a product
         // that can pass what a count holds: a size is measured against what is left of the figure
         // and the ways are only multiplied once they are known to fit.
-        int most = CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO.maximum();
-        int ways = 1;
+        int waysSoFar = 1;
         for (Pending each : pending) {
-            if (each.options().size() > most / ways) {
-                pending.forEach(one -> unaccounted.add(new DemandGap.Uncomposed(one.statement(),
-                        new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions())));
+            if (each.options().size() > most / waysSoFar) {
+                pending.forEach(one -> unaccounted.add(
+                        new DemandGap.Uncomposed(one.statement(), tooMany)));
                 return Attempt.nothing(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, unaccounted);
             }
-            ways *= each.options().size();
+            waysSoFar *= each.options().size();
         }
         Attempt first = null;
         for (List<List<DemandReading.Read>> choice : eachChoice(pending)) {

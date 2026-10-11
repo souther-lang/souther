@@ -200,5 +200,32 @@ public sealed interface DemandGap {
                         PublicationOrders.COMPOSITION_BUDGETS.keep(met));
             }
         }
+
+        /**
+         * No value was composed under it because the statement asks of more ways than a figure of
+         * this compiler's lets a way be split into, and none of them was looked along.
+         *
+         * <p>Said apart from {@link NoValueComposedAtItsPositions}: that one is about positions
+         * nothing here writes a value at, which more looking does not change, and this one is about
+         * how much was looked along, which raising the figure does.
+         *
+         * @param figures what ended the splitting
+         */
+        record NoWayComposedBeforeAFigureEnded(CanonicalSelection<CompositionBudget> figures)
+                implements WhyNotComposed {
+
+            public NoWayComposedBeforeAFigureEnded {
+                if (figures == null || figures.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a splitting a figure ended says which figure ended it");
+                }
+            }
+
+            /** What ended a splitting, in the order a report says it. */
+            public static NoWayComposedBeforeAFigureEnded by(Collection<CompositionBudget> met) {
+                return new NoWayComposedBeforeAFigureEnded(
+                        PublicationOrders.COMPOSITION_BUDGETS.keep(met));
+            }
+        }
     }
 }
