@@ -16,7 +16,6 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
-import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -24,7 +23,6 @@ import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -86,13 +84,8 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
     void howManyListsPutEndToEndHoldIsWhatTheirSizesAddUpTo() {
         Quantity.SumOver read = assertInstanceOf(Quantity.SumOver.class, theOnlyNumber("stocked"));
         assertEquals(new DecisionSubject.AnInput(BINS), read.container());
-        assertEquals(0, read.ofTheElement().constant().signum(), () -> "nothing beside: " + read);
-        Map.Entry<Quantity, ExactRatio> each = read.ofTheElement().coefs().entrySet().iterator()
-                .next();
-        assertEquals(1, read.ofTheElement().coefs().size(), () -> "one number of each: " + read);
-        assertEquals(ExactRatio.ONE, each.getValue());
         NumericTerm.TakenOf size = assertInstanceOf(NumericTerm.TakenOf.class,
-                assertInstanceOf(DecisionAtom.OfTheInput.class, each.getKey()).term());
+                assertInstanceOf(DecisionAtom.OfTheInput.class, read.ofTheElement()).term());
         assertEquals(BINS.element(), size.subjectPath(), () -> "the size of each list: " + read);
     }
 
@@ -109,8 +102,7 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
                 theOnlyNumber("stockedItems"));
         assertEquals(new DecisionSubject.AnInput(ITEMS), read.container());
         NumericTerm.TakenOf size = assertInstanceOf(NumericTerm.TakenOf.class,
-                assertInstanceOf(DecisionAtom.OfTheInput.class,
-                        read.ofTheElement().coefs().keySet().iterator().next()).term());
+                assertInstanceOf(DecisionAtom.OfTheInput.class, read.ofTheElement()).term());
         assertEquals(ITEMS.element().then("bins"), size.subjectPath(),
                 () -> "the size of each list: " + read);
     }

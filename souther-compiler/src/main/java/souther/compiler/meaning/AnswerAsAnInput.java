@@ -296,11 +296,16 @@ public final class AnswerAsAnInput {
                 yield container == null || each == null ? null
                         : new Quantity.HowManyDifferent(container, each);
             }
+            // What each element adds may be a number put at a value here, and a sum of a value is
+            // that value times how many elements there are, which is no one quantity.
             case Quantity.SumOver sum -> {
                 DecisionSubject container = subject(sum.container());
-                LinearForm<Quantity> each = form(sum.ofTheElement());
-                yield container == null || each == null ? null
-                        : new Quantity.SumOver(container, each);
+                LinearForm<Quantity> each = form(LinearForm.atom(sum.ofTheElement()));
+                yield container == null || each == null || each.constant().signum() != 0
+                        || each.coefs().size() != 1
+                        || !ExactRatio.ONE.equals(each.coefs().values().iterator().next())
+                        ? null
+                        : new Quantity.SumOver(container, each.coefs().keySet().iterator().next());
             }
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _ -> null;

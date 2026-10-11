@@ -427,6 +427,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Pullback$WrittenOutRead;",
                     "counts the applications a closure is handed each value on, and past the"
                             + " figure carries the law out as a part nothing read, naming it"),
+            Map.entry("souther.compiler.partition.Pullback$ALawRead#sumOverWrittenOut("
+                            + "Lsouther/compiler/check/DeclaredArgument;"
+                            + "Ljava/util/List;"
+                            + "Lsouther/compiler/semantics/LawNumber;)"
+                            + "Lsouther/compiler/partition/Pullback$Sized;",
+                    "counts the values a sum is read of one by one, and past the figure carries"
+                            + " the number out as one nothing read, naming it"),
             Map.entry("souther.compiler.partition.Pullback$ALawRead#count("
                             + "Lsouther/compiler/semantics/LawNumber$HowManyMeet;)"
                             + "Lsouther/compiler/partition/Pullback$Sized;",

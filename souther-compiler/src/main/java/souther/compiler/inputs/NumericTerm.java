@@ -514,7 +514,10 @@ public sealed interface NumericTerm
                     : new Type.ListOf(souther.compiler.check.TypeOps.base(each, inners));
             Type answers = over == null ? null
                     : NumericAnswers.typeOf(operation, over, inners, symbols);
-            if (how == null || answers == null || source == null) {
+            // How many values a run holds is how many the walk that made it answered, which the
+            // law of the walk's operation says, and no account over the values themselves.
+            if (how == null || how instanceof TakenAs.HowManyItHolds || answers == null
+                    || source == null) {
                 return null;
             }
             return how.takenOf(over, answers) ? new TakenOver(operation, source) : null;
