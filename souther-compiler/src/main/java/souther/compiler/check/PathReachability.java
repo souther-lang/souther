@@ -248,7 +248,7 @@ public final class PathReachability {
     public static Answers of(Core body, SpecImplementation.Implemented implemented,
                              CoverageSites.Plan plan, InputReading read,
                              RuleReadingContext ruleReading, MeaningsOfABody meanings,
-                             ElementBindings elements) {
+                             ElementBindings elements, ValueTemplates values) {
         Objects.requireNonNull(read, "a reachability reading is made against an input that was read");
         if (implemented == null) {
             return Answers.NONE;
@@ -262,7 +262,7 @@ public final class PathReachability {
             params = params.with(input.written().binder(),
                     TypeOps.successType(input.declared().type()));
         }
-        return of(body, params, plan, read, ruleReading, meanings, elements);
+        return of(body, params, plan, read, ruleReading, meanings, elements, values);
     }
 
     /**
@@ -276,17 +276,26 @@ public final class PathReachability {
      * the language's operations stand — and is what a path takes in where it passes one. A
      * condition inside a copy of one of the language's operations is no condition of the model:
      * the path goes on through it and takes nothing in.
+     *
+     * <p>A value the body builds is a call of the value's method in the tree this walks, and what
+     * the value is defined as is its template in {@code values}, the templates of the tree an
+     * analysis reads. A name given such a call is read as that template and in the environment a
+     * template is read in, where nothing of this body is in force ({@link Terms#inside}) — so a
+     * fork on a value the module declares is settled as one on the value written out, and nothing
+     * of the other representation is read under this body's names.
      */
     public static Answers of(Core body, Scope params, CoverageSites.Plan plan,
                              InputReading reading, RuleReadingContext ruleReading,
-                             MeaningsOfABody meanings, ElementBindings elements) {
+                             MeaningsOfABody meanings, ElementBindings elements,
+                             ValueTemplates values) {
         Objects.requireNonNull(reading,
                 "a reachability reading is made against an input that was read");
         if (body == null) {
             return Answers.NONE;
         }
         InputDomain read = reading.domain();
-        PathEngine engine = new PathEngine(ruleReading, Terms.Of.THE_TREE_THAT_RUNS);
+        PathEngine engine = new PathEngine(ruleReading, Map.of(), Terms.Of.THE_TREE_THAT_RUNS,
+                values);
         Map<ControlPlace, Reachability> out = new LinkedHashMap<>();
         Map<ConstructOccurrence,
                 souther.compiler.reach.ComparisonArrival> arriving = new LinkedHashMap<>();

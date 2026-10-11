@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * An expression this walk could not read comes back with the environment it was being read in.
  *
- * <p>The pair is the contract {@link AffineForms.ReadThrough} already states: a value stands for a
+ * <p>The pair is the contract {@link ValueStanding.ReadThrough} already states: a value stands for a
  * name in the environment the binding was made in, which is not always the one the name was read
  * in. An answer that carries the expression alone puts the caller in the position of reading it
  * again in whatever it happens to hold — which is the same reading done twice, and free to disagree
@@ -99,16 +99,16 @@ class WhereAReadingStoppedComesBackWithWhatItWasReadInTest {
             }
 
             @Override
-            public AffineForms.ReadThrough<String> readThrough(Core.Read read, String at) {
+            public ValueStanding.ReadThrough<String> readThrough(Core.Read read, String at) {
                 return read.binding().equals(A_NAME)
-                        ? new AffineForms.ReadThrough<>(UNREADABLE, "where the value was written")
+                        ? new ValueStanding.ReadThrough<>(UNREADABLE, "where the value was written")
                         : null;
             }
 
             /** One name denotes one value here, and no name stands for several: what this test is
              *  about is the environment a stop comes back with, which a plurality would not add to. */
             @Override
-            public java.util.List<AffineForms.ReadThrough<String>> alternativesOf(Core.Read read,
+            public java.util.List<ValueStanding.ReadThrough<String>> alternativesOf(Core.Read read,
                                                                                   String at) {
                 return null;
             }

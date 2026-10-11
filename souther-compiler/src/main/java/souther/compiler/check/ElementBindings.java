@@ -129,12 +129,20 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
      * the value is.
      *
      * <p>Asked where a name is bound, so that everything that reads the name reads the meaning and
-     * not the edge that asked for it.
+     * not the edge that asked for it. Which value a build is of is {@link ValueTemplates#builtBy}'s
+     * answer.
+     *
+     * <p>The template is read in the environment the name is, not one of its own, which is right
+     * only where the template is written in the representation that environment reads. So the
+     * templates held here are the ones of the tree an analysis reads, and the bindings of the tree
+     * that runs hold none: a template put in front of a reader of that tree would hand it nodes of
+     * the other representation.
      */
     public Core dereferenced(Core standing) {
         // The type a name is in force at says nothing about which value it holds.
         Core value = Core.withoutStanding(standing);
-        return value instanceof Core.MaterialisedValue build ? templates.bodyOf(build) : value;
+        Core built = templates.builtBy(value);
+        return built != null ? built : value;
     }
 
     /**
@@ -376,8 +384,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
             // A name given a build of a value holds what the value is: what it was bound to is the
             // template, and the build is only where it was asked for.
             Core value = Core.withoutStanding(let.value());
-            held.putIfAbsent(let.binder().binding(), value instanceof Core.MaterialisedValue build
-                    ? values.bodyOf(build) : value);
+            Core built = values.builtBy(value);
+            held.putIfAbsent(let.binder().binding(), built != null ? built : value);
             // The body of a binding is read only where a fact proved before the tree was rewritten
             // says this binding is a closure parameter of a walk answering one per element. The
             // shape connects the two ends; it establishes nothing, and a binding nothing licenses

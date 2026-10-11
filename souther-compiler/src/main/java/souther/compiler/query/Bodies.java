@@ -80,6 +80,7 @@ import souther.compiler.claims.ClaimDiagnostics;
 import souther.compiler.claims.Claims;
 import souther.compiler.claims.UnreachableClaims;
 import souther.compiler.check.ElementBindings;
+import souther.compiler.check.ValueTemplates;
 import souther.compiler.check.EmittedDefinition;
 import souther.compiler.check.Expandable;
 import souther.compiler.check.PathReachability;
@@ -3422,7 +3423,9 @@ public final class Bodies {
                                     analysed.get(spec.name()), read,
                                     () -> Adequacy.readingOf(db, read, reading.value()),
                                     reading.value()),
-                            elements.getOrDefault(spec.name(), ElementBindings.NONE))));
+                            elements.getOrDefault(spec.name(), ElementBindings.NONE),
+                            analysed.get(spec.name()) == null ? ValueTemplates.NONE
+                                    : analysed.get(spec.name()).templates())));
         }
         // In the order the module declares them, which is the order a reader meets the diagnostics
         // these carry. `Map.copyOf` keeps the entries and not the order (see `Ordered`), so a

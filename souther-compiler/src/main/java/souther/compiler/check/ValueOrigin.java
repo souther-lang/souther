@@ -483,7 +483,7 @@ public sealed interface ValueOrigin<K> {
 
         /** The value {@code read}'s name denotes and what to read it in, or null where the name
          *  stands for something of its own. */
-        AffineForms.ReadThrough<E> readThrough(Core.Read read, E at);
+        ValueStanding.ReadThrough<E> readThrough(Core.Read read, E at);
 
         /** What {@code li}'s body is read in. */
         E inside(Core.LetIn li, E at);
@@ -549,7 +549,7 @@ public sealed interface ValueOrigin<K> {
             return new IsAPosition<>(here);
         }
         if (e instanceof Core.Read read) {
-            AffineForms.ReadThrough<E> through = reading.readThrough(read, at);
+            ValueStanding.ReadThrough<E> through = reading.readThrough(read, at);
             if (through != null && following.enter(read.binding())) {
                 ValueOrigin<K> inside = following.readingOf(read.binding(), through.value(),
                         through.at(), () -> of(through.value(), through.at(), reading, following));

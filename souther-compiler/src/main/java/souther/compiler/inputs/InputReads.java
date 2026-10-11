@@ -10,6 +10,7 @@ import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Location;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.ValueStanding;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.HowAClosureIsApplied;
@@ -1703,14 +1704,22 @@ public final class InputReads {
     }
 
     /**
-     * {@code from} followed through the steps that have one successor, as far as they go.
+     * What {@code e} stands as here, as a value a reader may take apart: each part it finds is
+     * followed where {@code e} was written ({@link ValueStanding.Standing#part}).
+     */
+    public ValueStanding.Standing<InputReads, ?> standingValue(Core e, Symbols symbols,
+                                                              DeclarationNewtypes newtypes) {
+        return ValueStanding.one(e, this, new Followed(symbols, newtypes, new HashSet<>()));
+    }
+
+    /**
+     * {@code from} followed through the steps that have one successor, as far as they go
+     * ({@link ValueStanding}).
      *
-     * <p>A name standing for one value, the body of a binding, and a value the reading takes as
-     * another ({@link #taking}), and nothing else. A normal form
-     * and never a failure: what comes back where nothing applies is what went in, which a caller
-     * reads rather than treating as an absence.
+     * <p>A normal form and never a failure: what comes back where nothing applies is what went in,
+     * which a caller reads rather than treating as an absence.
      *
-     * <p><b>Which names those are is {@link #meaningOf}'s answer and is not read off the bindings
+     * <p><b>Which names are followed is {@link #meaningOf}'s answer and is not read off the bindings
      * here.</b> A name is a position, or one of several values, or an element, before it is what it
      * was bound to, and there is no way to read a binding's value here without that order having
      * been applied: the environment answers what a name is ({@link BindingRole}) and hands out
@@ -1718,36 +1727,64 @@ public final class InputReads {
      * that both holds a value and is what an operation handed an element on, which is the shape
      * joining two walks leaves.
      *
-     * <p>By the bindings met, which is what makes it stop. Each tells itself from every other, so a
-     * name that came round to itself is one already answered for.
+     * <p>No plurality is followed into. A name that is one of several values stands as the name,
+     * which is what a reader asking for one value is owed.
      */
     private static Denotation standing(Denotation from, Symbols symbols,
                                        DeclarationNewtypes newtypes, Set<BindingId> met) {
-        Denotation at = from;
-        while (true) {
-            switch (at.value()) {
-                case Core.Read name -> {
-                    if (!met.add(name.binding())
-                            || !(at.at().meaningOf(name, symbols, newtypes, met)
-                                    instanceof ReadMeaning.Through through)) {
-                        return at;
-                    }
-                    at = through.denotes();
-                }
-                case Core.LetIn let ->
-                        at = new Denotation(let.body(), at.at().and(let.binder(), let.value()));
-                // What a value is does not turn on the type it stands as.
-                case Core.Widen w -> at = new Denotation(w.value(), at.at());
-                // A value this reading takes as another is that value: a choice the answer of the
-                // arm it is on, a call the body it entered.
-                default -> {
-                    Denotation as = at.at().taken(at.value());
-                    if (as == null) {
-                        return at;
-                    }
-                    at = as;
-                }
+        ValueStanding.Standing<InputReads, Followed> stands =
+                ValueStanding.one(from.value(), from.at(), new Followed(symbols, newtypes, met));
+        return new Denotation(stands.value(), stands.at());
+    }
+
+    /**
+     * What this reading answers about names, for the walk that follows them.
+     *
+     * <p>By the bindings met, which is what makes a walk stop: each tells itself from every other,
+     * so a name that came round to itself is one already answered for. Shared with
+     * {@link #meaningOf}, which follows a container to its elements by this same walk, so the two
+     * stop at the same names.
+     */
+    private record Followed(Symbols symbols, DeclarationNewtypes newtypes, Set<BindingId> met)
+            implements ValueStanding.Names<InputReads, Followed> {
+
+        private Followed {
+            Objects.requireNonNull(newtypes, "a name is followed knowing what each name wraps");
+        }
+
+        @Override
+        public ValueStanding.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
+            if (!met.add(read.binding())
+                    || !(at.meaningOf(read, symbols, newtypes, met)
+                            instanceof ReadMeaning.Through through)) {
+                return null;
             }
+            return new ValueStanding.ReadThrough<>(through.denotes().value(),
+                    through.denotes().at());
+        }
+
+        @Override
+        public List<ValueStanding.ReadThrough<InputReads>> alternativesOf(Core.Read read,
+                                                                          InputReads at) {
+            return null;
+        }
+
+        @Override
+        public InputReads inside(Core.LetIn li, InputReads at) {
+            return at.and(li.binder(), li.value());
+        }
+
+        // A value this reading takes as another is that value: a choice the answer of the arm it
+        // is on, a call the body it entered.
+        @Override
+        public ValueStanding.ReadThrough<InputReads> taken(Core node, InputReads at) {
+            Denotation as = at.taken(node);
+            return as == null ? null : new ValueStanding.ReadThrough<>(as.value(), as.at());
+        }
+
+        @Override
+        public Followed oneAtATime() {
+            return this;
         }
     }
 

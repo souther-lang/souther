@@ -8,6 +8,7 @@ import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.RuleAt;
+import souther.compiler.check.ValueStanding;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
@@ -493,7 +494,7 @@ public final class GuardThresholds {
              * itself where a name's value is read, beside a reader that was told.
              */
             @Override
-            public souther.compiler.check.AffineForms.ReadThrough<InputReads> readThrough(
+            public ValueStanding.ReadThrough<InputReads> readThrough(
                     Core.Read read, InputReads at) {
                 return NameAnswers.denoting(read, at, symbols, newtypes);
             }

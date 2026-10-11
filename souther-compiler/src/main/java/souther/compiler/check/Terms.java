@@ -542,7 +542,7 @@ final class Terms {
      * fact about that expression, and a caller handed nothing back had to reconstruct it from the
      * shape of what it asked about — which is a second account of this walk, written by whoever
      * needed one. The environment travels with the expression for the reason
-     * {@link AffineForms.ReadThrough} gives.
+     * {@link ValueStanding.ReadThrough} gives.
      *
      * <p>The narrowing is for a reader whose subjects are narrower than this one's. What may be named here is what
      * the discharge procedure can carry a fact about, which is every number it can identify; what a
@@ -582,13 +582,13 @@ final class Terms {
             }
 
             @Override
-            public AffineForms.ReadThrough<Denotations> readThrough(Core.Read read,
+            public ValueStanding.ReadThrough<Denotations> readThrough(Core.Read read,
                                                                     Denotations where) {
                 return affineReading.readThrough(read, where);
             }
 
             @Override
-            public java.util.List<AffineForms.ReadThrough<Denotations>> alternativesOf(
+            public java.util.List<ValueStanding.ReadThrough<Denotations>> alternativesOf(
                     Core.Read read, Denotations where) {
                 return affineReading.alternativesOf(read, where);
             }
@@ -633,7 +633,7 @@ final class Terms {
                 }
 
                 @Override
-                public AffineForms.ReadThrough<Denotations> readThrough(Core.Read read,
+                public ValueStanding.ReadThrough<Denotations> readThrough(Core.Read read,
                                                                         Denotations at) {
                     return Terms.this.readThrough(read, at);
                 }
@@ -648,7 +648,7 @@ final class Terms {
                  * such a clause is read once for the value in front of it.
                  */
                 @Override
-                public java.util.List<AffineForms.ReadThrough<Denotations>> alternativesOf(
+                public java.util.List<ValueStanding.ReadThrough<Denotations>> alternativesOf(
                         Core.Read read, Denotations at) {
                     return null;
                 }
@@ -690,8 +690,8 @@ final class Terms {
         // answered about and not the edge that stood for it. The type the binding is in force at
         // says nothing about which value it holds, so that is set aside.
         Core value = Core.withoutStanding(li.value());
-        Core given = value instanceof Core.MaterialisedValue build
-                ? templates.bodyOf(build) : value;
+        Core built = templates.builtBy(value);
+        Core given = built != null ? built : value;
         // Entering a binding a walk is already inside is not a second binding of it. A branch is
         // read from where its conditional stood, which is inside these, over a tree that still holds
         // them.
@@ -706,7 +706,7 @@ final class Terms {
         }
         // The names a value's body holds are its own, so it is read where nothing outside it is in
         // force, and the same environment answers for every build of it.
-        Denotations reading = value instanceof Core.MaterialisedValue ? insideATemplate : at;
+        Denotations reading = built != null ? insideATemplate : at;
         // What the name is about is what it was given is about. Where even the identity reading has
         // nothing to name — an expression answering nothing at all — the name is what there is, and
         // it is one value however many times it is read.
@@ -763,7 +763,7 @@ final class Terms {
      * The number {@code e} folds to at compile time, or {@code null} where it folds to none.
      *
      * <p>Over the tree alone, for a walk that carries an environment of its own and has entered the
-     * bindings above what it hands over ({@link AffineForms.Reading#inside}). A binding standing
+     * bindings above what it hands over ({@link ValueStanding.Names#inside}). A binding standing
      * <em>inside</em> what is handed over is not read here, and the walks that meet one are named in
      * the issue on which readings cross a binding.
      */
@@ -885,7 +885,7 @@ final class Terms {
      * {@link AffineForms}'s: this once did the reading itself, and a caller that can answer with a
      * form is a caller that can keep an account of the arithmetic beside the one walk that has one.
      */
-    AffineForms.ReadThrough<Denotations> readThrough(Core.Read read, Denotations at) {
+    ValueStanding.ReadThrough<Denotations> readThrough(Core.Read read, Denotations at) {
         if (!computesAsWhatItWasGiven(read.binding(), at) || !carriesANumber(read.type())) {
             return null;
         }
@@ -895,7 +895,7 @@ final class Terms {
         // whatever was bound after it; a binding tells itself from every other, so nothing bound
         // later answers for a name this one holds.
         return given == null || given == read ? null
-                : new AffineForms.ReadThrough<>(given, at);
+                : new ValueStanding.ReadThrough<>(given, at);
     }
 
     /**
@@ -941,7 +941,7 @@ final class Terms {
      * <p><b>This is what the environment holds and not what a reading is licensed to follow.</b>
      * Every name a binding gives a value to is peeled here, which is the question a reader asking
      * what was built wants answered. What one occurrence may be read as another is a narrower
-     * answer with an owner of its own ({@link AffineForms.Reading#readThrough}), and the walk that
+     * answer with an owner of its own ({@link ValueStanding.Names#readThrough}), and the walk that
      * resolves an occurrence under it is held to that owner rather than to this one — so the two
      * are not made one, however alike the shapes they peel look.
      */

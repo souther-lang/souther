@@ -287,8 +287,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "check/AffineForms$Reading;L" + c + "check/AffineForms$Walk;L" + c
                 + "check/AffineForms$Stop;)L" + c + "numeric/LinearForm;",
                 Reading.NAMES, READS_THE_NAMES);
-        row(out, c + "check/AffineForms", "eliminated", "(" + core + "Ljava/lang/Object;L" + c
-                + "check/AffineForms$Reading;L" + c + "check/AffineForms$Walk;)Ljava/util/List;",
+        row(out, c + "check/ValueStanding", "eliminated", "(" + core + "Ljava/lang/Object;L" + c
+                + "check/ValueStanding$Names;L" + c + "check/BindingWalk;)Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "check/AnalysisBody", "visit", "(" + core + "L" + c
                 + "check/ValueTemplates;Ljava/util/Set;Ljava/util/List;)V",
