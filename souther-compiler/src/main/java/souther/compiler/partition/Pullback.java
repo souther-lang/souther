@@ -331,8 +331,8 @@ final class Pullback {
     private static boolean aTruthStatedWhereItIsWritten(Core from, Core check) {
         Core node = Core.withoutStanding(from);
         return aComparisonWrittenInside(from, check)
-                || node != Core.withoutStanding(check) && node instanceof Core.PreservedCall call
-                        && Type.BOOL.equals(call.type());
+                || (node != Core.withoutStanding(check) && node instanceof Core.PreservedCall call
+                        && Type.BOOL.equals(call.type()));
     }
 
     /** Whether {@code from} is a comparison written inside {@code check}, which draws its own
