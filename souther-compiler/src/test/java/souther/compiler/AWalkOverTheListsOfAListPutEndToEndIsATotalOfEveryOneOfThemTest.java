@@ -176,6 +176,57 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
         assertTrue(unequal, () -> "a row whose entries hold different numbers of postings: " + rows);
     }
 
+    /**
+     * Levels that only say how many they hold at least, and say nothing of the most, hold as many
+     * as a count can be: the capacity of three such levels is past what a count of leaves is held
+     * in, and a level asked for a few of them is still one that holds the leaves.
+     */
+    @Test
+    void levelsWithNoCeilingStillHoldTheLeavesAskedOfThem() {
+        String model = """
+                module example.deep
+
+                data Many
+                data Few
+
+                data C = { q: Int }
+                data B = { cs: List<C> }
+                    invariant List.length(cs) >= 2
+                data A = { bs: List<B> }
+                    invariant List.length(bs) >= 2
+                data Groups = { groups: List<A> }
+                    invariant List.length(groups) >= 3
+
+                behavior decide : (all: Groups) -> Many | Few
+
+                let decide (all) =
+                    if List.sum(List.map(c -> c.q,
+                            List.flatMap(.cs, List.flatMap(.bs, all.groups)))) >= 7
+                    then Many else Few
+                """;
+        String rows = rowsOf(model);
+        Pattern leaf = Pattern.compile("C \\{ q = (-?\\d+) \\}");
+        boolean fewestGroupsAtThePoint = false;
+        for (String row : rows.split("\n    \\| ")) {
+            Matcher found = leaf.matcher(row);
+            long total = 0;
+            boolean any = false;
+            while (found.find()) {
+                total += Long.parseLong(found.group(1));
+                any = true;
+            }
+            if (any) {
+                assertTrue(count(row, "A \\{") >= 3, () -> "three groups: " + row);
+                // The grouping written is the one of the fewest elements each level allows, which
+                // is three groups of two lists of two leaves where each level's count has a floor
+                // and no ceiling — what the other ways of writing a row are not asked to be.
+                fewestGroupsAtThePoint |= total == 7L && count(row, "A \\{") == 3
+                        && count(row, "C \\{") == 12;
+            }
+        }
+        assertTrue(fewestGroupsAtThePoint, () -> "the point on the line, at the fewest: " + rows);
+    }
+
     /** The same spreading through three levels of lists. */
     @Test
     void aTotalOverThreeLevelsOfListsIsSpreadOverTheLeavesOfAll() {

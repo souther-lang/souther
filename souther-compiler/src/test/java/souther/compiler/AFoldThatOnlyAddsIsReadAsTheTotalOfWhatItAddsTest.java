@@ -76,6 +76,18 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
         }
     }
 
+    /** A name given the answer so far, or what the step adds, is the same step. */
+    @Test
+    void aNameGivenWhatTheStepAddsIsTheSameStep() {
+        String report = report(model("{ let grown = acc + a.q  grown }", "0", 4));
+        assertTrue(report.contains("List.sum(xs[*].q)"), report);
+        assertFalse(report.contains("not read"), report);
+
+        String squared = report(model("{ let grown = acc * acc  grown + a.q }", "0", 4));
+        assertTrue(squared.contains("not read"), squared);
+        assertFalse(squared.contains("List.sum"), squared);
+    }
+
     /** A fold and a sum of the same numbers are one number, down to the rows written for them. */
     @Test
     void aFoldAndASumOfTheSameNumbersAreWrittenTheSameRows() {
@@ -185,7 +197,11 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
                 "acc + acc",
                 "if a.q > acc then a.q else acc",
                 "acc + a.q * acc",
-                "acc + acc * a.q")) {
+                "acc + acc * a.q",
+                // Right at an answer of nought and of one and wrong past them: the step is judged
+                // for every answer, so agreeing with an addition at two of them proves nothing.
+                "acc * acc + a.q",
+                "acc * (acc - 1) + acc + a.q")) {
             String report = report(model(step, "0", 4));
             assertTrue(report.contains("not read"), () -> step + ": " + report);
             assertFalse(report.contains("List.sum"), () -> step + ": " + report);

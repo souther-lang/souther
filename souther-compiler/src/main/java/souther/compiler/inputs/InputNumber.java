@@ -11,7 +11,6 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.check.WalkElements;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.DateTranslation;
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenAs;
@@ -19,9 +18,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -263,12 +260,14 @@ public final class InputNumber {
      * over the elements at one position. Null where it is any other walk, or where the elements are
      * not read from a place.
      *
-     * <p>By induction over the walk the answer is {@code seed + Σ w(x)}, where {@code w(x)} is what
-     * the step answers for an accumulator of nought. The step adds exactly that and nothing else
-     * where it moves by one for each unit of the accumulator and by the same everywhere else, which
-     * is asked of two readings of the step rather than of its spelling: the step read at an
-     * accumulator of nought and at one of one differ by the accumulator and by nothing the element
-     * holds. {@code acc + x}, {@code x + acc} and {@code Decimal.add(acc, x)} are one step.
+     * <p>By induction over the walk, which visits every element of what it walks once — that is
+     * what the library's one loop does, and what the walks defined over it hand it — the answer is
+     * {@code seed + Σ w(x)} where the step is {@code 1·answer + w(x)}. That is asked of the step as
+     * a form of the answer so far and the element's fields together ({@link
+     * ElementValue#addedTo}), so a step is accepted where the arithmetic composes it that way and
+     * for every answer. {@code acc + x}, {@code x + acc} and {@code Decimal.add(acc, x)} are one
+     * step; a step that is merely right at some answers, like {@code acc * acc + x} at nought and
+     * at one, is none.
      *
      * <p>The total is the term {@code List.sum} of those values is, so a rule over a fold and a rule
      * over a sum of the same numbers are about one number.
@@ -291,31 +290,16 @@ public final class InputNumber {
             return null;
         }
         BindingId element = walk.element().binding();
-        ElementAnswer step = new ElementAnswer(element, walk.step().body());
-        int accumulatorAt = walk.step().params().indexOf(walk.accumulator());
-        Type counted = accumulatorAt < 0 ? null : walk.step().paramTypes().get(accumulatorAt);
-        // The body's names are copied once, and the accumulator put at each of the two figures in
-        // turn: a reading keeps nothing of the names it was given.
-        Map<BindingId, Core> held = new HashMap<>(reads.heldByTheBody());
-        if (!holds(held, walk.accumulator().binding(), counted, 0)) {
-            return null;
-        }
-        ElementValue.Affine nought = affine(ElementValue.read(step, held, source));
-        if (nought == null || nought.form().coefs().isEmpty()) {
-            return null;
-        }
-        holds(held, walk.accumulator().binding(), counted, 1);
-        ElementValue.Affine one = affine(ElementValue.read(step, held, source));
+        Map<BindingId, Core> held = reads.heldByTheBody();
+        ElementValue.Affine adds = ElementValue.addedTo(
+                new ElementAnswer(element, walk.step().body()), walk.accumulator().binding(), held,
+                source);
         ElementValue.Affine seed = affine(ElementValue.read(
                 new ElementAnswer(element, walk.seed()), held, source));
-        if (seed == null || one == null || !seed.form().coefs().isEmpty()
-                || !nought.form().coefs().equals(one.form().coefs())
-                || !(one.form().constant().minus(nought.form().constant())
-                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio moved))
-                || !ExactRatio.ONE.equals(moved)) {
+        if (adds == null || seed == null || !seed.form().coefs().isEmpty()) {
             return null;
         }
-        ElementProjection place = nought.asAPlace();
+        ElementProjection place = adds.asAPlace();
         NumericTerm total;
         if (place != null && TypeOps.base(walk.step().body().type(), source.inners()).equals(
                 TypeOps.base(inputs.typeAt(place.from(at), source), source.inners()))) {
@@ -325,7 +309,7 @@ public final class InputNumber {
                             source.inners(), source.symbols());
         } else {
             Type each = walk.step().body().type();
-            RunSource over = RunSource.computedOverTheElementsAt(at, nought, each);
+            RunSource over = RunSource.computedOverTheElementsAt(at, adds, each);
             total = over == null ? null
                     : NumericTerm.TakenOver.of(SUM, over, each, source.inners(), source.symbols());
         }
@@ -337,21 +321,6 @@ public final class InputNumber {
 
     private static ElementValue.Affine affine(ElementValue read) {
         return read instanceof ElementValue.Affine form ? form : null;
-    }
-
-    /** Puts the accumulator at {@code value} of the type it counts in, or says it counts in a type
-     *  no literal is written for. */
-    private static boolean holds(Map<BindingId, Core> held, BindingId accumulator, Type type,
-                                 long value) {
-        if (Type.INT.equals(type)) {
-            held.put(accumulator, new Core.Int(value, type, null));
-            return true;
-        }
-        if (Type.DECIMAL.equals(type)) {
-            held.put(accumulator, new Core.Decimal(BigDecimal.valueOf(value), type, null));
-            return true;
-        }
-        return false;
     }
 
     /**

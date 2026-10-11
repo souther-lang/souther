@@ -195,9 +195,27 @@ final class NestedContainersAddingUp {
         if (at == levels.size() - 1) {
             return here;
         }
-        long inner = leaves(levels, at + 1, most);
-        return here == 0 || inner == 0 ? 0 : here > Long.MAX_VALUE / inner ? Long.MAX_VALUE
-                : here * inner;
+        return times(here, leaves(levels, at + 1, most));
+    }
+
+    /**
+     * {@code one} times {@code other}, or the largest count there is where that is more.
+     *
+     * <p>The capacity of a level is a product of every level below it, and levels that say nothing
+     * of the most they hold hold as many as a count can be. A product taken past that wraps round to
+     * a number below the one asked for, and a level that holds everything is then read as holding
+     * nothing — so every product of capacities is taken here, and the answer saturates upward,
+     * which is the way a capacity is only ever compared.
+     */
+    private static long times(long one, long other) {
+        return one == 0 || other == 0 ? 0 : one > Long.MAX_VALUE / other ? Long.MAX_VALUE
+                : one * other;
+    }
+
+    /** {@code count} over {@code each}, rounded up, with no sum that could pass the end of a
+     *  count. */
+    private static long dividedUp(long count, long each) {
+        return count / each + (count % each == 0 ? 0 : 1);
     }
 
     private static int saturated(long count) {
@@ -223,14 +241,13 @@ final class NestedContainersAddingUp {
         }
         long eachFewest = leaves(levels, at + 1, false);
         long eachMost = leaves(levels, at + 1, true);
-        long from = eachMost == 0 ? least
-                : Math.max(least, (count + eachMost - 1) / Math.max(eachMost, 1));
+        long from = eachMost == 0 ? least : Math.max(least, dividedUp(count, eachMost));
         // Without a floor on what an element holds there is no number of elements the count
         // bounds, so a few of them are tried.
         long to = eachFewest == 0 ? Math.min(here.most(), from + 8)
                 : Math.min(here.most(), count / eachFewest);
         for (long many = from; many <= to; many++) {
-            if (many * eachMost < count || many * eachFewest > count
+            if (times(many, eachMost) < count || times(many, eachFewest) > count
                     || (asked != null && !asked.holds((int) many))) {
                 continue;
             }
