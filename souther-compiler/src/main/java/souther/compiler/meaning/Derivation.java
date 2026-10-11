@@ -195,7 +195,8 @@ public sealed interface Derivation {
         }
     }
 
-    /** An {@code if}: its arm under its condition, and its other arm under the denial of it. */
+    /** An {@code if}: its arm under its condition, and its other arm under the denial of it — or
+     *  what both state, where they state one thing. */
     record IfThenElse(Derivation condition, Derivation then, Derivation otherwise)
             implements Derivation {
 
@@ -210,6 +211,9 @@ public sealed interface Derivation {
             Proposition cond = numbering.of(condition);
             Proposition yes = numbering.of(then);
             Proposition no = numbering.of(otherwise);
+            if (yes.key().equals(no.key()) && Proposition.firstStopIn(yes) == null) {
+                return yes;
+            }
             return Proposition.any(List.of(Proposition.all(List.of(cond, yes)),
                     Proposition.all(List.of(cond.denied(), no))));
         }
@@ -223,6 +227,10 @@ public sealed interface Derivation {
     /**
      * A {@code match}: an arm is taken where it selects the value and no arm before it does, and
      * what is stated is what the arm taken states.
+     *
+     * <p>Some arm is taken whatever the value. A match covers its scrutinee, a choice between
+     * constructing and not covers both, and the cases the library defines an operation or a size
+     * in cover everything the operation is given.
      */
     record MatchArms(List<Arm> arms) implements Derivation {
 
@@ -254,13 +262,29 @@ public sealed interface Derivation {
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
+            List<Proposition> selecting = new ArrayList<>(arms.size());
+            List<Proposition> stating = new ArrayList<>(arms.size());
+            for (Arm arm : arms) {
+                selecting.add(numbering.of(arm.selects()));
+                stating.add(numbering.of(arm.states()));
+            }
+            // Some arm is always taken, so where every arm states one thing that is what is
+            // stated, whichever arm selects. Not where an arm's statement is about the entry it
+            // picked out, which is a different entry under each arm.
+            Proposition first = stating.getFirst();
+            if (Proposition.firstStopIn(first) == null
+                    && arms.stream().noneMatch(Arm::aboutTheEntry)
+                    && stating.stream().allMatch(each -> each.key().equals(first.key()))) {
+                return first;
+            }
             List<Proposition> taken = new ArrayList<>();
             List<Proposition> before = new ArrayList<>();
-            for (Arm arm : arms) {
-                Proposition selects = numbering.of(arm.selects());
+            for (int i = 0; i < arms.size(); i++) {
+                Arm arm = arms.get(i);
+                Proposition selects = selecting.get(i);
                 List<Proposition> arrives = new ArrayList<>(before.stream()
                         .map(Proposition::denied).toList());
-                Proposition states = numbering.of(arm.states());
+                Proposition states = stating.get(i);
                 // The entry an arm picks out is the one its statement is about: the statement
                 // sits inside the quantifier that selected it, where its subjects under the
                 // container's elements are that entry's.

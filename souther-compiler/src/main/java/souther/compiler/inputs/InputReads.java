@@ -359,6 +359,12 @@ public final class InputReads {
                         applied.given(), applied.entered()));
     }
 
+    /** Whether an application this reading is on handed {@code binding} one of the values a
+     *  container was written with ({@link #handing}). */
+    public boolean hands(BindingId binding) {
+        return applied.handed().contains(binding);
+    }
+
     /**
      * Whether what {@code name} stands for turns on which application of a closure this reading is
      * on: whether it reads a name an application handed one of the values written out, itself or

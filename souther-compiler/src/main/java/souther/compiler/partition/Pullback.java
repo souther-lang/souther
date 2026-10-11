@@ -3856,7 +3856,11 @@ final class Pullback {
                     case Inside.ACallDefinedByCases(Core call, var _, var _, var _) ->
                             number.at().isTaken(call);
                     // A name an application handed a value is that one value, and stops nothing.
-                    case Inside.OneOfTheValues _ -> false;
+                    // Met again as several, it was reached through a value handed another name and
+                    // read where that value was written, which no application handed it: handed
+                    // here once more, it would be met there again without end.
+                    case Inside.OneOfTheValues(Core.Read name, var _) ->
+                            number.at().hands(name.binding());
                 };
                 if (!goneInto) {
                     return found;

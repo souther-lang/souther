@@ -137,6 +137,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
 
         /**
+         * Read to the end, a statement of which case, which truth or whether a value positions of
+         * the input hold, or of some element of a container the input holds meeting that, with no
+         * relation of numbers anywhere in it ({@link #statesNoRelation}).
+         *
+         * <p>What an application stating the same is, and not a reading that stopped: there is no
+         * line for it to be, and what it tells apart is the decision table's to owe rows for.
+         * {@code length(filter(p, written)) == 1} over a list written out comes to some choice of
+         * which of the statements about its values hold, and where those are about which cases
+         * the input's elements are, the comparison states what {@code List.all} and
+         * {@code List.any} written over those cases would.
+         */
+        record StatesNoRelation() implements Read {}
+
+        /**
          * The arithmetic stopped, and this is what it leaves at each place it is filed at.
          *
          * <p>A map and not one reason, because the places are not one subject. Where the arithmetic
@@ -279,7 +293,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * ({@link Read.Several}), and so is a comparison inside a closure handed the values a
      * container was written with, read on each application ({@code applying}). A statement one of
      * whose parts is no relation over the input's own numbers is read and not drawn
-     * ({@link BlockReason.SeveralLinesInOneRule}).
+     * ({@link BlockReason.SeveralLinesInOneRule}). A statement none of whose parts is a relation
+     * of numbers, only which cases, truths and values the input's positions hold, is what an
+     * application stating it is: no line, and no reading that stopped
+     * ({@link Read.StatesNoRelation}).
      *
      * <p>The reason a reading stopped is settled here, where it stopped, and not asked for
      * afterwards by whoever met the absence.
@@ -323,9 +340,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         List<FilingCoordinate> settled = new ArrayList<>();
         List<FilingCoordinate> against = new ArrayList<>();
         Map<Read, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
+        InputReads statingNoRelation = null;
         for (ClosureApplications.Application one : each) {
             switch (readOnce(behavior, comparison, read, one.reads(), answering, conditions)) {
                 case Read.Stopped alone -> alone.why().forEach(stopped::putIfAbsent);
+                case Read.StatesNoRelation _ -> {
+                    if (statingNoRelation == null) {
+                        statingNoRelation = one.reads();
+                    }
+                }
                 case Read.CutsNothing alone -> alone.filedAt().forEach(at -> {
                     if (!settled.contains(at)) {
                         settled.add(at);
@@ -350,6 +373,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // the input to another value is no line.
         if (!against.isEmpty()) {
             return new Read.AgainstAnotherValue(against);
+        }
+        // A statement of no relation on some application is no line there, and the lines the
+        // others draw would be drawn as though the comparison were only them.
+        if (statingNoRelation != null) {
+            return lines.isEmpty() ? new Read.StatesNoRelation()
+                    : severalNotDrawn(comparison, read, statingNoRelation, answering);
         }
         if (lines.isEmpty()) {
             return new Read.CutsNothing(settled);
@@ -551,6 +580,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Unread unread when unread.why() instanceof WhyUnread.ANumberNotHeld ->
                     new Read.NumberNoRatioHolds(
                             GuardThresholds.filedAt(comparison, read, reads, answering));
+            // Which cases, truths and values the input's positions hold, and no relation of
+            // numbers: what an application stating it is ({@link #ofAnApplication}).
+            case Proposition.All _, Proposition.Any _, Proposition.Some _, Proposition.InCases _,
+                 Proposition.Truth _, Proposition.Present _
+                    when statesNoRelation(stated.proposition()) -> new Read.StatesNoRelation();
             case Proposition.All _, Proposition.Any _
                     when !Proposition.leavesSomethingUnread(stated.proposition()) -> {
                 Read several =
@@ -827,6 +861,29 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         List<FilingCoordinate> related = valuesItRelates(stated);
         return related == null ? null : new Read.AgainstAnotherValue(related);
+    }
+
+    /**
+     * Whether {@code stated} says only which case, which truth or whether a value positions of the
+     * input hold, or that some element of a container the input holds meets that, joined: no
+     * relation of numbers and nothing about what a dependency answered anywhere in it.
+     */
+    static boolean statesNoRelation(Proposition stated) {
+        return switch (stated) {
+            case Proposition.InCases cases -> cases.of() instanceof DecisionSubject.AnInput;
+            case Proposition.Truth truth -> truth.of() instanceof DecisionSubject.AnInput;
+            case Proposition.Present present -> present.of() instanceof DecisionSubject.AnInput;
+            case Proposition.Some some -> some.container() instanceof DecisionSubject.AnInput
+                    && statesNoRelation(some.ofTheElement());
+            case Proposition.All all -> all.parts().stream().allMatch(Cutting::statesNoRelation);
+            case Proposition.Any any -> any.parts().stream().allMatch(Cutting::statesNoRelation);
+            // Settled, a relation, two values being one, or something nobody read: each is read
+            // as what it is ({@link #readOnce}).
+            case Proposition.Always _, Proposition.Compared _, Proposition.SameValue _,
+                 Proposition.Unread _, Proposition.LastToHold _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _ -> false;
+            case Proposition.Carried carried -> throw carried.handedToAReader();
+        };
     }
 
     /**

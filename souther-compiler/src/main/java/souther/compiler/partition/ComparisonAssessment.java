@@ -147,6 +147,15 @@ sealed interface ComparisonAssessment {
      */
     record OnADependencysAnswer() implements ComparisonAssessment {}
 
+    /**
+     * Read to the end, the comparison states which case, which truth or whether a value positions
+     * of the input hold, and no relation of numbers ({@link Cutting.Read.StatesNoRelation}).
+     *
+     * <p>Not a reading that stopped, and no line: an application stating the same is no rule
+     * lines are drawn on, and what the statement tells apart is owed rows by the decision table.
+     */
+    record StatesNoRelation() implements ComparisonAssessment {}
+
     /** The comparison names no position of the behavior's input. */
     record NoInput() implements ComparisonAssessment {}
 
@@ -414,6 +423,7 @@ sealed interface ComparisonAssessment {
             case Cutting.Read.CutsNothing over -> over.filedAt().isEmpty()
                     ? aboutNoPosition(comparison, reads, read.newtypes())
                     : new CutsNothing(over.filedAt());
+            case Cutting.Read.StatesNoRelation _ -> new StatesNoRelation();
             // Where the reading stopped and the comparison is over what a dependency answered, it is
             // the decision table's. A number of an answer is no number of the input, so this reading
             // stops at it however the comparison was written, and the stop is about whose subject
@@ -464,7 +474,7 @@ sealed interface ComparisonAssessment {
                     : new Unread(atEachOf(over.over(),
                             new BlockReason.LineAtANumberNoRatioHolds()));
             case Cutting.Read.CutsNothing _, Cutting.Read.Stopped _, Cutting.Read.Several _,
-                 Cutting.Read.AgainstAnotherValue _ ->
+                 Cutting.Read.AgainstAnotherValue _, Cutting.Read.StatesNoRelation _ ->
                     throw new IllegalArgumentException("one line is drawn or refused: " + line);
         };
     }
@@ -496,7 +506,8 @@ sealed interface ComparisonAssessment {
             case Cutting.Read.AgainstAnotherValue related ->
                     new AgainstAnotherValue(related.over());
             case Cutting.Read.Cuts _, Cutting.Read.CutsNothing _, Cutting.Read.Stopped _,
-                 Cutting.Read.NoOrderToCountOn _, Cutting.Read.NumberNoRatioHolds _ ->
+                 Cutting.Read.NoOrderToCountOn _, Cutting.Read.NumberNoRatioHolds _,
+                 Cutting.Read.StatesNoRelation _ ->
                     throw new IllegalArgumentException(
                             "an application states lines or values it relates: " + answered);
         };
@@ -651,8 +662,9 @@ sealed interface ComparisonAssessment {
             case NothingArrivesAtItsLine unarrived -> unarrived.cutting();
             case TurnsNothing turns -> turns.cutting();
             case NoFeasibleInput none -> none.cutting();
-            case AnswerDependent _, OnADependencysAnswer _, NoInput _, CutsNothing _, Unread _,
-                 AgainstAnotherValue _, Several _ -> throw new IllegalArgumentException(
+            case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _,
+                 CutsNothing _, Unread _, AgainstAnotherValue _, Several _ ->
+                    throw new IllegalArgumentException(
                          "a reading that drew no line is about none: " + line);
         };
     }
@@ -826,7 +838,8 @@ sealed interface ComparisonAssessment {
                     .flatMap(part -> part.line().filedAt().stream())
                     .distinct()
                     .toList();
-            case AtAPosition _, AnswerDependent _, OnADependencysAnswer _, NoInput _ -> List.of();
+            case AtAPosition _, AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _,
+                 NoInput _ -> List.of();
         };
     }
 
@@ -918,7 +931,7 @@ sealed interface ComparisonAssessment {
             case NoFeasibleInput _, AtAPosition _, NoInput _, AnswerDependent _ -> List.of();
             // Read by the decision table, which owes the rows it distinguishes. Left here as a
             // place, it would be a rule that reading named reported as one nobody read.
-            case OnADependencysAnswer _ -> List.of();
+            case OnADependencysAnswer _, StatesNoRelation _ -> List.of();
         };
     }
 
@@ -962,8 +975,8 @@ sealed interface ComparisonAssessment {
                             && over.cutting().of().singlesWithSides());
             case Several several -> several.parts().stream()
                     .anyMatch(part -> part.line().drawsABorder());
-            case AnswerDependent _, OnADependencysAnswer _, NoInput _, CutsNothing _,
-                 AgainstAnotherValue _, OutsideTheDomain _, TurnsNothing _,
+            case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _,
+                 CutsNothing _, AgainstAnotherValue _, OutsideTheDomain _, TurnsNothing _,
                  NothingArrivesAtItsLine _, NoFeasibleInput _, Unread _ -> false;
         };
     }

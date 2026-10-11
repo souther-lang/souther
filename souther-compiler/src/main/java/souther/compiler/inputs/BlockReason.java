@@ -957,8 +957,10 @@ public sealed interface BlockReason {
              *  or what a run of values comes to. */
             A_NUMBER_NO_POSITION_HOLDS,
 
-            /** It states which case, which truth or whether a value a position holds, or what
-             *  some element of a container meets — no relation of numbers at all. */
+            /** It states which case, which truth or whether a value something other than the
+             *  input's own positions holds, or what some element of a container meets — no
+             *  relation of numbers at all. Said only of the input's positions, it is no reading
+             *  that stopped ({@code Cutting.Read.StatesNoRelation}). */
             NO_RELATION_OF_NUMBERS
         }
     }
