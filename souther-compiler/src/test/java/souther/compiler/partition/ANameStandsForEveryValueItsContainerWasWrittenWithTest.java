@@ -190,10 +190,10 @@ class ANameStandsForEveryValueItsContainerWasWrittenWithTest {
         }
     }
 
-    /** The answer, by which of the five it is and which values a plurality holds. */
+    /** The answer, by which of the six it is and which values a plurality holds. */
     private static String said(ReadMeaning meaning) {
         return switch (meaning) {
-            case ReadMeaning.OneOf one -> "OneOf" + one.alternatives().stream()
+            case ReadMeaning.OneOf one -> "OneOf" + one.everyValueItMayBe().stream()
                     .map(each -> switch (each.value()) {
                         case Core.Construct made -> made.typeName().toString();
                         case Core.UnitValue unit -> unit.data().toString();
@@ -202,6 +202,7 @@ class ANameStandsForEveryValueItsContainerWasWrittenWithTest {
                     .toList();
             case ReadMeaning.Position position -> "Position[" + position.path() + "]";
             case ReadMeaning.Element _ -> "Element";
+            case ReadMeaning.MoreThanAreWrittenOut _ -> "MoreThanAreWrittenOut";
             case ReadMeaning.Unknown _ -> "Unknown";
             case ReadMeaning.Through _ -> throw new IllegalStateException("followed already");
         };
@@ -210,12 +211,13 @@ class ANameStandsForEveryValueItsContainerWasWrittenWithTest {
     /** Every answer this test can get, so a case added to the reading arrives here rather than
      *  under a word one of these tests already expects. */
     @Test
-    void theFiveAnswersAreTheOnesThisTestKnows() {
+    void theSixAnswersAreTheOnesThisTestKnows() {
         Map<String, String> byName = new LinkedHashMap<>();
         for (Class<?> each : ReadMeaning.class.getPermittedSubclasses()) {
             byName.put(each.getSimpleName(), each.getSimpleName());
         }
         assertEquals(Map.of("Position", "Position", "Through", "Through", "OneOf", "OneOf",
-                "Element", "Element", "Unknown", "Unknown"), byName);
+                "MoreThanAreWrittenOut", "MoreThanAreWrittenOut", "Element", "Element",
+                "Unknown", "Unknown"), byName);
     }
 }

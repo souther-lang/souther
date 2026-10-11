@@ -93,10 +93,13 @@ public final class MeaningsOfABodyReading {
                 return;
             }
             // Where which of the applications a run makes is not said, what a condition states on
-            // each is said all the same.
+            // each is said all the same — and so of an application handed an element a filter
+            // may have dropped, which is one the closure may be handed.
             List<InputReads> applications = switch (applied) {
-                case InputReads.Applications.Each(var made, var _) -> made;
-                case InputReads.Applications.Unsaid(var mayBeMade) -> mayBeMade;
+                case InputReads.Applications.Each(var made, var _) ->
+                        made.stream().map(InputReads.Applications.Made::reads).toList();
+                case InputReads.Applications.Unsaid(var mayBeMade) ->
+                        mayBeMade.stream().map(InputReads.Applications.Made::reads).toList();
                 case InputReads.Applications.MoreThanAreRead _,
                      InputReads.Applications.NoneHanded _ -> List.of();
             };

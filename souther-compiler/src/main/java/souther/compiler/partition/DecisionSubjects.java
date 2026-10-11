@@ -198,14 +198,15 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
                     switch (at.meaningOf(name, symbols, newtypes)) {
                         case ReadMeaning.Through(Denotation denotes) ->
                                 workedOut(denotes.value(), denotes.at(), met);
-                        case ReadMeaning.OneOf(List<Denotation> values) -> {
+                        case ReadMeaning.OneOf one -> {
                             List<String> each = new ArrayList<>();
-                            values.forEach(value -> each.add(
+                            one.everyValueItMayBe().forEach(value -> each.add(
                                     workedOut(value.value(), value.at(), new HashSet<>(met))));
                             yield "one of " + each;
                         }
                         case ReadMeaning.Position _, ReadMeaning.Element _,
-                             ReadMeaning.Unknown _ -> name.name();
+                             ReadMeaning.MoreThanAreWrittenOut _, ReadMeaning.Unknown _ ->
+                                name.name();
                     };
             case Core.Read name -> name.name();
             case Core.LetIn let -> workedOut(let.body(), at.and(let.binder(), let.value()), met);

@@ -671,11 +671,11 @@ public final class GuardThresholds {
     private static void throughEachValue(Core e, InputReads reads, Symbols symbols,
                                          DeclarationNewtypes newtypes, Arrivals answering,
                                          List<TermPath> out) {
+        // Every value it may be, kept or not, since where the reading looked takes in each.
         if (Core.withoutStanding(e) instanceof Core.Read read
-                && reads.meaningOf(read, symbols, newtypes)
-                        instanceof ReadMeaning.OneOf(var values)) {
-            values.forEach(value -> mentioned(value.value(), value.at(), symbols, newtypes,
-                    answering, out));
+                && reads.meaningOf(read, symbols, newtypes) instanceof ReadMeaning.OneOf one) {
+            one.everyValueItMayBe().forEach(value -> mentioned(value.value(), value.at(), symbols,
+                    newtypes, answering, out));
             return;
         }
         ScopeStep.forEachChild(e, (child, step) -> throughEachValue(child,

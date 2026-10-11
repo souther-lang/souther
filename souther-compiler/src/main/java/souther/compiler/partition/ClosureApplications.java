@@ -8,6 +8,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
@@ -111,12 +112,14 @@ sealed interface ClosureApplications {
                 case InputReads.Applications.Each(var each, var how) -> {
                     handed = true;
                     List<Proposition> answers = how == HowAClosureIsApplied.TO_EVERY_ELEMENT ? null
-                            : each.stream().map(one -> Pullback.ofATruth(block.body(), one, read,
-                                    Optional.empty()).proposition()).toList();
-                    List<Proposition> reached = WhereAnApplicationIsMade.reached(answers,
-                            each.size(), how, around.reached());
+                            : each.stream().map(one -> Pullback.ofATruth(block.body(), one.reads(),
+                                    read, Optional.empty()).proposition()).toList();
+                    List<List<Proposition>> keptBy = each.stream()
+                            .map(one -> keptBy(one.keptWhere(), read)).toList();
+                    List<Proposition> reached = WhereAnApplicationIsMade.reached(answers, keptBy,
+                            how, around.reached());
                     for (int at = 0; at < each.size(); at++) {
-                        out.add(new Application(each.get(at), reached.get(at)));
+                        out.add(new Application(each.get(at).reads(), reached.get(at)));
                     }
                 }
                 case InputReads.Applications.NoneHanded _ -> {
@@ -136,6 +139,20 @@ sealed interface ClosureApplications {
             }
         }
         return handed || asked || !outside ? new Each(out) : OUTSIDE;
+    }
+
+    /**
+     * What each truth an element was kept by states, read where it was decided, and denied where it
+     * was kept by the truth failing. A truth this cannot read is said as one it did not read, and
+     * not as one that holds: an application it decides is one a run may not make.
+     */
+    private static List<Proposition> keptBy(List<ReadMeaning.Occurrence.Kept> keptWhere,
+                                            InputReading read) {
+        return keptWhere.stream().map(kept -> {
+            Proposition stated = Pullback.ofATruth(kept.truth().value(), kept.truth().at(), read,
+                    Optional.empty()).proposition();
+            return kept.holds() ? stated : stated.denied();
+        }).toList();
     }
 
     /**

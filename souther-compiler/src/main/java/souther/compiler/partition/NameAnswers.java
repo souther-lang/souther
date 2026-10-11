@@ -38,8 +38,9 @@ final class NameAnswers {
     /**
      * Every value {@code read}'s name can stand for, or null where the reading has not got them all.
      *
-     * <p>A container an operation built answers nothing here, which is what it answered before there
-     * was anything to write out.
+     * <p>A container this reading cannot write out answers nothing here. One it can is answered with
+     * every value an occurrence of it may be, kept or not: what a reader keeps is what every member
+     * comes to, and that holds of the ones kept as of all of them.
      */
     static List<ValueStanding.ReadThrough<InputReads>> alternativesOf(Core.Read read, InputReads at,
                                                                     Symbols symbols,
@@ -48,7 +49,7 @@ final class NameAnswers {
             return null;
         }
         List<ValueStanding.ReadThrough<InputReads>> each = new ArrayList<>();
-        one.alternatives().forEach(stands -> each.add(asked(stands)));
+        one.everyValueItMayBe().forEach(stands -> each.add(asked(stands)));
         return each;
     }
 
