@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.coverage.Observation;
 import souther.compiler.coverage.RunRecord;
 import souther.compiler.coverage.SiteNumbering;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Counting;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
@@ -32,11 +33,17 @@ import java.util.List;
  * @param watched what came of running it. A sum and not an account that may be empty: a run that
  *                recorded nothing and a tuple nothing recorded are the same empty account and are
  *                not the same fact, and which of them this is decides what may be concluded
+ * @param answer  what the behavior answered. An account of a run is also an account of the
+ *                fixtures a row builds before the behavior is applied, so an account says the
+ *                behavior was entered no more than the values say it did; the answer is what says
+ *                the run went all the way down one path
  */
-public record ObservedInputs(List<ObservedValue> inputs, Generator.Watched watched) {
+public record ObservedInputs(List<ObservedValue> inputs, Generator.Watched watched,
+                             AnswerObservation answer) {
 
     public ObservedInputs {
         inputs = List.copyOf(inputs);
+        java.util.Objects.requireNonNull(answer, "a tuple says what the behavior answered");
         // Said and not left out. Having no account of the run is one of the two answers here, and a
         // caller that has nothing to say says that one; taken as an absence to be filled in, the
         // distinction this holds would be made by whoever forgot to pass it.
@@ -57,7 +64,8 @@ public record ObservedInputs(List<ObservedValue> inputs, Generator.Watched watch
             // The module has no numbering, so there is nothing its numbers could be places of.
             // What the row did is not something anything here can say, which is no account of a
             // run rather than an account of one that went nowhere.
-            return new ObservedInputs(row.inputs(), new Generator.Watched.NoAccount());
+            return new ObservedInputs(row.inputs(), new Generator.Watched.NoAccount(),
+                    row.answer());
         }
         return new ObservedInputs(row.inputs(), switch (row.run().counting()) {
             // Read under the numbering asking, which is where the numbers a run left behind become
@@ -70,7 +78,12 @@ public record ObservedInputs(List<ObservedValue> inputs, Generator.Watched watch
             case Counting.Read(long _, RunRecord.NoAccount _) ->
                     new Generator.Watched.NoAccount();
             case Counting.Unread _ -> new Generator.Watched.NoAccount();
-        });
+        }, row.answer());
+    }
+
+    /** Whether the behavior answered, which is the run having gone down one path to its end. */
+    public boolean answered() {
+        return answer instanceof AnswerObservation.Answered;
     }
 
 }

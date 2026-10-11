@@ -86,6 +86,17 @@ public record RowAsRead(List<ObservedValue> values, Settlement.Reason whyNotRead
 
     /** The row as the walks take it, or null where its values are not here to be walked. */
     public ObservedInputs asInputs() {
-        return values == null ? null : new ObservedInputs(values, watched);
+        return values == null ? null : new ObservedInputs(values, watched, answer);
+    }
+
+    /**
+     * The row as its run is placed among the rules of a decision.
+     *
+     * <p>What the run recorded and answered are the run's, and found out whether or not the values
+     * built; a row whose values did not build has none to read a rule off, which is none and not
+     * a row that was not run.
+     */
+    public ObservedInputs asRun() {
+        return new ObservedInputs(values == null ? List.of() : values, watched, answer);
     }
 }

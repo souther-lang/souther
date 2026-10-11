@@ -9,6 +9,7 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -91,7 +92,9 @@ class TheReadingTheStepsWereFoundByIsOneOfTheReadingsTriedTest {
         BehaviorInputs where = new BehaviorInputs(List.of("flat", "lines"),
                 List.of(Type.Prim.INT, new Type.ListOf(named("Line"))), rules, POLICY);
         return StandingAtAPoint.readings(where,
-                new ObservedInputs(row, new Generator.Watched.NoAccount()), quantityOf(at));
+                new ObservedInputs(row, new Generator.Watched.NoAccount(),
+                        new AnswerObservation.NotAnswered()),
+                quantityOf(at));
     }
 
     private static BorderQuantity quantityOf(TermPath at) {
