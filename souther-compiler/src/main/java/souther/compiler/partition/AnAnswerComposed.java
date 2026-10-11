@@ -13,6 +13,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -205,12 +206,18 @@ public final class AnAnswerComposed {
     }
 
     /**
-     * {@code failed}, with each statement some of whose ways a figure left unlooked at said to be
-     * one that figure stopped the looking for.
+     * {@code failed}, with each statement some of whose ways a figure left unlooked at, and that
+     * no value met, said to be one that figure stopped the looking for.
      *
      * <p>Not one nothing composes for: the ways looked along came to no value, and a way past the
      * figure may be one that does. So the figure is what is said of it, as it is where the values of
      * the input's numbers ran out ({@link CompositionAccount#sayingAFigureEndedTheLookingOverNumbers}).
+     *
+     * <p>Said whether or not the way looked along wrote anything down about the statement. A way
+     * can come to no value for a reason that is about no statement — two truths asked of one place
+     * — and a figure ridden on whatever the failure happened to say would go where nothing was
+     * said, leaving the statement to be read as one nothing composes for. Where a value was
+     * composed, a statement it is not said to be short of is one it met, and nothing is added.
      *
      * @param jointly the figure that cut the ways the statements were taken together along, or
      *                null where every one of them was looked along
@@ -232,15 +239,29 @@ public final class AnAnswerComposed {
             return failed;
         }
         List<DemandGap> said = new ArrayList<>();
+        Set<AnswerDemand> named = new HashSet<>();
         for (DemandGap gap : failed.unaccounted()) {
-            said.add(gap instanceof DemandGap.Uncomposed(AnswerDemand demand, var why)
-                    && stopped.containsKey(demand)
-                    && !(why instanceof DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded)
-                    && !(why instanceof DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded)
-                    ? new DemandGap.Uncomposed(demand,
+            if (gap instanceof DemandGap.Uncomposed(AnswerDemand demand, var why)
+                    && stopped.containsKey(demand)) {
+                named.add(demand);
+                if (!(why instanceof DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded)
+                        && !(why instanceof DemandGap.WhyNotComposed
+                                .NoPairComposedBeforeAFigureEnded)) {
+                    said.add(new DemandGap.Uncomposed(demand,
                             DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(
-                                    stopped.get(demand)))
-                    : gap);
+                                    stopped.get(demand))));
+                    continue;
+                }
+            }
+            said.add(gap);
+        }
+        if (failed.outcome() instanceof Outcome.NothingComposed) {
+            stopped.forEach((demand, by) -> {
+                if (!named.contains(demand)) {
+                    said.add(new DemandGap.Uncomposed(demand,
+                            DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(by)));
+                }
+            });
         }
         return new Attempt(failed.outcome(), said);
     }
@@ -415,7 +436,7 @@ public final class AnAnswerComposed {
                         if (!thisWay) {
                             return Attempt.nothing(
                                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                                    List.of());
+                                    unaccounted);
                         }
                     }
                     default -> { }
@@ -426,8 +447,8 @@ public final class AnAnswerComposed {
         switch (TruthsAsked.of(asked)) {
             case TruthsAsked.Merge.Merged(var merged) -> truths = merged;
             case TruthsAsked.Merge.Conflict _ -> {
-                return Attempt.of(new Outcome.NothingComposed(
-                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
+                return Attempt.nothing(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                        unaccounted);
             }
         }
         SearchRegion region = subject.quantities().region();

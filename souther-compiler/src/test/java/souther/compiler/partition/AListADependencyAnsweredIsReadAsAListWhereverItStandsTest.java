@@ -410,6 +410,67 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
         }
     }
 
+    /**
+     * Where every way the figure let through comes to no value, and some way past it was left
+     * unlooked at, the statement is said to be one the figure stopped — even where the ways looked
+     * along failed for a reason about no statement at all.
+     *
+     * <p>The answer is asked to be {@code ok}, and the statement beside it to meet one of more
+     * things than a way is split into. The first of them each ask it not to be — two truths asked
+     * of one place, which a way comes to no value for without saying anything of the statement —
+     * and the last does not.
+     */
+    @Test
+    void waysThatAllCameToNothingBeforeTheFigureSayTheFigureStoppedTheLooking() {
+        List<String> alternatives = new ArrayList<>();
+        for (int each = 0; each < CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO.maximum(); each++) {
+            alternatives.add("(Bool.not(v.ok) && v.n == " + each + ")");
+        }
+        alternatives.add("(v.ok && v.n >= 100)");
+        Compilation compilation = Compilation.ofSource("""
+                module p
+
+                data Cat = A | B
+                data Reply = { ok: Bool, n: Int }
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                behavior r : (c: Cat) -> Reply
+
+                behavior f : (c: Cat) -> Answer
+                    depends on r
+                let f (c, r) = {
+                    let v = r(c)
+                    if v.ok && (ALTERNATIVES) then Yes else No
+                }
+                """.replace("ALTERNATIVES", String.join(" || ", alternatives)), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+
+        List<DemandGap.WhyNotComposed> said = new ArrayList<>();
+        for (RuleSettlement each : compilation.db()
+                .ask(new Adequacy.DecisionSearch(module, "f")).value().values()) {
+            for (DemandGap gap : each.account().onAnAnswer()) {
+                if (gap instanceof DemandGap.Uncomposed(AnswerDemand.AStatement _, var why)) {
+                    said.add(why);
+                }
+            }
+        }
+
+        assertTrue(said.stream().anyMatch(why ->
+                        why instanceof DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded(
+                                var figures)
+                                && figures.written().contains(
+                                        CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO)),
+                () -> "the statement is said to be one the figure stopped the looking for: "
+                        + said);
+        assertFalse(said.stream().anyMatch(
+                        DemandGap.WhyNotComposed.NothingComposedAValueOfTheAnswer.class::isInstance),
+                () -> "and not one nothing composes for: " + said);
+    }
+
     /** What the dependency answers is a list of elements of two numbers. */
     private static final String PAIRS = """
             module p
