@@ -343,7 +343,7 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
         Axis length = axisOf(read, "gate/String.length(slot.c)");
 
         TermPath at = TermPath.of("slot").then("c");
-        NumericTerm.TakenOf again = NumericTerm.TakenOf.of(
+        NumericTerm.TakenOf again = NumericTerm.TakenOf.asItStands(
                 NumericMeasures.takenOf(Type.STRING, souther.compiler.check.ScopedDeclarations.wrapsOf(symbols)),
                 at, Type.STRING, souther.compiler.check.ScopedDeclarations.wrapsOf(symbols),
                 symbols);

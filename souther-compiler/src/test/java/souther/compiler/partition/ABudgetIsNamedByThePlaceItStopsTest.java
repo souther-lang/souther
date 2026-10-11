@@ -114,7 +114,7 @@ class ABudgetIsNamedByThePlaceItStopsTest {
     /** Containers of whole numbers adding up to {@code total}. */
     private static TermRealizations.Realization totalOf(int total) {
         Type ofWholeNumbers = new Type.ListOf(Type.INT);
-        NumericTerm.TakenOf sum = NumericTerm.TakenOf.of(
+        NumericTerm.TakenOf sum = NumericTerm.TakenOf.asItStands(
                 ValueName.Stdlib.operation("List", "sum"), TermPath.of("ns"), ofWholeNumbers,
                 souther.compiler.check.ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS);
         assertNotNull(sum, "a walk that adds up a list of whole numbers is a number of it");

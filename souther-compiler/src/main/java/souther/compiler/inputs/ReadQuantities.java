@@ -368,7 +368,7 @@ final class ReadQuantities implements Quantities {
             return null;
         }
         NumericTerm.TakenOf term =
-                NumericTerm.TakenOf.of(operation, at, typeAt.apply(at),
+                NumericTerm.TakenOf.asItStands(operation, at, typeAt.apply(at),
                         ruleReading.source().inners(), ruleReading.source().symbols());
         return term != null && term.takenAs() instanceof TakenAs.HowManyItHolds ? term : null;
     }
@@ -1638,7 +1638,7 @@ final class ReadQuantities implements Quantities {
                     NumberAt.countOf(at.named(), count.counted());
             case NumericTerm.Multiplicity _ -> NumberAt.multiplicityOf(at.named());
             case NumericTerm.TakenOver over ->
-                    NumberAt.takenOf(at.named(), over.operation());
+                    NumberAt.takenAsItStands(at.named(), over.operation());
         };
     }
 

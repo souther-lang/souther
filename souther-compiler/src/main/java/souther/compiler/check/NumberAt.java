@@ -68,9 +68,10 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return new NumberAt<>(position, new OfWhatNumber.OfItsOwnValue());
     }
 
-    /** The number {@code operation} answers of what stands at {@code position}, given nothing
-     *  beside it. */
-    public static <P> NumberAt<P> takenOf(P position, ValueName operation) {
+    /** The number {@code operation} answers of what stands at {@code position} as it stands,
+     *  given nothing beside it. What the value was made into is {@link #takenOf}'s, and a caller
+     *  that has one does not take this. */
+    public static <P> NumberAt<P> takenAsItStands(P position, ValueName operation) {
         return takenOf(position, operation, TakenArguments.NONE, ValueTransformation.NONE);
     }
 

@@ -1238,7 +1238,7 @@ final class Pullback {
         Type container = read.domain().typeAt(held, read.rules());
         ValueName.Stdlib size = container == null ? null
                 : NumericMeasures.takenOf(container, read.rules().inners());
-        return size == null ? null : NumericTerm.TakenOf.of(size, held, container,
+        return size == null ? null : NumericTerm.TakenOf.asItStands(size, held, container,
                 read.rules().inners(), read.rules().symbols());
     }
 

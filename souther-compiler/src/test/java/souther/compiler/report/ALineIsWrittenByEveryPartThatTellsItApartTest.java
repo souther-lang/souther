@@ -224,13 +224,13 @@ class ALineIsWrittenByEveryPartThatTellsItApartTest {
     }
 
     private static NumericTerm.TakenOf lengthOf(TermPath path) {
-        return NumericTerm.TakenOf.of(ValueName.Stdlib.operation("String", "length"), path,
+        return NumericTerm.TakenOf.asItStands(ValueName.Stdlib.operation("String", "length"), path,
                 Type.STRING, INNERS, SYMBOLS);
     }
 
     /** {@code List.<operation>} of the list at {@code lines}, which a count and a sum both take. */
     private static NumericTerm.TakenOf takenOfAList(String operation) {
-        return NumericTerm.TakenOf.of(ValueName.Stdlib.operation("List", operation),
+        return NumericTerm.TakenOf.asItStands(ValueName.Stdlib.operation("List", operation),
                 TermPath.of("lines"), new Type.ListOf(Type.INT), INNERS, SYMBOLS);
     }
 
@@ -277,7 +277,7 @@ class ALineIsWrittenByEveryPartThatTellsItApartTest {
     }
 
     private static NumericTerm.TakenOf quotientOf(TermPath path, long divisor) {
-        return NumericTerm.TakenOf.of(QUOTIENT, path,
+        return NumericTerm.TakenOf.asItStands(QUOTIENT, path,
                 TakenArguments.at(1, BigDecimal.valueOf(divisor)), Type.INT, INNERS, SYMBOLS);
     }
 

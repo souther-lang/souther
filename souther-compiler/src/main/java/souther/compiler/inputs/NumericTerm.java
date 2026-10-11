@@ -180,8 +180,32 @@ public sealed interface NumericTerm
         }
 
         /**
-         * The term for what {@code operation} answers of what stands at {@code path}, or null where
-         * the two do not go together.
+         * The term for what {@code operation} answers of the value at {@code position} as it
+         * stands, given nothing beside it, or null where the two do not go together.
+         *
+         * <p>Named for what it says of the value: the one the operation takes its number of is the
+         * one at the position and nothing made of it. A caller that has what the value was made
+         * into takes {@link #of} and says so, and cannot hand over the position alone and be read
+         * as taking the number of it as it stands.
+         */
+        public static TakenOf asItStands(ValueName.Stdlib operation, TermPath position, Type at,
+                                         NewtypeInners inners, Symbols symbols) {
+            return of(operation, ObservationSource.asItStands(position), TakenArguments.NONE, at,
+                    inners, symbols);
+        }
+
+        /** The same, for a taking the operation was given {@code arguments} beside the value at
+         *  {@code position}. */
+        public static TakenOf asItStands(ValueName.Stdlib operation, TermPath position,
+                                         TakenArguments arguments, Type at, NewtypeInners inners,
+                                         Symbols symbols) {
+            return of(operation, ObservationSource.asItStands(position), arguments, at, inners,
+                    symbols);
+        }
+
+        /**
+         * The term for what {@code operation} answers of the value {@code source} says — the one
+         * at its position, or what it was made into — or null where the two do not go together.
          *
          * <p><b>The one way one of these is made.</b> Four things have to hold and each of them is
          * a proposition somebody already owns: there is an account of what such a call takes, from
@@ -193,6 +217,10 @@ public sealed interface NumericTerm
          * operation and the location agree, by construction" — which is a claim about who happens
          * to build one today and not an invariant (#1027).
          *
+         * <p>And a value made into something is one the account reads
+         * ({@link TakenAs#readsWhatItWasMadeFrom}): the year of a moved date is a number a row is
+         * written for and a month of one is not.
+         *
          * <p>Null and not a refusal. Whether a call names a number the model has a term for is a
          * question every reader of an expression asks, and the answer "it does not" is one they all
          * have somewhere to put: no line is drawn and the rule is reported as one nothing read.
@@ -200,23 +228,6 @@ public sealed interface NumericTerm
          * <p>Asked of what the names wrap, since a name around a list is still a list — the same
          * reach {@link Carrier#ofValue} takes, and taken here so that no caller takes it itself.
          */
-        public static TakenOf of(ValueName.Stdlib operation, TermPath position, Type at,
-                                 NewtypeInners inners, Symbols symbols) {
-            return of(operation, ObservationSource.asItStands(position), TakenArguments.NONE, at,
-                    inners, symbols);
-        }
-
-        /** The same, for a taking the operation was given {@code arguments} beside the value at
-         *  {@code position}, which it takes its number of as it stands. */
-        public static TakenOf of(ValueName.Stdlib operation, TermPath position,
-                                 TakenArguments arguments, Type at, NewtypeInners inners,
-                                 Symbols symbols) {
-            return of(operation, ObservationSource.asItStands(position), arguments, at, inners,
-                    symbols);
-        }
-
-        /** The same, for a taking of the value {@code source} says: the one at its position, or
-         *  what it was made into. */
         public static TakenOf of(ValueName.Stdlib operation, ObservationSource source,
                                  TakenArguments arguments, Type at, NewtypeInners inners,
                                  Symbols symbols) {

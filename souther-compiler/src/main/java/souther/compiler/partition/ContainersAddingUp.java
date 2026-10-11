@@ -729,7 +729,7 @@ final class ContainersAddingUp {
         ValueName.Stdlib counts =
                 NumericMeasures.takenOf(container.declared(), reading.source().inners());
         return counts == null ? null
-                : NumericTerm.TakenOf.of(counts, root, container.declared(),
+                : NumericTerm.TakenOf.asItStands(counts, root, container.declared(),
                         reading.source().inners(), reading.source().symbols());
     }
 

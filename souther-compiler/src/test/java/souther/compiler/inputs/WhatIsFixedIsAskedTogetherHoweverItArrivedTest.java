@@ -480,7 +480,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
      *  builds one: through the factory that holds the operation to what is there. */
     private static NumericTerm takenOfWhatIsThere(Read read, TermPath at) {
         souther.compiler.types.Type type = read.inputs().at(at).type();
-        NumericTerm.TakenOf made = NumericTerm.TakenOf.of(
+        NumericTerm.TakenOf made = NumericTerm.TakenOf.asItStands(
                 souther.compiler.check.NumericMeasures.takenOf(type, read.rules().inners()),
                 at, type, read.rules().inners(), read.rules().symbols());
         assertNotNull(made, at + " is counted by what its type is counted by");

@@ -36,12 +36,12 @@ class ANumberMovedIsTakenWithWhatItWasGivenTest {
 
     @Test
     void aQuotientMovedKeepsItsDivisor() {
-        NumericTerm.TakenOf atR = NumericTerm.TakenOf.of(QUOTIENT, TermPath.of("r"), BY_SEVEN,
+        NumericTerm.TakenOf atR = NumericTerm.TakenOf.asItStands(QUOTIENT, TermPath.of("r"), BY_SEVEN,
                 Type.INT, INNERS, SYMBOLS);
         assertNotNull(atR, "a quotient by seven is a number of the place");
 
         assertEquals(
-                NumericTerm.TakenOf.of(QUOTIENT, TermPath.of("s"), BY_SEVEN, Type.INT, INNERS,
+                NumericTerm.TakenOf.asItStands(QUOTIENT, TermPath.of("s"), BY_SEVEN, Type.INT, INNERS,
                         SYMBOLS),
                 atR.movedTo(TermPath.of("s"), Type.INT, INNERS, SYMBOLS));
     }

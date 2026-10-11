@@ -58,7 +58,7 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
             counting(new CodePointClass.NotWhitespaceNorEqualTo(','));
     private static final NumericTerm.CodePointClassCount NOT_WHITESPACE_NOR_SPACE =
             counting(new CodePointClass.NotWhitespaceNorEqualTo(' '));
-    private static final NumericTerm LENGTH = NumericTerm.TakenOf.of(
+    private static final NumericTerm LENGTH = NumericTerm.TakenOf.asItStands(
             ValueName.Stdlib.operation("String", "length"), AT, Type.STRING,
             ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS);
 

@@ -134,7 +134,7 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
      * pair: the walk stops in the same places and this term never looks at any of them.
      */
     private static BorderQuantity.OverAForm howMany() {
-        NumericTerm.TakenOf counted = NumericTerm.TakenOf.of(
+        NumericTerm.TakenOf counted = NumericTerm.TakenOf.asItStands(
                 ValueName.Stdlib.operation("List", "length"),
                 TermPath.of("lines"),
                 new souther.compiler.types.Type.ListOf(souther.compiler.types.Type.Prim.INT),

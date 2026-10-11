@@ -57,7 +57,7 @@ class EveryQuestionAReadingAnswersIsAboutItsOwnInputTest {
 
     /** A term of another input, whose root this reading takes nothing under. */
     private static NumericTerm foreignTerm() {
-        NumericTerm.TakenOf made = NumericTerm.TakenOf.of(
+        NumericTerm.TakenOf made = NumericTerm.TakenOf.asItStands(
                 ValueName.Stdlib.operation("String", "length"), TermPath.of("s"), Type.STRING,
                 souther.compiler.check.ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS);
         assertNotNull(made, "a length is taken of a string");

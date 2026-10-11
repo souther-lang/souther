@@ -321,7 +321,7 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
      */
     @Test
     void aNumberTakenOfThePositionIsNotHeldToTheSetOfItsValues() {
-        NumericTerm.FromOnePosition length = NumericTerm.TakenOf.of(
+        NumericTerm.FromOnePosition length = NumericTerm.TakenOf.asItStands(
                 ValueName.Stdlib.operation("String", "length"), CODE,
                 souther.compiler.types.Type.Prim.STRING,
                 souther.compiler.check.NewtypeInners.NONE,
