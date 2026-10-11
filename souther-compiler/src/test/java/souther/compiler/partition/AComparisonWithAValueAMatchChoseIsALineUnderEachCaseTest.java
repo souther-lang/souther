@@ -100,6 +100,36 @@ class AComparisonWithAValueAMatchChoseIsALineUnderEachCaseTest {
                 """), "chk/days"), "a Warm row meets the line at seven");
     }
 
+    /**
+     * The runs between the lines are the classes of {@code days}, which every line on it bounds
+     * whatever case it decides in; a row in one is owed to a line only where it is in that line's
+     * case. Five days at {@code Warm} is in the run above the line for {@code Hot} and below the
+     * line for {@code Warm}, and is the second of those and not the first.
+     */
+    @Test
+    void aRowInARunIsOwedOnlyToTheLineOfItsOwnCase() {
+        JsonNode report = reportOf(STAGES, """
+                example chk
+                    | "warm five" : (Warm, 5) -> Ok { k = 1 }
+                """);
+        List<String> met = new ArrayList<>();
+        regions(report, met);
+        assertEquals(List.of("7 below 2 < days < 7"), met,
+                "the run below the line for Warm, and not the same run above the line for Hot");
+    }
+
+    /** Each run a row of the examples is in, as the line it is owed to, the side and the run. */
+    private static void regions(JsonNode node, List<String> out) {
+        if (node.isObject() && node.has("point") && node.has("readings")
+                && "in_the_region".equals(node.at("/obligationId/location/kind").asString())
+                && node.path("readings").get(0).path("hit").asBoolean()) {
+            out.add(node.at("/obligationId/level/at").asString() + " "
+                    + node.at("/obligationId/location/side").asString() + " "
+                    + node.path("readings").get(0).path("against").asString());
+        }
+        node.forEach(child -> regions(child, out));
+    }
+
     @Test
     void aTruthAHelperReadsOffTheCaseChoosesTheLineTheSameWay() {
         JsonNode report = reportOf(DISABILITY, "");
