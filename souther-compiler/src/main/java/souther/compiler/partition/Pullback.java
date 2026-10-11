@@ -3401,20 +3401,24 @@ final class Pullback {
                 }
             }
         }
+        LinearForm<Quantity> form = null;
         if (answered) {
             LinearForm<Quantity> relating = answering.get(0).minus(answering.get(1)).orNull();
             if (relating != null
                     && (relating.coefs().isEmpty() || relatesPositionsApart(relating))) {
                 sides = answering;
+                form = relating;
             } else if (unread != null) {
                 return unread;
             }
         }
-        LinearForm<Quantity> form;
-        switch (sides.get(0).minus(sides.get(1))) {
-            case ExactAnswer.Held<LinearForm<Quantity>>(LinearForm<Quantity> held) -> form = held;
-            case ExactAnswer.Unheld<LinearForm<Quantity>>(UnheldNumber why) -> {
-                return new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), false);
+        if (form == null) {
+            switch (sides.get(0).minus(sides.get(1))) {
+                case ExactAnswer.Held<LinearForm<Quantity>>(LinearForm<Quantity> held) ->
+                        form = held;
+                case ExactAnswer.Unheld<LinearForm<Quantity>>(UnheldNumber why) -> {
+                    return new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), false);
+                }
             }
         }
         if (form.coefs().isEmpty()) {
@@ -3455,9 +3459,9 @@ final class Pullback {
         // A value that counts to a number is the arithmetic's: what it could not read of one is
         // said where it stopped.
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
-        Carrier carrier = Carrier.ofValue(stands.value().type(), read.rules().declarations());
         if (facts.takenAs(operation) != null || !facts.isDefinedByCases(operation).isEmpty()
-                || carrier != null && carrier.counts()) {
+                || (Carrier.ofValue(stands.value().type(), read.rules().declarations())
+                        instanceof Carrier carrier && carrier.counts())) {
             return null;
         }
         List<Quantity> of = new ArrayList<>();
@@ -3493,17 +3497,18 @@ final class Pullback {
         if (form.constant().signum() != 0 || form.coefs().size() != 2) {
             return false;
         }
-        List<List<NumericTerm>> sides = new ArrayList<>();
+        List<List<TermPath>> sides = new ArrayList<>();
         ExactRatio weighed = null;
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
-            switch (each.getKey()) {
-                case DecisionAtom.OfTheInput(NumericTerm term) -> sides.add(List.of(term));
-                case Quantity.WhatAnOperationAnswers answers ->
-                        sides.add(answers.positionsItIsMadeOf());
-                default -> {
-                    return false;
-                }
+            List<NumericTerm> terms = switch (each.getKey()) {
+                case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                case Quantity.WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
+                default -> null;
+            };
+            if (terms == null) {
+                return false;
             }
+            sides.add(terms.stream().flatMap(term -> term.placesReadOff().stream()).toList());
             if (weighed == null) {
                 weighed = each.getValue();
                 continue;
@@ -3513,14 +3518,10 @@ final class Pullback {
                 return false;
             }
         }
-        for (NumericTerm one : sides.get(0)) {
-            for (NumericTerm other : sides.get(1)) {
-                for (TermPath p : one.placesReadOff()) {
-                    for (TermPath q : other.placesReadOff()) {
-                        if (p.isAtOrUnder(q) || q.isAtOrUnder(p)) {
-                            return false;
-                        }
-                    }
+        for (TermPath p : sides.get(0)) {
+            for (TermPath q : sides.get(1)) {
+                if (p.isAtOrUnder(q) || q.isAtOrUnder(p)) {
+                    return false;
                 }
             }
         }
