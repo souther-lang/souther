@@ -184,6 +184,9 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == BindingId.class) {
             return new BindingId(new BindingOwner.OfValue("example", "f"), 0);
         }
+        if (type == InputReads.ContainerOf.class) {
+            return new InputReads.ContainerOf.AtAPosition(TermPath.of("x"));
+        }
         if (type.isEnum()) {
             return type.getEnumConstants()[0];
         }

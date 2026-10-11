@@ -61,9 +61,10 @@ final class BindingEnvironment {
     private final Layer newest;
     private final ElementBindings elements;
     private final boolean callsStand;
-    /** The lookup that picked out the entry a name standing at an element of a map or a list is,
-     *  for each such element: the name is read of that entry and no other. */
-    private final Map<TermPath, Core> selected;
+    /** The lookup that picked out the entry each such name is the value of: the name is read of
+     *  that entry and no other. By the name and not by the element it stands at, since two names
+     *  for entries of one map are two entries at one element. */
+    private final Map<BindingId, InputReads.EntryLookedUp> selected;
     private volatile Map<BindingId, Core> boundAsATable;
     /** {@link #hashCode}, worked out the first time it is asked: nothing here changes, and what
      *  it is worked out from is every value bound, which a reader asking it of one environment
@@ -77,7 +78,8 @@ final class BindingEnvironment {
 
     private BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> handed,
                                Map<BindingId, Core> table, Layer newest, ElementBindings elements,
-                               boolean callsStand, Map<TermPath, Core> selected) {
+                               boolean callsStand,
+                               Map<BindingId, InputReads.EntryLookedUp> selected) {
         this.selected = selected;
         this.roots = roots;
         this.handed = handed;
@@ -242,18 +244,18 @@ final class BindingEnvironment {
     }
 
     /**
-     * The same, where what stands at {@code element} is the entry {@code lookup} picked out: a
-     * statement about it holds of that entry and of no other element of the container.
+     * The same, where {@code binding} is the value of the entry {@code entry} names: a statement
+     * about it holds of that entry and of no other element of the container.
      */
-    BindingEnvironment selecting(TermPath element, Core lookup) {
-        Map<TermPath, Core> wider = new LinkedHashMap<>(selected);
-        wider.put(element, lookup);
+    BindingEnvironment selecting(BindingId binding, InputReads.EntryLookedUp entry) {
+        Map<BindingId, InputReads.EntryLookedUp> wider = new LinkedHashMap<>(selected);
+        wider.put(binding, entry);
         return new BindingEnvironment(roots, handed, table, newest, elements, callsStand,
                 Map.copyOf(wider));
     }
 
-    /** The lookups that picked out the entries names stand at, by the element each is. */
-    Map<TermPath, Core> selected() {
+    /** The entries names are the value of, by the name. */
+    Map<BindingId, InputReads.EntryLookedUp> selected() {
         return selected;
     }
 

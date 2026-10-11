@@ -30,6 +30,7 @@ import souther.compiler.check.AnIndexedMap;
 import souther.compiler.inputs.AnIdentityMap;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -231,6 +232,12 @@ final class Pullback {
      */
     private List<Derivation.AComparisonRead.Counted> alike;
     /**
+     * The elements of the containers the comparison being read is read of, which name stands for
+     * each — held to one name for each container ({@link ElementsMet}). Nothing where what is read
+     * is no comparison of two numbers.
+     */
+    private ElementsMet elementsMet = ElementsMet.NONE;
+    /**
      * How many each answer an operation sized by cases holds, in the case of it the comparison
      * being read is read in ({@link #inEachCaseOf}): a number of the input, where the arguments
      * stand as that case says.
@@ -270,25 +277,40 @@ final class Pullback {
                                 Optional<ModelOccurrence> where) {
         Pullback reading = new Pullback(read, where);
         return reading.pulled(reading.underTheEntriesLookedUp(
-                reading.comparison(comparison, null, false, reads), reads));
+                reading.comparison(comparison, null, false, reads), comparison, reads));
     }
 
     /**
      * {@code about}, with what picked out each entry it states something of: a lookup answers one
      * entry, and a statement about its value is about that one.
      */
-    private Derivation underTheEntriesLookedUp(Derivation about, InputReads reads) {
-        Map<TermPath, Core> entries = reads.entriesLookedUp();
+    private Derivation underTheEntriesLookedUp(Derivation about, StatedComparison comparison,
+                                               InputReads reads) {
+        Map<BindingId, InputReads.EntryLookedUp> entries = reads.entriesLookedUp();
         if (entries.isEmpty()) {
             return about;
         }
-        Set<NumericTerm> numbers = AStatementAtARow.numbersOf(about.concludes(Optional.empty()));
+        // The entries of the names the comparison is written through, and not of every name in
+        // force: two names for two entries of one map are one position, and which of them a
+        // number is a number of is the name it was written with.
+        Set<BindingId> written = ElementsMet.namesOfElementsIn(
+                List.of(comparison.left(), comparison.right()), reads, read.rules().newtypes());
         Derivation out = about;
-        for (Map.Entry<TermPath, Core> each : entries.entrySet()) {
-            if (numbers.stream().anyMatch(term -> term.subjectPath().isAtOrUnder(each.getKey()))) {
-                out = new Derivation.OfTheEntryUnderTheKey(
-                        observe(each.getValue(), AnswerAspect.PRESENCE, reads), out);
+        for (Map.Entry<BindingId, InputReads.EntryLookedUp> each : entries.entrySet()) {
+            if (!written.contains(each.getKey())) {
+                continue;
             }
+            Derivation picked = observe(each.getValue().lookup(), AnswerAspect.PRESENCE, reads);
+            // A lookup whose key no position holds says nothing of which entry it is, and a
+            // statement about an entry it does not pick out is about another.
+            if (!(picked.concludes(Optional.empty()) instanceof Proposition.Some some
+                    && some.holds())) {
+                WhyUnread stopped = Proposition.firstStopIn(picked.concludes(Optional.empty()));
+                return new Derivation.Stopped(stopped != null ? stopped
+                        : new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT),
+                        false);
+            }
+            out = new Derivation.OfTheEntryUnderTheKey(picked, out);
         }
         return out;
     }
@@ -309,7 +331,8 @@ final class Pullback {
         Once<AffineReading.OfAComparison> arithmetic = reading.arithmeticOf(comparison, reads);
         return new OnTheInput(reading.pulled(reading.underTheEntriesLookedUp(
                 reading.firstThatReadsIt(
-                        reading.rulesFor(comparison, null, false, reads, arithmetic)), reads)),
+                        reading.rulesFor(comparison, null, false, reads, arithmetic)),
+                comparison, reads)),
                 arithmetic);
     }
 
@@ -2682,13 +2705,16 @@ final class Pullback {
     private Derivation overQuantities(Denotation left, Denotation right, Rel states) {
         Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
         List<Derivation.AComparisonRead.Counted> outerAlike = alike;
+        ElementsMet outerElements = elementsMet;
         counting = new LinkedHashMap<>();
         alike = null;
+        elementsMet = new ElementsMet();
         try {
             return overQuantitiesCounting(left, right, states);
         } finally {
             counting = outer;
             alike = outerAlike;
+            elementsMet = outerElements;
         }
     }
 
@@ -2712,7 +2738,10 @@ final class Pullback {
             switch (AffineForms.outcome(side.value(), side.at(), quantities())) {
                 case AffineForms.Outcome.Composed<Quantity, InputReads>(var form) -> sides.add(form);
                 case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
-                    return new Derivation.Stopped(noFormOf(stopped), false);
+                    // A comparison of two elements of one container is read of neither: they
+                    // stand at one position, and a form would hold them as one number.
+                    return new Derivation.Stopped(elementsMet.crowded()
+                            ? new WhyUnread.TwoElementsOfOneContainer() : noFormOf(stopped), false);
                 }
             }
         }
@@ -2897,9 +2926,15 @@ final class Pullback {
                 if (added != null) {
                     return added;
                 }
-                NumericTerm term = InputNumber.of(node, read.domain(), at, read.rules());
+                NumericTerm term = InputNumber.of(node, read.domain(), at, read.rules(),
+                        elementsMet);
                 if (term != null) {
                     return LinearForm.atom(new DecisionAtom.OfTheInput(term));
+                }
+                // A name for another element of a container the comparison is already read of is
+                // no number of the input, and what it is made of is not followed further.
+                if (elementsMet.crowded()) {
+                    return null;
                 }
                 // How many an operation's answer holds, as its law says of its arguments.
                 if (AnOperationApplied.of(Core.withoutStanding(node)) instanceof AnOperationApplied

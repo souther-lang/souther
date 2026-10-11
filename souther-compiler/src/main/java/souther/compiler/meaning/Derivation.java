@@ -236,7 +236,8 @@ public sealed interface Derivation {
                 Proposition selects = numbering.of(arm.selects());
                 List<Proposition> arrives = new ArrayList<>(before.stream()
                         .map(Proposition::denied).toList());
-                Proposition states = numbering.of(arm.states());                // The entry an arm picks out is the one its statement is about: the statement
+                Proposition states = numbering.of(arm.states());
+                // The entry an arm picks out is the one its statement is about: the statement
                 // sits inside the quantifier that selected it, where its subjects under the
                 // container's elements are that entry's.
                 if (arm.aboutTheEntry() && selects instanceof Proposition.Some(
