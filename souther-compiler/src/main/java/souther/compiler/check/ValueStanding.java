@@ -216,18 +216,19 @@ public final class ValueStanding {
                 if (led == null || !following.enter(r.binding())) {
                     yield List.of(new Standing<>(e, at, names));
                 }
-                List<Standing<E, N>> each = new ArrayList<>();
-                switch (led) {
+                List<Standing<E, N>> reached = switch (led) {
                     case Named.One<E, N>(Standing<E, N> one) ->
-                            each.addAll(of(one.value(), one.at(), one.names(), following));
+                            of(one.value(), one.at(), one.names(), following);
                     case Named.OneOf<E, N>(List<Standing<E, N>> members) -> {
+                        List<Standing<E, N>> each = new ArrayList<>();
                         for (Standing<E, N> one : members) {
                             each.addAll(of(one.value(), one.at(), one.names(), following));
                         }
+                        yield each;
                     }
-                }
+                };
                 following.leave(r.binding());
-                yield each;
+                yield reached;
             }
             case Core.LetIn li -> of(li.body(), names.inside(li, at), names, following);
             case Core.Widen w -> of(w.value(), at, names, following);
@@ -258,6 +259,10 @@ public final class ValueStanding {
                 List<Standing<E, N>> written = eliminated(e, at, names, following);
                 if (written == null) {
                     yield List.of(new Standing<>(e, at, names));
+                }
+                if (written.size() == 1) {
+                    Standing<E, N> one = written.getFirst();
+                    yield of(one.value(), one.at(), one.names(), following);
                 }
                 List<Standing<E, N>> each = new ArrayList<>();
                 for (Standing<E, N> one : written) {

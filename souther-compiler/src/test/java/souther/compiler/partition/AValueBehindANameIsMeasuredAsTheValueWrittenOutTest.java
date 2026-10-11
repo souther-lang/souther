@@ -10,6 +10,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -322,8 +323,16 @@ class AValueBehindANameIsMeasuredAsTheValueWrittenOutTest {
         assertEquals(read.get("Alice"), read.get("b"));
     }
 
+    /** What each source was measured as, so a module several tests read is compiled once. */
+    private static final Map<String, Map<String, Measured>> MEASURED = new HashMap<>();
+
     /** Every behavior of {@code source}, measured. */
     private static Map<String, Measured> measured(String source) {
+        return MEASURED.computeIfAbsent(source,
+                AValueBehindANameIsMeasuredAsTheValueWrittenOutTest::measuredAfresh);
+    }
+
+    private static Map<String, Measured> measuredAfresh(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
