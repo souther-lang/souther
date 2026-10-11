@@ -594,23 +594,36 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
          */
         void reached(ModelOccurrence states, List<OnTheWay> assumed,
                      Map<WhereAPartDecides, List<OnTheWay>> whereEachDecides) {
-            // Once per construct of the model, because that is what the walk reads: a comparison
-            // inside a non-recursive helper is read once per call of it and each of those calls is
-            // a construct of its own. Two arriving under one would be the reading holding two
-            // comparisons the model states at one place, which is what nothing downstream could
-            // then tell apart — so it is refused here rather than resolved by keeping one of them.
-            List<OnTheWay> already =
-                    byLine.putIfAbsent(new ALine(states, Optional.empty()), List.copyOf(assumed));
-            if (already != null) {
-                throw new IllegalStateException(
-                        "two comparisons of one reading state one construct of the model: "
-                                + states);
-            }
+            // A comparison inside a non-recursive helper is read once per call of it and each of
+            // those calls is a construct of its own. A comparison inside a closure is the one the
+            // author wrote, met through each copy an application of the closure makes. A run
+            // reaches the rule through any of them, so what a row owes is what every way here
+            // states — kept by neither alone, which would owe a row the conditions of a copy it
+            // does not go through.
+            byLine.merge(new ALine(states, Optional.empty()), List.copyOf(assumed),
+                    Collected::commonTo);
             whereEachDecides.forEach((part, decides) -> {
                 List<OnTheWay> way = new ArrayList<>(assumed);
                 way.addAll(decides);
-                byLine.put(new ALine(states, Optional.of(part)), List.copyOf(way));
+                byLine.merge(new ALine(states, Optional.of(part)), List.copyOf(way),
+                        Collected::commonTo);
             });
+        }
+
+        /**
+         * What a row owes whichever of two ways it reaches one rule by: what both state, and a
+         * decline from either — a condition one way could not take in is one the account cannot say
+         * it took in, so it stays.
+         */
+        private static List<OnTheWay> commonTo(List<OnTheWay> one, List<OnTheWay> other) {
+            List<OnTheWay> common = new ArrayList<>(one);
+            common.retainAll(other);
+            for (OnTheWay each : List.of(one, other).stream().flatMap(List::stream).toList()) {
+                if (each instanceof OnTheWay.Declined && !common.contains(each)) {
+                    common.add(each);
+                }
+            }
+            return List.copyOf(common);
         }
 
         ReachingCuts made() {

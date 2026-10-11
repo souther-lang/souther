@@ -197,6 +197,22 @@ public sealed interface ItemAssessment {
             return this == PROVEN;
         }
 
+        /**
+         * What two readings of one point establish together.
+         *
+         * <p>Whether a value at the point exists is a fact about the point and not about the reading
+         * that reached it: one reading proving it proves it. The other two states are what a
+         * reading says about itself, so the weaker of them stands only where nothing proved
+         * anything — and a reading that ran and got nowhere says more than one that did not put the
+         * question.
+         */
+        public WritabilityProjection and(WritabilityProjection other) {
+            if (proves() || other.proves()) {
+                return PROVEN;
+            }
+            return this == UNPROVEN || other == UNPROVEN ? UNPROVEN : NOT_COMPUTED;
+        }
+
         /** The two answers a reading that ran can come to. For a caller holding the reading's own
          *  boolean, so that the third state is never spelled where it cannot arise. */
         public static WritabilityProjection ofReading(boolean proven) {

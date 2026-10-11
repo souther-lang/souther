@@ -142,24 +142,36 @@ class AComparisonInAClosureThatIgnoresTheElementIsOwedARowOnlyWhereTheContainerH
         }
     }
 
-    private static boolean isEmpty(String written) {
+    static boolean isEmpty(String written) {
         return written.replace(" ", "").equals("[]");
     }
 
-    private static void assertEveryRowStandsAtItsPoint(String source, String behavior,
-                                                       Predicate<List<String>> holdsSomething) {
+    /**
+     * Some search of every point of the line on {@code atLeast} came back as a row read back
+     * standing there, and every such row is one {@code holdsSomething} says is right.
+     *
+     * <p>Some and not every: a rule met through several copies of a closure is searched once for
+     * each, and a copy a run reaches only where the border is not is one no row at it stands in.
+     */
+    static void assertEveryRowStandsAtItsPoint(String source, String behavior,
+                                               Predicate<List<String>> holdsSomething) {
         List<ItemAssessment.Owed> searched = searchedPointsOn(source, behavior);
         assertTrue(searched.size() >= 2, () -> "the line on atLeast has points to search: "
                 + searched);
         for (ItemAssessment.Owed owed : searched) {
-            ItemAssessment.Attempt.Certified certified = assertInstanceOf(
-                    ItemAssessment.Attempt.Certified.class, owed.searches().only(),
-                    () -> "a row was composed and read back at " + owed.criterion());
-            List<String> row = certified.row().inputs().stream()
-                    .map(input -> input.text()).toList();
-            assertTrue(holdsSomething.test(row),
-                    () -> "the row at " + owed.criterion() + " holds nothing the closure is"
-                            + " applied over: " + row);
+            List<List<String>> standing = owed.searches().each().stream()
+                    .filter(ItemAssessment.Attempt.Certified.class::isInstance)
+                    .map(ItemAssessment.Attempt.Certified.class::cast)
+                    .map(certified -> certified.row().inputs().stream()
+                            .map(input -> input.text()).toList())
+                    .toList();
+            assertFalse(standing.isEmpty(), () -> "a row was composed and read back at "
+                    + owed.criterion() + ": " + owed.searches());
+            for (List<String> row : standing) {
+                assertTrue(holdsSomething.test(row),
+                        () -> "the row at " + owed.criterion() + " holds nothing the closure is"
+                                + " applied over: " + row);
+            }
         }
     }
 
