@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 /**
  * A number a comparison is written over, told apart by which value it is.
@@ -170,6 +171,33 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 coefs.put(size, each.constant());
             }
             return new LinearForm<>(ExactRatio.ZERO, coefs);
+        }
+
+        /**
+         * What each element adds, where {@code sum} is a sum over the elements of the container at
+         * {@code container} as {@link #over} spreads one: each sum's weight on the number it sums,
+         * and the weight of how many elements there are, which {@code howMany} tells, as the
+         * constant — or null where some part of {@code sum} is neither.
+         */
+        public static LinearForm<Quantity> addedByEach(DecisionSubject container,
+                                                       LinearForm<Quantity> sum,
+                                                       Predicate<Quantity> howMany) {
+            if (sum.constant().signum() != 0) {
+                return null;
+            }
+            Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+            ExactRatio constant = ExactRatio.ZERO;
+            for (Map.Entry<Quantity, ExactRatio> part : sum.coefs().entrySet()) {
+                if (part.getKey() instanceof SumOver(DecisionSubject summed, Quantity each)
+                        && summed.equals(container)) {
+                    coefs.put(each, part.getValue());
+                } else if (howMany.test(part.getKey()) && constant.signum() == 0) {
+                    constant = part.getValue();
+                } else {
+                    return null;
+                }
+            }
+            return new LinearForm<>(constant, coefs);
         }
 
         @Override

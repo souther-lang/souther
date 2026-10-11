@@ -903,17 +903,17 @@ public sealed interface Derivation {
                                 new DecisionSubject.AnInput(element)).equals(atom);
                     }
                     // A sum is held spread over the numbers of each element and how many elements
-                    // there are ({@link Quantity.SumOver#over}), so each part of the form is one
-                    // of those two.
+                    // there are ({@link Quantity.SumOver#over}), so what each element adds is
+                    // taken back out of it and is the law's number of the element.
                     case LawNumber.SumOver<DeclaredArgument>(var container, var each) -> {
                         TermPath at = positionOf(container);
-                        yield at == null || (form.constant().signum() == 0
-                                && form.coefs().keySet().stream().allMatch(part ->
-                                        howManyAt(part, at)
-                                        || (part instanceof Quantity.SumOver(
-                                                DecisionSubject summed, Quantity ofEach)
-                                        && summed.equals(new DecisionSubject.AnInput(at))
-                                        && numberStands(each, LinearForm.atom(ofEach), leaf))));
+                        if (at == null) {
+                            yield true;
+                        }
+                        LinearForm<Quantity> added = Quantity.SumOver.addedByEach(
+                                new DecisionSubject.AnInput(at), form,
+                                part -> howManyAt(part, at));
+                        yield added != null && numberStands(each, added, leaf);
                     }
                     case LawNumber.HowManyMeet<DeclaredArgument>(var container, var statement) -> {
                         TermPath at = positionOf(container);

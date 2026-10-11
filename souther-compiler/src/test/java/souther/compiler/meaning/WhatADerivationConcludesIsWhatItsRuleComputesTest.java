@@ -488,6 +488,49 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         }
     }
 
+    /**
+     * What a number of each element adds up to is that sum and nothing else: the sum over the
+     * law's container of the law's number of the element, once. Nought, how many elements there
+     * are, twice the sum, a sum over another container and a sum of one more than each are all
+     * of the right kinds of number and none is the law's.
+     */
+    @Test
+    void aSumOfANumberOfEachElementIsReadAsThatSumAlone() {
+        Derivation.TheCall call = callOfGet();
+        DeclaredArgument list = null;
+        for (Map.Entry<DeclaredArgument, TermPath> each : call.standingAt().entrySet()) {
+            if (each.getValue().equals(B)) {
+                list = each.getKey();
+            }
+        }
+        LawProposition.Compared<DeclaredArgument> summing = new LawProposition.Compared<>(
+                LinearForm.atom(new LawNumber.SumOver<>(list,
+                        new LawNumber.SizeOf<>(new LawSubject.ElementOf<>(list)))), Rel.GT);
+        Quantity eachSize = new DecisionAtom.OfTheInput(NumericTerm.TakenOf.asItStands(
+                LIST_LENGTH, B.element(), Type.list(Type.INT), ScopedDeclarations.wrapsOf(SYMBOLS),
+                SYMBOLS));
+        LinearForm<Quantity> sum = LinearForm.atom(
+                new Quantity.SumOver(new DecisionSubject.AnInput(B), eachSize));
+        assertEquals(true, readsTheSum(summing, sum, call), "the sum itself");
+        for (LinearForm<Quantity> other : List.<LinearForm<Quantity>>of(
+                LinearForm.constant(ExactRatio.ZERO), LinearForm.atom(LENGTH),
+                new LinearForm<>(ExactRatio.ZERO, Map.of(sum.coefs().keySet().iterator().next(),
+                        ExactRatio.of(2))),
+                LinearForm.atom(new Quantity.SumOver(new DecisionSubject.AnInput(A), eachSize)),
+                new LinearForm<>(ExactRatio.ZERO, Map.of(sum.coefs().keySet().iterator().next(),
+                        ExactRatio.ONE, LENGTH, ExactRatio.ONE)))) {
+            assertEquals(false, readsTheSum(summing, other, call), () -> "read as " + other);
+        }
+    }
+
+    /** Whether {@code law}, its one number read as {@code read}, is a reading of the law. */
+    private static boolean readsTheSum(LawProposition.Compared<DeclaredArgument> law,
+                                       LinearForm<Quantity> read, Derivation.TheCall call) {
+        return Derivation.ByALaw.readsTheLaw(law, Derivation.ALawComparison.of(law,
+                Map.of(law.form().coefs().keySet().iterator().next(), read), Map.of(), List.of()),
+                call);
+    }
+
     /** A count read as {@code count} where every element settled the statement as
      *  {@code settled}, and whether that is a reading of the law's. */
     private record AllOrNone(LinearForm<Quantity> count, Derivation settled, boolean reads) {
