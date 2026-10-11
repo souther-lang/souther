@@ -35,6 +35,7 @@ import souther.compiler.types.Type;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -45,6 +46,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -441,15 +443,17 @@ final class TermRealizations {
             return wholly(targets, quotients.keySet(),
                     () -> new JointBuilder.SolvingForTheirQuotients(quotients));
         }
-        // A date moved before its year is taken is not a value spelled in parts: two years of one
-        // date are two numbers, and what writes a date answering them is a search over the days.
-        // Only the years of a moved date are one, so anything else asked beside them is a group
-        // nothing here solves.
+        // A date moved before a part of it is taken is not a value spelled in parts: two years of
+        // one date are two numbers, and what writes a date answering them is a search over the
+        // days. Every part asked of the date, moved or not, is a condition on the days it comes
+        // from, so the group is one search. What bounds it is a year asked of it; a number of a
+        // moved date is only ever a year ({@link NumericTerm.TakenOf#of}), so a group holding one
+        // has that.
         if (moved.values().stream().anyMatch(each -> !each.isNone())) {
             return times.isEmpty() && dates.size() == numbers.size()
-                    && dates.values().stream().allMatch(each -> each == TakenAs.DatePart.YEAR)
+                    && dates.containsValue(TakenAs.DatePart.YEAR)
                     ? wholly(targets, dates.keySet(),
-                            () -> new JointBuilder.OnThoseShiftedYears(moved))
+                            () -> new JointBuilder.OnThoseMovedDateParts(dates, moved))
                     : nothingSolvesAGroup();
         }
         // A value spelled in parts is written at the parts it is spelled in. Two asks at one part
@@ -758,21 +762,27 @@ final class TermRealizations {
         }
 
         /**
-         * The years of one date, each after the date was moved by its own shift.
+         * The parts of one date, each taken after the date was moved as its own number says.
          *
-         * <p>The years of {@code b} and of {@code b} a day on are two numbers of one date, and the
-         * parts of a date have one year apiece to write. A date answering both is looked for among
-         * the days, where each year is a run ({@link #onShiftedYears}).
+         * <p>The year of {@code b} and the year of {@code b} a day on are two numbers of one date,
+         * and a value spelled in parts has one year to write. So a date answering them is looked
+         * for among the days, where every number asked is a condition on the date itself
+         * ({@link #onMovedDates}) — which holds for the parts of a date that is not moved as well,
+         * so the two kinds are asked together and neither leaves the group unsolved.
          */
-        record OnThoseShiftedYears(SequencedMap<RealizationTarget.OfANumber, DateTranslation> years)
+        record OnThoseMovedDateParts(
+                SequencedMap<RealizationTarget.OfANumber, TakenAs.DatePart> parts,
+                SequencedMap<RealizationTarget.OfANumber, DateTranslation> moved)
                 implements JointBuilder {
 
-            public OnThoseShiftedYears {
-                if (years.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "a way of writing a date for some years says which years");
+            public OnThoseMovedDateParts {
+                if (parts.isEmpty() || !parts.keySet().equals(moved.keySet())
+                        || !parts.containsValue(TakenAs.DatePart.YEAR)) {
+                    throw new IllegalArgumentException("a way of writing a moved date says how"
+                            + " each part was moved, and is walked by the year asked of it");
                 }
-                years = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(years));
+                parts = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(parts));
+                moved = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(moved));
             }
 
             @Override
@@ -781,13 +791,13 @@ final class TermRealizations {
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
                 nothingInside(inside);
-                List<ShiftedYear> asks = new ArrayList<>();
-                for (Map.Entry<RealizationTarget.OfANumber, DateTranslation> each
-                        : years.entrySet()) {
-                    asks.add(new ShiftedYear(each.getValue(),
+                List<DatePartAsk> asks = new ArrayList<>();
+                for (Map.Entry<RealizationTarget.OfANumber, TakenAs.DatePart> each
+                        : parts.entrySet()) {
+                    asks.add(new DatePartAsk(each.getValue(), moved.get(each.getKey()),
                             demands.get(each.getKey()).walking()));
                 }
-                return onShiftedYears(asks, sourceType, rootOf(years.keySet(), measuring),
+                return onMovedDates(asks, sourceType, rootOf(parts.keySet(), measuring),
                         reading.source());
             }
         }
@@ -1246,7 +1256,7 @@ final class TermRealizations {
                     false;
             case JointBuilder.StringsHoldingTheirCounts _,
                  JointBuilder.AtThoseTimeParts _, JointBuilder.OnThoseDateParts _,
-                 JointBuilder.OnThoseShiftedYears _, JointBuilder.SolvingForTheirQuotients _,
+                 JointBuilder.OnThoseMovedDateParts _, JointBuilder.SolvingForTheirQuotients _,
                  JointBuilder.SolvingForTheirRemainders _,
                  JointBuilder.ItsOwnValueAndWhatIsTakenOfIt _ -> false;
         };
@@ -1438,8 +1448,8 @@ final class TermRealizations {
             case TakenAs.PartOfTime taken -> atThoseParts(Map.of(taken.part(), wanted), sourceType,
                     orders.observed(), ruleSource);
             case TakenAs.PartOfDate taken -> from instanceof ValueTransformation.DateShift moved
-                    ? onShiftedYears(List.of(new ShiftedYear(moved.translation(), wanted)),
-                            sourceType, orders.observed(), ruleSource)
+                    ? onMovedDates(List.of(new DatePartAsk(taken.part(), moved.translation(),
+                            wanted)), sourceType, orders.observed(), ruleSource)
                     : onThoseParts(Map.of(taken.part(), wanted), sourceType, orders.observed(),
                             ruleSource);
             // And this one multiplies back. What a quotient is taken of is a whole number and what
@@ -2965,31 +2975,102 @@ final class TermRealizations {
     record Search(java.time.LocalDate on, boolean everyOne) {}
 
     /**
-     * One year asked of a date, after the date was moved.
+     * One part of a date asked of it, after the date was moved.
      *
-     * @param moved  what the date was made into before its year was taken
-     * @param wanted the years the rules leave that number
+     * @param part   which part is taken
+     * @param moved  what the date was made into before the part was taken
+     * @param wanted the numbers the rules leave that part
      */
-    record ShiftedYear(DateTranslation moved, NumericSet wanted) {}
+    record DatePartAsk(TakenAs.DatePart part, DateTranslation moved, NumericSet wanted) {
+
+        /** Whether the date {@code day} counts to is one this admits: one the move is defined at,
+         *  whose moved date has a part the rules leave. */
+        boolean admits(long day, Carrier observed) {
+            return moved.definedAt(day)
+                    && wanted.holds(Count.of(partOf(part, day + moved.offsetDays())), observed);
+        }
+
+        /** The days, among those after {@code from} up to {@code to}, at which this ask is
+         *  answered otherwise than on the day before: where the move stops being defined, and where
+         *  the part of the moved date starts a new run. */
+        void cutsInto(SortedSet<Long> cuts, long from, long to) {
+            for (long edge : new long[] {moved.first(), moved.last() + 1}) {
+                addIfBetween(cuts, edge, from, to);
+            }
+            long low = clamped(from + moved.offsetDays());
+            long high = clamped(to + moved.offsetDays());
+            switch (part) {
+                case YEAR -> {
+                    for (int year = LocalDate.ofEpochDay(low).getYear() + 1;
+                            year <= LocalDate.ofEpochDay(high).getYear(); year++) {
+                        addMoved(cuts, LocalDate.of(year, 1, 1), from, to);
+                    }
+                }
+                case MONTH -> {
+                    YearMonth last = YearMonth.from(LocalDate.ofEpochDay(high));
+                    for (YearMonth month = YearMonth.from(LocalDate.ofEpochDay(low)).plusMonths(1);
+                            !month.isAfter(last); month = month.plusMonths(1)) {
+                        addMoved(cuts, month.atDay(1), from, to);
+                    }
+                }
+                // Every day starts a new day of its month.
+                case DAY -> {
+                    for (long day = low + 1; day <= high; day++) {
+                        addMoved(cuts, LocalDate.ofEpochDay(day), from, to);
+                    }
+                }
+            }
+        }
+
+        private void addMoved(SortedSet<Long> cuts, LocalDate movedDate, long from, long to) {
+            addIfBetween(cuts, movedDate.toEpochDay() - moved.offsetDays(), from, to);
+        }
+
+        private static void addIfBetween(SortedSet<Long> cuts, long day, long from, long to) {
+            if (from < day && day <= to) {
+                cuts.add(day);
+            }
+        }
+
+        private static long clamped(long day) {
+            return Math.max(LocalDate.MIN.toEpochDay(), Math.min(LocalDate.MAX.toEpochDay(), day));
+        }
+    }
+
+    /** The part of the date that {@code day} counts to, with a day the calendar does not have read
+     *  as its first or last. */
+    private static int partOf(TakenAs.DatePart part, long day) {
+        LocalDate date = LocalDate.ofEpochDay(Math.max(LocalDate.MIN.toEpochDay(),
+                Math.min(LocalDate.MAX.toEpochDay(), day)));
+        return switch (part) {
+            case YEAR -> date.getYear();
+            case MONTH -> date.getMonthValue();
+            case DAY -> date.getDayOfMonth();
+        };
+    }
 
     /**
-     * A date whose year, after each of these shifts, is one of the years asked of it.
+     * A date whose parts, each after the date was moved as its own ask says, are ones the rules
+     * leave.
      *
-     * <p>Solved over the days and not over the parts. The dates of a year are a run of days, so the
-     * dates whose shifted year is one of those are the run moved back by the shift, kept to where
-     * the shift is defined, and what a group asks of one date is the meeting of those runs. A year
-     * of the first is tried, and the days it leaves are cut where any of the others changes year or
-     * stops being defined: between two cuts nothing the group asks changes, so the first day of
-     * each is every day of it. What this walks is therefore every combination there is, and an
-     * answer of nothing is a statement about the calendar, as it is for the parts of a date.
+     * <p>Solved over the days and not over the parts. Every ask is a condition on the date the
+     * program was given: the move is defined there, and the part of the moved date is one the rules
+     * leave. What a group asks of one date is the meeting of those conditions, so a year after one
+     * move, a year after another and a month with no move are one question and not three.
+     *
+     * <p>The years of the first year asked for are walked, and the days of the run each of them is
+     * are cut where any ask is answered otherwise than on the day before: between two cuts nothing
+     * the group asks changes, so the first day of each is every day of it. What this walks is
+     * therefore every combination there is, and an answer of nothing is a statement about the
+     * calendar, as it is for the parts of a date.
      */
-    private static Realization onShiftedYears(List<ShiftedYear> asks, Type sourceType,
-                                              Carrier observed, RuleReadingSource ruleSource) {
+    private static Realization onMovedDates(List<DatePartAsk> asks, Type sourceType,
+                                            Carrier observed, RuleReadingSource ruleSource) {
         if (observed == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        Search found = dateWhoseShiftedYearsAre(asks, observed);
+        Search found = dateAnsweringMovedParts(asks, observed);
         if (found.on() == null) {
             return found.everyOne()
                     ? new Realization.None(
@@ -3009,16 +3090,23 @@ final class TermRealizations {
                 : Realization.Built.whole(List.of(standing));
     }
 
-    /** The first date whose year under every one of {@code asks} is one that ask admits, walking
-     *  the years of the first ask. */
-    static Search dateWhoseShiftedYearsAre(List<ShiftedYear> asks, Carrier observed) {
-        ShiftedYear lead = asks.getFirst();
+    /**
+     * The first date every one of {@code asks} admits, walking the years of the first year asked
+     * for.
+     *
+     * <p>At least one of the asks is for a year, since that is what bounds the walk: the dates of
+     * a year are a run, and the parts of a date are not.
+     */
+    static Search dateAnsweringMovedParts(List<DatePartAsk> asks, Carrier observed) {
+        DatePartAsk lead = asks.stream().filter(each -> each.part() == TakenAs.DatePart.YEAR)
+                .findFirst().orElseThrow(() -> new IllegalArgumentException(
+                        "a date answering moved parts is walked by the years asked of it"));
         Tried years = wholeNumbers(lead.wanted(), observed,
                 LocalDate.MIN.getYear(), LocalDate.MAX.getYear(),
                 CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
         boolean everyOne = years.rest() instanceof Remainder.Exhausted;
         for (Place year : years.numbers()) {
-            LocalDate on = dateInYearOfLead(whole(year), asks, observed);
+            LocalDate on = dateInTheRunOf(lead, whole(year), asks, observed);
             if (on != null) {
                 return new Search(on, everyOne);
             }
@@ -3027,64 +3115,32 @@ final class TermRealizations {
     }
 
     /**
-     * The first date the lead ask's shifted year is {@code year} at, and every other ask is met at,
+     * The first date the lead ask's moved date is in {@code year} at, and every other ask admits,
      * or null where there is none.
      */
-    private static LocalDate dateInYearOfLead(int year, List<ShiftedYear> asks,
-                                              Carrier observed) {
-        DateTranslation lead = asks.getFirst().moved();
-        long from = Math.max(lead.first(),
-                LocalDate.of(year, 1, 1).toEpochDay() - lead.offsetDays());
-        long to = Math.min(lead.last(),
-                LocalDate.of(year, 12, 31).toEpochDay() - lead.offsetDays());
+    private static LocalDate dateInTheRunOf(DatePartAsk lead, int year, List<DatePartAsk> asks,
+                                            Carrier observed) {
+        DateTranslation moved = lead.moved();
+        long from = Math.max(moved.first(),
+                LocalDate.of(year, 1, 1).toEpochDay() - moved.offsetDays());
+        long to = Math.min(moved.last(),
+                LocalDate.of(year, 12, 31).toEpochDay() - moved.offsetDays());
         if (from > to) {
             return null;
         }
-        // Where something asked changes inside the run: a shift stops being defined, or a shifted
-        // date crosses into another year. A run is at most a year long, so a shifted date crosses
-        // at most one new year's first day, and each cut is a day this has to try.
+        // The run is at most a year of days, and each ask is answered the same way between two of
+        // the days it changes at, so the first day of each stretch is every day of it.
         TreeSet<Long> cuts = new TreeSet<>();
         cuts.add(from);
-        for (ShiftedYear each : asks) {
-            DateTranslation moved = each.moved();
-            for (long edge : new long[] {moved.first(), moved.last() + 1}) {
-                if (from < edge && edge <= to) {
-                    cuts.add(edge);
-                }
-            }
-            for (int crossed = yearOnDay(from + moved.offsetDays()) + 1;
-                    crossed <= yearOnDay(to + moved.offsetDays()); crossed++) {
-                long edge = LocalDate.of(crossed, 1, 1).toEpochDay() - moved.offsetDays();
-                if (from < edge && edge <= to) {
-                    cuts.add(edge);
-                }
-            }
+        for (DatePartAsk each : asks) {
+            each.cutsInto(cuts, from, to);
         }
         for (long day : cuts) {
-            if (everyAskIsMetOn(day, asks, observed)) {
+            if (asks.stream().allMatch(each -> each.admits(day, observed))) {
                 return LocalDate.ofEpochDay(day);
             }
         }
         return null;
-    }
-
-    /** Whether the date {@code day} counts to is one every ask admits the shifted year of. */
-    private static boolean everyAskIsMetOn(long day, List<ShiftedYear> asks, Carrier observed) {
-        for (ShiftedYear each : asks) {
-            if (!each.moved().definedAt(day)
-                    || !each.wanted().holds(
-                            Count.of(yearOnDay(day + each.moved().offsetDays())), observed)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /** The year the date {@code day} counts to falls in, with a day the calendar does not have
-     *  read as its first or last. */
-    private static int yearOnDay(long day) {
-        return LocalDate.ofEpochDay(Math.max(LocalDate.MIN.toEpochDay(),
-                Math.min(LocalDate.MAX.toEpochDay(), day))).getYear();
     }
 
     /**

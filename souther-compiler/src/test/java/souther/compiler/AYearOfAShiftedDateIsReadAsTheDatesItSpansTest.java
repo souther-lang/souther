@@ -277,10 +277,22 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
 
     @Test
     void aLineBeyondTheLastDateIsReportedAndNotRefused() {
+        // No date moved back that far is in the last year, so the year the line is drawn at is one
+        // the number never takes: no point is owed at it, as none is for the last year of any date
+        // that is one past the end.
         String year = about("Date.year(Date.addDays(-366, b)) >= 999999999");
 
         assertTrue(year.contains("measurement: complete"), year);
-        assertTrue(year.contains("Date.year((b -366 days)): = 999999999"), year);
+        assertTrue(year.contains("no ON point is owed at Date.year((b -366 days)) = 999999999"),
+                year);
+        assertTrue(year.contains("excluded — the rules leave no value there"), year);
+        assertFalse(year.contains("read as f/Date.year((b -366 days)): = 999999999"), year);
+
+        // One a year less is one it takes, at the last date it can be moved from.
+        String last = about("Date.year(Date.addDays(-366, b)) >= 999999998");
+
+        assertTrue(last.contains("measurement: complete"), last);
+        assertTrue(last.contains("Date.year((b -366 days)): = 999999998"), last);
 
         LocalDate from = LocalDate.of(999999999, 6, 1);
         String comparison = "Date.addDays(-366, b) >= Date(\"+999999999-06-01\")";

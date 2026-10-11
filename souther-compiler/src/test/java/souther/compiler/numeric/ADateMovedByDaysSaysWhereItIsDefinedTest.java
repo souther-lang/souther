@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -103,6 +104,25 @@ class ADateMovedByDaysSaysWhereItIsDefinedTest {
         assertEquals(10L, one.originOf(11));
         assertNull(one.originOf(LAST + 1));
         assertNull(DateTranslation.none().thenAddDays(1).thenAddDays(-1).originOf(LAST));
+    }
+
+    /**
+     * A translation is defined at dates and moves them to dates, whoever builds it: one that says
+     * it is defined at a day the calendar has not, or at a date it moves off the end of the
+     * calendar, would answer {@code definedAt} of a day no program reaches.
+     */
+    @Test
+    void aTranslationDefinedWhereNothingIsOrMovingOffTheCalendarIsNone() {
+        assertThrows(IllegalArgumentException.class, () -> new DateTranslation(1, LAST, LAST));
+        assertThrows(IllegalArgumentException.class, () -> new DateTranslation(-1, FIRST, FIRST));
+        assertThrows(IllegalArgumentException.class,
+                () -> new DateTranslation(0, FIRST - 1, FIRST));
+        assertThrows(IllegalArgumentException.class, () -> new DateTranslation(0, LAST, LAST + 1));
+        assertThrows(IllegalArgumentException.class, () -> new DateTranslation(0, 5, 4));
+        assertThrows(IllegalArgumentException.class,
+                () -> new DateTranslation(Long.MAX_VALUE, 5, 5));
+        assertEquals(new DateTranslation(1, FIRST, LAST - 1),
+                DateTranslation.none().thenAddDays(1));
     }
 
     @Test

@@ -284,6 +284,9 @@ public final class Partitions {
                 // And what an operation answered is the operation's to say. Asked of the arm it is
                 // taken as instead, every operation sharing an arm would carry one answer: a string
                 // of any length exists and a `Set<Bool>` of three does not, and both are counts.
+                // The same for a number taken of a moved value: what it can answer is the run of
+                // numbers the moved values come to ({@link NumericTerm#intrinsicBounds}), and
+                // every one of them has a date, so the operation's answer holds of them.
                 case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
                         .everyAnswerItCanGiveHasASourceValue(taken.operation());
                 // A string holding any number of the code points of a class is written by

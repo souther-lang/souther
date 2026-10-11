@@ -389,7 +389,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Map;Lsouther/compiler/check/Carrier;)"
                             + "Lsouther/compiler/partition/TermRealizations$Search;",
                     "how many years a date is looked for in, and whether they were all of them"),
-            Map.entry("souther.compiler.partition.TermRealizations#dateWhoseShiftedYearsAre("
+            Map.entry("souther.compiler.partition.TermRealizations#dateAnsweringMovedParts("
                             + "Ljava/util/List;Lsouther/compiler/check/Carrier;)"
                             + "Lsouther/compiler/partition/TermRealizations$Search;",
                     "how many years the first ask is walked over, and whether they were all of"
@@ -433,7 +433,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/check/RuleReadingSource;)"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "names the figure where no date was found and the years were not all walked"),
-            Map.entry("souther.compiler.partition.TermRealizations#onShiftedYears("
+            Map.entry("souther.compiler.partition.TermRealizations#onMovedDates("
                             + "Ljava/util/List;Lsouther/compiler/types/Type;"
                             + "Lsouther/compiler/check/Carrier;"
                             + "Lsouther/compiler/check/RuleReadingSource;)"

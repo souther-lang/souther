@@ -49,12 +49,11 @@ public final class DateShifts {
      */
     public static Step stepOf(Core e, Symbols symbols) {
         ValueName operation = Terms.operationOf(e);
-        if (operation == null) {
+        if (operation == null || Core.withoutStanding(e).type() != Type.Prim.DATE) {
             return null;
         }
-        LinearForm<DeclaredArgument> says =
-                DefaultBoundOperationFacts.get().answersAFormOfItsArguments(operation);
-        if (says == null || says.constant().signum() != 0 || says.coefs().size() != 2) {
+        LinearForm<DeclaredArgument> says = shapeOf(operation);
+        if (says == null) {
             return null;
         }
         List<Core> args = Terms.argsOf(e);
@@ -65,16 +64,47 @@ public final class DateShifts {
             if (at < 0 || at >= args.size()) {
                 return null;
             }
-            if (each.getKey().stands() == Type.Prim.DATE
-                    && each.getValue().compareTo(ExactRatio.ONE) == 0) {
+            if (each.getKey().stands() == Type.Prim.DATE) {
                 date = args.get(at);
-            } else if (each.getKey().stands() == Type.Prim.INT) {
-                days = daysOf(args.get(at), each.getValue(), symbols);
             } else {
-                return null;
+                days = daysOf(args.get(at), each.getValue(), symbols);
             }
         }
         return date == null || days == null ? null : new Step(days, date);
+    }
+
+    /**
+     * Whether {@code operation} is declared as a shift: its answer is its date argument and a
+     * count of days, and nothing else.
+     *
+     * <p>What the declaration says is the form of what is answered. That the call is defined
+     * wherever the date it answers is one — which is what a chain of these keeps as its
+     * definition ({@link souther.compiler.numeric.DateTranslation}) — is the operation's own run
+     * time, and is held of each operation this says yes to where the operations are listed.
+     */
+    public static boolean isAShift(ValueName operation) {
+        return shapeOf(operation) != null;
+    }
+
+    /** What {@code operation} is declared to answer where it is a shift, or null where it is not
+     *  one: a date weighed one, a count of days, and no constant. */
+    private static LinearForm<DeclaredArgument> shapeOf(ValueName operation) {
+        LinearForm<DeclaredArgument> says =
+                DefaultBoundOperationFacts.get().answersAFormOfItsArguments(operation);
+        if (says == null || says.constant().signum() != 0 || says.coefs().size() != 2) {
+            return null;
+        }
+        boolean date = false;
+        boolean days = false;
+        for (Map.Entry<DeclaredArgument, ExactRatio> each : says.coefs().entrySet()) {
+            if (each.getKey().stands() == Type.Prim.DATE
+                    && each.getValue().compareTo(ExactRatio.ONE) == 0) {
+                date = true;
+            } else if (each.getKey().stands() == Type.Prim.INT) {
+                days = true;
+            }
+        }
+        return date && days ? says : null;
     }
 
     /** What {@code written}, weighed by {@code weight}, comes to as a whole count of days, or null

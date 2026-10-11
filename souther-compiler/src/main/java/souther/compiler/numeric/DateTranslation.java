@@ -24,11 +24,43 @@ public record DateTranslation(long offsetDays, long first, long last) {
     private static final long FIRST_DAY = LocalDate.MIN.toEpochDay();
     private static final long LAST_DAY = LocalDate.MAX.toEpochDay();
 
+    /**
+     * Only a chain that is defined somewhere, at dates the calendar has and that move to dates it
+     * has: a translation whose first or last origin is no date, or moves to none, would say
+     * {@link #definedAt} of a day no program reaches.
+     */
     public DateTranslation {
         if (first > last) {
             throw new IllegalArgumentException(
                     "a translation defined at no date is not one: " + first + " > " + last);
         }
+        if (!inCalendar(first) || !inCalendar(last) || !movesIntoCalendar(first, offsetDays)
+                || !movesIntoCalendar(last, offsetDays)) {
+            throw new IllegalArgumentException("a translation is defined at dates and moves them"
+                    + " to dates: " + first + " to " + last + " moved by " + offsetDays);
+        }
+    }
+
+    private static boolean inCalendar(long day) {
+        return FIRST_DAY <= day && day <= LAST_DAY;
+    }
+
+    private static boolean movesIntoCalendar(long day, long by) {
+        try {
+            return inCalendar(Math.addExact(day, by));
+        } catch (ArithmeticException _) {
+            return false;
+        }
+    }
+
+    /** The first date this is defined at, moved. */
+    public LocalDate firstMoved() {
+        return LocalDate.ofEpochDay(first + offsetDays);
+    }
+
+    /** The last date this is defined at, moved. */
+    public LocalDate lastMoved() {
+        return LocalDate.ofEpochDay(last + offsetDays);
     }
 
     /** Moving nothing, at every date there is. */

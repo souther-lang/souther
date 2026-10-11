@@ -659,9 +659,13 @@ public sealed interface NumericTerm
     default NumericDomain.Bounds intrinsicBounds() {
         return switch (this) {
             case ValueOf _ -> NumericDomain.Bounds.OPEN;
+            // And what the value it was taken of can be: a date moved a year's days back is never
+            // the last date, so its year is never the last year, whatever the operation answers of
+            // any date.
             case TakenOf taken -> ResultRange.of(
                     DefaultBoundOperationFacts.get().boundsOnTheResult(taken.operation()),
-                    argument -> Optional.ofNullable(taken.arguments().at(argument.position())));
+                    argument -> Optional.ofNullable(taken.arguments().at(argument.position())))
+                    .meet(taken.takenAs().reachedFrom(taken.transformation()));
             // A count of some of a string's code points is never negative, as how many it holds is
             // not. What it is at most is the string's own length, which is another number of the
             // same place and is held where the two are realized together.
