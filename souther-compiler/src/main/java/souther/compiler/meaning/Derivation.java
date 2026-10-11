@@ -147,6 +147,28 @@ public sealed interface Derivation {
     }
 
     /**
+     * What a recursive helper a call names answers, read off its body where the call stands: what
+     * {@code inItsBody} states of the walk the body makes ({@link AcrossAWalk}).
+     */
+    record ARecursionsBody(ValueName.Helper helper, Derivation inItsBody) implements Derivation {
+
+        public ARecursionsBody {
+            Objects.requireNonNull(helper, "a call names a helper");
+            Objects.requireNonNull(inItsBody, "whose body states something");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(inItsBody);
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(inItsBody);
+        }
+    }
+
+    /**
      * What is read where a name stands for one of the values a container was written with, read once
      * for each of them: on an application the name is that value, so what is stated is what is
      * stated on the application handing it each ({@link Proposition.OnAnApplication}).
@@ -1347,6 +1369,178 @@ public sealed interface Derivation {
         }
     }
 
+    /**
+     * What a walk from a seed ends with, coming out on the side asked of it, read by induction over
+     * the elements walked: the step keeps what it carried where that came out one way, so the end
+     * comes out that way where the seed did or where the step's answer on some element did.
+     *
+     * <p>A recursion over a list by its head is such a walk taken from the other end: what it
+     * answers on the rest is what the step is carried, and what it answers on a list holding
+     * nothing is the seed.
+     *
+     * <p>Read as a step whose answer {@code F} turns on what it was carried only through that
+     * coming out on the same side. Where {@code F} holds whenever what was carried does, {@code F}
+     * is what it is where nothing held carried, or what was carried: so the end holds where the
+     * seed does or some element meets the step carried nothing that held ({@link
+     * ConditionJoin#EITHER}). Where {@code F} fails whenever what was carried does, the end holds
+     * where the seed does and every element meets the step carried something that held ({@link
+     * ConditionJoin#BOTH}) — no element failing it, which is what {@code walked} states denied.
+     *
+     * <p>Whether the walk ends, and in what order it hands the elements, is not a premise. Each
+     * element is walked once, and a run that does not end comes to no answer to be read.
+     *
+     * @param seed     what the seed comes out as
+     * @param walked   some element meeting the step's answer on it: carried nothing that held,
+     *                 where {@code how} is either; carried something that held and denied, where it
+     *                 is both
+     * @param keeps    the step's answer on the other of the two, which comes out as what was
+     *                 carried whatever the element is, and is what lets the walk be read so
+     * @param how      which of the two the step keeps
+     */
+    record AcrossAWalk(Derivation seed, SomeElementMeeting walked, Derivation keeps,
+                       ConditionJoin how) implements Derivation {
+
+        public AcrossAWalk {
+            Objects.requireNonNull(seed, "a walk starts from a seed");
+            Objects.requireNonNull(walked, "and walks the elements of something");
+            Objects.requireNonNull(keeps, "with a step that keeps what it carried");
+            Objects.requireNonNull(how, "one way or the other");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            Proposition start = numbering.of(seed);
+            Proposition some = numbering.of(walked);
+            return switch (how) {
+                case EITHER -> Proposition.any(List.of(start, some));
+                case BOTH -> Proposition.all(List.of(start, some.denied()));
+            };
+        }
+    }
+
+    /**
+     * What a search from a node answers, coming out on the side asked of it, read by induction over
+     * the nodes below it: some node reachable from it meeting what the body states with every call
+     * of itself supposed to have come out the other way ({@link Proposition.SomeReachable}).
+     *
+     * <p>The body is read twice. Read with every call it makes of itself on a node below supposed
+     * to have come out the way that leaves the answer to the node itself, it is what a node has to
+     * meet ({@code atANode}). Read with each of those calls standing for the search from the node it
+     * is on ({@link AReachedNode}), it is {@code unfoldedOnce}, which was found to be the node
+     * meeting that or some node below it from which the search does, whatever its parts are
+     * ({@link #unfoldsOnce}). Each call goes to an element of a container the node holds, so a run
+     * goes down a finite value, and where it ends every call it made answered what the search from
+     * its node does: the search is the least such answer, and the one the run gives.
+     *
+     * <p>Where {@code how} is {@link ConditionJoin#BOTH} it is read the other way round: the calls
+     * supposed to have held, and the answer holding where every reachable node meets that — no node
+     * failing it.
+     *
+     * @param node          where the node the search is from stands
+     * @param through       the fields of a node whose elements are the nodes below it
+     * @param atANode       the body with every call of itself supposed to have come out the way that
+     *                      leaves the answer to the node: failed where {@code how} is either, held
+     *                      where it is both
+     * @param below         whether each container under {@code through} on the node holds
+     *                      something, where each is measured
+     * @param unfoldedOnce  the body with each call of itself standing for the search from its node
+     * @param how           which side a call of itself coming out the other way leaves to the node
+     */
+    record ATreeSearched(TermPath node, List<String> through, Derivation atANode,
+                         Optional<List<Derivation>> below, Derivation unfoldedOnce,
+                         ConditionJoin how) implements Derivation {
+
+        public ATreeSearched {
+            Objects.requireNonNull(node, "a search is from a node");
+            through = List.copyOf(through);
+            Objects.requireNonNull(atANode, "of what a node meets");
+            below = below.map(List::copyOf);
+            Objects.requireNonNull(unfoldedOnce, "found by reading the body one step down");
+            Objects.requireNonNull(how, "one way or the other");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            Proposition read = numbering.of(atANode);
+            Optional<Proposition> noneBelow = below.map(each -> Proposition.all(each.stream()
+                    .map(one -> numbering.of(one).denied()).toList()));
+            return searchFrom(node, node, through, read, noneBelow, how);
+        }
+
+        /**
+         * Whether {@code unfolded}, the body read with each call of itself on a node below standing
+         * for the search from there, says what the search from the node at {@code node} does one
+         * step down, whatever its parts are: the node meeting {@code atANode} or some node below
+         * from which the search does — or, the other way round, the node meeting it and every node
+         * below doing so.
+         *
+         * <p>Which quantifier a container of nodes below is read under is part of what is compared:
+         * some node below and every node below are two parts, and one is never taken for the other.
+         */
+        public static boolean unfoldsOnce(Proposition unfolded, Proposition atANode, TermPath node,
+                                          List<String> through, ConditionJoin how) {
+            List<Proposition> parts = new ArrayList<>();
+            parts.add(atANode);
+            for (String field : through) {
+                Proposition reached = searchFrom(node.then(field).element(), node, through,
+                        atANode, Optional.empty(), how);
+                DecisionSubject nodes = new DecisionSubject.AnInput(node.then(field));
+                parts.add(switch (how) {
+                    case EITHER -> new Proposition.Some(nodes, reached, true);
+                    case BOTH -> new Proposition.Some(nodes, reached.denied(), false);
+                });
+            }
+            Proposition expected = switch (how) {
+                case EITHER -> Proposition.any(parts);
+                case BOTH -> Proposition.all(parts);
+            };
+            return TruthTable.holdsWhateverItsPartsAre(Proposition.any(List.of(
+                    Proposition.all(List.of(unfolded, expected)),
+                    Proposition.all(List.of(unfolded.denied(), expected.denied())))));
+        }
+    }
+
+    /**
+     * A call a search makes of itself on a node below the one it is from, standing for the search
+     * from there while the body is read one step down ({@link ATreeSearched}).
+     *
+     * @param at       where the node the call is on stands
+     * @param from     where the node the search is read from stands
+     * @param through  the fields of a node whose elements are the nodes below it
+     * @param atANode  the body with every call of itself supposed to have come out the way that
+     *                 leaves the answer to the node
+     * @param how      which side that is
+     */
+    record AReachedNode(TermPath at, TermPath from, List<String> through, Derivation atANode,
+                        ConditionJoin how) implements Derivation {
+
+        public AReachedNode {
+            Objects.requireNonNull(at, "a call is on a node");
+            Objects.requireNonNull(from, "below the one the search is read from");
+            through = List.copyOf(through);
+            Objects.requireNonNull(atANode, "of what a node meets");
+            Objects.requireNonNull(how, "one way or the other");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return searchFrom(at, from, through, numbering.of(atANode), Optional.empty(), how);
+        }
+    }
+
+    /** The search from the node at {@code at} coming out as the body read with every call of itself
+     *  supposed to have come out the way {@code how} leaves to the node, {@code read}, says. */
+    private static Proposition searchFrom(TermPath at, TermPath writtenAt, List<String> through,
+                                          Proposition read, Optional<Proposition> noneBelow,
+                                          ConditionJoin how) {
+        return switch (how) {
+            case EITHER -> new Proposition.SomeReachable(at, writtenAt, through, read, noneBelow,
+                    true);
+            case BOTH -> new Proposition.SomeReachable(at, writtenAt, through, read.denied(),
+                    noneBelow, false);
+        };
+    }
+
     // The grounds: a part made from what one kind of thing says, and nothing else.
 
     /** A truth, a container's holding anything or an optional's holding a value, written out. */
@@ -1355,6 +1549,40 @@ public sealed interface Derivation {
         @Override
         public Proposition conclusion(Conclusion numbering) {
             return new Proposition.Always(holds);
+        }
+    }
+
+    /**
+     * What a walk carried into its step, on the side the walk's end is asked about: what the
+     * concluding supposes it came out as ({@link Supposing}), and a part nothing read where it
+     * supposes nothing of it.
+     */
+    record WhatAWalkCarried(ACarriedValue carried) implements Derivation {
+
+        public WhatAWalkCarried {
+            Objects.requireNonNull(carried, "a walk carried something");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.carried(carried);
+        }
+    }
+
+    /**
+     * What {@code step} states where what a walk carried into it came out as {@code holds}: the
+     * step read once, and concluded under each way its walk needs it ({@link AcrossAWalk}).
+     */
+    record Supposing(Derivation step, ACarriedValue carried, boolean holds) implements Derivation {
+
+        public Supposing {
+            Objects.requireNonNull(step, "something is read under a supposition");
+            Objects.requireNonNull(carried, "of something a walk carried");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.supposing(carried, holds).of(step);
         }
     }
 

@@ -448,6 +448,12 @@ public final class BoundOperationFacts {
         return held == null ? null : held.source();
     }
 
+    /** The count and the list {@code operation} answers the elements of that list from that index
+     *  on of, or null where nothing says it does. */
+    public BoundOperationFact.HoldsTheElementsFrom holdsTheElementsFrom(ValueName operation) {
+        return one(BoundOperationFact.HoldsTheElementsFrom.class, operation);
+    }
+
     /** Which argument {@code operation} puts in which, or null where it puts nothing in. Read by
      *  the proofs of what the library's written operations build, and by no reader of a
      *  condition. */

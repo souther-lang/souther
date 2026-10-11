@@ -642,27 +642,71 @@ public final class InputReads {
      */
     public InputReads calling(ValueName.Behavior behavior, CalledBody body, List<Core> args,
                               DeclarationNewtypes newtypes) {
-        if (applied.entered().contains(behavior) || args.size() != body.parameters().size()) {
+        if (applied.entered().contains(behavior)) {
             return null;
-        }
-        BindingEnvironment inside = names.entering(body.elements());
-        Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
-        for (int at = 0; at < args.size(); at++) {
-            Core.Binder parameter = body.parameters().get(at);
-            if (parameter == null || parameter.binding() == null) {
-                continue;
-            }
-            if (pathOf(args.get(at), newtypes) instanceof PathResolution.At(TermPath stands)) {
-                inside = inside.naming(parameter.binding(), stands);
-            } else {
-                given.put(parameter.binding(), new Denotation(args.get(at), this));
-            }
         }
         Set<ValueName.Behavior> entered = new HashSet<>(applied.entered());
         entered.add(behavior);
+        return calledWith(body, args, names.entering(body.elements()), entered, newtypes);
+    }
+
+    /**
+     * Where one step of a recursion over a list is read: the body a call of it names, with its
+     * parameters standing for what the call handed as {@link #calling} has them, and {@code element}
+     * standing at {@code at}, an element of the list the recursion walks — or null where the call
+     * hands another number of values than the body takes.
+     *
+     * <p>What the step's own calls of the recursion answer is no binding here; a reader of the step
+     * says what it takes them to answer.
+     */
+    public InputReads steppingThrough(CalledBody body, List<Core> args, BindingId element,
+                                      TermPath at, DeclarationNewtypes newtypes) {
+        return calledWith(body, args,
+                names.entering(body.elements()).overStandingCalls().naming(element, at),
+                applied.entered(), newtypes);
+    }
+
+    /**
+     * Where the body of a search from a node is read: the body a call of it names, with its
+     * parameters standing for what the call handed as {@link #calling} has them — or null where the
+     * call hands another number of values than the body takes.
+     *
+     * <p>What the body's own calls of the search answer is no binding here; a reader of the body
+     * says what it takes them to answer.
+     */
+    public InputReads searching(CalledBody body, List<Core> args, DeclarationNewtypes newtypes) {
+        return calledWith(body, args, names.entering(body.elements()).overStandingCalls(),
+                applied.entered(), newtypes);
+    }
+
+    /**
+     * Where {@code body} is read in {@code entering} with its parameters standing for what a call
+     * handed it, {@code entered} the bodies entered on the way — or null where the call hands
+     * another number of values than the body takes. A parameter handed a value at a position
+     * stands at it, and one handed anything else is given it as read here.
+     */
+    private InputReads calledWith(CalledBody body, List<Core> args, BindingEnvironment entering,
+                                  Set<ValueName.Behavior> entered, DeclarationNewtypes newtypes) {
+        if (args.size() != body.parameters().size()) {
+            return null;
+        }
+        BindingEnvironment inside = entering;
+        Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
+        for (int i = 0; i < args.size(); i++) {
+            Core.Binder parameter = body.parameters().get(i);
+            if (parameter == null || parameter.binding() == null) {
+                continue;
+            }
+            if (pathOf(args.get(i), newtypes) instanceof PathResolution.At(TermPath stands)) {
+                inside = inside.naming(parameter.binding(), stands);
+            } else {
+                given.put(parameter.binding(), new Denotation(args.get(i), this));
+            }
+        }
         return new InputReads(inside, alternatives, declared,
                 souther.compiler.carrier.Membership.none(),
-                new Applied(applied.handed(), applied.readings(), applied.taken(), given, entered));
+                new Applied(applied.handed(), applied.readings(), applied.taken(), given,
+                        entered));
     }
 
     /** Whether the body of {@code behavior} was entered on the way here ({@link #calling}). */

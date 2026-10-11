@@ -234,6 +234,8 @@ public final class OperationFacts {
             // And in the order of the list it was handed, which is what a reader writing the
             // answer out itself takes.
             about("List", "map", new OperationFact.KeepsTheOrderOf(CONTAINER)),
+            // Which elements of its list a drop keeps: the ones from the count on.
+            about("List", "drop", new OperationFact.HoldsTheElementsFrom(at(0), at(1))),
             about("List", "mapIndexed", maps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("Map", "mapValues", maps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("List", "filter", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),

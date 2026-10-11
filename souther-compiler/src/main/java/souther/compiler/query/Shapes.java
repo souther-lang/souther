@@ -2,7 +2,9 @@ package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.ARecursion;
 import souther.compiler.check.BehaviorAnswers;
+import souther.compiler.check.CalledBody;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.BoundaryConstraints;
@@ -2141,7 +2143,19 @@ public final class Shapes {
      * reader taking one depends on the bodies of the behaviors it asks about and on nothing else.
      */
     public static BehaviorAnswers behaviorAnswers(Db db) {
-        return behavior -> Optional.ofNullable(db.ask(new Adequacy.BodyAtACall(behavior)).value());
+        return new BehaviorAnswers() {
+
+            @Override
+            public Optional<CalledBody> bodyOf(ValueName.Behavior behavior) {
+                return Optional.ofNullable(db.ask(new Adequacy.BodyAtACall(behavior)).value());
+            }
+
+            @Override
+            public Optional<ARecursion> recursionOf(ValueName.Helper recursion) {
+                return Optional.ofNullable(db.ask(new Bodies.RecursionAtACall(recursion.module(),
+                        recursion.name())).value());
+            }
+        };
     }
 
     /**
