@@ -1050,6 +1050,18 @@ public sealed interface BlockReason {
     record ComparisonOverARun() implements ReadToEndWithoutLine {}
 
     /**
+     * The comparison draws its line on what a division by a written number leaves of a number made
+     * of the input's, which divides none of the positions it is made of.
+     *
+     * <p>Its own word beside {@link ComparisonRelatingTwoValues} and {@link ComparisonOverARun}.
+     * Nothing relates two values and nothing is read over a run: the rule is read to the end, and
+     * what it is about is a remainder, which runs from nought to one below the divisor whatever the
+     * values it is taken of come to. Its border is drawn there, so what is absent is a class of any
+     * position and not a limit of this compiler's.
+     */
+    record ComparisonOnARemainder() implements ReadToEndWithoutLine {}
+
+    /**
      * The rule holds this position to the values it admits, and places no end on them.
      *
      * <p>What a reader is owed, and it is a fact they act on: the value written here has to be one

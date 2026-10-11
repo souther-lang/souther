@@ -104,6 +104,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 "NON_AFFINE_PRODUCT/UNAFFECTED");
         table.put("NonAffineArithmetic:DIVISION_BY_NON_CONSTANT_VALUE",
                 "NON_CONSTANT_DIVISOR/UNAFFECTED");
+        table.put("NonAffineArithmetic:REMAINDER_BY_NON_CONSTANT_VALUE",
+                "NON_CONSTANT_REMAINDER_DIVISOR/UNAFFECTED");
         // An end a choice in the rule left open. Its own word and not the one above: the rule at
         // this position was read, and what an author acts on is the branch written beside it. A run
         // allowed more meets it again — the reading of ends stopped on a form and not at a figure.
@@ -191,6 +193,9 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // values at one come to has nothing to wait for — the position has no class from it and
         // its border is drawn.
         table.put("ComparisonOverARun", "RULE_ABOUT_A_RUN/-");
+        // And its own word beside that one: the line is drawn on what a division leaves of the
+        // values, which is a number of its own and no run of any position's.
+        table.put("ComparisonOnARemainder", "RULE_ABOUT_A_REMAINDER/-");
         // A row of its own, and here is what it is for. The three above are rules that leave the
         // position where they found it: the quantity is empty, the line falls outside it, or the
         // number is over a run. This one holds the position to the values it admits, and everything
@@ -475,6 +480,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                         NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES),
                 new BlockReason.NonAffineArithmetic(
                         NonAffineOperation.DIVISION_BY_NON_CONSTANT_VALUE),
+                new BlockReason.NonAffineArithmetic(
+                        NonAffineOperation.REMAINDER_BY_NON_CONSTANT_VALUE),
                 new BlockReason.EndLeftOpenByAChoice(),
                 new BlockReason.ValueRuleLeftOpenByAChoice(),
                 new BlockReason.PatternTooCostly(),
@@ -491,6 +498,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.ComparisonLineTurningNothing(),
                 new BlockReason.ComparisonRelatingTwoValues(),
                 new BlockReason.ComparisonOverARun(),
+                new BlockReason.ComparisonOnARemainder(),
                 new BlockReason.RuleRestrictingToAdmittedValues(),
                 new BlockReason.PredicateTellingNothingApart(),
                 new BlockReason.ClassesNotComposed(),

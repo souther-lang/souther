@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
@@ -22,6 +23,8 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -51,7 +54,8 @@ import java.util.Set;
  * what a variant costs is the answers this interface asks for below, and nothing downstream gains
  * an arm.
  */
-public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.HowMany {
+public sealed interface BorderQuantity
+        permits LinearQuantity, BorderQuantity.HowMany, BorderQuantity.RemainderOfAForm {
 
     /**
      * The number one position holds, which is the position's own values.
@@ -991,6 +995,132 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
         }
     }
 
+    /**
+     * What a division by a written number leaves of a form of a row's numbers: a whole number from
+     * nought to one below the divisor.
+     *
+     * <p>No form over the row's numbers and no line on one. Which rows stand at a value of it is
+     * which values of the form come round to it, every divisor along, so a border on it divides
+     * the remainders and says nothing of where on the form a row stands. The form is what a row is
+     * read at; the quantity is what the form leaves.
+     *
+     * <p>The dividend's constant is the quantity's own and not the level's: a level is a remainder,
+     * and moving the dividend by one moves every remainder by one. So it is held beside the form,
+     * which carries none.
+     *
+     * @param dividend the form the division is of, with no constant
+     * @param shift what is added to the form before it is divided, as a whole number
+     * @param divisor the number it is divided by, above nought
+     */
+    record RemainderOfAForm(String behavior, OverAForm dividend, BigInteger shift,
+                            BigInteger divisor) implements BorderQuantity {
+
+        public RemainderOfAForm {
+            if (behavior == null || dividend == null || shift == null || divisor == null
+                    || divisor.signum() <= 0) {
+                throw new IllegalArgumentException("a remainder is of a form, by a divisor above"
+                        + " nought: " + dividend + " by " + divisor);
+            }
+            ExactRatio weights = dividend.form().coefs().values().stream()
+                    .filter(each -> !each.isWhole()).findFirst().orElse(null);
+            if (weights != null) {
+                throw new IllegalArgumentException("a remainder is of whole numbers, and this form"
+                        + " weighs a position by " + weights);
+            }
+        }
+
+        /** What the remainder runs between whatever the form comes to. */
+        NumericDomain.Bounds runs() {
+            return new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+                    Endpoint.inclusive(new Count(new BigDecimal(divisor.subtract(BigInteger.ONE)))));
+        }
+
+        /** The dividend with its constant, which is the form a rule wrote. */
+        LinearForm<NumericTerm> wholeDividend() {
+            return new LinearForm<>(ExactRatio.of(shift), dividend.form().coefs());
+        }
+
+        /** Every remainder a divisor leaves: nought to one below it, one apart. */
+        @Override
+        public LevelSpace levels() {
+            return LevelSpace.steppingBy(ExactRatio.ONE);
+        }
+
+        /**
+         * What the remainder comes to at a row: the dividend there, less every whole turn of the
+         * divisor.
+         *
+         * <p>The dividend as mathematics has it, read off the form. Whether the run computed it
+         * without leaving what an {@code Int} holds is not a question about the form: a form keeps
+         * what an expression comes to and not the order its steps were taken in, so {@code a - d}
+         * at {@code -1} and the least {@code Int} is held there as a product that is out of range
+         * and is a difference that is not. What says a row ran is the run, and a row is certified
+         * from it ({@code Generator}); this says where the numbers the row holds stand.
+         */
+        @Override
+        public Stands standsAt(Criterion where, Observation row) {
+            return switch (dividend.valuesOf(dividend.read(row))) {
+                case ValuesAtARow.NoneHere _ -> Stands.NO;
+                case ValuesAtARow.CouldNotTell(Set<ReadingGap> why) -> Stands.couldNotTell(why);
+                case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
+                        switch (OrderedAffineBoundary.at(wholeDividend(), values)) {
+                            case ExactAnswer.Unheld<ExactRatio> unheld ->
+                                    Stands.couldNotTell(Set.of(ReadingGap.of(unheld.why())));
+                            case ExactAnswer.Held<ExactRatio> held ->
+                                    held.value().isWhole() && held.value().floor()
+                                            instanceof ExactAnswer.Held<BigInteger> whole
+                                            && where.holds(new Level.OfTheQuantity(ExactRatio.of(
+                                                    whole.value().mod(divisor))))
+                                            ? Stands.YES : Stands.NO;
+                        };
+            };
+        }
+
+        @Override
+        public void lookAt(Observation row) {
+            dividend.lookAt(row);
+        }
+
+        @Override
+        public Standing standingAt(Criterion where) {
+            return new Standing.OfARemainder(wholeDividend(),
+                    LinearQuantity.answeredOn(dividend.on()), levels(), divisor, where);
+        }
+
+        @Override
+        public String behavior() {
+            return behavior;
+        }
+
+        @Override
+        public String named() {
+            return new AxisId(behavior, left()).toString();
+        }
+
+        /** The call as an author would write it. */
+        @Override
+        public String left() {
+            String form = OrderedAffineBoundary.spelled(dividend.form().coefs());
+            String moved = shift.signum() == 0 ? form
+                    : shift.signum() > 0 ? form + " + " + shift : form + " - " + shift.negate();
+            return "Int.floorMod(" + moved + ", " + divisor + ")";
+        }
+
+        @Override
+        public String writtenAt(Level level) {
+            if (!(level instanceof Level.OfTheQuantity remainder)) {
+                throw new IllegalStateException(
+                        "a remainder was asked to write a level that is not a number: " + level);
+            }
+            return remainder.at().spelled();
+        }
+
+        @Override
+        public BoundaryTarget.Shape shape() {
+            return BoundaryTarget.Shape.REMAINDER_OF_A_FORM;
+        }
+    }
+
     /** How this quantity's own values are ordered, and which of them it can take. */
     LevelSpace levels();
 
@@ -1011,6 +1141,9 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
             // What a count runs between is none to as many as the container holds, whatever any
             // rule about the count says.
             case Apart _, OverAForm _, HowMany _ -> false;
+            // What a remainder runs between is nought to one below its divisor, whatever any rule
+            // about it says.
+            case RemainderOfAForm _ -> false;
         };
     }
 
@@ -1035,7 +1168,7 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
     default NumbersAskedFor asksOfEachTerm(Criterion where) {
         return switch (this) {
             case OfACoordinate _ -> NumbersAskedFor.of(where.region());
-            case Apart _, OverAForm _, HowMany _ ->
+            case Apart _, OverAForm _, HowMany _, RemainderOfAForm _ ->
                     NumbersAskedFor.onlyTogether(new QuantityInRegion(this, where.region()));
         };
     }
@@ -1076,6 +1209,7 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
                 yield key == null ? null : key.key();
             }
             case HowMany count -> count.left();
+            case RemainderOfAForm remainder -> remainder.left();
         };
     }
 
@@ -1086,7 +1220,7 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
     default ExactRatio per() {
         return switch (this) {
             case LinearQuantity form -> QuantityKey.per(form.direction());
-            case HowMany _ -> ExactRatio.ONE;
+            case HowMany _, RemainderOfAForm _ -> ExactRatio.ONE;
         };
     }
 
@@ -1101,6 +1235,7 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
         return switch (this) {
             case LinearQuantity form -> form.terms();
             case HowMany count -> count.allNumbers();
+            case RemainderOfAForm remainder -> remainder.dividend().terms();
         };
     }
 
@@ -1113,6 +1248,7 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
             // sum is left unbounded: what the rules leave it is no more than that.
             case HowMany count -> count.against.coefs().isEmpty() ? NONE_OR_MORE
                     : NumericDomain.Bounds.OPEN;
+            case RemainderOfAForm remainder -> remainder.runs();
         };
     }
 
@@ -1128,6 +1264,9 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
             // count of elements: it leaves the count what a count runs between.
             case HowMany count -> new NumericDomain.FormProjection.Within(
                     count.against.coefs().isEmpty() ? NONE_OR_MORE : NumericDomain.Bounds.OPEN);
+            // Whatever the rules leave the form, a remainder stays below its divisor.
+            case RemainderOfAForm remainder ->
+                    new NumericDomain.FormProjection.Within(remainder.runs());
         };
     }
 
@@ -1138,7 +1277,7 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
     default List<FilingCoordinate> filedAt() {
         return switch (this) {
             case LinearQuantity form -> AffineReading.filedAt(form.direction().coefs().keySet());
-            case HowMany _ -> AffineReading.filedAt(numbers());
+            case HowMany _, RemainderOfAForm _ -> AffineReading.filedAt(numbers());
         };
     }
 
@@ -1154,17 +1293,38 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
     default boolean singlesWithSides() {
         return switch (this) {
             case LinearQuantity _ -> false;
-            case HowMany _ -> true;
+            // One number, whose values either side of the one named are the nearest rows that do
+            // not leave it, as a count's are.
+            case HowMany _, RemainderOfAForm _ -> true;
+        };
+    }
+
+    /**
+     * Why a rule drawn on this quantity divides none of the positions it is made of, in the word
+     * that is true of what the quantity is.
+     *
+     * <p>Which of three things a reader who found no partition is told: that the rule relates
+     * positions, that it is about what a run of values comes to, or that it is about what a
+     * division leaves of them. Asked of the quantity because only it knows which it is.
+     */
+    default BlockReason.ReadToEndWithoutLine whyItDividesNoPosition() {
+        return switch (this) {
+            case RemainderOfAForm _ -> new BlockReason.ComparisonOnARemainder();
+            case LinearQuantity _, HowMany _ -> readOverARun()
+                    ? new BlockReason.ComparisonOverARun()
+                    : new BlockReason.ComparisonRelatingTwoValues();
         };
     }
 
     /** Whether this is a number read over a run of values rather than a form over positions,
      *  which is a different thing to tell a reader who found no partition. */
-    default boolean readOverARun() {
+    private boolean readOverARun() {
         return switch (this) {
             case LinearQuantity form -> form.direction().coefs().keySet().stream()
                     .anyMatch(term -> term.atOnePosition() == null);
             case HowMany _ -> true;
+            case RemainderOfAForm remainder -> remainder.dividend().direction().coefs().keySet()
+                    .stream().anyMatch(term -> term.atOnePosition() == null);
         };
     }
 
@@ -1176,7 +1336,7 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
         return switch (this) {
             case LinearQuantity form -> form.direction().coefs().size() == 1
                     ? form.carrierOf(form.direction().coefs().keySet().iterator().next()) : null;
-            case HowMany _ -> null;
+            case HowMany _, RemainderOfAForm _ -> null;
         };
     }
 
@@ -1268,6 +1428,8 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
             case Apart _ -> false;
             // How many, which is the count's and not a position's.
             case HowMany _ -> true;
+            // What a division leaves, which is the call's and not a position's.
+            case RemainderOfAForm _ -> true;
         };
     }
 

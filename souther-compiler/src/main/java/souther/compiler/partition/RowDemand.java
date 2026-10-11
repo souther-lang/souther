@@ -661,6 +661,10 @@ public sealed interface RowDemand {
          *  each adds up to over them. */
         A_NUMBER_OVER_ELEMENTS,
 
+        /** What a division by a written number leaves of a form of several numbers, which no
+         *  position holds and no composer writes a row at when it is what a way passes. */
+        A_REMAINDER_OF_A_FORM,
+
         /** Two subjects of a row being one value. */
         TWO_SUBJECTS_ONE_VALUE,
 

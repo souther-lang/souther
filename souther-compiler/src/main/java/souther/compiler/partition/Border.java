@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NarrowedBounds;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -13,6 +14,7 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -566,7 +568,21 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      */
     public static Border at(BoundaryTarget target, LineOrigin origin, NumericDomain.Bounds within,
                             ExactAnswer<List<Parting>> parted, NarrowedBounds narrowed) {
+        return at(target, origin, within, null, parted, narrowed);
+    }
+
+    /**
+     * The same, told the class of whole numbers the declarations leave the quantity's value in, or
+     * null where they leave it no class.
+     *
+     * <p>The ends of a range say nothing of the numbers between them, so a point inside the range
+     * that is not of the class is one the rules refuse all the same.
+     */
+    public static Border at(BoundaryTarget target, LineOrigin origin, NumericDomain.Bounds within,
+                            Congruences class_, ExactAnswer<List<Parting>> parted,
+                            NarrowedBounds narrowed) {
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
+        Admissible admissible = new Admissible(reach, class_);
         LevelSpace space = target.levels();
         Level cut = target.at();
         if (!reaches(cut, () -> seamOf(space, cut, origin), origin.lineFacts().claim(),
@@ -590,11 +606,11 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                 }));
         Map<DomainPoint, PointAnswer> demands = new LinkedHashMap<>();
         if (drawnByAnInvariant(origin)) {
-            aBound(demands, origin, target.of(), cut, space, reach,
+            aBound(demands, origin, target.of(), cut, space, admissible,
                     arranged.map(Arranged::arrangement));
             return new Border(target, origin, demands);
         }
-        againstTheLine(demands, origin, cut, space, reach);
+        againstTheLine(demands, origin, cut, space, admissible);
         // Each side runs from the point against the line on that side, where there is one, and from
         // the line itself where there is not: the values one step away are not there to be left out,
         // and everything past the line is then as far from the border as anything gets.
@@ -636,7 +652,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * is and whether the rule holds there ({@link PointRole#of}).
      */
     private static void againstTheLine(Map<DomainPoint, PointAnswer> demands, LineOrigin origin,
-                                       Level cut, LevelSpace space, NumericDomain.Bounds reach) {
+                                       Level cut, LevelSpace space, Admissible reach) {
         switch (origin.lineFacts().claim()) {
             case ComparisonClaim.Cut order -> {
                 // The same `at` is the point inside the line of `<= 3000` and the point outside the
@@ -1119,10 +1135,19 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * level is one a row can be written at — {@code value >= 10} under {@code x < 10} would otherwise
      * be owed a 9 the record refuses.
      *
+     * <p><b>The point beside a line is the carrier's neighbour of it, and what the rules leave is
+     * asked of that neighbour and does not move it.</b> With {@code value} held to the multiples of
+     * a thousand, the number beside {@code 1950000} is {@code 1950001}: no value of the type, so no
+     * row is owed there ({@link NotOwedReason#THE_RULES_REFUSE_IT}). The nearest value the type does
+     * hold, {@code 1951000}, is a row of the run that side of the line owes and is chosen there, from
+     * the members of the class. Taken the other way and the neighbour read off what the rules leave,
+     * the border's points and the runs between its lines would be two readings of one order — a run
+     * ending at the number before a point that is no number of it.
+     *
      * @param isTheThreshold whether this point is the threshold itself, where the quantity takes it
      */
     private static PointAnswer pointAt(LevelSpace space, Level cut, Towards towards,
-                                       boolean isTheThreshold, NumericDomain.Bounds reach) {
+                                       boolean isTheThreshold, Admissible reach) {
         if (isTheThreshold) {
             switch (space.attainable(cut)) {
                 case ExactAnswer.Unheld<Boolean> unheld -> {
@@ -1161,9 +1186,40 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * one and no place is it, and what the range says about a number does not depend on which
      * arithmetic it is asked in.
      */
-    private static boolean admitted(NumericDomain.Bounds reach, Level level) {
-        ExactRatio number = level.asANumber();
-        return number == null ? reach.admits(level.asAPlace()) : reach.admits(number);
+    private static boolean admitted(Admissible reach, Level level) {
+        return reach.admits(level);
+    }
+
+    /**
+     * What the rules leave a quantity's value, as far as they were read: the range it runs in and
+     * the class of whole numbers it is held to.
+     *
+     * <p>Both are consequences of the declarations, so a number outside either is one the rules
+     * refuse. A number inside both is not shown to be a value the rules leave — another rule may
+     * refuse it — which is why this is asked only for the refusal ({@link #admits}) and never read
+     * as the presence of a row.
+     *
+     * @param bounds the range the value runs in
+     * @param necessary the class every value is of, or null where none is known
+     */
+    private record Admissible(NumericDomain.Bounds bounds, Congruences necessary) {
+
+        /** Whether a row may be written at {@code level} as far as these two say. */
+        boolean admits(Level level) {
+            ExactRatio number = level.asANumber();
+            if (number == null) {
+                return bounds.admits(level.asAPlace());
+            }
+            return bounds.admits(number) && inTheClass(number);
+        }
+
+        private boolean inTheClass(ExactRatio number) {
+            if (necessary == null || !number.isWhole()
+                    || !(number.floor() instanceof ExactAnswer.Held<BigInteger> whole)) {
+                return true;
+            }
+            return whole.value().mod(necessary.modulus()).equals(necessary.residue());
+        }
     }
 
     /**
@@ -1198,7 +1254,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      */
     private static void aBound(Map<DomainPoint, PointAnswer> demands, LineOrigin origin,
                                BorderQuantity of, Level cut, LevelSpace space,
-                               NumericDomain.Bounds within,
+                               Admissible admissible,
                                ExactAnswer<QuantityArrangement> arrangement) {
         Towards kept = satisfyingSide(origin);
         boolean holdsHere = holdsAtTheValue(origin);
@@ -1208,7 +1264,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // line falls inside that — so the range is no account of where this rule stops, and
         // requiring the two to agree would refuse every relation a model states.
         if (of.aBoundOnItEndsItsRange()) {
-            requireItIsTheEndItKeeps(within, space, cut, kept, origin);
+            requireItIsTheEndItKeeps(admissible.bounds(), space, cut, kept, origin);
         }
         // The value the rule wrote is a value a row can hold exactly where the bound admits it. A
         // bound refusing its own threshold keeps the values from one step in, and that step is the
@@ -1217,7 +1273,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                 : new DomainPoint.BesideTheLine(kept);
         DomainPoint outside = holdsHere ? new DomainPoint.BesideTheLine(kept.opposite())
                 : new DomainPoint.AtTheLine();
-        PointAnswer on = againstABound(space, cut, kept, holdsHere, within);
+        PointAnswer on = againstABound(space, cut, kept, holdsHere, admissible);
         demands.put(inside, on);
         demands.put(outside, new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
         // The partition the bound bounds, without the value against the line.
@@ -1260,7 +1316,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * side the bound keeps, which is the question the point is about anyway.
      */
     private static PointAnswer againstABound(LevelSpace space, Level cut, Towards kept,
-                                             boolean holdsHere, NumericDomain.Bounds within) {
+                                             boolean holdsHere, Admissible within) {
         if (holdsHere) {
             return pointAt(space, cut, kept, true, within);
         }

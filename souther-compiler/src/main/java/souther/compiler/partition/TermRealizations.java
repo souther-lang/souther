@@ -13,6 +13,7 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.DateTranslation;
@@ -23,6 +24,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.ObservedValue;
@@ -1866,11 +1868,50 @@ final class TermRealizations {
             }
             case null -> leaves = null;
         }
+        // A value held to a class is a value of the class, so what is offered are its members: the
+        // end of a run is one only by luck, and a place the class refuses is no candidate whatever
+        // else is asked of it afterwards.
+        Congruences members = orders.term() instanceof NumericTerm.ValueOf value && within != null
+                ? within.valueClassAt(value) : null;
+        if (members != null) {
+            return membersOnTheOrder(wanted, orders, members, leaves, ofTheRun);
+        }
         Place found = Criterion.Within.somewhereIn(wanted.region(orders.answered()),
                 Towards.ABOVE, orders.answered(),
                 leaves == null ? null : leaves.min(), leaves == null ? null : leaves.max());
         return new Tried(found == null ? List.of() : List.of(found),
                 new Remainder.SomeOf(ofTheRun));
+    }
+
+    /**
+     * The members of {@code members} that the runs of {@code wanted} hold inside what the rules
+     * leave the number, nearest the end the search starts from, run by run.
+     *
+     * <p>More than one, so that what is refused of the first is not the end of the search: the next
+     * member is the one a caller reads back and tries. A run holding more than are offered says so,
+     * for the figure it was cut at.
+     */
+    private static Tried membersOnTheOrder(NumericSet wanted, TermOrders orders,
+                                           Congruences members, NumericDomain.Bounds leaves,
+                                           Set<CompositionRepertoire> ofTheRun) {
+        Carrier carrier = orders.answered();
+        List<Place> offered = new ArrayList<>();
+        boolean more = false;
+        for (LevelInterval look : Criterion.Within.runsInside(wanted.region(carrier), carrier,
+                leaves == null ? null : leaves.min(), leaves == null ? null : leaves.max())) {
+            OrderedInterval run = LevelRealizer.runOf(look, carrier);
+            if (run == null) {
+                continue;
+            }
+            ClassMembers inside = ClassMembers.within(members,
+                    new NumericDomain.Bounds(run.low(), run.high()), Towards.ABOVE,
+                    CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED.maximum());
+            offered.addAll(inside.notApart(PlacesApart.NONE));
+            more |= inside.stoppedShort();
+        }
+        return new Tried(offered, more
+                ? new Remainder.StoppedAt(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED)
+                : new Remainder.SomeOf(ofTheRun));
     }
 
     /**

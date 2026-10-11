@@ -94,6 +94,8 @@ public sealed interface Proposition {
             case Quantity.SumOver(TermPath summed, var each) ->
                     isAnElementOf(summed, container) || each.coefs().keySet().stream()
                             .anyMatch(one -> mayBeAnElementOf(one, container));
+            case Quantity.RemainderOfADividend(var dividend, var _) -> dividend.coefs().keySet()
+                    .stream().anyMatch(term -> isAnElementOf(term.subjectPath(), container));
         };
     }
 
@@ -490,7 +492,7 @@ public sealed interface Proposition {
         return switch (quantity) {
             case DecisionAtom.OfAnAnswer _ -> true;
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
-                 Quantity.CodePointsOfAPiece _ -> false;
+                 Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _ -> false;
             case Quantity.HowManyMeet count -> aboutAnAnswer(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream()
                     .anyMatch(Proposition::aboutAnAnswer);

@@ -200,6 +200,8 @@ public final class ReportedReason {
                 case PRODUCT_OF_NON_CONSTANT_VALUES -> UndividedPosition.Reason.NON_AFFINE_PRODUCT;
                 case DIVISION_BY_NON_CONSTANT_VALUE ->
                         UndividedPosition.Reason.NON_CONSTANT_DIVISOR;
+                case REMAINDER_BY_NON_CONSTANT_VALUE ->
+                        UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR;
             };
             case BlockReason.RuleAboutAnElementOfSeveralContainers _ ->
                     UndividedPosition.Reason.RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS;
@@ -282,6 +284,10 @@ public final class ReportedReason {
             // drawn.
             case BlockReason.ComparisonOverARun _ ->
                     UndividedPosition.Reason.RULE_ABOUT_A_RUN;
+            // Its own word again: the rule's line is drawn on a remainder, a number of its own that
+            // neither relates two positions nor is read over a run.
+            case BlockReason.ComparisonOnARemainder _ ->
+                    UndividedPosition.Reason.RULE_ABOUT_A_REMAINDER;
             // Its own word again, and the one furthest from the two above. Those two are rules
             // that leave the position where they found it; this one holds it to what the rule
             // admits, which is a fact a reader acts on — the value written here is one of those.

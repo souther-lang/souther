@@ -35,6 +35,7 @@ import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -1170,6 +1171,10 @@ public final class Partitions {
         // whose two halves came from two places, and the day they part is the day a row is decoded
         // on a count the value is not written in.
         TermOrders orders = reading.ordersOf(axis.term());
+        // The class the declarations hold the value to, which the range alone cannot say: a point
+        // inside the range that is not of the class is one the rules refuse.
+        Congruences valueClass = axis.term() instanceof NumericTerm.ValueOf place
+                ? reading.region().valueClassAt(place) : null;
         List<Border> out = new ArrayList<>();
         // Every place the rules part this position's values, collected before any border is built.
         // What each border owes away from its line is a run of the arrangement they make together,
@@ -1220,7 +1225,8 @@ public final class Partitions {
                 // The line is written down as it is met and the border where it lands, so that the
                 // day something is written between the two the reading is held to having lost one.
                 read.found(target, origin);
-                out.add(read.drew(Border.at(target, origin, within, parted, axis.narrowed())));
+                out.add(read.drew(Border.at(target, origin, within, valueClass, parted,
+                        axis.narrowed())));
             }
         }
         return List.copyOf(out);

@@ -2743,6 +2743,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RULE_ABOUT_A_RUN ->
                     "it is about what the values here come to rather than about any one of them,"
                             + " so it draws its line and divides none of them";
+            case RULE_ABOUT_A_REMAINDER ->
+                    "it is about what a division leaves of a number made of the values here, so it"
+                            + " draws its line on that remainder and divides none of them";
             // What the rule does to the position, and not what this measure could not hold. An
             // author reading "this compiler does not read it" would go and rewrite a rule that was
             // read from end to end, and one told the position is divided would go looking for the
@@ -2781,6 +2784,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case NON_CONSTANT_DIVISOR ->
                     "it compares a quotient by a value that is not a constant, which no line on the"
                             + " values here says";
+            case NON_CONSTANT_REMAINDER_DIVISOR ->
+                    "it compares a remainder by a value that is not a constant, which has no period"
+                            + " for a line on the values here to be drawn at";
             // And the four a position reaches, written about the position, because that is all
             // there is: nothing observed a rule to name. Which reasons reach which of the two is
             // settled by the authority a reason belongs to, so no reason is written both ways.
@@ -3831,6 +3837,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                             "how many different values the elements of a"
                                                     + " container come to, or what a number of"
                                                     + " each adds up to";
+                                    case A_REMAINDER_OF_A_FORM ->
+                                            "what a division leaves of a form of several"
+                                                    + " numbers";
                                     case TWO_SUBJECTS_ONE_VALUE -> "two values being one";
                                     case AN_ORDER_OF_NO_ONE_POSITION ->
                                             "a place on an order of a term that is no one"
@@ -3973,6 +3982,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         + " that are not constants, which no linear form says";
                 case DIVISION_BY_NON_CONSTANT_VALUE -> "a comparison over a quotient by a value"
                         + " that is not a constant, which no linear form says";
+                case REMAINDER_BY_NON_CONSTANT_VALUE -> "a comparison over a remainder by a value"
+                        + " that is not a constant, which has no period";
             };
             case WhyUnread.NotArithmetic _ -> "a comparison over something that is no arithmetic,"
                     + " which no linear form says";

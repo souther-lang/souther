@@ -24,6 +24,27 @@ import java.math.BigInteger;
  */
 public sealed interface AffinePreimage {
 
+    /**
+     * The values of this that are also of a class of whole numbers the position is held to.
+     *
+     * <p>Two progressions of whole numbers meet in one, or in none ({@link Congruences#meet}), and
+     * none is a proof: no value of the position is both what the rest of the form can complete and
+     * a number its own rules leave it. A coset whose values fill is no progression of whole numbers
+     * and is left as it is, which is wider and so sound.
+     */
+    default AffinePreimage heldTo(Congruences members) {
+        if (!(this instanceof Stepping stepping) || stepping.spacing() != Granularity.DISCRETE) {
+            return this;
+        }
+        Congruences mine = new Congruences(
+                ((ExactAnswer.Held<BigInteger>) stepping.from().floor()).value(),
+                ((ExactAnswer.Held<BigInteger>) stepping.by().floor()).value());
+        Congruences both = mine.meet(members);
+        return both == null ? new None()
+                : new Stepping(ExactRatio.of(both.residue()), ExactRatio.of(both.modulus()),
+                        Granularity.DISCRETE);
+    }
+
     /** No value of the position leaves a residue the image reaches. A proof and not a search. */
     record None() implements AffinePreimage {}
 

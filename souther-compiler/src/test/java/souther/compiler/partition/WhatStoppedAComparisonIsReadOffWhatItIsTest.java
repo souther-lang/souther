@@ -50,18 +50,21 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
     }
 
     /**
-     * An operation answered the value the rule is about. Where the values came from is known and
-     * what the rule says about them here is not, which asks for a statement about the operation.
+     * An operation answered the value the rule is about, and the arithmetic met it where it stopped:
+     * a remainder by a value a row writes has no period, so there is no remainder for a line on the
+     * values to be drawn at. Said of the divisor, which is what an author would change.
      *
-     * <p>Told that its syntax was not read, an author goes looking for a spelling this compiler
-     * handles perfectly well.
+     * <p>Told only that a value was made from the position, an author goes looking for a statement
+     * about an operation that is not there to be written.
      */
     @Test
-    void anOperationsAnswerIsARuleAboutAValueMadeFromThePosition() {
-        assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                whyAt(guard("a: Int, b: Int", "Int.floorMod(a, b) > 10"), "a"));
-        assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                whyAt(guard("a: Int, b: Int", "Int.floorMod(a, b) > 10"), "b"));
+    void aRemainderByAValueARowWritesIsNamedForItsDivisor() {
+        PartitionEvidence measured = guard("a: Int, b: Int", "Int.floorMod(a, b) > 10");
+
+        assertEquals(List.of(UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR),
+                whyAt(measured, "a"));
+        assertEquals(List.of(UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR),
+                whyAt(measured, "b"));
     }
 
     /**
@@ -94,9 +97,9 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
         PartitionEvidence measured =
                 guard("a: Int, b: Int", "Int.floorMod(b, a) > 10");
 
-        assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+        assertEquals(List.of(UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR),
                 whyAt(measured, "a"));
-        assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+        assertEquals(List.of(UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR),
                 whyAt(measured, "b"));
     }
 
@@ -130,7 +133,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
      */
     @Test
     void anOperationThisDoesNotReadIsNamed() {
-        assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+        assertEquals(List.of(UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR),
                 whyAt(guard("a: Int", "Int.floorMod(a, a) > 10"), "a"));
     }
 
@@ -232,7 +235,7 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
         for (String condition : List.of("Int.floorMod(a, b) <= 30",
                 "Int.add(Int.floorMod(a, b), 1) <= 30",
                 "Int.add(1, Int.floorMod(a, b)) <= 30")) {
-            assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+            assertEquals(List.of(UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR),
                     whyAt(guard("a: Int, b: Int", condition), "a"), condition);
         }
     }

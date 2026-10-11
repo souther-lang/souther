@@ -137,6 +137,9 @@ final class StandingImpossibility {
             case Standing.OfAForm over -> new Asked(over.form(), over.where(), null);
             // A count is no form a region holds relations about, so a region proves nothing of it.
             case Standing.OfACount _, Standing.OfACountAndAForm _ -> null;
+            // Nor of what a division leaves of a form: the region's relations are about the form
+            // and the remainder is one the walk of its values settles ({@link LevelRealizer}).
+            case Standing.OfARemainder _ -> null;
         };
     }
 }

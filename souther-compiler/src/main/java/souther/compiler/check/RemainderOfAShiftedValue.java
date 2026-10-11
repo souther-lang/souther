@@ -67,46 +67,114 @@ public final class RemainderOfAShiftedValue {
     public static <E> Read<E> read(StatedComparison comparison, E at,
                                    TheSignOfAnOrder.Sides<E> sides) {
         for (boolean remainderFirst : List.of(true, false)) {
-            Core spelled = remainderFirst ? comparison.left() : comparison.right();
-            // The call itself and not a name given it: a guard over a bound value is a fact about
-            // that value, which a path holds as the number it is, and a disjunction of stretches
-            // of the place's remainder is a fact it cannot take in its place.
-            if (Core.withoutStanding(spelled) instanceof Core.Read) {
+            Located<E> found = locate(comparison, at, sides, remainderFirst);
+            if (found == null) {
                 continue;
             }
-            AffineForms.ReadThrough<E> side = sides.standing(spelled, at);
-            if (!(Core.withoutStanding(side.value()) instanceof Core.PreservedCall call)) {
-                continue;
-            }
-            OptionalInt divides = DefaultBoundOperationFacts.get()
-                    .divisorOfAFloorRemainder(call.operation());
-            if (divides.isEmpty() || call.args().size() <= divides.getAsInt()) {
-                continue;
-            }
-            Moved moved = Moved.of(call.args().getFirst(), side.at(), sides);
+            Moved moved = Moved.of(found.call().args().getFirst(), found.at(), sides);
             if (moved == null) {
                 continue;
             }
-            BigInteger divisor =
-                    wholeNumberOf(sides.constant(call.args().get(divides.getAsInt()), side.at()));
-            BigInteger against = wholeNumberOf(
-                    sides.constant(remainderFirst ? comparison.right() : comparison.left(), at));
-            if (divisor == null || against == null || divisor.signum() <= 0) {
+            if (found.divisor() == null || found.against() == null
+                    || found.divisor().signum() <= 0) {
                 return null;
             }
-            Rel written = (remainderFirst ? comparison.claim() : comparison.claim().turned())
-                    .statedRelation();
-            ConstantComparison statement = statementOf(written, against, divisor, moved);
+            ConstantComparison statement =
+                    statementOf(found.written(), found.against(), found.divisor(), moved);
             if (statement == null) {
                 return null;
             }
-            List<Core> over = new ArrayList<>(call.args());
+            List<Core> over = new ArrayList<>(found.call().args());
             over.set(0, moved.place());
+            Core.PreservedCall call = found.call();
             return new Read<>(new Core.PreservedCall(call.declared(), over, call.place(),
-                    call.settled(), call.type(), call.pos()), side.at(), statement);
+                    call.settled(), call.type(), call.pos()), found.at(), statement);
         }
         return null;
     }
+
+    /**
+     * What a comparison states of the remainder of a dividend taken whole, read as the remainder of
+     * a form of the input's numbers where the dividend is no place moved by a number — or null where
+     * neither side is such a remainder, the other side is no whole number the same on every run, or
+     * the divisor is no number above nought.
+     *
+     * <p>The statement is of the remainder the call answers, between nought and one below the
+     * divisor: nothing of the dividend is peeled, because what a form is moved by is the form's own
+     * constant.
+     *
+     * @param <E> the environment the call is read in
+     * @param dividend the first argument of the call, which is the form the division is of
+     * @param at where the call was applied, which is where its arguments are read
+     * @param divisor the number the dividend is divided by
+     * @param statement what holds of the remainder exactly where the comparison holds
+     */
+    public record OfAForm<E>(Core dividend, E at, BigInteger divisor,
+                             ConstantComparison statement) {
+
+        public OfAForm {
+            Objects.requireNonNull(dividend, "a remainder is of something");
+            Objects.requireNonNull(at, "read somewhere");
+            Objects.requireNonNull(divisor, "by something");
+            Objects.requireNonNull(statement, "and the comparison states something of it");
+        }
+    }
+
+    /** The same, of the dividend as the call has it: no moving is peeled off it. */
+    public static <E> OfAForm<E> readOverAForm(StatedComparison comparison, E at,
+                                                TheSignOfAnOrder.Sides<E> sides) {
+        for (boolean remainderFirst : List.of(true, false)) {
+            Located<E> found = locate(comparison, at, sides, remainderFirst);
+            if (found == null) {
+                continue;
+            }
+            if (found.divisor() == null || found.against() == null
+                    || found.divisor().signum() <= 0) {
+                return null;
+            }
+            ConstantComparison statement = ConstantComparison.of(found.written(), found.against(),
+                    BigInteger.ZERO, found.divisor().subtract(BigInteger.ONE));
+            return statement == null ? null : new OfAForm<>(found.call().args().getFirst(),
+                    found.at(), found.divisor(), statement);
+        }
+        return null;
+    }
+
+    /**
+     * The call of a floor remainder that one side of {@code comparison} is, and what the other side
+     * and the divisor are as whole numbers — or null where this side is no such call.
+     */
+    private static <E> Located<E> locate(StatedComparison comparison, E at,
+                                         TheSignOfAnOrder.Sides<E> sides,
+                                         boolean remainderFirst) {
+        Core spelled = remainderFirst ? comparison.left() : comparison.right();
+        // The call itself and not a name given it: a guard over a bound value is a fact about
+        // that value, which a path holds as the number it is, and a disjunction of stretches
+        // of the place's remainder is a fact it cannot take in its place.
+        if (Core.withoutStanding(spelled) instanceof Core.Read) {
+            return null;
+        }
+        AffineForms.ReadThrough<E> side = sides.standing(spelled, at);
+        if (!(Core.withoutStanding(side.value()) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        OptionalInt divides = DefaultBoundOperationFacts.get()
+                .divisorOfAFloorRemainder(call.operation());
+        if (divides.isEmpty() || call.args().size() <= divides.getAsInt()) {
+            return null;
+        }
+        BigInteger divisor =
+                wholeNumberOf(sides.constant(call.args().get(divides.getAsInt()), side.at()));
+        BigInteger against = wholeNumberOf(
+                sides.constant(remainderFirst ? comparison.right() : comparison.left(), at));
+        Rel written = (remainderFirst ? comparison.claim() : comparison.claim().turned())
+                .statedRelation();
+        return new Located<>(call, side.at(), divisor, against, written);
+    }
+
+    /** A floor remainder one side of a comparison is, with the numbers it is read against. */
+    private record Located<E>(Core.PreservedCall call, E at, BigInteger divisor,
+                              BigInteger against, Rel written) {}
 
     /**
      * What holds of the remainder {@code r} of the place, by {@code divisor}, where the remainder of

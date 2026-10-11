@@ -119,11 +119,6 @@ sealed interface ComparisonAssessment {
             }
         }
 
-        /** Whether what it cuts is a number read over a run of values rather than a form over
-         *  positions, which is a different thing to tell a reader who found no partition. */
-        boolean overARun() {
-            return cutting.of().readOverARun();
-        }
     }
 
     /**
@@ -877,9 +872,8 @@ sealed interface ComparisonAssessment {
             // one line with no position under it, and a line over several positions is a relation
             // between them. Answered from what the quantity is over rather than by the count of its
             // terms, since a form of one term is either.
-            case AcrossPositions across -> sameAtEachPlace(across.overARun()
-                    ? new BlockReason.ComparisonOverARun()
-                    : new BlockReason.ComparisonRelatingTwoValues());
+            case AcrossPositions across ->
+                    sameAtEachPlace(across.cutting().of().whyItDividesNoPosition());
             // Another value is no position, and what the rule says is the same thing it says
             // against one: where the value here stands against it.
             case AgainstAnotherValue _ ->

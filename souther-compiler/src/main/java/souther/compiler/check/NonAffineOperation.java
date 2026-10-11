@@ -14,5 +14,8 @@ public enum NonAffineOperation {
     PRODUCT_OF_NON_CONSTANT_VALUES,
 
     /** A quotient by a form that is not a constant. */
-    DIVISION_BY_NON_CONSTANT_VALUE
+    DIVISION_BY_NON_CONSTANT_VALUE,
+
+    /** A remainder by a form that is not a constant, which has no period to be periodic in. */
+    REMAINDER_BY_NON_CONSTANT_VALUE
 }

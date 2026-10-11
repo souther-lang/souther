@@ -227,6 +227,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.Terms.operatorTerm",
                     "hands it to the interner, for a binary the recognition beside it found to be"
                             + " no comparison"),
+            new Held("souther.compiler.check.Term.foldedWhole",
+                    "does the sum, the difference or the product of two written whole numbers, so"
+                            + " that a divisor is read as the number it comes to and not as it was"
+                            + " spelled"),
             new Held("souther.compiler.check.Terms.asOperator",
                     "reads the operator an arithmetic meaning was keyed by"),
             new Held("souther.compiler.check.Terms.openedKey", "the same, for the term it keys"),
