@@ -123,10 +123,36 @@ class AListPutTogetherOfAPieceOfEachElementIsProvedOfTheBodyTest {
         return declared;
     }
 
-    /** The library as shipped with {@code shipped} written as {@code body}, proved. */
+    /**
+     * Control for the bodies below: the pieces alone, bound over the library as shipped, are
+     * proved. What a body rewritten fails to be proved is then the rewriting's, and not the
+     * other facts it was bound without.
+     */
+    @Test
+    void thePiecesAloneAreProvedOfTheBodiesAsShipped() {
+        BoundOperationFacts facts = OperationFactBinder.bindAll(StdlibLoader.load(text -> text),
+                thePieces());
+        assertEquals(PieceOfAnElement.THE_CLOSURES_ANSWER, facts.assembles(MAP).piece());
+        assertEquals(PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS, facts.assembles(FILTER).piece());
+        assertEquals(PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS, facts.assembles(FLAT_MAP).piece());
+    }
+
+    /**
+     * The library as shipped with {@code shipped} written as {@code body}, the pieces proved of it.
+     *
+     * <p>The pieces alone. Proving every fact the language declares is most of what binding costs,
+     * and what a rewritten body is or is not is a question about this one.
+     */
     private static BoundOperationFacts proved(String shipped, String body) {
         Stdlib stdlib = StdlibLoader.load(text -> text.contains(shipped)
                 ? text.replace(shipped, body) : text);
-        return OperationFactBinder.bindAll(stdlib);
+        return OperationFactBinder.bindAll(stdlib, thePieces());
+    }
+
+    /** What the language declares of a list put together of pieces, and nothing else. */
+    private static List<OperationFacts.Declared> thePieces() {
+        return OperationFacts.declarations().stream()
+                .filter(each -> each.fact() instanceof OperationFact.AssemblesPieces)
+                .toList();
     }
 }
