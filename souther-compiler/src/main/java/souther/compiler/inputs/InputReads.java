@@ -360,29 +360,21 @@ public final class InputReads {
     }
 
     /**
-     * For each parameter of {@code block} that an operation hands something a container holds, the
-     * containers it may be handed it from, read here. A parameter handed nothing is not in it, and
-     * two taking from the same containers are one.
+     * The containers {@code block} is applied over, read here, one for each operation applying it
+     * — or empty where something other than an operation over a container may apply it.
      *
-     * <p>A body entered by an application of the closure is entered only where each of these
-     * parameters is handed something, so each needs one of its containers to hold something. More
-     * than one container is a closure shared by several operations, and a run is inside it by any
-     * one of them.
+     * <p>A body entered by an application of the closure is entered only where one of these holds
+     * something. Empty says nothing is known of what enters it, and not that nothing does.
      */
-    public List<List<Denotation>> containersHandingTheElements(Core.Block block) {
-        List<List<Denotation>> out = new ArrayList<>();
+    public List<Denotation> containersAppliedOver(Core.Block block) {
         for (Core.Binder param : block.params()) {
-            if (param == null || param.binding() == null) {
-                continue;
-            }
-            List<Denotation> containers = names.roleOf(param.binding()).containers().stream()
-                    .map(held -> new Denotation(held.container(), this))
-                    .toList();
-            if (!containers.isEmpty() && !out.contains(containers)) {
-                out.add(containers);
+            if (param != null && param.binding() != null) {
+                return names.enteredOver(param.binding()).stream()
+                        .map(container -> new Denotation(container, this))
+                        .toList();
             }
         }
-        return List.copyOf(out);
+        return List.of();
     }
 
     /**

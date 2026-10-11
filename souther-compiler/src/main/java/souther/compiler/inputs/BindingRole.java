@@ -34,21 +34,6 @@ import java.util.Objects;
 sealed interface BindingRole {
 
     /**
-     * The containers an operation may have handed the binding something from: the one of an
-     * element, each of the several of an element of several, and none of what is no element.
-     *
-     * <p>Over every role with no {@code default}, so a role added arrives here as a compile error
-     * and not as a binding that took from nothing.
-     */
-    default List<HeldIn> containers() {
-        return switch (this) {
-            case Element(var held) -> List.of(held);
-            case ElementOfSeveral(var held) -> held;
-            case Root _, Alias _, Unknown _ -> List.of();
-        };
-    }
-
-    /**
      * The binding is a parameter of the behavior, which is a place a row writes at.
      *
      * <p>Each of these carries what makes it the answer it is, and refuses to be made without it.

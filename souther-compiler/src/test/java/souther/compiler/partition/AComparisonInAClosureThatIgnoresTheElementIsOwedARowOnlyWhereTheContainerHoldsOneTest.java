@@ -76,6 +76,29 @@ class AComparisonInAClosureThatIgnoresTheElementIsOwedARowOnlyWhereTheContainerH
                 | "the row" : (9, [1], [1]) -> High
             """;
 
+    /**
+     * A fold hands its closure an accumulator no container holds and an element of {@code xs}:
+     * what enters the closure is {@code xs} holding something, and nothing the accumulator is.
+     */
+    private static final String FOLDED = """
+            module probe
+
+            data Low
+            data High
+
+            behavior pick : (atLeast: Int, xs: List<Int>) -> Low | High
+            let pick (atLeast, xs) =
+                if List.fold((acc, x) -> atLeast > 5, false, xs) then High else Low
+
+            example pick
+                | "the row" : (9, [1]) -> High
+            """;
+
+    @Test
+    void aRowComposedForAFoldHoldsSomethingInTheContainerItWalks() {
+        assertEveryRowStandsAtItsPoint(FOLDED, "pick", row -> !isEmpty(row.get(1)));
+    }
+
     @Test
     void aRowComposedForAnAnyOverTheContainerHoldsSomething() {
         assertEveryRowStandsAtItsPoint(MODEL.replace("GUARD", "List.any(x -> atLeast > 5, xs)"),
@@ -156,7 +179,8 @@ class AComparisonInAClosureThatIgnoresTheElementIsOwedARowOnlyWhereTheContainerH
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> all =
                 Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
-        assertNotNull(all, "the model under test compiles");
+        assertNotNull(all, () -> "the model under test compiles: " + compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().values()).toList());
         assertTrue(all.containsKey(behavior), () -> "lines of " + behavior + ": " + all.keySet());
         return all.get(behavior);
     }

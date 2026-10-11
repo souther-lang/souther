@@ -65,25 +65,19 @@ public final class WhereAnApplicationIsMade {
     }
 
     /**
-     * What has to hold for a run to be inside a closure whose parameters are handed what
-     * containers hold, under {@code outer}: each parameter is handed something, from one of the
-     * containers it may be handed it from, which then holds something. Said where the values they
-     * hold are not written out, and so no application is said; an operation may stop before it
-     * makes any, so this is necessary for an application and not enough for one.
+     * What has to hold for a run to be inside a closure that only operations apply, under
+     * {@code outer}: one of the containers they apply it over holds something. Said where the
+     * values they hold are not written out, and so no application is said; an operation may stop
+     * before it makes any, so this is necessary for an application and not enough for one.
      *
-     * @param takenFrom for each parameter, the positions of the containers it may be handed
-     *                  something from, none of them empty
+     * @param appliedOver the positions of the containers, one for each operation applying the
+     *                    closure
      */
-    public static Proposition whereTheContainersHoldSomething(Proposition outer,
-                                                              List<List<TermPath>> takenFrom) {
-        List<Proposition> each = new ArrayList<>();
-        each.add(outer);
-        for (List<TermPath> containers : takenFrom) {
-            each.add(Proposition.any(containers.stream()
-                    .<Proposition>map(at -> new Proposition.Some(at, nothingAsked(), true))
-                    .toList()));
-        }
-        return Proposition.all(each);
+    public static Proposition whereOneOfTheContainersHoldsSomething(Proposition outer,
+                                                                    List<TermPath> appliedOver) {
+        return past(outer, Proposition.any(appliedOver.stream()
+                .<Proposition>map(at -> new Proposition.Some(at, nothingAsked(), true))
+                .toList()));
     }
 
     /** Whether {@code cases} say a line decides wherever a row is. */

@@ -147,6 +147,12 @@ final class BindingEnvironment {
         return value == null ? new BindingRole.Unknown() : new BindingRole.Alias(value);
     }
 
+    /** The containers the closure {@code binding} is a parameter of is applied over, where every
+     *  application of it is an operation's ({@link ElementBindings#enteredOver}). */
+    List<Core> enteredOver(BindingId binding) {
+        return elements.enteredOver(binding);
+    }
+
     /** Where in the element handed to {@code binding} the value a walk answered stands, or null
      *  where the walk answered no place of it ({@link ElementProjection}). */
     ElementAnswer answerAt(BindingId binding) {

@@ -305,6 +305,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/ElementBindings", "walk", "(" + core + "Ljava/util/Map;Ljava/util/Map;L"
                 + c + "check/ElementProvenance;Ljava/util/Map;Ljava/util/Map;L" + c
                 + "check/ValueTemplates;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
+        row(out, c + "check/ClosureEntries", "visit", "(" + core + "L" + c
+                + "check/ClosureEntries$Standing;)V", Reading.STRUCTURE,
+                "finds the places a closure is used, which no field read is");
         row(out, c + "check/EmittedClassReferences", "visit", "(" + core + "L" + c + "types/Type;)V",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "check/EmittedClassReferences", "visitChildren",

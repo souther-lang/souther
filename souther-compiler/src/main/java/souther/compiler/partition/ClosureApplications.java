@@ -119,11 +119,12 @@ sealed interface ClosureApplications {
                     }
                 }
                 case InputReads.Applications.NoneHanded _ -> {
-                    List<List<TermPath>> takenFrom = containersHeld(block, around.reads(), read);
-                    asked |= !takenFrom.isEmpty();
+                    List<TermPath> appliedOver = positionsAppliedOver(block, around.reads(), read);
+                    asked |= !appliedOver.isEmpty();
                     out.add(new Application(around.reads().entering(step, symbols, newtypes),
-                            WhereAnApplicationIsMade.whereTheContainersHoldSomething(
-                                    around.reached(), takenFrom)));
+                            appliedOver.isEmpty() ? around.reached()
+                                    : WhereAnApplicationIsMade.whereOneOfTheContainersHoldsSomething(
+                                            around.reached(), appliedOver)));
                 }
                 case InputReads.Applications.Unsaid _,
                      InputReads.Applications.MoreThanAreRead _ -> {
@@ -135,31 +136,24 @@ sealed interface ClosureApplications {
     }
 
     /**
-     * For each parameter of {@code block} an operation hands something a container holds, the
-     * positions of the input those containers stand at.
+     * The positions of the input the containers {@code block} is applied over stand at, or none
+     * where there are none or one of them stands at no position.
      *
-     * <p>A parameter is left out where some container it may be handed something from stands at no
-     * position: a run may be inside the closure by that one with every other empty, so saying the
-     * rest hold something would be saying more than is known.
+     * <p>Every one or nothing: a run may be inside the closure by the operation over the container
+     * that stands at no position with every other empty, so saying one of the rest holds something
+     * would be saying more than is known.
      */
-    private static List<List<TermPath>> containersHeld(Core.Block block, InputReads reads,
+    private static List<TermPath> positionsAppliedOver(Core.Block block, InputReads reads,
                                                        InputReading read) {
-        List<List<TermPath>> out = new ArrayList<>();
-        for (List<Denotation> containers : reads.containersHandingTheElements(block)) {
-            List<TermPath> positions = new ArrayList<>();
-            for (Denotation container : containers) {
-                Optional<TermPath> at = Pullback.positionHoldingWhatItHolds(container, read);
-                if (at.isEmpty()) {
-                    positions = null;
-                    break;
-                }
-                positions.add(at.get());
+        List<TermPath> out = new ArrayList<>();
+        for (Denotation container : reads.containersAppliedOver(block)) {
+            Optional<TermPath> at = Pullback.positionHoldingWhatItHolds(container, read);
+            if (at.isEmpty()) {
+                return List.of();
             }
-            if (positions != null) {
-                out.add(List.copyOf(positions));
-            }
+            out.add(at.get());
         }
-        return out;
+        return List.copyOf(out);
     }
 
     /**
