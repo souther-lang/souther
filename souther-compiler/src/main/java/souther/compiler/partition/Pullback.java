@@ -2525,9 +2525,18 @@ final class Pullback {
                                                 new Sized.NotSized(new WhyUnread.AtNoPosition(
                                                         WhyUnread.AtNoPosition.Place.SUBJECT));
                                     };
-                            case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ ->
-                                    new Sized.NotSized(new WhyUnread.AtNoPosition(
-                                            WhyUnread.AtNoPosition.Place.SUBJECT));
+                            // As many as the body answers, read where its parameter is the
+                            // element handed it, as what the closure answers is observed.
+                            case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(
+                                    DeclaredArgument at) -> {
+                                Denotation closure = reads.denotes(applied.argument(at),
+                                        read.rules().symbols(), read.rules().newtypes());
+                                yield Core.withoutStanding(closure.value())
+                                        instanceof Core.Block block
+                                        ? sizeOf(block.body(),
+                                                application != null ? application : closure.at())
+                                        : new Sized.NotSized(aClosureNotMet());
+                            }
                             case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) -> {
                                 DecisionSubject key = keyAt(at);
                                 yield key != null ? sizedAt(key) : new Sized.NotSized(
@@ -2674,12 +2683,23 @@ final class Pullback {
 
         /**
          * What {@code ofTheElement}, a number of each element of the container at {@code at}, adds
-         * up to over them, where the elements stand at a position ({@link #elementsOf}).
+         * up to over them, where the elements stand at a position ({@link #elementsOf}) or are
+         * values the source wrote out.
          *
          * <p>Of every element, as {@link #different} is: a number over some of them is no sum a
          * quantity of the container states.
          */
         private Sized sumOver(DeclaredArgument at, LawNumber<DeclaredArgument> ofTheElement) {
+            Denotation container = reads.standing(applied.argument(at), read.rules().symbols(),
+                    read.rules().newtypes());
+            Beneath beneath = beneath(container, true);
+            List<Denotation> values = eachValue(beneath == null ? container : beneath.at());
+            if (values != null) {
+                return beneath != null && !beneath.kept().isEmpty()
+                        ? new Sized.NotSized(
+                                new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER))
+                        : sumOverWrittenOut(at, values, ofTheElement);
+            }
             Located located = elementsOf(at, true);
             if (located == null || !located.kept().isEmpty()) {
                 return new Sized.NotSized(
@@ -2702,9 +2722,76 @@ final class Pullback {
                 elements.remove(at);
                 quantifying.remove(held);
             }
-            return each instanceof Sized.AsAForm(LinearForm<Quantity> form)
-                    ? new Sized.AsAForm(LinearForm.atom(new Quantity.SumOver(held, form)))
-                    : each;
+            if (!(each instanceof Sized.AsAForm(LinearForm<Quantity> form))) {
+                return each;
+            }
+            if (!form.coefs().isEmpty()) {
+                return new Sized.AsAForm(LinearForm.atom(new Quantity.SumOver(held, form)));
+            }
+            // The same number for every element adds up to that many times how many there are.
+            if (form.constant().signum() == 0) {
+                return new Sized.AsAForm(LinearForm.constant(ExactRatio.ZERO));
+            }
+            return switch (sizedAt(held)) {
+                case Sized.NotSized notSized -> notSized;
+                case Sized.AsAForm(LinearForm<Quantity> size) ->
+                        switch (size.times(form.constant())) {
+                            case ExactAnswer.Held<LinearForm<Quantity>>(var times) ->
+                                    new Sized.AsAForm(times);
+                            case ExactAnswer.Unheld<LinearForm<Quantity>>(var why) ->
+                                    new Sized.NotSized(new WhyUnread.ANumberNotHeld(why));
+                        };
+            };
+        }
+
+        /**
+         * What {@code ofTheElement} adds up to over {@code values}, the values a container of the
+         * argument {@code at} was written out with: its number of each, read with the element that
+         * value and a closure it names on the application handing it that value, added together.
+         */
+        private Sized sumOverWrittenOut(DeclaredArgument at, List<Denotation> values,
+                                        LawNumber<DeclaredArgument> ofTheElement) {
+            if (reads.readings() * values.size() > READINGS.maximum()) {
+                return new Sized.NotSized(new WhyUnread.MoreReadingsThanAreMade());
+            }
+            DeclaredArgument named = closureIn(ofTheElement);
+            Denotation closure = named == null ? null : reads.denotes(applied.argument(named),
+                    read.rules().symbols(), read.rules().newtypes());
+            Core.Block block = closure != null
+                    && Core.withoutStanding(closure.value()) instanceof Core.Block written
+                    ? written : null;
+            if (closure != null && block == null) {
+                return new Sized.NotSized(aClosureNotMet());
+            }
+            LinearForm<Quantity> total = LinearForm.constant(ExactRatio.ZERO);
+            InputReads outer = application;
+            try {
+                for (Denotation value : values) {
+                    if (block != null) {
+                        InputReads handing = closure.at().handingTheElement(block,
+                                applied.argument(at), value, read.rules().newtypes());
+                        if (handing == null) {
+                            return new Sized.NotSized(aClosureNotMet());
+                        }
+                        application = handing;
+                    }
+                    elements.put(at, new ElementAt.AValue(value.value(), value.at()));
+                    Sized each = number(LinearForm.atom(ofTheElement));
+                    if (!(each instanceof Sized.AsAForm(LinearForm<Quantity> form))) {
+                        return each;
+                    }
+                    switch (total.plus(form)) {
+                        case ExactAnswer.Held<LinearForm<Quantity>>(var sum) -> total = sum;
+                        case ExactAnswer.Unheld<LinearForm<Quantity>>(var why) -> {
+                            return new Sized.NotSized(new WhyUnread.ANumberNotHeld(why));
+                        }
+                    }
+                }
+            } finally {
+                elements.remove(at);
+                application = outer;
+            }
+            return new Sized.AsAForm(total);
         }
 
         /** How many what stands at {@code at} holds, as a number of the input. A place inside what
@@ -2853,6 +2940,26 @@ final class Pullback {
                             DeclaredArgument closure) ? closure : null;
             case LawProposition.SomeElement<DeclaredArgument> some ->
                     closureIn(some.ofTheElement());
+        };
+    }
+
+    /** The closure {@code number} names what it answers of, or null where it names none. */
+    private static DeclaredArgument closureIn(LawNumber<DeclaredArgument> number) {
+        return switch (number) {
+            case LawNumber.AnArgument<DeclaredArgument> _ -> null;
+            case LawNumber.HowManyDifferent<DeclaredArgument>(var _, var of) ->
+                    of instanceof LawSubject.WhatTheClosureAnswers<DeclaredArgument>(
+                            DeclaredArgument closure) ? closure : null;
+            case LawNumber.SizeOf<DeclaredArgument>(var of) ->
+                    of instanceof LawSubject.WhatTheClosureAnswers<DeclaredArgument>(
+                            DeclaredArgument closure) ? closure : null;
+            case LawNumber.CodePointsOf<DeclaredArgument>(var of, var _) ->
+                    of instanceof LawSubject.WhatTheClosureAnswers<DeclaredArgument>(
+                            DeclaredArgument closure) ? closure : null;
+            case LawNumber.HowManyMeet<DeclaredArgument>(var _, var ofTheElement) ->
+                    closureIn(ofTheElement);
+            case LawNumber.SumOver<DeclaredArgument>(var _, var ofTheElement) ->
+                    closureIn(ofTheElement);
         };
     }
 
