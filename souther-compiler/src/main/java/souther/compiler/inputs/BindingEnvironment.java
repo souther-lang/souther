@@ -74,16 +74,49 @@ final class BindingEnvironment {
      *  it is worked out from is every value bound, which a reader asking it of one environment
      *  many times would otherwise walk each time. Nought where it has not been. */
     private int hash;
+    /**
+     * The hash of {@link #elements} and {@link #values}, shared by every environment made from
+     * this one, which holds the same two.
+     *
+     * <p>Both hold the trees of a body and of the values it builds, so their hash is a walk of
+     * all of them. An environment is made at every name a reading follows, and one that worked the
+     * hash out again would walk every tree the body holds once per name followed.
+     */
+    private final HeldHash heldHash;
+
+    /** The hash of what a body holds, worked out the first time an environment holding it is
+     *  asked for one, and not before: most environments are never asked. */
+    private static final class HeldHash {
+
+        private final ElementBindings elements;
+        private final ValueDefinitions values;
+        /** Nought where it has not been worked out; worked out again, it is the same number. */
+        private int hash;
+
+        HeldHash(ElementBindings elements, ValueDefinitions values) {
+            this.elements = elements;
+            this.values = values;
+        }
+
+        int get() {
+            int h = hash;
+            if (h == 0) {
+                h = Objects.hash(elements, values);
+                hash = h;
+            }
+            return h;
+        }
+    }
 
     BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
                        ElementBindings elements, ValueDefinitions values, boolean callsStand) {
-        this(Map.copyOf(roots), Map.of(), Map.copyOf(bound), null, elements, values, callsStand,
-                Map.of());
+        this(Map.copyOf(roots), Map.of(), Map.copyOf(bound), null, elements, values,
+                new HeldHash(elements, values), callsStand, Map.of());
     }
 
     private BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> handed,
                                Map<BindingId, Core> table, Layer newest, ElementBindings elements,
-                               ValueDefinitions values, boolean callsStand,
+                               ValueDefinitions values, HeldHash heldHash, boolean callsStand,
                                Map<BindingId, InputReads.EntryLookedUp> selected) {
         this.selected = selected;
         this.roots = roots;
@@ -93,6 +126,7 @@ final class BindingEnvironment {
         this.elements = elements;
         this.values = Objects.requireNonNull(values,
                 "a reading says what the values it meets are defined as, if none");
+        this.heldHash = heldHash;
         this.callsStand = callsStand;
     }
 
@@ -245,13 +279,13 @@ final class BindingEnvironment {
         int depth = newest == null ? 1 : newest.depth() + 1;
         Layer inner = new Layer(binder.binding(), Core.withoutStanding(value), newest, depth);
         if (depth <= KEPT_APART) {
-            return new BindingEnvironment(roots, handed, table, inner, elements, values,
+            return new BindingEnvironment(roots, handed, table, inner, elements, values, heldHash,
                     callsStand, selected);
         }
         BindingEnvironment written = new BindingEnvironment(roots, handed, table, inner, elements,
-                values, callsStand, selected);
+                values, heldHash, callsStand, selected);
         return new BindingEnvironment(roots, handed, written.bound(), null, elements, values,
-                callsStand, selected);
+                heldHash, callsStand, selected);
     }
 
     /** The same, with {@code binding} standing at {@code path}. */
@@ -259,7 +293,7 @@ final class BindingEnvironment {
         Map<BindingId, TermPath> wider = new LinkedHashMap<>(roots);
         wider.put(binding, path);
         return new BindingEnvironment(Map.copyOf(wider), handed, table, newest, elements, values,
-                callsStand, selected);
+                heldHash, callsStand, selected);
     }
 
     /**
@@ -269,8 +303,8 @@ final class BindingEnvironment {
     BindingEnvironment selecting(BindingId binding, InputReads.EntryLookedUp entry) {
         Map<BindingId, InputReads.EntryLookedUp> wider = new LinkedHashMap<>(selected);
         wider.put(binding, entry);
-        return new BindingEnvironment(roots, handed, table, newest, elements, values, callsStand,
-                Map.copyOf(wider));
+        return new BindingEnvironment(roots, handed, table, newest, elements, values, heldHash,
+                callsStand, Map.copyOf(wider));
     }
 
     /** The entries names are the value of, by the name. */
@@ -286,7 +320,7 @@ final class BindingEnvironment {
         Map<BindingId, Core> wider = new LinkedHashMap<>(handed);
         wider.put(binding, value);
         return new BindingEnvironment(roots, Map.copyOf(wider), table, newest, elements, values,
-                callsStand, selected);
+                heldHash, callsStand, selected);
     }
 
     /**
@@ -295,8 +329,10 @@ final class BindingEnvironment {
      * one of these — and the values it builds are defined beside the ones this one does.
      */
     BindingEnvironment entering(ElementBindings called) {
-        return new BindingEnvironment(roots, handed, table, newest, elements.and(called),
-                values.and(called), callsStand, selected);
+        ElementBindings joined = elements.and(called);
+        ValueDefinitions defined = values.and(called);
+        return new BindingEnvironment(roots, handed, table, newest, joined, defined,
+                new HeldHash(joined, defined), callsStand, selected);
     }
 
     /** The parameters as positions, which is what a name in a tree stands for. */
@@ -319,11 +355,21 @@ final class BindingEnvironment {
                         && values.equals(that.values));
     }
 
+    /**
+     * Of what {@link #equals} compares, the parts that are cheap to hash.
+     *
+     * <p>What is bound is hashed by which names are bound and not by what they were given: a value
+     * is a tree, and an environment made at every name a reading follows would walk every tree
+     * bound on the way at each. Two environments binding the same names to different values are
+     * still told apart, by {@link #equals}. What the body holds is the hash worked out once, where
+     * it was first held ({@link #heldHash}).
+     */
     @Override
     public int hashCode() {
         int h = hash;
         if (h == 0) {
-            h = Objects.hash(roots, handed, bound(), elements, values, callsStand, selected);
+            h = Objects.hash(roots, handed, bound().keySet(), heldHash.get(), callsStand,
+                    selected);
             hash = h;
         }
         return h;

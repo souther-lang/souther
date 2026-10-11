@@ -33,6 +33,9 @@ public final class ValueDefinitions {
     public static final ValueDefinitions NONE = new ValueDefinitions(ElementBindings.NONE);
 
     private final ElementBindings definedWith;
+    /** The hash of {@link #definedWith}, worked out the first time it is asked, since it is every
+     *  tree the definitions hold; nought where it has not been. */
+    private int hash;
     private volatile InputReads reading;
 
     private ValueDefinitions(ElementBindings definedWith) {
@@ -89,6 +92,11 @@ public final class ValueDefinitions {
 
     @Override
     public int hashCode() {
-        return definedWith.hashCode();
+        int h = hash;
+        if (h == 0) {
+            h = definedWith.hashCode();
+            hash = h;
+        }
+        return h;
     }
 }
