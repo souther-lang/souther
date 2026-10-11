@@ -62,7 +62,7 @@ class ARunThatAnsweredAConditionBothWaysTookNoOneRuleTest {
     void aRunDownOneArmTakesTheRuleOfThatArm() {
         Fixture at = new Fixture();
         assertEquals(new RulesTaken.WhichRule.TookThis(THEN),
-                at.rules(THEN).takenBy(at.seenDown(0), List.of()),
+                at.rules(THEN).takenBy(InputsOfTheBody.aRunSeen(at.seenDown(0))),
                 "the control: one arm lit, and the rule that takes it that way");
     }
 
@@ -71,9 +71,9 @@ class ARunThatAnsweredAConditionBothWaysTookNoOneRuleTest {
         Fixture at = new Fixture();
         RulesTaken.WhichRule bothWays = new RulesTaken.WhichRule.CouldNotTell(
                 RulesTaken.WhichRule.Why.A_CONDITION_CAME_OUT_BOTH_WAYS);
-        assertEquals(bothWays, at.rules(THEN).takenBy(at.seenDown(0, 1), List.of()),
+        assertEquals(bothWays, at.rules(THEN).takenBy(InputsOfTheBody.aRunSeen(at.seenDown(0, 1))),
                 "the run went the rule's way and the other, so it is not shown to have taken it");
-        assertEquals(bothWays, at.rules(THEN, ELSE).takenBy(at.seenDown(0, 1), List.of()),
+        assertEquals(bothWays, at.rules(THEN, ELSE).takenBy(InputsOfTheBody.aRunSeen(at.seenDown(0, 1))),
                 "and with a rule for each arm it took neither, rather than both");
     }
 

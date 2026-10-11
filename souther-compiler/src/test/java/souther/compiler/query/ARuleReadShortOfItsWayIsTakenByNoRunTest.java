@@ -70,7 +70,7 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
         assertEquals(new RulesTaken.WhichRule.CouldNotTell(
                         RulesTaken.WhichRule.Why.NO_RULE_IS_RECOGNISABLE),
                 rulesOf(compilation, reading(ruled(NO_DISTINCTION, false)))
-                        .takenBy(nothingSeen(compilation), List.of()));
+                        .takenBy(InputsOfTheBody.aRunSeen(nothingSeen(compilation))));
     }
 
     @Test
@@ -78,7 +78,7 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         assertEquals(new RulesTaken.WhichRule.TookThis(NO_DISTINCTION),
                 rulesOf(compilation, reading(ruled(NO_DISTINCTION, true)))
-                        .takenBy(nothingSeen(compilation), List.of()));
+                        .takenBy(InputsOfTheBody.aRunSeen(nothingSeen(compilation))));
     }
 
     /**

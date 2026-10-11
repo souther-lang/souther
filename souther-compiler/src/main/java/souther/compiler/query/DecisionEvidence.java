@@ -389,8 +389,8 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
             // it is a fact about this build rather than about where the row went.
             switch (row.watched()) {
                 case Generator.Watched.NoAccount _ -> notWatched++;
-                case Generator.Watched.Ran(var seen) -> {
-                    switch (against.takenBy(seen, row.inputs())) {
+                case Generator.Watched.Ran _ -> {
+                    switch (against.takenBy(row)) {
                         case RulesTaken.WhichRule.TookThis it -> {
                             took.add(it.rule());
                             placed++;

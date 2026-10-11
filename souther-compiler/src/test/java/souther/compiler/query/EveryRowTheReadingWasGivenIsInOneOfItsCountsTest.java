@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.RulesTaken;
@@ -71,7 +72,8 @@ class EveryRowTheReadingWasGivenIsInOneOfItsCountsTest {
     @Test
     void andARowNothingWatchedIsCountedAsOne() {
         DecisionEvidence.RowsPlaced read = DecisionEvidence.of("classify", rulesTakenOf(compiled()),
-                        List.of(new ObservedInputs(List.of(), new Generator.Watched.NoAccount())),
+                        List.of(new ObservedInputs(List.of(), new Generator.Watched.NoAccount(),
+                                new AnswerObservation.NotAnswered())),
                         WeakeningSet.none())
                 .made().orElseThrow(
                         () -> new AssertionError("a row is read whether or not anything watched it"));

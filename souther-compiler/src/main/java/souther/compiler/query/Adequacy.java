@@ -2746,7 +2746,7 @@ public final class Adequacy {
                 RunPlacement taken,
                 souther.compiler.partition.DecisionReading.Ruled ruled) {
             RowAsRead read = probe.read(composed);
-            if (!(read.watched() instanceof Generator.Watched.Ran(var seen))) {
+            if (!(read.watched() instanceof Generator.Watched.Ran)) {
                 return new RuleRequirement.Unsettled.NothingWatchedTheRow();
             }
             // What the row did, and not what it was composed against. A row steered here by a
@@ -2757,7 +2757,7 @@ public final class Adequacy {
             // this reading could not place is this compiler falling short and says nothing about
             // where the row went, so a reason added to that reading is a case to decide about here
             // rather than a run quietly reported as having gone elsewhere.
-            return switch (taken.takenBy(seen, read.values() == null ? List.of() : read.values())) {
+            return switch (taken.takenBy(read.asRun())) {
                 case souther.compiler.partition.RulesTaken.WhichRule.TookThis took
                         when took.rule().equals(ruled.rule()) ->
                         new RuleRequirement.Required(composed);
