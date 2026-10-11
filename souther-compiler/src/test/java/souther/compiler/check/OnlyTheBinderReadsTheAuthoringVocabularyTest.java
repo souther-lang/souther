@@ -291,6 +291,9 @@ class OnlyTheBinderReadsTheAuthoringVocabularyTest {
                             + " names"),
             new Reader("souther.compiler.check.ElementBindings",
                     "what a call hands its closure, for the value a closure parameter is bound to"),
+            new Reader("souther.compiler.check.ClosureEntries",
+                    "which container a call applies its closure over, for what enters a closure"
+                            + " that only operations apply"),
             new Reader("souther.compiler.check.Reductions",
                     "what a call hands its closure, for a walk from a seed"),
             new Reader("souther.compiler.check.Predicates",

@@ -1696,9 +1696,11 @@ final class Coverages {
      * how a point this declined to work on left the count as one the model admits no row at.
      *
      * <p>Each dimension by whatever owns it. What the rows came to is coverage's own question
-     * ({@link ObligationCoverage#acrossOneReadingsSearches}); what the rules prove is a reading of
-     * the declarations and the two searches read the same ones, so a difference there is not
-     * something to fold but something that has gone wrong.
+     * ({@link ObligationCoverage#acrossOneReadingsSearches}); what the rules prove is the
+     * projection's ({@link ItemAssessment.WritabilityProjection#and}). The two searches read the
+     * same declarations but each along its own way to the border — a rule written once and met
+     * through two copies of the closure it is in is reached on a different condition by each — so
+     * what one proved the other may not have been asked.
      */
     private static ItemAssessment together(ItemAssessment a, ItemAssessment b) {
         if (!(a instanceof ItemAssessment.Owed one) || !(b instanceof ItemAssessment.Owed two)) {
@@ -1710,13 +1712,9 @@ final class Coverages {
             throw new IllegalStateException("two searches of one point asking for different"
                     + " values: " + one.criterion() + " and " + two.criterion());
         }
-        if (one.projection() != two.projection()) {
-            throw new IllegalStateException("two searches of one point disagreeing about what the"
-                    + " rules prove there: " + one.projection() + " and " + two.projection());
-        }
         return new ItemAssessment.Owed(one.criterion(),
                 ObligationCoverage.acrossOneReadingsSearches(one.coverage(), two.coverage()),
-                one.projection(), one.searches().plus(two.searches()));
+                one.projection().and(two.projection()), one.searches().plus(two.searches()));
     }
 
     /**

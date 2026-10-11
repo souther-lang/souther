@@ -449,12 +449,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
             }
             coverage.add(owed.coverage());
             searched = searched.plus(owed.searches());
-            if (owed.projection().proves()) {
-                projection = ItemAssessment.WritabilityProjection.PROVEN;
-            } else if (projection != ItemAssessment.WritabilityProjection.PROVEN
-                    && owed.projection() == ItemAssessment.WritabilityProjection.UNPROVEN) {
-                projection = ItemAssessment.WritabilityProjection.UNPROVEN;
-            }
+            projection = projection.and(owed.projection());
         }
         return new ObligationAssessment(asked.criterion(),
                 ObligationCoverage.acrossTheReadings(coverage), projection, searched,

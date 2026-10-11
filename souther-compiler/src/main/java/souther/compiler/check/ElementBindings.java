@@ -53,7 +53,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                               ElementProvenance provenance,
                               Map<BindingId, ElementProjection> projected,
                               ValueTemplates templates,
-                              Map<BindingId, ElementAnswer> answers) {
+                              Map<BindingId, ElementAnswer> answers,
+                              Map<BindingId, List<Core>> enteredOver) {
 
     /** Nothing was read, which is what a body with no combinator in it comes to. */
     public static final ElementBindings NONE =
@@ -64,10 +65,20 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         held = Map.copyOf(held);
         projected = Map.copyOf(projected);
         answers = Map.copyOf(answers);
+        enteredOver = Map.copyOf(enteredOver);
         if (templates == null) {
             throw new IllegalArgumentException("a body builds values it holds the meaning of, or"
                     + " none");
         }
+    }
+
+    /** Of a body whose closures are asked for no more than what they answered. */
+    public ElementBindings(Map<BindingId, List<HeldIn>> containers, Map<BindingId, Core> held,
+                           ElementProvenance provenance,
+                           Map<BindingId, ElementProjection> projected,
+                           ValueTemplates templates,
+                           Map<BindingId, ElementAnswer> answers) {
+        this(containers, held, provenance, projected, templates, answers, Map.of());
     }
 
     /** Of a body whose closures are asked for no more than the place they answered. */
@@ -106,8 +117,11 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         joinedTemplates.putAll(other.templates.templates());
         Map<BindingId, ElementAnswer> joinedAnswers = new LinkedHashMap<>(answers);
         joinedAnswers.putAll(other.answers);
+        Map<BindingId, List<Core>> joinedEntries = new LinkedHashMap<>(enteredOver);
+        joinedEntries.putAll(other.enteredOver);
         return new ElementBindings(joinedContainers, joinedHeld, provenance.and(other.provenance),
-                joinedProjected, new ValueTemplates(joinedTemplates), joinedAnswers);
+                joinedProjected, new ValueTemplates(joinedTemplates), joinedAnswers,
+                joinedEntries);
     }
 
     /**
@@ -172,6 +186,18 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
      */
     public List<HeldIn> containersOf(BindingId binding) {
         return binding == null ? List.of() : containers.getOrDefault(binding, List.of());
+    }
+
+    /**
+     * The containers the closure {@code binding} is a parameter of is applied over, one for each
+     * operation applying it, or empty where something other than an operation over a container may
+     * apply it ({@link ClosureEntries}).
+     *
+     * <p>Empty says nothing is known and not that nothing enters the closure: a reader that took it
+     * for the second would hold every run out of a closure that is also called directly.
+     */
+    public List<Core> enteredOver(BindingId binding) {
+        return binding == null ? List.of() : enteredOver.getOrDefault(binding, List.of());
     }
 
     public boolean isEmpty() {
@@ -241,8 +267,13 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                 projected.putIfAbsent(element, was);
             }
         });
+        List<Core> roots = new ArrayList<>();
+        roots.add(body);
+        roots.addAll(templates);
+        Map<BindingId, List<Core>> entered = ClosureEntries.of(roots, held);
         return found.isEmpty() && provenance.isEmpty() && values.templates().isEmpty() ? NONE
-                : new ElementBindings(found, held, provenance, projected, values, closures);
+                : new ElementBindings(found, held, provenance, projected, values, closures,
+                        entered);
     }
 
     /**

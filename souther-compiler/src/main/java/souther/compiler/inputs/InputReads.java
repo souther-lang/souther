@@ -360,6 +360,24 @@ public final class InputReads {
     }
 
     /**
+     * The containers {@code block} is applied over, read here, one for each operation applying it
+     * — or empty where something other than an operation over a container may apply it.
+     *
+     * <p>A body entered by an application of the closure is entered only where one of these holds
+     * something. Empty says nothing is known of what enters it, and not that nothing does.
+     */
+    public List<Denotation> containersAppliedOver(Core.Block block) {
+        for (Core.Binder param : block.params()) {
+            if (param != null && param.binding() != null) {
+                return names.enteredOver(param.binding()).stream()
+                        .map(container -> new Denotation(container, this))
+                        .toList();
+            }
+        }
+        return List.of();
+    }
+
+    /**
      * What reading {@code block}'s body on each application of it that hands a parameter one of the
      * values a container was written with comes to.
      *
