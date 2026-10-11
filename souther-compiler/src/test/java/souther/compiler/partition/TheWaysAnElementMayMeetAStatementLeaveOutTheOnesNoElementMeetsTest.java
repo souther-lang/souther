@@ -2,11 +2,10 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceRendering;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
-import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,21 +54,79 @@ class TheWaysAnElementMayMeetAStatementLeaveOutTheOnesNoElementMeetsTest {
                 "a row for each rule");
     }
 
+    /**
+     * Choices every way of which some element meets, more of them than are read: the ways read are
+     * kept and the rest are said to be where the figure stopped — beside them on the way, so a row
+     * is composed along the ones read and a way past them is not taken to be closed.
+     */
     @Test
-    void choicesAnElementMeetsInEveryWayStopAtTheFigureAndSaySo() {
+    void choicesAnElementMeetsInEveryWayKeepWhatWasReadAndSayTheRestStopped() {
+        String source = PAIRS.replace("BODY", "List.any(x -> " + pastTheFigure() + ", xs)");
+
+        boolean said = false;
+        for (DecisionReading.Ruled each : DecisionReadings.of(source, "f").found()) {
+            said |= each.states().declined().stream().anyMatch(declined -> declined.whys()
+                    .contains(new WhyNotTaken.MoreWaysThanAreRead()));
+        }
+        assertTrue(said, "the ways past the figure are said to be where this compiler stopped");
+
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+        assertEquals(List.of(true, true), compilation.db()
+                        .ask(new Adequacy.DecisionSearch(module, "f")).value().values().stream()
+                        .map(each -> each.requirement() instanceof RuleRequirement.Required)
+                        .toList(),
+                "and a row for each rule along the ways that were read");
+    }
+
+    /** Elements of two numbers, so a conjunction of choices between them has a way for every
+     *  choice of each and none is closed by another. */
+    private static final String PAIRS = """
+            module q
+
+            data P = { a: Int, b: Int }
+            data Yes
+            data No
+            data Answer = Yes | No
+
+            behavior f : (xs: List<P>) -> Answer
+            let f (xs) = if BODY then Yes else No
+            """;
+
+    /**
+     * Some element meeting one of two things, one of which comes to more ways than are read, is
+     * found along the other or along the ways of the first that were read — whichever is written
+     * first. A figure that stops one alternative leaves the rest of the choice as it was.
+     */
+    @Test
+    void aChoiceOneSideOfWhichPassesTheFigureIsComposedAlongWhatWasRead() {
+        String past = pastTheFigure();
+        for (String body : List.of("x.a == 357 || " + past, past + " || x.a == 357")) {
+            Compilation compilation = Compilation.ofSource(
+                    PAIRS.replace("BODY", "List.any(x -> " + body + ", xs)"), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            String module = compilation.modules().getFirst();
+
+            assertEquals(List.of(true, true), compilation.db()
+                            .ask(new Adequacy.DecisionSearch(module, "f")).value().values()
+                            .stream()
+                            .map(each -> each.requirement() instanceof RuleRequirement.Required)
+                            .toList(),
+                    () -> "a row for each rule of " + body);
+        }
+    }
+
+    /** A conjunction of choices between the two numbers of an element, every way of which an
+     *  element meets, and more of them than a reading of one condition makes. */
+    static String pastTheFigure() {
         List<String> parts = new ArrayList<>();
         for (int each = 0; each < 10; each++) {
-            parts.add("(x <= " + (100 + each) + " || x >= " + each + ")");
+            parts.add("(x.a >= " + (10 + each) + " || x.b >= " + (10 + each) + ")");
         }
-        Compilation compilation = compiled(
-                "List.any(x -> " + String.join(" && ", parts) + ", xs)");
-        String human = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
-
-        assertTrue(human.contains("more ways an element may meet it than this compiler takes one"
-                        + " by one"),
-                () -> "the statement is said to be where a figure of this compiler's work stopped:\n"
-                        + human);
+        return "(" + String.join(" && ", parts) + ")";
     }
 
     private static Compilation compiled(String body) {

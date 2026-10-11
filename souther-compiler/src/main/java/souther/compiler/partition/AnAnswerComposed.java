@@ -12,9 +12,11 @@ import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A value for one answer a rule asks something of.
@@ -165,11 +167,6 @@ public final class AnAnswerComposed {
         // looked along each of them, as a way over the input is.
         List<DemandGap> unaccounted = new ArrayList<>();
         List<Pending> pending = new ArrayList<>();
-        CompositionBudget splitFigure = CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO;
-        int most = splitFigure.maximum();
-        DemandGap.WhyNotComposed tooMany =
-                DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(List.of(splitFigure));
-        CompositionBudget readingsFigure = CompositionBudget.READINGS_OF_ONE_CONDITION;
         for (AnswerDemand each : demands) {
             if (!(each instanceof AnswerDemand.AStatement statement)) {
                 continue;
@@ -177,40 +174,26 @@ public final class AnAnswerComposed {
             Proposition over = AnswerAsAnInput.of(statement.statement(), at,
                     subject.rules().inners(), subject.symbols(), pinned);
             List<DemandReading.Read> reads = over == null ? null : statements.asked(over);
-            Ways ways = reads == null ? new Ways.Unwritable() : eachWay(reads, most);
-            if (ways instanceof Ways.Each(var options)) {
-                pending.add(new Pending(statement, options));
-                continue;
-            }
             // Past a figure nothing was looked along, which is not the same as there being nothing
             // a composer writes: only the first is cured by looking further.
-            unaccounted.add(new DemandGap.Uncomposed(each, switch (ways) {
-                case Ways.TooMany _ -> tooMany;
-                case Ways.ReadingStopped _ ->
-                        DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(
-                                List.of(readingsFigure));
-                case Ways.Unwritable _ ->
-                        new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions();
-                case Ways.Each _ -> throw new IllegalStateException("taken above: " + ways);
-            }));
-        }
-        // Every way the statements together can be taken, and no more of them than the figure lets
-        // a way be split into: past it they are not looked along, and what asked for them is a
-        // demand no value was composed against. Said before any is built, and without a product
-        // that can pass what a count holds: a size is measured against what is left of the figure
-        // and the ways are only multiplied once they are known to fit.
-        int waysSoFar = 1;
-        for (Pending each : pending) {
-            if (each.options().size() > most / waysSoFar) {
-                pending.forEach(one -> unaccounted.add(
-                        new DemandGap.Uncomposed(one.statement(), tooMany)));
-                return Attempt.nothing(
-                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, unaccounted);
+            switch (reads == null ? new Ways.Unwritable() : eachWay(reads)) {
+                case Ways.Each(var options, var stoppedBy) ->
+                        pending.add(new Pending(statement, options, stoppedBy));
+                case Ways.Stopped(var by) -> unaccounted.add(new DemandGap.Uncomposed(each,
+                        DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(by)));
+                case Ways.Unwritable _ -> unaccounted.add(new DemandGap.Uncomposed(each,
+                        new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions()));
             }
-            waysSoFar *= each.options().size();
         }
+        // Every way the statements together can be taken, as many as the figure lets a way be split
+        // into: one way of all of them is enough, so those are looked along, and past them each
+        // statement is one a figure stopped the looking for.
+        CompositionBudget splitFigure = CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO;
+        List<List<List<DemandReading.Read>>> choices = new ArrayList<>();
+        boolean someLeft = !eachChoice(pending, 0, new ArrayList<>(), choices,
+                splitFigure.maximum());
         Attempt first = null;
-        for (List<List<DemandReading.Read>> choice : eachChoice(pending)) {
+        for (List<List<DemandReading.Read>> choice : choices) {
             Attempt here = composedAlong(subject, at, required, asked, unaccounted, pending,
                     choice, demands);
             if (here.outcome() instanceof Outcome.Composed && here.unaccounted().isEmpty()) {
@@ -218,74 +201,155 @@ public final class AnAnswerComposed {
             }
             first = first == null ? here : first;
         }
-        return first;
+        return sayingWhatStoppedTheLooking(first, pending, someLeft ? splitFigure : null);
     }
 
-    /** One statement and each way it may be taken, which is one thing it asks and not several. */
+    /**
+     * {@code failed}, with each statement some of whose ways a figure left unlooked at said to be
+     * one that figure stopped the looking for.
+     *
+     * <p>Not one nothing composes for: the ways looked along came to no value, and a way past the
+     * figure may be one that does. So the figure is what is said of it, as it is where the values of
+     * the input's numbers ran out ({@link CompositionAccount#sayingAFigureEndedTheLookingOverNumbers}).
+     *
+     * @param jointly the figure that cut the ways the statements were taken together along, or
+     *                null where every one of them was looked along
+     */
+    private static Attempt sayingWhatStoppedTheLooking(Attempt failed, List<Pending> pending,
+                                                       CompositionBudget jointly) {
+        Map<AnswerDemand, Set<CompositionBudget>> stopped = new LinkedHashMap<>();
+        for (Pending each : pending) {
+            Set<CompositionBudget> by = EnumSet.noneOf(CompositionBudget.class);
+            by.addAll(each.stoppedBy());
+            if (jointly != null) {
+                by.add(jointly);
+            }
+            if (!by.isEmpty()) {
+                stopped.put(each.statement(), by);
+            }
+        }
+        if (stopped.isEmpty()) {
+            return failed;
+        }
+        List<DemandGap> said = new ArrayList<>();
+        for (DemandGap gap : failed.unaccounted()) {
+            said.add(gap instanceof DemandGap.Uncomposed(AnswerDemand demand, var why)
+                    && stopped.containsKey(demand)
+                    && !(why instanceof DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded)
+                    && !(why instanceof DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded)
+                    ? new DemandGap.Uncomposed(demand,
+                            DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(
+                                    stopped.get(demand)))
+                    : gap);
+        }
+        return new Attempt(failed.outcome(), said);
+    }
+
+    /**
+     * One statement and each way it may be taken, which is one thing it asks and not several.
+     *
+     * @param stoppedBy the figures that left some of its ways unlooked at, empty where none did
+     */
     private record Pending(AnswerDemand.AStatement statement,
-                           List<List<DemandReading.Read>> options) {}
+                           List<List<DemandReading.Read>> options,
+                           Set<CompositionBudget> stoppedBy) {}
 
     /** What the reads of a statement come to along each way they may be taken, or why they come to
      *  none to compose for. */
-    private sealed interface Ways {
+    sealed interface Ways {
 
-        /** Each way, which is one thing it asks and not several. */
-        record Each(List<List<DemandReading.Read>> each) implements Ways {}
+        /**
+         * Each way looked at, which is one thing it asks and not several, and the figures that
+         * left others unlooked at.
+         *
+         * <p>Any one way is enough for the statement to hold, so the ways looked at are composed
+         * along whether or not others were left: a choice one of whose alternatives a figure
+         * stopped is the other alternatives still.
+         */
+        record Each(List<List<DemandReading.Read>> each, Set<CompositionBudget> stoppedBy)
+                implements Ways {
+
+            public Each {
+                each = List.copyOf(each);
+                stoppedBy = Set.copyOf(stoppedBy);
+            }
+        }
 
         /** A read a composer writes toward in no way: a narrowing of a case is what a way over the
          *  input carries, and nothing here puts it under a value composed for an answer. */
         record Unwritable() implements Ways {}
 
-        /** More ways than the figure lets a way be split into. None was built: a count is checked
-         *  against what is left of the figure before the ways it would make are made. */
-        record TooMany() implements Ways {}
+        /** No way looked at, and some left unlooked at by {@code by}: none is known to be one a
+         *  composer writes nothing toward. */
+        record Stopped(Set<CompositionBudget> by) implements Ways {
 
-        /** A part the reading of the statement did not read one by one, because it would have been
-         *  read more times than a reading of one condition makes. A figure ended it, as with
-         *  {@link TooMany}, and a different one. */
-        record ReadingStopped() implements Ways {}
+            public Stopped {
+                by = Set.copyOf(by);
+            }
+        }
     }
 
     /**
      * What {@code reads} comes to along each way it may be taken: a choice between things is each
-     * of them in turn, and no more of them than {@code most}.
+     * of them in turn, as many as a way is split into.
+     *
+     * <p>An alternative no way of which is written toward is passed over and the others are
+     * taken; only where none is left is the choice what stopped them. Every read beside a choice
+     * is asked along every way, so one of those no way is written toward stops all of them.
      */
-    private static Ways eachWay(List<DemandReading.Read> reads, int most) {
+    static Ways eachWay(List<DemandReading.Read> reads) {
+        CompositionBudget splitFigure = CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO;
+        CompositionBudget readingsFigure = CompositionBudget.READINGS_OF_ONE_CONDITION;
+        int most = splitFigure.maximum();
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
         List<List<DemandReading.Read>> ways = new ArrayList<>();
         ways.add(List.of());
         for (DemandReading.Read each : reads) {
             List<List<DemandReading.Read>> these = new ArrayList<>();
             if (each instanceof DemandReading.Read.OneOf(var alternatives)) {
                 for (List<DemandReading.Read> alternative : alternatives) {
-                    Ways inside = eachWay(alternative, most);
-                    if (!(inside instanceof Ways.Each(var found))) {
-                        return inside;
+                    switch (eachWay(alternative)) {
+                        case Ways.Each(var found, var by) -> {
+                            stoppedBy.addAll(by);
+                            for (List<DemandReading.Read> one : found) {
+                                if (these.size() == most) {
+                                    stoppedBy.add(splitFigure);
+                                    break;
+                                }
+                                these.add(one);
+                            }
+                        }
+                        case Ways.Stopped(var by) -> stoppedBy.addAll(by);
+                        case Ways.Unwritable _ -> { }
                     }
-                    these.addAll(found);
-                    if (these.size() > most) {
-                        return new Ways.TooMany();
-                    }
+                }
+                if (these.isEmpty()) {
+                    return stoppedBy.isEmpty() ? new Ways.Unwritable()
+                            : new Ways.Stopped(stoppedBy);
                 }
             } else if (composedAgainst(each)) {
                 these.add(List.of(each));
-            } else if (each instanceof DemandReading.Read.Unread(var whys) && !whys.isEmpty()
+            } else if (each instanceof DemandReading.Read.Unread(var whys)
                     && whys.stream().allMatch(why -> why instanceof WhyNotTaken.MoreWaysThanAreRead
                             || why instanceof WhyNotTaken.MeaningUnread(
                                     WhyUnread.MoreReadingsThanAreMade _))) {
                 // Only where the figure is every reason: a part also left for a reason more
                 // reading does not change is one no value is written toward either way.
-                return new Ways.ReadingStopped();
+                stoppedBy.add(readingsFigure);
+                return new Ways.Stopped(stoppedBy);
             } else {
                 return new Ways.Unwritable();
             }
-            // The ways so far times the ways of this read, held to the figure without a product
-            // that could pass what a count holds.
-            if (these.size() > most / ways.size()) {
-                return new Ways.TooMany();
-            }
+            // The ways so far with each of this read's, made whole one at a time and no more of
+            // them than the figure: each is enough by itself, so the ones made are taken.
             List<List<DemandReading.Read>> wider = new ArrayList<>();
+            product:
             for (List<DemandReading.Read> before : ways) {
                 for (List<DemandReading.Read> more : these) {
+                    if (wider.size() == most) {
+                        stoppedBy.add(splitFigure);
+                        break product;
+                    }
                     List<DemandReading.Read> both = new ArrayList<>(before);
                     both.addAll(more);
                     wider.add(both);
@@ -293,25 +357,34 @@ public final class AnAnswerComposed {
             }
             ways = wider;
         }
-        return new Ways.Each(ways);
+        return new Ways.Each(ways, stoppedBy);
     }
 
-    /** Each way of taking every statement, the first statement's ways changing slowest. */
-    private static List<List<List<DemandReading.Read>>> eachChoice(List<Pending> pending) {
-        List<List<List<DemandReading.Read>>> out = new ArrayList<>();
-        out.add(List.of());
-        for (Pending each : pending) {
-            List<List<List<DemandReading.Read>>> wider = new ArrayList<>();
-            for (List<List<DemandReading.Read>> before : out) {
-                for (List<DemandReading.Read> one : each.options()) {
-                    List<List<DemandReading.Read>> both = new ArrayList<>(before);
-                    both.add(one);
-                    wider.add(both);
-                }
+    /**
+     * Each way of taking every statement from {@code at} on, the first statement's ways changing
+     * slowest, put in {@code into} until it holds {@code most}.
+     *
+     * @return whether every way was put, which is false where {@code most} stopped it
+     */
+    private static boolean eachChoice(List<Pending> pending, int at,
+                                      List<List<DemandReading.Read>> chosen,
+                                      List<List<List<DemandReading.Read>>> into, int most) {
+        if (at == pending.size()) {
+            if (into.size() == most) {
+                return false;
             }
-            out = wider;
+            into.add(List.copyOf(chosen));
+            return true;
         }
-        return out;
+        for (List<DemandReading.Read> one : pending.get(at).options()) {
+            chosen.add(one);
+            boolean more = eachChoice(pending, at + 1, chosen, into, most);
+            chosen.removeLast();
+            if (!more) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

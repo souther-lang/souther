@@ -55,18 +55,13 @@ public sealed interface Reachability {
         // of them: the way is each of them as well, and a search looks along each. Every row is
         // along one, so where none of them reaches, nothing does.
         CompositionBudget figure = CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO;
-        Optional<List<WayToTheBorder>> each = way.eachWay(figure.maximum());
-        if (each.isEmpty()) {
-            // More ways than are looked along: the way is looked along whole, which every row past
-            // it is on, and the conditions it was not split at say so.
-            return taking(way, declarations, new Ways.Whole(way.severalWays(), figure));
-        }
-        if (each.get().size() == 1) {
+        WayToTheBorder.Split each = way.eachWay(figure.maximum());
+        if (each.everyWay() && each.ways().size() == 1) {
             return whole;
         }
         List<Reaching> along = new ArrayList<>();
         Reachability closed = null;
-        for (WayToTheBorder one : each.get()) {
+        for (WayToTheBorder one : each.ways()) {
             switch (taking(one, declarations, Ways.ONE)) {
                 case Reaching open -> along.add(open);
                 case Reachability shut -> {
@@ -75,6 +70,13 @@ public sealed interface Reachability {
                     }
                 }
             }
+        }
+        if (!each.everyWay()) {
+            // More ways than are looked along: the ones the figure let through are looked along
+            // first, each narrower than the way, and past them the way is looked along whole —
+            // which every row past it is on, so none of them being closed proves nothing — and the
+            // conditions it was not split at say so.
+            return taking(way, declarations, new Ways.Whole(way.severalWays(), figure, along));
         }
         return along.isEmpty() ? closed : taking(way, declarations, new Ways.Each(along));
     }
@@ -153,15 +155,25 @@ public sealed interface Reachability {
         }
 
         /**
-         * Not split, though {@code unsplit} came out one of several ways: the ways they split it
-         * into are more than {@code figure} lets this look along, so it is looked along whole.
+         * Not split whole, though {@code unsplit} came out one of several ways: the ways they split
+         * it into are more than {@code figure} lets this look along, so the first of them are
+         * looked along and past them it is looked along whole.
+         *
+         * <p>The ones looked along are each enough for a row, and any of them may be the one an
+         * author wrote the condition for, so they are not given up for the rest. The way whole is
+         * still looked along past them, and only it says nothing reaches, since a row may be on a
+         * way not among them.
          *
          * @param unsplit the conditions of several ways on it, in the order the walk met them
+         * @param along   the ways the figure let through that some row may take, looked along
+         *                before the way whole; none where every one of them was closed
          */
-        record Whole(List<OnTheWay.OneOf> unsplit, CompositionBudget figure) implements Ways {
+        record Whole(List<OnTheWay.OneOf> unsplit, CompositionBudget figure, List<Reaching> along)
+                implements Ways {
 
             public Whole {
                 unsplit = List.copyOf(unsplit);
+                along = List.copyOf(along);
                 if (unsplit.isEmpty() || figure == null) {
                     throw new IllegalArgumentException("a way looked along whole past a figure has"
                             + " a condition of several ways on it, and a figure it met");

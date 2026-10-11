@@ -65,10 +65,24 @@ public sealed interface TakenConstraint {
      * condition on the one element the way walks would be held against what another element meets.
      */
     static boolean nothingMeetsAll(List<TakenConstraint> these, SearchRegion rules) {
-        SearchRegion within = rules;
+        return nothingIsLeftFor(these, narrowedBy(these, rules));
+    }
+
+    /** {@code region} with each of {@code these} taken in. */
+    static SearchRegion narrowedBy(List<TakenConstraint> these, SearchRegion region) {
+        SearchRegion within = region;
         for (TakenConstraint one : these) {
             within = one.narrowing(within);
         }
+        return within;
+    }
+
+    /**
+     * Whether {@code within}, which has {@code these} taken in, leaves nothing for some number
+     * they name or some form one of them is over — the second half of {@link #nothingMeetsAll},
+     * for a reader that narrows a region one constraint at a time and asks after each.
+     */
+    static boolean nothingIsLeftFor(List<TakenConstraint> these, SearchRegion within) {
         for (TakenConstraint one : these) {
             for (NumericTerm term : one.terms()) {
                 if (within.projectionOf(term)

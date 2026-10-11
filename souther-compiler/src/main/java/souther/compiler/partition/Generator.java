@@ -4802,7 +4802,9 @@ public final class Generator {
             // stays one that was, so what was not split is still said of its row.
             Reachability.Reaching thisWay = new Reachability.Reaching(reaching.region(),
                     way.taken(), truths, reaching.boundedOnTheWay(),
-                    reaching.ways() instanceof Reachability.Ways.Whole whole ? whole
+                    reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure,
+                            var _)
+                            ? new Reachability.Ways.Whole(unsplit, figure, List.of())
                             : Reachability.Ways.ONE);
             ParameterCameToNothing one = new InOrder(subject, order, composed, standing, writes,
                     settled, thisWay, check, way.contents()).from(0, Map.of());
@@ -5202,7 +5204,7 @@ public final class Generator {
                 counted.get(itemCount).values(), LevelRegion::meet));
         // A condition of several ways the way was not split at is composed past along the whole,
         // and says so: along one of its ways the row would be composed against more.
-        if (reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure)) {
+        if (reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure, var _)) {
             unsplit.forEach(each -> gaps.add(new ReachabilityGap.LookedAlongWhole(each, figure)));
         }
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {

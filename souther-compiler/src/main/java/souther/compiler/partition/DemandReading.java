@@ -460,28 +460,21 @@ final class DemandReading {
         Proposition asked = everyElement ? some.ofTheElement().denied() : some.ofTheElement();
         List<Proposition> parts = asked instanceof Proposition.All all ? all.parts()
                 : List.of(asked);
-        List<AnElementsWay> ways = List.of(AnElementsWay.ASKING_NOTHING);
+        List<List<AnElementsWay>> choices = new ArrayList<>();
         for (Proposition part : parts) {
             // What a container holding a value asks of an element is that it be that value, which
             // a composer writes into the container and no region narrows by. The element itself:
             // the key a map files it under being a value is no value the map holds.
-            List<AnElementsWay> choices = part instanceof Proposition.SameValue(
+            List<AnElementsWay> these = part instanceof Proposition.SameValue(
                     DecisionSubject.AnInput(TermPath one), DecisionSubject.AnInput(TermPath at),
                     boolean holds, var _) && one.equals(held.element())
                     ? List.of(AnElementsWay.asking(holds ? new RowDemand.SameAs(at)
                             : new RowDemand.DifferentFrom(at)))
                     : keyedWays(part, held, element);
-            if (choices == null) {
-                choices = waysOf(projected(part, read), element, everyElement, some, read);
-            }
-            ways = choices == null ? null : AnElementsWay.eachOf(ways, choices, read);
-            // More ways an element may meet it than a reading of one condition makes: not taken
-            // one by one, and said to be where this compiler's work stopped, which is neither the
-            // meaning left unread nor words a row lacks.
-            if (ways == null) {
-                return List.of(new Read.Unread(new WhyNotTaken.MoreWaysThanAreRead()));
-            }
+            choices.add(these != null ? these
+                    : waysOf(projected(part, read), element, everyElement, some, read));
         }
+        List<AnElementsWay> ways = AnElementsWay.eachWhole(choices, read);
         List<List<Read>> alternatives = new ArrayList<>();
         for (AnElementsWay way : ways) {
             alternatives.add(everyElement ? everyElementMeeting(held, way, read)
@@ -525,65 +518,134 @@ final class DemandReading {
         }
 
         /**
-         * Every way of {@code ways} taken together with every one of {@code choices}, or null
-         * where more of them are open than a reading of one condition makes.
-         *
-         * <p>A way no element meets asks the same whatever else it asks: some element meeting it
-         * is no row's, and every element meeting it is the container holding none. So every such
-         * way is one, and nothing taken together with it is looked at. Which ways those are is
-         * proved and not guessed: what the declarations leave, which is what every element holds,
-         * with the relations the way asks of the element taken in, left with nothing
-         * ({@link TakenConstraint#nothingMeetsAll}). A choice between relations of one number
-         * written as a conjunction of disjunctions is, taken apart, mostly ways like that, and the
-         * ones left open are few.
-         *
-         * <p>Only what is left open is held to the figure, since that is what is read one by one
-         * after this; past it nothing is said of what is left, which is why null and not the ways
-         * so far.
+         * The ways a figure of this compiler's work left unlooked at, as one way of their own: the
+         * row is asked something nothing here read, which is neither a way no element meets nor
+         * one an element is composed for. Kept beside the ways that were looked at, so those are
+         * composed for and a way past all of them is not said to be closed.
          */
-        static List<AnElementsWay> eachOf(List<AnElementsWay> ways, List<AnElementsWay> choices,
-                                          InputReading read) {
-            int most = READINGS.maximum();
-            Set<AnElementsWay> out = new LinkedHashSet<>();
-            int open = 0;
-            for (AnElementsWay way : ways) {
-                if (way.never) {
-                    out.add(NEVER);
-                    continue;
-                }
-                for (AnElementsWay choice : choices) {
-                    AnElementsWay both = way.with(choice, read);
-                    if (out.add(both) && !both.never && ++open > most) {
-                        return null;
-                    }
-                }
+        static final AnElementsWay LEFT_UNREAD = ofTheRow(
+                new Read.Unread(new WhyNotTaken.MoreWaysThanAreRead()));
+
+        /**
+         * Every way of taking one choice of each of {@code parts} together, each whole.
+         *
+         * <p>Any of them meeting is enough, whether some element is asked it or every element is:
+         * a row along one way meets what all of them ask together. So the ways are made whole one
+         * at a time and those made are kept however many are not, with {@link #LEFT_UNREAD} beside
+         * them where a figure stopped the making — what is kept is composed for, and what was not
+         * looked at is said to be so rather than lost or taken as closed.
+         *
+         * <p>A way no element meets is not taken further: some element meeting it is no row's, and
+         * every element meeting it is the container holding none, whatever else is asked beside
+         * it. Which ways those are is proved and not guessed: what the declarations leave, which is
+         * what every element holds, with the relations the way asks of the element taken in, left
+         * with nothing ({@link TakenConstraint#nothingMeetsAll}). A choice between relations of one
+         * number written as a conjunction of disjunctions is, taken apart, mostly ways like that.
+         *
+         * <p>What is looked at is held to the figure — each way a choice of several opens — whether
+         * or not it turns out closed, so a walk among closed ways stops where it is told to.
+         */
+        static List<AnElementsWay> eachWhole(List<List<AnElementsWay>> parts, InputReading read) {
+            Set<AnElementsWay> open = new LinkedHashSet<>();
+            int[] looked = {0};
+            if (!walk(parts, 0, ASKING_NOTHING, read.quantities().region(), open, looked)) {
+                open.add(LEFT_UNREAD);
             }
-            return List.copyOf(out);
+            return open.isEmpty() ? List.of(NEVER) : List.copyOf(open);
         }
 
-        /** This way and {@code choice} together, said to be met by no element where nothing the
-         *  declarations leave meets the relations they ask of it together. */
-        private AnElementsWay with(AnElementsWay choice, InputReading read) {
-            if (never || choice.never) {
-                return NEVER;
+        /**
+         * {@code so} taken one choice of each part from {@code at} on, each way made whole put in
+         * {@code open}.
+         *
+         * @param within what the declarations leave with every relation {@code so} asks of the
+         *               element taken in, carried down the walk so each choice narrows it by what
+         *               it adds and no more
+         * @return whether every way was looked at, which is false where the figure stopped it
+         */
+        private static boolean walk(List<List<AnElementsWay>> parts, int at, AnElementsWay so,
+                                    SearchRegion within, Set<AnElementsWay> open, int[] looked) {
+            if (at == parts.size()) {
+                open.add(so);
+                return true;
             }
+            int most = READINGS.maximum();
+            List<AnElementsWay> choices = parts.get(at);
+            // A part with one choice is taken and not chosen, so a long conjunction of single
+            // relations costs nothing of the figure: what is counted is each way a choice opens.
+            boolean aChoice = choices.size() > 1;
+            for (AnElementsWay choice : choices) {
+                if (aChoice) {
+                    if (looked[0] == most) {
+                        return false;
+                    }
+                    looked[0]++;
+                }
+                if (choice.never) {
+                    continue;
+                }
+                List<TakenConstraint> added = relationsOf(choice);
+                SearchRegion further = added.isEmpty() ? within
+                        : TakenConstraint.narrowedBy(added, within);
+                if (!added.isEmpty() && TakenConstraint.nothingIsLeftFor(added, further)) {
+                    continue;
+                }
+                if (!walk(parts, at + 1, so.with(choice), further, open, looked)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** The relations {@code way} asks of the element, which are what a region is narrowed
+         *  by. */
+        private static List<TakenConstraint> relationsOf(AnElementsWay way) {
+            List<TakenConstraint> out = new ArrayList<>();
+            for (RowDemand.OfAnElement each : way.ofTheElement) {
+                if (each instanceof RowDemand.Relational(TakenConstraint relation)) {
+                    out.add(relation);
+                }
+            }
+            return out;
+        }
+
+        /**
+         * The ways of every one of {@code alternatives}, any of which is enough.
+         *
+         * <p>One no element meets is none of them, and only where every one is closed is the
+         * whole. Those left open are held to the figure, and past it the rest are said to be
+         * {@link #LEFT_UNREAD} and not dropped: the ones kept are composed for all the same.
+         */
+        static List<AnElementsWay> oneOfEach(List<List<AnElementsWay>> alternatives) {
+            int most = READINGS.maximum();
+            Set<AnElementsWay> open = new LinkedHashSet<>();
+            boolean someLeft = false;
+            for (List<AnElementsWay> alternative : alternatives) {
+                for (AnElementsWay way : alternative) {
+                    if (way.never || open.contains(way)) {
+                        continue;
+                    }
+                    if (open.size() == most) {
+                        someLeft = true;
+                        break;
+                    }
+                    open.add(way);
+                }
+            }
+            if (someLeft) {
+                open.add(LEFT_UNREAD);
+            }
+            return open.isEmpty() ? List.of(NEVER) : List.copyOf(open);
+        }
+
+        /** This way and {@code choice} together; whether an element meets them is the walk's to
+         *  ask ({@link #walk}). */
+        private AnElementsWay with(AnElementsWay choice) {
             List<RowDemand.OfAnElement> element = new ArrayList<>(ofTheElement);
             element.addAll(choice.ofTheElement);
             List<Read> row = new ArrayList<>(ofTheRow);
             row.addAll(choice.ofTheRow);
-            List<TakenConstraint> relations = new ArrayList<>();
-            for (RowDemand.OfAnElement each : element) {
-                if (each instanceof RowDemand.Relational(TakenConstraint relation)) {
-                    relations.add(relation);
-                }
-            }
-            // Asked only where the choice added a relation: what was there before was asked when
-            // it was added.
-            boolean added = choice.ofTheElement.stream()
-                    .anyMatch(RowDemand.Relational.class::isInstance);
-            return added && TakenConstraint.nothingMeetsAll(relations,
-                    read.quantities().region())
-                    ? NEVER : new AnElementsWay(element, row, false);
+            return new AnElementsWay(element, row, false);
         }
     }
 
@@ -593,21 +655,15 @@ final class DemandReading {
      *
      * @param whole what the quantifier states, which is what a part only the run decides asks of
      *              the run
-     * @return the ways, or null where more are open than a reading of one condition makes
-     *         ({@link AnElementsWay#eachOf})
      */
     private static List<AnElementsWay> waysOf(List<Read> reads, List<TermPath> element,
                                               boolean everyElement, Proposition.Some whole,
                                               InputReading read) {
-        List<AnElementsWay> ways = List.of(AnElementsWay.ASKING_NOTHING);
+        List<List<AnElementsWay>> choices = new ArrayList<>();
         for (Read each : reads) {
-            List<AnElementsWay> choices = choicesOf(each, element, everyElement, whole, read);
-            ways = choices == null ? null : AnElementsWay.eachOf(ways, choices, read);
-            if (ways == null) {
-                return null;
-            }
+            choices.add(choicesOf(each, element, everyElement, whole, read));
         }
-        return ways;
+        return AnElementsWay.eachWhole(choices, read);
     }
 
     /**
@@ -617,8 +673,6 @@ final class DemandReading {
      * whichever element it is, so those are what the row is asked like any other. What every
      * element meets is asked of the element whatever it is about, since a container holding none
      * meets all of it.
-     *
-     * @return the ways, or null where more are open than a reading of one condition makes
      */
     private static List<AnElementsWay> choicesOf(Read each, List<TermPath> element,
                                                  boolean everyElement, Proposition.Some whole,
@@ -659,18 +713,14 @@ final class DemandReading {
                             : AnElementsWay.ofTheRow(each));
             case Read.Demands(RowDemand.ForTheRun(var _, var why, var past)) ->
                     List.of(AnElementsWay.ofTheRow(forTheRun(whole, why, past)));
-            // Each way of each alternative, held to the same figure as a conjunction's ways are.
+            // Each way of each alternative: one alternative a figure stopped is said to be, and
+            // the others are the ways they are.
             case Read.OneOf(var alternatives) -> {
-                List<AnElementsWay> out = new ArrayList<>();
+                List<List<AnElementsWay>> ofEach = new ArrayList<>();
                 for (List<Read> alternative : alternatives) {
-                    List<AnElementsWay> inside =
-                            waysOf(alternative, element, everyElement, whole, read);
-                    if (inside == null || out.size() + inside.size() > READINGS.maximum()) {
-                        yield null;
-                    }
-                    out.addAll(inside);
+                    ofEach.add(waysOf(alternative, element, everyElement, whole, read));
                 }
-                yield List.copyOf(out);
+                yield AnElementsWay.oneOfEach(ofEach);
             }
         };
     }

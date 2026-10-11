@@ -364,17 +364,21 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "how many readings of one condition the reading of what it means makes"),
             Map.entry("souther.compiler.partition.DemandReading#<clinit>()V",
                     "how many ways an element may meet what a quantifier asks are read one by one"),
-            Map.entry("souther.compiler.partition.DemandReading$AnElementsWay#eachOf("
-                            + "Ljava/util/List;Ljava/util/List;"
-                            + "Lsouther/compiler/inputs/InputReading;)Ljava/util/List;",
-                    "past the figure gives the ways up, and the quantifier is said to be where"
-                            + " this compiler's work stopped"),
-            Map.entry("souther.compiler.partition.DemandReading#choicesOf("
-                            + "Lsouther/compiler/partition/DemandReading$Read;"
-                            + "Ljava/util/List;Z"
-                            + "Lsouther/compiler/meaning/Proposition$Some;"
-                            + "Lsouther/compiler/inputs/InputReading;)Ljava/util/List;",
-                    "past the figure gives the ways of one of several things up, the same way"),
+            Map.entry("souther.compiler.partition.DemandReading$AnElementsWay#walk("
+                            + "Ljava/util/List;I"
+                            + "Lsouther/compiler/partition/DemandReading$AnElementsWay;"
+                            + "Lsouther/compiler/inputs/SearchRegion;Ljava/util/Set;[I)Z",
+                    "past the figure stops making ways whole, keeps the ones made and says the"
+                            + " rest are where this compiler's work stopped"),
+            Map.entry("souther.compiler.partition.DemandReading$AnElementsWay#oneOfEach("
+                            + "Ljava/util/List;)Ljava/util/List;",
+                    "past the figure stops taking the ways of one of several things, keeps the"
+                            + " ones taken and says the rest stopped, the same way"),
+            Map.entry("souther.compiler.partition.AnAnswerComposed#eachWay("
+                            + "Ljava/util/List;)"
+                            + "Lsouther/compiler/partition/AnAnswerComposed$Ways;",
+                    "past the figure keeps the ways it made and names the figure as what left the"
+                            + " rest, and names the reading's figure where a part was not read"),
             Map.entry("souther.compiler.partition.Pullback#applicationsOf("
                             + "Lsouther/compiler/core/Core$Block;"
                             + "Lsouther/compiler/inputs/InputReads;"

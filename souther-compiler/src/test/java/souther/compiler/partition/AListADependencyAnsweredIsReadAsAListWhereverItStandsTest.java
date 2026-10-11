@@ -374,48 +374,59 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
     }
 
     /**
-     * What the statement asks is not expanded past the figure, and the demand is said to be one
-     * nothing was composed against. A conjunction of many independent two-way choices is as many
-     * ways as the choices multiplied, and the figure is met before any of them is built.
+     * A statement of more ways than are looked along is composed along the ones that are: any one
+     * is enough for it to hold, so the ways past the figure are not a reason to give up the ways
+     * before it. Past the figure for splitting a way at five choices, and past what a reading of one
+     * condition makes at ten.
      */
     @Test
-    void aStatementOfManyChoicesIsNotExpandedPastTheFigure() {
-        // Every choice of either side is met by some element, so the ways are as many as the
-        // choices multiplied: past the figure for splitting a way at five, and past what a
-        // reading of one condition makes at ten.
-        assertEquals(List.of(CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO),
-                figureThatEndedTheChoices(5));
-        assertEquals(List.of(CompositionBudget.READINGS_OF_ONE_CONDITION),
-                figureThatEndedTheChoices(10));
-    }
-
-    /** The figure the statement of {@code choices} open choices was said to stop at. */
-    private static List<CompositionBudget> figureThatEndedTheChoices(int choices) {
-        List<String> parts = new ArrayList<>();
-        for (int each = 0; each < choices; each++) {
-            parts.add("(x <= " + (100 + each) + " || x >= " + each + ")");
-        }
-        Compilation compilation = Compilation.ofSource(MODEL.replace("BODY",
-                "List.any(x -> " + String.join(" && ", parts) + ", sched1(c).value)"), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        String module = compilation.modules().getFirst();
-
-        List<RuleSettlement> notComposed = compilation.db()
-                .ask(new Adequacy.DecisionSearch(module, "f")).value().values().stream()
-                .filter(each -> !(each.requirement() instanceof RuleRequirement.Required))
-                .toList();
-
-        assertEquals(1, notComposed.size(), "the rule that needs the statement to hold");
-        List<CompositionBudget> said = new ArrayList<>();
-        for (DemandGap gap : notComposed.getFirst().account().onAnAnswer()) {
-            if (gap instanceof DemandGap.Uncomposed(AnswerDemand.AStatement _,
-                    DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded(var figures))) {
-                said.addAll(figures.written());
+    void aStatementOfManyChoicesIsComposedAlongTheWaysLookedAt() {
+        for (int choices : new int[] {5, 10}) {
+            List<String> parts = new ArrayList<>();
+            for (int each = 0; each < choices; each++) {
+                parts.add("(x <= " + (100 + each) + " || x >= " + each + ")");
             }
+            List<RowToRun> rows = rowsFoundFor(
+                    "List.any(x -> " + String.join(" && ", parts) + ", sched1(c).value)");
+
+            assertEquals(2, rows.size(), () -> "a row for each rule: " + rows);
         }
-        return said;
     }
+
+    /**
+     * Some element of what a dependency answered meeting one of two things, one of which comes to
+     * more ways than are read, is composed along what was read — whichever of the two is written
+     * first.
+     */
+    @Test
+    void aChoiceOneSideOfWhichPassesTheFigureIsComposedAlongWhatWasRead() {
+        String past = TheWaysAnElementMayMeetAStatementLeaveOutTheOnesNoElementMeetsTest
+                .pastTheFigure();
+        for (String body : List.of("x.a == 357 || " + past, past + " || x.a == 357")) {
+            List<RowToRun> rows = rowsFoundIn(PAIRS.replace("BODY",
+                    "List.any(x -> " + body + ", sched1(c).value)"));
+
+            assertEquals(2, rows.size(), () -> "a row for each rule of " + body + ": " + rows);
+        }
+    }
+
+    /** What the dependency answers is a list of elements of two numbers. */
+    private static final String PAIRS = """
+            module p
+
+            data Cat = A | B
+            data P = { a: Int, b: Int }
+            data Sched = List<P>
+            data Yes
+            data No
+            data Answer = Yes | No
+
+            behavior sched1 : (c: Cat) -> Sched
+
+            behavior f : (c: Cat) -> Answer
+                depends on sched1
+            let f (c, sched1) = if BODY then Yes else No
+            """;
 
     /**
      * A choice between relations of one number written as a conjunction of disjunctions is, taken
