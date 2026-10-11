@@ -26,6 +26,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.check.WholeUnitsBetween;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.AnIdentityMap;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputNumber;
@@ -2624,8 +2625,8 @@ final class Pullback {
         if (filed == null) {
             return null;
         }
-        Denotation walked = whole.at().standing(filed.walked(), read.rules().symbols(),
-                read.rules().newtypes());
+        Denotation walked = holdingEachAsOften(whole.at().standing(filed.walked(),
+                read.rules().symbols(), read.rules().newtypes()));
         Denotation key = whole.at().standing(filed.key(), read.rules().symbols(),
                 read.rules().newtypes());
         if (!(walked.at().pathOf(walked.value(), read.rules().newtypes())
@@ -2652,6 +2653,47 @@ final class Pullback {
                 ? new LinearForm<>(constant, Map.of(
                         new DecisionAtom.OfTheInput(occurrences), filed.step()))
                 : null;
+    }
+
+    /**
+     * The seed and the total of what each element adds, where {@code node} is a walk from a seed
+     * whose step only adds to the answer so far ({@link InputNumber#ofAWalkAdding}) — or null where
+     * it is not.
+     */
+    private LinearForm<Quantity> seedPlusWhatEachElementAdds(Core node, InputReads at) {
+        Core stands = Core.withoutStanding(node);
+        if (!(stands instanceof Core.PreservedCall) && !(stands instanceof Core.Read)) {
+            return null;
+        }
+        Denotation walk = at.standing(node, read.rules().symbols(), read.rules().newtypes());
+        InputNumber.SeedAndTotal added = InputNumber.ofAWalkAdding(walk.value(), read.domain(),
+                walk.at(), read.rules(), blocksAt(walk));
+        return added == null ? null : new LinearForm<>(added.seed(),
+                Map.of(new DecisionAtom.OfTheInput(added.total()), ExactRatio.ONE));
+    }
+
+    /**
+     * What {@code container} holds, beneath the operations that only put its elements in another
+     * order or answer each of them as it is: the same values, each as often as {@code container}
+     * holds it, which is what a count of them is a count of.
+     */
+    private Denotation holdingEachAsOften(Denotation container) {
+        Denotation at = container;
+        while (Core.withoutStanding(at.value()) instanceof Core.PreservedCall call) {
+            ValueName operation = call.declared().operation();
+            BuiltFrom<DeclaredArgument> built =
+                    DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
+            DeclaredArgument from = built == null ? null : built.permutesTheElementsOf();
+            if (from == null) {
+                from = AnIdentityMap.of(operation, call.args(), blocksAt(at));
+            }
+            if (from == null) {
+                break;
+            }
+            at = at.at().standing(call.args().get(from.position()), read.rules().symbols(),
+                    read.rules().newtypes());
+        }
+        return at;
     }
 
     /**
@@ -2689,6 +2731,10 @@ final class Pullback {
                 LinearForm<Quantity> filedUnder = valueOfAnEntry(node, at);
                 if (filedUnder != null) {
                     return filedUnder;
+                }
+                LinearForm<Quantity> added = seedPlusWhatEachElementAdds(node, at);
+                if (added != null) {
+                    return added;
                 }
                 NumericTerm term = InputNumber.of(node, read.domain(), at, read.rules());
                 if (term != null) {

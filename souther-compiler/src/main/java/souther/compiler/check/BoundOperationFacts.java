@@ -330,6 +330,44 @@ public final class BoundOperationFacts {
     }
 
     /**
+     * The argument whose elements {@code operation} hands a closure that answers a list for each,
+     * where its answer holds every element of every one of those lists, each once — or null where
+     * it holds anything else.
+     *
+     * <p>Two declared facts together and neither alone. That every element of the answer is inside
+     * what the closure answered of some element ({@link ElementLineage.InsideClosureResult}) says
+     * nothing of how many of them there are, and the size the answer is stated to have — the sizes of
+     * what the closure answered, added up over the elements, and nothing beside them — is a count
+     * without saying which values are counted. An answer that is both has each of the lists
+     * the closure answered put end to end.
+     */
+    public DeclaredArgument flattensEveryAnswerOf(ValueName operation) {
+        BoundOperationFact.ElementsComeFrom held =
+                one(BoundOperationFact.ElementsComeFrom.class, operation);
+        if (held == null
+                || !(held.lineage() instanceof ElementLineage.InsideClosureResult<DeclaredArgument>
+                        inside) || inside.source().elements() != 1
+                || !(settled(operation, OperationLaw.Observed.SIZE)
+                        instanceof Settled.ByALaw(OperationLaw<DeclaredArgument> law, var _))
+                || !(law instanceof OperationLaw.Size<DeclaredArgument> size)) {
+            return null;
+        }
+        LinearForm<LawNumber<DeclaredArgument>> form = size.unconditional();
+        if (form == null || form.constant().signum() != 0 || form.coefs().size() != 1) {
+            return null;
+        }
+        Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> only =
+                form.coefs().entrySet().iterator().next();
+        DeclaredArgument container = inside.source().argument();
+        return ExactRatio.ONE.equals(only.getValue())
+                && only.getKey() instanceof LawNumber.SumOver<DeclaredArgument> sum
+                && sum.container().equals(container)
+                && sum.ofTheElement() instanceof LawNumber.SizeOf<DeclaredArgument> sized
+                && sized.of() instanceof LawSubject.WhatTheClosureAnswers<DeclaredArgument>
+                ? container : null;
+    }
+
+    /**
      * The argument whose elements the answer of {@code operation} is made from where that is all
      * the operation says, or null where it says more or says nothing.
      *
