@@ -4,6 +4,7 @@ import souther.compiler.check.NumberAt;
 import souther.compiler.check.Owed;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenArguments;
 
 /**
@@ -88,7 +89,7 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleCitation cit
             case NumericTerm.ValueOf _ -> new NumberAt.OfWhatNumber.OfItsOwnValue();
             case NumericTerm.TakenOf taken ->
                     new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(taken.operation(),
-                            taken.arguments());
+                            taken.arguments(), taken.transformation());
             case NumericTerm.CodePointClassCount count ->
                     new NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn(count.counted());
             case NumericTerm.Multiplicity _ -> new NumberAt.OfWhatNumber.OfItsMultiplicity();
@@ -98,7 +99,7 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleCitation cit
             // written about what its elements come to.
             case NumericTerm.TakenOver over ->
                     new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(over.operation(),
-                            TakenArguments.NONE);
+                            TakenArguments.NONE, ValueTransformation.NONE);
         }), cited);
     }
 

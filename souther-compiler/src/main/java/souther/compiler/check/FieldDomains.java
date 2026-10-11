@@ -10,6 +10,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -2118,7 +2119,7 @@ public final class FieldDomains {
         }
         return new CountLeft(counted.by(), leftAt(path,
                 new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(counted.by(),
-                        TakenArguments.NONE)));
+                        TakenArguments.NONE, ValueTransformation.NONE)));
     }
 
     /**

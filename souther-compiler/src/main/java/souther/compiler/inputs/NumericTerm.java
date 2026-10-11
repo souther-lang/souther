@@ -11,6 +11,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ConstantArguments;
@@ -151,7 +152,7 @@ public sealed interface NumericTerm
     final class TakenOf implements FromOnePosition {
 
         private final ValueName.Stdlib operation;
-        private final TermPath position;
+        private final ObservationSource source;
         private final TakenArguments arguments;
 
         /**
@@ -168,10 +169,11 @@ public sealed interface NumericTerm
          * this package rather than of the term — and this package's own tests were already going
          * round it (#1027).
          */
-        private TakenOf(ValueName.Stdlib operation, TermPath position, TakenArguments arguments) {
+        private TakenOf(ValueName.Stdlib operation, ObservationSource source,
+                        TakenArguments arguments) {
             this.operation = java.util.Objects.requireNonNull(operation,
                     "a taken number is taken by an operation");
-            this.position = java.util.Objects.requireNonNull(position, "and taken of somewhere");
+            this.source = java.util.Objects.requireNonNull(source, "and taken of somewhere");
             this.arguments = java.util.Objects.requireNonNull(arguments,
                     "and with whatever it was given beside that value, which is nothing where it"
                             + " was given nothing");
@@ -200,12 +202,22 @@ public sealed interface NumericTerm
          */
         public static TakenOf of(ValueName.Stdlib operation, TermPath position, Type at,
                                  NewtypeInners inners, Symbols symbols) {
-            return of(operation, position, TakenArguments.NONE, at, inners, symbols);
+            return of(operation, ObservationSource.asItStands(position), TakenArguments.NONE, at,
+                    inners, symbols);
         }
 
         /** The same, for a taking the operation was given {@code arguments} beside the value at
-         *  {@code position}. */
+         *  {@code position}, which it takes its number of as it stands. */
         public static TakenOf of(ValueName.Stdlib operation, TermPath position,
+                                 TakenArguments arguments, Type at, NewtypeInners inners,
+                                 Symbols symbols) {
+            return of(operation, ObservationSource.asItStands(position), arguments, at, inners,
+                    symbols);
+        }
+
+        /** The same, for a taking of the value {@code source} says: the one at its position, or
+         *  what it was made into. */
+        public static TakenOf of(ValueName.Stdlib operation, ObservationSource source,
                                  TakenArguments arguments, Type at, NewtypeInners inners,
                                  Symbols symbols) {
             TakenAs how = DefaultBoundOperationFacts.get().takenAs(operation, arguments);
@@ -213,12 +225,14 @@ public sealed interface NumericTerm
             // what the container holds. Asked of the operation alone, a sum answered no number this
             // could name and no term was made for any rule written on one.
             Type answers = NumericAnswers.typeOf(operation, at, inners, symbols);
-            if (how == null || answers == null || at == null || arguments == null) {
+            if (how == null || answers == null || at == null || arguments == null
+                    || source == null) {
                 return null;
             }
             return how.takenOf(souther.compiler.check.TypeOps.base(at, inners), answers)
                     && how.settledBy(arguments)
-                    ? new TakenOf(operation, position, arguments) : null;
+                    && how.readsWhatItWasMadeFrom(source.transformation())
+                    ? new TakenOf(operation, source, arguments) : null;
         }
 
         /** The operation whose answer this term is. */
@@ -231,10 +245,10 @@ public sealed interface NumericTerm
          *  as it did here. */
         @Override
         public TakenOf movedTo(UnaryOperator<TermPath> moved) {
-            return new TakenOf(operation, moved.apply(position), arguments);
+            return new TakenOf(operation, source.movedTo(moved), arguments);
         }
 
-        /** What it was given beside the value at {@link #position()}, read as constants — and
+        /** What it was given beside the value it takes its number of, read as constants — and
          *  nothing where it was given nothing. */
         public TakenArguments arguments() {
             return arguments;
@@ -242,7 +256,19 @@ public sealed interface NumericTerm
 
         @Override
         public TermPath position() {
-            return position;
+            return source.position();
+        }
+
+        /** What the value the operation took its number of was made from the one at
+         *  {@link #position()}, which is nothing where it is that one. */
+        public ValueTransformation transformation() {
+            return source.transformation();
+        }
+
+        /** The value the operation takes its number of: where it stands and what it was made
+         *  into. */
+        public ObservationSource source() {
+            return source;
         }
 
         /** What this operation takes of the value at {@link #position()}, given what it was handed
@@ -251,23 +277,24 @@ public sealed interface NumericTerm
             return DefaultBoundOperationFacts.get().takenAs(operation, arguments);
         }
 
-        /** By the operation, the location and what it was given beside it, which is what makes two
-         *  of these one term. */
+        /** By the operation, the value it takes its number of and what it was given beside it,
+         *  which is what makes two of these one term. */
         @Override
         public boolean equals(Object other) {
             return other instanceof TakenOf taken
-                    && operation.equals(taken.operation) && position.equals(taken.position)
+                    && operation.equals(taken.operation) && source.equals(taken.source)
                     && arguments.equals(taken.arguments);
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(operation, position, arguments);
+            return java.util.Objects.hash(operation, source, arguments);
         }
 
         @Override
         public String toString() {
-            return operation.qualified() + arguments.writtenWith(position.toString());
+            return operation.qualified() + arguments.writtenWith(
+                    source.transformation().writtenAround(source.position().toString()));
         }
     }
 
@@ -593,7 +620,8 @@ public sealed interface NumericTerm
             case ValueOf _ -> new ValueOf(other);
             // With what it was given beside the value, which is part of which number it is: a
             // quotient is the one its divisor says, and a taking given none is no quotient.
-            case TakenOf taken -> TakenOf.of(taken.operation(), other, taken.arguments(), at,
+            case TakenOf taken -> TakenOf.of(taken.operation(),
+                    new ObservationSource(other, taken.transformation()), taken.arguments(), at,
                     inners, symbols);
             case CodePointClassCount count ->
                     CodePointClassCount.of(other, count.counted(), at, inners);

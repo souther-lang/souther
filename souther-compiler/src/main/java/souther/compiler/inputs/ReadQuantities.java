@@ -1632,7 +1632,8 @@ final class ReadQuantities implements Quantities {
         return switch (term) {
             case NumericTerm.ValueOf _ -> NumberAt.valueOf(at.named());
             case NumericTerm.TakenOf taken ->
-                    NumberAt.takenOf(at.named(), taken.operation(), taken.arguments());
+                    NumberAt.takenOf(at.named(), taken.operation(), taken.arguments(),
+                            taken.transformation());
             case NumericTerm.CodePointClassCount count ->
                     NumberAt.countOf(at.named(), count.counted());
             case NumericTerm.Multiplicity _ -> NumberAt.multiplicityOf(at.named());

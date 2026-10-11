@@ -1,5 +1,6 @@
 package souther.compiler.semantics;
 
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
@@ -60,6 +61,19 @@ public sealed interface TakenAs {
      */
     default boolean settledBy(TakenArguments arguments) {
         return true;
+    }
+
+    /**
+     * Whether a number of this account can be taken of a value made from the one at a position
+     * by {@code from}, and still be read off a row and written into one.
+     *
+     * <p>Asked where a term is built, as {@link #settledBy} is. Every account takes a number of the
+     * value as it stands. Which of them take it of a value that was moved first is a second
+     * question: it needs the numbers the account answers to be a run of the values that were moved
+     * from, so that what a row is asked to hold is read back from the numbers asked for.
+     */
+    default boolean readsWhatItWasMadeFrom(ValueTransformation from) {
+        return from instanceof ValueTransformation.Identity;
     }
 
     /**
@@ -321,6 +335,21 @@ public sealed interface TakenAs {
         @Override
         public boolean takenOf(Type source, Type answered) {
             return source == Type.Prim.DATE && answered == Type.Prim.INT;
+        }
+
+        /**
+         * The year of a date moved by days, and no other part of it.
+         *
+         * <p>The dates of one year are a run of days, so the dates a moved date falls in a year at
+         * are a run of days as well, and a row is written by the run. A month or a day of the month
+         * comes round every year: the dates it falls on are no run.
+         */
+        @Override
+        public boolean readsWhatItWasMadeFrom(ValueTransformation from) {
+            return switch (from) {
+                case ValueTransformation.Identity _ -> true;
+                case ValueTransformation.DateShift _ -> part == DatePart.YEAR;
+            };
         }
     }
 

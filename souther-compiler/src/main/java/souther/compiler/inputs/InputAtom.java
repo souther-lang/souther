@@ -137,7 +137,8 @@ sealed interface InputAtom {
                 // is: two quotients of one place written alike would be one name for two numbers.
                 case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
                         taken.operation() instanceof souther.compiler.types.ValueName.Stdlib named
-                                ? named.qualified() + taken.arguments().writtenWith(at)
+                                ? named.qualified() + taken.arguments().writtenWith(
+                                        taken.from().writtenAround(at))
                                 : "|" + at + "|";
                 case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count ->
                         "#(" + count.counted() + ")(" + at + ")";

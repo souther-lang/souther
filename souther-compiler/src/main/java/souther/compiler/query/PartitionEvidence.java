@@ -247,7 +247,8 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 case NumberAt.OfWhatNumber
                                         .OfWhatAnOperationAnswers taken ->
                                         named(taken.operation())
-                                                + taken.arguments().writtenWith(at());
+                                                + taken.arguments().writtenWith(
+                                                        taken.from().writtenAround(at()));
                                 case NumberAt.OfWhatNumber
                                         .OfHowManyCodePointsAreIn count ->
                                         "#(" + count.counted() + ")(" + at() + ")";

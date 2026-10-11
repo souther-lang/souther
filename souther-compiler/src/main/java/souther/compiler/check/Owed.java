@@ -80,7 +80,8 @@ public sealed interface Owed {
             return switch (on.of()) {
                 case NumberAt.OfWhatNumber.OfItsOwnValue _ -> where;
                 case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
-                        taken.operation() + taken.arguments().writtenWith(where);
+                        taken.operation() + taken.arguments().writtenWith(
+                                taken.from().writtenAround(where));
                 case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count ->
                         "#(" + count.counted() + ")(" + where + ")";
                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + where + ")";

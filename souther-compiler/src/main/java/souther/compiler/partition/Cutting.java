@@ -1012,8 +1012,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 if (!Boolean.TRUE.equals(of.levels().attainable(level).orNull())) {
                     return extent.extendTo(level);
                 }
-                // An equation this region cannot carry is no proof that nothing stands there.
-                return atTheLevel(region, level)
+                // An equation this region cannot carry is no proof that nothing stands there. What
+                // the quantity runs between is asked first and settles it where the level is past
+                // either end: a region that holds no rule about a number an operation bounds
+                // carries no equation that says so.
+                return extent.extendTo(level) && atTheLevel(region, level)
                         .map(there -> there.emptiness().isEmpty()).orElse(true);
             }
 

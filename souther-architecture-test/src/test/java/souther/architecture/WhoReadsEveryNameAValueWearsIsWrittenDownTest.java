@@ -197,6 +197,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "TermRealizations", "namesOf",
                     "(" + TYPE + SOURCE + ")L" + PARTITION + "WornNames;", THE_POSITION),
+            row(PARTITION + "TermRealizations", "onShiftedYears",
+                    "(Ljava/util/List;" + TYPE + "L" + CHECK + "Carrier;" + SOURCE + ")"
+                            + REALIZATION,
+                    THE_POSITION),
             row(PARTITION + "TermRealizations", "onThoseParts",
                     "(Ljava/util/Map;" + TYPE + "L" + CHECK + "Carrier;" + SOURCE + ")"
                             + REALIZATION,
