@@ -112,6 +112,19 @@ public enum CompositionBudget {
      */
     PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED(8),
 
+    /**
+     * How many choices of a value for each of the input's numbers a statement names are looked at
+     * to find the pairs above.
+     *
+     * <p>The looking beside the trying, held apart from
+     * {@link #PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED} for the reason
+     * {@link #PLACES_A_PAIR_IS_LOOKED_AT} is held apart from its own: a choice the way refuses a
+     * value of is looked at and is no pair to compose an answer for, and costs a question of the
+     * region and not a composing. Counted by what is looked at, whether or not it came to a pair,
+     * so that the walk is bounded and not only what it finds.
+     */
+    CHOICES_OF_INPUT_NUMBERS_LOOKED_AT(256),
+
     /** How many places along a line a pair is tried at, which is places the walk offered and not
      *  places it went past. What it costs to step over a place the anchored position may not stand
      *  at is {@link #PLACES_A_PAIR_IS_LOOKED_AT}. */
@@ -363,7 +376,9 @@ public enum CompositionBudget {
     public CompositionBudget splitFrom() {
         return switch (this) {
             // The walking beside the trying. Both halves of one walk over a line, and of one walk
-            // over the run a position on the way stands on.
+            // over the run a position on the way stands on, and of the one over what the input's
+            // numbers may be put at.
+            case CHOICES_OF_INPUT_NUMBERS_LOOKED_AT -> PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED;
             case PLACES_A_PAIR_IS_LOOKED_AT -> PLACES_A_PAIR_IS_TRIED_AT;
             case PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT ->
                     VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT;

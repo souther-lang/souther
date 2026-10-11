@@ -240,19 +240,20 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/AnAnswerComposed$Attempt;",
                     "past the figure does not look along the ways of a statement, and says that"
                             + " nothing was composed against it"),
+            Map.entry("souther.compiler.partition.InputNumbersAnAnswerTurnsOn#solvedAtTheEnds("
+                            + "Lsouther/compiler/numeric/ExactRatio;"
+                            + "Lsouther/compiler/numeric/ExactRatio;"
+                            + "Ljava/util/List;Ljava/util/List;"
+                            + "Lsouther/compiler/inputs/SearchRegion;)Ljava/util/List;",
+                    "stops the walk over the ends of an answer's places at the figure, and offers"
+                            + " what it had solved for — values to put a number at, which the"
+                            + " pairs' own figure then bounds again"),
             Map.entry("souther.compiler.partition.InputNumbersAnAnswerTurnsOn#of("
                             + "Lsouther/compiler/partition/AnswersDemanded;"
                             + "Lsouther/compiler/partition/Reachability$Reaching;"
                             + "Lsouther/compiler/partition/InputNumbersAnAnswerTurnsOn$AnswerSubjectOf;)"
                             + "Lsouther/compiler/partition/InputNumbersAnAnswerTurnsOn$Pairs;",
                     "stops offering pairs at the figure and says whether some were left out"),
-            Map.entry("souther.compiler.query.Adequacy$ARowBuiltAndRun#attempt("
-                            + "Ljava/lang/String;Ljava/util/Map;"
-                            + "Lsouther/compiler/partition/NumbersAskedFor;"
-                            + "Lsouther/compiler/partition/Reachability$Reaching;"
-                            + "Lsouther/compiler/partition/AnswersDemanded;)Ljava/util/List;",
-                    "names the figure as what stopped the search where no pair composed and some"
-                            + " were left untried"),
             Map.entry("souther.compiler.query.Coverages$2#endedBy("
                             + "Lsouther/compiler/query/SearchOutcomes;"
                             + "Lsouther/compiler/partition/Realization;)"

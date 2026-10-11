@@ -698,11 +698,6 @@ final class InputPath {
     static DeclaredArgument argumentWhoseElementsItHolds(ValueName operation) {
         BuiltFrom<DeclaredArgument> built =
                 DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
-        // Each as often is more than the same values: an answer that keeps some of what it was
-        // given holds those and not the rest.
-        if (asked == ElementQuestion.EVERY_OCCURRENCE) {
-            return built == null ? null : built.permutesTheElementsOf();
-        }
         DeclaredArgument holds = built == null ? null : built.holdsTheElementsOf();
         // A set of a list's values holds the very values the list does, though not as often.
         if (holds == null && DefaultBoundOperationFacts.get().holdsTheImageOfEveryElement(operation)
@@ -717,6 +712,11 @@ final class InputPath {
     private DeclaredArgument holdingTheElements(ValueName operation) {
         BuiltFrom<DeclaredArgument> built =
                 DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
+        // Each as often is more than the same values: an answer that keeps some of what it was
+        // given holds those and not the rest.
+        if (asked == ElementQuestion.EVERY_OCCURRENCE) {
+            return built == null ? null : built.permutesTheElementsOf();
+        }
         DeclaredArgument holds = argumentWhoseElementsItHolds(operation);
         // What is made from a position came from it and is not it, so an answer holding only that
         // is crossed by the walk after where a value came from and not by the walk after which

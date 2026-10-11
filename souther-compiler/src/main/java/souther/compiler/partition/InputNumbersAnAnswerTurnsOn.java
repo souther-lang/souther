@@ -17,6 +17,7 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -44,24 +45,36 @@ import java.util.function.Predicate;
  * to the next where it did not. Each pair puts the number at a value the region of the way takes
  * in, so a row that reaches the way is not given up for one that does not.
  *
- * <p>Looked along as far as {@link CompositionBudget#PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED}
- * and no further, and said where it stopped ({@link Pairs#someLeftUntried}): a statement that none
- * of those composed for is one nothing was composed against, and never one no value meets.
+ * <p><b>Two figures, and each bounds the walk and not only what it finds.</b> What is looked at is
+ * {@link CompositionBudget#CHOICES_OF_INPUT_NUMBERS_LOOKED_AT}, counted whether or not the way took
+ * the choice in, so a walk over a large product of values the way refuses stops where it is told
+ * to; and what is offered to compose an answer for is
+ * {@link CompositionBudget#PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED}. Where either ended the walk
+ * with more to look at, {@link Pairs#stoppedBy} says which: a statement that none of those composed
+ * for is one nothing was composed against, and never one no value meets.
  */
 public final class InputNumbersAnAnswerTurnsOn {
 
     /**
-     * The pairs to try, and whether there were more than the figure lets this offer.
+     * The pairs to try, and which figure ended the looking where one did.
      *
-     * @param tried          the pairs, the most promising first; one that puts nothing anywhere
-     *                       where no statement names a number of the input
-     * @param someLeftUntried that a pair the way takes in was left out because of the figure, which
-     *                       is the one thing a search that found none has to say about why
+     * @param tried     the pairs, the most promising first; one that puts nothing anywhere where
+     *                  no statement names a number of the input
+     * @param stoppedBy the figures that ended the walk with a choice left unlooked at, which is the
+     *                  one thing a search that found no pair has to say about why; empty where
+     *                  every choice was looked at
      */
-    public record Pairs(List<InputNumbersAnAnswerTurnsOn> tried, boolean someLeftUntried) {
+    public record Pairs(List<InputNumbersAnAnswerTurnsOn> tried,
+                        Set<CompositionBudget> stoppedBy) {
 
         public Pairs {
             tried = List.copyOf(tried);
+            stoppedBy = Set.copyOf(stoppedBy);
+        }
+
+        /** Whether a figure ended the walk with something left unlooked at. */
+        public boolean someLeftUntried() {
+            return !stoppedBy.isEmpty();
         }
     }
 
@@ -123,7 +136,7 @@ public final class InputNumbersAnAnswerTurnsOn {
             }
         }
         if (offered.isEmpty()) {
-            return new Pairs(List.of(unpinned), false);
+            return new Pairs(List.of(unpinned), Set.of());
         }
         SearchRegion region = reaching.region();
         List<NumericTerm> terms = new ArrayList<>(offered.keySet());
@@ -133,24 +146,34 @@ public final class InputNumbersAnAnswerTurnsOn {
             pool.addAll(allowedByTheWay(region, term));
             candidates.add(inTheOrderOffered(region, term, pool));
         }
-        int most = CompositionBudget.PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED.maximum();
+        CompositionBudget pairsFigure = CompositionBudget.PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED;
+        CompositionBudget lookedFigure = CompositionBudget.CHOICES_OF_INPUT_NUMBERS_LOOKED_AT;
+        int mostPairs = pairsFigure.maximum();
+        int mostLooked = lookedFigure.maximum();
         List<InputNumbersAnAnswerTurnsOn> out = new ArrayList<>();
-        boolean[] someLeftUntried = {false};
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
+        int[] looked = {0};
         ConditionReportAnchor at = anchor;
         eachChoice(candidates, 0, new ArrayList<>(), choice -> {
+            // The walk is bounded before a choice is looked at: one counted past the figure is one
+            // that was never put to the way.
+            if (looked[0] == mostLooked) {
+                stoppedBy.add(lookedFigure);
+                return false;
+            }
+            looked[0]++;
             InputNumbersAnAnswerTurnsOn pair = pinned(reaching, terms, choice, at);
             if (pair == null) {
                 return true;
             }
-            if (out.size() == most) {
-                someLeftUntried[0] = true;
+            if (out.size() == mostPairs) {
+                stoppedBy.add(pairsFigure);
                 return false;
             }
             out.add(pair);
             return true;
         });
-        return out.isEmpty() ? new Pairs(List.of(unpinned), false)
-                : new Pairs(out, someLeftUntried[0]);
+        return out.isEmpty() ? new Pairs(List.of(unpinned), stoppedBy) : new Pairs(out, stoppedBy);
     }
 
     /**
@@ -256,10 +279,15 @@ public final class InputNumbersAnAnswerTurnsOn {
             }
             for (ExactRatio solved : solvedAtTheEnds(form.constant(), by, places, weights,
                     answerRegion)) {
-                for (ExactRatio near : List.of(solved, plusOne(solved), minusOne(solved))) {
-                    if (near != null) {
-                        out.add(near);
-                    }
+                // The value and the ones beside it, each only where it is a number a ratio holds.
+                out.add(solved);
+                ExactRatio above = plusOne(solved);
+                if (above != null) {
+                    out.add(above);
+                }
+                ExactRatio below = minusOne(solved);
+                if (below != null) {
+                    out.add(below);
                 }
             }
         }
@@ -301,7 +329,14 @@ public final class InputNumbersAnAnswerTurnsOn {
             ends.add(here);
         }
         List<ExactRatio> out = new ArrayList<>();
+        // The ends of every place, which is as many choices as the places have ends multiplied, so
+        // the walk over them is held to what a walk over the input's numbers is.
+        int[] looked = {0};
+        int mostLooked = CompositionBudget.CHOICES_OF_INPUT_NUMBERS_LOOKED_AT.maximum();
         eachChoice(ends, 0, new ArrayList<>(), choice -> {
+            if (looked[0]++ == mostLooked) {
+                return false;
+            }
             ExactRatio rest = constant;
             for (int at = 0; at < choice.size() && rest != null; at++) {
                 ExactRatio weighed = weights.get(at).times(choice.get(at)).orNull();

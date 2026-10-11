@@ -719,6 +719,7 @@ public final class Generator {
                              // The pairs past it were never composed for, so what the search came
                              // to is about the pairs it tried.
                              PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
+                             CHOICES_OF_INPUT_NUMBERS_LOOKED_AT,
                              SHAPES_OF_A_TOTAL_OFFERED, ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
                              CONTAINERS_A_COUNT_IS_OFFERED, SHARES_A_COUNT_IS_TRIED_AT,
                              WAYS_DOWN_TO_A_TOTAL_TRIED,
@@ -4350,6 +4351,26 @@ public final class Generator {
          * put a value under.
          */
         CompositionAccount unrepresented();
+
+        /**
+         * This attempt as it came back, with {@code account} said of it in the place of the one it
+         * came back with.
+         *
+         * <p>For a reader that learned something about what the attempt was composed without after
+         * it was made: a row stays the row it is and a word stays the word, and what is said of what
+         * they were short of is the account's.
+         */
+        default BoundaryAttempt withAccount(CompositionAccount account) {
+            return switch (this) {
+                case Built built -> new Built(built.row(), account);
+                case Unresolved none -> new Unresolved(none.why(), account);
+                case Stopped stopped -> new Stopped(stopped.why(), stopped.met(), account);
+                case Unexhausted unexhausted ->
+                        new Unexhausted(unexhausted.why(), unexhausted.met(), account);
+                case Limited limited -> new Limited(limited.why(), limited.by(), account);
+                case Unplanned unplanned -> new Unplanned(unplanned.why(), unplanned.by(), account);
+            };
+        }
 
         /**
          * A value with the edge in it, built and accepted.

@@ -102,6 +102,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.FixtureTemplate;
+import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.Generator;
@@ -127,7 +128,6 @@ import souther.compiler.types.TypeSymbol;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -2919,11 +2919,12 @@ public final class Adequacy {
                 // A statement about an answer that also names a number of the input is met by the
                 // pair: the number is put at a value, the answer is composed for that, and the row
                 // is held to the same value. Which value suits is not known until the answer is
-                // composed for it, so each is tried in turn and the first pair every part of which
-                // composed is the one taken — and where none did, the pair that came nearest, which
-                // says what it was short of.
+                // composed for it, so each is tried in turn, and the first pair that a row was
+                // composed for in every demand is the one taken, with every way of standing the
+                // dependencies in that came with it: a row built whole is a row, and another way
+                // of standing in that came to nothing beside it takes nothing from it.
                 List<Generator.BoundaryAttempt> nearest = null;
-                long nearestComposed = -1;
+                long nearestBuilt = -1;
                 InputNumbersAnAnswerTurnsOn.Pairs pairs =
                         InputNumbersAnAnswerTurnsOn.of(demands, reaching, answers::subjectOf);
                 for (InputNumbersAnAnswerTurnsOn pinned : pairs.tried()) {
@@ -2933,29 +2934,29 @@ public final class Adequacy {
                         out.add(Generator.probeFixing(subject, label, fixing, asking,
                                 pinned.reaching(), check, stood));
                     }
-                    if (out.stream().allMatch(Adequacy::composedAgainstEverythingAsked)) {
+                    if (out.stream().anyMatch(Adequacy::composedAgainstEverythingAsked)) {
                         return List.copyOf(out);
                     }
-                    long composed = out.stream()
-                            .filter(Adequacy::composedAgainstEverythingAsked).count();
-                    if (composed > nearestComposed) {
+                    long built = out.stream()
+                            .filter(Generator.BoundaryAttempt.Built.class::isInstance).count();
+                    if (built > nearestBuilt) {
                         nearest = out;
-                        nearestComposed = composed;
+                        nearestBuilt = built;
                     }
                 }
-                // Every pair tried composed short of something, and there were more than the figure
-                // lets this try. That is the answer this has — a budget ended the search — and
-                // not that the pair that came nearest was the best there is.
-                if (pairs.someLeftUntried()) {
-                    CompositionBudget budget =
-                            CompositionBudget.PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED;
-                    return List.of(new Generator.BoundaryAttempt.Stopped(
-                            new Generator.UnresolvedCombination(List.of(label),
-                                    Generator.UnresolvedCombination.Reason.wordFor(Set.of(budget))),
-                            CompositionShortfall.of(EnumSet.of(budget)),
-                            nearest.getFirst().unrepresented()));
+                // No pair composed a row whole. What the pair that came nearest built stays, since
+                // the run of a row built short may still say something, and where a figure ended
+                // the walk with some left unlooked at that is said of the demands that were not
+                // composed against, in the account that goes with each attempt: what was built is
+                // not replaced by the stop, and the stop is not hidden by what was built.
+                if (!pairs.someLeftUntried()) {
+                    return List.copyOf(nearest);
                 }
-                return List.copyOf(nearest);
+                List<Generator.BoundaryAttempt> out = new ArrayList<>();
+                for (Generator.BoundaryAttempt each : nearest) {
+                    out.add(endedBy(each, label, pairs.stoppedBy()));
+                }
+                return List.copyOf(out);
             } catch (LinkageError _) {
                 // The generated classes would not link, so nothing can be built to find out what a
                 // model admits. Nothing was tried, which is not the same as everything tried being
@@ -2976,6 +2977,26 @@ public final class Adequacy {
         }
     }
 
+
+    /**
+     * {@code attempt} with a figure said to be why the statements that name a number of the input
+     * were not composed against.
+     *
+     * <p>A row it built stays as it is, with the account saying so. What came to no row is a
+     * search a figure ended, and is said in the word such a search has always come back with.
+     */
+    private static Generator.BoundaryAttempt endedBy(Generator.BoundaryAttempt attempt,
+                                                     String label,
+                                                     Set<CompositionBudget> figures) {
+        CompositionAccount said =
+                attempt.unrepresented().sayingAFigureEndedTheLookingOverNumbers(figures);
+        return attempt instanceof Generator.BoundaryAttempt.Unresolved
+                ? new Generator.BoundaryAttempt.Stopped(
+                        new Generator.UnresolvedCombination(List.of(label),
+                                Generator.UnresolvedCombination.Reason.wordFor(figures)),
+                        CompositionShortfall.of(figures), said)
+                : attempt.withAccount(said);
+    }
 
     /** Whether a row was built and nothing asked of an answer was left uncomposed. */
     private static boolean composedAgainstEverythingAsked(Generator.BoundaryAttempt attempt) {

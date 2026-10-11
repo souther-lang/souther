@@ -300,6 +300,7 @@ public final class PublicationOrders {
                     CompositionBudget.WAYS_UNDER_THE_CASES_TRIED,
                     CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO,
                     CompositionBudget.PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
+                    CompositionBudget.CHOICES_OF_INPUT_NUMBERS_LOOKED_AT,
                     CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                     CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT,
                     CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,

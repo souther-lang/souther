@@ -1,6 +1,10 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
+
+import java.util.Collection;
 
 /**
  * A condition about an answer that the value standing a dependency in was not composed against, and
@@ -168,5 +172,33 @@ public sealed interface DemandGap {
          * of them is one the row does not meet.
          */
         record OneValueAnswersEveryCall() implements WhyNotComposed {}
+
+        /**
+         * No value was composed under it before a figure of this compiler's ended the search over
+         * the values of the input's numbers it names.
+         *
+         * <p>Said of the statement and not of the pair that came nearest: what a figure ended is the
+         * looking, so a pair past it may be one an answer composes for. A demand with this was not
+         * composed against, and raising the figure is what looks further.
+         *
+         * @param figures what ended the walk
+         */
+        record NoPairComposedBeforeAFigureEnded(CanonicalSelection<CompositionBudget> figures)
+                implements WhyNotComposed {
+
+            public NoPairComposedBeforeAFigureEnded {
+                if (figures == null || figures.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a walk a figure ended says which figure ended it");
+                }
+            }
+
+            /** What ended a walk, in the order a report says it. */
+            public static NoPairComposedBeforeAFigureEnded by(
+                    Collection<CompositionBudget> met) {
+                return new NoPairComposedBeforeAFigureEnded(
+                        PublicationOrders.COMPOSITION_BUDGETS.keep(met));
+            }
+        }
     }
 }

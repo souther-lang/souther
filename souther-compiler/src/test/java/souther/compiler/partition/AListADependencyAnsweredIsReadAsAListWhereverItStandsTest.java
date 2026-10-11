@@ -11,12 +11,13 @@ import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
-import souther.compiler.query.RuleSearch;
 import souther.compiler.query.RuleSettlement;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -356,18 +357,50 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
         compilation.answerEverything();
         String module = compilation.modules().getFirst();
 
-        List<RuleSettlement> unsettled = compilation.db()
+        Set<CompositionBudget> said = new HashSet<>();
+        for (RuleSettlement each : compilation.db()
+                .ask(new Adequacy.DecisionSearch(module, "f")).value().values()) {
+            for (DemandGap gap : each.account().onAnAnswer()) {
+                if (gap instanceof DemandGap.Uncomposed(var _,
+                        DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded(var figures))) {
+                    said.addAll(figures.written());
+                }
+            }
+        }
+
+        assertEquals(Set.of(CompositionBudget.PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED), said,
+                "a figure ended the search, which the demand not composed against says — and is not"
+                        + " that every pair was tried and none met it");
+    }
+
+    /**
+     * What the statement asks is not expanded past the figure, and the demand is said to be one
+     * nothing was composed against. A conjunction of many independent two-way choices is as many
+     * ways as the choices multiplied, and the figure is met before any of them is built.
+     */
+    @Test
+    void aStatementOfManyChoicesIsNotExpandedPastTheFigure() {
+        List<String> parts = new ArrayList<>();
+        for (int each = 0; each < 10; each++) {
+            parts.add("(x <= " + each + " || x >= " + (100 + each) + ")");
+        }
+        Compilation compilation = Compilation.ofSource(MODEL.replace("BODY",
+                "List.any(x -> " + String.join(" && ", parts) + ", sched1(c).value)"), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+
+        List<RuleSettlement> notComposed = compilation.db()
                 .ask(new Adequacy.DecisionSearch(module, "f")).value().values().stream()
-                .filter(each -> each.requirement()
-                        instanceof RuleRequirement.Unsettled.NothingWasComposedToTry)
+                .filter(each -> !(each.requirement() instanceof RuleRequirement.Required))
                 .toList();
 
-        assertEquals(1, unsettled.size(), "the rule a number must reach the elements for");
-        assertEquals(List.of(Generator.UnresolvedCombination.Reason
-                        .THE_SEARCH_LEFT_SOMETHING_UNTRIED),
-                ((RuleSearch.CameToNothing) unsettled.getFirst().search()).ways().stream()
-                        .map(Generator.UnresolvedCombination::reason).toList(),
-                "a figure ended the search, which is not that every pair was tried and none met it");
+        assertEquals(1, notComposed.size(), "the rule that needs the statement to hold");
+        assertTrue(notComposed.getFirst().account().onAnAnswer().stream().anyMatch(gap ->
+                        gap instanceof DemandGap.Uncomposed(AnswerDemand.AStatement _,
+                                DemandGap.WhyNotComposed.NoValueComposedAtItsPositions _)),
+                () -> "and its statement is said to be one nothing was composed against: "
+                        + notComposed.getFirst().account());
     }
 
     /** A number of the answer compared with one of the input is met by the same pair. */

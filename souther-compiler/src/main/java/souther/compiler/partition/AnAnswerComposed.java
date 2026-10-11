@@ -170,8 +170,8 @@ public final class AnAnswerComposed {
             Proposition over = AnswerAsAnInput.of(statement.statement(), at,
                     subject.rules().inners(), subject.symbols(), pinned);
             List<DemandReading.Read> reads = over == null ? null : statements.asked(over);
-            List<List<DemandReading.Read>> options = reads == null ? null : eachWay(reads);
-            if (options == null) {
+            int most = CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO.maximum();
+            if (!(reads != null && eachWay(reads, most) instanceof Ways.Each(var options))) {
                 unaccounted.add(new DemandGap.Uncomposed(each,
                         new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions()));
                 continue;
@@ -180,16 +180,19 @@ public final class AnAnswerComposed {
         }
         // Every way the statements together can be taken, and no more of them than the figure lets
         // a way be split into: past it they are not looked along, and what asked for them is a
-        // demand no value was composed against.
+        // demand no value was composed against. Said before any is built, and without a product
+        // that can pass what a count holds: a size is measured against what is left of the figure
+        // and the ways are only multiplied once they are known to fit.
+        int most = CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO.maximum();
         int ways = 1;
         for (Pending each : pending) {
-            ways = Math.multiplyExact(ways, each.options().size());
-            if (ways > CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO.maximum()) {
+            if (each.options().size() > most / ways) {
                 pending.forEach(one -> unaccounted.add(new DemandGap.Uncomposed(one.statement(),
                         new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions())));
                 return Attempt.nothing(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, unaccounted);
             }
+            ways *= each.options().size();
         }
         Attempt first = null;
         for (List<List<DemandReading.Read>> choice : eachChoice(pending)) {
@@ -207,30 +210,51 @@ public final class AnAnswerComposed {
     private record Pending(AnswerDemand.AStatement statement,
                            List<List<DemandReading.Read>> options) {}
 
+    /** What the reads of a statement come to along each way they may be taken, or why they come to
+     *  none to compose for. */
+    private sealed interface Ways {
+
+        /** Each way, which is one thing it asks and not several. */
+        record Each(List<List<DemandReading.Read>> each) implements Ways {}
+
+        /** A read a composer writes toward in no way: a narrowing of a case is what a way over the
+         *  input carries, and nothing here puts it under a value composed for an answer. */
+        record Unwritable() implements Ways {}
+
+        /** More ways than the figure lets a way be split into. None was built: a count is checked
+         *  against what is left of the figure before the ways it would make are made. */
+        record TooMany() implements Ways {}
+    }
+
     /**
      * What {@code reads} comes to along each way it may be taken: a choice between things is each
-     * of them in turn. Null where some read is one a composer writes toward in no way — a
-     * narrowing of a case is what a way over the input carries, and nothing here puts it under a
-     * value composed for an answer.
+     * of them in turn, and no more of them than {@code most}.
      */
-    private static List<List<DemandReading.Read>> eachWay(List<DemandReading.Read> reads) {
+    private static Ways eachWay(List<DemandReading.Read> reads, int most) {
         List<List<DemandReading.Read>> ways = new ArrayList<>();
         ways.add(List.of());
         for (DemandReading.Read each : reads) {
-            List<List<DemandReading.Read>> these;
+            List<List<DemandReading.Read>> these = new ArrayList<>();
             if (each instanceof DemandReading.Read.OneOf(var alternatives)) {
-                these = new ArrayList<>();
                 for (List<DemandReading.Read> alternative : alternatives) {
-                    List<List<DemandReading.Read>> inside = eachWay(alternative);
-                    if (inside == null) {
-                        return null;
+                    Ways inside = eachWay(alternative, most);
+                    if (!(inside instanceof Ways.Each(var found))) {
+                        return inside;
                     }
-                    these.addAll(inside);
+                    these.addAll(found);
+                    if (these.size() > most) {
+                        return new Ways.TooMany();
+                    }
                 }
             } else if (composedAgainst(each)) {
-                these = List.of(List.of(each));
+                these.add(List.of(each));
             } else {
-                return null;
+                return new Ways.Unwritable();
+            }
+            // The ways so far times the ways of this read, held to the figure without a product
+            // that could pass what a count holds.
+            if (these.size() > most / ways.size()) {
+                return new Ways.TooMany();
             }
             List<List<DemandReading.Read>> wider = new ArrayList<>();
             for (List<DemandReading.Read> before : ways) {
@@ -242,7 +266,7 @@ public final class AnAnswerComposed {
             }
             ways = wider;
         }
-        return ways;
+        return new Ways.Each(ways);
     }
 
     /** Each way of taking every statement, the first statement's ways changing slowest. */

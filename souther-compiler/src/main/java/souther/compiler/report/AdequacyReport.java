@@ -3775,6 +3775,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case DemandGap.WhyNotComposed.NothingComposedAValueOfTheAnswer _ ->
                         "a condition on what a dependency answers, which nothing here composed a"
                                 + " value of";
+                case DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded(var figures) ->
+                        "a condition on what a dependency answers and a number of the input —"
+                                + " this compiler stopped looking at the values of that number at "
+                                + Reasons.said(figures);
                 case DemandGap.WhyNotComposed.OneValueAnswersEveryCall _ ->
                         "a condition on what a dependency answers at one call, where the row"
                                 + " writes one value for every call it makes";
