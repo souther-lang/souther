@@ -92,9 +92,8 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
     }
 
     /**
-     * A list that has to hold several elements, in a list that has to, is written with that many —
-     * and a point no row was written for is said to be one the search left untried, never a point a
-     * row reaches by holding fewer.
+     * A list that has to hold several elements, in a list that has to, is written with that many,
+     * and the total is spread over the leaves of all of them.
      */
     @Test
     void whatEachListHasToHoldIsHeldByTheRowsWritten() {
@@ -102,11 +101,10 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
                 "invariant List.length(entries) >= 2", SUMMED.formatted(10));
         String rows = rowsOf(model);
         List<Long> totals = totalsOf(rows);
-        for (long point : List.of(10L, 9L)) {
-            assertTrue(totals.contains(point) || rows.contains("no row for `List.sum("
-                            + "ledger.entries[*].postings[*].q) = " + point + "`"),
-                    () -> "the point " + point + " has a row or is said to have none: " + rows);
-        }
+        assertTrue(totals.contains(10L), () -> "the point on the line: " + rows);
+        assertTrue(totals.contains(9L), () -> "the point just off it: " + rows);
+        assertTrue(totals.stream().anyMatch(each -> each > 10), () -> "one inside: " + rows);
+        assertTrue(totals.stream().anyMatch(each -> each < 9), () -> "one outside: " + rows);
         for (String row : rows.split("\n    \\| ")) {
             if (!row.contains("Entry")) {
                 continue;
@@ -115,6 +113,110 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
             assertTrue(count(row, "Posting \\{") >= 2 * count(row, "Entry \\{"),
                     () -> "two postings in each: " + row);
         }
+    }
+
+    /**
+     * What a leaf may be and how many of them a list may hold bound what the lists can come to, so
+     * the total is spread over as many leaves as it takes and no list is written past its end.
+     */
+    @Test
+    void aTotalPastWhatOneLeafHoldsIsSpreadOverMoreLeaves() {
+        String model = DATA.replace("data Posting = { q: Int }", """
+                data Posting = { q: Int }
+                    invariant q >= 0 && q <= 3""") + """
+
+                data Entry = { postings: List<Posting> }
+                    invariant List.length(postings) >= 1 && List.length(postings) <= 2
+
+                data Ledger = { entries: List<Entry> }
+                    invariant List.length(entries) >= 1 && List.length(entries) <= 2
+
+                behavior decide : (ledger: Ledger) -> Many | Few
+
+                let decide (ledger) =
+                    if %s
+                    then Many else Few
+                """.formatted(SUMMED.formatted(10));
+        String rows = rowsOf(model);
+        List<Long> totals = totalsOf(rows);
+        assertTrue(totals.contains(10L), () -> "the point on the line: " + rows);
+        assertTrue(totals.contains(9L), () -> "the point just off it: " + rows);
+        for (String row : rows.split("\n    \\| ")) {
+            if (!row.contains("Ledger")) {
+                continue;
+            }
+            Matcher found = Pattern.compile("q = (-?\\d+)").matcher(row);
+            while (found.find()) {
+                long q = Long.parseLong(found.group(1));
+                assertTrue(q >= 0 && q <= 3, () -> "a posting inside its own rule: " + row);
+            }
+            assertTrue(count(row, "Entry \\{") <= 2, () -> "at most two entries: " + row);
+        }
+        // Four postings of three at most come to twelve, so a total past that has no row.
+        String past = rowsOf(model.replace(">= 10", ">= 13"));
+        assertTrue(totalsOf(past).stream().noneMatch(each -> each == 13L), past);
+    }
+
+    /** Lists the rules leave any size are written at more than one, the postings of an entry
+     *  differing in number from the postings of the next. */
+    @Test
+    void listsOfAnySizeAreWrittenAtMoreThanOneSize() {
+        String rows = rowsOf(model("", "invariant List.length(entries) >= 2", SUMMED.formatted(10)));
+        boolean unequal = false;
+        for (String row : rows.split("\n    \\| ")) {
+            List<Integer> sizes = new ArrayList<>();
+            for (String entry : row.split("Entry \\{")) {
+                if (entry.contains("postings")) {
+                    sizes.add(count(entry, "Posting \\{"));
+                }
+            }
+            unequal |= sizes.stream().distinct().count() > 1;
+        }
+        assertTrue(totalsOf(rows).contains(10L), rows);
+        assertTrue(unequal, () -> "a row whose entries hold different numbers of postings: " + rows);
+    }
+
+    /** The same spreading through three levels of lists. */
+    @Test
+    void aTotalOverThreeLevelsOfListsIsSpreadOverTheLeavesOfAll() {
+        String model = """
+                module example.deep
+
+                data Many
+                data Few
+
+                data C = { q: Int }
+                data B = { cs: List<C> }
+                    invariant List.length(cs) >= 2
+                data A = { bs: List<B> }
+                    invariant List.length(bs) >= 2
+
+                behavior decide : (groups: List<A>) -> Many | Few
+
+                let decide (groups) =
+                    if List.sum(List.map(c -> c.q,
+                            List.flatMap(.cs, List.flatMap(.bs, groups)))) >= 7
+                    then Many else Few
+                """;
+        String rows = rowsOf(model);
+        List<Long> totals = new ArrayList<>();
+        Pattern leaf = Pattern.compile("C \\{ q = (-?\\d+) \\}");
+        for (String row : rows.split("\n    \\| ")) {
+            Matcher found = leaf.matcher(row);
+            long total = 0;
+            boolean any = false;
+            while (found.find()) {
+                total += Long.parseLong(found.group(1));
+                any = true;
+            }
+            if (any) {
+                totals.add(total);
+                assertTrue(count(row, "B \\{") >= 2 * count(row, "A \\{"), row);
+                assertTrue(count(row, "C \\{") >= 2 * count(row, "B \\{"), row);
+            }
+        }
+        assertTrue(totals.contains(7L), () -> "the point on the line: " + rows);
+        assertTrue(totals.contains(6L), () -> "the point just off it: " + rows);
     }
 
     /** What a filter kept, or a closure that chose among the lists, is not every value there. */

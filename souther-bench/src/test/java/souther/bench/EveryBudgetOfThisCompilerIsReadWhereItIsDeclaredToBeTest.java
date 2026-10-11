@@ -96,6 +96,14 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.ContainersAddingUp$HowManyElements#figure()"
                             + "Lsouther/compiler/partition/CompositionBudget;",
                     "says which figure that was, which is what the walk hands over"),
+            // The same two for a total spread over the leaves of containers inside containers, where
+            // the count is the leaves and not the elements of one.
+            Map.entry("souther.compiler.partition.NestedContainersAddingUp$Walk#take("
+                            + "Ljava/lang/Integer;)Lsouther/compiler/partition/Taking$Taken;",
+                    "has no room for a count of more leaves than a row carries"),
+            Map.entry("souther.compiler.partition.NestedContainersAddingUp$Walk#figure()"
+                            + "Lsouther/compiler/partition/CompositionBudget;",
+                    "says which figure that was, which is what the walk hands over"),
             Map.entry("souther.compiler.partition.ContainersAddingUp$WhatIsOffered#take("
                             + "Lsouther/compiler/partition/FixtureTemplate;)"
                             + "Lsouther/compiler/partition/Taking$Taken;",

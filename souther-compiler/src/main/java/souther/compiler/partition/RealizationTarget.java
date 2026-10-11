@@ -145,9 +145,9 @@ public sealed interface RealizationTarget {
      * A number taken over a run of values, realized by writing the container they are read from.
      *
      * <p>What makes the root one location is the run's own invariant: a run is over every occurrence
-     * of the path it is read from, and a path standing inside two containers is not one
-     * ({@code inputs.RunSource}). So there is exactly one container holding all of the values, and
-     * rebuilding it is the whole of what moves the number.
+     * of the path it is read from ({@code inputs.RunSource}). So the outermost container holds all
+     * of the values, and rebuilding it is the whole of what moves the number — whether they stand
+     * in the elements of it or in containers inside those.
      *
      * <p>The values themselves are not written anywhere and no position of the row holds them. A
      * row that fixed the place they are read from would fix one of them, which is a rule about one
