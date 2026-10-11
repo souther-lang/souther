@@ -1966,6 +1966,33 @@ final class Pullback {
         }
 
         /**
+         * The truths of {@code keptWhere} still to be read with what is stated of an occurrence,
+         * or null where one of them holds on no row.
+         *
+         * <p>An occurrence kept by a truth that holds on no row is no element of the container, so
+         * nothing stated of it is any part of a statement about some element or of a count of them,
+         * and it is not read: a filter over values written out decides most of what it keeps, and
+         * what is read of each value is the body of a closure. A truth that holds on every row adds
+         * nothing to what is stated, and is left out of it.
+         */
+        private List<ReadMeaning.Occurrence.Kept> stillToBeRead(
+                List<ReadMeaning.Occurrence.Kept> keptWhere) {
+            List<ReadMeaning.Occurrence.Kept> out = new ArrayList<>();
+            for (ReadMeaning.Occurrence.Kept kept : keptWhere) {
+                Proposition stated = ofATruth(kept.truth().value(), kept.truth().at(), read,
+                        Optional.empty()).proposition();
+                switch (kept.holds() ? stated : stated.denied()) {
+                    case Proposition.Always(boolean holds) when !holds -> {
+                        return null;
+                    }
+                    case Proposition.Always _ -> { }
+                    default -> out.add(kept);
+                }
+            }
+            return out;
+        }
+
+        /**
          * {@code stated} of an occurrence, together with what it was kept by: an occurrence is one
          * of the container's elements where each truth it was kept by came out as it did, and a
          * statement about some element is about one that is there.
@@ -2238,8 +2265,15 @@ final class Pullback {
          * together with what its occurrence was kept by.
          */
         private WrittenOutRead ofEachWrittenOut(DeclaredArgument container,
-                                                List<ReadMeaning.Occurrence> occurrences,
+                                                List<ReadMeaning.Occurrence> written,
                                                 LawProposition<DeclaredArgument> law) {
+            List<ReadMeaning.Occurrence> occurrences = new ArrayList<>();
+            for (ReadMeaning.Occurrence each : written) {
+                List<ReadMeaning.Occurrence.Kept> kept = stillToBeRead(each.keptWhere());
+                if (kept != null) {
+                    occurrences.add(new ReadMeaning.Occurrence(each.value(), kept));
+                }
+            }
             if (occurrences.isEmpty()) {
                 return new WrittenOutRead.Each(List.of());
             }
@@ -2284,8 +2318,12 @@ final class Pullback {
             InputReads outer = application;
             try {
                 for (InputReads.Applications.Made one : applications) {
+                    List<ReadMeaning.Occurrence.Kept> kept = stillToBeRead(one.keptWhere());
+                    if (kept == null) {
+                        continue;
+                    }
                     application = one.reads();
-                    ofEach.add(whereItIsKept(of(law), one.keptWhere()));
+                    ofEach.add(whereItIsKept(of(law), kept));
                 }
             } finally {
                 application = outer;

@@ -24,6 +24,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -101,6 +102,10 @@ public final class InputReads {
     /** {@link #hashCode}, worked out the first time it is asked: nothing here changes, and what it
      *  is worked out from holds every value bound on the way here. Nought where it has not been. */
     private int hash;
+    /** Where each node {@link #pathOf} was asked of stands here, under the declarations
+     *  {@link #pathsUnder}; null until it is first asked. No part of what this reading is. */
+    private Map<Core, PathResolution> paths;
+    private DeclarationNewtypes pathsUnder;
 
     /**
      * The applications of closures, the arms of choices and the calls of behaviors a reading here is
@@ -1465,9 +1470,27 @@ public final class InputReads {
     /**
      * Where {@code e} stands, read here ({@link PathResolution}): a position, and never a narrowing
      * of one to several cases ({@link PathResolution#heldAt}).
+     *
+     * <p>Answered once for each node asked here. Every reader of a condition asks where its parts
+     * stand — the arithmetic of a side, whether a value is the same on every run, whether two
+     * cases are written out — and each asks it of the same nodes in the same reading. What it
+     * comes to turns on nothing but the node and this reading, which does not change; the node
+     * and not one equal to it, since what this reading takes a node as is taken of that node
+     * ({@link #taken}).
      */
     public PathResolution pathOf(Core e, DeclarationNewtypes newtypes) {
-        return InputPath.of(e, names, newtypes, this::taken).heldAt();
+        if (paths == null) {
+            paths = new IdentityHashMap<>();
+            pathsUnder = newtypes;
+        } else if (pathsUnder != newtypes) {
+            return InputPath.of(e, names, newtypes, this::taken).heldAt();
+        }
+        PathResolution held = paths.get(e);
+        if (held == null) {
+            held = InputPath.of(e, names, newtypes, this::taken).heldAt();
+            paths.put(e, held);
+        }
+        return held;
     }
 
     /** What a name means here, for a walk that goes on in this reading ({@link InputPath}). */
