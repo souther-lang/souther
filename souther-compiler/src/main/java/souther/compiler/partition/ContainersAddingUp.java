@@ -144,6 +144,14 @@ final class ContainersAddingUp {
         // Named beside it, the two were free to be about two numbers and this would fill a
         // container found under one path with elements counted on another's order.
         RealizationTarget.OfANumber target = RealizationTarget.of(orders.term());
+        // The lists of a list put end to end: a container inside the elements of another, so an
+        // element holds as many occurrences of the number as its own container does and the total is
+        // spread over the leaves and then grouped, level by level.
+        if (orders.term() instanceof NumericTerm.TakenOver over
+                && over.source() instanceof RunSource.FlattenedOccurrences flat) {
+            return new NestedContainersAddingUp(flat.subjectPath()).to(answer, container, orders,
+                    within, reading, alsoHolding, inside);
+        }
         // A run computed of each element is written by solving for the one field its computation
         // reads, so the elements are chosen on that field's order and stand at its place. A
         // computation this does not solve for is a population this compiler writes none of, which
@@ -379,7 +387,7 @@ final class ContainersAddingUp {
      * the top runs to the largest count there is, and what stops the walk before then is the
      * consumer having no room, as it is at every other length.
      */
-    private static Iterable<Integer> countsAdmitted(DeclaredBounds.CountRange howMany,
+    static Iterable<Integer> countsAdmitted(DeclaredBounds.CountRange howMany,
                                                     HowManyIsAskedFor alsoHolding) {
         int from = Math.max(howMany.least(), 0);
         return () -> new Iterator<>() {
@@ -680,7 +688,7 @@ final class ContainersAddingUp {
      * answers it as narrowed by whatever the row had to pass to get here. Read here instead, this
      * would be a second reading of the rules, free to part from the one the search was run against.
      */
-    private static DeclaredBounds.CountRange howMany(TypeView container, TermPath root,
+    static DeclaredBounds.CountRange howMany(TypeView container, TermPath root,
                                                      SearchRegion within,
                                                      RuleReadingContext reading,
                                                      HowManyIsAskedFor alsoHolding) {
@@ -977,7 +985,7 @@ final class ContainersAddingUp {
      * of one and neither the walk that adds nor the walk that maps takes a set at all. Refused
      * rather than composed as a list, so that the day one arrives it arrives here.
      */
-    private static FixtureTemplate filled(List<BigDecimal> split, Shape.Sequence holding,
+    static FixtureTemplate filled(List<BigDecimal> split, Shape.Sequence holding,
                                           TypeView container, Filling filling,
                                           Carrier elements, RuleReadingContext reading) {
         if (holding.kind() != Shape.Sequence.Kind.LIST) {
@@ -1012,7 +1020,7 @@ final class ContainersAddingUp {
      *                 against as well
      * @param narrowed the positions inside the element the caller said which case of
      */
-    private record Filling(ConstructionPlan plan, TermPath fixed,
+    record Filling(ConstructionPlan plan, TermPath fixed,
                            Map<TermPath, FixtureTemplate> beside, Set<TermPath> narrowed) {}
 
     /**
@@ -1021,7 +1029,7 @@ final class ContainersAddingUp {
      * @param filled  one per way that planned, in the order they were reached
      * @param cutBy   the figures the planning stopped at, which are this compiler's
      */
-    private record Ways(List<Filling> filled, Set<CompositionBudget> cutBy,
+    record Ways(List<Filling> filled, Set<CompositionBudget> cutBy,
                         List<TermPath> nothingStandsAt) {
 
         Ways {
@@ -1071,11 +1079,11 @@ final class ContainersAddingUp {
      * <p><b>One occurrence of the number per element, and nothing here has to check it.</b> The
      * split this fills a container from is one number per element, so a way down that passed
      * through a container of its own would build a value coming to a multiple of the total. No such
-     * way is asked about: a run is read from a path standing inside one container
-     * ({@link souther.compiler.inputs.RunSource}), and a total of what a location holds is read at
-     * the element itself — so a position under the element with a container on the way to it is not
-     * a number this is ever asked to write for. Guarded here as well, the guard would be one
-     * nothing can reach and nothing could show wrong.
+     * way is asked about: a run inside one container is read at a path with none of its own on the
+     * way ({@link souther.compiler.inputs.RunSource}), a total of what a location holds is read at
+     * the element itself, and a run inside several containers is spread over its leaves and written
+     * by {@link NestedContainersAddingUp}, which asks this for one container at a time and names
+     * the container below as the position each element is asked for.
      *
      * <p>The narrowings of one position in the order the declarations write them, and a second
      * position's under whichever of the first's it was reached by. Nothing here orders the ways of
@@ -1086,7 +1094,7 @@ final class ContainersAddingUp {
      * The others are ways down to an element the caller did not ask for, and stated anyway they are
      * plans the caller's narrowing refuses.
      */
-    private static Ways waysDown(Type element, TermPath at, TermPath demand, DemandsInside inside,
+    static Ways waysDown(Type element, TermPath at, TermPath demand, DemandsInside inside,
                                  RuleReadingContext reading) {
         List<Filling> found = new ArrayList<>();
         List<TermPath> nothingStandsAt = new ArrayList<>();
@@ -1333,7 +1341,7 @@ final class ContainersAddingUp {
      * {@code path} with the case {@code required} names written in after every position it names
      * one at, where the path does not already go on under a case there.
      */
-    private static TermPath underTheCasesNamed(TermPath path, Requirements required) {
+    static TermPath underTheCasesNamed(TermPath path, Requirements required) {
         TermPath out = TermPath.of(path.head());
         List<TermPath.Step> steps = path.steps();
         for (int i = 0; i <= steps.size(); i++) {

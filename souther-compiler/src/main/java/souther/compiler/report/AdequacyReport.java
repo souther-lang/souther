@@ -4981,6 +4981,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         over.put("kind", "occurrences");
                         over.put("position", run.subjectPath().discriminated());
                     }
+                    case RunSource.FlattenedOccurrences run -> {
+                        over.put("kind", "occurrences");
+                        over.put("position", run.subjectPath().discriminated());
+                    }
                     case RunSource.ComputedOccurrences run -> {
                         over.put("kind", "computed_occurrences");
                         over.put("elements", run.elements().discriminated());

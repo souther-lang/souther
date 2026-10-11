@@ -1592,6 +1592,17 @@ public final class InputReads {
         return InputPath.elementAt(binding, names, newtypes).heldAt();
     }
 
+    /** Where the elements {@code e} holds stand, where it holds every occurrence of that position
+     *  and each as often ({@link InputPath#everyElementOf}). */
+    public PathResolution everyElementOf(Core e, DeclarationNewtypes newtypes) {
+        return InputPath.everyElementOf(e, names, newtypes);
+    }
+
+    /** The same, of the elements handed to {@code binding} ({@link InputPath#everyElementAt}). */
+    public PathResolution everyElementAt(BindingId binding, DeclarationNewtypes newtypes) {
+        return InputPath.everyElementAt(binding, names, newtypes);
+    }
+
     /** Where {@code e}'s value came from. Not where it is: a value made from a position is not that
      *  position ({@link InputPath#cameFrom}). */
     public PathResolution cameFrom(Core e, DeclarationNewtypes newtypes) {

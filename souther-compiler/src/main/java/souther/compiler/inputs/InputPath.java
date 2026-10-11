@@ -133,6 +133,33 @@ final class InputPath {
         return new InputPath(newtypes, ElementQuestion.NAMED_POSITION).elementOf(binding, names);
     }
 
+    /**
+     * The position whose every occurrence {@code e} holds the values of, each as often, and that it
+     * holds those of none where it does not.
+     *
+     * <p>Beside {@link #of} and the stronger question. That one answers which position an
+     * expression names, and an expression that keeps some of what a container holds names the
+     * container's. A total over the values wants more: that nothing standing at the position is
+     * left out and nothing is counted twice. So this crosses only what puts the elements in another
+     * order, answers each as it is, or puts the elements of what a closure answered end to end, and
+     * starts only at a container no other container holds — a list inside the elements of another
+     * holds some of the occurrences of its path, and the path says no more than the whole of them.
+     *
+     * @return the position of the elements of {@code e}
+     */
+    static PathResolution everyElementOf(Core e, BindingEnvironment names,
+                                         DeclarationNewtypes newtypes) {
+        return new InputPath(newtypes, ElementQuestion.EVERY_OCCURRENCE)
+                .heldAt(e, new Wanted.APart(HeldIn.Part.ELEMENT), names).heldAt();
+    }
+
+    /** The same, of the elements handed to {@code binding}. */
+    static PathResolution everyElementAt(BindingId binding, BindingEnvironment names,
+                                         DeclarationNewtypes newtypes) {
+        return new InputPath(newtypes, ElementQuestion.EVERY_OCCURRENCE)
+                .elementOf(binding, names).heldAt();
+    }
+
     private PathResolution named(Core e, BindingEnvironment names) {
         return switch (e) {
             // What the name is, asked once, and the step that answers is the answer. An element is
@@ -458,7 +485,9 @@ final class InputPath {
             // is never a pair, since a pair has no form a boundary writes, so a place of one names
             // nothing there.
             case PathResolution.At at -> switch (wanted) {
-                case Wanted.APart(var part) -> at.deeper(part::of);
+                case Wanted.APart(var part) -> asked == ElementQuestion.EVERY_OCCURRENCE
+                        && at.path().insideAContainer()
+                        ? new PathResolution.NotAPosition() : at.deeper(part::of);
                 case Wanted.APlaceOfAnElement _ -> new PathResolution.NotAPosition();
             };
             // Each is a way to the same place, and neither is asked unless the other came back
@@ -468,7 +497,8 @@ final class InputPath {
             // further for one of them, what it holds would come back at a single place while the
             // container stands at more.
             case PathResolution.MayStandAt among -> switch (wanted) {
-                case Wanted.APart(var part) -> among.deeper(part::of);
+                case Wanted.APart(var part) -> asked == ElementQuestion.EVERY_OCCURRENCE
+                        ? new PathResolution.NotAPosition() : among.deeper(part::of);
                 case Wanted.APlaceOfAnElement _ -> new PathResolution.NotAPosition();
             };
         };
@@ -535,7 +565,11 @@ final class InputPath {
         }
         Crossing crossing = crossing(operation, wanted);
         if (crossing == null) {
-            return new PathResolution.NotAPosition();
+            crossing = throughAnIdentityMap(operation, args, wanted);
+        }
+        if (crossing == null) {
+            PathResolution flattened = throughAFlattening(operation, args, wanted, names);
+            return flattened != null ? flattened : new PathResolution.NotAPosition();
         }
         // The call may be the runnable tree's and not a kept one, so its argument count is checked
         // here rather than by a kept call's own constructor.
@@ -547,6 +581,65 @@ final class InputPath {
     /** Which argument of an operation what is wanted of its answer is found in, and what of that
      *  argument it is. */
     private record Crossing(DeclaredArgument argument, Wanted wanted) {}
+
+    /**
+     * The crossing of an operation answering what a closure made of each element, where the closure
+     * made nothing of it ({@link AnIdentityMap}): the elements of the answer are the elements of the
+     * argument, and a place of one is a place of the other. Null where it is any other operation, or
+     * where what is wanted is no element of the answer.
+     */
+    private static Crossing throughAnIdentityMap(ValueName operation, List<Core> args,
+                                                 Wanted wanted) {
+        boolean ofAnElement = switch (wanted) {
+            case Wanted.APart(HeldIn.Part part) -> part == HeldIn.Part.ELEMENT;
+            case Wanted.APlaceOfAnElement _ -> true;
+        };
+        DeclaredArgument same = ofAnElement
+                ? AnIdentityMap.of(operation, args, InputPath::blockStanding) : null;
+        return same == null ? null : new Crossing(same, wanted);
+    }
+
+    /**
+     * Where the elements of what {@code operation} answers stand, where it puts end to end the lists
+     * its closure answered of each element of a container, and the closure answers a place of the
+     * element ({@link BoundOperationFacts#flattensEveryAnswerOf}) — or null where it is any other
+     * operation or closure.
+     *
+     * <p>Each element of the answer is the value at that place of an element of the container, so
+     * it stands inside the container's elements at the place and one container further in. The
+     * container's elements are asked of the question in hand: where this walk wants every
+     * occurrence, so does it of the container, and the answer is every occurrence of a position
+     * with the container's containers and one more.
+     */
+    private PathResolution throughAFlattening(ValueName operation, List<Core> args, Wanted wanted,
+                                              BindingEnvironment names) {
+        if (!(wanted instanceof Wanted.APart(HeldIn.Part part)) || part != HeldIn.Part.ELEMENT) {
+            return null;
+        }
+        DeclaredArgument container = DefaultBoundOperationFacts.get().flattensEveryAnswerOf(operation);
+        if (container == null) {
+            return null;
+        }
+        int at = CallArguments.positionOf(container, operation);
+        Core.Block closure = at < 0 || at >= args.size() ? null
+                : AnIdentityMap.closureBeside(args, at, InputPath::blockStanding);
+        if (closure == null || closure.params().size() != 1
+                || closure.params().getFirst().binding() == null) {
+            return null;
+        }
+        ElementProjection answered = ElementProjection.read(closure.body(),
+                closure.params().getFirst().binding(), names.heldByTheBody(), newtypes);
+        if (answered == null) {
+            return null;
+        }
+        PathResolution within = heldAt(args.get(at), wanted, names);
+        return within instanceof PathResolution.NotAPosition ? null
+                : within.deeper(base -> answered.from(base).element());
+    }
+
+    private static Core.Block blockStanding(Core closure) {
+        return Core.withoutStanding(closure) instanceof Core.Block block ? block : null;
+    }
 
     /**
      * Where {@code wanted} of what {@code operation} answers comes from, or null where the
@@ -598,6 +691,11 @@ final class InputPath {
     private DeclaredArgument holdingTheElements(ValueName operation) {
         BuiltFrom<DeclaredArgument> built =
                 DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
+        // Each as often is more than the same values: an answer that keeps some of what it was
+        // given holds those and not the rest.
+        if (asked == ElementQuestion.EVERY_OCCURRENCE) {
+            return built == null ? null : built.permutesTheElementsOf();
+        }
         DeclaredArgument holds = built == null ? null : built.holdsTheElementsOf();
         // A set of a list's values holds the very values the list does, though not as often.
         if (holds == null && DefaultBoundOperationFacts.get().holdsTheImageOfEveryElement(operation)
@@ -613,7 +711,7 @@ final class InputPath {
                 : switch (asked) {
                     case VALUE_ORIGIN -> built != null ? built.derivesItsElementsFrom()
                             : DefaultBoundOperationFacts.get().elementsMadeFromAlone(operation);
-                    case NAMED_POSITION -> null;
+                    case NAMED_POSITION, EVERY_OCCURRENCE -> null;
                 };
     }
 }

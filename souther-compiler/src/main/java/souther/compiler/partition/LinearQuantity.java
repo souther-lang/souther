@@ -129,8 +129,9 @@ public sealed interface LinearQuantity extends BorderQuantity
                 case NumericTerm.FromOnePosition one ->
                         WhatATermRead.at(orders, observation.at(one.position()));
                 case NumericTerm.TakenOver over -> switch (over.source()) {
-                    case RunSource.ProjectedOccurrences _ -> WhatATermRead.over(orders,
-                            observation.everyValueAt(over.subjectPath()));
+                    case RunSource.ProjectedOccurrences _, RunSource.FlattenedOccurrences _ ->
+                            WhatATermRead.over(orders,
+                                    observation.everyValueAt(over.subjectPath()));
                     case RunSource.ComputedOccurrences computed ->
                             WhatATermRead.overElements(orders, computed, observation);
                 };
