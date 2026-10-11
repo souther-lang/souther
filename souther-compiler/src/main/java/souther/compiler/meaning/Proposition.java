@@ -468,8 +468,14 @@ public sealed interface Proposition {
         }
     }
 
-    /** Whether some part of {@code stated} is about what a dependency answered, rather than about
-     *  the input alone. */
+    /**
+     * Whether some part of {@code stated} is about what a dependency answered, rather than about
+     * the input alone.
+     *
+     * <p>A container a quantifier or a count is over is a part as much as what each element is
+     * asked: an element of a list an answer holds is a place inside that answer whatever the
+     * statement about it names.
+     */
     static boolean aboutAnAnswer(Proposition stated) {
         return switch (stated) {
             case Always _, Unread _ -> false;
@@ -487,21 +493,28 @@ public sealed interface Proposition {
             case Any any -> any.parts().stream().anyMatch(Proposition::aboutAnAnswer);
             case OnAnApplication applications ->
                     applications.each().stream().anyMatch(Proposition::aboutAnAnswer);
-            case Some some -> aboutAnAnswer(some.ofTheElement());
+            case Some some -> some.container() instanceof DecisionSubject.AnAnswer
+                    || aboutAnAnswer(some.ofTheElement());
         };
     }
 
-    private static boolean anAnswerIn(Quantity quantity) {
+    /** Whether {@code quantity} is about what a dependency answered: a number of an answer, or a
+     *  number over a container an answer holds or over elements asked something of one. */
+    static boolean anAnswerIn(Quantity quantity) {
         return switch (quantity) {
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _ -> true;
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _ -> false;
-            case Quantity.HowManyMeet count -> aboutAnAnswer(count.ofTheElement());
+            case Quantity.HowManyMeet count -> count.container() instanceof DecisionSubject.AnAnswer
+                    || aboutAnAnswer(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream()
                     .anyMatch(Proposition::aboutAnAnswer);
-            case Quantity.HowManyDifferent _ -> false;
-            case Quantity.SumOver sum -> sum.ofTheElement().coefs().keySet().stream()
-                    .anyMatch(Proposition::anAnswerIn);
+            case Quantity.HowManyDifferent different ->
+                    different.container() instanceof DecisionSubject.AnAnswer
+                            || different.ofTheElement() instanceof DecisionSubject.AnAnswer;
+            case Quantity.SumOver sum -> sum.container() instanceof DecisionSubject.AnAnswer
+                    || sum.ofTheElement().coefs().keySet().stream()
+                            .anyMatch(Proposition::anAnswerIn);
         };
     }
 

@@ -3961,6 +3961,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         + " on what a path knows, come to a number the exact arithmetic could not"
                         + " hold";
             };
+            // Its own words: the rule was read and a row has words for it, and raising a figure
+            // lifts it.
+            case WhyNotTaken.MoreWaysThanAreRead _ -> "a condition on some or every element that"
+                    + " comes to more ways an element may meet it than this compiler takes one by"
+                    + " one";
         };
     }
 
@@ -4632,6 +4637,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             "path_holds_element_facts_as_written";
                     case A_NUMBER_THE_PATH_CANNOT_HOLD -> "number_the_path_cannot_hold";
                 });
+            }
+            case WhyNotTaken.MoreWaysThanAreRead _ -> {
+                out.put("kind", "past_a_figure");
+                out.put("reason", "more_ways_than_are_read");
             }
         }
         return out;

@@ -60,6 +60,8 @@ class TheSameStatementIsComposedWhereverTheListStandsTest {
                 "Bool.not(List.any(x -> x <= on, LIST))",
                 "List.all(x -> x <= on, LIST)",
                 "List.length(List.filter(x -> x <= on, LIST)) == 0",
+                "List.length(List.filter(x -> x <= on, LIST)) >= on",
+                "List.length(List.filter(x -> x <= 3, LIST)) < on",
                 "List.any(x -> x <= 3, List.filter(y -> y > on, LIST))",
                 "List.any(x -> x <= 3, List.reverse(LIST))",
                 "List.isEmpty(LIST)",

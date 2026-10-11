@@ -380,9 +380,20 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
      */
     @Test
     void aStatementOfManyChoicesIsNotExpandedPastTheFigure() {
+        // Every choice of either side is met by some element, so the ways are as many as the
+        // choices multiplied: past the figure for splitting a way at five, and past what a
+        // reading of one condition makes at ten.
+        assertEquals(List.of(CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO),
+                figureThatEndedTheChoices(5));
+        assertEquals(List.of(CompositionBudget.READINGS_OF_ONE_CONDITION),
+                figureThatEndedTheChoices(10));
+    }
+
+    /** The figure the statement of {@code choices} open choices was said to stop at. */
+    private static List<CompositionBudget> figureThatEndedTheChoices(int choices) {
         List<String> parts = new ArrayList<>();
-        for (int each = 0; each < 10; each++) {
-            parts.add("(x <= " + each + " || x >= " + (100 + each) + ")");
+        for (int each = 0; each < choices; each++) {
+            parts.add("(x <= " + (100 + each) + " || x >= " + each + ")");
         }
         Compilation compilation = Compilation.ofSource(MODEL.replace("BODY",
                 "List.any(x -> " + String.join(" && ", parts) + ", sched1(c).value)"), "Main");
@@ -396,14 +407,55 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
                 .toList();
 
         assertEquals(1, notComposed.size(), "the rule that needs the statement to hold");
-        assertTrue(notComposed.getFirst().account().onAnAnswer().stream().anyMatch(gap ->
-                        gap instanceof DemandGap.Uncomposed(AnswerDemand.AStatement _,
-                                DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded(
-                                        var figures))
-                                && figures.written().equals(
-                                        List.of(CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO))),
-                () -> "and its statement is said to be one a figure stopped the looking along, and"
-                        + " not one with no value to write: " + notComposed.getFirst().account());
+        List<CompositionBudget> said = new ArrayList<>();
+        for (DemandGap gap : notComposed.getFirst().account().onAnAnswer()) {
+            if (gap instanceof DemandGap.Uncomposed(AnswerDemand.AStatement _,
+                    DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded(var figures))) {
+                said.addAll(figures.written());
+            }
+        }
+        return said;
+    }
+
+    /**
+     * A choice between relations of one number written as a conjunction of disjunctions is, taken
+     * apart, mostly choices no element meets: an element at most nought is never at least a
+     * hundred and one. Those are not looked at, and what is left is few enough to compose along.
+     *
+     * <p>As many choices as a way is split into, so the other side — no element meeting it, which
+     * is every element meeting one of that many ranges — is split along each as well.
+     */
+    @Test
+    void aStatementOfManyChoicesNoElementMeetsTogetherIsComposed() {
+        List<String> parts = new ArrayList<>();
+        for (int each = 0; each < CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO.maximum(); each++) {
+            parts.add("(x <= " + each + " || x >= " + (100 + each) + ")");
+        }
+        List<RowToRun> rows = rowsFoundFor(
+                "List.any(x -> " + String.join(" && ", parts) + ", sched1(c).value)");
+
+        assertEquals(2, rows.size(), () -> "a row for each rule: " + rows);
+    }
+
+    /**
+     * A count of an answer's list held against a number of the input is the answer's to compose,
+     * and the way the input is read does not say it is a count nothing composes.
+     */
+    @Test
+    void aCountOfAnAnswersListIsNotAlsoLeftOnTheWay() {
+        Compilation compilation = Compilation.ofSource(MODEL.replace("BODY",
+                "List.length(List.filter(x -> x <= on, sched1(c).value)) >= on"), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+
+        for (RuleSettlement each : compilation.db()
+                .ask(new Adequacy.DecisionSearch(module, "f")).value().values()) {
+            assertInstanceOf(RuleRequirement.Required.class, each.requirement(),
+                    () -> "a row for each rule: " + each);
+            assertEquals(List.of(), each.account().onTheWay(),
+                    () -> "and nothing of the input is said to have gone without: " + each);
+        }
     }
 
     /** A number of the answer compared with one of the input is met by the same pair. */

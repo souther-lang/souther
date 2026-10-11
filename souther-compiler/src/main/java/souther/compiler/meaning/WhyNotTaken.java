@@ -9,9 +9,11 @@ import java.util.Set;
  * Why a reader of what a condition means did not take it into its own terms: what a row is asked
  * for, a column of a decision, what a path knows past a guard.
  *
- * <p>Two kinds, told apart by what it takes to lift one. The meaning was not read, which a rule of
+ * <p>Three kinds, told apart by what it takes to lift one. The meaning was not read, which a rule of
  * the reading lifts; or it was read and the domain the reader writes in has no words for it, which
- * widening that domain lifts. A meaning read to the end and in the reader's words is taken, and
+ * widening that domain lifts; or it was read, the domain has the words, and saying it in them took
+ * more of this compiler's work than a figure lets, which raising the figure lifts. A meaning read
+ * to the end and in the reader's words is taken, and
  * whether a row can then be built for it is no part of this: a composer that writes nothing
  * toward a demand says so where rows are composed, beside the demand it was handed. None of these
  * says a row cannot be written, and one going away is a capability gained rather than a model
@@ -60,6 +62,15 @@ public sealed interface WhyNotTaken {
             Objects.requireNonNull(limit, "a domain stops somewhere");
         }
     }
+
+    /**
+     * What the condition means was read and the reader has words for it, and taking it into them
+     * stopped at a figure of this compiler's work: some or every element meeting it comes, taken
+     * apart, to more ways an element may meet it than a reading of one condition makes. Raising the
+     * figure lifts it; nothing about the model or about either domain does, so neither of the
+     * other two is said of it.
+     */
+    record MoreWaysThanAreRead() implements WhyNotTaken {}
 
     /**
      * Where a reader's domain has no words for what a condition means.

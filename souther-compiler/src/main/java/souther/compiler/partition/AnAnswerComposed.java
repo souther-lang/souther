@@ -7,6 +7,8 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.AnswerAsAnInput;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import java.util.ArrayList;
@@ -167,6 +169,7 @@ public final class AnAnswerComposed {
         int most = splitFigure.maximum();
         DemandGap.WhyNotComposed tooMany =
                 DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(List.of(splitFigure));
+        CompositionBudget readingsFigure = CompositionBudget.READINGS_OF_ONE_CONDITION;
         for (AnswerDemand each : demands) {
             if (!(each instanceof AnswerDemand.AStatement statement)) {
                 continue;
@@ -175,15 +178,21 @@ public final class AnAnswerComposed {
                     subject.rules().inners(), subject.symbols(), pinned);
             List<DemandReading.Read> reads = over == null ? null : statements.asked(over);
             Ways ways = reads == null ? new Ways.Unwritable() : eachWay(reads, most);
-            if (!(ways instanceof Ways.Each(var options))) {
-                // Past the figure nothing was looked along, which is not the same as there being
-                // nothing a composer writes: only the first is cured by looking further.
-                unaccounted.add(new DemandGap.Uncomposed(each, ways instanceof Ways.TooMany
-                        ? tooMany
-                        : new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions()));
+            if (ways instanceof Ways.Each(var options)) {
+                pending.add(new Pending(statement, options));
                 continue;
             }
-            pending.add(new Pending(statement, options));
+            // Past a figure nothing was looked along, which is not the same as there being nothing
+            // a composer writes: only the first is cured by looking further.
+            unaccounted.add(new DemandGap.Uncomposed(each, switch (ways) {
+                case Ways.TooMany _ -> tooMany;
+                case Ways.ReadingStopped _ ->
+                        DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(
+                                List.of(readingsFigure));
+                case Ways.Unwritable _ ->
+                        new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions();
+                case Ways.Each _ -> throw new IllegalStateException("taken above: " + ways);
+            }));
         }
         // Every way the statements together can be taken, and no more of them than the figure lets
         // a way be split into: past it they are not looked along, and what asked for them is a
@@ -230,6 +239,11 @@ public final class AnAnswerComposed {
         /** More ways than the figure lets a way be split into. None was built: a count is checked
          *  against what is left of the figure before the ways it would make are made. */
         record TooMany() implements Ways {}
+
+        /** A part the reading of the statement did not read one by one, because it would have been
+         *  read more times than a reading of one condition makes. A figure ended it, as with
+         *  {@link TooMany}, and a different one. */
+        record ReadingStopped() implements Ways {}
     }
 
     /**
@@ -254,6 +268,13 @@ public final class AnAnswerComposed {
                 }
             } else if (composedAgainst(each)) {
                 these.add(List.of(each));
+            } else if (each instanceof DemandReading.Read.Unread(var whys) && !whys.isEmpty()
+                    && whys.stream().allMatch(why -> why instanceof WhyNotTaken.MoreWaysThanAreRead
+                            || why instanceof WhyNotTaken.MeaningUnread(
+                                    WhyUnread.MoreReadingsThanAreMade _))) {
+                // Only where the figure is every reason: a part also left for a reason more
+                // reading does not change is one no value is written toward either way.
+                return new Ways.ReadingStopped();
             } else {
                 return new Ways.Unwritable();
             }

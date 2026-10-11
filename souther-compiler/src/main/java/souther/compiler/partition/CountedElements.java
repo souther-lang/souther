@@ -76,8 +76,9 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
                 on.put(each, orders.observed());
             }
         }
-        return new CountedElements(behavior, count.container().inputPosition(),
-                count.ofTheElement(), perElement, on, anElementMeeting);
+        Identity identity = identityOf(behavior, count);
+        return new CountedElements(behavior, identity.container(), identity.meeting(), perElement,
+                on, anElementMeeting);
     }
 
     /** Every number of a row the statement reads, the element's own among them. */
@@ -102,6 +103,12 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
     /** Which count this is ({@link Identity}). */
     Identity identity() {
         return new Identity(behavior, container, meeting);
+    }
+
+    /** Which count {@code count} read in {@code behavior} is, with nothing about it worked out —
+     *  the identity {@link #of} would give it. */
+    static Identity identityOf(String behavior, Quantity.HowManyMeet count) {
+        return new Identity(behavior, count.container().inputPosition(), count.ofTheElement());
     }
 
     /**

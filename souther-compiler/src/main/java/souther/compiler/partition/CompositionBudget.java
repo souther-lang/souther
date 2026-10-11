@@ -248,6 +248,12 @@ public enum CompositionBudget {
      * than this is not read one by one at all, and is carried out as a part nothing read, naming
      * this as why ({@link souther.compiler.meaning.WhyUnread.MoreReadingsThanAreMade}): a reader is
      * told that the compiler declined the work, and never that the model states nothing there.
+     *
+     * <p>And the same count bounds what a quantifier asks of an element, taken apart into the ways
+     * an element may meet it: the ways no element meets are proved closed and not counted, and
+     * past this many open ones the quantifier is not taken into a row's words at all and says so
+     * ({@link souther.compiler.meaning.WhyNotTaken.MoreWaysThanAreRead}) — the meaning was read
+     * and a row has the words, so neither the reading nor the domain is named.
      */
     READINGS_OF_ONE_CONDITION(256),
 

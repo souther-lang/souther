@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -113,13 +114,21 @@ class AConditionOnAContainersElementsIsComposedAsWhatItSaysTest {
                 () -> "a list of one is a size both conditions leave: " + asked);
     }
 
-    /** No element the rules allow meets it, so the way is closed — and said to be. */
+    /**
+     * No element the rules allow meets it, so the way is closed — and said to be. Where the reading
+     * meets it: what the declarations leave is what every element holds, and that left nothing
+     * for the relation is a proof before any row is composed.
+     */
     @Test
     void someElementNoElementCanBeClosesTheWay() {
-        Generator.BoundaryAttempt.Unresolved closed = assertInstanceOf(
-                Generator.BoundaryAttempt.Unresolved.class, composedPast(true, "somePastFive"));
-        assertEquals(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE,
-                closed.why().reason());
+        List<OnTheWay> stated = stated("somePastFive");
+        OnTheWay.Settled settled = assertInstanceOf(OnTheWay.Settled.class, stated.getFirst(),
+                "the condition comes out the way asked on no row");
+        assertFalse(settled.thisWay(), () -> "never this way: " + settled);
+        assertInstanceOf(Reachability.NothingComesOutThatWay.class,
+                Reachability.of(new WayToTheBorder(stated),
+                        domain("decide").quantities(rules()).region()),
+                "and the way is closed");
     }
 
     /**
@@ -174,6 +183,11 @@ class AConditionOnAContainersElementsIsComposedAsWhatItSaysTest {
 
     /** What {@code behavior}'s body asks of a row coming out true, as a condition on the way. */
     private static OnTheWay.TakenIn asked(String behavior) {
+        return assertInstanceOf(OnTheWay.TakenIn.class, stated(behavior).getFirst());
+    }
+
+    /** What {@code behavior}'s body states coming out true, as the one entry on the way. */
+    private static List<OnTheWay> stated(String behavior) {
         Bodies.Elaborated checked =
                 COMPILATION.db().ask(new Bodies.Checked(module())).value();
         AnalysisBody analysis = checked.analysisBodies().get(behavior);
@@ -188,7 +202,7 @@ class AConditionOnAContainersElementsIsComposedAsWhatItSaysTest {
                         new ConditionNumbering(module(), behavior)),
                 reading, true, WhatConditionsState.of(reading));
         assertEquals(1, stated.size(), () -> "one condition: " + stated);
-        return assertInstanceOf(OnTheWay.TakenIn.class, stated.getFirst());
+        return stated;
     }
 
     private static final Compilation COMPILATION = compiled();

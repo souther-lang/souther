@@ -33,8 +33,10 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
@@ -5186,6 +5188,18 @@ public final class Generator {
         // it, gathered by which count it is before any is taken in: two conditions on one count
         // are met where both are, and which count that is cannot be read off either alone.
         Map<CountedElements.Identity, CountsAsked> countsOnTheWay = new LinkedHashMap<>();
+        // What the conditions holding a count against a number alone leave of it, and the item's
+        // own where it is that count: known before any number of the row is put anywhere, so a
+        // count held against such numbers puts them where some of what is left is still there.
+        Map<CountedElements.Identity, LevelRegion> leftOfACount = new LinkedHashMap<>();
+        for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+            if (cut.demand() instanceof RowDemand.SoMany many && !many.againstNumbers()) {
+                leftOfACount.merge(CountedElements.identityOf(subject.behavior(), many.count()),
+                        many.counts().values(), LevelRegion::meet);
+            }
+        }
+        itemCounts.forEach((identity, itemCount) -> leftOfACount.merge(identity,
+                counted.get(itemCount).values(), LevelRegion::meet));
         // A condition of several ways the way was not split at is composed past along the whole,
         // and says so: along one of its ways the row would be composed against more.
         if (reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure)) {
@@ -5208,7 +5222,8 @@ public final class Generator {
                         TermOrders orders = subject.quantities().ordersOf(term);
                         return orders == null ? null : orders.observed();
                     };
-                    switch (NumericWitness.of(here, added, on, looking)) {
+                    switch (NumericWitness.of(leavingACount(here, many, count,
+                            leftOfACount.get(count.identity())), added, on, looking)) {
                         case NumericWitness.Standing.Found standing -> {
                             Map<NumericTerm, Place> standingAt = new LinkedHashMap<>();
                             for (NumericWitness.Standing.Found.Placed placed
@@ -5250,7 +5265,8 @@ public final class Generator {
                 } else {
                     counts = many.counts().values();
                 }
-                countsOnTheWay.merge(count.identity(), new CountsAsked(count, counts, cut),
+                countsOnTheWay.merge(count.identity(),
+                        new CountsAsked(count, counts, many.againstNumbers(), cut),
                         CountsAsked::and);
                 continue;
             }
@@ -5311,9 +5327,14 @@ public final class Generator {
             switch (count.leastIn(asked)) {
                 case CountedElements.Least.At(Count at) -> least = at;
                 // No count the conditions leave together — and the item's own, where it asks for
-                // this one — is a way no row passes, which the counts settle by themselves.
+                // this one — is a way no row passes, which the counts settle by themselves. Not
+                // where a count was held against numbers of the row: the counts it left are those
+                // of the values those numbers were put at, and other values may leave some.
                 case CountedElements.Least.None _ -> {
-                    gaps.add(new ReachabilityGap.ProvedImpossible(cut));
+                    gaps.add(each.getValue().turnsOnTheRowsNumbers()
+                            ? new ReachabilityGap.Uncomposed(cut,
+                                    new ReachabilityGap.Why.NoValueComposedForItsPositions())
+                            : new ReachabilityGap.ProvedImpossible(cut));
                     continue;
                 }
                 // A count that could not be worked out settles nothing about whether one is there.
@@ -5372,13 +5393,60 @@ public final class Generator {
      * The counts every condition on the way asks of one count, the count as all of them read it
      * ({@link CountedElements#and}), and the first of those conditions on the way, which is the one
      * a reader is sent to where they cannot be taken in.
+     *
+     * @param turnsOnTheRowsNumbers whether some of {@code counts} is what a count held against
+     *                              numbers of the row leaves at the values those numbers were put
+     *                              at — where it is, a region holding no count says those values
+     *                              leave none, and nothing about the rules
      */
     private record CountsAsked(CountedElements count, LevelRegion counts,
-                               OnTheWay.TakenIn first) {
+                               boolean turnsOnTheRowsNumbers, OnTheWay.TakenIn first) {
 
         CountsAsked and(CountsAsked other) {
-            return new CountsAsked(count.and(other.count), counts.meet(other.counts), first);
+            return new CountsAsked(count.and(other.count), counts.meet(other.counts),
+                    turnsOnTheRowsNumbers || other.turnsOnTheRowsNumbers, first);
         }
+    }
+
+    /**
+     * {@code here} narrowed to where the numbers {@code many} adds to its count leave room for a
+     * count the container can have, or {@code here} where that cannot be said.
+     *
+     * <p>A count is never below the least of what is left of it — what the container can hold, and
+     * what the other conditions on it leave ({@code left}) — and is held against what the numbers
+     * come to: where it is asked to stay under them, or to come to them, they have to come to at
+     * least that least. Put first at a value that does not, the numbers leave no count at all and a
+     * row that meets the statement is never looked for. Where the count is asked to be at least
+     * them, or other than them, a count above any value of theirs meets it and nothing is narrowed.
+     *
+     * <p>For choosing the numbers this cut puts, and not given to the region the rest of the way is
+     * read in: what is said here is that a value is a better first choice, which is no rule's.
+     *
+     * @param left what the conditions on the count that read no number of the row leave of it, or
+     *             null where none does
+     */
+    private static SearchRegion leavingACount(SearchRegion here, RowDemand.SoMany many,
+                                              CountedElements count, LevelRegion left) {
+        Rel room = switch (many.met()) {
+            case LT -> Rel.LT;
+            case LE, EQ -> Rel.LE;
+            case GE, GT, NE -> null;
+        };
+        if (room == null) {
+            return here;
+        }
+        LevelRegion any = LevelRegion.of(new LevelInterval(
+                Bound.at(new Level.OfTheQuantity(ExactRatio.ZERO), true), null));
+        if (!(count.leastIn(left == null ? any : left)
+                instanceof CountedElements.Least.At(Count least))) {
+            return here;
+        }
+        ExactRatio constant = least.exactly().minus(many.level()).orNull();
+        if (constant == null) {
+            return here;
+        }
+        return here.assuming(new LinearForm<>(constant, many.against().coefs()), room)
+                instanceof SearchRegion.Assumption.Taken(SearchRegion narrowed) ? narrowed : here;
     }
 
     /**
@@ -5455,23 +5523,7 @@ public final class Generator {
      */
     private static boolean noElementCanMeet(List<TakenConstraint> ofAnElement,
                                             MeasuredInput subject) {
-        SearchRegion rules = subject.quantities().region();
-        for (TakenConstraint one : ofAnElement) {
-            rules = one.narrowing(rules);
-        }
-        for (TakenConstraint one : ofAnElement) {
-            for (NumericTerm term : one.terms()) {
-                if (rules.projectionOf(term)
-                        instanceof NumericDomain.FormProjection.NothingIsLeft) {
-                    return true;
-                }
-            }
-            if (one instanceof TakenConstraint.Affine affine && rules.projectionOf(affine.form())
-                    instanceof NumericDomain.FormProjection.NothingIsLeft) {
-                return true;
-            }
-        }
-        return false;
+        return TakenConstraint.nothingMeetsAll(ofAnElement, subject.quantities().region());
     }
 
     private static List<TakenConstraint> constraints(List<RowDemand.Relational> relations) {

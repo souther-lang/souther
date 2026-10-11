@@ -56,6 +56,12 @@ final class DemandReading {
     }
 
     /**
+     * How many ways an element may meet what a quantifier asks are read one by one
+     * ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}), read here and nowhere else.
+     */
+    private static final CompositionBudget READINGS = CompositionBudget.READINGS_OF_ONE_CONDITION;
+
+    /**
      * What a condition asks of a row, or why this reading has no words for it.
      *
      * <p>Two halves, and no third. What was taken ({@link Taken}) is the condition said in a row's
@@ -346,6 +352,12 @@ final class DemandReading {
     private static List<Read> projected(Proposition stated, InputReading read) {
         return switch (stated) {
             case Proposition.Always(boolean holds) -> List.of(new Read.Settled(holds));
+            // A relation over anything an answer holds, a count of a list it holds among them, is
+            // one a row writes no value toward. Asked once here and not of each kind of number a
+            // relation weighs: a count over an answer's list is no number of the answer itself,
+            // and asked by the kind it would be read as a count a row composes.
+            case Proposition.Compared compared when Proposition.aboutAnAnswer(compared) ->
+                    List.of(anAnswerARowStandsIn());
             case Proposition.Compared compared -> List.of(ofARelation(compared, read));
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
                     List.of(new Read.Demands(new RowDemand.ATruth(at, holds)));
@@ -448,7 +460,13 @@ final class DemandReading {
                     ? List.of(AnElementsWay.asking(holds ? new RowDemand.SameAs(at)
                             : new RowDemand.DifferentFrom(at)))
                     : waysOf(projected(part, read), element, everyElement, some, read);
-            ways = AnElementsWay.eachOf(ways, choices);
+            ways = choices == null ? null : AnElementsWay.eachOf(ways, choices, read);
+            // More ways an element may meet it than a reading of one condition makes: not taken
+            // one by one, and said to be where this compiler's work stopped, which is neither the
+            // meaning left unread nor words a row lacks.
+            if (ways == null) {
+                return List.of(new Read.Unread(new WhyNotTaken.MoreWaysThanAreRead()));
+            }
         }
         List<List<Read>> alternatives = new ArrayList<>();
         for (AnElementsWay way : ways) {
@@ -492,19 +510,66 @@ final class DemandReading {
             return new AnElementsWay(List.of(), List.of(one), false);
         }
 
-        /** Every way of {@code ways} taken together with every one of {@code choices}. */
-        static List<AnElementsWay> eachOf(List<AnElementsWay> ways, List<AnElementsWay> choices) {
-            List<AnElementsWay> out = new ArrayList<>();
+        /**
+         * Every way of {@code ways} taken together with every one of {@code choices}, or null
+         * where more of them are open than a reading of one condition makes.
+         *
+         * <p>A way no element meets asks the same whatever else it asks: some element meeting it
+         * is no row's, and every element meeting it is the container holding none. So every such
+         * way is one, and nothing taken together with it is looked at. Which ways those are is
+         * proved and not guessed: what the declarations leave, which is what every element holds,
+         * with the relations the way asks of the element taken in, left with nothing
+         * ({@link TakenConstraint#nothingMeetsAll}). A choice between relations of one number
+         * written as a conjunction of disjunctions is, taken apart, mostly ways like that, and the
+         * ones left open are few.
+         *
+         * <p>Only what is left open is held to the figure, since that is what is read one by one
+         * after this; past it nothing is said of what is left, which is why null and not the ways
+         * so far.
+         */
+        static List<AnElementsWay> eachOf(List<AnElementsWay> ways, List<AnElementsWay> choices,
+                                          InputReading read) {
+            int most = READINGS.maximum();
+            Set<AnElementsWay> out = new LinkedHashSet<>();
+            int open = 0;
             for (AnElementsWay way : ways) {
+                if (way.never) {
+                    out.add(NEVER);
+                    continue;
+                }
                 for (AnElementsWay choice : choices) {
-                    List<RowDemand.OfAnElement> element = new ArrayList<>(way.ofTheElement);
-                    element.addAll(choice.ofTheElement);
-                    List<Read> row = new ArrayList<>(way.ofTheRow);
-                    row.addAll(choice.ofTheRow);
-                    out.add(new AnElementsWay(element, row, way.never || choice.never));
+                    AnElementsWay both = way.with(choice, read);
+                    if (out.add(both) && !both.never && ++open > most) {
+                        return null;
+                    }
                 }
             }
             return List.copyOf(out);
+        }
+
+        /** This way and {@code choice} together, said to be met by no element where nothing the
+         *  declarations leave meets the relations they ask of it together. */
+        private AnElementsWay with(AnElementsWay choice, InputReading read) {
+            if (never || choice.never) {
+                return NEVER;
+            }
+            List<RowDemand.OfAnElement> element = new ArrayList<>(ofTheElement);
+            element.addAll(choice.ofTheElement);
+            List<Read> row = new ArrayList<>(ofTheRow);
+            row.addAll(choice.ofTheRow);
+            List<TakenConstraint> relations = new ArrayList<>();
+            for (RowDemand.OfAnElement each : element) {
+                if (each instanceof RowDemand.Relational(TakenConstraint relation)) {
+                    relations.add(relation);
+                }
+            }
+            // Asked only where the choice added a relation: what was there before was asked when
+            // it was added.
+            boolean added = choice.ofTheElement.stream()
+                    .anyMatch(RowDemand.Relational.class::isInstance);
+            return added && TakenConstraint.nothingMeetsAll(relations,
+                    read.quantities().region())
+                    ? NEVER : new AnElementsWay(element, row, false);
         }
     }
 
@@ -514,14 +579,19 @@ final class DemandReading {
      *
      * @param whole what the quantifier states, which is what a part only the run decides asks of
      *              the run
+     * @return the ways, or null where more are open than a reading of one condition makes
+     *         ({@link AnElementsWay#eachOf})
      */
     private static List<AnElementsWay> waysOf(List<Read> reads, List<TermPath> element,
                                               boolean everyElement, Proposition.Some whole,
                                               InputReading read) {
         List<AnElementsWay> ways = List.of(AnElementsWay.ASKING_NOTHING);
         for (Read each : reads) {
-            ways = AnElementsWay.eachOf(ways,
-                    choicesOf(each, element, everyElement, whole, read));
+            List<AnElementsWay> choices = choicesOf(each, element, everyElement, whole, read);
+            ways = choices == null ? null : AnElementsWay.eachOf(ways, choices, read);
+            if (ways == null) {
+                return null;
+            }
         }
         return ways;
     }
@@ -533,6 +603,8 @@ final class DemandReading {
      * whichever element it is, so those are what the row is asked like any other. What every
      * element meets is asked of the element whatever it is about, since a container holding none
      * meets all of it.
+     *
+     * @return the ways, or null where more are open than a reading of one condition makes
      */
     private static List<AnElementsWay> choicesOf(Read each, List<TermPath> element,
                                                  boolean everyElement, Proposition.Some whole,
@@ -573,10 +645,16 @@ final class DemandReading {
                             : AnElementsWay.ofTheRow(each));
             case Read.Demands(RowDemand.ForTheRun(var _, var why, var past)) ->
                     List.of(AnElementsWay.ofTheRow(forTheRun(whole, why, past)));
+            // Each way of each alternative, held to the same figure as a conjunction's ways are.
             case Read.OneOf(var alternatives) -> {
                 List<AnElementsWay> out = new ArrayList<>();
                 for (List<Read> alternative : alternatives) {
-                    out.addAll(waysOf(alternative, element, everyElement, whole, read));
+                    List<AnElementsWay> inside =
+                            waysOf(alternative, element, everyElement, whole, read);
+                    if (inside == null || out.size() + inside.size() > READINGS.maximum()) {
+                        yield null;
+                    }
+                    out.addAll(inside);
                 }
                 yield List.copyOf(out);
             }
@@ -770,7 +848,6 @@ final class DemandReading {
                     new Read.Demands(new RowDemand.Relational(TakenConstraint.Ordered.isABound(met)
                             ? new TakenConstraint.Ordered(term, at, met)
                             : new TakenConstraint.AwayFrom(term, at)));
-            case Relation.Ordered(DecisionAtom.OfAnAnswer _, var _, Rel _) -> anAnswerARowStandsIn();
             case Relation.Ordered _ ->
                     forTheRun(compared, RowDemand.NoComposer.AN_ORDER_OF_NO_ONE_POSITION);
         };
