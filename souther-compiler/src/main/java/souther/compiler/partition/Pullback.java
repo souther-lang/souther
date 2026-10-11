@@ -66,6 +66,7 @@ import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
+import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.Unsayable;
@@ -501,6 +502,7 @@ final class Pullback {
         AnOperationApplied applied = AnOperationApplied.of(e);
         Derivation taken = firstThatReadsIt(List.of(
                 () -> writtenOut(e, AnswerAspect.TRUTH),
+                () -> ofAnElementOfAnAnswer(e, AnswerAspect.TRUTH, reads),
                 () -> BooleanMeaning.underADenial(e, true).<Derivation>map(denied ->
                         new Derivation.UnderADenial(
                                 observe(denied.part(), AnswerAspect.TRUTH, reads),
@@ -541,6 +543,21 @@ final class Pullback {
                 default -> null;
             };
         };
+    }
+
+    /**
+     * How {@code e}, a name for an element a walk was handed from what an operation answered, comes
+     * out on {@code aspect}, where every element of that answer comes out on that side
+     * ({@link Derivation.OfAnElementOfAnAnswer}) — or null where it is no such name.
+     */
+    private Derivation ofAnElementOfAnAnswer(Core e, AnswerAspect aspect, InputReads reads) {
+        Core container = reads.containerOfTheElement(e);
+        AnOperationApplied made = container == null ? null : AnOperationApplied.of(reads.standing(
+                container, read.rules().symbols(), read.rules().newtypes()).value());
+        SideAnswered side = made == null ? null
+                : DefaultBoundOperationFacts.get().everyElementOfItsAnswerIs(made.operation());
+        return side == null || side.aspect() != aspect ? null
+                : new Derivation.OfAnElementOfAnAnswer(made.operation(), side);
     }
 
     /** Two truths joined by a connective, or null where {@code standing} joins none. */
@@ -652,6 +669,7 @@ final class Pullback {
         Denotation asked = askedAt != null ? askedAt : new Denotation(e, reads);
         Derivation taken = firstThatReadsIt(List.of(
                 () -> writtenOut(e, AnswerAspect.EMPTINESS),
+                () -> ofAnElementOfAnAnswer(e, AnswerAspect.EMPTINESS, reads),
                 () -> byALaw(applied, e, AnswerAspect.EMPTINESS, reads, asked),
                 () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.EMPTINESS), reads),
                 () -> {
@@ -678,6 +696,7 @@ final class Pullback {
         AnOperationApplied applied = AnOperationApplied.of(e);
         Derivation taken = firstThatReadsIt(List.of(
                 () -> writtenOut(e, AnswerAspect.PRESENCE),
+                () -> ofAnElementOfAnAnswer(e, AnswerAspect.PRESENCE, reads),
                 () -> byALaw(applied, e, AnswerAspect.PRESENCE, reads, new Denotation(e, reads)),
                 () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.PRESENCE), reads),
                 () -> {
@@ -1128,6 +1147,14 @@ final class Pullback {
         record AnEntry() implements ElementAt {}
 
         /**
+         * Any element of what {@code operation} answered, of which nothing is known but the side
+         * every element of that answer comes out on ({@link Derivation.EveryElementMeetsIt}). It
+         * stands at no position, and is no value written out.
+         */
+        record OfAnAnswerEveryElementOfWhichIs(ValueName operation, SideAnswered side)
+                implements ElementAt {}
+
+        /**
          * An entry of a map filed from the list at {@code list}: the list's own element, under the
          * key {@code key} makes of it. Of two elements of one key the later is the entry, so what
          * a statement is about is the last element of its key.
@@ -1465,10 +1492,11 @@ final class Pullback {
         }
 
         /**
-         * Some element of {@code made} meeting {@code some}, where what {@code some} asks of it is
-         * what every element of the operation's answer {@code made} is meets
-         * ({@link Derivation.EveryElementMeetsIt}): the answer holding something — or null where
-         * {@code made} is no such answer.
+         * Some element of {@code made} meeting {@code some}, where {@code made} is the answer of an
+         * operation every element of which comes out on one side, and what {@code some} asks of an
+         * element known by that side alone comes out the same for every one of them
+         * ({@link Derivation.EveryElementMeetsIt}) — or null where it is no such answer, or what is
+         * asked turns on which element it is.
          *
          * @param standing what {@code made} stands for, once the names it is are followed
          */
@@ -1476,10 +1504,23 @@ final class Pullback {
                                              LawProposition.SomeElement<DeclaredArgument> some) {
             AnOperationApplied answering = AnOperationApplied.of(standing.value());
             ValueName operation = answering == null ? null : answering.operation();
-            return operation == null
-                    || !Derivation.EveryElementMeetsIt.askedOfEveryElement(some, operation) ? null
-                    : new Derivation.EveryElementMeetsIt(some, operation,
-                            observe(made.value(), AnswerAspect.EMPTINESS, made.at()));
+            SideAnswered side = operation == null ? null
+                    : DefaultBoundOperationFacts.get().everyElementOfItsAnswerIs(operation);
+            if (side == null) {
+                return null;
+            }
+            Derivation ofTheElement;
+            elements.put(some.container(),
+                    new ElementAt.OfAnAnswerEveryElementOfWhichIs(operation, side));
+            try {
+                ofTheElement = of(some.ofTheElement());
+            } finally {
+                elements.remove(some.container());
+            }
+            return trying.of(ofTheElement) instanceof Proposition.Always
+                    ? new Derivation.EveryElementMeetsIt(some, operation, ofTheElement,
+                            observe(made.value(), AnswerAspect.EMPTINESS, made.at()))
+                    : null;
         }
 
         /** The operation whose answer {@code given} stands for, read in {@code at}, or null where
@@ -1505,6 +1546,15 @@ final class Pullback {
                             case ElementAt.AFiledElement(TermPath list, Core.Block _) ->
                                     observedAt(new DecisionSubject.AnInput(list.element()),
                                             aspect);
+                            // Of an element known only by the side every element of an answer
+                            // comes out on, that side is known and no other.
+                            case ElementAt.OfAnAnswerEveryElementOfWhichIs(var operation,
+                                                                          var side) ->
+                                    side.aspect() == aspect
+                                            ? new Derivation.OfAnElementOfAnAnswer(operation,
+                                                    side)
+                                            : unread(e, reads, new WhyUnread.AtNoPosition(
+                                                    WhyUnread.AtNoPosition.Place.SUBJECT));
                             // A piece, and an entry filed by a fold, stand at no position of the
                             // input to be observed there.
                             case ElementAt.APiece _, ElementAt.AnEntry _ -> unread(e, reads,
@@ -1556,7 +1606,8 @@ final class Pullback {
                             reads.keyOfTheElement(key, list.element(), read.rules().newtypes());
                     yield filed == null ? null : new DecisionSubject.AnInput(filed);
                 }
-                case ElementAt.AValue _, ElementAt.APiece _, ElementAt.AnEntry _ -> null;
+                case ElementAt.AValue _, ElementAt.APiece _, ElementAt.AnEntry _,
+                     ElementAt.OfAnAnswerEveryElementOfWhichIs _ -> null;
                 case null -> null;
             };
         }
@@ -1581,7 +1632,8 @@ final class Pullback {
                                             instanceof PathResolution.At(TermPath held)
                                             ? new DecisionSubject.AnInput(held)
                                             : answerAt(value, in);
-                            case ElementAt.APiece _, ElementAt.AnEntry _ -> null;
+                            case ElementAt.APiece _, ElementAt.AnEntry _,
+                                 ElementAt.OfAnAnswerEveryElementOfWhichIs _ -> null;
                         };
                 case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ -> null;
                 case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) -> keyAt(at);
@@ -1592,14 +1644,23 @@ final class Pullback {
         /**
          * Some element of {@code made}, a container no binding, name or choice made, meeting
          * {@code some} — by the first of the rules for it that reads all of it ({@link RuleChoice}).
+         *
+         * <p>Read on the reading that takes the argument the call was handed as {@code made}
+         * ({@link InputReads#taking}): where the argument is chosen by cases or answered by a body,
+         * {@code made} is what it is on the case this is read on, and the elements the closure is
+         * handed are that container's.
          */
         Derivation someElementOf(Denotation made,
                                  LawProposition.SomeElement<DeclaredArgument> some) {
+            Core argument = applied.argument(some.container());
+            // A node taken as itself is taken as nothing.
+            ALawRead on = Core.withoutStanding(made.value()) == Core.withoutStanding(argument)
+                    ? this : new ALawRead(this, reads.taking(argument, made, 1));
             Denotation container = made.at().standing(made.value(), read.rules().symbols(),
                     read.rules().newtypes());
             return firstThatReadsIt(List.of(
-                    () -> meeting(made, container, some),
-                    () -> everyElementMeets(made, container, some),
+                    () -> on.meeting(made, container, some),
+                    () -> on.everyElementMeets(made, container, some),
                     () -> inTheCalledBody(made.value(), new Asked.SomeElement(this, some),
                             made.at())));
         }
@@ -1651,18 +1712,11 @@ final class Pullback {
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
             DecisionSubject heldAt = located.held();
-            InputReads outer = application;
-            Derivation answered;
-            try {
-                application = handingTheChosenElement(made, some, located);
-                answered = located.handed() == null
-                        ? aboutAnElement(some.container(), heldAt, located.each(),
-                                some.ofTheElement())
-                        : aboutTheValue(some.container(), heldAt, some.ofTheElement(),
-                                located.handed());
-            } finally {
-                application = outer;
-            }
+            Derivation answered = located.handed() == null
+                    ? aboutAnElement(some.container(), heldAt, located.each(),
+                            some.ofTheElement())
+                    : aboutTheValue(some.container(), heldAt, some.ofTheElement(),
+                            located.handed());
             if (answered == null) {
                 return unread(e, reads, new WhyUnread.TwoElementsOfOneContainer());
             }
@@ -1692,33 +1746,6 @@ final class Pullback {
                         : unread(over, in, new WhyUnread.NoMeasureOfItsSize()));
             }
             return new Derivation.SomeElementMeeting(heldAt, answered, true, holdsSomething);
-        }
-
-        /**
-         * Where the closure {@code some} names is read, where the container its elements arrive on
-         * was chosen by a case, or answered by a body, and stands at a position there as
-         * {@code located}: on that case the element handed the closure is the one standing at the
-         * container's element. Where the container is the argument itself, or its element is
-         * anything but the one standing there, it is where it was.
-         */
-        private InputReads handingTheChosenElement(Denotation made,
-                                                   LawProposition.SomeElement<DeclaredArgument>
-                                                           some, Located located) {
-            Core argument = applied.argument(some.container());
-            DeclaredArgument named = closureIn(some.ofTheElement());
-            if (named == null || Core.withoutStanding(made.value())
-                    == Core.withoutStanding(argument) || located.handed() != null
-                    || !(located.each() instanceof ElementAt.AtASubject(
-                            DecisionSubject.AnInput(TermPath list)))) {
-                return application;
-            }
-            Denotation closure = reads.denotes(applied.argument(named), read.rules().symbols(),
-                    read.rules().newtypes());
-            if (!(Core.withoutStanding(closure.value()) instanceof Core.Block block)) {
-                return application;
-            }
-            InputReads handing = closure.at().namingTheElement(block, argument, list.element());
-            return handing != null ? handing : application;
         }
 
         /**
@@ -2492,7 +2519,8 @@ final class Pullback {
                                                                      Core.Block _) ->
                                                 sizedAt(new DecisionSubject.AnInput(
                                                         list.element()));
-                                        case ElementAt.APiece _, ElementAt.AnEntry _ ->
+                                        case ElementAt.APiece _, ElementAt.AnEntry _,
+                                             ElementAt.OfAnAnswerEveryElementOfWhichIs _ ->
                                                 new Sized.NotSized(new WhyUnread.AtNoPosition(
                                                         WhyUnread.AtNoPosition.Place.SUBJECT));
                                     };
@@ -2621,7 +2649,8 @@ final class Pullback {
                             in.pathOf(value, read.rules().newtypes())
                                     instanceof PathResolution.At(TermPath inside)
                                     && inside.isAtOrUnder(held.element()) ? inside : null;
-                    case ElementAt.APiece _, ElementAt.AnEntry _ -> null;
+                    case ElementAt.APiece _, ElementAt.AnEntry _,
+                         ElementAt.OfAnAnswerEveryElementOfWhichIs _ -> null;
                 };
                 // The key of an entry is a place of a map, which the declarations say where there
                 // is one. Where the entries are a list's, a component of each is no place of an

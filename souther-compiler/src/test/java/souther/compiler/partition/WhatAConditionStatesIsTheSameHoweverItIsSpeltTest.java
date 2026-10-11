@@ -147,11 +147,14 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
     @Test
     void aTotalOverAListChosenByCasesIsNoTotalOfTheListOneCaseChose() {
         String total = "List.fold((acc, x) -> acc + x, 0, %s) >= 10";
-        Proposition ofTheList = stated(total.formatted("b.xs"));
-        assertNotEquals(ofTheList, stated(total.formatted("if b.open then b.xs else []")),
-                "on a closed box the total is nought whatever the list holds");
-        assertNotEquals(ofTheList, stated(total.formatted("if b.open then b.xs else [1]")));
-        assertEquals(ofTheList, stated(total.formatted("if b.open then b.xs else b.xs")),
+        for (String other : List.of("[]", "[1]")) {
+            assertEquals(stated("(b.open && " + total.formatted("b.xs") + ") || (Bool.not(b.open)"
+                            + " && " + total.formatted(other) + ")"),
+                    stated(total.formatted("if b.open then b.xs else " + other)),
+                    "on a closed box the total is the other list's, whatever b.xs holds");
+        }
+        assertEquals(stated(total.formatted("b.xs")),
+                stated(total.formatted("if b.open then b.xs else b.xs")),
                 "a list every case answers is that list on every run");
     }
 
@@ -176,6 +179,25 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
     }
 
     /**
+     * What every word is, asked of a word a closure is handed, is what it is asked of the element:
+     * it comes out the same for every word, so some word meeting it is the string having one where
+     * it holds and none where it fails, and every word meets it.
+     */
+    @Test
+    void whatEveryWordIsIsAskedTheSameOfAClosuresParameter() {
+        Proposition aWord = stated("Bool.not(String.isEmpty(String.trim(b.s)))");
+        assertEquals(aWord,
+                stated("List.any(w -> Bool.not(String.isEmpty(w)), String.words(b.s))"));
+        assertEquals(aWord, stated("List.any(w -> String.length(w) >= 1, String.words(b.s))"));
+        assertEquals(stated("String.length(b.s) >= 1"), stated(
+                "List.any(c -> Bool.not(String.isEmpty(c)), String.characters(b.s))"));
+        assertEquals(new Proposition.Always(false),
+                stated("List.any(w -> String.isEmpty(w), String.words(b.s))"));
+        assertEquals(new Proposition.Always(true),
+                stated("List.all(w -> Bool.not(String.isEmpty(w)), String.words(b.s))"));
+    }
+
+    /**
      * What every word is says nothing of a word but that it holds something, and a case mapping
      * keeps whether there is a code point that is not whitespace and not how many there are.
      */
@@ -185,7 +207,7 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
         for (String more : List.of("List.any(w -> String.length(w) >= 2, String.words(b.s))",
                 "String.length(String.lowercase(b.s)) >= 2",
                 "List.length(String.words(String.lowercase(b.s))) >= 2")) {
-            assertTrue(stated(more).toString().contains("Unread"), more);
+            assertInstanceOf(Proposition.Unread.class, stated(more), more);
         }
         assertNotEquals(aWord,
                 stated("String.length(String.join(\"-\", String.split(\",\", b.s))) >= 1"),

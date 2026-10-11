@@ -471,31 +471,6 @@ public final class InputReads {
     }
 
     /**
-     * The reading where the parameter of {@code block} the elements of {@code container} arrive on
-     * stands at {@code element} — or null where no parameter of it takes the elements of
-     * {@code container}.
-     *
-     * <p>For a container chosen by cases, read in the case that chose it: there the container is the
-     * one that case answers, so the element handed the closure is an element of that one.
-     */
-    public InputReads namingTheElement(Core.Block block, Core container, TermPath element) {
-        for (Core.Binder param : block.params()) {
-            if (param != null && param.binding() != null
-                    && names.roleOf(param.binding()) instanceof BindingRole.Element(var held)
-                    && held.part() == HeldIn.Part.ELEMENT && held.container() == container) {
-                Map<BindingId, List<Denotation>> narrower = new LinkedHashMap<>(alternatives);
-                narrower.remove(param.binding());
-                Set<BindingId> handed = new HashSet<>(applied.handed());
-                handed.add(param.binding());
-                return new InputReads(names.naming(param.binding(), element), narrower,
-                        declared, dependencies, new Applied(handed, applied.readings(),
-                                applied.taken(), applied.given(), applied.entered()));
-            }
-        }
-        return null;
-    }
-
-    /**
      * The container {@code e} stands for an element of, where it is a parameter a walk hands each
      * element of one — or null where it is no such parameter.
      *
@@ -1386,7 +1361,12 @@ public final class InputReads {
      * of one to several cases ({@link PathResolution#heldAt}).
      */
     public PathResolution pathOf(Core e, DeclarationNewtypes newtypes) {
-        return InputPath.of(e, names, newtypes).heldAt();
+        return InputPath.of(e, names, newtypes, this::taken).heldAt();
+    }
+
+    /** What a name means here, for a walk that goes on in this reading ({@link InputPath}). */
+    BindingEnvironment names() {
+        return names;
     }
 
     /**
@@ -1398,7 +1378,7 @@ public final class InputReads {
      * the position afresh ({@link DeclaredInput#taking}).
      */
     public PathResolution forkedOn(Core e, DeclarationNewtypes newtypes) {
-        return InputPath.of(e, names, newtypes);
+        return InputPath.of(e, names, newtypes, this::taken);
     }
 
     /** Where in the element handed to {@code binding} the value a walk answered stands, or null
@@ -1866,24 +1846,24 @@ public final class InputReads {
     /** Where an element handed to {@code binding} stands ({@link InputPath#elementAt}), at a
      *  position and never at a narrowing of one to several cases ({@link PathResolution#heldAt}). */
     public PathResolution elementAt(BindingId binding, DeclarationNewtypes newtypes) {
-        return InputPath.elementAt(binding, names, newtypes).heldAt();
+        return InputPath.elementAt(binding, names, newtypes, this::taken).heldAt();
     }
 
     /** Where the elements {@code e} holds stand, where it holds every occurrence of that position
      *  and each as often ({@link InputPath#everyElementOf}). */
     public PathResolution everyElementOf(Core e, DeclarationNewtypes newtypes) {
-        return InputPath.everyElementOf(e, names, newtypes);
+        return InputPath.everyElementOf(e, names, newtypes, this::taken);
     }
 
     /** The same, of the elements handed to {@code binding} ({@link InputPath#everyElementAt}). */
     public PathResolution everyElementAt(BindingId binding, DeclarationNewtypes newtypes) {
-        return InputPath.everyElementAt(binding, names, newtypes);
+        return InputPath.everyElementAt(binding, names, newtypes, this::taken);
     }
 
     /** Where {@code e}'s value came from. Not where it is: a value made from a position is not that
      *  position ({@link InputPath#cameFrom}). */
     public PathResolution cameFrom(Core e, DeclarationNewtypes newtypes) {
-        return InputPath.cameFrom(e, names, newtypes).heldAt();
+        return InputPath.cameFrom(e, names, newtypes, this::taken).heldAt();
     }
 
     /**

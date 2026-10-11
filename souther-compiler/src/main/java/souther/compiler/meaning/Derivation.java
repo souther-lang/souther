@@ -721,7 +721,8 @@ public sealed interface Derivation {
                     case Stopped _ -> true;
                     // What the container holding something was read as is a reading of what made
                     // the container, held to that call where it was made.
-                    case EveryElementMeetsIt(var part, var _, var _) -> part.equals(some);
+                    case EveryElementMeetsIt(var part, var _, Derivation ofTheElement, var _) ->
+                            part.equals(some) && reads(some.ofTheElement(), ofTheElement);
                     case SomeElementMeeting(DecisionSubject container, Derivation ofTheElement,
                                             boolean holds, var _) ->
                             holds && standsAt(some.container(), container)
@@ -1533,23 +1534,33 @@ public sealed interface Derivation {
     }
 
     /**
-     * Some element of what {@code operation} answered meeting what {@code part} asks of it, which is
-     * the side every element of that answer comes out on: any element there is meets it, so some
-     * element does exactly where the answer holds something, read as {@code holdsSomething}.
+     * Some element of what {@code operation} answered meeting what {@code part} asks of it, where
+     * that comes out the same for every element: {@code ofTheElement} is it read of an element
+     * known only by the side every element of the answer comes out on, and it settles one way.
+     * Some element meets it exactly where the answer holds something, read as
+     * {@code holdsSomething}, and it holds.
      *
-     * <p>The side is the operation's, taken from what is bound of it and never handed in. A
-     * statement asking anything else of the element is no statement this reads.
+     * <p>Whether the statement is written of the element ({@code w} holds something) or of what a
+     * closure answers on it ({@code w -> Bool.not(String.isEmpty(w))}) is no part of this: both
+     * are read of the same element. A statement it does not settle — how long a word is — is no
+     * statement this reads.
      */
     record EveryElementMeetsIt(LawProposition.SomeElement<?> part, ValueName operation,
-                               Derivation holdsSomething) implements Derivation {
+                               Derivation ofTheElement, Derivation holdsSomething)
+            implements Derivation {
 
         public EveryElementMeetsIt {
             Objects.requireNonNull(part, "some element meets a statement");
             Objects.requireNonNull(operation, "of what an operation answered");
+            Objects.requireNonNull(ofTheElement, "which is read of an element of it");
             Objects.requireNonNull(holdsSomething, "which is read as holding something");
-            if (!askedOfEveryElement(part, operation)) {
-                throw new IllegalArgumentException(part + " asks of an element of what "
-                        + operation + " answers what it says of none of them");
+            if (DefaultBoundOperationFacts.get().everyElementOfItsAnswerIs(operation) == null) {
+                throw new IllegalArgumentException(operation
+                        + " says nothing of every element of what it answers");
+            }
+            if (!(ofTheElement.concludes(Optional.empty()) instanceof Proposition.Always)) {
+                throw new IllegalArgumentException(ofTheElement
+                        + " comes out differently for different elements");
             }
         }
 
@@ -1566,7 +1577,32 @@ public sealed interface Derivation {
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return numbering.of(holdsSomething);
+            return Proposition.all(List.of(numbering.of(holdsSomething),
+                    numbering.of(ofTheElement)));
+        }
+    }
+
+    /**
+     * An element of what {@code operation} answered coming out on {@code side}'s holding side, which
+     * is the side every element of that answer comes out on: the answer {@code side} says.
+     *
+     * <p>The side is the operation's, taken from what is bound of it and never handed in.
+     */
+    record OfAnElementOfAnAnswer(ValueName operation, SideAnswered side) implements Derivation {
+
+        public OfAnElementOfAnAnswer {
+            Objects.requireNonNull(operation, "an element of what an operation answered");
+            Objects.requireNonNull(side, "comes out on a side");
+            if (!side.equals(DefaultBoundOperationFacts.get().everyElementOfItsAnswerIs(
+                    operation))) {
+                throw new IllegalArgumentException(operation
+                        + " says no element of what it answers comes out " + side);
+            }
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return new Proposition.Always(side.holds());
         }
     }
 
