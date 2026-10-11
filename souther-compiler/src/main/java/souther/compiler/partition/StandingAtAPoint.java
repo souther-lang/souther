@@ -5,6 +5,7 @@ import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ElementsTaken;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.partition.BorderQuantity.Lastness;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -500,16 +501,21 @@ public final class StandingAtAPoint {
          * <p>Asked of every occurrence of the position the reading is consistent with, so an
          * element of another container this reading chose against is not a later element of this
          * one's. A reading that chose no element of the container has none to be last.
+         *
+         * <p>A value that could not be read, in this element or in one after it, is no value to be
+         * equal or unequal to another: it shows that the element is not the last only by another
+         * after it that was read and is equal, and shows that it is by nothing. Which stopped it is
+         * the observation's ({@link ObservedValue#unread}), and is said.
          */
         @Override
-        public final WalkResult<Boolean> lastToHold(TermPath container, TermPath position) {
+        public final Lastness lastToHold(TermPath container, TermPath position) {
             Integer mine = chosen().get(container);
             if (mine == null) {
-                return WalkResult.couldNotWalk();
+                return new Lastness.CouldNotTell(ReadingGap.COULD_NOT_WALK);
             }
             return switch (occurrencesAt(position)) {
                 case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
-                        WalkResult.couldNotWalk();
+                        new Lastness.CouldNotTell(ReadingGap.COULD_NOT_WALK);
                 case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) -> {
                     ObservedValue held = null;
                     for (BehaviorInputs.Occurrence each : values) {
@@ -519,17 +525,27 @@ public final class StandingAtAPoint {
                         }
                     }
                     if (held == null) {
-                        yield WalkResult.couldNotWalk();
+                        yield new Lastness.CouldNotTell(ReadingGap.COULD_NOT_WALK);
                     }
-                    boolean last = true;
+                    if (held.unread() != null) {
+                        yield new Lastness.CouldNotTell(ReadingGap.of(held.unread()));
+                    }
+                    ReadingGap notTold = null;
                     for (BehaviorInputs.Occurrence each : values) {
                         Integer taken = each.at().elementAt(container);
-                        if (agreesBeside(container, each) && taken != null && taken > mine
-                                && held.equals(each.value())) {
-                            last = false;
+                        if (!agreesBeside(container, each) || taken == null || taken <= mine) {
+                            continue;
+                        }
+                        if (each.value().unread() != null) {
+                            notTold = notTold != null ? notTold
+                                    : ReadingGap.of(each.value().unread());
+                        } else if (held.equals(each.value())) {
+                            // One that was read and is equal settles it, whatever else was not.
+                            yield new Lastness.NotLast();
                         }
                     }
-                    yield WalkResult.reached(last);
+                    yield notTold != null ? new Lastness.CouldNotTell(notTold)
+                            : new Lastness.Last();
                 }
             };
         }

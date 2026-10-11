@@ -30,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -1551,8 +1552,33 @@ public sealed interface BorderQuantity
          * container was chosen, and a walk that chose none could not walk to an answer. A walk
          * that holds one element at a time, with the others left out, answers the same.
          */
-        default WalkResult<Boolean> lastToHold(TermPath container, TermPath position) {
-            return WalkResult.couldNotWalk();
+        default Lastness lastToHold(TermPath container, TermPath position) {
+            return new Lastness.CouldNotTell(ReadingGap.COULD_NOT_WALK);
+        }
+    }
+
+    /**
+     * Whether an element is the last of those holding the value it holds at a place.
+     *
+     * <p>Three answers and not a truth. That an element is the last is shown by every element after
+     * it holding something else, and that it is not by one of them holding the same; a value that
+     * could not be read, in this element or in one after it, shows neither, and is said as that
+     * rather than taken for a value no other has.
+     */
+    sealed interface Lastness {
+
+        /** Every element after it holds another value. */
+        record Last() implements Lastness {}
+
+        /** An element after it holds the same value. */
+        record NotLast() implements Lastness {}
+
+        /** Whether one does could not be told, for this reason. */
+        record CouldNotTell(ReadingGap why) implements Lastness {
+
+            public CouldNotTell {
+                Objects.requireNonNull(why, "what could not be told says what stopped it");
+            }
         }
     }
 }

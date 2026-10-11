@@ -358,10 +358,10 @@ final class AStatementAtARow {
             case Proposition.LastToHold(TermPath container, TermPath position, boolean holds,
                                         String _) -> heldAs(holds, switch (
                     row.lastToHold(container, position)) {
-                case WalkResult.CouldNotWalk<Boolean> _ ->
-                        new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
-                case WalkResult.Reached<Boolean>(Boolean last) ->
-                        last ? Answer.HOLDS : Answer.FAILS;
+                case BorderQuantity.Lastness.Last _ -> Answer.HOLDS;
+                case BorderQuantity.Lastness.NotLast _ -> Answer.FAILS;
+                case BorderQuantity.Lastness.CouldNotTell(ReadingGap why) ->
+                        new Answer.CouldNotTell(Set.of(why));
             });
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds,
                                    String _) -> heldAs(holds, ofItsValue(at, row,
@@ -436,9 +436,7 @@ final class AStatementAtARow {
                     new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
             case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
                 case ObservationAtPoint.Value(ObservedValue value) -> {
-                    Boolean answer = (value instanceof ObservedValue.Unknown
-                            || value instanceof ObservedValue.Truncated) ? null
-                            : asked.apply(value);
+                    Boolean answer = value.unread() != null ? null : asked.apply(value);
                     if (answer == null) {
                         yield new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));
                     }
@@ -469,11 +467,14 @@ final class AStatementAtARow {
             return Answer.FAILS;
         }
         if (!(first instanceof ObservationAtPoint.Value(ObservedValue left))
-                || !(second instanceof ObservationAtPoint.Value(ObservedValue right))
-                || left instanceof ObservedValue.Unknown || left instanceof ObservedValue.Truncated
-                || right instanceof ObservedValue.Unknown
-                || right instanceof ObservedValue.Truncated) {
+                || !(second instanceof ObservationAtPoint.Value(ObservedValue right))) {
             return new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));
+        }
+        // A value that could not be read is no value to be equal or unequal to another, and which
+        // stopped it is the observation's to say.
+        if (left.unread() != null || right.unread() != null) {
+            return new Answer.CouldNotTell(Set.of(ReadingGap.of(
+                    left.unread() != null ? left.unread() : right.unread())));
         }
         return left.equals(right) ? Answer.HOLDS : Answer.FAILS;
     }
