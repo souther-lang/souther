@@ -165,6 +165,9 @@ public final class AnswerAsAnInput {
             // Which element of a list the input holds is the last of its key: a place of the
             // input and of no answer, which the input that stands for the answer does not have.
             case Proposition.LastToHold _ -> null;
+            // A search is read from a node of the input, and of no answer.
+            case Proposition.SomeReachable _ -> null;
+            case Proposition.Carried carried -> throw carried.handedToAReader();
             case Proposition.SameValue(DecisionSubject one, DecisionSubject other,
                                        boolean holds, var _) -> {
                 DecisionSubject left = subject(one);
@@ -293,11 +296,16 @@ public final class AnswerAsAnInput {
                 yield container == null || each == null ? null
                         : new Quantity.HowManyDifferent(container, each);
             }
+            // What each element adds may be a number put at a value here, and a sum of a value is
+            // that value times how many elements there are, which is no one quantity.
             case Quantity.SumOver sum -> {
                 DecisionSubject container = subject(sum.container());
-                LinearForm<Quantity> each = form(sum.ofTheElement());
-                yield container == null || each == null ? null
-                        : new Quantity.SumOver(container, each);
+                LinearForm<Quantity> each = form(LinearForm.atom(sum.ofTheElement()));
+                yield container == null || each == null || each.constant().signum() != 0
+                        || each.coefs().size() != 1
+                        || !ExactRatio.ONE.equals(each.coefs().values().iterator().next())
+                        ? null
+                        : new Quantity.SumOver(container, each.coefs().keySet().iterator().next());
             }
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _ -> null;

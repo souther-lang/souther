@@ -235,4 +235,42 @@ class AComparisonOverAListAFlatMapOrAFilterAnsweredIsReadTest {
             assertTrue(headed(report, "border").contains("borders 1"), report);
         }
     }
+
+    /**
+     * How many a flatMap answers adds up what each element it is handed puts in, and of a filter
+     * of values written out the elements are the ones it keeps: here two of the three, two each.
+     */
+    @Test
+    void aSumOverTheElementsAFilterKeptAddsUpTheOnesItKept() {
+        String report = measured("""
+                module p
+                behavior f : (n: Int) -> Bool
+                let f (n) = n >= List.length(List.flatMap(w -> [w, w],
+                                                          List.filter(w -> w >= 2, [1, 2, 3])))
+                example f
+                    | "below" : (3) -> false
+                    | "at" : (4) -> true
+                """);
+        assertEquals(List.of(), notRead(report));
+        assertTrue(report.contains("read as f/n: in 4 < n"), report);
+        assertTrue(report.contains("read as f/n: in n < 3"), report);
+    }
+
+    /** One kept or not by what the row is makes the sum turn on the row, and it is not read as
+     *  the sum of all of them. */
+    @Test
+    void aSumOverElementsKeptByTheRowIsNotReadAsASumOfThemAll() {
+        String report = measured("""
+                module p
+                behavior f : (n: Int) -> Bool
+                let f (n) = n >= List.length(List.flatMap(w -> [w, w],
+                                                          List.filter(w -> w >= n, [1, 2, 3])))
+                example f
+                    | "below" : (0) -> false
+                    | "at" : (6) -> true
+                """);
+        assertTrue(report.contains("not read: comparison@3:15"), report);
+        assertTrue(headed(report, "border").contains("borders 3"),
+                () -> "the filter's own comparison is read at each element: " + report);
+    }
 }

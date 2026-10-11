@@ -11,6 +11,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -38,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
 
     private static final String INPUT = """
-            data Item = { price: Int, tag: String? }
+            data Item = { price: Int, tag: String?, parts: List<Int> }
             data Box = { xs: List<Int>, items: List<Item>, others: List<Item>, open: Bool, x: Int,
                          y: Int, m: Map<String, Int>, s: String }
             let chosen (b: Box) = if b.open then b.items else []
@@ -254,6 +255,92 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
             assertTrue(compared.relation().toString().contains(asked.get(1)),
                     () -> asked.get(0) + " is about " + asked.get(1) + ": " + compared);
         }
+    }
+
+    /**
+     * How many a list made of others holds is a number of those others, however it is made, and
+     * one number that arithmetic adds to another. What a closure answers as many of for every
+     * element as for any other adds up to that many times how many elements there are; lists
+     * written out add up to what each of them holds; and a mapping holds as many as it mapped,
+     * whether its closure reads a place of the element or works something out of it.
+     */
+    @Test
+    void howManyAListMadeOfOthersHoldsIsANumberOfThoseOthers() {
+        String sum = "List.length(%s) + List.length(b.items) >= 1";
+        Proposition once = stated(sum.formatted("b.xs"));
+        for (String made : List.of("List.flatMap(e -> [e], b.xs)",
+                "List.flatMap(e -> [e + 1], b.xs)", "List.map(e -> e, b.xs)",
+                "List.map(e -> e + 1, b.xs)", "{ let ys = List.flatMap(e -> [e], b.xs)\n ys }")) {
+            assertEquals(once, stated(sum.formatted(made)), made);
+        }
+        Proposition twice = stated(
+                "List.length(b.xs) + List.length(b.xs) + List.length(b.items) >= 1");
+        for (String made : List.of("List.flatMap(e -> [e, e], b.xs)", "List.append(b.xs, b.xs)",
+                "List.concat([b.xs, b.xs])")) {
+            assertEquals(twice, stated(sum.formatted(made)), made);
+        }
+        assertEquals(stated("0 + List.length(b.items) >= 1"),
+                stated(sum.formatted("List.flatMap(e -> [], b.xs)")));
+        assertEquals(stated("List.length(b.xs) + 2 + List.length(b.items) >= 1"),
+                stated(sum.formatted("List.concat([b.xs, [1, 2], []])")));
+        assertEquals(stated("4 + List.length(b.items) >= 1"),
+                stated(sum.formatted("List.flatMap(e -> [e, e], [b.x, b.y])")));
+        for (String mapped : List.of("i -> i.price", "i -> i.price + 1", "i -> i")) {
+            assertEquals(new Proposition.Always(true), stated(
+                    "List.length(List.map(" + mapped + ", b.items)) == List.length(b.items)"),
+                    mapped);
+        }
+    }
+
+    /**
+     * A closure answering as many as the element it is handed says is summed over the elements,
+     * the same sum however the lists are put end to end. One answering a number by cases is no
+     * number of how many elements there are, and is not read as one.
+     */
+    @Test
+    void whatAClosureAnswersAsManyOfAsTheElementSaysIsNoMultipleOfTheElements() {
+        Proposition flattened = stated("List.length(List.flatMap(i -> i.parts, b.items))"
+                + " + List.length(b.xs) >= 1");
+        Proposition.Compared compared = assertInstanceOf(Proposition.Compared.class, flattened);
+        assertTrue(((Relation.Affine) compared.relation()).form().coefs().keySet().stream()
+                        .anyMatch(Quantity.SumOver.class::isInstance),
+                () -> "a sum over the items: " + flattened);
+        assertEquals(stated("List.length(List.concat(List.map(i -> i.parts, b.items)))"
+                + " + List.length(b.xs) >= 1"), flattened);
+        for (String byCases : List.of("e -> if e > 0 then [e] else []",
+                "e -> if e > 0 then [e] else [e, e]")) {
+            assertInstanceOf(Proposition.Unread.class, stated("List.length(List.flatMap("
+                    + byCases + ", b.xs)) + List.length(b.items) >= 1"), byCases);
+        }
+    }
+
+    /**
+     * A sum over the elements is spread over what each element adds: a sum of a number and a
+     * constant is the sum of the number and the constant times how many elements there are, and a
+     * sum of twice a number is twice its sum. Two spellings of one sum are one number, so a
+     * comparison of them settles.
+     */
+    @Test
+    void aSumOfWhatEachElementAddsIsTheSumOfEachPartOfIt() {
+        String parts = "List.length(List.flatMap(i -> i.parts, b.items))";
+        assertEquals(new Proposition.Always(true), stated(
+                "List.length(List.flatMap(i -> List.append(i.parts, [1]), b.items)) == "
+                        + parts + " + List.length(b.items)"));
+        assertEquals(new Proposition.Always(true), stated(
+                "List.length(List.flatMap(i -> List.append(i.parts, i.parts), b.items)) == 2 * "
+                        + parts));
+    }
+
+    /**
+     * An element a closure is handed inside a number is summed over, so it is no element the
+     * comparison is read of: two sums over one container in one comparison are two numbers, and
+     * not two elements of the container.
+     */
+    @Test
+    void twoSumsOverOneContainerAreReadInOneComparison() {
+        assertEquals(stated("2 * List.sum(List.map(i -> i.price, b.items)) >= 1"),
+                stated("List.sum(List.map(i -> i.price, b.items))"
+                        + " + List.sum(List.map(j -> j.price, b.items)) >= 1"));
     }
 
     /** One container quantified inside itself would make its two elements one subject. */

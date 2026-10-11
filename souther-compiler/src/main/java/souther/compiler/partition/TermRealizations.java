@@ -2237,7 +2237,11 @@ final class TermRealizations {
         return switch (how) {
             case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, orders,
                     within, reading, inside);
-            case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _,
+            // How many a run holds is the size the walk's law says, which no term over a run is
+            // made for ({@code NumericTerm.TakenOver.of}).
+            case TakenAs.HowManyItHolds _ -> throw new IllegalStateException(
+                    "a count of a run is sized by the law of what made it, not taken over it");
+            case TakenAs.PartOfTime _, TakenAs.PartOfDate _,
                     TakenAs.TheTruncatingQuotient _, TakenAs.TheFloorRemainder _ -> {
                 nothingInside(inside);
                 yield new Realization.None(

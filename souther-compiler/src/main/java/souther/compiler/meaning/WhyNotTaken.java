@@ -107,6 +107,14 @@ public sealed interface WhyNotTaken {
         AN_ANSWER_A_ROW_STANDS_IN,
 
         /**
+         * A node a search from a node reaches below the ones a row writes: a value holding values
+         * of its own kind is written so deep and no deeper, so some node further down meeting what
+         * the search asks is nothing a row is written toward. What it asks of the node it starts
+         * at, and of that node having nothing below, is.
+         */
+        A_NODE_BELOW_WHAT_A_ROW_WRITES,
+
+        /**
          * A place the tree a path is walked over does not read: a position, an answer or a value
          * the body bound that no expression of the condition stands for there, so there is no
          * subject for a fact about it to be about.
@@ -159,7 +167,8 @@ public sealed interface WhyNotTaken {
          */
         public Domain domain() {
             return switch (this) {
-                case A_QUANTITY_ON_NO_ORDER, AN_ANSWER_A_ROW_STANDS_IN ->
+                case A_QUANTITY_ON_NO_ORDER, AN_ANSWER_A_ROW_STANDS_IN,
+                     A_NODE_BELOW_WHAT_A_ROW_WRITES ->
                         Domain.WHAT_A_ROW_IS_WRITTEN_IN;
                 case A_PATH_KNOWS_NO_ALTERNATIVES, A_PLACE_THE_PATH_DOES_NOT_READ,
                      A_PATH_KNOWS_NO_CASES, A_PATH_KNOWS_NO_SAMENESS_OF_VALUES,

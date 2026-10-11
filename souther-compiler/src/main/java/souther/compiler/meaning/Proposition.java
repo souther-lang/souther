@@ -53,7 +53,7 @@ public sealed interface Proposition {
      */
     default boolean mayTurnOnAnElementOf(DecisionSubject container) {
         return switch (this) {
-            case Always _ -> false;
+            case Always _, Carried _ -> false;
             case Unread unread -> !unread.fixed();
             case Compared compared -> switch (compared.relation()) {
                 case Relation.Affine affine -> affine.form().coefs().keySet().stream()
@@ -75,6 +75,11 @@ public sealed interface Proposition {
                     .anyMatch(one -> one.mayTurnOnAnElementOf(container));
             case Some some -> isAnElementOf(some.container(), container)
                     || some.ofTheElement().mayTurnOnAnElementOf(container);
+            // What it is written over is not what it is about, so it is taken to turn on an element
+            // wherever it might, as a part nothing sees into is.
+            case SomeReachable reached ->
+                    isAnElementOf(new DecisionSubject.AnInput(reached.at()), container)
+                            || reached.atANode().mayTurnOnAnElementOf(container);
         };
     }
 
@@ -96,9 +101,8 @@ public sealed interface Proposition {
                     .anyMatch(one -> one.mayTurnOnAnElementOf(container));
             case Quantity.HowManyDifferent(DecisionSubject counted, DecisionSubject _) ->
                     isAnElementOf(counted, container);
-            case Quantity.SumOver(DecisionSubject summed, var each) ->
-                    isAnElementOf(summed, container) || each.coefs().keySet().stream()
-                            .anyMatch(one -> mayBeAnElementOf(one, container));
+            case Quantity.SumOver(DecisionSubject summed, Quantity each) ->
+                    isAnElementOf(summed, container) || mayBeAnElementOf(each, container);
             case Quantity.RemainderOfADividend(var dividend, var _) -> dividend.coefs().keySet()
                     .stream().anyMatch(term -> isAnElementOf(
                             new DecisionSubject.AnInput(term.subjectPath()), container));
@@ -379,6 +383,108 @@ public sealed interface Proposition {
     }
 
     /**
+     * What a walk carried into the step being read coming out on the side its end is asked about —
+     * or, where {@code holds} is false, not.
+     *
+     * <p>Made only while a walk's step is concluded with nothing supposing what it carried, which a
+     * reading does to decide how the walk closes: the same for every element the walk is handed,
+     * and either way as far as anything here knows. Every concluding of a whole condition supposes
+     * it ({@link Derivation.Supposing}), so no reader of what a condition states is handed one.
+     *
+     * @param key spelled from the rest when it is made, whatever is handed in
+     */
+    record Carried(ACarriedValue value, boolean holds, String key) implements Proposition {
+
+        public Carried(ACarriedValue value, boolean holds) {
+            this(value, holds, null);
+        }
+
+        public Carried {
+            if (value == null) {
+                throw new IllegalArgumentException("a walk carried something");
+            }
+            key = (holds ? "" : "!") + value;
+        }
+
+        @Override
+        public Proposition denied() {
+            return new Carried(value, !holds);
+        }
+
+        /** What a reader of what a condition states throws, handed one: a walk's step concluded
+         *  outside every supposition of what it carried. */
+        public IllegalStateException handedToAReader() {
+            return new IllegalStateException(value + " is supposed wherever a condition is"
+                    + " concluded whole, and reached a reader of it unsupposed");
+        }
+    }
+
+    /**
+     * Some node reachable from the one at {@code at} meeting {@code atANode} — the node itself, or
+     * one an element of a container under {@code through} on a node reached — or, where
+     * {@code holds} is false, none doing so.
+     *
+     * <p>{@code atANode} is written of the node at {@code writtenAt}, and it binds that place: a
+     * subject under {@code writtenAt} there is the same place under the node reached, and every
+     * other subject is the one it names wherever the node is. So the subjects it is written over do
+     * not say what it is about, and nothing reads them as a statement of the input: a reader of what
+     * holds where takes {@link #surely}, which says it of the subjects as they stand.
+     *
+     * <p>How deep a run goes is not bounded here. A reader that sees only so far into the input has
+     * {@link #surely} for each side, which holds of a row only where the search comes out that way
+     * whatever lies further down, and holding of neither says nothing of which way it comes out.
+     *
+     * @param through   the fields of a node whose elements are the nodes below it, in one order
+     * @param noneBelow that the node at {@code at} has no node below it, where {@code at} is
+     *                  {@code writtenAt} and the containers under it are measured
+     * @param key       spelled from the rest when it is made, whatever is handed in
+     */
+    record SomeReachable(TermPath at, TermPath writtenAt, List<String> through,
+                         Proposition atANode, Optional<Proposition> noneBelow, boolean holds,
+                         String key) implements Proposition {
+
+        public SomeReachable(TermPath at, TermPath writtenAt, List<String> through,
+                             Proposition atANode, Optional<Proposition> noneBelow, boolean holds) {
+            this(at, writtenAt, through, atANode, noneBelow, holds, null);
+        }
+
+        public SomeReachable {
+            if (at == null || writtenAt == null || atANode == null || noneBelow == null) {
+                throw new IllegalArgumentException("a search is from a node, of something on one");
+            }
+            through = List.copyOf(through);
+            if (through.isEmpty()) {
+                throw new IllegalArgumentException("a search goes below a node through something");
+            }
+            key = (holds ? "reachable " : "unreachable ") + at + " from " + writtenAt + " through "
+                    + through + " [" + atANode.key() + "]";
+        }
+
+        @Override
+        public Proposition denied() {
+            return new SomeReachable(at, writtenAt, through, atANode, noneBelow, !holds);
+        }
+
+        /**
+         * What holds of a row only where this comes out as {@code outcome} whatever lies below the
+         * node — the node meeting the statement for a search that some node does, the node meeting
+         * it not and having nothing below for one that none does — and never holds where that is not
+         * said of the subjects as they stand.
+         */
+        public Proposition surely(boolean outcome) {
+            if (!at.equals(writtenAt)) {
+                return new Always(false);
+            }
+            // The outcome asked is the one some node meeting the statement gives.
+            if (outcome == holds) {
+                return atANode;
+            }
+            return noneBelow.<Proposition>map(none -> all(List.of(atANode.denied(), none)))
+                    .orElse(new Always(false));
+        }
+    }
+
+    /**
      * Part of a condition nothing read the meaning of, told apart by where the reading stopped.
      *
      * <p>The one proposition told apart by a name. Two parts nothing could read mean nothing to be
@@ -501,8 +607,9 @@ public sealed interface Proposition {
             case OnAnApplication applications ->
                     applications.each().forEach(one -> stopsIn(one, into));
             case Some some -> stopsIn(some.ofTheElement(), into);
+            case SomeReachable reached -> stopsIn(reached.atANode(), into);
             case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
-                 LastToHold _ -> { }
+                 LastToHold _, Carried _ -> { }
         }
     }
 
@@ -518,8 +625,9 @@ public sealed interface Proposition {
             case OnAnApplication applications ->
                     applications.each().stream().anyMatch(Proposition::saysTheLastToHold);
             case Some some -> saysTheLastToHold(some.ofTheElement());
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, Unread _ ->
-                    false;
+            case SomeReachable reached -> saysTheLastToHold(reached.atANode());
+            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, Unread _,
+                 Carried _ -> false;
         };
     }
 
@@ -533,7 +641,7 @@ public sealed interface Proposition {
      */
     static boolean aboutAnAnswer(Proposition stated) {
         return switch (stated) {
-            case Always _, Unread _, LastToHold _ -> false;
+            case Always _, Unread _, LastToHold _, Carried _ -> false;
             case Compared(Relation relation, boolean _, String _) -> switch (relation) {
                 case Relation.Affine affine -> affine.form().coefs().keySet().stream()
                         .anyMatch(Proposition::anAnswerIn);
@@ -550,6 +658,7 @@ public sealed interface Proposition {
                     applications.each().stream().anyMatch(Proposition::aboutAnAnswer);
             case Some some -> some.container() instanceof DecisionSubject.AnAnswer
                     || aboutAnAnswer(some.ofTheElement());
+            case SomeReachable reached -> aboutAnAnswer(reached.atANode());
         };
     }
 
@@ -568,8 +677,7 @@ public sealed interface Proposition {
                     different.container() instanceof DecisionSubject.AnAnswer
                             || different.ofTheElement() instanceof DecisionSubject.AnAnswer;
             case Quantity.SumOver sum -> sum.container() instanceof DecisionSubject.AnAnswer
-                    || sum.ofTheElement().coefs().keySet().stream()
-                            .anyMatch(Proposition::anAnswerIn);
+                    || anAnswerIn(sum.ofTheElement());
         };
     }
 

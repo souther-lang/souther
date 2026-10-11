@@ -235,6 +235,24 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers the elements of {@code list} from the index {@code count} names on, in
+     * the order they stand there: each of them once, and nothing else. All of them where the count
+     * is nought or less, and none where it is past the last.
+     *
+     * <p>Which of the source's elements, and not only that they came from it. What is left out is
+     * the run before the index, so some element of the answer meeting a statement is some element of
+     * the source at that index or after it meeting it — and of a list holding something, what the
+     * answer from index one holds and the element at nought are all it holds.
+     */
+    record HoldsTheElementsFrom(ArgumentRef count, ArgumentRef list) implements OperationFact {
+
+        public HoldsTheElementsFrom {
+            Objects.requireNonNull(count, "the index the elements are kept from is some argument");
+            Objects.requireNonNull(list, "and they are some list's");
+        }
+    }
+
+    /**
      * The operation's answer holds the image of every element of the argument {@code image} names,
      * and holds nothing else: an element of the answer is one of those images, and each of those
      * is in the answer. The image is the element itself, or what the closure answered on it.

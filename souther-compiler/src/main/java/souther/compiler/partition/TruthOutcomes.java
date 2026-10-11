@@ -156,6 +156,7 @@ final class TruthOutcomes {
                     Outcomes.EITHER;
             case Proposition.Unread unread ->
                     unread.fixed() ? Outcomes.FIXED_UNNAMED : Outcomes.EITHER;
+            case Proposition.Carried carried -> throw carried.handedToAReader();
             case Proposition.All all -> all.parts().stream().map(TruthOutcomes::of)
                     .reduce(Outcomes.ONLY_TRUE, Outcomes::and);
             case Proposition.Any any -> any.parts().stream().map(TruthOutcomes::of)
@@ -169,6 +170,13 @@ final class TruthOutcomes {
                     case FIXED_UNNAMED, UNKNOWN -> Outcomes.UNKNOWN;
                 };
                 yield some.holds() ? found : found.denied();
+            }
+            // The node it starts at is one it reaches, and one with nothing below reaches no
+            // other: what that node can give, the search can.
+            case Proposition.SomeReachable reached -> {
+                Outcomes atANode = of(reached.atANode());
+                Outcomes found = atANode == Outcomes.FIXED_UNNAMED ? Outcomes.UNKNOWN : atANode;
+                yield reached.holds() ? found : found.denied();
             }
         };
     }

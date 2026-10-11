@@ -259,6 +259,8 @@ public final class OperationFacts {
             about("List", "reverse", keeps(at(0), SizeAgainstItsSource.SAME)),
             about("List", "sort", keeps(at(0), SizeAgainstItsSource.SAME)),
             about("List", "sortBy", keeps(CONTAINER, SizeAgainstItsSource.SAME)),
+            // Which elements of its list a drop keeps: the ones from the count on.
+            about("List", "drop", new OperationFact.HoldsTheElementsFrom(at(0), at(1))),
             about("List", "mapIndexed", maps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("Map", "mapValues", maps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("List", "distinct", keeps(at(0), SizeAgainstItsSource.AT_MOST)),

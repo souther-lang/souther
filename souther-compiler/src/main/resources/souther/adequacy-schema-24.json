@@ -2671,7 +2671,7 @@
     },
     "conditionNotReadReason": {
       "type": "object",
-      "description": "One reason a condition nothing read was not: which of the three kinds, and the word within it. The kinds are told apart by what lifts one — a rule of the reading of what a condition means, a wider domain, or a higher figure. `more_ways_than_are_read` is some or every element meeting the condition coming, taken apart, to more ways an element may meet it than a reading of one condition makes; nothing about the model or about either domain is short. Each `outside_domain` word names the reader whose domain stops: what a row is asked is written at the input's positions, so `answer_a_row_stands_in` is what a dependency answered; what a path knows is relations of numbers, truths and what every element was written to meet, about the places of the tree it walks, so the `path_` words and `place_the_path_does_not_read` are where that stops. `size_nothing_measures` and `position_the_reading_holds_no_place_for` are no longer written — every container a condition asks about has a size that is a number of the input, and the reading of the input holds every position a condition names — and a document of this version may still carry them.",
+      "description": "One reason a condition nothing read was not: which of the three kinds, and the word within it. The kinds are told apart by what lifts one — a rule of the reading of what a condition means, a wider domain, or a higher figure. `more_ways_than_are_read` is some or every element meeting the condition coming, taken apart, to more ways an element may meet it than a reading of one condition makes; nothing about the model or about either domain is short. Each `outside_domain` word names the reader whose domain stops: what a row is asked is written at the input's positions, so `answer_a_row_stands_in` is what a dependency answered and `node_below_what_a_row_writes` is a node a search reaches further down than a row is written; what a path knows is relations of numbers, truths and what every element was written to meet, about the places of the tree it walks, so the `path_` words and `place_the_path_does_not_read` are where that stops. `size_nothing_measures` and `position_the_reading_holds_no_place_for` are no longer written — every container a condition asks about has a size that is a number of the input, and the reading of the input holds every position a condition names — and a document of this version may still carry them.",
       "required": [
         "kind",
         "reason"
@@ -2750,6 +2750,7 @@
                   "path_knows_no_alternatives",
                   "position_the_reading_holds_no_place_for",
                   "answer_a_row_stands_in",
+                  "node_below_what_a_row_writes",
                   "place_the_path_does_not_read",
                   "path_knows_no_cases",
                   "path_knows_no_sameness_of_values",
