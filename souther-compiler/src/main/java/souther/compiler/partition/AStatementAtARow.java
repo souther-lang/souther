@@ -470,11 +470,14 @@ final class AStatementAtARow {
                 || !(second instanceof ObservationAtPoint.Value(ObservedValue right))) {
             return new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));
         }
-        // A value that could not be read is no value to be equal or unequal to another, and which
-        // stopped it is the observation's to say.
-        if (left.unread() != null || right.unread() != null) {
-            return new Answer.CouldNotTell(Set.of(ReadingGap.of(
-                    left.unread() != null ? left.unread() : right.unread())));
+        // A value any part of which could not be read is no value to be equal or unequal to
+        // another.
+        ReadingGap notRead = ReadingGap.ofAComparisonOf(left);
+        if (notRead == null) {
+            notRead = ReadingGap.ofAComparisonOf(right);
+        }
+        if (notRead != null) {
+            return new Answer.CouldNotTell(Set.of(notRead));
         }
         return left.equals(right) ? Answer.HOLDS : Answer.FAILS;
     }

@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -43,7 +44,13 @@ record ContentsAsked(List<Asked> asked) {
      * That the container at {@code container} holds the value at {@code value}, or holds nothing
      * equal to it — as an element, or as a key where {@code ofTheKey}.
      */
-    record Asked(TermPath container, TermPath value, boolean holding, boolean ofTheKey) {}
+    record Asked(TermPath container, TermPath value, boolean holding, boolean ofTheKey) {
+
+        Asked {
+            Objects.requireNonNull(container, "what is asked is asked of some container");
+            Objects.requireNonNull(value, "a container is asked about the value at some position");
+        }
+    }
 
     /** What {@code way} asks of containers' contents. */
     static ContentsAsked of(List<OnTheWay.TakenIn> way) {

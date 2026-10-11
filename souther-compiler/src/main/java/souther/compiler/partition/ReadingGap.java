@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RunSensitivity;
 
 /**
@@ -144,6 +146,20 @@ public sealed interface ReadingGap {
     /** The gap an observation's code is, for a reader holding one. */
     static ReadingGap of(Incompleteness.Code code) {
         return new Observation(code);
+    }
+
+    /**
+     * Why {@code value} cannot be held against another as a whole, or null where it can.
+     *
+     * <p>Asked of every part of it and not of the value alone. A record one of whose fields a limit
+     * stopped is itself a value, and two of them stopped alike are equal as values while what was
+     * written in them may differ; a comparison of the two would say they are one where nothing
+     * shows it. So a value is compared only where all of it was read ({@link Limits#UNBOUNDED}),
+     * and what stopped the reading of any part is what is said.
+     */
+    static ReadingGap ofAComparisonOf(ObservedValue value) {
+        Incompleteness.Code stopped = Limits.UNBOUNDED.stoppedBy(value);
+        return stopped == null ? null : of(stopped);
     }
 
     /** The gap a number this could not hold is, for a reader that met one. */

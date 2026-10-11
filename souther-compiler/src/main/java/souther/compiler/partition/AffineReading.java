@@ -285,7 +285,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * for the whole reading of one comparison, and this reader lives exactly that long.
      */
     private static AffineForms.Reading<NumericTerm, InputReads> reading(
-            InputDomain inputs, RuleReadingSource ruleSource, java.util.Set<NumericTerm> named,
+            InputDomain inputs, RuleReadingSource ruleSource, Set<NumericTerm> named,
             ElementsMet met) {
         return new AffineForms.Reading<NumericTerm, InputReads>() {
 

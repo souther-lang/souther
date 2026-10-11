@@ -502,10 +502,10 @@ public final class StandingAtAPoint {
          * element of another container this reading chose against is not a later element of this
          * one's. A reading that chose no element of the container has none to be last.
          *
-         * <p>A value that could not be read, in this element or in one after it, is no value to be
-         * equal or unequal to another: it shows that the element is not the last only by another
-         * after it that was read and is equal, and shows that it is by nothing. Which stopped it is
-         * the observation's ({@link ObservedValue#unread}), and is said.
+         * <p>A value any part of which could not be read, in this element or in one after it, is no
+         * value to be equal or unequal to another: it shows that the element is not the last only
+         * by another after it that was read whole and is equal, and shows that it is by nothing.
+         * What stopped it is said ({@link ReadingGap#ofAComparisonOf}).
          */
         @Override
         public final Lastness lastToHold(TermPath container, TermPath position) {
@@ -527,8 +527,9 @@ public final class StandingAtAPoint {
                     if (held == null) {
                         yield new Lastness.CouldNotTell(ReadingGap.COULD_NOT_WALK);
                     }
-                    if (held.unread() != null) {
-                        yield new Lastness.CouldNotTell(ReadingGap.of(held.unread()));
+                    ReadingGap ownNotRead = ReadingGap.ofAComparisonOf(held);
+                    if (ownNotRead != null) {
+                        yield new Lastness.CouldNotTell(ownNotRead);
                     }
                     ReadingGap notTold = null;
                     for (BehaviorInputs.Occurrence each : values) {
@@ -536,9 +537,9 @@ public final class StandingAtAPoint {
                         if (!agreesBeside(container, each) || taken == null || taken <= mine) {
                             continue;
                         }
-                        if (each.value().unread() != null) {
-                            notTold = notTold != null ? notTold
-                                    : ReadingGap.of(each.value().unread());
+                        ReadingGap laterNotRead = ReadingGap.ofAComparisonOf(each.value());
+                        if (laterNotRead != null) {
+                            notTold = notTold != null ? notTold : laterNotRead;
                         } else if (held.equals(each.value())) {
                             // One that was read and is equal settles it, whatever else was not.
                             yield new Lastness.NotLast();

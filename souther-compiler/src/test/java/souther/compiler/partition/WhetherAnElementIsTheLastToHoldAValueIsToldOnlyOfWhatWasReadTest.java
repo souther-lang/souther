@@ -16,7 +16,9 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.values.AsACompilationAllows;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -42,8 +44,7 @@ class WhetherAnElementIsTheLastToHoldAValueIsToldOnlyOfWhatWasReadTest {
             """;
 
     private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12,
-            souther.compiler.values.AsACompilationAllows.admittedValues(),
-            souther.compiler.values.AsACompilationAllows.whatARuleLeaves());
+            AsACompilationAllows.admittedValues(), AsACompilationAllows.whatARuleLeaves());
 
     private static final TermPath ROWS = TermPath.of("rows");
 
@@ -61,7 +62,7 @@ class WhetherAnElementIsTheLastToHoldAValueIsToldOnlyOfWhatWasReadTest {
         RuleReadingSource rules = RuleReadings.ofSource(MODEL);
         BehaviorInputs where = new BehaviorInputs(List.of("rows"),
                 List.of(new Type.ListOf(named("Row"))), rules, POLICY);
-        List<ObservedValue> rows = new java.util.ArrayList<>();
+        List<ObservedValue> rows = new ArrayList<>();
         for (ObservedValue key : keys) {
             rows.add(new ObservedValue.Constructed(sym("Row"),
                     Map.of("sku", key, "qty", new ObservedValue.Integer(1))));
@@ -73,6 +74,59 @@ class WhetherAnElementIsTheLastToHoldAValueIsToldOnlyOfWhatWasReadTest {
                 new BorderQuantity.OfACoordinate("decide", term,
                         TermOrdersFixtures.itself(term, new Carrier.Whole())));
         return readings.tried().get(element).lastToHold(ROWS, SKU);
+    }
+
+    private static final String KEYED_BY_A_RECORD = """
+            module g
+
+            data Key = { code: String }
+
+            data Row = { sku: Key, qty: Int }
+
+            behavior decide : (rows: List<Row>) -> Row
+            """;
+
+    /** The same, of rows whose key is a record holding {@code codes} in its one field. */
+    private static BorderQuantity.Lastness lastnessOfRecordKeys(int element,
+                                                                ObservedValue... codes) {
+        RuleReadingSource rules = RuleReadings.ofSource(KEYED_BY_A_RECORD);
+        BehaviorInputs where = new BehaviorInputs(List.of("rows"),
+                List.of(new Type.ListOf(named("Row"))), rules, POLICY);
+        List<ObservedValue> rows = new ArrayList<>();
+        for (ObservedValue code : codes) {
+            rows.add(new ObservedValue.Constructed(sym("Row"), Map.of(
+                    "sku", new ObservedValue.Constructed(sym("Key"), Map.of("code", code)),
+                    "qty", new ObservedValue.Integer(1))));
+        }
+        NumericTerm.ValueOf term = new NumericTerm.ValueOf(ROWS.element().then("qty"));
+        StandingAtAPoint.Readings readings = StandingAtAPoint.readings(where,
+                new ObservedInputs(List.of(new ObservedValue.Sequence(rows)),
+                        new Generator.Watched.NoAccount(), new AnswerObservation.NotAnswered()),
+                new BorderQuantity.OfACoordinate("decide", term,
+                        TermOrdersFixtures.itself(term, new Carrier.Whole())));
+        return readings.tried().get(element).lastToHold(ROWS, SKU);
+    }
+
+    /**
+     * A key that is a record one of whose fields was not read is not read either. Two such keys
+     * stopped alike are equal as values while what was written in them may differ, so they show
+     * neither that the first is the last of its key nor that it is not.
+     */
+    @Test
+    void aRecordKeyAPartOfWhichWasNotReadIsNotReadEither() {
+        assertEquals(couldNotTell(Incompleteness.Code.VALUE_TRUNCATED),
+                lastnessOfRecordKeys(0, TRUNCATED, TRUNCATED));
+        assertEquals(couldNotTell(Incompleteness.Code.VALUE_UNREADABLE),
+                lastnessOfRecordKeys(0, A, UNREADABLE));
+        assertEquals(couldNotTell(Incompleteness.Code.VALUE_TRUNCATED),
+                lastnessOfRecordKeys(0, TRUNCATED, B));
+    }
+
+    /** The control: record keys read whole are told apart and told alike as their fields are. */
+    @Test
+    void recordKeysReadWholeAreToldApartByWhatTheyHold() {
+        assertEquals(NOT_LAST, lastnessOfRecordKeys(0, A, A));
+        assertEquals(LAST, lastnessOfRecordKeys(0, A, B));
     }
 
     private static BorderQuantity.Lastness couldNotTell(Incompleteness.Code why) {

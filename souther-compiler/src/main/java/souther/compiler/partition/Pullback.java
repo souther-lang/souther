@@ -89,6 +89,7 @@ import java.util.LinkedHashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
@@ -1106,7 +1107,13 @@ final class Pullback {
          * key {@code key} makes of it. Of two elements of one key the later is the entry, so what
          * a statement is about is the last element of its key.
          */
-        record AFiledElement(TermPath list, Core.Block key) implements ElementAt {}
+        record AFiledElement(TermPath list, Core.Block key) implements ElementAt {
+
+            public AFiledElement {
+                Objects.requireNonNull(list, "an entry is an element of some list");
+                Objects.requireNonNull(key, "an element is filed under what some closure makes");
+            }
+        }
     }
 
     /**

@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * What is known of the names in a tree, as answers to the questions a walk over them asks.
@@ -303,7 +304,7 @@ final class BindingEnvironment {
     public int hashCode() {
         int h = hash;
         if (h == 0) {
-            h = java.util.Objects.hash(roots, handed, bound(), elements, callsStand, selected);
+            h = Objects.hash(roots, handed, bound(), elements, callsStand, selected);
             hash = h;
         }
         return h;

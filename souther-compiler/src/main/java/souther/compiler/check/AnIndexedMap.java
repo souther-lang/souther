@@ -6,6 +6,7 @@ import souther.compiler.proof.EntriesFiledByKey;
 import souther.compiler.types.ValueName;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 
 /**
@@ -21,6 +22,11 @@ import java.util.function.Function;
  * @param key    the closure that answers the key an element is filed under
  */
 public record AnIndexedMap(Core walked, Core.Block key) {
+
+    public AnIndexedMap {
+        Objects.requireNonNull(walked, "a map is filed from some list");
+        Objects.requireNonNull(key, "an element is filed under what some closure makes of it");
+    }
 
     /** Read once: the library is the same library for every module compiled. */
     private static final class Derived {
