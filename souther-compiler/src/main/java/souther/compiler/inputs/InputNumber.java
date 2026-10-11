@@ -294,14 +294,21 @@ public final class InputNumber {
         ElementAnswer step = new ElementAnswer(element, walk.step().body());
         int accumulatorAt = walk.step().params().indexOf(walk.accumulator());
         Type counted = accumulatorAt < 0 ? null : walk.step().paramTypes().get(accumulatorAt);
+        // The body's names are copied once, and the accumulator put at each of the two figures in
+        // turn: a reading keeps nothing of the names it was given.
+        Map<BindingId, Core> held = new HashMap<>(reads.heldByTheBody());
+        if (!holds(held, walk.accumulator().binding(), counted, 0)) {
+            return null;
+        }
+        ElementValue.Affine nought = affine(ElementValue.read(step, held, source));
+        if (nought == null || nought.form().coefs().isEmpty()) {
+            return null;
+        }
+        holds(held, walk.accumulator().binding(), counted, 1);
+        ElementValue.Affine one = affine(ElementValue.read(step, held, source));
         ElementValue.Affine seed = affine(ElementValue.read(
-                new ElementAnswer(element, walk.seed()), reads.heldByTheBody(), source));
-        ElementValue.Affine nought = affine(ElementValue.read(step,
-                holding(reads, walk.accumulator().binding(), counted, 0), source));
-        ElementValue.Affine one = affine(ElementValue.read(step,
-                holding(reads, walk.accumulator().binding(), counted, 1), source));
-        if (seed == null || nought == null || one == null || !seed.form().coefs().isEmpty()
-                || nought.form().coefs().isEmpty()
+                new ElementAnswer(element, walk.seed()), held, source));
+        if (seed == null || one == null || !seed.form().coefs().isEmpty()
                 || !nought.form().coefs().equals(one.form().coefs())
                 || !(one.form().constant().minus(nought.form().constant())
                         instanceof ExactAnswer.Held<ExactRatio>(ExactRatio moved))
@@ -332,17 +339,19 @@ public final class InputNumber {
         return read instanceof ElementValue.Affine form ? form : null;
     }
 
-    /** What the body holds, and the accumulator {@code value} of the type it counts in — or
-     *  nothing where it counts in a type no literal is written for. */
-    private static Map<BindingId, Core> holding(InputReads reads, BindingId accumulator, Type type,
-                                                long value) {
-        Map<BindingId, Core> held = new HashMap<>(reads.heldByTheBody());
+    /** Puts the accumulator at {@code value} of the type it counts in, or says it counts in a type
+     *  no literal is written for. */
+    private static boolean holds(Map<BindingId, Core> held, BindingId accumulator, Type type,
+                                 long value) {
         if (Type.INT.equals(type)) {
             held.put(accumulator, new Core.Int(value, type, null));
-        } else if (Type.DECIMAL.equals(type)) {
-            held.put(accumulator, new Core.Decimal(BigDecimal.valueOf(value), type, null));
+            return true;
         }
-        return held;
+        if (Type.DECIMAL.equals(type)) {
+            held.put(accumulator, new Core.Decimal(BigDecimal.valueOf(value), type, null));
+            return true;
+        }
+        return false;
     }
 
     /**
