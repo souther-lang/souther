@@ -51,24 +51,16 @@ public final class TruthTable {
      * which comes out no way this can name.
      */
     private static boolean partsOf(Proposition stated, Map<String, Integer> into) {
-        switch (stated) {
-            case Proposition.Always _ -> {
-                return true;
-            }
-            case Proposition.Unread _ -> {
-                return false;
-            }
-            case Proposition.All all -> {
-                return all.parts().stream().allMatch(part -> partsOf(part, into));
-            }
-            case Proposition.Any any -> {
-                return any.parts().stream().allMatch(part -> partsOf(part, into));
-            }
+        return switch (stated) {
+            case Proposition.Always _ -> true;
+            case Proposition.Unread _ -> false;
+            case Proposition.All all -> all.parts().stream().allMatch(part -> partsOf(part, into));
+            case Proposition.Any any -> any.parts().stream().allMatch(part -> partsOf(part, into));
             default -> {
                 into.putIfAbsent(spelledFirst(stated), into.size());
-                return true;
+                yield true;
             }
-        }
+        };
     }
 
     private static boolean valueOf(Proposition stated, Map<String, Integer> parts,
