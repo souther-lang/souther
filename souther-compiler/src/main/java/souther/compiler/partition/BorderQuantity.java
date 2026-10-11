@@ -21,7 +21,6 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
-import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 
 import java.math.BigDecimal;
@@ -1051,53 +1050,30 @@ public sealed interface BorderQuantity
          * What the remainder comes to at a row: the dividend there, less every whole turn of the
          * divisor.
          *
-         * <p>The dividend as the run computes it, which is not the dividend as mathematics does. A
-         * product or a sum that leaves what an {@code Int} holds aborts the run before the
-         * remainder is asked, so a row whose form comes out of range at any step is no row that
-         * stands anywhere; it could not be told, and it is never read as standing at the remainder
-         * the mathematics gives it.
+         * <p>The dividend as mathematics has it, read off the form. Whether the run computed it
+         * without leaving what an {@code Int} holds is not a question about the form: a form keeps
+         * what an expression comes to and not the order its steps were taken in, so {@code a - d}
+         * at {@code -1} and the least {@code Int} is held there as a product that is out of range
+         * and is a difference that is not. What says a row ran is the run, and a row is certified
+         * from it ({@code Generator}); this says where the numbers the row holds stand.
          */
         @Override
         public Stands standsAt(Criterion where, Observation row) {
             return switch (dividend.valuesOf(dividend.read(row))) {
                 case ValuesAtARow.NoneHere _ -> Stands.NO;
                 case ValuesAtARow.CouldNotTell(Set<ReadingGap> why) -> Stands.couldNotTell(why);
-                case ValuesAtARow.Read(Map<NumericTerm, Place> values) -> {
-                    BigInteger computed = dividendComputedAt(values);
-                    if (computed == null) {
-                        yield Stands.couldNotTell(
-                                Set.of(ReadingGap.of(UnheldNumber.NO_REPRESENTATION_EXISTS)));
-                    }
-                    yield where.holds(new Level.OfTheQuantity(
-                            ExactRatio.of(computed.mod(divisor)))) ? Stands.YES : Stands.NO;
-                }
+                case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
+                        switch (OrderedAffineBoundary.at(wholeDividend(), values)) {
+                            case ExactAnswer.Unheld<ExactRatio> unheld ->
+                                    Stands.couldNotTell(Set.of(ReadingGap.of(unheld.why())));
+                            case ExactAnswer.Held<ExactRatio> held ->
+                                    held.value().isWhole() && held.value().floor()
+                                            instanceof ExactAnswer.Held<BigInteger> whole
+                                            && where.holds(new Level.OfTheQuantity(ExactRatio.of(
+                                                    whole.value().mod(divisor))))
+                                            ? Stands.YES : Stands.NO;
+                        };
             };
-        }
-
-        /**
-         * The dividend at a row, each step held to what an {@code Int} holds — or null where a step
-         * is out of it, or a number of the row is no whole number.
-         */
-        private BigInteger dividendComputedAt(Map<NumericTerm, Place> values) {
-            BigInteger sum = shift;
-            for (Map.Entry<NumericTerm, ExactRatio> each
-                    : NumericTerms.entriesInOrder(dividend.form().coefs())) {
-                ExactRatio at = Count.number(values.get(each.getKey())).exactly();
-                if (!at.isWhole() || !(at.floor() instanceof ExactAnswer.Held<BigInteger> whole)
-                        || !(each.getValue().floor() instanceof ExactAnswer.Held<BigInteger> by)) {
-                    return null;
-                }
-                BigInteger product = whole.value().multiply(by.value());
-                sum = sum.add(product);
-                if (!fitsAnInt(product) || !fitsAnInt(sum)) {
-                    return null;
-                }
-            }
-            return sum;
-        }
-
-        private static boolean fitsAnInt(BigInteger number) {
-            return number.bitLength() < Long.SIZE;
         }
 
         @Override
