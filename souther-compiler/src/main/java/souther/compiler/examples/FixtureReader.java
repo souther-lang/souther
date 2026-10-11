@@ -7,9 +7,8 @@ import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.DeclarationKinds;
-import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
-import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.cst.SyntaxKind;
@@ -1474,12 +1473,11 @@ public final class FixtureReader {
     /** Whether {@code operation} is proved to answer its first argument's answer on each element
      *  of its second, once each, in that list's order. */
     private static boolean answersEachInOrder(ValueName.Stdlib.Operation operation) {
-        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
-        BuiltFrom<DeclaredArgument> built = facts.buildsItsResultFrom(operation);
-        DeclaredArgument each = built == null ? null : built.mapsEachElementOf();
-        DeclaredArgument ordered = facts.keepsTheOrderOf(operation);
-        return each != null && each.position() == 1 && ordered != null
-                && ordered.position() == 1;
+        BoundOperationFacts.Assembled assembled =
+                DefaultBoundOperationFacts.get().assembles(operation);
+        return assembled != null
+                && assembled.piece() == PieceOfAnElement.THE_CLOSURES_ANSWER
+                && assembled.source().position() == 1;
     }
 
     /**

@@ -304,7 +304,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     static Read read(String behavior, StatedComparison comparison,
                      InputReading read, InputReads reads, ClosureApplications applying,
                      Arrivals answering, WhatConditionsState conditions) {
-        if (!(applying instanceof ClosureApplications.Each(var each))) {
+        List<ClosureApplications.Application> each = switch (applying) {
+            case ClosureApplications.Each(var made) -> made;
+            // A comparison inside a closure no run applies is read on no application, and comes
+            // out the same — not at all — on every row.
+            case ClosureApplications.None _ -> List.of();
+            case ClosureApplications.Outside _, ClosureApplications.NotSaid _ -> null;
+        };
+        if (each == null) {
             return readOnce(behavior, comparison, read, reads, answering, conditions);
         }
         Read drawn = onEachApplication(behavior, comparison, read, each, answering, conditions);
@@ -330,6 +337,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * one statement: where one application's reading stopped, the comparison stops there with that
      * application's reasons, at that application's places. An application on which the comparison
      * comes out the same for every row draws nothing.
+     *
+     * <p>Of the applications a run makes on some row. One made on no row — an operation that has
+     * stopped on an answer before it on every row — is not read: nothing it states is part of the
+     * comparison, and a reading of it that stopped would stop the applications that are made.
      */
     private static Read onEachApplication(String behavior, StatedComparison comparison,
                                           InputReading read,
@@ -342,6 +353,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Map<Read, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
         InputReads statingNoRelation = null;
         for (ClosureApplications.Application one : each) {
+            if (one.reached() instanceof Proposition.Always(boolean made) && !made) {
+                continue;
+            }
             switch (readOnce(behavior, comparison, read, one.reads(), answering, conditions)) {
                 case Read.Stopped alone -> alone.why().forEach(stopped::putIfAbsent);
                 case Read.StatesNoRelation _ -> {

@@ -215,19 +215,22 @@ public sealed interface OperationFact {
     }
 
     /**
-     * The elements of the operation's answer stand in the order of the elements of {@code source}
-     * they came from: one stands before another where what it came from stood before what the
-     * other came from.
+     * The operation's answer is a piece for each element of {@code source}, put end to end in the
+     * order of those elements, and nothing else: the answer to {@code [x₁, …, xₙ]} is
+     * {@code piece(x₁) ++ … ++ piece(xₙ)}, with {@code piece} what {@code piece} says the closure
+     * makes of an element.
      *
-     * <p>The order and nothing else. Where the elements came from is {@link BuildsItsResultFrom},
-     * and the two together are what a reader computing the answer itself needs: as many answers of
-     * the closure as elements, each on a different one ({@link ElementLineage.ClosureResult} with
-     * {@link SizeAgainstItsSource#SAME}), in the order they stand in, is the answer written out.
+     * <p>Which values the answer holds, in which order and how many times, and which of them are
+     * there at all, are four readings of this one statement. Where the elements came from
+     * ({@link ElementLineage}) and how many there are ({@link SizeAgainstItsSource}, a size law) are
+     * each weaker, and the two together are not this: {@code [a, a]} came from inside
+     * {@code [a, b]} and is as long. A reader writing the answer out asks this and nothing else.
      */
-    record KeepsTheOrderOf(ArgumentRef source) implements OperationFact {
+    record AssemblesPieces(ArgumentRef source, PieceOfAnElement piece) implements OperationFact {
 
-        public KeepsTheOrderOf {
-            Objects.requireNonNull(source, "this one names what the order is of");
+        public AssemblesPieces {
+            Objects.requireNonNull(source, "pieces are made of the elements of something");
+            Objects.requireNonNull(piece, "and of each element some piece is made");
         }
     }
 

@@ -24,6 +24,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -94,13 +95,17 @@ public final class InputReads {
     private static final ValueName.Stdlib.Operation GET = ValueName.Stdlib.operation("Map", "get");
 
     private final BindingEnvironment names;
-    private final Map<BindingId, java.util.List<Denotation>> alternatives;
+    private final Map<BindingId, List<ReadMeaning.Occurrence>> alternatives;
     private final DeclaredInput declared;
     private final souther.compiler.carrier.Membership<ValueName.Behavior> dependencies;
     private final Applied applied;
     /** {@link #hashCode}, worked out the first time it is asked: nothing here changes, and what it
      *  is worked out from holds every value bound on the way here. Nought where it has not been. */
     private int hash;
+    /** Where each node {@link #pathOf} was asked of stands here, under the declarations
+     *  {@link #pathsUnder}; null until it is first asked. No part of what this reading is. */
+    private Map<Core, PathResolution> paths;
+    private DeclarationNewtypes pathsUnder;
 
     /**
      * The applications of closures, the arms of choices and the calls of behaviors a reading here is
@@ -188,7 +193,7 @@ public final class InputReads {
     }
 
     private InputReads(BindingEnvironment names,
-                       Map<BindingId, java.util.List<Denotation>> alternatives,
+                       Map<BindingId, List<ReadMeaning.Occurrence>> alternatives,
                        DeclaredInput declared,
                        souther.compiler.carrier.Membership<ValueName.Behavior> dependencies,
                        Applied applied) {
@@ -339,7 +344,7 @@ public final class InputReads {
      * ({@link #calling}): its names are that reading's and not these.
      */
     public InputReads handing(BindingId binding, Denotation value, DeclarationNewtypes newtypes) {
-        Map<BindingId, List<Denotation>> narrower = new LinkedHashMap<>(alternatives);
+        Map<BindingId, List<ReadMeaning.Occurrence>> narrower = new LinkedHashMap<>(alternatives);
         narrower.remove(binding);
         Set<BindingId> handed = new HashSet<>(applied.handed());
         handed.add(binding);
@@ -433,12 +438,20 @@ public final class InputReads {
      * <p>Counted before anything is made. How many applications there are is the product of how
      * many values each parameter is handed, times the readings this one is already one of; past
      * {@code most}, none of them is made, so a closure nested in closures costs what the figure
-     * allows and not what the nesting would.
+     * allows and not what the nesting would. A container holding more than is written out is past
+     * it already.
+     *
+     * <p>Each application is handed one occurrence of each container there on some row, as
+     * {@code kept} decides, and is made only where the container holds it: what each occurrence is
+     * still kept by goes with the application. A parameter handed the elements of a container that
+     * holds none — written so, or with every occurrence dropped on every row — is handed nothing,
+     * and the closure is applied to nothing ({@link Applications.NoneMade}).
      */
     public Applications applicationsOf(Core.Block block, Symbols symbols,
-                                       DeclarationNewtypes newtypes, int most) {
+                                       DeclarationNewtypes newtypes, int most,
+                                       ReadMeaning.WhereKept kept) {
         List<Core.Binder> handed = new ArrayList<>();
-        List<List<Denotation>> valuesOf = new ArrayList<>();
+        List<List<ReadMeaning.Occurrence>> occurrencesOf = new ArrayList<>();
         HowAClosureIsApplied how = HowAClosureIsApplied.TO_EVERY_ELEMENT;
         long readings = applied.readings();
         for (int at = 0; at < block.params().size(); at++) {
@@ -448,34 +461,54 @@ public final class InputReads {
             }
             Core.Read read = new Core.Read(param.name(), param.binding(),
                     block.paramTypes().get(at), block.pos());
-            if (meaningOf(read, symbols, newtypes) instanceof ReadMeaning.OneOf(var values)) {
-                if (!alternatives.containsKey(param.binding())
-                        && names.roleOf(param.binding()) instanceof BindingRole.Element(var held)) {
-                    how = held.applied();
+            switch (meaningOf(read, symbols, newtypes)) {
+                case ReadMeaning.OneOf one -> {
+                    List<ReadMeaning.Occurrence> occurrences = one.occurrencesWhere(kept);
+                    if (occurrences.isEmpty()) {
+                        return new Applications.NoneMade();
+                    }
+                    if (!alternatives.containsKey(param.binding())
+                            && names.roleOf(param.binding())
+                                    instanceof BindingRole.Element(var held)) {
+                        how = held.applied();
+                    }
+                    handed.add(param);
+                    occurrencesOf.add(occurrences);
+                    if (readings > most / occurrences.size()) {
+                        return new Applications.MoreThanAreRead();
+                    }
+                    readings *= occurrences.size();
                 }
-                handed.add(param);
-                valuesOf.add(values);
-                readings *= values.size();
-                if (readings > most) {
+                case ReadMeaning.NoneHeld _ -> {
+                    return new Applications.NoneMade();
+                }
+                case ReadMeaning.MoreThanAreWrittenOut _ -> {
                     return new Applications.MoreThanAreRead();
                 }
+                case ReadMeaning.Position _, ReadMeaning.Through _, ReadMeaning.Element _,
+                     ReadMeaning.Unknown _ -> { }
             }
         }
         if (handed.isEmpty()) {
             return new Applications.NoneHanded();
         }
-        List<InputReads> applications = List.of(this);
+        List<Applications.Made> applications = List.of(new Applications.Made(this, List.of()));
         for (int at = 0; at < handed.size(); at++) {
-            List<InputReads> wider = new ArrayList<>();
-            for (InputReads each : applications) {
-                for (Denotation value : valuesOf.get(at)) {
-                    wider.add(each.handing(handed.get(at).binding(), value, newtypes));
+            List<Applications.Made> wider = new ArrayList<>();
+            for (Applications.Made each : applications) {
+                for (ReadMeaning.Occurrence occurrence : occurrencesOf.get(at)) {
+                    List<ReadMeaning.Occurrence.Kept> keptBy = new ArrayList<>(each.keptWhere());
+                    keptBy.addAll(occurrence.keptWhere());
+                    wider.add(new Applications.Made(each.reads().handing(
+                            handed.get(at).binding(), occurrence.value(), newtypes), keptBy));
                 }
             }
             applications = wider;
         }
         long counted = readings;
-        List<InputReads> each = applications.stream().map(one -> one.readAs(counted)).toList();
+        List<Applications.Made> each = applications.stream()
+                .map(one -> new Applications.Made(one.reads().readAs(counted), one.keptWhere()))
+                .toList();
         // An operation applying its closure to one element at most picks it out by something else
         // it was handed, and one applying it to some of them says not which; and applications made
         // of every value of each of several parameters are made in an order no operation here
@@ -634,6 +667,13 @@ public final class InputReads {
                 at.dependencies, at.applied.as(applied.readings(), taken)));
     }
 
+    /** The same, of an occurrence: its value and each truth it was kept by. */
+    private ReadMeaning.Occurrence carryingWhatIsTaken(ReadMeaning.Occurrence occurrence) {
+        return new ReadMeaning.Occurrence(carryingWhatIsTaken(occurrence.value()),
+                occurrence.keptWhere().stream().map(kept -> new ReadMeaning.Occurrence.Kept(
+                        carryingWhatIsTaken(kept.truth()), kept.holds())).toList());
+    }
+
     /**
      * Where the body of {@code behavior}, called with {@code args} here, is read: its parameters
      * standing for what the call handed — a position where the argument stands at one, and the
@@ -730,10 +770,24 @@ public final class InputReads {
     public sealed interface Applications {
 
         /**
-         * One environment per application, in the order the values were written, which is the order
-         * a run makes them in, and how far the operation goes making them.
+         * One application: the names in force on it, and what has to hold of the values for the
+         * container to hold the element it is handed — every truth the element was kept by, for
+         * each parameter handed one ({@link ReadMeaning.Occurrence}). An application handed an
+         * element a filter dropped is one no run makes.
          */
-        record Each(List<InputReads> each, HowAClosureIsApplied how) implements Applications {
+        record Made(InputReads reads, List<ReadMeaning.Occurrence.Kept> keptWhere) {
+
+            public Made {
+                Objects.requireNonNull(reads, "an application is read in some names");
+                keptWhere = List.copyOf(keptWhere);
+            }
+        }
+
+        /**
+         * One application per occurrence, in the order a walk of the container meets them, which
+         * is the order a run makes them in, and how far the operation goes making them.
+         */
+        record Each(List<Made> each, HowAClosureIsApplied how) implements Applications {
 
             public Each {
                 each = List.copyOf(each);
@@ -747,6 +801,16 @@ public final class InputReads {
         record NoneHanded() implements Applications {}
 
         /**
+         * A parameter is handed the elements of a container that holds none on any row, so the
+         * closure is applied to nothing and nothing in its body is reached.
+         *
+         * <p>Beside {@link NoneHanded} and the opposite of it. That one says which values the
+         * closure is handed are not written out, and its body is read once as it stands because
+         * some run may apply it to something; this one says no run applies it at all.
+         */
+        record NoneMade() implements Applications {}
+
+        /**
          * One environment for each application a run may make, where which of them it makes is not
          * said: the operation applies its closure to one element at most, or to some of them, or
          * hands values to several parameters and stops.
@@ -755,7 +819,7 @@ public final class InputReads {
          * application and not about whether a run makes it; where each is made among the others is
          * what is not.
          */
-        record Unsaid(List<InputReads> each) implements Applications {
+        record Unsaid(List<Made> each) implements Applications {
 
             public Unsaid {
                 each = List.copyOf(each);
@@ -1246,25 +1310,27 @@ public final class InputReads {
     private InputReads admitting(Core scrutinee, Core.Case arm, Symbols symbols,
                                  DeclarationNewtypes newtypes) {
         ReadMeaning.OneOf one = pluralityOf(scrutinee, symbols, newtypes);
-        List<Denotation> values;
+        List<ReadMeaning.Occurrence> values;
         if (one != null) {
-            values = one.alternatives();
+            values = one.asWritten();
         } else {
             Denotation stands = standing(new Denotation(scrutinee, this), symbols, newtypes,
                     new HashSet<>());
             if (WrittenCase.of(stands.value()).isEmpty()) {
                 return denotingWhatWasMatched(scrutinee, arm, symbols, newtypes);
             }
-            values = List.of(stands);
+            values = List.of(ReadMeaning.Occurrence.always(stands));
         }
         for (CaseSelector selector : arm.pattern().selectors()) {
             if (!(selector.refinement() instanceof souther.compiler.types.Refinement.Direct)) {
                 return this;
             }
         }
-        java.util.List<Denotation> left = new java.util.ArrayList<>();
-        for (Denotation each : values) {
-            Optional<TypeSymbol> written = WrittenCase.of(each.value());
+        // What each occurrence was kept by stays with it: the arm takes some of them out, and
+        // whether a container holds the ones left is what it was before.
+        List<ReadMeaning.Occurrence> left = new ArrayList<>();
+        for (ReadMeaning.Occurrence each : values) {
+            Optional<TypeSymbol> written = WrittenCase.of(each.value().value());
             if (written.isEmpty()) {
                 return this;
             }
@@ -1275,7 +1341,7 @@ public final class InputReads {
         if (left.isEmpty()) {
             return this;
         }
-        Map<BindingId, java.util.List<Denotation>> wider = new LinkedHashMap<>(alternatives);
+        Map<BindingId, List<ReadMeaning.Occurrence>> wider = new LinkedHashMap<>(alternatives);
         wider.put(arm.binder().binding(), left);
         return new InputReads(names, wider, declared, dependencies, applied);
     }
@@ -1411,8 +1477,9 @@ public final class InputReads {
                 && stands.at().meaningOf(name, symbols, newtypes) instanceof ReadMeaning.OneOf many)) {
             return null;
         }
+        // Of every value it may be, kept or not: a case none of them is, is a case no kept one is.
         Set<TypeSymbol> out = new LinkedHashSet<>();
-        for (Denotation each : many.alternatives()) {
+        for (Denotation each : many.everyValueItMayBe()) {
             Optional<TypeSymbol> written =
                     WrittenCase.of(standing(each, symbols, newtypes, new HashSet<>()).value());
             if (written.isEmpty()) {
@@ -1478,9 +1545,27 @@ public final class InputReads {
     /**
      * Where {@code e} stands, read here ({@link PathResolution}): a position, and never a narrowing
      * of one to several cases ({@link PathResolution#heldAt}).
+     *
+     * <p>Answered once for each node asked here. Every reader of a condition asks where its parts
+     * stand — the arithmetic of a side, whether a value is the same on every run, whether two
+     * cases are written out — and each asks it of the same nodes in the same reading. What it
+     * comes to turns on nothing but the node and this reading, which does not change; the node
+     * and not one equal to it, since what this reading takes a node as is taken of that node
+     * ({@link #taken}).
      */
     public PathResolution pathOf(Core e, DeclarationNewtypes newtypes) {
-        return InputPath.of(e, names, newtypes, this::taken).heldAt();
+        if (paths == null) {
+            paths = new IdentityHashMap<>();
+            pathsUnder = newtypes;
+        } else if (pathsUnder != newtypes) {
+            return InputPath.of(e, names, newtypes, this::taken).heldAt();
+        }
+        PathResolution held = paths.get(e);
+        if (held == null) {
+            held = InputPath.of(e, names, newtypes, this::taken).heldAt();
+            paths.put(e, held);
+        }
+        return held;
     }
 
     /** What a name means here, for a walk that goes on in this reading ({@link InputPath}). */
@@ -1632,7 +1717,7 @@ public final class InputReads {
             case Core.Read name -> ofSeveral
                     && reads.meaningOf(name, symbols, newtypes, new HashSet<>(met))
                             instanceof ReadMeaning.OneOf one
-                    && one.alternatives().stream()
+                    && one.everyValueItMayBe().stream()
                             .allMatch(each -> writtenOut(each, true, symbols, newtypes,
                                     new HashSet<>(met)));
             case Core.Neg negated -> writtenOut(new Denotation(negated.operand(), reads),
@@ -1683,25 +1768,34 @@ public final class InputReads {
             return new ReadMeaning.Through(defined != null ? defined
                     : carryingWhatIsTaken(given));
         }
-        java.util.List<Denotation> narrowed = alternatives.get(read.binding());
+        List<ReadMeaning.Occurrence> narrowed = alternatives.get(read.binding());
         if (narrowed != null) {
             return new ReadMeaning.OneOf(narrowed.stream().map(this::carryingWhatIsTaken)
                     .toList());
         }
         return switch (names.roleOf(read.binding())) {
-            // What a container written out in the body holds is the values it was written with, and
-            // what a walk answering one value per element of another container holds is that
-            // walk's answer on one of them. A map's keys are among neither, so a key is a key of
-            // the map and which one is not said.
+            // What a container written out holds is the occurrences that walk writes out
+            // ({@link WrittenOutElements}), and what a walk answering one value per element of a
+            // container it cannot write out holds is that walk's answer on one of them. A map's
+            // keys are among neither, so a key is a key of the map and which one is not said.
             case BindingRole.Element(var held) -> {
                 if (held.part() != HeldIn.Part.ELEMENT) {
                     yield new ReadMeaning.Element();
                 }
                 Denotation container = standing(new Denotation(held.container(), this), symbols,
                         newtypes, met);
-                java.util.List<Denotation> written = writtenElementsOf(container);
-                if (written != null) {
-                    yield new ReadMeaning.OneOf(written);
+                switch (WrittenOutElements.of(container, symbols, newtypes, met)) {
+                    // No element at all, which is an answer of its own and not a set of none.
+                    case WrittenOutElements.Walked.Each each when each.asWritten().isEmpty() -> {
+                        yield new ReadMeaning.NoneHeld();
+                    }
+                    case WrittenOutElements.Walked.Each each -> {
+                        yield new ReadMeaning.OneOf(each.asWritten());
+                    }
+                    case WrittenOutElements.Walked.PastTheFigure _ -> {
+                        yield new ReadMeaning.MoreThanAreWrittenOut();
+                    }
+                    case WrittenOutElements.Walked.NotWrittenOut _ -> { }
                 }
                 ReadMeaning answered = answerOnEachElement(container, symbols, newtypes, met);
                 yield answered == null ? new ReadMeaning.Element() : answered;
@@ -1824,7 +1918,7 @@ public final class InputReads {
             each.add(new Denotation(walk.step().body(),
                     at.handing(walk.element().binding(), value, newtypes)));
         }
-        return new AnsweredByAWalk(walk, new ReadMeaning.OneOf(each));
+        return new AnsweredByAWalk(walk, ReadMeaning.OneOf.ofEvery(each));
     }
 
     /**
@@ -1935,8 +2029,8 @@ public final class InputReads {
      * <p>No plurality is followed into. A name that is one of several values stands as the name,
      * which is what a reader asking for one value is owed.
      */
-    private static Denotation standing(Denotation from, Symbols symbols,
-                                       DeclarationNewtypes newtypes, Set<BindingId> met) {
+    static Denotation standing(Denotation from, Symbols symbols,
+                               DeclarationNewtypes newtypes, Set<BindingId> met) {
         ValueStanding.Standing<InputReads, Followed> stands =
                 ValueStanding.one(from.value(), from.at(), new Followed(symbols, newtypes, met));
         return new Denotation(stands.value(), stands.at());

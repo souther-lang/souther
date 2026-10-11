@@ -4,6 +4,7 @@ import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.ReadMeaning;
 
 /**
  * Which of a body's conditions the decision table holds as distinctions over what a dependency
@@ -36,11 +37,12 @@ record WhatAnAnswerTakesUp(DecisionSubjects subjects, DecisionComparison compari
      * declaration's clause is, is read where none is and has no answer in it a row controls.
      */
     static WhatAnAnswerTakesUp of(InputReading read) {
+        ReadMeaning.WhereKept kept = KeptTruths.readIn(read);
         DecisionSubjects subjects =
                 new DecisionSubjects(read.domain(), read.rules().symbols(),
-                        read.rules().declarations(), read.rules().newtypes());
+                        read.rules().declarations(), read.rules().newtypes(), kept);
         return new WhatAnAnswerTakesUp(subjects,
-                new DecisionComparison(read.domain(), read.rules(), subjects));
+                new DecisionComparison(read.domain(), read.rules(), subjects, kept));
     }
 
     /** Whether {@code comparison}, read under {@code reads}, is a column over an answer. */

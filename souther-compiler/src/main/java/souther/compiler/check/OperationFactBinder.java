@@ -25,6 +25,7 @@ import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.OperationLaw;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenAs;
@@ -462,14 +463,19 @@ final class OperationFactBinder {
                                 new ArgumentRef.TheContainer(), TypeRequirement.SIZED,
                                 "what the result is no smaller than"));
             }
-            // An order is of a sequence, and of the answer's elements as it is of the source's.
-            case OperationFact.KeepsTheOrderOf kept -> {
+            // Pieces put end to end are a list, made of the elements the closure is handed.
+            case OperationFact.AssemblesPieces assembles -> {
                 holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
-                        "what keeps the order of what it was built from");
-                yield new BoundOperationFact.KeepsTheOrderOf(operation,
-                        holdToTheDeclaration(declaration, kept.source(),
-                                new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
-                                "what the order is of"));
+                        "pieces put end to end");
+                DeclaredArgument source = holdToTheDeclaration(declaration, assembles.source(),
+                        new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                        "what a piece is made of each element of");
+                DeclaredArgument closure = holdToTheDeclaration(declaration,
+                        new ArgumentRef.TheClosure(), new ArgumentRef.TheClosure(),
+                        TypeRequirement.CLOSURE, "what makes each piece");
+                holdThePieceTo(declaration, source, closure, assembles.piece());
+                yield new BoundOperationFact.AssemblesPieces(operation, source, closure,
+                        assembles.piece());
             }
             // The elements of a list from an index on are a list's, and the index is a number.
             case OperationFact.HoldsTheElementsFrom from -> {
@@ -867,6 +873,39 @@ final class OperationFactBinder {
                     holdTheClosureAnswerTo(declaration, inside.source().argument(), true);
             case ElementLineage.OneOf<DeclaredArgument>(var alternatives) ->
                     alternatives.forEach(each -> holdWhatTheClosureAnswered(declaration, each));
+        }
+    }
+
+    /**
+     * That the closure at {@code closure} is handed the elements of {@code source}, and answers what
+     * {@code piece} makes a piece of the result out of: a value the result holds, a truth, or a
+     * list of such values. The element itself, kept, is a value of the source and of the result.
+     */
+    private static void holdThePieceTo(CompleteSignature declaration, DeclaredArgument source,
+                                       DeclaredArgument closure,
+                                       PieceOfAnElement piece) {
+        String name = ((ValueName.Stdlib) declaration.declaring().operation()).qualified();
+        ClosurePositions handed = Combinators.positionsOf(declaration.declaring().operation());
+        if (handed == null || handed.containerArg() != source.position()) {
+            throw new IllegalStateException(name + " is said to make a piece of each element of"
+                    + " argument " + (source.position() + 1) + ", and its signature hands no"
+                    + " closure those");
+        }
+        Type answered = declaration.params().get(closure.position()) instanceof Type.FnOf fn
+                ? fn.result() : null;
+        Type held = Type.elementOf(declaration.result());
+        boolean holds = switch (piece) {
+            case THE_CLOSURES_ANSWER -> held != null && held.equals(answered);
+            case THE_ELEMENT_WHERE_IT_HOLDS -> Type.BOOL.equals(answered) && held != null
+                    && held.equals(Type.elementOf(declaration.params().get(source.position())));
+            case WHAT_THE_CLOSURE_ANSWERS -> answered instanceof Type.ListOf(Type element)
+                    && element.equals(held);
+        };
+        if (!holds) {
+            throw new IllegalStateException(name + " answers " + Type.show(declaration.result())
+                    + " and its closure answers "
+                    + (answered == null ? "nothing" : Type.show(answered))
+                    + ", which is not what a piece made as " + piece + " is made of");
         }
     }
 

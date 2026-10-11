@@ -8,6 +8,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
@@ -68,6 +69,16 @@ sealed interface ClosureApplications {
     record NotSaid() implements ClosureApplications {}
 
     /**
+     * Inside a closure no run applies: it is handed the elements of a container that holds none on
+     * any row, inside every application around it that is made. Nothing in it is reached, so
+     * nothing in it is read — and closures inside it are applied by nothing either.
+     *
+     * <p>The opposite of {@link NotSaid}, which reads what is in a closure once because some run
+     * may apply it to something nobody wrote down.
+     */
+    record None() implements ClosureApplications {}
+
+    /**
      * One application.
      *
      * @param reads             the names in force at it, with the value it was handed in place of
@@ -100,14 +111,16 @@ sealed interface ClosureApplications {
                             Map.of())),
                     read, true);
             case Each(var outer) -> applied(block, step, outer, read, false);
-            case NotSaid _ -> this;
+            case NotSaid _, None _ -> this;
         };
     }
 
     /**
      * The applications of {@code block} made inside each of {@code outer} — and where the block is
      * handed nothing written out, each of {@code outer} past the step into it, or nothing at all
-     * where {@code outer} stands for being inside no closure.
+     * where {@code outer} stands for being inside no closure. Inside an application around it where
+     * the block is applied to nothing, it adds no application; where that is so inside every one,
+     * no run applies it ({@link None}).
      */
     private static ClosureApplications applied(Core.Block block, ScopeStep step,
                                                List<Application> outer, InputReading read,
@@ -118,16 +131,19 @@ sealed interface ClosureApplications {
         boolean handed = false;
         boolean asked = false;
         for (Application around : outer) {
-            switch (Pullback.applicationsOf(block, around.reads(), symbols, newtypes)) {
+            switch (Pullback.applicationsOf(block, around.reads(), read)) {
+                case InputReads.Applications.NoneMade _ -> handed = true;
                 case InputReads.Applications.Each(var each, var how) -> {
                     handed = true;
                     List<Proposition> answers = how == HowAClosureIsApplied.TO_EVERY_ELEMENT ? null
-                            : each.stream().map(one -> Pullback.ofATruth(block.body(), one, read,
-                                    Optional.empty()).proposition()).toList();
-                    List<Proposition> reached = WhereAnApplicationIsMade.reached(answers,
-                            each.size(), how, around.reached());
+                            : each.stream().map(one -> Pullback.ofATruth(block.body(), one.reads(),
+                                    read, Optional.empty()).proposition()).toList();
+                    List<List<Proposition>> keptBy = each.stream()
+                            .map(one -> keptBy(one.keptWhere(), read)).toList();
+                    List<Proposition> reached = WhereAnApplicationIsMade.reached(answers, keptBy,
+                            how, around.reached());
                     for (int at = 0; at < each.size(); at++) {
-                        out.add(new Application(each.get(at), reached.get(at),
+                        out.add(new Application(each.get(at).reads(), reached.get(at),
                                 around.carriedIntoTheFirst()));
                     }
                 }
@@ -148,7 +164,24 @@ sealed interface ClosureApplications {
                 }
             }
         }
+        if (out.isEmpty()) {
+            return new None();
+        }
         return handed || asked || !outside ? new Each(out) : OUTSIDE;
+    }
+
+    /**
+     * What each truth an element was kept by states, read where it was decided, and denied where it
+     * was kept by the truth failing. A truth this cannot read is said as one it did not read, and
+     * not as one that holds: an application it decides is one a run may not make.
+     */
+    private static List<Proposition> keptBy(List<ReadMeaning.Occurrence.Kept> keptWhere,
+                                            InputReading read) {
+        return keptWhere.stream().map(kept -> {
+            Proposition stated = Pullback.ofATruth(kept.truth().value(), kept.truth().at(), read,
+                    Optional.empty()).proposition();
+            return kept.holds() ? stated : stated.denied();
+        }).toList();
     }
 
     /**
@@ -179,7 +212,7 @@ sealed interface ClosureApplications {
      * there, it would be read with the parameter standing for any of the values at once.
      */
     default boolean saysWhatStandsInIt() {
-        return this instanceof Each;
+        return this instanceof Each || this instanceof None;
     }
 
     /**
@@ -203,7 +236,7 @@ sealed interface ClosureApplications {
                         : new Application(one.reads(), WhereAnApplicationIsMade.past(
                                 one.reached(), past), one.carriedIntoTheFirst());
             }).toList());
-            case Outside _, NotSaid _ -> this;
+            case Outside _, NotSaid _, None _ -> this;
         };
     }
 
@@ -254,8 +287,8 @@ sealed interface ClosureApplications {
      * The applications that enter the arm {@code decidedBy} decides, inside it.
      *
      * <p>An application handed a value of a case the arm does not take never enters it, so it is
-     * left out rather than read in an arm it does not reach. Where none enters, what is in the arm
-     * is read once as it stands, as it would be in a closure whose applications are not said.
+     * left out rather than read in an arm it does not reach. Where none enters, no run reaches
+     * what is in the arm ({@link None}).
      */
     default ClosureApplications choosing(Choice.Decides decidedBy, Symbols symbols,
                                          DeclarationNewtypes newtypes) {
@@ -267,7 +300,7 @@ sealed interface ClosureApplications {
                 .map(one -> new Application(one.reads().choosing(decidedBy, symbols, newtypes),
                         one.reached(), one.carriedIntoTheFirst()))
                 .toList();
-        return entering.isEmpty() ? new NotSaid() : new Each(entering);
+        return entering.isEmpty() ? new None() : new Each(entering);
     }
 
     /**
@@ -294,7 +327,7 @@ sealed interface ClosureApplications {
                     .map(one -> new Application(step.apply(one.reads()), one.reached(),
                             one.carriedIntoTheFirst()))
                     .toList());
-            case Outside _, NotSaid _ -> this;
+            case Outside _, NotSaid _, None _ -> this;
         };
     }
 }

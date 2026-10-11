@@ -18,6 +18,7 @@ import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.NumericResult;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.SideAnswered;
@@ -331,44 +332,6 @@ public final class BoundOperationFacts {
     }
 
     /**
-     * The argument whose elements {@code operation} hands a closure that answers a list for each,
-     * where its answer holds every element of every one of those lists, each once — or null where
-     * it holds anything else.
-     *
-     * <p>Two declared facts together and neither alone. That every element of the answer is inside
-     * what the closure answered of some element ({@link ElementLineage.InsideClosureResult}) says
-     * nothing of how many of them there are, and the size the answer is stated to have — the sizes of
-     * what the closure answered, added up over the elements, and nothing beside them — is a count
-     * without saying which values are counted. An answer that is both has each of the lists
-     * the closure answered put end to end.
-     */
-    public DeclaredArgument flattensEveryAnswerOf(ValueName operation) {
-        BoundOperationFact.ElementsComeFrom held =
-                one(BoundOperationFact.ElementsComeFrom.class, operation);
-        if (held == null
-                || !(held.lineage() instanceof ElementLineage.InsideClosureResult<DeclaredArgument>
-                        inside) || inside.source().elements() != 1
-                || !(settled(operation, OperationLaw.Observed.SIZE)
-                        instanceof Settled.ByALaw(OperationLaw<DeclaredArgument> law, var _))
-                || !(law instanceof OperationLaw.Size<DeclaredArgument> size)) {
-            return null;
-        }
-        LinearForm<LawNumber<DeclaredArgument>> form = size.unconditional();
-        if (form == null || form.constant().signum() != 0 || form.coefs().size() != 1) {
-            return null;
-        }
-        Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> only =
-                form.coefs().entrySet().iterator().next();
-        DeclaredArgument container = inside.source().argument();
-        return ExactRatio.ONE.equals(only.getValue())
-                && only.getKey() instanceof LawNumber.SumOver<DeclaredArgument> sum
-                && sum.container().equals(container)
-                && sum.ofTheElement() instanceof LawNumber.SizeOf<DeclaredArgument> sized
-                && sized.of() instanceof LawSubject.WhatTheClosureAnswers<DeclaredArgument>
-                ? container : null;
-    }
-
-    /**
      * The argument whose elements the answer of {@code operation} is made from where that is all
      * the operation says, or null where it says more or says nothing.
      *
@@ -440,13 +403,18 @@ public final class BoundOperationFacts {
     /** A map an operation answers a list of what it holds, and which part of it. */
     public record Listed(DeclaredArgument map, MapPart part) {}
 
-    /** The argument the elements of {@code operation}'s answer stand in the order of, or null
-     *  where nothing says they do. */
-    public DeclaredArgument keepsTheOrderOf(ValueName operation) {
-        BoundOperationFact.KeepsTheOrderOf held =
-                one(BoundOperationFact.KeepsTheOrderOf.class, operation);
-        return held == null ? null : held.source();
+    /** How {@code operation}'s answer is put together of a piece for each element of an argument,
+     *  or null where it is not ({@link BoundOperationFact.AssemblesPieces}). */
+    public Assembled assembles(ValueName operation) {
+        BoundOperationFact.AssemblesPieces held =
+                one(BoundOperationFact.AssemblesPieces.class, operation);
+        return held == null ? null : new Assembled(held.source(), held.closure(), held.piece());
     }
+
+    /** The argument a piece is made of each element of, the closure that makes it, and what the
+     *  piece is. */
+    public record Assembled(DeclaredArgument source, DeclaredArgument closure,
+                            PieceOfAnElement piece) {}
 
     /** The count and the list {@code operation} answers the elements of that list from that index
      *  on of, or null where nothing says it does. */

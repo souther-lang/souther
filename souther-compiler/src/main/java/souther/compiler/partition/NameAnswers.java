@@ -38,18 +38,22 @@ final class NameAnswers {
     /**
      * Every value {@code read}'s name can stand for, or null where the reading has not got them all.
      *
-     * <p>A container an operation built answers nothing here, which is what it answered before there
-     * was anything to write out.
+     * <p>A container this reading cannot write out answers nothing here. One it can is answered with
+     * the value of every occurrence there on some row, as {@code kept} decides: what a reader keeps
+     * is what every member comes to, and a value no run has is no member — counted, one this reading
+     * could not follow would leave the ones that are there unread. Where none is there on any row,
+     * no value is handed and nothing is answered.
      */
     static List<ValueStanding.ReadThrough<InputReads>> alternativesOf(Core.Read read, InputReads at,
                                                                     Symbols symbols,
-                                                                    DeclarationNewtypes newtypes) {
+                                                                    DeclarationNewtypes newtypes,
+                                                                    ReadMeaning.WhereKept kept) {
         if (!(at.meaningOf(read, symbols, newtypes) instanceof ReadMeaning.OneOf one)) {
             return null;
         }
         List<ValueStanding.ReadThrough<InputReads>> each = new ArrayList<>();
-        one.alternatives().forEach(stands -> each.add(asked(stands)));
-        return each;
+        one.valuesWhere(kept).forEach(stands -> each.add(asked(stands)));
+        return each.isEmpty() ? null : each;
     }
 
     /** What the reading {@code at} takes {@code node} as, or null where it takes it as nothing

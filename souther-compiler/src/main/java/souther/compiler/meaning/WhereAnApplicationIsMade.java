@@ -32,24 +32,35 @@ public final class WhereAnApplicationIsMade {
     /**
      * What has to hold for a run to make each application, in the order a run makes them.
      *
+     * <p>An application is made where the container holds the element it is handed, and an
+     * operation stopping on an answer stops on one it made: an element a filter dropped answers
+     * nothing, and the applications after it are made as they would be without it.
+     *
      * @param answers what the closure answers on each application, in that order. Read only where
      *                the operation stops on an answer, so it may be null elsewhere
-     * @param applications how many applications there are
+     * @param keptBy  for each application, the truths each of which holds where the container
+     *                holds the element it is handed — none where it holds it whatever the row is
      * @param how     how far the operation goes applying the closure
      * @param outer   what has to hold for a run to be inside the closure at all
      */
-    public static List<Proposition> reached(List<Proposition> answers, int applications,
+    public static List<Proposition> reached(List<Proposition> answers,
+                                            List<List<Proposition>> keptBy,
                                             HowAClosureIsApplied how, Proposition outer) {
         Objects.requireNonNull(outer, "a closure is reached under something, if only nothing");
         List<Proposition> out = new ArrayList<>();
         List<Proposition> before = new ArrayList<>();
         before.add(outer);
-        for (int at = 0; at < applications; at++) {
-            out.add(Proposition.all(before));
+        for (int at = 0; at < keptBy.size(); at++) {
+            Proposition kept = Proposition.all(keptBy.get(at));
+            List<Proposition> here = new ArrayList<>(before);
+            here.add(kept);
+            out.add(Proposition.all(here));
             switch (how) {
                 case TO_EVERY_ELEMENT -> { }
-                case UNTIL_ONE_HOLDS -> before.add(answers.get(at).denied());
-                case UNTIL_ONE_FAILS -> before.add(answers.get(at));
+                case UNTIL_ONE_HOLDS -> before.add(Proposition.any(
+                        List.of(kept.denied(), answers.get(at).denied())));
+                case UNTIL_ONE_FAILS -> before.add(Proposition.any(
+                        List.of(kept.denied(), answers.get(at))));
                 case AT_MOST_ONE, TO_SOME -> throw new IllegalArgumentException("which values an"
                         + " operation applies its closure to is not said, so no application of it"
                         + " is placed among the others");

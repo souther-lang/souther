@@ -17,6 +17,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.PathResolution;
+import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -158,20 +159,21 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      */
     static LinearForm<NumericTerm> formOf(Core expression, InputReads reads, InputReading read) {
         AffineForms.Outcome<NumericTerm, InputReads> outcome = AffineForms.outcome(expression,
-                reads, reading(read.domain(), read.rules(), new LinkedHashSet<>(),
-                        new ElementsMet()));
+                reads, reading(read.domain(), read.rules(), KeptTruths.readIn(read),
+                        new LinkedHashSet<>(), new ElementsMet()));
         return outcome instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> composed
                 ? composed.form() : null;
     }
 
-    /** The same, of the input {@code read} reads, with the names as {@code reads} has them. */
-    static OfAComparison read(StatedComparison comparison, InputReads reads, InputReading read) {
-        return read(comparison, read.domain(), reads, read.rules());
-    }
-
-    /** The same, saying which of the four it is. */
-    static OfAComparison read(StatedComparison comparison, InputDomain inputs, InputReads reads,
-                              RuleReadingSource ruleSource) {
+    /**
+     * The same, of the input {@code ofTheInput} reads, with the names as {@code reads} has them, saying
+     * which of the four it is.
+     */
+    static OfAComparison read(StatedComparison comparison, InputReads reads,
+                              InputReading ofTheInput) {
+        InputDomain inputs = ofTheInput.domain();
+        RuleReadingSource ruleSource = ofTheInput.rules();
+        ReadMeaning.WhereKept kept = KeptTruths.readIn(ofTheInput);
         // What this reading names as it goes, kept so that a reading which ran to the end can say
         // what it was about without anybody reading the comparison again.
         java.util.Set<NumericTerm> named = new java.util.LinkedHashSet<>();
@@ -181,7 +183,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         LinearForm<NumericTerm> left = null;
         for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
             AffineForms.Outcome<NumericTerm, InputReads> read =
-                    AffineForms.outcome(side, reads, reading(inputs, ruleSource, named, met));
+                    AffineForms.outcome(side, reads,
+                            reading(inputs, ruleSource, kept, named, met));
             if (read instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped) {
                 return new OfAComparison.Stopped(stopped);
             }
@@ -286,8 +289,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * for the whole reading of one comparison, and this reader lives exactly that long.
      */
     private static AffineForms.Reading<NumericTerm, InputReads> reading(
-            InputDomain inputs, RuleReadingSource ruleSource, Set<NumericTerm> named,
-            ElementsMet met) {
+            InputDomain inputs, RuleReadingSource ruleSource, ReadMeaning.WhereKept kept,
+            Set<NumericTerm> named, ElementsMet met) {
         return new AffineForms.Reading<NumericTerm, InputReads>() {
 
             @Override
@@ -341,7 +344,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             public java.util.List<ValueStanding.ReadThrough<InputReads>> alternativesOf(
                     Core.Read read, InputReads at) {
                 return NameAnswers.alternativesOf(read, at, ruleSource.symbols(),
-                        ruleSource.newtypes());
+                        ruleSource.newtypes(), kept);
             }
 
             @Override
