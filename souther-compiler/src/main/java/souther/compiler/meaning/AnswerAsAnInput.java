@@ -34,34 +34,60 @@ public final class AnswerAsAnInput {
     private final NewtypeInners inners;
     private final Symbols symbols;
     private final Set<InjectedAnswer> answers = new LinkedHashSet<>();
+    private final Map<NumericTerm, ExactRatio> pinned;
+    private final boolean askingWhatItIsAbout;
+    private final Set<NumericTerm> inputs = new LinkedHashSet<>();
 
-    private AnswerAsAnInput(String head, NewtypeInners inners, Symbols symbols) {
+    private AnswerAsAnInput(String head, NewtypeInners inners, Symbols symbols,
+                            Map<NumericTerm, ExactRatio> pinned, boolean askingWhatItIsAbout) {
         this.head = head;
         this.inners = inners;
         this.symbols = symbols;
+        this.pinned = pinned;
+        this.askingWhatItIsAbout = askingWhatItIsAbout;
     }
 
     /**
-     * {@code stated} over the input named {@code head}, or null where some part of it is about
-     * something other than the answer.
+     * {@code stated} over the input named {@code head}, with each number of the behavior's own
+     * input put at the value in {@code pinned}, or null where some part of it is about something
+     * other than the answer and those numbers.
      */
     public static Proposition of(Proposition stated, String head, NewtypeInners inners,
-                                 Symbols symbols) {
-        return new AnswerAsAnInput(head, inners, symbols).proposition(stated);
+                                 Symbols symbols, Map<NumericTerm, ExactRatio> pinned) {
+        return new AnswerAsAnInput(head, inners, symbols, new LinkedHashMap<>(pinned), false)
+                .proposition(stated);
     }
 
     /**
      * The one evaluation of one dependency {@code stated} is about, or null where it is about
-     * none, about two, or about anything beside one answer.
+     * none, about two, or about anything beside one answer and numbers of the input.
      *
      * <p>Whether a statement can be put to a composer at all, which is asked where the demand is
      * made and answered by the same walk that puts it there, so the two cannot disagree about
      * what a composer is handed.
      */
     public static InjectedAnswer onlyAnswerIn(Proposition stated) {
-        AnswerAsAnInput reading = new AnswerAsAnInput("$answer", null, null);
-        return reading.proposition(stated) != null && reading.answers.size() == 1
+        AnswerAsAnInput reading = asking(stated);
+        return reading != null && reading.answers.size() == 1
                 ? reading.answers.iterator().next() : null;
+    }
+
+    /**
+     * The numbers of the behavior's own input {@code stated} is about besides the answer, or null
+     * where it is about something no value composed for one answer can be held to.
+     *
+     * <p>What a composer is to be told before it is asked: those numbers have to be put at values
+     * first, since which value the answer may be turns on them.
+     */
+    public static Set<NumericTerm> inputNumbersIn(Proposition stated) {
+        AnswerAsAnInput reading = asking(stated);
+        return reading == null ? null : Set.copyOf(reading.inputs);
+    }
+
+    private static AnswerAsAnInput asking(Proposition stated) {
+        AnswerAsAnInput reading =
+                new AnswerAsAnInput("$answer", null, null, Map.of(), true);
+        return reading.proposition(stated) == null ? null : reading;
     }
 
     private Proposition proposition(Proposition stated) {
@@ -74,8 +100,19 @@ public final class AnswerAsAnInput {
                     yield null;
                 }
                 LinearForm<Quantity> over = form(form);
-                yield over == null ? null : new Proposition.Compared(
-                        new Relation.Affine(over, rel), holds);
+                if (over == null) {
+                    yield null;
+                }
+                // Every number of it fixed, what is left is a number against nought.
+                if (over.coefs().isEmpty()) {
+                    yield new Proposition.Always(rel.holds(over.constant().signum()) == holds);
+                }
+                // Spelled for another input, its atoms come in another order, so the form is turned
+                // to face the one way again.
+                Relation.OneWay<Quantity> one =
+                        Relation.OneWay.of(over, holds ? rel : rel.denied());
+                yield new Proposition.Compared(
+                        new Relation.Affine(one.form(), one.proposition()), one.holds());
             }
             case Proposition.Truth(DecisionSubject of, boolean holds, var _) -> {
                 DecisionSubject at = subject(of);
@@ -139,16 +176,42 @@ public final class AnswerAsAnInput {
         return new DecisionSubject.AnInput(new TermPath(head, answer.steps()));
     }
 
+    /**
+     * {@code form} over the input standing for the answer, with each number of the behavior's own
+     * input put at the value it was fixed at.
+     *
+     * <p>A number of the input that is not fixed is no number a value composed for the answer can
+     * be held to, and the form is not said — except where this is only asked what the statement is
+     * about, and the number is kept to be named.
+     */
     private LinearForm<Quantity> form(LinearForm<Quantity> form) {
         Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+        ExactRatio constant = form.constant();
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+            if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+                ExactRatio value = pinned.get(term);
+                if (value != null) {
+                    ExactRatio before = constant;
+                    constant = each.getValue().times(value).flatMap(before::plus).orNull();
+                    if (constant == null) {
+                        return null;
+                    }
+                    continue;
+                }
+                if (!askingWhatItIsAbout) {
+                    return null;
+                }
+                inputs.add(term);
+                coefs.merge(each.getKey(), each.getValue(), (a, b) -> a.plus(b).orNull());
+                continue;
+            }
             Quantity atom = quantity(each.getKey());
             if (atom == null) {
                 return null;
             }
             coefs.merge(atom, each.getValue(), (a, b) -> a.plus(b).orNull());
         }
-        return new LinearForm<>(form.constant(), coefs);
+        return new LinearForm<>(constant, coefs);
     }
 
     private Quantity quantity(Quantity quantity) {

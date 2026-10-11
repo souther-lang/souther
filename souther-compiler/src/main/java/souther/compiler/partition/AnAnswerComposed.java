@@ -104,6 +104,18 @@ public final class AnAnswerComposed {
      */
     public static Attempt of(MeasuredInput subject, AnswerStatements statements,
                              List<AnswerDemand> demands) {
+        return of(subject, statements, Map.of(), demands);
+    }
+
+    /**
+     * The same, where a statement also names numbers of the behavior's own input.
+     *
+     * @param pinned the value each such number is put at, which is the row the value is composed
+     *               to stand in: what the answer has to be turns on them, and a number left out
+     *               is a statement this does not compose against
+     */
+    public static Attempt of(MeasuredInput subject, AnswerStatements statements,
+                             Map<NumericTerm, ExactRatio> pinned, List<AnswerDemand> demands) {
         if (subject.parameters().size() != 1) {
             throw new IllegalArgumentException(
                     "an answer is one value, and this stands for " + subject.parameters().size());
@@ -155,7 +167,7 @@ public final class AnAnswerComposed {
                 continue;
             }
             Proposition over = AnswerAsAnInput.of(statement.statement(), at,
-                    subject.rules().inners(), subject.symbols());
+                    subject.rules().inners(), subject.symbols(), pinned);
             List<DemandReading.Read> reads = over == null ? null : statements.asked(over);
             if (reads == null || !reads.stream().allMatch(AnAnswerComposed::composedAgainst)) {
                 unaccounted.add(new DemandGap.Uncomposed(each,

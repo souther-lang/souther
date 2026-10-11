@@ -10,6 +10,8 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.RuleRequirement;
+import souther.compiler.query.RuleSettlement;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
@@ -50,6 +52,23 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
 
             behavior holds : (s: Sched) -> Bool
             let holds (s) = true
+            """;
+
+    private static final String MODEL_OF_TWO = """
+            module p
+
+            data Cat = A | B
+            data Sched = List<Int>
+            data Yes
+            data No
+            data Answer = Yes | No
+
+            behavior sched1 : (c: Cat) -> Sched
+            behavior sched2 : (c: Cat) -> Sched
+
+            behavior f : (c: Cat, on: Int) -> Answer
+                depends on sched1, sched2
+            let f (c, on, sched1, sched2) = if BODY then Yes else No
             """;
 
     private static final Pattern NUMBER = Pattern.compile("-?\\d+");
@@ -154,20 +173,77 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
         }
     }
 
+    /** A statement that is also about a number of the input is still a statement of the answer. */
+    @Test
+    void aStatementAlsoAboutANumberOfTheInputIsStated() {
+        for (AnswersDemanded each : waysOf("List.any(x -> x <= on, sched1(c).value)")) {
+            assertTrue(each.declined().isEmpty(), () -> "nothing was left unstated: " + each);
+            assertInstanceOf(AnswerDemand.AStatement.class, each.stated().getFirst());
+        }
+    }
+
     /**
-     * A statement that is also about the input is not composed for, and the way says why. What the
-     * value has to be turns on the number the row writes at the input, which nothing here has.
+     * A statement that is also about the input is met by the pair: the number of the input is put at
+     * a value, the answer is composed for it, and the row carries both. A row the run takes the rule
+     * with is what says the pair meets it, and the two rules of the way are taken by two rows.
      */
     @Test
-    void aStatementAlsoAboutTheInputIsDeclinedAndSaysSo() {
+    void aRowIsFoundForEachWayOfAStatementAboutTheAnswerAndTheInput() {
         for (String body : List.of("List.any(x -> x <= on, sched1(c).value)",
                 "List.length(List.filter(x -> x <= on, sched1(c).value)) >= 1")) {
-            for (AnswersDemanded each : waysOf(body)) {
-                assertEquals(List.of(new DemandGap.WhyNotStated.AStatementOfSeveralParts()),
-                        each.declined().stream().map(DemandGap.Unstated::why).toList(),
-                        () -> body + " is about the pair: " + each);
-                assertTrue(each.stated().isEmpty(), () -> body + " states nothing: " + each);
+            List<RowToRun> rows = rowsFoundFor(body);
+
+            assertEquals(2, rows.size(), () -> body + " owes a row for each of its two rules");
+            List<Boolean> someElementAtMostOn = new ArrayList<>();
+            for (RowToRun row : rows) {
+                long on = Long.parseLong(row.inputs().get(1).text().trim());
+                List<Long> held = elementsOf(
+                        ((StoodInAnswer.OnTheRow) row.answers().getFirst()).value().text());
+                someElementAtMostOn.add(held.stream().anyMatch(each -> each <= on));
             }
+            assertEquals(List.of(false, true), someElementAtMostOn.stream().sorted().toList(),
+                    () -> body + ": one row has an element the number reaches and the other has"
+                            + " none, whichever number the row holds: " + rows);
+        }
+    }
+
+    /**
+     * The number is put where the way leaves it. A way that asks the number to be above a hundred is
+     * a way the row reaches only with one, so the answer is composed for such a number and not for
+     * the first one that came to mind.
+     */
+    @Test
+    void theNumberOfTheInputIsPutWhereTheWayLeavesIt() {
+        List<RowToRun> rows = rowsFoundFor("on > 100 && List.any(x -> x <= on, sched1(c).value)");
+
+        assertFalse(rows.isEmpty(), "a row reaches the way");
+        for (RowToRun row : rows) {
+            long on = Long.parseLong(row.inputs().get(1).text().trim());
+            if (on > 100) {
+                List<Long> held = elementsOf(
+                        ((StoodInAnswer.OnTheRow) row.answers().getFirst()).value().text());
+                assertTrue(held.stream().anyMatch(each -> each <= on),
+                        () -> "an element the number reaches: " + row);
+                return;
+            }
+        }
+        throw new AssertionError("no row carries a number above a hundred: " + rows);
+    }
+
+    /**
+     * And what is about two answers is not composed for, which says so. Which value either may be
+     * turns on the other, and nothing here composes two of them together.
+     */
+    @Test
+    void aStatementAboutTwoAnswersIsDeclinedAndSaysSo() {
+        String source = MODEL_OF_TWO.replace("BODY",
+                "List.any(x -> List.any(y -> x <= y, sched2(c).value), sched1(c).value)");
+        for (DecisionReading.Ruled each : DecisionReadings.of(source, "f").found()) {
+            assertEquals(List.of(new DemandGap.WhyNotStated.AStatementOfSeveralParts()),
+                    each.demands().declined().stream().map(DemandGap.Unstated::why).toList(),
+                    () -> "it is about the pair: " + each.demands());
+            assertTrue(each.demands().stated().isEmpty(),
+                    () -> "and nothing is composed to it: " + each.demands());
         }
     }
 
@@ -178,6 +254,22 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
 
         assertFalse(json.contains("unsupported_syntax"), "no rule is left as a form nobody reads");
         assertFalse(json.contains("rule_unread"), "and none weakens what the report claims");
+    }
+
+    /** The row the search stood each rule of the way in with. */
+    private static List<RowToRun> rowsFoundFor(String body) {
+        Compilation compilation = Compilation.ofSource(MODEL.replace("BODY", body), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+        List<RowToRun> rows = new ArrayList<>();
+        for (RuleSettlement each : compilation.db()
+                .ask(new Adequacy.DecisionSearch(module, "f")).value().values()) {
+            if (each.requirement() instanceof RuleRequirement.Required(RowToRun row)) {
+                rows.add(row);
+            }
+        }
+        return rows;
     }
 
     private static List<AnswersDemanded> waysOf(String body) {

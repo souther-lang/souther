@@ -104,6 +104,7 @@ import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputClassifications;
+import souther.compiler.partition.InputNumbersAnAnswerTurnsOn;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.BodyReading;
 import souther.compiler.partition.FillResult;
@@ -2913,9 +2914,15 @@ public final class Adequacy {
                 // is not something this can tell — where a row goes is read by whoever asked — so
                 // all of them go back and none is chosen here.
                 List<Generator.BoundaryAttempt> out = new ArrayList<>();
-                for (souther.compiler.partition.StandInAttempt stood : answers.of(demands)) {
-                    out.add(Generator.probeFixing(subject, label, fixing, asking, reaching, check,
-                            stood));
+                // A statement about an answer that also names a number of the input is met by the
+                // pair: the number is put at a value the way leaves it, the answer is composed for
+                // that, and the row is held to the same value.
+                InputNumbersAnAnswerTurnsOn pinned =
+                        InputNumbersAnAnswerTurnsOn.of(demands, reaching);
+                for (souther.compiler.partition.StandInAttempt stood
+                        : answers.of(demands, pinned.values())) {
+                    out.add(Generator.probeFixing(subject, label, fixing, asking,
+                            pinned.reaching(), check, stood));
                 }
                 return List.copyOf(out);
             } catch (LinkageError _) {

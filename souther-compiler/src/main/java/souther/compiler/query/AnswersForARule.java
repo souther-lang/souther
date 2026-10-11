@@ -3,6 +3,8 @@ package souther.compiler.query;
 import souther.compiler.check.FakeTables;
 import souther.compiler.examples.ExampleProvisioning;
 import souther.compiler.examples.ExampleStatements;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.partition.AnAnswerComposed;
 import souther.compiler.partition.AnswerDemand;
 import souther.compiler.partition.AnswersDemanded;
@@ -80,6 +82,14 @@ record AnswersForARule(RequiredDependencies requires,
      * them all.
      */
     List<StandInAttempt> of(AnswersDemanded demanded) {
+        return of(demanded, Map.of());
+    }
+
+    /**
+     * The same, for a row that writes {@code pinned} at the numbers of the input a way's statement
+     * about an answer names: what the answer has to be turns on them.
+     */
+    List<StandInAttempt> of(AnswersDemanded demanded, Map<NumericTerm, ExactRatio> pinned) {
         Map<ValueName.Behavior, Map<InjectedAnswer, List<AnswerDemand>>> asked = byDependency(
                 demanded.byAnswer());
         List<List<Alternative>> apiece = new ArrayList<>();
@@ -89,7 +99,8 @@ record AnswersForARule(RequiredDependencies requires,
         // nothing met would put this compiler's word on a value it has.
         Evidence withoutARow = Evidence.NOTHING;
         for (RequiredDependencies.Required each : requires.inOrder()) {
-            StandingIn here = standingIn(each, asked.getOrDefault(each.dependency(), Map.of()));
+            StandingIn here = standingIn(each, asked.getOrDefault(each.dependency(), Map.of()),
+                    pinned);
             if (here instanceof StandingIn.None(var why, var evidence)) {
                 return List.of(new StandInAttempt(new AnswersStoodIn.NothingComposed(why),
                         account(demanded, withoutARow.and(evidence))));
@@ -276,7 +287,8 @@ record AnswersForARule(RequiredDependencies requires,
      * the module was written for — and what the run reaches decides whether it was.
      */
     private StandingIn standingIn(RequiredDependencies.Required required,
-                                  Map<InjectedAnswer, List<AnswerDemand>> asked) {
+                                  Map<InjectedAnswer, List<AnswerDemand>> asked,
+                                  Map<NumericTerm, ExactRatio> pinned) {
         if (asked.isEmpty() && stated(required.dependency())) {
             return byTheModule(required, Evidence.NOTHING);
         }
@@ -284,7 +296,7 @@ record AnswersForARule(RequiredDependencies requires,
         List<DemandGap> said = new ArrayList<>();
         List<AnswerDemand> metBySomething = new ArrayList<>();
         for (Map.Entry<InjectedAnswer, List<AnswerDemand>> each : asked.entrySet()) {
-            Composing composed = composed(required, each.getValue());
+            Composing composed = composed(required, each.getValue(), pinned);
             said.addAll(composed.written());
             composed.values().forEach(candidate -> metBySomething.addAll(candidate.met()));
             if (composed.values().isEmpty()) {
@@ -390,7 +402,7 @@ record AnswersForARule(RequiredDependencies requires,
     private List<Candidate> servingEveryAsking(RequiredDependencies.Required required,
                                                Map<InjectedAnswer, List<Candidate>> values) {
         if (values.isEmpty()) {
-            return composed(required, List.of()).values();
+            return composed(required, List.of(), Map.of()).values();
         }
         Map<WhatARowWrites, Candidate> serving = null;
         for (List<Candidate> each : values.values()) {
@@ -418,7 +430,8 @@ record AnswersForARule(RequiredDependencies requires,
      * not what the row carries and its answers are read only where no case gave one.
      */
     private Composing composed(RequiredDependencies.Required required,
-                               List<AnswerDemand> demands) {
+                               List<AnswerDemand> demands,
+                               Map<NumericTerm, ExactRatio> pinned) {
         AnswerSubjects subjects = standing.get(required.dependency());
         List<AnswerSubjects.Feasible> over = subjects == null ? List.of()
                 : subjects.against(demands);
@@ -427,7 +440,7 @@ record AnswersForARule(RequiredDependencies requires,
         for (AnswerSubjects.Feasible each : over) {
             AnAnswerComposed.Attempt attempt =
                     AnAnswerComposed.of(each.standing().subject(),
-                            each.standing().statements(), each.demands());
+                            each.standing().statements(), pinned, each.demands());
             written.addAll(attempt.unaccounted());
             if (attempt.outcome() instanceof AnAnswerComposed.Outcome.Composed(var value)) {
                 // This value's own evidence, and never the asking's: what another case could not
