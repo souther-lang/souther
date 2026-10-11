@@ -11,6 +11,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.ACarriedValue;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
@@ -39,6 +40,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -73,9 +75,10 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
 
             data Yes
             data Held = { o: Int? }
+            data Node = { v: Int, below: List<Node> }
 
-            behavior f : (n: Int, b: Bool, s: String, h: Held, xs: List<Int>) -> Yes
-            let f (n, b, s, h, xs) = Yes
+            behavior f : (n: Int, b: Bool, s: String, h: Held, xs: List<Int>, t: Node) -> Yes
+            let f (n, b, s, h, xs, t) = Yes
             """;
 
     /** Where a row reader's words stop: the input's own words, and nothing of a path's. */
@@ -90,8 +93,18 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
     void everyKindOfStatementHasASampleHere() {
         Set<Class<?>> sampled = new LinkedHashSet<>();
         samples().values().forEach(each -> sampled.add(each.getClass()));
-        assertEquals(new LinkedHashSet<>(Arrays.asList(Proposition.class.getPermittedSubclasses())),
-                sampled, "a kind of statement no reader below was handed");
+        Set<Class<?>> kinds =
+                new LinkedHashSet<>(Arrays.asList(Proposition.class.getPermittedSubclasses()));
+        // What a walk carried is supposed wherever a condition is concluded whole, and handed to
+        // a reader of a row it is refused (below).
+        kinds.remove(Proposition.Carried.class);
+        assertEquals(kinds, sampled, "a kind of statement no reader below was handed");
+    }
+
+    @Test
+    void whatAWalkCarriedIsNeverAskedOfARow() {
+        assertThrows(IllegalStateException.class, () -> DemandReading.asked(
+                new Proposition.Carried(ACarriedValue.made(), true), reading()));
     }
 
     @Test
@@ -233,6 +246,12 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
         out.put("either", new Proposition.Any(List.of(above, truth)));
         out.put("some element", new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("xs")), element, true));
         out.put("on some application", new Proposition.OnAnApplication(List.of(above, truth)));
+        TermPath node = TermPath.of("t");
+        out.put("some node a search reaches", new Proposition.SomeReachable(node, node,
+                List.of("below"), new Proposition.Compared(new Relation.Affine(
+                        LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(
+                                new NumericTerm.ValueOf(node.then("v")))), Rel.GT), true),
+                Optional.empty(), true));
         out.put("unread", new Proposition.Unread(Optional.empty(), 0,
                 new WhyUnread.NotMetByTheReading(), false, true));
         return out;

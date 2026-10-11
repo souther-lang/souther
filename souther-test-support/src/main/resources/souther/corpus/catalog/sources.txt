@@ -2,3 +2,4 @@ catalog.sou
 splitting.sou
 shipping.sou
 shipping.examples.sou
+searching.sou

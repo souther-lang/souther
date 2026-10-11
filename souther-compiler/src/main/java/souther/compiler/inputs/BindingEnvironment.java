@@ -284,6 +284,13 @@ final class BindingEnvironment {
                 heldHash, callsStand, selected);
     }
 
+    /** The same, over a tree that keeps the language's operations standing as calls, which the
+     *  body of what a call names is, as the call reads it. */
+    BindingEnvironment overStandingCalls() {
+        return new BindingEnvironment(roots, handed, table, newest, elements, values, heldHash,
+                true, selected);
+    }
+
     /** The same, with {@code binding} standing at {@code path}. */
     BindingEnvironment naming(BindingId binding, TermPath path) {
         Map<BindingId, TermPath> wider = new LinkedHashMap<>(roots);

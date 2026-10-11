@@ -8,6 +8,7 @@ import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.diag.Citation;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ScopeStep;
+import souther.compiler.check.SeededWalk;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueTemplates;
@@ -586,6 +587,29 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             live, out, forks, numbering);
                 }
             }
+            // A walk from a seed is entered as every call is, and its step as every closure is —
+            // with each application of the step carrying the seed into the first step, which is
+            // what a condition on what the walk carried is read against
+            // ({@link ClosureApplications#taking}).
+            case Core.PreservedCall call when SeededWalk.of(call, closure ->
+                    Core.withoutStanding(reads.standing(closure, symbols, in.newtypes()).value())
+                            instanceof Core.Block block ? block : null)
+                    instanceof SeededWalk seeded -> ScopeStep.forEachChild(e, (child, step) -> {
+                        InputReads inside = reads.entering(step, symbols, in.newtypes());
+                        ClosureApplications through =
+                                applying.entering(step, symbols, in.newtypes());
+                        if (child != seeded.step()) {
+                            walk(child, in, inside, through, flow, assumed, live, out, forks,
+                                    numbering);
+                            return;
+                        }
+                        Denotation seed = new Denotation(seeded.seed(), reads);
+                        ScopeStep.forEachChild(seeded.step(), (body, into) -> walk(body, in,
+                                inside.entering(into, symbols, in.newtypes()),
+                                through.into(seeded.step(), into, inside, in.read())
+                                        .carryingIntoTheFirst(seeded.accumulator(), seed),
+                                flow, assumed, live, out, forks, numbering));
+                    });
             // A closure handed the values a container was written with is entered once for all of
             // its applications, each of them carried beside the names as the value it was handed.
             case Core.Block block -> ScopeStep.forEachChild(block, (child, step) ->

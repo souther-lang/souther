@@ -477,6 +477,8 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " as part of naming the question; nothing asks what it means"),
             new Held("souther.compiler.stdlib.TheWalksBody.isTheNext",
                     "names the addition the walk moves to its next index by"),
+            new Held("souther.compiler.proof.WhereTheElementsCameFrom.oneMore",
+                    "names the addition a count of the elements walked moves by at each step"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",
                     "names the two that scale a newtype"),
             new Held("souther.compiler.codegen.BodyGen.arithmetic",

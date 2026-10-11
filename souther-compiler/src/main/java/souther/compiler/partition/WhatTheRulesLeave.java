@@ -110,6 +110,7 @@ public final class WhatTheRulesLeave {
                     some(applications.each(), want, read);
             case Proposition.Unread unread ->
                     notAsked(new WhyNotTaken.MeaningUnread(unread.why()));
+            case Proposition.Carried carried -> throw carried.handedToAReader();
             // What a dependency answered is what a row stands it in with, and the input's rules
             // say nothing of that.
             case Proposition.Truth(DecisionSubject.AnAnswer _, boolean _, var _),
@@ -131,6 +132,9 @@ public final class WhatTheRulesLeave {
             case Proposition.Some some when some.container() instanceof DecisionSubject.AnAnswer ->
                     LEFT;
             case Proposition.Some some -> someElement(some, some.holds() == want, read);
+            // The rules are of what a row writes, and a search goes on below as deep as a value
+            // does: a node it reaches may meet what the one at the top cannot.
+            case Proposition.SomeReachable _ -> LEFT;
         };
     }
 

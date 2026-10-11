@@ -21,6 +21,8 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.UnaryOperator;
@@ -588,6 +590,21 @@ public sealed interface NumericTerm
      * what it states of the same number of whatever a call handed that parameter.
      */
     NumericTerm movedTo(UnaryOperator<TermPath> moved);
+
+    /**
+     * Every place this number is read off: each place {@link #movedTo} hands the move, which is
+     * every place there is to move, so the two cannot come to name different places.
+     */
+    default List<TermPath> placesReadOff() {
+        List<TermPath> places = new ArrayList<>();
+        if (movedTo(at -> {
+            places.add(at);
+            return at;
+        }) == null) {
+            throw new IllegalStateException(this + " moved nowhere is no number, and is one");
+        }
+        return List.copyOf(places);
+    }
 
     /**
      * This number where one input position answers it, or null where no single place does.

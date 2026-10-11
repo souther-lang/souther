@@ -2,6 +2,7 @@ package souther.compiler.proof;
 
 import souther.compiler.core.TheWalk;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ClosurePositions;
@@ -12,6 +13,7 @@ import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.SizeAgainstItsSource;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -203,6 +205,94 @@ public final class WhereTheElementsCameFrom {
             }
         }
         return true;
+    }
+
+    /**
+     * Whether {@code operation}'s answer is the elements of its argument at {@code list} from the
+     * index its argument at {@code count} names on: its body is a walk over that list as it stands,
+     * from its first element, carrying beside what it answers a count of the elements walked, which
+     * starts at nought and goes up by one at every step; what it answers starts from nothing, and a
+     * step puts the element it is handed after all of it where the count has reached the index and
+     * keeps it as it is where the count has not.
+     *
+     * <p>The count is how many elements were walked before the one handed, which is that element's
+     * index, so the element is put exactly where its index is the count or past it, and in the order
+     * it was handed in.
+     */
+    public LibraryProver.Outcome fromAnIndexOn(ValueName.Stdlib.Operation operation, int count,
+                                               int list) {
+        Reading reading = new Reading(library, readThrough);
+        try {
+            List<Value> params = new ArrayList<>();
+            for (int at = 0; at < library.takes(operation).size(); at++) {
+                params.add(new Value.Argument(at));
+            }
+            TheWalk walk = library.stdlib().walk();
+            for (Reading.Case each : reading.cases(reading.bodyOf(operation),
+                    new Reading.Frame(params, Map.of()))) {
+                if (!(each.is() instanceof Value.Component(Value.Made(
+                        ValueName.Stdlib.Operation walks, List<Value> args), int answered))
+                        || !walks.equals(walk.operation())
+                        || !(args.get(walk.index()) instanceof Value.Whole(long from)) || from != 0
+                        || !args.get(walk.container()).equals(new Value.Argument(list))
+                        || !(args.get(walk.seed()) instanceof Value.Tupled(List<Value> started))
+                        || !(started.get(answered) instanceof Value.Listed(List<Value> nothing))
+                        || !nothing.isEmpty()
+                        || !putsFromTheIndex(args.get(walk.step()), walk, started, answered,
+                                new Value.Argument(count), reading)) {
+                    return new LibraryProver.Outcome.Open(new Unproved.DoesNotFollow(
+                            Unproved.Obligation.WHERE_ITS_ELEMENTS_CAME_FROM));
+                }
+            }
+            return new LibraryProver.Outcome.Proved(
+                    new Proof.ByWhatItsBodyBuilds(operation, reading.used()));
+        } catch (Reading.Stopped stopped) {
+            return LibraryProver.stoppedAt(stopped);
+        }
+    }
+
+    /**
+     * Whether {@code step}, the step of a walk started from {@code started}, carries at some
+     * component other than {@code answered} a count from nought up by one at every step, and at
+     * {@code answered} puts the element it is handed after all of what it carries where that count
+     * is {@code index} or past it and keeps what it carries where it is below.
+     */
+    private static boolean putsFromTheIndex(Value step, TheWalk walk, List<Value> started,
+                                            int answered, Value index, Reading reading) {
+        Value carried = new Value.Fresh(1, "what the walk carries");
+        Value next = new Value.Fresh(3, "the element the walk is handed next");
+        List<Value> handed = new ArrayList<>(List.of(next, next));
+        handed.set(walk.accumulator(), carried);
+        handed.set(walk.element(), next);
+        List<Reading.Case> cases = reading.applied(step, handed);
+        Value before = Reading.componentOf(carried, answered);
+        Value putAfter = new Value.Joined(before, new Value.Listed(List.of(next)));
+        for (int counted = 0; counted < started.size(); counted++) {
+            if (counted == answered || !started.get(counted).equals(new Value.Whole(0))) {
+                continue;
+            }
+            Value walked = Reading.componentOf(carried, counted);
+            LinearForm<LawNumber<Value>> reached = LinearForm.difference(
+                    new LawNumber.AnArgument<>(walked), new LawNumber.AnArgument<>(index));
+            boolean every = true;
+            for (Reading.Case each : cases) {
+                Value after = Reading.componentOf(each.is(), answered);
+                Rel puts = after.equals(putAfter) ? Rel.GE : after.equals(before) ? Rel.LT : null;
+                every &= puts != null && oneMore(Reading.componentOf(each.is(), counted), walked)
+                        && each.when().equals(new LawProposition.Compared<>(reached, puts));
+            }
+            if (every) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether {@code after} is {@code before} with one added. */
+    private static boolean oneMore(Value after, Value before) {
+        Value one = new Value.Whole(1);
+        return after.equals(new Value.Arithmetic(BinOp.ADD, before, one))
+                || after.equals(new Value.Arithmetic(BinOp.ADD, one, before));
     }
 
     /** Whether {@code operation}'s answer is settled to hold as many as its argument at

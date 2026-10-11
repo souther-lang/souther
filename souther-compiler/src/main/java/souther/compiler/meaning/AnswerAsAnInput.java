@@ -165,6 +165,9 @@ public final class AnswerAsAnInput {
             // Which element of a list the input holds is the last of its key: a place of the
             // input and of no answer, which the input that stands for the answer does not have.
             case Proposition.LastToHold _ -> null;
+            // A search is read from a node of the input, and of no answer.
+            case Proposition.SomeReachable _ -> null;
+            case Proposition.Carried carried -> throw carried.handedToAReader();
             case Proposition.SameValue(DecisionSubject one, DecisionSubject other,
                                        boolean holds, var _) -> {
                 DecisionSubject left = subject(one);
