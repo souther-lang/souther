@@ -195,6 +195,54 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
                 "and nought is the remainder it does leave");
     }
 
+    /**
+     * A hole the region holds in the distance, against the level the item asks for.
+     *
+     * <p>The run the region projects the distance onto has no hole in it, so crossing runs leaves the
+     * level reachable. The region itself holds the hole, and asked to take the level in finds the
+     * contradiction — which is also so of a form written at twice the weight, the same relation in
+     * other numbers.
+     */
+    @Test
+    void aHoleTheRegionHoldsAtTheLevelTheItemAsksForIsOutOfReach() {
+        SearchRegion apart = region().assuming(form(-1, 1, 0), Rel.NE).taken();
+        SearchRegion apartAtTwiceTheWeight = region().assuming(form(-2, 2, 0), Rel.NE).taken();
+        Criterion atNought = new Criterion.AtTheLevel(Level.OfTheQuantity.of(0));
+
+        assertInstanceOf(Realization.Impossible.class, realize(pairAt(atNought), apart),
+                "the region keeps `y - x` away from nought, and the item asks for nought");
+        assertInstanceOf(Realization.Impossible.class,
+                realize(pairAt(atNought), apartAtTwiceTheWeight),
+                "and the relation is the same in whatever weight it is written");
+        assertInstanceOf(Realization.Impossible.class, realize(formAt(atNought), apart),
+                "and of the same line handed over as a form");
+    }
+
+    /**
+     * An item of two runs is out of reach only where each of them is.
+     *
+     * <p>Minus two to two with nought taken out is the run below nought and the run above it. A
+     * region keeping the distance above nought holds nothing of the first and something of the
+     * second, and an item with one run out of reach is not out of reach; a region holding the
+     * distance at nought holds nothing of either.
+     */
+    @Test
+    void anItemOfTwoRunsIsOutOfReachOnlyWhereEveryRunIs() {
+        Criterion eitherSideOfNought = new Criterion.Within(
+                new Band(Band.endAt(null, Bound.at(Level.OfTheQuantity.of(-2), true), Towards.ABOVE),
+                        Band.endAt(null, Bound.at(Level.OfTheQuantity.of(2), true), Towards.BELOW)),
+                Level.OfTheQuantity.of(0), Towards.ABOVE);
+
+        assertFalse(realize(pairAt(eitherSideOfNought),
+                        region().assuming(form(-1, 1, 0), Rel.GT).taken())
+                        instanceof Realization.Impossible,
+                "the region leaves the distance above nought, which the second run asks for");
+        assertInstanceOf(Realization.Impossible.class,
+                realize(pairAt(eitherSideOfNought),
+                        region().assuming(form(-1, 1, 0), Rel.EQ).taken()),
+                "and with the distance held at nought neither run has a value");
+    }
+
     /** A remainder of {@code x + y} by seven, at one of the remainders. */
     private static Standing remainderAt(long remainder) {
         Map<NumericTerm, Carrier> on = new LinkedHashMap<>();

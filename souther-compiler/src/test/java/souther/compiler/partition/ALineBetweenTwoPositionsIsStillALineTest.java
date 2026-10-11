@@ -403,10 +403,10 @@ class ALineBetweenTwoPositionsIsStillALineTest {
      * equal. That is not a border whose row nobody could find — it is not a border, and the
      * comparison says so.
      *
-     * <p>Apart from {@link #aRuleTheRangesCouldNotTakeInIsNotAProofEither}, where the ranges do
-     * meet and the pair on the line is what the rules refuse. There the line is real and the row for
-     * it is unproven; here the quantity stops short of the line. Held alike, a rule stating
-     * something no row satisfies was reported as one this compiler could not find a witness for.
+     * <p>Apart from {@link #aHoleOnePositionHoldsEmptiesTheDiagonalTheRangesBothReach}, where the
+     * ranges do meet and the pair on the line is what the rules refuse. There the line is real and
+     * the region proves no row stands at it; here the quantity stops short of the line, and the
+     * line is not drawn at all.
      */
     @Test
     void aLineNoCountSatisfiesIsSaidAndNotCounted() {
@@ -483,23 +483,25 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     }
 
     /**
-     * A rule the ranges could not take in is not a range that says nothing is missing.
+     * A hole in one position is not a range, and the ranges overlapping is not what proves the
+     * diagonal empty.
      *
      * <p>{@code /= 0} leaves a hole and {@code == 0} leaves one value, and the two positions are
-     * under different parameters, so nothing relates them and their ranges overlap at zero. Read as a
-     * proof, that asks for a diagonal row at a value one of the two refuses outright.
+     * under different parameters, so nothing relates them and their ranges overlap at zero. A
+     * diagonal row would stand at that zero, which the first position refuses outright — and that is
+     * a proof, made by the region holding the hole against the line and not by the ranges, which
+     * meet.
      *
-     * <p>Nor does "every rule was read" answer it. The checker understands a disequality perfectly
-     * well and it reaches no range, so a position with a hole in it looks unbounded from there.
+     * <p>It is said as what it is: no row can stand there, the rules leave no value, and not a row
+     * nothing here managed to find.
      */
     @Test
-    void aRuleTheRangesCouldNotTakeInIsNotAProofEither() {
+    void aHoleOnePositionHoldsEmptiesTheDiagonalTheRangesBothReach() {
         String report = report(A_HOLE_AND_A_POINT);
 
-        assertFalse(report.contains("no row is at the OFF point ("),
-                "zero is the only place both ranges hold and one position refuses it:\n" + report);
-        assertTrue(report.contains(
+        assertFalse(report.contains(
                 "nothing could show a row can be written at the OFF point ("), report);
+        assertTrue(report.contains("no row can stand at the OFF point ("), report);
         assertTrue(report.contains("read as cmp/a: = b"), report);
     }
 
