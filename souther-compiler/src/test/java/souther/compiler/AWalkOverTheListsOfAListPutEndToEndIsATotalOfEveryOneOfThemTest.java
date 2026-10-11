@@ -227,6 +227,26 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
         assertTrue(fewestGroupsAtThePoint, () -> "the point on the line, at the fewest: " + rows);
     }
 
+    /**
+     * What the rules make a row carry is a figure's business whatever the leaves are.
+     *
+     * <p>A list that has to hold a great many lists, each of which may hold nothing, comes to no
+     * leaf at all and to a great many elements. Nothing of that size is written for it, and what is
+     * reported is the figure that was reached rather than a value that was never built.
+     */
+    @Test
+    void aGreatManyListsOfNothingAreNotWrittenAndTheFigureIsSaid() {
+        String model = model("", "invariant List.length(entries) >= 2000000000",
+                SUMMED.formatted(0));
+        String rows = org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(
+                java.time.Duration.ofSeconds(30), () -> rowsOf(model));
+        assertTrue(rows.length() < 20_000,
+                () -> "no row of that size is written: " + rows.length());
+        assertTrue(count(rows, "Entry \\{") < 200, () -> "no entry is written a million times");
+        assertTrue(rows.contains("no row for `List.sum(ledger.entries[*].postings[*].q) = 0`"),
+                rows);
+    }
+
     /** The same spreading through three levels of lists. */
     @Test
     void aTotalOverThreeLevelsOfListsIsSpreadOverTheLeavesOfAll() {

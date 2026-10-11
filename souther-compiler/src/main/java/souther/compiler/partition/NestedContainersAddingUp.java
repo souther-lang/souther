@@ -34,6 +34,12 @@ import java.util.stream.IntStream;
  * leaves are then grouped, one container at a time from the innermost out: each container holds the
  * leaves its level's count allows, and each element the container of the level below it.
  *
+ * <p><b>The room is for every element the row carries.</b> The figure that says how many elements a
+ * container is worth building with ({@link CompositionBudget#ELEMENTS_A_TOTAL_IS_SPREAD_OVER}) is
+ * spent on the elements of every level together, and a grouping past it is never made — not
+ * allocated and then refused. Spent on the leaves alone it would leave a container that must hold
+ * a great many lists of nothing as large as its rules say, though no leaf is written.
+ *
  * <p><b>The counts of every level are asked, and each is the container's own.</b> How many a level
  * holds is what its type declares tightened by what the rules leave on the way, as it is for one
  * container, and the grouping is made only where every level's count is met. A total no grouping
@@ -55,7 +61,38 @@ final class NestedContainersAddingUp {
      * it holds, each the container of the level below; for the innermost, how many leaves it
      * holds.
      */
-    private record Layout(List<Layout> within, int leaves) {}
+    private record Layout(List<Layout> within, int leaves) {
+
+        /** Every element this writes, at every level: the leaves, and the elements each of them is
+         *  held in, and the elements each of those is. */
+        long elements() {
+            long all = within.isEmpty() ? leaves : within.size();
+            for (Layout each : within) {
+                all += each.elements();
+            }
+            return all;
+        }
+    }
+
+    /**
+     * Whether a grouping was turned away for being past the room the figure leaves a row.
+     *
+     * <p>Told apart from a grouping that does not exist. What a walk owes a reader is which of the
+     * two stopped it: a figure that was reached is somebody's to raise, and counts that no grouping
+     * meets are not.
+     */
+    private static final class Cut {
+
+        private boolean by;
+
+        void reached() {
+            by = true;
+        }
+
+        boolean by() {
+            return by;
+        }
+    }
 
     private final TermPath run;
 
@@ -231,13 +268,20 @@ final class NestedContainersAddingUp {
      * may with what is left on the first. Which of the many groupings they are is not claimed.
      */
     private static Layout layoutOf(List<Level> levels, int at, long count, boolean loadedFirst,
-                                   ContainersAddingUp.HowManyIsAskedFor asked) {
+                                   ContainersAddingUp.HowManyIsAskedFor asked, long room,
+                                   Cut cut) {
         DeclaredBounds.CountRange here = levels.get(at).howMany();
         long least = Math.max(here.least(), 0);
         if (at == levels.size() - 1) {
-            return count < least || count > here.most()
-                    || (asked != null && !asked.holds((int) count)) ? null
-                    : new Layout(List.of(), (int) count);
+            if (count < least || count > here.most()
+                    || (asked != null && !asked.holds((int) count))) {
+                return null;
+            }
+            if (count > room) {
+                cut.reached();
+                return null;
+            }
+            return new Layout(List.of(), (int) count);
         }
         long eachFewest = leaves(levels, at + 1, false);
         long eachMost = leaves(levels, at + 1, true);
@@ -247,6 +291,13 @@ final class NestedContainersAddingUp {
         long to = eachFewest == 0 ? Math.min(here.most(), from + 8)
                 : Math.min(here.most(), count / eachFewest);
         for (long many = from; many <= to; many++) {
+            // Asked before anything is made: a count of elements past what is left of the room is
+            // no grouping to build, however few leaves it holds, and each count after it is past
+            // the room as well.
+            if (many > room) {
+                cut.reached();
+                break;
+            }
             if (times(many, eachMost) < count || times(many, eachFewest) > count
                     || (asked != null && !asked.holds((int) many))) {
                 continue;
@@ -256,12 +307,14 @@ final class NestedContainersAddingUp {
                 continue;
             }
             List<Layout> within = new ArrayList<>();
+            long left = room - many;
             for (long share : shares) {
-                Layout one = layoutOf(levels, at + 1, share, loadedFirst, null);
+                Layout one = layoutOf(levels, at + 1, share, loadedFirst, null, left, cut);
                 if (one == null) {
                     within = null;
                     break;
                 }
+                left -= one.elements();
                 within.add(one);
             }
             if (within != null) {
@@ -326,14 +379,23 @@ final class NestedContainersAddingUp {
                 return Taken.NOT_TAKEN;
             }
             List<Layout> layouts = new ArrayList<>();
+            Cut cut = new Cut();
             for (boolean loadedFirst : new boolean[] {false, true}) {
-                Layout one = layoutOf(levels, 0, count, loadedFirst, alsoHolding);
+                // Every element of every level is one the row carries, so the figure is the room
+                // for all of them together and not for the leaves alone: a container that has to
+                // hold a great many lists of nothing is as much to carry as one holding the same
+                // number of leaves.
+                Layout one = layoutOf(levels, 0, count, loadedFirst, alsoHolding,
+                        figure().maximum(), cut);
                 if (one != null && !layouts.contains(one)) {
                     layouts.add(one);
                 }
             }
             if (layouts.isEmpty()) {
-                return Taken.AND_MORE;
+                // What stops the counts after this one is the room, since a grouping needs at
+                // least as many elements for more leaves, and the walk says so rather than going
+                // on to counts it has no room for.
+                return cut.by() ? Taken.NOT_TAKEN : Taken.AND_MORE;
             }
             // The groupings are some of the many, always.
             left.notAllOf(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD);
