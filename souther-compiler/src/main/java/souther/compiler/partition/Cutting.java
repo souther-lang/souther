@@ -538,8 +538,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Compared _ when remainder != null -> remainder;
             case Proposition.Compared _ when related != null ->
                     new Read.AgainstAnotherValue(related);
-            case Proposition.Some some when valuesItRelates(some) != null ->
-                    new Read.AgainstAnotherValue(valuesItRelates(some));
+            case Proposition.Some some
+                    when valuesItRelates(some) instanceof List<FilingCoordinate> values ->
+                    new Read.AgainstAnotherValue(values);
             case Proposition.Compared(Relation.Ordered(
                     DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel proposition),
                     boolean holds, String _) when term.atOnePosition() != null ->
@@ -678,8 +679,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * a row falls on moves with the other values.
      */
     private static List<FilingCoordinate> heldOverValuesRelatedToOneAnother(Proposition stated) {
-        if (!(stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, String _))
-                || !Proposition.stopsIn(stated).isEmpty()) {
+        if (!(stated instanceof Proposition.Compared(Relation.Affine affine, boolean _,
+                                                     String _))) {
             return null;
         }
         List<NumericTerm> input = new ArrayList<>();
@@ -697,7 +698,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 }
             }
         }
-        if (related.isEmpty()) {
+        // Asked last: the walk of the whole statement is the dear part, and most comparisons
+        // are dropped above for weighing something that is neither.
+        if (related.isEmpty() || !Proposition.stopsIn(stated).isEmpty()) {
             return null;
         }
         List<FilingCoordinate> out = new ArrayList<>(AffineReading.filedAt(input));
