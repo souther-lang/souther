@@ -382,8 +382,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.Pullback#applicationsOf("
                             + "Lsouther/compiler/core/Core$Block;"
                             + "Lsouther/compiler/inputs/InputReads;"
-                            + "Lsouther/compiler/check/Symbols;"
-                            + "Lsouther/compiler/check/DeclarationNewtypes;)"
+                            + "Lsouther/compiler/inputs/InputReading;)"
                             + "Lsouther/compiler/inputs/InputReads$Applications;",
                     "hands the figure to the counting of a closure's applications, which answers"
                             + " that there are more than are read; every reader of that answer"

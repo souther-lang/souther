@@ -17,6 +17,7 @@ import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
+import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Relation;
@@ -45,7 +46,8 @@ import java.util.Map;
  * {@code known(name) == false} holding is {@code known(name)} not holding, and one column, which is
  * what {@link souther.compiler.inputs.InputTruth} makes of the same spelling over a position.
  */
-record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionSubjects subjects) {
+record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionSubjects subjects,
+                          ReadMeaning.WhereKept kept) {
 
     /**
      * {@code comparison} coming out {@code held} as a column, or null where nothing here reads it.
@@ -188,7 +190,8 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
             @Override
             public List<ValueStanding.ReadThrough<InputReads>> alternativesOf(Core.Read read,
                                                                            InputReads at) {
-                return NameAnswers.alternativesOf(read, at, rules.symbols(), rules.newtypes());
+                return NameAnswers.alternativesOf(read, at, rules.symbols(), rules.newtypes(),
+                        kept);
             }
 
             @Override

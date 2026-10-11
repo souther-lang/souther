@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ElementLineage;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.HeldIn;
@@ -482,6 +483,52 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Combinators.Handed handed = Combinators.handedTo(operation, call.args(), blockOf);
         return handed != null && answersOnePerElementOf(operation, handed.container(), call.args())
                 ? new StepOnEachElement(handed.step(), handed.element(), handed.container())
+                : null;
+    }
+
+    /**
+     * A step that makes a piece of each element of {@code walked}, and what the piece is: the
+     * container is those pieces put end to end in the order of the elements
+     * ({@link BoundOperationFacts#assembles}).
+     *
+     * @param step    the step
+     * @param element the parameter of the step each element arrives on
+     * @param walked  the argument whose elements it is handed
+     * @param piece   what the piece of one element is
+     */
+    public record PiecesOfEachElement(Core.Block step, Core.Binder element, Core walked,
+                                      PieceOfAnElement piece) {}
+
+    /**
+     * The step {@code container} is put together of a piece of each element by, or null where it
+     * is not so put together.
+     *
+     * <p>Of this application and of no other over the same elements, as
+     * {@link #stepAnsweredOnEachElement} is: the step is the one this call was handed, and the
+     * elements are those of the argument the operation is proved to make pieces of.
+     *
+     * @param blockOf the block a closure argument stands for, where the call stands
+     */
+    public static PiecesOfEachElement piecesOfEachElement(Core container,
+                                                          Function<Core, Core.Block> blockOf) {
+        if (!(Core.withoutStanding(container) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        ValueName operation = call.declared().operation();
+        BoundOperationFacts.Assembled assembled =
+                DefaultBoundOperationFacts.get().assembles(operation);
+        if (assembled == null) {
+            return null;
+        }
+        Combinators.Handed handed = Combinators.handedTo(operation, call.args(), blockOf);
+        int source = CallArguments.positionOf(assembled.source(), operation);
+        int closure = CallArguments.positionOf(assembled.closure(), operation);
+        return handed != null && source >= 0 && source < call.args().size()
+                && closure >= 0 && closure < call.args().size()
+                && call.args().get(source) == handed.container()
+                && call.args().get(closure) == handed.closure()
+                ? new PiecesOfEachElement(handed.step(), handed.element(), handed.container(),
+                        assembled.piece())
                 : null;
     }
 

@@ -81,8 +81,11 @@ public final class MeaningsOfABodyReading {
         // application, each handing its parameter one of them, and what a site in it states is
         // what it states on the application a run meets it on.
         if (Core.withoutStanding(e) instanceof Core.Block block && !pastTheFigure) {
-            InputReads.Applications applied =
-                    Pullback.applicationsOf(block, reads, symbols, newtypes);
+            InputReads.Applications applied = Pullback.applicationsOf(block, reads, read());
+            // Applied to nothing: no condition in the body is met on any run.
+            if (applied instanceof InputReads.Applications.NoneMade) {
+                return;
+            }
             // More applications than are read: every condition in the body is filed as one this
             // compiler declined to read, and none is read on fewer of them than it is on.
             if (applied instanceof InputReads.Applications.MoreThanAreRead) {
@@ -93,12 +96,16 @@ public final class MeaningsOfABodyReading {
                 return;
             }
             // Where which of the applications a run makes is not said, what a condition states on
-            // each is said all the same.
+            // each is said all the same — and so of an application handed an element a filter
+            // keeps on some rows, which is one the closure may be handed.
             List<InputReads> applications = switch (applied) {
-                case InputReads.Applications.Each(var made, var _) -> made;
-                case InputReads.Applications.Unsaid(var mayBeMade) -> mayBeMade;
+                case InputReads.Applications.Each(var made, var _) ->
+                        made.stream().map(InputReads.Applications.Made::reads).toList();
+                case InputReads.Applications.Unsaid(var mayBeMade) ->
+                        mayBeMade.stream().map(InputReads.Applications.Made::reads).toList();
                 case InputReads.Applications.MoreThanAreRead _,
-                     InputReads.Applications.NoneHanded _ -> List.of();
+                     InputReads.Applications.NoneHanded _,
+                     InputReads.Applications.NoneMade _ -> List.of();
             };
             if (!applications.isEmpty()) {
                 List<MeaningsOfABody> each = new ArrayList<>();

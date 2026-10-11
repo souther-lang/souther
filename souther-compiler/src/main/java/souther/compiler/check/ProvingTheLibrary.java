@@ -148,8 +148,9 @@ final class ProvingTheLibrary implements LibraryProofs {
                     elements.proveEveryElementIsHeld(operation,
                             holds.image().withArguments(DeclaredArgument::position))
                             instanceof LibraryProver.Outcome.Proved;
-            case BoundOperationFact.KeepsTheOrderOf kept ->
-                    elements.inOrder(operation, kept.source().position())
+            case BoundOperationFact.AssemblesPieces assembles ->
+                    elements.assemblesPieces(operation, assembles.source().position(),
+                            assembles.closure().position(), assembles.piece())
                             instanceof LibraryProver.Outcome.Proved;
             case BoundOperationFact.HoldsTheElementsFrom from ->
                     elements.fromAnIndexOn(operation, from.count().position(),

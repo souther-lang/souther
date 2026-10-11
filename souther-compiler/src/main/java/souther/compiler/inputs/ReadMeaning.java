@@ -1,17 +1,19 @@
 package souther.compiler.inputs;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 /**
  * What a name a body reads stands for, said in terms of the behavior's input.
  *
- * <p>Five answers rather than two. A reader that asks only which position a name is gets a position
- * or nothing, and that nothing holds four different names at once: one given arithmetic over
- * positions, one an operation handed an element of a container this reading can write out, one it
- * handed an element of a container it cannot, and one this reading knows nothing about. Told apart
- * nowhere, they were read the same way — so a rule written over a name given arithmetic drew no
- * line, and nothing said why.
+ * <p>Seven answers rather than two. A reader that asks only which position a name is gets a
+ * position or nothing, and that nothing holds six different names at once: one given arithmetic
+ * over positions, one an operation handed an element of a container this reading can write out,
+ * one of a container written out holding no element at all, one of a container it could write out
+ * and holding more than it does, one it handed an element of a container it cannot, and one this
+ * reading knows nothing about. Told apart nowhere, they were read the same way — so a rule written
+ * over a name given arithmetic drew no line, and nothing said why.
  *
  * <p>Facts about the name and not permissions. Whether a reader may put {@link Through}'s expression
  * where the name stands is that reader's to settle from the fact; what is answered here is what the
@@ -56,7 +58,8 @@ public sealed interface ReadMeaning {
     }
 
     /**
-     * The name stands for one of {@code alternatives} and for no other value.
+     * The name is handed each of {@code occurrences} in turn, each where what it was kept by holds,
+     * and stands for no other value.
      *
      * <p>How many there are says nothing. A container written with one member, and an arm that left
      * one of several standing, both answer with one — and that is this answer with one member rather
@@ -66,31 +69,177 @@ public sealed interface ReadMeaning {
      *
      * <p><b>Exhaustive, or this is not the answer.</b> What a reader may do with a plurality is
      * state what holds of every member, and one member left out makes that statement about a value
-     * the name can take and nothing said. So this is produced only where every value the name can
-     * stand for was written down and reached — a container written out as a list, narrowed by the
-     * arms passed on the way — and a container built by an operation stays {@link Element}, which
-     * says the plurality is there and its members are not in hand. A reading that cannot write them
-     * out is one capability short; a reading that writes out some of them is wrong.
+     * the name can take and nothing said. So this is produced only where every element the
+     * container can hold was written down and reached — a list written out, or one an operation put
+     * together of pieces of such a list ({@link WrittenOutElements}), narrowed by the arms passed
+     * on the way — and any other container stays {@link Element}, which says the plurality is there
+     * and its members are not in hand. A reading that cannot write them out is one capability
+     * short; a reading that writes out some of them is wrong.
      *
-     * <p>Never empty. A name stands for something wherever it can be read, so no members is not a
-     * name that can take no value — it is this reading having lost them, and a statement quantified
-     * over nothing holds vacuously, which would make the emptiest answer the strongest one.
+     * <p><b>Which of them are there is decided once, by whoever can read a truth.</b> An occurrence
+     * a filter dropped on every row is no element: no run hands it to a closure, and nothing stated
+     * of it is part of anything. Whether a truth it was kept by holds on every row, on none, or
+     * turns on the row is a reading of that truth, which this reading of names cannot make — so a
+     * reader outside it is handed the occurrences only through what decides that
+     * ({@link WhereKept}): {@link #occurrencesWhere} for where each application is made, and
+     * {@link #valuesWhere} for what every value supports. What is left out there is left out for
+     * every reader alike, and a reader cannot take an occurrence no run has.
+     *
+     * <p>Never empty as written. A container written with no element is {@link NoneHeld}, which is
+     * an answer of its own; what a decision leaves of these may be none, and a reader handed none
+     * reads it as that answer.
      *
      * <p>A list and not a set. Two members that are written alike are two elements of the container,
      * and what tells occurrences apart is not this reading's to decide: a reader that only wants to
      * know what they agree on may ignore how many there are, and one that identified them here
      * would have taken that decision for every reader.
      */
-    record OneOf(List<Denotation> alternatives) implements ReadMeaning {
+    final class OneOf implements ReadMeaning {
 
-        public OneOf {
-            if (alternatives == null || alternatives.isEmpty()) {
+        private final List<Occurrence> occurrences;
+
+        public OneOf(List<Occurrence> occurrences) {
+            if (occurrences == null || occurrences.isEmpty()) {
                 throw new IllegalArgumentException(
-                        "a name stands for something, so its alternatives are not none");
+                        "a container holding none is NoneHeld, so these are not none");
             }
-            alternatives = List.copyOf(alternatives);
+            this.occurrences = List.copyOf(occurrences);
+        }
+
+        /** Every occurrence handed in turn, each where nothing keeps it out. */
+        public static OneOf ofEvery(List<Denotation> values) {
+            return new OneOf(values.stream().map(Occurrence::always).toList());
+        }
+
+        /**
+         * The occurrences there on some row, in order, each with the truths {@code kept} leaves
+         * open — none where every one was dropped on every row.
+         */
+        public List<Occurrence> occurrencesWhere(WhereKept kept) {
+            return decided(occurrences, kept);
+        }
+
+        /** The value of each occurrence there on some row, whatever it is kept by there. */
+        public List<Denotation> valuesWhere(WhereKept kept) {
+            return occurrencesWhere(kept).stream().map(Occurrence::value).toList();
+        }
+
+        /** Every occurrence as written, kept or not: for what a reading of names asks of the
+         *  values themselves, where a value no run has supports what the rest support. */
+        List<Occurrence> asWritten() {
+            return occurrences;
+        }
+
+        /** The value of every occurrence as written ({@link #asWritten}). */
+        List<Denotation> everyValueItMayBe() {
+            return occurrences.stream().map(Occurrence::value).toList();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof OneOf that && occurrences.equals(that.occurrences);
+        }
+
+        @Override
+        public int hashCode() {
+            return occurrences.hashCode();
+        }
+
+        @Override
+        public String toString() {
+            return "OneOf" + occurrences;
         }
     }
+
+    /**
+     * {@code occurrences}, leaving out the ones {@code kept} says are dropped on every row and the
+     * truths it says hold on every row.
+     */
+    static List<Occurrence> decided(List<Occurrence> occurrences, WhereKept kept) {
+        List<Occurrence> out = new ArrayList<>();
+        for (Occurrence each : occurrences) {
+            List<Occurrence.Kept> open = kept.stillOpen(each.keptWhere());
+            if (open != null) {
+                out.add(open == each.keptWhere() ? each : new Occurrence(each.value(), open));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Which of the truths an occurrence was kept by are still open: those that hold on some rows and
+     * not on others. Null where one holds on no row, which leaves the occurrence out of the
+     * container; one that holds on every row is no condition, and is left out of what is open.
+     *
+     * <p>A reading of truths, which is the reading of conditions this reading of names is beneath:
+     * a reader holding one hands it here, and every reader holding one decides the same.
+     */
+    @FunctionalInterface
+    interface WhereKept {
+
+        /** Decides nothing: every occurrence is there, kept by every truth it was kept by. */
+        WhereKept NOTHING_DECIDED = keptWhere -> keptWhere;
+
+        List<Occurrence.Kept> stillOpen(List<Occurrence.Kept> keptWhere);
+    }
+
+    /**
+     * An element of a container that holds none: a list written empty, or one an operation put
+     * together of pieces each of which is empty.
+     *
+     * <p>No value at all, which is knowledge and not a lack of it. A closure handed the elements of
+     * such a container is applied to none, so nothing in it is reached; read as an {@link Element},
+     * the closure would be read once as it stands, as though some run applied it.
+     */
+    record NoneHeld() implements ReadMeaning {}
+
+    /**
+     * One element a container holds where every one of {@code keptWhere} holds, and {@code value}
+     * where it is held.
+     *
+     * <p>What it was kept by is said as the truths read where each was decided, and not as one
+     * statement: a filter's closure was applied to the element in the reading that handed it, and
+     * a filter around that one to the element it was handed in turn. Read in any other names, the
+     * same truth would be about another value.
+     */
+    record Occurrence(Denotation value, List<Kept> keptWhere) {
+
+        public Occurrence {
+            Objects.requireNonNull(value, "an occurrence is of some value");
+            keptWhere = List.copyOf(keptWhere);
+        }
+
+        /** An occurrence nothing keeps out. */
+        public static Occurrence always(Denotation value) {
+            return new Occurrence(value, List.of());
+        }
+
+        /** The same occurrence, kept also where every one of {@code more} holds — those decided
+         *  first. */
+        public Occurrence keptAlsoWhere(List<Kept> more) {
+            List<Kept> all = new ArrayList<>(more);
+            all.addAll(keptWhere);
+            return new Occurrence(value, all);
+        }
+
+        /** A truth an occurrence was kept by, and which way it came out. */
+        public record Kept(Denotation truth, boolean holds) {
+
+            public Kept {
+                Objects.requireNonNull(truth, "an occurrence is kept by some truth");
+            }
+        }
+    }
+
+    /**
+     * An element of a container that could be written out, holding more than this reading writes
+     * out ({@link WrittenOutElements#MOST_WALKED}).
+     *
+     * <p>Beside {@link Element} and not folded into it. That one says this reading cannot name the
+     * values; this one says it could and stopped at a figure, which is a limit a reader reports as
+     * one rather than a capability this compiler lacks.
+     */
+    record MoreThanAreWrittenOut() implements ReadMeaning {}
 
     /**
      * An operation of the language handed the name an element of a container, no position of the

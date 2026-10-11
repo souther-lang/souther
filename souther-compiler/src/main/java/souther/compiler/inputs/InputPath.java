@@ -11,6 +11,7 @@ import souther.compiler.core.Core;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.MapPart;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -665,8 +666,8 @@ final class InputPath {
     /**
      * Where the elements of what {@code operation} answers stand, where it puts end to end the lists
      * its closure answered of each element of a container, and the closure answers a place of the
-     * element ({@link BoundOperationFacts#flattensEveryAnswerOf}) — or null where it is any other
-     * operation or closure.
+     * element ({@link PieceOfAnElement#WHAT_THE_CLOSURE_ANSWERS}) — or null where
+     * it is any other operation or closure.
      *
      * <p>Each element of the answer is the value at that place of an element of the container, so
      * it stands inside the container's elements at the place and one container further in. The
@@ -679,11 +680,13 @@ final class InputPath {
         if (!(wanted instanceof Wanted.APart(HeldIn.Part part)) || part != HeldIn.Part.ELEMENT) {
             return null;
         }
-        DeclaredArgument container = DefaultBoundOperationFacts.get().flattensEveryAnswerOf(operation);
-        if (container == null) {
+        BoundOperationFacts.Assembled assembled =
+                DefaultBoundOperationFacts.get().assembles(operation);
+        if (assembled == null
+                || assembled.piece() != PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS) {
             return null;
         }
-        int at = CallArguments.positionOf(container, operation);
+        int at = CallArguments.positionOf(assembled.source(), operation);
         Core.Block closure = at < 0 || at >= args.size() ? null
                 : AnIdentityMap.closureBeside(args, at, InputPath::blockStanding);
         if (closure == null || closure.params().size() != 1
