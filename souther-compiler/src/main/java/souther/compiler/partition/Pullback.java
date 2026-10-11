@@ -2932,7 +2932,7 @@ final class Pullback {
                 }
                 case WrittenOutElements.Walked.Each each -> {
                     List<ReadMeaning.Occurrence> occurrences = there(each);
-                    if (beneath != null && !beneath.kept().isEmpty()
+                    if ((beneath != null && !beneath.kept().isEmpty())
                             || occurrences.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
                         return new Sized.NotSized(
                                 new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
