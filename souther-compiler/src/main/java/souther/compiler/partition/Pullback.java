@@ -2994,6 +2994,13 @@ final class Pullback {
                     // behavior's call answers: the reading reads it on each arm, or in the body.
                     case ReadMeaning.Through _ when inside != null && aWayInAt(inside) != null ->
                             null;
+                    // A name for one value the source wrote out stands for that value, which no
+                    // binding of the body works out: it is no atom of its own, as the value written
+                    // where the name is is none. Where the reading of it stopped is still the stop
+                    // the walk reports, at the name. A name for one of several written values is
+                    // not one value, and stays a name.
+                    case ReadMeaning.Through _ when at.writtenOutAsOneValue(name,
+                            read.rules().symbols(), read.rules().newtypes()) -> null;
                     // A name read through to what it was given, which the reading stopped inside
                     // where it did: the value is named by its binding, and why its number is none
                     // of the input's goes with it.

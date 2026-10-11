@@ -15,6 +15,7 @@ import souther.compiler.flow.ValueArrivals;
 import souther.compiler.flow.Ways;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.partition.MeaningsOfABodyReading;
 
@@ -24,6 +25,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -255,8 +257,15 @@ public final class CoverageRead {
         CoverageSites.Plan plan = run.plan();
         RuleReadingSource source = input.rules();
         Symbols symbols = source.symbols();
+        // What the tree where the language's operations stand binds, read once: what the forks of
+        // the model state is read there, and what each value the body builds is defined as is held
+        // there — this tree builds a value by calling its method.
+        Optional<ElementBindings> analysed = run.analysis()
+                .map(analysis -> ElementBindings.of(analysis, source.newtypes()));
         InputReads reads = InputReads.ofParameters(input.domain().parameterReads(),
-                input.declared(), ElementBindings.NONE, input.domain().dependencies());
+                input.declared(), ElementBindings.NONE,
+                analysed.map(ValueDefinitions::readWith).orElse(ValueDefinitions.NONE),
+                input.domain().dependencies());
         // One reading of this body's comparisons, handed to both readers of them. What a way is
         // admitted by and what a decision is said of are two questions about one comparison, and
         // each reading it for itself is how they came to be about different numbers.
@@ -270,7 +279,7 @@ public final class CoverageRead {
         MeaningsOfABody meanings = run.analysis()
                 .map(analysis -> MeaningsOfABodyReading.of(analysis, () -> input,
                         InputReads.ofParametersWhereCallsStand(input.domain().parameterReads(),
-                                input.declared(), ElementBindings.of(analysis, source.newtypes()),
+                                input.declared(), analysed.orElseThrow(),
                                 input.domain().dependencies()),
                         symbols, source.newtypes()))
                 .orElse(MeaningsOfABody.NONE);

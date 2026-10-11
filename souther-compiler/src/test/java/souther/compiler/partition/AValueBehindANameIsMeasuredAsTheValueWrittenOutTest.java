@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.Compiler;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.SourceRendering;
+import souther.compiler.report.AdequacyReport;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -19,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A value an author gave a name is measured as the value written out.
@@ -321,6 +324,79 @@ class AValueBehindANameIsMeasuredAsTheValueWrittenOutTest {
         assertFalse(read.get("Alice").axes().isEmpty(), "the rule written out is read: " + read);
         assertEquals(read.get("Alice"), read.get("a"));
         assertEquals(read.get("Alice"), read.get("b"));
+    }
+
+    /**
+     * What the report says of a behavior is the same whether the value it compares against is
+     * written out or named — its partition and borders, which arm a run goes down and which decision
+     * rule a row can be written for, and why one cannot.
+     *
+     * <p>The tree that runs builds a value by calling its method, and the reading of which way a
+     * comparison comes out on a run reads that tree. A value named in a body, named through another
+     * value, or handed to a helper is held to the one written out — under a rule that keeps the case
+     * out, and where the position holds one case and no line can be drawn on it at all.
+     */
+    @Test
+    void theReportOfAComparisonIsTheSameWhateverNamesTheValue() {
+        String keptOut = """
+                module probe.named
+
+                data Suspect = Alice | Bob | Carol
+                data Who = Suspect
+                    invariant Bool.not(value == Alice)
+                let a = Alice
+                let b = a
+                let same (x: Suspect, y: Suspect) = x == y
+
+                behavior f : (w: Who) -> Bool
+                let f (w) = if %s then true else false
+                example f
+                    | "x" : (Who(Bob)) -> false
+                """;
+        String oneCase = """
+                module probe.named
+
+                data Alice
+                data Bob
+                data Suspect = Alice | Bob
+                let a = Alice
+                let b = a
+                let same (x: Alice, y: Alice) = x == y
+
+                behavior f : (s: Alice) -> Bool
+                let f (s) = if %s then true else false
+                example f
+                    | "x" : (Alice) -> true
+                """;
+        Map<String, String> reported = new LinkedHashMap<>();
+        for (String spelling : List.of("w.value == Alice", "w.value == a", "w.value == b",
+                "same(w.value, a)")) {
+            reported.put(spelling, reportOf(keptOut.formatted(spelling)));
+        }
+        for (String spelling : List.of("s == Alice", "s == a", "s == b", "same(s, a)")) {
+            reported.put(spelling, reportOf(oneCase.formatted(spelling)));
+        }
+        assertTrue(reported.get("w.value == Alice").contains("branch      1/1"),
+                "the arm the rule rules out is no arm a run takes: "
+                        + reported.get("w.value == Alice"));
+        for (String spelling : List.of("w.value == a", "w.value == b", "same(w.value, a)")) {
+            assertEquals(reported.get("w.value == Alice"), reported.get(spelling), spelling);
+        }
+        for (String spelling : List.of("s == a", "s == b", "same(s, a)")) {
+            assertEquals(reported.get("s == Alice"), reported.get(spelling), spelling);
+        }
+    }
+
+    /** The report of {@code source}'s one module, with where each thing is written taken out. */
+    private static String reportOf(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        return AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()))
+                .replaceAll("\\d+:\\d+", "");
     }
 
     /** What each source was measured as, so a module several tests read is compiled once. */

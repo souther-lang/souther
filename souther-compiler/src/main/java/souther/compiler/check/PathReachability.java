@@ -10,6 +10,7 @@ import souther.compiler.flow.WhyRuledOut;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.Refinement;
@@ -248,7 +249,7 @@ public final class PathReachability {
     public static Answers of(Core body, SpecImplementation.Implemented implemented,
                              CoverageSites.Plan plan, InputReading read,
                              RuleReadingContext ruleReading, MeaningsOfABody meanings,
-                             ElementBindings elements, ValueTemplates values) {
+                             ElementBindings elements, ValueDefinitions values) {
         Objects.requireNonNull(read, "a reachability reading is made against an input that was read");
         if (implemented == null) {
             return Answers.NONE;
@@ -278,16 +279,17 @@ public final class PathReachability {
      * the path goes on through it and takes nothing in.
      *
      * <p>A value the body builds is a call of the value's method in the tree this walks, and what
-     * the value is defined as is its template in {@code values}, the templates of the tree an
-     * analysis reads. A name given such a call is read as that template and in the environment a
-     * template is read in, where nothing of this body is in force ({@link Terms#inside}) — so a
-     * fork on a value the module declares is settled as one on the value written out, and nothing
-     * of the other representation is read under this body's names.
+     * the value is defined as is in {@code values}, held in the tree an analysis reads. Both
+     * readings this walk makes — of what its conditions state, and of the input its comparisons are
+     * about — read a name given such a call as that definition, where a definition is read and
+     * nothing of this body is in force — so a fork on a value the module declares is settled as one
+     * on the value written out, and nothing of the other representation is read under this body's
+     * names.
      */
     public static Answers of(Core body, Scope params, CoverageSites.Plan plan,
                              InputReading reading, RuleReadingContext ruleReading,
                              MeaningsOfABody meanings, ElementBindings elements,
-                             ValueTemplates values) {
+                             ValueDefinitions values) {
         Objects.requireNonNull(reading,
                 "a reachability reading is made against an input that was read");
         if (body == null) {
@@ -295,7 +297,7 @@ public final class PathReachability {
         }
         InputDomain read = reading.domain();
         PathEngine engine = new PathEngine(ruleReading, Map.of(), Terms.Of.THE_TREE_THAT_RUNS,
-                values);
+                values.templates());
         Map<ControlPlace, Reachability> out = new LinkedHashMap<>();
         Map<ConstructOccurrence,
                 souther.compiler.reach.ComparisonArrival> arriving = new LinkedHashMap<>();
@@ -316,7 +318,7 @@ public final class PathReachability {
         walker.entered = in.at();
         walker.walk(body, in.known(), in.at(),
                         InputReads.ofParameters(read.parameterReads(),
-                                read.declared(ruleReading.source()), elements,
+                                read.declared(ruleReading.source()), elements, values,
                                 read.dependencies()),
                         List.of(), true);
         // A walk that ran to the end and made none of the answers it is written to produce. Its own

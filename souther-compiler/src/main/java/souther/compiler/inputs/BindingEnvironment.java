@@ -61,6 +61,9 @@ final class BindingEnvironment {
     private final Map<BindingId, Core> table;
     private final Layer newest;
     private final ElementBindings elements;
+    /** What the values built here are defined as, and where a definition is read: whichever tree
+     *  this is of, the definitions are in the one an analysis reads. */
+    private final ValueDefinitions values;
     private final boolean callsStand;
     /** The lookup that picked out the entry each such name is the value of: the name is read of
      *  that entry and no other. By the name and not by the element it stands at, since two names
@@ -73,13 +76,14 @@ final class BindingEnvironment {
     private int hash;
 
     BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
-                       ElementBindings elements, boolean callsStand) {
-        this(Map.copyOf(roots), Map.of(), Map.copyOf(bound), null, elements, callsStand, Map.of());
+                       ElementBindings elements, ValueDefinitions values, boolean callsStand) {
+        this(Map.copyOf(roots), Map.of(), Map.copyOf(bound), null, elements, values, callsStand,
+                Map.of());
     }
 
     private BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> handed,
                                Map<BindingId, Core> table, Layer newest, ElementBindings elements,
-                               boolean callsStand,
+                               ValueDefinitions values, boolean callsStand,
                                Map<BindingId, InputReads.EntryLookedUp> selected) {
         this.selected = selected;
         this.roots = roots;
@@ -87,7 +91,14 @@ final class BindingEnvironment {
         this.table = table;
         this.newest = newest;
         this.elements = elements;
+        this.values = Objects.requireNonNull(values,
+                "a reading says what the values it meets are defined as, if none");
         this.callsStand = callsStand;
+    }
+
+    /** What the values built here are defined as, and where a definition is read. */
+    ValueDefinitions values() {
+        return values;
     }
 
     /** What {@code binding} is bound to on the way here, the nearest binding winning. */
@@ -189,9 +200,13 @@ final class BindingEnvironment {
     Core heldAnywhereBy(BindingId binding) {
         // What is bound on the way here first, and what the body bound anywhere after it. No
         // binding holds nothing — this environment refuses a null value — so what is not here is
-        // absent rather than bound to nothing, and one lookup says so.
+        // absent rather than bound to nothing, and one lookup says so. A build bound on the way
+        // here is answered by the body's own table, which holds what each binding over the whole
+        // of the tree and its definitions holds: a definition read there is read among its own
+        // bindings, which is where it is defined.
         Core here = boundTo(binding);
-        return here != null ? here : elements.boundTo(binding);
+        return here != null && values.definitionOf(here) == null ? here
+                : elements.boundTo(binding);
     }
 
     /**
@@ -222,25 +237,28 @@ final class BindingEnvironment {
         if (binder == null || binder.binding() == null || value == null) {
             return this;
         }
-        // The nearest binding wins, which is what being inside it means.
+        // The nearest binding wins, which is what being inside it means. What the name is given is
+        // held as it was written: a build of a value is read as its definition, in the reading a
+        // definition is read in, by the one place that says what a name stands for
+        // (InputReads#meaningOf) — and not swapped for the definition here, where the reading it
+        // would be read in is this one.
         int depth = newest == null ? 1 : newest.depth() + 1;
-        // A name given a build of a value holds what the value is.
-        Layer inner = new Layer(binder.binding(), elements.dereferenced(value), newest, depth);
+        Layer inner = new Layer(binder.binding(), Core.withoutStanding(value), newest, depth);
         if (depth <= KEPT_APART) {
-            return new BindingEnvironment(roots, handed, table, inner, elements, callsStand,
-                    selected);
+            return new BindingEnvironment(roots, handed, table, inner, elements, values,
+                    callsStand, selected);
         }
         BindingEnvironment written = new BindingEnvironment(roots, handed, table, inner, elements,
+                values, callsStand, selected);
+        return new BindingEnvironment(roots, handed, written.bound(), null, elements, values,
                 callsStand, selected);
-        return new BindingEnvironment(roots, handed, written.bound(), null, elements, callsStand,
-                selected);
     }
 
     /** The same, with {@code binding} standing at {@code path}. */
     BindingEnvironment naming(BindingId binding, TermPath path) {
         Map<BindingId, TermPath> wider = new LinkedHashMap<>(roots);
         wider.put(binding, path);
-        return new BindingEnvironment(Map.copyOf(wider), handed, table, newest, elements,
+        return new BindingEnvironment(Map.copyOf(wider), handed, table, newest, elements, values,
                 callsStand, selected);
     }
 
@@ -251,7 +269,7 @@ final class BindingEnvironment {
     BindingEnvironment selecting(BindingId binding, InputReads.EntryLookedUp entry) {
         Map<BindingId, InputReads.EntryLookedUp> wider = new LinkedHashMap<>(selected);
         wider.put(binding, entry);
-        return new BindingEnvironment(roots, handed, table, newest, elements, callsStand,
+        return new BindingEnvironment(roots, handed, table, newest, elements, values, callsStand,
                 Map.copyOf(wider));
     }
 
@@ -267,18 +285,18 @@ final class BindingEnvironment {
     BindingEnvironment handing(BindingId binding, Core value) {
         Map<BindingId, Core> wider = new LinkedHashMap<>(handed);
         wider.put(binding, value);
-        return new BindingEnvironment(roots, Map.copyOf(wider), table, newest, elements,
+        return new BindingEnvironment(roots, Map.copyOf(wider), table, newest, elements, values,
                 callsStand, selected);
     }
 
     /**
      * The same, where the body of a behavior a call names is read as well: what that body binds to
      * the elements of what, beside what this one does. Its bindings are its own, so none of them is
-     * one of these.
+     * one of these — and the values it builds are defined beside the ones this one does.
      */
     BindingEnvironment entering(ElementBindings called) {
         return new BindingEnvironment(roots, handed, table, newest, elements.and(called),
-                callsStand, selected);
+                values.and(called), callsStand, selected);
     }
 
     /** The parameters as positions, which is what a name in a tree stands for. */
@@ -297,14 +315,15 @@ final class BindingEnvironment {
                         && handed.equals(that.handed)
                         && bound().equals(that.bound())
                         && selected.equals(that.selected)
-                        && elements.equals(that.elements));
+                        && elements.equals(that.elements)
+                        && values.equals(that.values));
     }
 
     @Override
     public int hashCode() {
         int h = hash;
         if (h == 0) {
-            h = Objects.hash(roots, handed, bound(), elements, callsStand, selected);
+            h = Objects.hash(roots, handed, bound(), elements, values, callsStand, selected);
             hash = h;
         }
         return h;

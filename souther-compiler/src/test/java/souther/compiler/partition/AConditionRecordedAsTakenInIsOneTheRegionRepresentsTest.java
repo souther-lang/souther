@@ -10,6 +10,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -235,7 +236,8 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
             souther.compiler.inputs.InputDomain inputs =
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(name);
             InputReads reads = InputReads.ofParameters(inputs.parameterReads(), inputs.declared(rules),
-                    checked.elementBindings().get(name), inputs.dependencies());
+                    checked.elementBindings().get(name), ValueDefinitions.NONE,
+                    inputs.dependencies());
             return new Read(body, inputs.reading(rules), reads, rules, module, name);
         });
     }

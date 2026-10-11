@@ -125,27 +125,6 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     }
 
     /**
-     * What a name given {@code value} holds: the value itself, or where it is a build of one, what
-     * the value is.
-     *
-     * <p>Asked where a name is bound, so that everything that reads the name reads the meaning and
-     * not the edge that asked for it. Which value a build is of is {@link ValueTemplates#builtBy}'s
-     * answer.
-     *
-     * <p>The template is read in the environment the name is, not one of its own, which is right
-     * only where the template is written in the representation that environment reads. So the
-     * templates held here are the ones of the tree an analysis reads, and the bindings of the tree
-     * that runs hold none: a template put in front of a reader of that tree would hand it nodes of
-     * the other representation.
-     */
-    public Core dereferenced(Core standing) {
-        // The type a name is in force at says nothing about which value it holds.
-        Core value = Core.withoutStanding(standing);
-        Core built = templates.builtBy(value);
-        return built != null ? built : value;
-    }
-
-    /**
      * Where in the element at {@code binding} the value a walk answered stands, or null where the
      * walk answered no place of it.
      *
@@ -382,7 +361,11 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         if (e instanceof Core.LetIn let && let.binder() != null
                 && let.binder().binding() != null) {
             // A name given a build of a value holds what the value is: what it was bound to is the
-            // template, and the build is only where it was asked for.
+            // template, and the build is only where it was asked for. Held in this table and no
+            // other: it holds what every binding of the body and of the templates it builds holds,
+            // so a template read through it is read among its own bindings, where it is defined. A
+            // reading that goes down a path holds only what is bound on the way, and reads a build
+            // as its definition where definitions are read (InputReads#meaningOf).
             Core value = Core.withoutStanding(let.value());
             Core built = values.builtBy(value);
             held.putIfAbsent(let.binder().binding(), built != null ? built : value);

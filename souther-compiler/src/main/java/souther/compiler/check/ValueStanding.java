@@ -148,11 +148,22 @@ public final class ValueStanding {
         }
     }
 
-    /** {@code e} read in {@code at}, followed as far as one value goes — or {@code e} itself where
-     *  it stands for several, which no one of them answers for. */
+    /**
+     * {@code e} read in {@code at}, followed as far as one value goes.
+     *
+     * <p>Walked with no plurality in the answers ({@link Names#oneAtATime}), so a name that is one
+     * of several values stands as the name: it is not one value, however many values it is one of —
+     * one included. Which a name is, is the environment's answer ({@link Named}), and a walk that
+     * followed it into its values and counted them afterwards would be deciding it again by how
+     * many there happened to be.
+     */
     public static <E, N extends Names<E, N>> Standing<E, N> one(Core e, E at, N names) {
-        List<Standing<E, N>> reached = of(e, at, names);
-        return reached.size() == 1 ? reached.getFirst() : new Standing<>(e, at, names);
+        List<Standing<E, N>> reached = of(e, at, names.oneAtATime());
+        if (reached.size() != 1) {
+            throw new IllegalStateException("a walk with no plurality in it reached "
+                    + reached.size() + " values from " + e.pos());
+        }
+        return reached.getFirst();
     }
 
     /** {@code e} read in {@code at}, followed as far as the steps go: one value where the
