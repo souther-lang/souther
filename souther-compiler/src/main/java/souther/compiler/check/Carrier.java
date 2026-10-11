@@ -534,7 +534,8 @@ public sealed interface Carrier extends ValueOrder {
      * reader instead, and an invariant and a {@code guard} at one position admitted different rules
      * with only one of them saying so.
      *
-     * <p><b>No names to take off.</b> The {@link #literalOf(Core, Symbols)} beside this one peels a
+     * <p><b>No names to take off.</b> The {@link #literalOf(ValueStanding.Standing, Symbols)} beside
+     * this one peels a
      * newtype's construction, and this one does not, which is a difference in what the two are handed
      * rather than one of them forgetting: a rule may not construct a data, so a bound is never one
      * (E1105 for an invariant, E1017 for an {@code ensures}). Peeling here would be a rule about
@@ -568,18 +569,31 @@ public sealed interface Carrier extends ValueOrder {
      * {@code Core} and an invariant's bound as {@code Hir}, and a rule read at one and not the other
      * is a rule about the representation rather than about the model — which is what the two readers
      * deciding separately what a literal is already cost once.
+     *
+     * <p><b>Handed a value with what it is read in, and never an expression alone.</b> A value
+     * written behind a name is the value written: {@code s == a} under {@code let a = Alice} states
+     * what {@code s == Alice} states. Which names stand for which values is the environment's answer
+     * and not this carrier's, so what comes here is the value as the reader's walk stands at it, and
+     * every part taken off it — what a newtype wraps, what a minus negates — is followed where the
+     * value was written before it is read ({@link ValueStanding.Standing#part}). Handed the
+     * expression alone, a carrier would either read no name or follow names for itself, and the
+     * second is a reader's own account of what a name means.
      */
-    default Place literalOf(Core e, Symbols symbols) {
-        Core bare = bare(e, symbols);
+    default Place literalOf(ValueStanding.Standing<?, ?> value, Symbols symbols) {
+        ValueStanding.Standing<?, ?> standing = bare(value, symbols);
+        Core bare = Core.withoutStanding(standing.value());
         return switch (this) {
             case Whole _, Dense _ -> switch (bare) {
                 case Core.Int i -> onTheGrid(Count.of(i.value()));
                 case Core.Decimal d -> onTheGrid(Count.of(d.value()));
                 // A minus in front of a value is part of the value written down, and these are the
                 // only carriers with one to write: nothing negates a date, a case or a string.
-                case Core.Neg n when IntNegation.isTheLeastInt(n.operand()) -> null;
                 case Core.Neg n -> {
-                    Place inner = literalOf(n.operand(), symbols);
+                    ValueStanding.Standing<?, ?> operand = standing.part(n.operand());
+                    if (IntNegation.isTheLeastInt(Core.withoutStanding(operand.value()))) {
+                        yield null;
+                    }
+                    Place inner = literalOf(operand, symbols);
                     yield inner == null ? null : Count.number(inner).negate();
                 }
                 case null, default -> null;
@@ -613,13 +627,20 @@ public sealed interface Carrier extends ValueOrder {
      * <p>What makes something one is the declaration and never the shape: a data of one field that
      * is not a newtype wraps its value rather than being it, so its construction is a value of its
      * own and is left alone.
+     *
+     * <p>What a construction wraps is followed where the construction was written, so a name inside
+     * it is the value it was given: {@code Code(c)} under {@code let c = "x"} is {@code "x"}.
      */
-    private static Core bare(Core written, Symbols symbols) {
+    private static ValueStanding.Standing<?, ?> bare(ValueStanding.Standing<?, ?> written,
+                                                     Symbols symbols) {
+        ValueStanding.Standing<?, ?> at = written;
         // A value written down is the value it is whatever type it stands as.
-        Core e = Core.withoutStanding(written);
-        return e instanceof Core.Construct nd && !nd.values().isEmpty()
-                && TypeOps.isSingleValueNewtype(Type.ref(nd.typeName()), symbols)
-                ? bare(nd.values().get(0).value(), symbols) : e;
+        while (Core.withoutStanding(at.value()) instanceof Core.Construct nd
+                && !nd.values().isEmpty()
+                && TypeOps.isSingleValueNewtype(Type.ref(nd.typeName()), symbols)) {
+            at = at.part(nd.values().get(0).value());
+        }
+        return at;
     }
 
     /** The count a written temporal is, or null where the expression is not one of that kind. A

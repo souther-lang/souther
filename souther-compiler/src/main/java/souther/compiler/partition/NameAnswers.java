@@ -1,8 +1,8 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.AffineForms;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.ValueStanding;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReads;
@@ -28,7 +28,7 @@ import java.util.List;
 final class NameAnswers {
 
     /** The one value {@code read}'s name denotes, or null where it denotes none. */
-    static AffineForms.ReadThrough<InputReads> denoting(Core.Read read, InputReads at,
+    static ValueStanding.ReadThrough<InputReads> denoting(Core.Read read, InputReads at,
                                                         Symbols symbols,
                                                         DeclarationNewtypes newtypes) {
         return at.meaningOf(read, symbols, newtypes) instanceof ReadMeaning.Through through
@@ -41,20 +41,20 @@ final class NameAnswers {
      * <p>A container an operation built answers nothing here, which is what it answered before there
      * was anything to write out.
      */
-    static List<AffineForms.ReadThrough<InputReads>> alternativesOf(Core.Read read, InputReads at,
+    static List<ValueStanding.ReadThrough<InputReads>> alternativesOf(Core.Read read, InputReads at,
                                                                     Symbols symbols,
                                                                     DeclarationNewtypes newtypes) {
         if (!(at.meaningOf(read, symbols, newtypes) instanceof ReadMeaning.OneOf one)) {
             return null;
         }
-        List<AffineForms.ReadThrough<InputReads>> each = new ArrayList<>();
+        List<ValueStanding.ReadThrough<InputReads>> each = new ArrayList<>();
         one.alternatives().forEach(stands -> each.add(asked(stands)));
         return each;
     }
 
     /** What the reading {@code at} takes {@code node} as, or null where it takes it as nothing
      *  else ({@link InputReads#taken}). */
-    static AffineForms.ReadThrough<InputReads> taken(Core node, InputReads at) {
+    static ValueStanding.ReadThrough<InputReads> taken(Core node, InputReads at) {
         Denotation as = at.taken(node);
         return as == null ? null : asked(as);
     }
@@ -66,8 +66,8 @@ final class NameAnswers {
     }
 
     /** A value and what to read it in, as the walks spell that pair. */
-    private static AffineForms.ReadThrough<InputReads> asked(Denotation stands) {
-        return new AffineForms.ReadThrough<>(stands.value(), stands.at());
+    private static ValueStanding.ReadThrough<InputReads> asked(Denotation stands) {
+        return new ValueStanding.ReadThrough<>(stands.value(), stands.at());
     }
 
     private NameAnswers() {}

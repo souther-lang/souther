@@ -11,7 +11,7 @@ import souther.compiler.ast.Hir;
  * together, a caller that drops the environment has to say so.
  *
  * <p>The same shape the affine walk reads a name through
- * ({@code AffineForms.ReadThrough}), for the same reason (ADR-0111): a value stands for a name in
+ * ({@code ValueStanding.ReadThrough}), for the same reason (ADR-0111): a value stands for a name in
  * the environment the binding was made in, so the two travel together or the value is read against
  * the wrong names.
  *

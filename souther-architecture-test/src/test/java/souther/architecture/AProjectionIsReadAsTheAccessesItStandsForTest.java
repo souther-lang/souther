@@ -287,8 +287,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "check/AffineForms$Reading;L" + c + "check/AffineForms$Walk;L" + c
                 + "check/AffineForms$Stop;)L" + c + "numeric/LinearForm;",
                 Reading.NAMES, READS_THE_NAMES);
-        row(out, c + "check/AffineForms", "eliminated", "(" + core + "Ljava/lang/Object;L" + c
-                + "check/AffineForms$Reading;L" + c + "check/AffineForms$Walk;)Ljava/util/List;",
+        row(out, c + "check/ValueStanding", "eliminated", "(" + core + "Ljava/lang/Object;L" + c
+                + "check/ValueStanding$Names;L" + c + "check/BindingWalk;)Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "check/AnalysisBody", "visit", "(" + core + "L" + c
                 + "check/ValueTemplates;Ljava/util/Set;Ljava/util/List;)V",
@@ -303,8 +303,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/Clauses", "substituted", "(" + core + "Ljava/util/Map;)" + core,
                 Reading.STRUCTURE, REWRITES_THE_BASE);
         row(out, c + "check/ElementBindings", "walk", "(" + core + "Ljava/util/Map;Ljava/util/Map;L"
-                + c + "check/ElementProvenance;Ljava/util/Map;Ljava/util/Map;L" + c
-                + "check/ValueTemplates;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
+                + c + "check/ElementProvenance;Ljava/util/Map;Ljava/util/Map;)V",
+                Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/ClosureEntries", "visit", "(" + core + "L" + c
                 + "check/ClosureEntries$Standing;)V", Reading.STRUCTURE,
                 "finds the places a closure is used, which no field read is");

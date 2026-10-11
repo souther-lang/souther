@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.ValueStanding;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.CalledBody;
@@ -3259,6 +3260,13 @@ final class Pullback {
                     // behavior's call answers: the reading reads it on each arm, or in the body.
                     case ReadMeaning.Through _ when inside != null && aWayInAt(inside) != null ->
                             null;
+                    // A name for one value the source wrote out stands for that value, which no
+                    // binding of the body works out: it is no atom of its own, as the value written
+                    // where the name is is none. Where the reading of it stopped is still the stop
+                    // the walk reports, at the name. A name for one of several written values is
+                    // not one value, and stays a name.
+                    case ReadMeaning.Through _ when at.writtenOutAsOneValue(name,
+                            read.rules().symbols(), read.rules().newtypes()) -> null;
                     // A name read through to what it was given, which the reading stopped inside
                     // where it did: the value is named by its binding, and why its number is none
                     // of the input's goes with it.
@@ -3276,7 +3284,7 @@ final class Pullback {
             }
 
             @Override
-            public AffineForms.ReadThrough<InputReads> readThrough(Core.Read name, InputReads at) {
+            public ValueStanding.ReadThrough<InputReads> readThrough(Core.Read name, InputReads at) {
                 // A name given what a dependency answered is read through to the call, which is
                 // the evaluation it names ({@link InputReads#answerAt}): the answer a row stands in
                 // and a reader walking the tree relates by that evaluation.
@@ -3285,14 +3293,14 @@ final class Pullback {
             }
 
             @Override
-            public List<AffineForms.ReadThrough<InputReads>> alternativesOf(Core.Read name,
+            public List<ValueStanding.ReadThrough<InputReads>> alternativesOf(Core.Read name,
                                                                            InputReads at) {
                 return NameAnswers.alternativesOf(name, at, read.rules().symbols(),
                         read.rules().newtypes());
             }
 
             @Override
-            public AffineForms.ReadThrough<InputReads> taken(Core node, InputReads at) {
+            public ValueStanding.ReadThrough<InputReads> taken(Core node, InputReads at) {
                 return NameAnswers.taken(node, at);
             }
 
@@ -4243,10 +4251,10 @@ final class Pullback {
         return new TheSignOfAnOrder.Sides<>() {
 
             @Override
-            public AffineForms.ReadThrough<InputReads> standing(Core e, InputReads at) {
+            public ValueStanding.ReadThrough<InputReads> standing(Core e, InputReads at) {
                 Denotation stands = at.standing(e, read.rules().symbols(),
                         read.rules().newtypes());
-                return new AffineForms.ReadThrough<>(stands.value(), stands.at());
+                return new ValueStanding.ReadThrough<>(stands.value(), stands.at());
             }
 
             @Override

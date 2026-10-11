@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.ValueStanding;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.RuleReadingSource;
@@ -327,14 +328,14 @@ public sealed interface ElementValue {
             }
 
             @Override
-            public AffineForms.ReadThrough<Map<BindingId, Core>> readThrough(
+            public ValueStanding.ReadThrough<Map<BindingId, Core>> readThrough(
                     Core.Read read, Map<BindingId, Core> at) {
                 Core value = element.equals(read.binding()) ? null : at.get(read.binding());
-                return value == null ? null : new AffineForms.ReadThrough<>(value, at);
+                return value == null ? null : new ValueStanding.ReadThrough<>(value, at);
             }
 
             @Override
-            public List<AffineForms.ReadThrough<Map<BindingId, Core>>> alternativesOf(
+            public List<ValueStanding.ReadThrough<Map<BindingId, Core>>> alternativesOf(
                     Core.Read read, Map<BindingId, Core> at) {
                 return null;
             }

@@ -125,19 +125,6 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     }
 
     /**
-     * What a name given {@code value} holds: the value itself, or where it is a build of one, what
-     * the value is.
-     *
-     * <p>Asked where a name is bound, so that everything that reads the name reads the meaning and
-     * not the edge that asked for it.
-     */
-    public Core dereferenced(Core standing) {
-        // The type a name is in force at says nothing about which value it holds.
-        Core value = Core.withoutStanding(standing);
-        return value instanceof Core.MaterialisedValue build ? templates.bodyOf(build) : value;
-    }
-
-    /**
      * Where in the element at {@code binding} the value a walk answered stands, or null where the
      * walk answered no place of it.
      *
@@ -243,9 +230,9 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Map<BindingId, Core> held = new LinkedHashMap<>();
         Map<BindingId, Core> answered = new LinkedHashMap<>();
         Map<BindingId, Core> standing = new LinkedHashMap<>();
-        walk(body, found, held, provenance, answered, standing, values);
+        walk(body, found, held, provenance, answered, standing);
         for (Core template : templates) {
-            walk(template, found, held, provenance, answered, standing, values);
+            walk(template, found, held, provenance, answered, standing);
         }
         // What one walk hands its closure is what a licence and a projection are about, and a
         // binding taking elements of more than one container has no one walk to be about. The
@@ -370,14 +357,15 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     private static void walk(Core e, Map<BindingId, List<HeldIn>> found,
                              Map<BindingId, Core> held,
                              ElementProvenance provenance, Map<BindingId, Core> answered,
-                             Map<BindingId, Core> standing, ValueTemplates values) {
+                             Map<BindingId, Core> standing) {
         if (e instanceof Core.LetIn let && let.binder() != null
                 && let.binder().binding() != null) {
-            // A name given a build of a value holds what the value is: what it was bound to is the
-            // template, and the build is only where it was asked for.
-            Core value = Core.withoutStanding(let.value());
-            held.putIfAbsent(let.binder().binding(), value instanceof Core.MaterialisedValue build
-                    ? values.bodyOf(build) : value);
+            // What a name was given, as it was written. A build of a value is held as the build:
+            // what the value is defined as is read where definitions are read, by the one place
+            // that says what a name stands for (InputReads#meaningOf), and what this table answers
+            // — where an element came from, which position a value stands at — is nothing a
+            // definition holds, since a value takes no input.
+            held.putIfAbsent(let.binder().binding(), Core.withoutStanding(let.value()));
             // The body of a binding is read only where a fact proved before the tree was rewritten
             // says this binding is a closure parameter of a walk answering one per element. The
             // shape connects the two ends; it establishes nothing, and a binding nothing licenses
@@ -400,7 +388,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
             handed(preserved.declared().operation(), preserved.args(), found, standing, held);
         }
         Core.forEachChild(e, child ->
-                walk(child, found, held, provenance, answered, standing, values));
+                walk(child, found, held, provenance, answered, standing));
     }
 
     /**

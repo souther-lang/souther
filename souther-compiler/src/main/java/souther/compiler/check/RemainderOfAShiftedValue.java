@@ -154,7 +154,7 @@ public final class RemainderOfAShiftedValue {
         if (Core.withoutStanding(spelled) instanceof Core.Read) {
             return null;
         }
-        AffineForms.ReadThrough<E> side = sides.standing(spelled, at);
+        ValueStanding.ReadThrough<E> side = sides.standing(spelled, at);
         if (!(Core.withoutStanding(side.value()) instanceof Core.PreservedCall call)) {
             return null;
         }
@@ -304,7 +304,7 @@ public final class RemainderOfAShiftedValue {
             boolean peeled = false;
             E here = at;
             while (true) {
-                AffineForms.ReadThrough<E> through = sides.standing(place, here);
+                ValueStanding.ReadThrough<E> through = sides.standing(place, here);
                 here = through.at();
                 SumOrDifference arithmetic = SumOrDifference.of(through.value());
                 if (arithmetic == null) {

@@ -12,6 +12,7 @@ import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Location;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.ValueStanding;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.HowAClosureIsApplied;
@@ -217,12 +218,18 @@ public final class InputReads {
      * nothing, every name inside a closure names no position.
      *
      * <p>{@code dependencies} is what a row stands in for ({@link InputDomain#dependencies}).
+     *
+     * <p>{@code values} is what the values the body builds are defined as. In this tree a value is
+     * a call of its method, and what it is defined as is held in the other tree; handed none, every
+     * such call is a call this reading knows nothing of.
      */
     public static InputReads ofParameters(
             Map<BindingId, String> parameters, DeclaredInput declared, ElementBindings elements,
+            ValueDefinitions values,
             souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
         return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(parameters),
-                Map.of(), elements, false), Map.of(), declared, dependencies, Applied.NONE);
+                Map.of(), elements, values, false), Map.of(), declared, dependencies,
+                Applied.NONE);
     }
 
     /**
@@ -238,12 +245,37 @@ public final class InputReads {
      * settled where the walk that reads it is written. Asked for afterwards, a walk of one tree
      * could be handed the other's reading and the first rule about a value an operation made would
      * be reported as this compiler failing to expand something.
+     *
+     * <p>The values this tree builds are defined in it, and read with its own bindings.
      */
     public static InputReads ofParametersWhereCallsStand(
             Map<BindingId, String> parameters, DeclaredInput declared, ElementBindings elements,
             souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
         return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(parameters),
-                Map.of(), elements, true), Map.of(), declared, dependencies, Applied.NONE);
+                Map.of(), elements, ValueDefinitions.readWith(elements), true), Map.of(),
+                declared, dependencies, Applied.NONE);
+    }
+
+    /**
+     * Where the values this reading meets are read as what they are defined as: the reading a
+     * definition of one is read in ({@link ValueDefinitions#reading}). A reader that walks the
+     * definitions themselves walks them here, so that what a name inside one means is what it
+     * means to a reading that followed a name into it.
+     */
+    public InputReads whereValuesAreDefined() {
+        return names.values().reading();
+    }
+
+    /**
+     * Where a value's definition is read ({@link ValueDefinitions#reading}): no parameter, nothing
+     * declared under one, nothing a row stands in for, and the operations of the language standing
+     * — the bindings the definitions make and what their operations hand their closures, and the
+     * definitions of the values they name in turn.
+     */
+    static InputReads insideADefinition(ValueDefinitions values, ElementBindings definedWith) {
+        return new InputReads(new BindingEnvironment(Map.of(), Map.of(), definedWith, values,
+                true), Map.of(), DeclaredInput.NONE, souther.compiler.carrier.Membership.none(),
+                Applied.NONE);
     }
 
     /**
@@ -256,7 +288,7 @@ public final class InputReads {
     public static InputReads ofWhatIsDeclared(Map<BindingId, String> roots,
                                               DeclaredInput declared) {
         return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(roots), Map.of(),
-                ElementBindings.NONE, true), Map.of(), declared,
+                ElementBindings.NONE, ValueDefinitions.NONE, true), Map.of(), declared,
                 souther.compiler.carrier.Membership.none(), Applied.NONE);
     }
 
@@ -276,7 +308,7 @@ public final class InputReads {
     public static InputReads ofADeclaredClause(Map<BindingId, TermPath> roots,
                                                DeclaredInput declared) {
         return new InputReads(new BindingEnvironment(roots, Map.of(),
-                ElementBindings.NONE, true), Map.of(), declared,
+                ElementBindings.NONE, ValueDefinitions.NONE, true), Map.of(), declared,
                 souther.compiler.carrier.Membership.none(), Applied.NONE);
     }
 
@@ -290,7 +322,8 @@ public final class InputReads {
      */
     static InputReads written(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
                               ElementBindings elements) {
-        return new InputReads(new BindingEnvironment(roots, bound, elements, false), Map.of(),
+        return new InputReads(new BindingEnvironment(roots, bound, elements,
+                ValueDefinitions.NONE, false), Map.of(),
                 DeclaredInput.NONE, souther.compiler.carrier.Membership.none(), Applied.NONE);
     }
 
@@ -524,6 +557,12 @@ public final class InputReads {
      * value — or null where it is not taken, or taken as a form of its arguments.
      */
     public Denotation taken(Core e) {
+        // A build of a value is the value it is defined as on every reading, wherever it stands —
+        // under a name or not ({@link #denoting}).
+        Denotation defined = definedAs(e, this);
+        if (defined != null) {
+            return defined;
+        }
         return applied.taken() == null
                 || !(applied.taken().of(Core.withoutStanding(e)) instanceof TakenAs.AValue(var as))
                 ? null : as;
@@ -542,6 +581,32 @@ public final class InputReads {
     /** Whether {@code e} is taken as anything on the reading here, a value or a form. */
     public boolean isTaken(Core e) {
         return applied.taken() != null && applied.taken().of(Core.withoutStanding(e)) != null;
+    }
+
+    /**
+     * What a name given {@code value} where {@code writtenAt} reads stands for, and what it is read
+     * in.
+     *
+     * <p>The value as written, read there — except a build of a value, which stands for what the
+     * value is defined as, read where a definition is read ({@link ValueDefinitions#reading}). A
+     * definition names nothing of the place that builds it, so read in that place it would be read
+     * under names it has nothing to do with, and in the tree that runs, in a representation that is
+     * not its own. Which builds are builds is {@link ValueDefinitions#definitionOf}'s answer, and
+     * every way a name is given a value comes through here, so a value is read alike however its name
+     * was given it.
+     *
+     */
+    private static Denotation denoting(Core value, InputReads writtenAt) {
+        Denotation defined = definedAs(value, writtenAt);
+        return defined != null ? defined : new Denotation(value, writtenAt);
+    }
+
+    /** What the build {@code value} written where {@code writtenAt} reads is defined as, read where
+     *  a definition is — or null where it is no build. */
+    private static Denotation definedAs(Core value, InputReads writtenAt) {
+        ValueDefinitions values = writtenAt.names.values();
+        Core definition = values.definitionOf(value);
+        return definition == null ? null : new Denotation(definition, values.reading());
     }
 
     /**
@@ -1489,34 +1554,46 @@ public final class InputReads {
      * that position's values.
      */
     public boolean writtenOut(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
-        return writtenOut(new Denotation(e, this), symbols, newtypes, new HashSet<>());
+        return writtenOut(new Denotation(e, this), true, symbols, newtypes, new HashSet<>());
     }
 
-    private static boolean writtenOut(Denotation from, Symbols symbols,
+    /**
+     * Whether {@code e} is one value the source wrote out all the way down, read here.
+     *
+     * <p>{@link #writtenOut} with a name that stands for every value of several left out, at any
+     * depth. Each of those values is written, and still the name is one of them on one run and
+     * another on the next: what it holds is not one value, whatever each value is.
+     */
+    public boolean writtenOutAsOneValue(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        return writtenOut(new Denotation(e, this), false, symbols, newtypes, new HashSet<>());
+    }
+
+    private static boolean writtenOut(Denotation from, boolean ofSeveral, Symbols symbols,
                                       DeclarationNewtypes newtypes, Set<BindingId> met) {
         Denotation at = standing(from, symbols, newtypes, met);
         InputReads reads = at.at();
         return switch (Core.withoutStanding(at.value())) {
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
                  Core.UnitValue _, Core.OptionNone _ -> true;
-            case Core.Read name -> reads.meaningOf(name, symbols, newtypes, new HashSet<>(met))
-                    instanceof ReadMeaning.OneOf one
+            case Core.Read name -> ofSeveral
+                    && reads.meaningOf(name, symbols, newtypes, new HashSet<>(met))
+                            instanceof ReadMeaning.OneOf one
                     && one.alternatives().stream()
-                            .allMatch(each -> writtenOut(each, symbols, newtypes,
+                            .allMatch(each -> writtenOut(each, true, symbols, newtypes,
                                     new HashSet<>(met)));
             case Core.Neg negated -> writtenOut(new Denotation(negated.operand(), reads),
-                    symbols, newtypes, new HashSet<>(met));
+                    ofSeveral, symbols, newtypes, new HashSet<>(met));
             case Core.OptionSome some -> writtenOut(new Denotation(some.value(), reads),
-                    symbols, newtypes, new HashSet<>(met));
+                    ofSeveral, symbols, newtypes, new HashSet<>(met));
             case Core.ListLit list -> list.elements().stream()
-                    .allMatch(each -> writtenOut(new Denotation(each, reads), symbols, newtypes,
-                            new HashSet<>(met)));
-            case Core.Tuple tuple -> tuple.elements().stream()
-                    .allMatch(each -> writtenOut(new Denotation(each, reads), symbols, newtypes,
-                            new HashSet<>(met)));
-            case Core.Construct made -> made.values().stream()
-                    .allMatch(each -> writtenOut(new Denotation(each.value(), reads), symbols,
+                    .allMatch(each -> writtenOut(new Denotation(each, reads), ofSeveral, symbols,
                             newtypes, new HashSet<>(met)));
+            case Core.Tuple tuple -> tuple.elements().stream()
+                    .allMatch(each -> writtenOut(new Denotation(each, reads), ofSeveral, symbols,
+                            newtypes, new HashSet<>(met)));
+            case Core.Construct made -> made.values().stream()
+                    .allMatch(each -> writtenOut(new Denotation(each.value(), reads), ofSeveral,
+                            symbols, newtypes, new HashSet<>(met)));
             case null, default -> false;
         };
     }
@@ -1546,7 +1623,11 @@ public final class InputReads {
         // What a call handed a parameter of the body it entered, read where the call stands.
         Denotation given = applied.given().get(read.binding());
         if (given != null) {
-            return new ReadMeaning.Through(carryingWhatIsTaken(given));
+            // What this reading took goes with a value read where it was given, and not into a
+            // definition, which is read where nothing taken on the way here is.
+            Denotation defined = definedAs(given.value(), given.at());
+            return new ReadMeaning.Through(defined != null ? defined
+                    : carryingWhatIsTaken(given));
         }
         java.util.List<Denotation> narrowed = alternatives.get(read.binding());
         if (narrowed != null) {
@@ -1585,7 +1666,7 @@ public final class InputReads {
             // A name bound to the very read being answered is a name this knows nothing about: the
             // value would be the question, and a reader handed it would ask it again.
             case BindingRole.Alias(var value) -> value == read ? new ReadMeaning.Unknown()
-                    : new ReadMeaning.Through(new Denotation(value, this));
+                    : new ReadMeaning.Through(denoting(value, this));
             case BindingRole.Unknown _ -> new ReadMeaning.Unknown();
             // A parameter is the position it is the name of. The walk above reaches it by the same
             // fact, so nothing gets here — and what would be said if anything did is what is said
@@ -1774,14 +1855,22 @@ public final class InputReads {
     }
 
     /**
-     * {@code from} followed through the steps that have one successor, as far as they go.
+     * What {@code e} stands as here, as a value a reader may take apart: each part it finds is
+     * followed where {@code e} was written ({@link ValueStanding.Standing#part}).
+     */
+    public ValueStanding.Standing<InputReads, ?> standingValue(Core e, Symbols symbols,
+                                                              DeclarationNewtypes newtypes) {
+        return ValueStanding.one(e, this, new Followed(symbols, newtypes, new HashSet<>()));
+    }
+
+    /**
+     * {@code from} followed through the steps that have one successor, as far as they go
+     * ({@link ValueStanding}).
      *
-     * <p>A name standing for one value, the body of a binding, and a value the reading takes as
-     * another ({@link #taking}), and nothing else. A normal form
-     * and never a failure: what comes back where nothing applies is what went in, which a caller
-     * reads rather than treating as an absence.
+     * <p>A normal form and never a failure: what comes back where nothing applies is what went in,
+     * which a caller reads rather than treating as an absence.
      *
-     * <p><b>Which names those are is {@link #meaningOf}'s answer and is not read off the bindings
+     * <p><b>Which names are followed is {@link #meaningOf}'s answer and is not read off the bindings
      * here.</b> A name is a position, or one of several values, or an element, before it is what it
      * was bound to, and there is no way to read a binding's value here without that order having
      * been applied: the environment answers what a name is ({@link BindingRole}) and hands out
@@ -1789,36 +1878,64 @@ public final class InputReads {
      * that both holds a value and is what an operation handed an element on, which is the shape
      * joining two walks leaves.
      *
-     * <p>By the bindings met, which is what makes it stop. Each tells itself from every other, so a
-     * name that came round to itself is one already answered for.
+     * <p>No plurality is followed into. A name that is one of several values stands as the name,
+     * which is what a reader asking for one value is owed.
      */
     private static Denotation standing(Denotation from, Symbols symbols,
                                        DeclarationNewtypes newtypes, Set<BindingId> met) {
-        Denotation at = from;
-        while (true) {
-            switch (at.value()) {
-                case Core.Read name -> {
-                    if (!met.add(name.binding())
-                            || !(at.at().meaningOf(name, symbols, newtypes, met)
-                                    instanceof ReadMeaning.Through through)) {
-                        return at;
-                    }
-                    at = through.denotes();
-                }
-                case Core.LetIn let ->
-                        at = new Denotation(let.body(), at.at().and(let.binder(), let.value()));
-                // What a value is does not turn on the type it stands as.
-                case Core.Widen w -> at = new Denotation(w.value(), at.at());
-                // A value this reading takes as another is that value: a choice the answer of the
-                // arm it is on, a call the body it entered.
-                default -> {
-                    Denotation as = at.at().taken(at.value());
-                    if (as == null) {
-                        return at;
-                    }
-                    at = as;
-                }
+        ValueStanding.Standing<InputReads, Followed> stands =
+                ValueStanding.one(from.value(), from.at(), new Followed(symbols, newtypes, met));
+        return new Denotation(stands.value(), stands.at());
+    }
+
+    /**
+     * What this reading answers about names, for the walk that follows them.
+     *
+     * <p>By the bindings met, which is what makes a walk stop: each tells itself from every other,
+     * so a name that came round to itself is one already answered for. Shared with
+     * {@link #meaningOf}, which follows a container to its elements by this same walk, so the two
+     * stop at the same names.
+     */
+    private record Followed(Symbols symbols, DeclarationNewtypes newtypes, Set<BindingId> met)
+            implements ValueStanding.Names<InputReads, Followed> {
+
+        private Followed {
+            Objects.requireNonNull(newtypes, "a name is followed knowing what each name wraps");
+        }
+
+        @Override
+        public ValueStanding.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
+            if (!met.add(read.binding())
+                    || !(at.meaningOf(read, symbols, newtypes, met)
+                            instanceof ReadMeaning.Through through)) {
+                return null;
             }
+            return new ValueStanding.ReadThrough<>(through.denotes().value(),
+                    through.denotes().at());
+        }
+
+        @Override
+        public List<ValueStanding.ReadThrough<InputReads>> alternativesOf(Core.Read read,
+                                                                          InputReads at) {
+            return null;
+        }
+
+        @Override
+        public InputReads inside(Core.LetIn li, InputReads at) {
+            return at.and(li.binder(), li.value());
+        }
+
+        // A value this reading takes as another is that value: a choice the answer of the arm it
+        // is on, a call the body it entered.
+        @Override
+        public ValueStanding.ReadThrough<InputReads> taken(Core node, InputReads at) {
+            Denotation as = at.taken(node);
+            return as == null ? null : new ValueStanding.ReadThrough<>(as.value(), as.at());
+        }
+
+        @Override
+        public Followed oneAtATime() {
+            return this;
         }
     }
 

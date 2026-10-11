@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.ValueStanding;
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
@@ -180,18 +181,18 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
             }
 
             @Override
-            public AffineForms.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
+            public ValueStanding.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
                 return NameAnswers.denoting(read, at, rules.symbols(), rules.newtypes());
             }
 
             @Override
-            public List<AffineForms.ReadThrough<InputReads>> alternativesOf(Core.Read read,
+            public List<ValueStanding.ReadThrough<InputReads>> alternativesOf(Core.Read read,
                                                                            InputReads at) {
                 return NameAnswers.alternativesOf(read, at, rules.symbols(), rules.newtypes());
             }
 
             @Override
-            public AffineForms.ReadThrough<InputReads> taken(Core node, InputReads at) {
+            public ValueStanding.ReadThrough<InputReads> taken(Core node, InputReads at) {
                 return NameAnswers.taken(node, at);
             }
 

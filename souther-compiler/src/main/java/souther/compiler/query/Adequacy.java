@@ -48,6 +48,7 @@ import souther.compiler.check.FakeTables;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.check.ElementBindings;
+import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.check.DeclarationCitations;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.DeclarationKinds;
@@ -872,6 +873,7 @@ public final class Adequacy {
         }
         return souther.compiler.inputs.InputDemand.of(checked.body(),
                 InputReads.ofParameters(parameters, declared, checked.elements(),
+                        ValueDefinitions.of(checked.analysis(), Shapes.declarationNewtypes(db)),
                         dependenciesOf(spec)),
                 symbols, Shapes.declarationNewtypes(db));
     }
@@ -1182,7 +1184,8 @@ public final class Adequacy {
                         ruleReading, meaningsOf(both.analysis(), read,
                                 () -> readingOf(db, read, reading.value()), reading.value()),
                         checked.value().elementBindings()
-                                .getOrDefault(spec.name(), ElementBindings.NONE)));
+                                .getOrDefault(spec.name(), ElementBindings.NONE),
+                        ValueDefinitions.of(both.analysis(), Shapes.declarationNewtypes(db))));
             }
             return Answer.of(Ordered.map(out));
         }
