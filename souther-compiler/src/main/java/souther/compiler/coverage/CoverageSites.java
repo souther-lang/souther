@@ -1864,9 +1864,11 @@ public final class CoverageSites {
                     walk(structural.take(new CoreStructure.Edge.BinaryRight(), b.right()), inside);
                 }
                 case Core.Call c -> {
+                    // A function the call never applies is not emitted, so what is inside it is a
+                    // fork with the structure and no site, like the forks below an abort.
                     for (int i = 0; i < c.args().size(); i++) {
                         walk(structural.take(new CoreStructure.Edge.CallArgument(i),
-                                c.args().get(i)), inside);
+                                c.args().get(i)), inside && !c.omitsFunctionBody(i));
                     }
                 }
                 // What a representation kept standing for an analysis to read. Coverage is measured

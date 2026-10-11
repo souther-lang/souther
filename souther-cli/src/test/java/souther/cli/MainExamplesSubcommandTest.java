@@ -72,8 +72,12 @@ class MainExamplesSubcommandTest {
     private record Streams(String out, String err) {}
 
     private static Streams both(String... extraArgs) throws Exception {
+        return bothFor(MODEL, extraArgs);
+    }
+
+    private static Streams bothFor(String model, String... extraArgs) throws Exception {
         Path file = Files.createTempDirectory("souther-examples").resolve("trip.sou");
-        Files.writeString(file, MODEL);
+        Files.writeString(file, model);
         List<String> args = new ArrayList<>(List.of("examples", file.toString()));
         args.addAll(List.of(extraArgs));
 
@@ -102,6 +106,25 @@ class MainExamplesSubcommandTest {
         assertTrue(out.contains("implemented"), out);
         assertTrue(out.contains("2 behaviors: 1 implemented, 0 unimplemented, 1 injected; 2 rows waiting for a `let`."),
                 out);
+    }
+
+    /**
+     * A function the call hands a list with no element to apply it to is not emitted, so the
+     * measurement holds no probe for what is written in it.
+     */
+    @Test
+    void aFunctionNeverAppliedIsReportedOnWithoutAnInternalError() throws Exception {
+        Streams streams = bothFor("""
+                module p
+
+                behavior f : (rows: List<Int>) -> List<Int>
+                let f (rows) =
+                    List.flatMap(e -> List.filter(x -> x == e, rows), [ ])
+                """);
+
+        assertFalse(streams.out().contains("internal compiler error"), streams.out());
+        assertFalse(streams.err().contains("internal compiler error"), streams.err());
+        assertTrue(streams.out().contains("f"), streams.out());
     }
 
     @Test

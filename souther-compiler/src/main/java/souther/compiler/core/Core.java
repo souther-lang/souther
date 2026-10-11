@@ -1164,15 +1164,25 @@ public sealed interface Core {
          * @param theWalk the standard library's one loop
          */
         public FunctionArgument functionArgument(int index, TheWalk theWalk) {
-            if (!(args.get(index).type() instanceof Type.FnOf fnType)) {
+            if (!(args.get(index).type() instanceof Type.FnOf)) {
                 throw new IllegalArgumentException("argument " + index + " of `" + fn.rendered()
                         + "` is not a function");
             }
             if (index == 0 && stepRunWhereItStands(theWalk) != null) {
                 return FunctionArgument.RUNS_WHERE_IT_STANDS;
             }
-            return !(fn instanceof Reached.OfKernel) && neverRuns(fnType)
+            return omitsFunctionBody(index)
                     ? FunctionArgument.NEVER_APPLIED : FunctionArgument.HANDED_OVER;
+        }
+
+        /**
+         * Whether the argument at {@code index} is a function none of whose body is emitted, because
+         * it is never applied. Decided by the types alone, so a function handed a list that is only
+         * empty at run time is not one.
+         */
+        public boolean omitsFunctionBody(int index) {
+            return args.get(index).type() instanceof Type.FnOf fnType
+                    && !(fn instanceof Reached.OfKernel) && neverRuns(fnType);
         }
 
         /**
