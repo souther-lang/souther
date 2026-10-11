@@ -148,8 +148,8 @@ public final class RulesTaken {
 
             @Override
             public ExecutionEvidence in(Run run) {
-                if (run.inputs().indexOf(at) < 0
-                        || run.inputs().indexOf(at) >= run.values().size()) {
+                int parameter = run.inputs().indexOf(at);
+                if (parameter < 0 || parameter >= run.values().size()) {
                     return ExecutionEvidence.UNOBSERVED;
                 }
                 if (run.inputs().valuesAt(run.values(), at)

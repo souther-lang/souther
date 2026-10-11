@@ -991,8 +991,16 @@ public final class Adequacy {
      * identity, so an answer holding it would be an answer no two computations agree about.
      */
     static BehaviorInputs inputsOf(Db db, String module, String behavior) {
-        Map<String, InputDomain> read = db.ask(new Inputs(module)).value();
-        RuleReadingSource source = Shapes.ruleReading(db, module).value();
+        return inputsOf(db, db.ask(new Inputs(module)).value(),
+                Shapes.ruleReading(db, module).value(), behavior);
+    }
+
+    /**
+     * The same, for a caller placing the runs of every behavior of a module, which asks for the
+     * module's inputs and reading source once rather than once per behavior.
+     */
+    static BehaviorInputs inputsOf(Db db, Map<String, InputDomain> read, RuleReadingSource source,
+                                   String behavior) {
         InputDomain domain = read == null ? null : read.get(behavior);
         return domain == null || source == null ? null
                 : BehaviorInputs.of(readingOf(db, domain, source));
@@ -1002,10 +1010,11 @@ public final class Adequacy {
      * The rules {@code behavior}'s body states and the inputs its rows are walked by, or null where
      * either is missing.
      */
-    static RunPlacement placementOf(Db db, String module, Map<String, RulesTaken> placed,
+    static RunPlacement placementOf(Db db, Map<String, InputDomain> read,
+                                    RuleReadingSource source, Map<String, RulesTaken> placed,
                                     String behavior) {
         RulesTaken rules = placed == null ? null : placed.get(behavior);
-        BehaviorInputs inputs = rules == null ? null : inputsOf(db, module, behavior);
+        BehaviorInputs inputs = rules == null ? null : inputsOf(db, read, source, behavior);
         return inputs == null ? null : new RunPlacement(rules, inputs);
     }
 
@@ -1504,6 +1513,8 @@ public final class Adequacy {
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             Map<String, souther.compiler.partition.RulesTaken> placed =
                     db.ask(new Placements(name)).value();
+            Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
+            RuleReadingSource source = Shapes.ruleReading(db, name).value();
             Map<String, DecisionEvidence> out = new LinkedHashMap<>();
             read.value().forEach((behavior, rules) -> {
                 // The positions the rules' ways are placed on, asked only where some part of the
@@ -1512,7 +1523,7 @@ public final class Adequacy {
                 souther.compiler.partition.MeasuredInput subject =
                         unanswered.regions().isEmpty() ? null : subjectOf(db, name, behavior);
                 out.put(behavior, new DecisionEvidence(rules,
-                        whatTheRowsTook(behavior, rules, placementOf(db, name, placed, behavior),
+                        whatTheRowsTook(behavior, rules, placementOf(db, readInputs, source, placed, behavior),
                                 RowReadings.readingFor(byTarget, behavior), numbering),
                         subject == null ? Map.of()
                                 : DecisionEvidence.unansweredIn(rules, unanswered, subject.axes())));
