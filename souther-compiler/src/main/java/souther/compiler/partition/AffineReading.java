@@ -166,7 +166,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     }
 
     /**
-     * The same, of the input {@code read} reads, with the names as {@code reads} has them, saying
+     * The same, of the input {@code ofTheInput} reads, with the names as {@code reads} has them, saying
      * which of the four it is.
      */
     static OfAComparison read(StatedComparison comparison, InputReads reads,
