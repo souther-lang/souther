@@ -1124,7 +1124,7 @@ final class ReadQuantities implements Quantities {
      */
     private ConstraintState<InputAtom> holding(ConstraintState<InputAtom> rules, NumericTerm term,
                                                StructuralContext under) {
-        NumericDomain.Bounds runs = whereOneTermRuns(term);
+        NumericDomain.Bounds runs = whereOneTermRuns(term, false);
         if (runs == null || (asCut(runs.min()) == null && asCut(runs.max()) == null)) {
             return rules;
         }
@@ -1188,7 +1188,7 @@ final class ReadQuantities implements Quantities {
         // where a value's own emptiness is rather than by a range here. A caller looking for
         // somewhere to put a value asks the region face, and that one keeps the difference
         // ({@link #projectionOf}).
-        return switch (projectionOf(form)) {
+        return switch (projectionOf(form, false)) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) -> bounds;
             case NumericDomain.FormProjection.NothingIsLeft _ -> NumericDomain.Bounds.OPEN;
         };
@@ -1201,6 +1201,13 @@ final class ReadQuantities implements Quantities {
      * about a form.
      */
     public NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form) {
+        return projectionOf(form, true);
+    }
+
+    /** The same, where the class the declarations hold a value to is or is not what its ends are
+     *  held to ({@link #residuesFixedAt}). */
+    private NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form,
+                                                      boolean andTheDeclared) {
         if (form.coefs().isEmpty()) {
             return null;
         }
@@ -1212,7 +1219,7 @@ final class ReadQuantities implements Quantities {
         //
         // Under the context this question is asked in, which is what says which of those rules are
         // about the row being asked about at all.
-        return runsIn(asked(form.coefs().keySet()), form);
+        return runsIn(asked(form.coefs().keySet()), form, andTheDeclared);
     }
 
     /**
@@ -1223,7 +1230,8 @@ final class ReadQuantities implements Quantities {
      * the context is the one the fold has reached and not the one anybody fixed.
      */
     private NumericDomain.FormProjection runsIn(StructuralContext under,
-                                                LinearForm<NumericTerm> form) {
+                                                LinearForm<NumericTerm> form,
+                                                boolean andTheDeclared) {
         ConstraintState<InputAtom> rules = effectiveConstraints(under);
         // Walked by the terms: what each one brings in is taken onto the state the one before it
         // left, and a form says which terms it weighs without saying which was written first.
@@ -1253,8 +1261,18 @@ final class ReadQuantities implements Quantities {
         // count is ever asked in — a form adds its terms together and two strings have no sum — so
         // this is where a floor written as a value rather than as a number survives at all.
         NumericTerm only = onlyTermOf(form);
-        return new NumericDomain.FormProjection.Within(
-                only == null ? projected : meeting(projected, whereOneTermRuns(only)));
+        if (only == null) {
+            return new NumericDomain.FormProjection.Within(projected);
+        }
+        // And the ends of what is left held to the class the term is held to. What the rules say of
+        // the term is a range, and a bound a caller took in sits at a number that need not be of the
+        // class — so the ends are cut inward to the members, the same as the ends of the term's own
+        // run are, and a search that names an end names a number of the class. Where the class has
+        // no member in what is left there is nothing left.
+        NumericDomain.Bounds held = withinTheResiduesFixedOf(only,
+                meeting(projected, whereOneTermRuns(only, andTheDeclared)), andTheDeclared);
+        return held.holdsAValue() ? new NumericDomain.FormProjection.Within(held)
+                : new NumericDomain.FormProjection.NothingIsLeft();
     }
 
     /**
@@ -1522,7 +1540,7 @@ final class ReadQuantities implements Quantities {
         // asked whether they hold anything — said here, this would be a container proved non-empty
         // out of a reading that proves nothing at all.
         NumericDomain.Bounds many =
-                runsIn(under, LinearForm.atom(counted))
+                runsIn(under, LinearForm.atom(counted), false)
                         instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds)
                         ? bounds : null;
         if (many == null || CountDomain.leastFrom(many.min()) < 1) {
@@ -1665,7 +1683,7 @@ final class ReadQuantities implements Quantities {
      * ends that are values — a string stops at {@code "A"} — and the arithmetic that adds terms
      * together has no word for one.
      */
-    private NumericDomain.Bounds whereOneTermRuns(NumericTerm term) {
+    private NumericDomain.Bounds whereOneTermRuns(NumericTerm term, boolean andTheDeclared) {
         NumericDomain.Bounds runs = meeting(whereItsValuesAre(term), term.intrinsicBounds());
         // And what was taken in about this position's own order. Here rather than with the
         // relations, because this is the one shape such a rule has: a bound on a carrier that counts
@@ -1678,7 +1696,7 @@ final class ReadQuantities implements Quantities {
         // caller that has not asked.
         return withinTheResiduesFixedOf(term, fixedAt == null ? runs
                 : meeting(runs, new NumericDomain.Bounds(Endpoint.inclusive(fixedAt.least()),
-                        Endpoint.inclusive(fixedAt.most()))));
+                        Endpoint.inclusive(fixedAt.most()))), andTheDeclared);
     }
 
     /**
@@ -1700,8 +1718,9 @@ final class ReadQuantities implements Quantities {
      * the rules, says nothing of where a number of the place runs.
      */
     private NumericDomain.Bounds withinTheResiduesFixedOf(NumericTerm term,
-                                                          NumericDomain.Bounds runs) {
-        Congruences together = residuesFixedAt(term);
+                                                          NumericDomain.Bounds runs,
+                                                          boolean andTheDeclared) {
+        Congruences together = residuesFixedAt(term, andTheDeclared);
         return together == null ? runs : ResidueHull.of(runs, together);
     }
 
@@ -1714,14 +1733,22 @@ final class ReadQuantities implements Quantities {
      * it.
      */
     public Congruences valueClassAt(NumericTerm.ValueOf place) {
-        return residuesFixedAt(place);
+        return residuesFixedAt(place, true);
     }
 
     /**
      * What the remainders fixed at the position of {@code term} leave {@code term} in, which is the
-     * class the number it is of is held to.
+     * class the number it is of is held to — and, where {@code andTheDeclared}, the class the
+     * declarations hold it to besides.
+     *
+     * <p>Two faces and not one. Where a rule stops a value is an end the declarations wrote, and
+     * that end need not be a member of the class they also hold the value to: {@code value >= 0}
+     * beside a value that leaves seven by a thousand stops at nought and first holds seven. A line
+     * is drawn at the end that was written, so the face lines are drawn from does not round it; the
+     * face a value is chosen from does, since a value named at an end is a value the rules refuse
+     * where it is outside the class.
      */
-    private Congruences residuesFixedAt(NumericTerm term) {
+    private Congruences residuesFixedAt(NumericTerm term, boolean andTheDeclared) {
         if (!(term instanceof NumericTerm.FromOnePosition here)) {
             return null;
         }
@@ -1741,7 +1768,7 @@ final class ReadQuantities implements Quantities {
         // The class every fixed remainder leaves the value in together: narrowing by each in turn
         // would name an end of the run that is of one class and not of the other.
         Congruences together = null;
-        Congruences declared = classDeclaredAt(here);
+        Congruences declared = andTheDeclared ? classDeclaredAt(here) : null;
         if (declared != null) {
             // The declared class is of the value, so a remainder by `own` is held to the class of it
             // the two divisors share.

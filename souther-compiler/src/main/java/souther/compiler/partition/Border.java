@@ -1135,6 +1135,15 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * level is one a row can be written at — {@code value >= 10} under {@code x < 10} would otherwise
      * be owed a 9 the record refuses.
      *
+     * <p><b>The point beside a line is the carrier's neighbour of it, and what the rules leave is
+     * asked of that neighbour and does not move it.</b> With {@code value} held to the multiples of
+     * a thousand, the number beside {@code 1950000} is {@code 1950001}: no value of the type, so no
+     * row is owed there ({@link NotOwedReason#THE_RULES_REFUSE_IT}). The nearest value the type does
+     * hold, {@code 1951000}, is a row of the run that side of the line owes and is chosen there, from
+     * the members of the class. Taken the other way and the neighbour read off what the rules leave,
+     * the border's points and the runs between its lines would be two readings of one order — a run
+     * ending at the number before a point that is no number of it.
+     *
      * @param isTheThreshold whether this point is the threshold itself, where the quantity takes it
      */
     private static PointAnswer pointAt(LevelSpace space, Level cut, Towards towards,

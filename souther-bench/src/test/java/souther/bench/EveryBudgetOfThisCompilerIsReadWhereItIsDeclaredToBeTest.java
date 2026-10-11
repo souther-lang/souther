@@ -233,6 +233,35 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/ValuesTried;)"
                             + "Lsouther/compiler/partition/Realization;",
                     "collects what the level walks ran out of, and the levels it was offered"),
+            Map.entry("souther.compiler.partition.LevelRealizer#ofOne("
+                            + "Lsouther/compiler/partition/Standing$OfOneCoordinate;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Ljava/util/Map;"
+                            + "Lsouther/compiler/partition/WitnessSearch;"
+                            + "Lsouther/compiler/partition/ValuesTried;)"
+                            + "Lsouther/compiler/partition/Realization;",
+                    "counts the places a point was offered and hands the figure on with the answer"
+                            + " where it offered as many as it may"),
+            Map.entry("souther.compiler.partition.LevelRealizer#someMemberIn("
+                            + "Lsouther/compiler/partition/Criterion$Within;"
+                            + "Ljava/util/List;"
+                            + "Lsouther/compiler/check/Carrier;"
+                            + "Lsouther/compiler/values/ValueSet;"
+                            + "Lsouther/compiler/numeric/Congruences;"
+                            + "Lsouther/compiler/numeric/PlacesApart;"
+                            + "Ljava/util/Set;)"
+                            + "Lsouther/compiler/numeric/Place;",
+                    "puts the figure beside the answer where a run held more members of the class"
+                            + " than were looked at"),
+            Map.entry("souther.compiler.partition.TermRealizations#membersOnTheOrder("
+                            + "Lsouther/compiler/partition/NumericSet;"
+                            + "Lsouther/compiler/inputs/TermOrders;"
+                            + "Lsouther/compiler/numeric/Congruences;"
+                            + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
+                            + "Ljava/util/Set;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Tried;",
+                    "says in what it hands back that a run held more members than it offered, by"
+                            + " the figure it was cut at"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofARemainder("
                             + "Lsouther/compiler/partition/Standing$OfARemainder;"
                             + "Lsouther/compiler/inputs/SearchRegion;"

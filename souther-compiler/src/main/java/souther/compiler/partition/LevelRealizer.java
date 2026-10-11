@@ -5,6 +5,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.AdditiveImage;
+import souther.compiler.numeric.AffinePreimage;
 import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
@@ -17,7 +18,6 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
-import souther.compiler.numeric.Towards;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.values.ValueSet;
 import java.math.BigDecimal;
@@ -345,10 +345,44 @@ public final class LevelRealizer {
                               WitnessSearch looking, ValuesTried tried) {
         Congruences members = one.term() instanceof NumericTerm.ValueOf value
                 ? within.valueClassAt(value) : null;
-        Place at = placeMeeting(one.where(), one.term(), one.of(), runs.get(one.term()),
-                members, looking, tried, Map.of());
-        return at == null ? Realization.Unknown.nothingComposedOne()
-                : found(Map.of(RealizationTarget.of(one.term()), at), within, tried);
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
+        // A place the rules refuse once it stands with the rest of the row is not offered again
+        // here: the places a point is offered are the ones before it that were not refused, and a
+        // search that handed back the one it was just refused would be read as having found nothing
+        // else to offer.
+        List<Place> refused = new ArrayList<>();
+        for (int offered = 0; offered < PLACES_A_POSITION_IS_OFFERED; offered++) {
+            Place at = placeMeeting(one.where(), one.term(), one.of(), runs.get(one.term()),
+                    members, looking, tried, Map.of(), refused, stoppedBy);
+            if (at == null) {
+                return stoppedShort(stoppedBy);
+            }
+            Realization made =
+                    found(Map.of(RealizationTarget.of(one.term()), at), within, tried);
+            if (made instanceof Realization.Found) {
+                return made;
+            }
+            refused.add(at);
+        }
+        stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
+        return stoppedShort(stoppedBy);
+    }
+
+    /** How many places one point of a position is offered before a search says it stopped. */
+    private static final int PLACES_A_POSITION_IS_OFFERED =
+            CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED.maximum();
+
+    /**
+     * Nothing composed, and the figures the search ran out of where it ran out of any.
+     *
+     * <p>The word is the walk's and the figures are beside it ({@link Realization.Unknown}): a search
+     * that met none composed nothing, and one that met one left places untried.
+     */
+    private static Realization stoppedShort(Set<CompositionBudget> stoppedBy) {
+        return stoppedBy.isEmpty() ? Realization.Unknown.nothingComposedOne()
+                : Realization.Unknown.leftOpen(
+                        Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, stoppedBy,
+                        Set.of(), Set.of());
     }
 
     /**
@@ -434,8 +468,12 @@ public final class LevelRealizer {
                 }
                 Criterion here = related.where();
                 Place at = here == null ? null
-                        : placeMeeting(here, reading.settles(), two.of(), settled, null, looking,
-                                tried, Map.of(RealizationTarget.of(reading.anchors()), common));
+                        : placeMeeting(here, reading.settles(), two.of(), settled,
+                                reading.settles() instanceof NumericTerm.ValueOf value
+                                        ? within.valueClassAt(value) : null,
+                                looking, tried,
+                                Map.of(RealizationTarget.of(reading.anchors()), common),
+                                List.of(), stoppedBy);
                 if (at == null) {
                     continue;
                 }
@@ -796,7 +834,8 @@ public final class LevelRealizer {
             if (wanted == null) {
                 continue;
             }
-            Members members = Members.of(wanted, reach);
+            ClassMembers members = ClassMembers.within(wanted, reach, null,
+                    VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT);
             if (members.stoppedShort()) {
                 stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
                 bounded = false;
@@ -832,69 +871,6 @@ public final class LevelRealizer {
             step = step.gcd(((ExactAnswer.Held<BigInteger>) each.floor()).value());
         }
         return step.signum() == 0 ? BigInteger.ONE : step;
-    }
-
-    /**
-     * The members of a class a run holds that are worth walking, nearest the end the walk starts
-     * from.
-     *
-     * <p>From the least end the run has, and from the greatest where it has none, and outward from
-     * nought where it has neither. How many are offered is the figure of a progression nothing
-     * bounds, and a run holding more says so rather than being read as one that held no more.
-     *
-     * @param values the members to walk, in order
-     * @param stoppedShort whether the run held more than were offered
-     */
-    private record Members(List<BigInteger> values, boolean stoppedShort) {
-
-        private static final int HOW_MANY = VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT;
-
-        static Members of(Congruences wanted, NumericDomain.Bounds run) {
-            BigInteger low = run.min() == null ? null : endAt(run.min(), true);
-            BigInteger high = run.max() == null ? null : endAt(run.max(), false);
-            List<BigInteger> out = new ArrayList<>();
-            if (low == null && high == null) {
-                BigInteger up = wanted.leastAtOrAbove(BigInteger.ZERO);
-                BigInteger down = wanted.greatestAtOrBelow(BigInteger.ONE.negate());
-                for (int i = 0; out.size() < HOW_MANY; i++) {
-                    out.add(up.add(wanted.modulus().multiply(BigInteger.valueOf(i))));
-                    if (out.size() < HOW_MANY) {
-                        out.add(down.subtract(wanted.modulus().multiply(BigInteger.valueOf(i))));
-                    }
-                }
-                return new Members(List.copyOf(out), true);
-            }
-            if (low != null) {
-                BigInteger at = wanted.leastAtOrAbove(low);
-                while ((high == null || at.compareTo(high) <= 0) && out.size() < HOW_MANY) {
-                    out.add(at);
-                    at = at.add(wanted.modulus());
-                }
-                return new Members(List.copyOf(out), high == null || at.compareTo(high) <= 0);
-            }
-            BigInteger at = wanted.greatestAtOrBelow(high);
-            while (out.size() < HOW_MANY) {
-                out.add(at);
-                at = at.subtract(wanted.modulus());
-            }
-            return new Members(List.copyOf(out), true);
-        }
-
-        /** The whole number an end admits, which is the end itself where it is inclusive and one
-         *  inside it where it is not. */
-        private static BigInteger endAt(Endpoint end, boolean lower) {
-            if (!(end.at() instanceof Count count)) {
-                return null;
-            }
-            ExactAnswer<BigInteger> whole = lower ? count.exactly().ceiling()
-                    : count.exactly().floor();
-            if (!(whole instanceof ExactAnswer.Held<BigInteger> held)) {
-                return null;
-            }
-            boolean on = count.exactly().isWhole() && !end.inclusive();
-            return on ? held.value().add(lower ? BigInteger.ONE : BigInteger.ONE.negate())
-                    : held.value();
-        }
     }
 
     /** The region a walk of one level is held to, and where each position runs in it. */
@@ -1178,8 +1154,14 @@ public final class LevelRealizer {
             // rather than beside it — a residue off what the rest can reach is one no assignment of
             // them arrives at, and a position offering one candidate has nothing for a test applied
             // afterwards to leave.
+            AffinePreimage reaches = fromHere[i + 1].affinePreimage(coef, owed, carriers[i].spacing());
+            // And the numbers the position's own rules hold it to: a value of the class that the
+            // rest cannot complete, and a value the rest can complete that is not of it, are one
+            // refusal, and a walk that kept them apart tries what neither leaves.
+            Congruences classOf = terms.get(i).getKey().term() instanceof NumericTerm.ValueOf value
+                    ? here.valueClassAt(value) : null;
             CandidateDomain may = CandidateDomain.of(
-                    fromHere[i + 1].affinePreimage(coef, owed, carriers[i].spacing()), left);
+                    classOf == null ? reaches : reaches.heldTo(classOf), left);
             return switch (may) {
                 case CandidateDomain.None _ -> Reached.EXHAUSTED;
                 case CandidateDomain.One only -> trying(i, only.at().at(), owed, coef, here);
@@ -1757,8 +1739,14 @@ public final class LevelRealizer {
     private static Place placeMeeting(Criterion where, NumericTerm.FromOnePosition term,
                                       Carrier carrier, NumericDomain.Bounds bounds,
                                       Congruences members, WitnessSearch looking,
-                                      ValuesTried tried, Map<RealizationTarget, Place> given) {
+                                      ValuesTried tried, Map<RealizationTarget, Place> given,
+                                      List<Place> refused, Set<CompositionBudget> stoppedBy) {
         PlacesApart apart = tried.apartFor(RealizationTarget.of(term), given);
+        if (!refused.isEmpty()) {
+            List<Place> held = new ArrayList<>(apart.places());
+            held.addAll(refused);
+            apart = PlacesApart.of(held);
+        }
         Place offered = switch (where) {
             // The level itself, and the set is not asked. A point on a line stands where the rule
             // wrote it; held to what the declarations admit, a line drawn at a value they refuse
@@ -1779,7 +1767,7 @@ public final class LevelRealizer {
                 ValueSet admits = looking.toComposeFrom(term).toCrossTheRunWith();
                 yield admits == null ? null
                         : someValueIn(within, carrier, bounds, admits, members, apart,
-                                looking::meter);
+                                looking::meter, stoppedBy);
             }
         };
         if (offered == null) {
@@ -1817,19 +1805,23 @@ public final class LevelRealizer {
     private static Place someValueIn(Criterion.Within within, Carrier carrier,
                                      NumericDomain.Bounds bounds, ValueSet admits,
                                      Congruences members, PlacesApart apart,
-                                     Supplier<Meter> allowance) {
+                                     Supplier<Meter> allowance, Set<CompositionBudget> stoppedBy) {
         LevelSpace space = LevelSpace.onACarrier(carrier);
         List<LevelInterval> runs = within.runsInside(carrier, bounds.min(), bounds.max());
+        // A value held to a class is a value of the class, so the places are drawn from it. What
+        // walks the run does not know the class, and a place it names that is outside it is one the
+        // rules refuse: the second walk below is no way to a member the first did not reach.
+        if (members != null) {
+            return someMemberIn(within, runs, carrier, admits, members, apart, stoppedBy);
+        }
         for (LevelInterval look : runs) {
             // And not one this point was already tried at. The run's own representative is the
             // cheap answer and stays the first one offered; offered again after the row built from
             // it did not stand, it would be the whole of what a second asking ever reaches, and the
             // search below it would never be asked.
-            if (space.witness(look, within.away()).level() instanceof Level.OnACarrier on) {
-                Place near = memberNear(members, on.at(), look, carrier, within.away());
-                if (near != null && carrier.admitted(admits, near) && !apart.has(near)) {
-                    return near;
-                }
+            if (space.witness(look, within.away()).level() instanceof Level.OnACarrier on
+                    && carrier.admitted(admits, on.at()) && !apart.has(on.at())) {
+                return on.at();
             }
         }
         for (LevelInterval look : runs) {
@@ -1844,29 +1836,38 @@ public final class LevelRealizer {
     }
 
     /**
-     * The place of {@code members} nearest {@code witness} that {@code look} holds, the side the
-     * item is named for first — or {@code witness} itself where the value has no class, and null
-     * where the run holds no member of it.
+     * The first member of a class that a run of the item holds and the position's values take in,
+     * which is not one already tried or refused — or null where none is.
      *
-     * <p>A run's end is a number of the class only by luck: the class is a fact about the numbers
-     * between the ends that the ends do not say.
+     * <p>Every run in turn, each from the end the item is named for, so the row is the one beside
+     * the boundary. A run is a number of the class at its ends only by luck, which is why the ends
+     * are not what is offered: what a place is held apart for is asked of each member in turn, and a
+     * member refused leaves the next one to try rather than the search having nothing to go on.
+     *
+     * <p>Where the runs held more members than were looked at, that is said beside the answer: a
+     * search that left members untried found no proof that there is none.
      */
-    private static Place memberNear(Congruences members, Place witness, LevelInterval look,
-                                    Carrier carrier, Towards away) {
-        if (members == null) {
-            return witness;
-        }
-        if (!(witness instanceof Count count) || !count.exactly().isWhole()
-                || !(count.exactly().floor() instanceof ExactAnswer.Held<BigInteger> whole)) {
-            return witness;
-        }
-        BigInteger up = members.leastAtOrAbove(whole.value());
-        BigInteger down = members.greatestAtOrBelow(whole.value());
-        for (BigInteger each : away == Towards.ABOVE ? List.of(up, down) : List.of(down, up)) {
-            Place place = new Count(new BigDecimal(each));
-            if (look.contains(new Level.OnACarrier(carrier, place))) {
-                return place;
+    private static Place someMemberIn(Criterion.Within within, List<LevelInterval> runs,
+                                      Carrier carrier, ValueSet admits, Congruences members,
+                                      PlacesApart apart, Set<CompositionBudget> stoppedBy) {
+        boolean leftSome = false;
+        for (LevelInterval look : runs) {
+            OrderedInterval run = runOf(look, carrier);
+            if (run == null) {
+                continue;
             }
+            ClassMembers inside = ClassMembers.within(members,
+                    new NumericDomain.Bounds(run.low(), run.high()), within.away(),
+                    VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT);
+            for (Place each : inside.notApart(apart)) {
+                if (carrier.admitted(admits, each)) {
+                    return each;
+                }
+            }
+            leftSome |= inside.stoppedShort();
+        }
+        if (leftSome) {
+            stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
         }
         return null;
     }
@@ -1879,7 +1880,7 @@ public final class LevelRealizer {
      * a run is in the written form's units, and a set of the position's values has nothing to say
      * about a number in them — put to one, the set would be answering about a value nobody holds.
      */
-    private static OrderedInterval runOf(LevelInterval look, Carrier carrier) {
+    static OrderedInterval runOf(LevelInterval look, Carrier carrier) {
         Endpoint low = endOf(look.low(), carrier);
         Endpoint high = endOf(look.high(), carrier);
         boolean lost = (look.low() != null && low == null)

@@ -2046,7 +2046,7 @@ public final class FieldDomains {
                     || !call.parts().getFirst().equals(place.identity())) {
                 continue;
             }
-            Long written = call.parts().get(divides.getAsInt()).writtenNumber();
+            Long written = call.parts().get(divides.getAsInt()).foldedWholeNumber();
             if (written == null || written == 0
                     || !(constraints.numbers().projectionOf(atom)
                             instanceof NumericDomain.Projection.Within(

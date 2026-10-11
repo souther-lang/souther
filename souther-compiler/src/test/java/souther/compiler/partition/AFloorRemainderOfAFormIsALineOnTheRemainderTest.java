@@ -149,6 +149,26 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
         return written.replaceAll(".*(\\d{4}-\\d{2}-\\d{2}).*", "$1");
     }
 
+    /**
+     * A row is a pair whose difference the run computes, and a difference the run cannot compute
+     * is no witness whatever it comes to as mathematics.
+     *
+     * <p>Every pair this guard lets through has a difference above the greatest {@code Int}, so the
+     * subtraction aborts before the remainder is asked and no row reaches the line.
+     */
+    @Test
+    void aDifferenceTheRunCannotComputeIsNoWitness() {
+        String condition = "a >= 9223372036854775000 && d <= -1000"
+                + " && Int.floorMod(a - d, 7) == 3";
+        for (Row row : certifiedRows("a: Int, d: Int", condition)) {
+            if (row.labels().stream().anyMatch(label -> label.contains("floorMod(a - d, 7)"))) {
+                long a = Long.parseLong(row.inputs().get(0));
+                long d = Long.parseLong(row.inputs().get(1));
+                Math.subtractExact(a, d);
+            }
+        }
+    }
+
     /** A remainder the divisor cannot leave settles the comparison and draws no line. */
     @Test
     void aRemainderPastTheDivisorDrawsNoLine() {

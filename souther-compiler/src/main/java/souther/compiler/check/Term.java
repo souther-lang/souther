@@ -6,6 +6,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -674,13 +675,45 @@ final class Term {
         return shape == Shape.CALLED ? (ValueName) of : null;
     }
 
-    /** The whole number this term writes, below nought where it is a number negated, or null where
-     *  it writes none. */
-    Long writtenNumber() {
-        if (shape == Shape.NEG && parts.getFirst().shape == Shape.INT) {
-            return -(Long) parts.getFirst().of;
-        }
-        return shape == Shape.INT ? (Long) of : null;
+    /**
+     * The whole number this term comes to where it is written whole numbers added, subtracted,
+     * multiplied or negated — or null where it is anything else, or the number is out of what an
+     * {@code Int} holds.
+     *
+     * <p>What it comes to and not how it is spelled: {@code 1000} and {@code 100 * 10} are one
+     * number, and a reader asking which divisor a remainder is by is asking the first. Read off the
+     * term and never built into it, since a term that was made one thing when it was written and
+     * another when it was read would be two derivations of one value.
+     */
+    Long foldedWholeNumber() {
+        BigInteger folded = foldedWhole();
+        return folded == null || folded.bitLength() >= Long.SIZE ? null : folded.longValueExact();
+    }
+
+    /** The same, in a number wide enough to hold every step, which is out of range only at the
+     *  end. */
+    private BigInteger foldedWhole() {
+        return switch (shape) {
+            case INT -> BigInteger.valueOf((Long) of);
+            case NEG -> {
+                BigInteger operand = parts.getFirst().foldedWhole();
+                yield operand == null ? null : operand.negate();
+            }
+            case OP -> {
+                BigInteger left = parts.get(0).foldedWhole();
+                BigInteger right = parts.get(1).foldedWhole();
+                if (left == null || right == null) {
+                    yield null;
+                }
+                yield switch ((BinOp) of) {
+                    case ADD -> left.add(right);
+                    case SUB -> left.subtract(right);
+                    case MUL -> left.multiply(right);
+                    default -> null;
+                };
+            }
+            default -> null;
+        };
     }
 
     @Override
