@@ -21,6 +21,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -49,10 +50,29 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
 
             behavior stocked : (s: Shelf) -> Bool
             let stocked (s) = List.length(List.concat(s.bins)) >= 3
+
+            data Item = { code: Int, bins: List<Int> }
+
+            behavior variedItems : (items: List<Item>) -> Bool
+            let variedItems (items) = List.length(List.distinct(List.map(.code, items))) >= 2
+
+            behavior stockedItems : (items: List<Item>) -> Bool
+            let stockedItems (items) =
+                List.length(List.concat(List.map(.bins, items))) >= 3
+
+            behavior variedOfSome : (items: List<Item>) -> Bool
+            let variedOfSome (items) = List.length(List.distinct(
+                List.map(.code, List.filter(i -> i.code > 0, items)))) >= 2
+
+            behavior variedWorkedOut : (items: List<Item>) -> Bool
+            let variedWorkedOut (items) =
+                List.length(List.distinct(List.map(i -> i.code + 1, items))) >= 2
+
             """;
 
     private static final TermPath CODES = TermPath.of("s").then("codes");
     private static final TermPath BINS = TermPath.of("s").then("bins");
+    private static final TermPath ITEMS = TermPath.of("items");
 
     @Test
     void howManyADistinctListHoldsIsHowManyDifferentValuesTheListHolds() {
@@ -72,6 +92,49 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
         NumericTerm.TakenOf size = assertInstanceOf(NumericTerm.TakenOf.class,
                 assertInstanceOf(DecisionAtom.OfTheInput.class, each.getKey()).term());
         assertEquals(BINS.element(), size.subjectPath(), () -> "the size of each list: " + read);
+    }
+
+    @Test
+    void howManyDifferentValuesAMappedListHoldsIsHowManyDifferentValuesOfWhatIsTakenOfEach() {
+        assertEquals(new Quantity.HowManyDifferent(ITEMS, ITEMS.element().then("code")),
+                theOnlyNumber("variedItems"));
+    }
+
+    @Test
+    void whatTheListsOfAMappedListAddUpToIsWhatTheirSizesInTheSourceAddUpTo() {
+        Quantity.SumOver read = assertInstanceOf(Quantity.SumOver.class,
+                theOnlyNumber("stockedItems"));
+        assertEquals(ITEMS, read.container());
+        NumericTerm.TakenOf size = assertInstanceOf(NumericTerm.TakenOf.class,
+                assertInstanceOf(DecisionAtom.OfTheInput.class,
+                        read.ofTheElement().coefs().keySet().iterator().next()).term());
+        assertEquals(ITEMS.element().then("bins"), size.subjectPath(),
+                () -> "the size of each list: " + read);
+    }
+
+    /**
+     * Which of the elements a filter kept is a number of those, which no quantity of the
+     * container says; and what a closure worked out of an element is no place of the input.
+     */
+    @Test
+    void aNumberOfSomeOfTheElementsOrOfAValueWorkedOutOfThemIsNoNumberOfTheContainer() {
+        assertEquals(List.of(), numbersAsked("variedOfSome"));
+        assertEquals(List.of(), numbersAsked("variedWorkedOut"));
+    }
+
+    /** Every number the conditions {@code behavior} writes are compared over, as the run is asked
+     *  them. */
+    private static List<Quantity> numbersAsked(String behavior) {
+        List<Quantity> out = new ArrayList<>();
+        for (OnTheWay each : statedAll(behavior)) {
+            if (each instanceof OnTheWay.TakenIn taken
+                    && taken.demand() instanceof RowDemand.ForTheRun run
+                    && run.statement() instanceof Proposition.Compared compared
+                    && compared.relation() instanceof Relation.Affine affine) {
+                out.addAll(affine.form().coefs().keySet());
+            }
+        }
+        return out;
     }
 
     /** The one number besides constants the condition {@code behavior} writes is compared over,
