@@ -471,6 +471,62 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
                 () -> "and not one nothing composes for: " + said);
     }
 
+    /**
+     * A count of statements about the answer held against a number of the input is two numbers,
+     * and the reading of what the comparison means has nothing to hold to a figure; put at the
+     * value the way leaves the input's number at, it is a count alone against a constant, which is
+     * as many choices of which statements hold as there are ways of picking that many. Past the
+     * readings of one condition the statement is said to be one a figure stopped the composing
+     * of — and not one nothing composes for, or one about something other than the answer.
+     */
+    @Test
+    void aCountLeftAloneByANumberPutAtAValueIsHeldToTheFigure() {
+        List<String> written = new ArrayList<>();
+        for (int each = 0; each < 18; each++) {
+            written.add("v.n + " + each);
+        }
+        Compilation compilation = Compilation.ofSource("""
+                module p
+
+                data Cat = A | B
+                data Reply = { n: Int }
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                behavior r : (c: Cat) -> Reply
+
+                behavior f : (c: Cat, on: Int) -> Answer
+                    depends on r
+                let f (c, on, r) = {
+                    let v = r(c)
+                    if on == 9 && List.length(List.filter(x -> x > 0, [WRITTEN])) == on
+                    then Yes
+                    else No
+                }
+                """.replace("WRITTEN", String.join(", ", written)), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+
+        List<DemandGap.WhyNotComposed> said = new ArrayList<>();
+        for (RuleSettlement each : compilation.db()
+                .ask(new Adequacy.DecisionSearch(module, "f")).value().values()) {
+            for (DemandGap gap : each.account().onAnAnswer()) {
+                if (gap instanceof DemandGap.Uncomposed(AnswerDemand.AStatement _, var why)) {
+                    said.add(why);
+                }
+            }
+        }
+
+        assertTrue(said.stream().anyMatch(why ->
+                        why instanceof DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded(
+                                var figures)
+                                && figures.written().contains(
+                                        CompositionBudget.READINGS_OF_ONE_CONDITION)),
+                () -> "the statement is said to be one the figure stopped: " + said);
+    }
+
     /** What the dependency answers is a list of elements of two numbers. */
     private static final String PAIRS = """
             module p

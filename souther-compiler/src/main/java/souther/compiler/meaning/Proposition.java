@@ -95,7 +95,7 @@ public sealed interface Proposition {
             case Quantity.CodePointsOfAPiece _ -> false;
             case Quantity.HowManyMeet(DecisionSubject counted, Proposition each) ->
                     isAnElementOf(counted, container) || each.mayTurnOnAnElementOf(container);
-            case Quantity.HowManyHold(List<Proposition> each, long _) -> each.stream()
+            case Quantity.HowManyHold(List<Proposition> each) -> each.stream()
                     .anyMatch(one -> one.mayTurnOnAnElementOf(container));
             case Quantity.HowManyDifferent(DecisionSubject counted, DecisionSubject _) ->
                     isAnElementOf(counted, container);
@@ -694,26 +694,35 @@ public sealed interface Proposition {
 
     /**
      * {@code relation} held or failing as {@code holds}, written as what it comes to where it holds
-     * a count of elements against nought ({@link #ofACount}).
+     * a count of elements against nought ({@link #ofACount}), or a count of statements about values
+     * written out as which of them hold ({@link WhichOfThemHold}).
+     *
+     * <p>Every choice of a count of statements is written out, so this is for a relation whose
+     * choices the reading that formed it already held to how many it makes ({@link #choicesIn});
+     * one formed anywhere else is compared with that figure in hand
+     * ({@link #compared(Relation, boolean, long)}).
      */
     static Proposition compared(Relation relation, boolean holds) {
-        Proposition counted = ofACount(relation);
-        if (counted == null) {
-            counted = whichOfThemHold(relation);
-        }
-        Proposition held = counted != null ? counted : new Compared(relation, true);
-        return holds ? held : held.denied();
+        return compared(relation, holds, Long.MAX_VALUE);
     }
 
     /**
-     * What a relation over how many of some statements hold says: some choice of which of them hold
-     * that puts the number where the relation does ({@link WhichOfThemHold}) — or null where the
-     * relation is over anything else, a number of them the arithmetic could not hold, or more
-     * choices than the reading that counted them makes ({@link Quantity.HowManyHold#mostChoices}).
+     * The same, or null where {@code relation} is a count of statements written out as more than
+     * {@code most} choices of which of them hold.
      */
-    private static Proposition whichOfThemHold(Relation relation) {
-        WhichOfThemHold choosing = WhichOfThemHold.of(relation);
-        return choosing == null ? null : choosing.writtenWithinWhatIsMade();
+    static Proposition compared(Relation relation, boolean holds, long most) {
+        Proposition counted = ofACount(relation);
+        if (counted == null) {
+            WhichOfThemHold choosing = WhichOfThemHold.of(relation);
+            if (choosing != null) {
+                counted = choosing.written(most);
+                if (counted == null) {
+                    return null;
+                }
+            }
+        }
+        Proposition held = counted != null ? counted : new Compared(relation, true);
+        return holds ? held : held.denied();
     }
 
     /**

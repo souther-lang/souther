@@ -3097,8 +3097,7 @@ final class Pullback {
                         // the number it is compared with, and is held to the readings of one
                         // condition where it is ({@link #aRelation}).
                         yield new Sized.AsAForm(new LinearForm<>(settled.constant(),
-                                Map.of(new Quantity.HowManyHold(unsettled, READINGS.maximum()),
-                                        ExactRatio.ONE)));
+                                Map.of(new Quantity.HowManyHold(unsettled), ExactRatio.ONE)));
                     }
                 };
             }

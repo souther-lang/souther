@@ -433,12 +433,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Pullback$Sized;",
                     "counts the values a sum is read of one by one, and past the figure carries"
                             + " the number out as one nothing read, naming it"),
-            Map.entry("souther.compiler.partition.Pullback$ALawRead#count("
-                            + "Lsouther/compiler/semantics/LawNumber$HowManyMeet;)"
-                            + "Lsouther/compiler/partition/Pullback$Sized;",
-                    "hands the figure to the count of which values written out meet a"
-                            + " statement, as how many choices of them a comparison of it is"
-                            + " written out as"),
             Map.entry("souther.compiler.partition.Pullback#aRelation("
                             + "Lsouther/compiler/meaning/Derivation$ComparisonReading;"
                             + "Lsouther/compiler/numeric/LinearForm;"

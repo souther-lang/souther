@@ -1,6 +1,7 @@
 package souther.compiler.meaning;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
@@ -12,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * How many of some statements hold, held against a number, is which of them hold: a choice for each
@@ -82,25 +84,47 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
      */
     @Test
     void exactlyOneOfManyIsOneChoiceForEach() {
-        List<Proposition> many = new ArrayList<>();
-        for (int i = 0; i < 18; i++) {
-            many.add(new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("t" + i)), true));
-        }
-
-        assertEquals(18, Proposition.choicesIn(relation(many, Rel.EQ, 1), 256));
-        assertEquals(257, Proposition.choicesIn(relation(many, Rel.EQ, 9), 256));
+        assertEquals(18, Proposition.choicesIn(relation(distinct(18), Rel.EQ, 1), 256));
+        assertEquals(257, Proposition.choicesIn(relation(distinct(18), Rel.EQ, 9), 256));
     }
 
-    /** More choices than the reading that counted them makes is kept as the relation. */
+    /** More choices than a figure handed in are not written out, and nothing is said in their
+     *  place. */
     @Test
     void moreChoicesThanAreMadeAreNotWrittenOut() {
-        List<Proposition> many = new ArrayList<>();
-        for (int i = 0; i < 18; i++) {
-            many.add(new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("t" + i)), true));
-        }
-        Relation half = relation(many, Rel.EQ, 9);
+        Relation half = relation(distinct(18), Rel.EQ, 9);
 
-        assertEquals(new Proposition.Compared(half, true), Proposition.compared(half, true));
+        assertNull(Proposition.compared(half, true, 256));
+        assertEquals(Proposition.compared(relation(distinct(18), Rel.EQ, 1), true),
+                Proposition.compared(relation(distinct(18), Rel.EQ, 1), true, 256));
+    }
+
+    /**
+     * A count no choice comes to is no choice, found without looking at any: forty statements each
+     * written twice come to an even number however many hold, and every set of fewer than twenty
+     * of them comes short of thirty-nine.
+     */
+    @Test
+    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void aCountNoChoiceComesToIsNoChoiceFoundWithoutLookingAtAny() {
+        List<Proposition> twice = new ArrayList<>();
+        for (Proposition one : distinct(40)) {
+            twice.add(one);
+            twice.add(one);
+        }
+        Relation odd = relation(twice, Rel.EQ, 39);
+
+        assertEquals(0, Proposition.choicesIn(odd, 256));
+        assertEquals(new Proposition.Always(false), Proposition.compared(odd, true, 256));
+    }
+
+    /** {@code count} statements, each about a position of its own. */
+    private static List<Proposition> distinct(int count) {
+        List<Proposition> out = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            out.add(new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("t" + i)), true));
+        }
+        return out;
     }
 
     /** {@code #each - against} standing to nought as {@code rel} says. */
@@ -110,6 +134,6 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
 
     private static Relation relation(List<Proposition> each, Rel rel, long against) {
         return new Relation.Affine(new LinearForm<>(ExactRatio.of(-against),
-                Map.of(new Quantity.HowManyHold(each, 256), ExactRatio.ONE)), rel);
+                Map.of(new Quantity.HowManyHold(each), ExactRatio.ONE)), rel);
     }
 }
