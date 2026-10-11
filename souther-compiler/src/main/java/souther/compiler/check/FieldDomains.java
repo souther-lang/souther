@@ -34,6 +34,7 @@ import java.util.SequencedMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 /**
@@ -249,6 +250,14 @@ public final class FieldDomains {
      * say.
      */
     private final Map<LeftOut, FieldDomains> counterfactuals = new HashMap<>();
+
+    /**
+     * The class of whole numbers each place is held to ({@link #valueClassAt}), kept under the place.
+     *
+     * <p>Asked at every projection of a number of the place, and the answer turns on the rules of
+     * this value alone, so it is worked out once for each place and not once for each question.
+     */
+    private final Map<RuleKey, Optional<Congruences>> classes = new ConcurrentHashMap<>();
 
     private FieldDomains(Map<RuleKey, NumericDomain.Bounds> byName,
                          Map<RuleKey, NumericDomain.Bounds> heldByName,
@@ -2018,6 +2027,11 @@ public final class FieldDomains {
      * range the value runs in say nothing of the numbers between them.
      */
     public Congruences valueClassAt(RuleKey path) {
+        return classes.computeIfAbsent(path, at -> Optional.ofNullable(classOf(at))).orElse(null);
+    }
+
+    /** The class {@link #valueClassAt} says, worked out: a walk of every subject the rules hold. */
+    private Congruences classOf(RuleKey path) {
         FactSubject place = atomAt.get(path);
         if (place == null) {
             return null;

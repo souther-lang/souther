@@ -808,6 +808,13 @@ public final class LevelRealizer {
                     return walk.found();
                 }
                 bounded &= walk.exhausted();
+                // A member whose walk spent every step it is given says the next one is as far from
+                // an answer: members of one class are walked at the same cost, so one that ran out
+                // would take a second whole allowance for nothing.
+                if (!walk.exhausted()
+                        && stoppedBy.contains(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)) {
+                    break;
+                }
             }
         }
         if (bounded && over.where() instanceof Criterion.AtTheLevel) {
