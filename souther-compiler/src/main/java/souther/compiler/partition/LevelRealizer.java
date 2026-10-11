@@ -5,6 +5,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.AdditiveImage;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.UnheldNumber;
@@ -16,10 +17,13 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.Towards;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.values.ValueSet;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -139,6 +143,7 @@ public final class LevelRealizer {
             case Standing.OfOneCoordinate one -> ofOne(one, within, runs, looking, tried);
             case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, runs, looking, tried);
             case Standing.OfAForm over -> ofAForm(over, within, runs, tried);
+            case Standing.OfARemainder remainder -> ofARemainder(remainder, within, runs, tried);
             case Standing.OfACount count -> ofACount(count, within, looking, tried);
             case Standing.OfACountAndAForm both ->
                     ofACountAndAForm(both, within, runs, looking, tried);
@@ -317,6 +322,8 @@ public final class LevelRealizer {
             case Standing.OfOneCoordinate one -> List.of(one.term());
             case Standing.OfTwoOnOneCarrier two -> List.of(two.on(), two.against());
             case Standing.OfAForm over -> NumericTerms.inOrder(over.form().coefs().keySet());
+            case Standing.OfARemainder over ->
+                    NumericTerms.inOrder(over.dividend().coefs().keySet());
             case Standing.OfACount count -> count.numbers().stream()
                     .filter(term -> !term.subjectPath().insideAContainer()).toList();
             case Standing.OfACountAndAForm both -> {
@@ -336,8 +343,10 @@ public final class LevelRealizer {
                               SearchRegion within,
                               Map<NumericTerm, NumericDomain.Bounds> runs,
                               WitnessSearch looking, ValuesTried tried) {
+        Congruences members = one.term() instanceof NumericTerm.ValueOf value
+                ? within.valueClassAt(value) : null;
         Place at = placeMeeting(one.where(), one.term(), one.of(), runs.get(one.term()),
-                looking, tried, Map.of());
+                members, looking, tried, Map.of());
         return at == null ? Realization.Unknown.nothingComposedOne()
                 : found(Map.of(RealizationTarget.of(one.term()), at), within, tried);
     }
@@ -425,8 +434,8 @@ public final class LevelRealizer {
                 }
                 Criterion here = related.where();
                 Place at = here == null ? null
-                        : placeMeeting(here, reading.settles(), two.of(), settled, looking, tried,
-                                Map.of(RealizationTarget.of(reading.anchors()), common));
+                        : placeMeeting(here, reading.settles(), two.of(), settled, null, looking,
+                                tried, Map.of(RealizationTarget.of(reading.anchors()), common));
                 if (at == null) {
                     continue;
                 }
@@ -629,16 +638,7 @@ public final class LevelRealizer {
         // were recorded in is a hash order — and which position is solved last decides whether the
         // walk finds an answer inside its budget, so an answer that depended on it would depend on
         // nothing a reader can see.
-        List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms = new java.util.ArrayList<>();
-        for (Map.Entry<NumericTerm, ExactRatio> each : AffineReading.ordered(over.form())) {
-            // Every number is realized by rebuilding one value, so what the walk assigns is a demand
-            // and there is one for each term of the form. Whether anything writes such a value is
-            // not asked here and is not this reader's to answer: a walk that turned a term away for
-            // being of the wrong kind would be deciding what is buildable from the shape of the
-            // number, which is the answer that went stale the first time something learned to build
-            // one.
-            terms.add(Map.entry(RealizationTarget.of(each.getKey()), each.getValue()));
-        }
+        List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms = targetsOf(over.form());
         boolean bounded = true;
         // Every budget any of the level walks ran out of. Collected and not chosen between: two
         // levels stopped by two figures are two things this compiler declined to do, and a reader
@@ -652,28 +652,12 @@ public final class LevelRealizer {
             stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
         }
         for (Level level : offered.levels()) {
-            ExactRatio target = level.asAnExactNumber();
-            AtTheLevel here = atTheLevel(over.form(), target, within, runs);
-            if (here == null) {
-                // The rules leave nothing at this level: a proof about it and about no other.
-                continue;
+            LevelWalk walk = walkLevel(over.form(), terms, over.on(), level.asAnExactNumber(),
+                    within, runs, tried, stoppedBy, unheld);
+            if (walk.found() != null) {
+                return walk.found();
             }
-            Search search = new Search(terms, over.on(), here.region(), here.runs(), tried);
-            Reached reached = search.solve(target);
-            stoppedBy.addAll(search.stoppedBy());
-            unheld.addAll(search.unheld());
-            if (reached == Reached.FOUND) {
-                Realization made = found(search.fixing(), within, tried);
-                if (made instanceof Realization.Found) {
-                    return made;
-                }
-                // An assignment the walk reached that no row came of. Nothing about the level
-                // follows from it: what refused the row is the writing of it and not the rules the
-                // walk held the assignment to.
-                bounded = false;
-            } else {
-                bounded &= reached == Reached.EXHAUSTED;
-            }
+            bounded &= walk.exhausted();
         }
         // A point asks for one level and a side asks for any level past one, so only the first can
         // be settled by looking: a walk of the whole box that reaches the level nothing else does is
@@ -690,6 +674,220 @@ public final class LevelRealizer {
         return Realization.Unknown.leftOpen(
                 Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                 stoppedBy, Set.of(), unheld);
+    }
+
+    /**
+     * What each number of a form is realized as, in the form's own order and not the map's. A form
+     * is a map, so the order its coefficients were recorded in is a hash order — and which position
+     * is solved last decides whether the walk finds an answer inside its budget, so an answer that
+     * depended on it would depend on nothing a reader can see.
+     *
+     * <p>Every number is realized by rebuilding one value, so what the walk assigns is a demand and
+     * there is one for each term of the form. Whether anything writes such a value is not asked here
+     * and is not this reader's to answer: a walk that turned a term away for being of the wrong kind
+     * would be deciding what is buildable from the shape of the number, which is the answer that
+     * went stale the first time something learned to build one.
+     */
+    private static List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> targetsOf(
+            LinearForm<NumericTerm> form) {
+        List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms = new ArrayList<>();
+        for (Map.Entry<NumericTerm, ExactRatio> each : AffineReading.ordered(form)) {
+            terms.add(Map.entry(RealizationTarget.of(each.getKey()), each.getValue()));
+        }
+        return terms;
+    }
+
+    /**
+     * What walking a form at one level came to: a realization where a row was found, and otherwise
+     * whether the walk proved that nothing stands there.
+     *
+     * @param found the realization, or null where the walk found none
+     * @param exhausted whether every assignment the level has was tried and none stands
+     */
+    private record LevelWalk(Realization found, boolean exhausted) {}
+
+    /**
+     * The form held at one level, walked as {@link #ofAForm} walks each level it is offered.
+     *
+     * <p>The budgets the walk ran out of go to {@code stoppedBy} and {@code unheld}, which the
+     * caller reads over every level it walked.
+     */
+    private LevelWalk walkLevel(LinearForm<NumericTerm> form,
+                                List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms,
+                                Map<NumericTerm, Carrier> on, ExactRatio target,
+                                SearchRegion within,
+                                Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried,
+                                Set<CompositionBudget> stoppedBy,
+                                Set<CompositionCapacity> unheld) {
+        AtTheLevel here = atTheLevel(form, target, within, runs);
+        if (here == null) {
+            // The rules leave nothing at this level: a proof about it and about no other.
+            return new LevelWalk(null, true);
+        }
+        Search search = new Search(terms, on, here.region(), here.runs(), tried);
+        Reached reached = search.solve(target);
+        stoppedBy.addAll(search.stoppedBy());
+        unheld.addAll(search.unheld());
+        if (reached == Reached.FOUND) {
+            Realization made = found(search.fixing(), within, tried);
+            if (made instanceof Realization.Found) {
+                return new LevelWalk(made, false);
+            }
+            // An assignment the walk reached that no row came of. Nothing about the level follows
+            // from it: what refused the row is the writing of it and not the rules the walk held
+            // the assignment to.
+            return new LevelWalk(null, false);
+        }
+        return new LevelWalk(null, reached == Reached.EXHAUSTED);
+    }
+
+    /**
+     * A form whose remainder by a written number the item asks for, held at the values of the form
+     * that leave it.
+     *
+     * <p>The remainders the criterion offers are walked as the levels of any quantity are, and each
+     * is a class of values of the form: those the divisor leaves the remainder at, among those the
+     * form's own coefficients reach. A class that is empty is proof that the form never leaves the
+     * remainder, whatever the rules say. Where it is not, its members nearest the run the rules
+     * leave the form are walked as levels of the form, and the first a row stands at is the answer.
+     *
+     * <p>A walk of a class is a proof only where it was the whole of the class: a run with an end
+     * nothing bounds has members past the last one tried, and a point is settled by looking only
+     * where every member was.
+     */
+    private Realization ofARemainder(Standing.OfARemainder over, SearchRegion within,
+                                     Map<NumericTerm, NumericDomain.Bounds> runs,
+                                     ValuesTried tried) {
+        LinearForm<NumericTerm> form = new LinearForm<>(ExactRatio.ZERO, over.dividend().coefs());
+        BigInteger moved = ((ExactAnswer.Held<BigInteger>) over.dividend().constant().floor())
+                .value();
+        // What the coefficients reach: every multiple of the step they generate.
+        Congruences reached = new Congruences(BigInteger.ZERO,
+                wholeStepOf(over.dividend().coefs().values()));
+        List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms = targetsOf(form);
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
+        Set<CompositionCapacity> unheld = new HashSet<>();
+        boolean bounded = true;
+        LevelCandidateSource.Offered offered =
+                LevelCandidateSource.forItem(over.where(), over.levels());
+        if (offered.stoppedShort()) {
+            stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
+        }
+        NumericDomain.Bounds reach = NumericDomain.Bounds.OPEN;
+        switch (within.projectionOf(form)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                    reach = held == null ? NumericDomain.Bounds.OPEN : held;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                return new Realization.Impossible();
+            }
+            case null -> { }
+        }
+        for (Level level : offered.levels()) {
+            ExactRatio asked = level.asAnExactNumber();
+            if (asked == null || !asked.isWhole()
+                    || !(asked.floor() instanceof ExactAnswer.Held<BigInteger> remainder)
+                    || remainder.value().signum() < 0
+                    || remainder.value().compareTo(over.divisor()) >= 0) {
+                // A remainder the divisor cannot leave: no value of the form is at it.
+                continue;
+            }
+            Congruences wanted = new Congruences(remainder.value().subtract(moved), over.divisor())
+                    .meet(reached);
+            if (wanted == null) {
+                continue;
+            }
+            Members members = Members.of(wanted, reach);
+            if (members.stoppedShort()) {
+                stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
+                bounded = false;
+            }
+            for (BigInteger at : members.values()) {
+                LevelWalk walk = walkLevel(form, terms, over.on(), ExactRatio.of(at), within, runs,
+                        tried, stoppedBy, unheld);
+                if (walk.found() != null) {
+                    return walk.found();
+                }
+                bounded &= walk.exhausted();
+            }
+        }
+        if (bounded && over.where() instanceof Criterion.AtTheLevel) {
+            return new Realization.Impossible();
+        }
+        return Realization.Unknown.leftOpen(
+                Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
+                stoppedBy, Set.of(), unheld);
+    }
+
+    /** The step a form's whole coefficients generate: the greatest number that divides them all. */
+    private static BigInteger wholeStepOf(Collection<ExactRatio> coefficients) {
+        BigInteger step = BigInteger.ZERO;
+        for (ExactRatio each : coefficients) {
+            step = step.gcd(((ExactAnswer.Held<BigInteger>) each.floor()).value());
+        }
+        return step.signum() == 0 ? BigInteger.ONE : step;
+    }
+
+    /**
+     * The members of a class a run holds that are worth walking, nearest the end the walk starts
+     * from.
+     *
+     * <p>From the least end the run has, and from the greatest where it has none, and outward from
+     * nought where it has neither. How many are offered is the figure of a progression nothing
+     * bounds, and a run holding more says so rather than being read as one that held no more.
+     *
+     * @param values the members to walk, in order
+     * @param stoppedShort whether the run held more than were offered
+     */
+    private record Members(List<BigInteger> values, boolean stoppedShort) {
+
+        private static final int HOW_MANY = VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT;
+
+        static Members of(Congruences wanted, NumericDomain.Bounds run) {
+            BigInteger low = run.min() == null ? null : endAt(run.min(), true);
+            BigInteger high = run.max() == null ? null : endAt(run.max(), false);
+            List<BigInteger> out = new ArrayList<>();
+            if (low == null && high == null) {
+                BigInteger up = wanted.leastAtOrAbove(BigInteger.ZERO);
+                BigInteger down = wanted.greatestAtOrBelow(BigInteger.ONE.negate());
+                for (int i = 0; out.size() < HOW_MANY; i++) {
+                    out.add(up.add(wanted.modulus().multiply(BigInteger.valueOf(i))));
+                    if (out.size() < HOW_MANY) {
+                        out.add(down.subtract(wanted.modulus().multiply(BigInteger.valueOf(i))));
+                    }
+                }
+                return new Members(List.copyOf(out), true);
+            }
+            if (low != null) {
+                BigInteger at = wanted.leastAtOrAbove(low);
+                while ((high == null || at.compareTo(high) <= 0) && out.size() < HOW_MANY) {
+                    out.add(at);
+                    at = at.add(wanted.modulus());
+                }
+                return new Members(List.copyOf(out), high == null || at.compareTo(high) <= 0);
+            }
+            BigInteger at = wanted.greatestAtOrBelow(high);
+            while (out.size() < HOW_MANY) {
+                out.add(at);
+                at = at.subtract(wanted.modulus());
+            }
+            return new Members(List.copyOf(out), true);
+        }
+
+        /** The whole number an end admits, which is the end itself where it is inclusive and one
+         *  inside it where it is not. */
+        private static BigInteger endAt(Endpoint end, boolean lower) {
+            if (!(end.at() instanceof Count count)) {
+                return null;
+            }
+            ExactAnswer<BigInteger> whole = lower ? count.exactly().ceiling()
+                    : count.exactly().floor();
+            if (!(whole instanceof ExactAnswer.Held<BigInteger> held)) {
+                return null;
+            }
+            boolean on = count.exactly().isWhole() && !end.inclusive();
+            return on ? held.value().add(lower ? BigInteger.ONE : BigInteger.ONE.negate())
+                    : held.value();
+        }
     }
 
     /** The region a walk of one level is held to, and where each position runs in it. */
@@ -1551,8 +1749,8 @@ public final class LevelRealizer {
      */
     private static Place placeMeeting(Criterion where, NumericTerm.FromOnePosition term,
                                       Carrier carrier, NumericDomain.Bounds bounds,
-                                      WitnessSearch looking, ValuesTried tried,
-                                      Map<RealizationTarget, Place> given) {
+                                      Congruences members, WitnessSearch looking,
+                                      ValuesTried tried, Map<RealizationTarget, Place> given) {
         PlacesApart apart = tried.apartFor(RealizationTarget.of(term), given);
         Place offered = switch (where) {
             // The level itself, and the set is not asked. A point on a line stands where the rule
@@ -1573,7 +1771,8 @@ public final class LevelRealizer {
             case Criterion.Within within -> {
                 ValueSet admits = looking.toComposeFrom(term).toCrossTheRunWith();
                 yield admits == null ? null
-                        : someValueIn(within, carrier, bounds, admits, apart, looking::meter);
+                        : someValueIn(within, carrier, bounds, admits, members, apart,
+                                looking::meter);
             }
         };
         if (offered == null) {
@@ -1610,7 +1809,8 @@ public final class LevelRealizer {
      */
     private static Place someValueIn(Criterion.Within within, Carrier carrier,
                                      NumericDomain.Bounds bounds, ValueSet admits,
-                                     PlacesApart apart, Supplier<Meter> allowance) {
+                                     Congruences members, PlacesApart apart,
+                                     Supplier<Meter> allowance) {
         LevelSpace space = LevelSpace.onACarrier(carrier);
         List<LevelInterval> runs = within.runsInside(carrier, bounds.min(), bounds.max());
         for (LevelInterval look : runs) {
@@ -1618,9 +1818,11 @@ public final class LevelRealizer {
             // cheap answer and stays the first one offered; offered again after the row built from
             // it did not stand, it would be the whole of what a second asking ever reaches, and the
             // search below it would never be asked.
-            if (space.witness(look, within.away()).level() instanceof Level.OnACarrier on
-                    && carrier.admitted(admits, on.at()) && !apart.has(on.at())) {
-                return on.at();
+            if (space.witness(look, within.away()).level() instanceof Level.OnACarrier on) {
+                Place near = memberNear(members, on.at(), look, carrier, within.away());
+                if (near != null && carrier.admitted(admits, near) && !apart.has(near)) {
+                    return near;
+                }
             }
         }
         for (LevelInterval look : runs) {
@@ -1629,6 +1831,34 @@ public final class LevelRealizer {
                     : carrier.somewhereIn(admits, run, apart, allowance.get());
             if (held != null) {
                 return held;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The place of {@code members} nearest {@code witness} that {@code look} holds, the side the
+     * item is named for first — or {@code witness} itself where the value has no class, and null
+     * where the run holds no member of it.
+     *
+     * <p>A run's end is a number of the class only by luck: the class is a fact about the numbers
+     * between the ends that the ends do not say.
+     */
+    private static Place memberNear(Congruences members, Place witness, LevelInterval look,
+                                    Carrier carrier, Towards away) {
+        if (members == null) {
+            return witness;
+        }
+        if (!(witness instanceof Count count) || !count.exactly().isWhole()
+                || !(count.exactly().floor() instanceof ExactAnswer.Held<BigInteger> whole)) {
+            return witness;
+        }
+        BigInteger up = members.leastAtOrAbove(whole.value());
+        BigInteger down = members.greatestAtOrBelow(whole.value());
+        for (BigInteger each : away == Towards.ABOVE ? List.of(up, down) : List.of(down, up)) {
+            Place place = new Count(new BigDecimal(each));
+            if (look.contains(new Level.OnACarrier(carrier, place))) {
+                return place;
             }
         }
         return null;

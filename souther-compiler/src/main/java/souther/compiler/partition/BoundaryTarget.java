@@ -122,6 +122,9 @@ public record BoundaryTarget(BorderQuantity of, QuantityCut cut) {
         /** An arithmetic form over several positions, at a value of the form. */
         OVER_A_FORM,
         /** How many elements of a container meet a statement, at a number of them. */
-        COUNT_OF_ELEMENTS
+        COUNT_OF_ELEMENTS,
+        /** What a division by a written number leaves of a form of several positions, at one of the
+         *  remainders it can leave. */
+        REMAINDER_OF_A_FORM
     }
 }

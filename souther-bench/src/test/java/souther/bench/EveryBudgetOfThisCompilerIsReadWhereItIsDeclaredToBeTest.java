@@ -233,6 +233,14 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/ValuesTried;)"
                             + "Lsouther/compiler/partition/Realization;",
                     "collects what the level walks ran out of, and the levels it was offered"),
+            Map.entry("souther.compiler.partition.LevelRealizer#ofARemainder("
+                            + "Lsouther/compiler/partition/Standing$OfARemainder;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Ljava/util/Map;"
+                            + "Lsouther/compiler/partition/ValuesTried;)"
+                            + "Lsouther/compiler/partition/Realization;",
+                    "collects what the level walks ran out of, the levels it was offered and the"
+                            + " members of a class it left untried"),
             Map.entry("souther.compiler.partition.LevelRealizer$Search#stepsLeft()Z",
                     "the steps a search may take, marked where there is no room for another"),
             Map.entry("souther.compiler.partition.LevelRealizer$Search#outward("

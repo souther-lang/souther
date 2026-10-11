@@ -295,6 +295,7 @@ final class WhatABodyTellsApart {
                  BlockReason.PredicateTellingNothingApart _ -> true;
             case BlockReason.ComparisonRelatingTwoValues _,
                  BlockReason.ComparisonOverARun _,
+                 BlockReason.ComparisonOnARemainder _,
                  BlockReason.RuleRestrictingToAdmittedValues _,
                  BlockReason.ClassesNotComposed _ -> false;
         };

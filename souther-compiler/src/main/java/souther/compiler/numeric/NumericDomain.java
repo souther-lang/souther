@@ -3,6 +3,7 @@ package souther.compiler.numeric;
 import souther.compiler.collect.AppendOnly;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -878,6 +879,20 @@ public final class NumericDomain<A> {
          */
         public boolean holdsAValue() {
             return Endpoint.someValueLiesBetween(min, max);
+        }
+
+        /**
+         * The one whole number both ends are written at, or null where the range holds more than
+         * one value or an end is no whole number this reads.
+         */
+        public BigInteger holdsOneWholeNumber() {
+            if (min == null || max == null || !min.inclusive() || !max.inclusive()
+                    || !(min.at() instanceof Count low) || !(max.at() instanceof Count high)
+                    || !low.exactly().equals(high.exactly()) || !low.exactly().isWhole()
+                    || !(low.exactly().floor() instanceof ExactAnswer.Held<BigInteger> whole)) {
+                return null;
+            }
+            return whole.value();
         }
 
         /** The values this and {@code other} both hold. Each end is the tighter of the two, which

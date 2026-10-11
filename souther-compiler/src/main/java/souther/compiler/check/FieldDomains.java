@@ -7,6 +7,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.ChoiceToLift;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
@@ -20,6 +21,7 @@ import souther.compiler.values.UnreadReason;
 import souther.compiler.values.ValueSet;
 
 import souther.compiler.numeric.Count;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -27,6 +29,7 @@ import java.util.LinkedHashSet;
 import souther.compiler.types.ValueName;
 
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.SequencedMap;
 import java.util.List;
 import java.util.Map;
@@ -2003,6 +2006,51 @@ public final class FieldDomains {
             // anything either of them met.
             case ProjectionEvidence.Cause.TwoValuesStateRulesAboutIt _ -> "9";
         };
+    }
+
+    /**
+     * The class of whole numbers the rules leave the value at {@code path} in through the
+     * remainders they hold at one number each, or null where they hold none.
+     *
+     * <p>Read off what the rules leave each remainder of the value and not off how a clause spells
+     * it: {@code Int.floorMod(value, 1000) == 0} and a pair of bounds that meet at nought leave the
+     * value in the same class. A remainder left at one number is a congruence, and the ends of the
+     * range the value runs in say nothing of the numbers between them.
+     */
+    public Congruences valueClassAt(RuleKey path) {
+        FactSubject place = atomAt.get(path);
+        if (place == null) {
+            return null;
+        }
+        Congruences together = null;
+        for (FactSubject atom : constraints.numbers().atomsSpokenOf()) {
+            Term call = atom.identity();
+            ValueName operation = call.calledOperation();
+            OptionalInt divides = operation == null ? OptionalInt.empty()
+                    : DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(operation);
+            if (divides.isEmpty() || call.parts().size() <= divides.getAsInt()
+                    || !call.parts().getFirst().equals(place.identity())) {
+                continue;
+            }
+            Long written = call.parts().get(divides.getAsInt()).writtenNumber();
+            if (written == null || written == 0
+                    || !(constraints.numbers().projectionOf(atom)
+                            instanceof NumericDomain.Projection.Within(
+                                    NumericDomain.Bounds bounds))) {
+                continue;
+            }
+            BigInteger residue = bounds.holdsOneWholeNumber();
+            if (residue == null) {
+                continue;
+            }
+            Congruences leaves = new Congruences(residue,
+                    BigInteger.valueOf(written).abs());
+            together = together == null ? leaves : together.meet(leaves);
+            if (together == null) {
+                return null;
+            }
+        }
+        return together;
     }
 
     /**

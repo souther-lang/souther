@@ -403,14 +403,18 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
                 .get("f").notRead());
     }
 
-    /** What is scaled, or made of two places, is no place moved by a number, and a divisor below
-     *  nought answers the other side of nought where the moving was worked out for this one. */
+    /**
+     * What is scaled, or made of two places, is no place moved by a number, and is read as the
+     * remainder of a form instead: a line on the remainder, drawn where the rule writes it
+     * ({@link AFloorRemainderOfAFormIsALineOnTheRemainderTest}). A divisor below nought answers the
+     * other side of nought where the moving was worked out for this one, and is left unread.
+     */
     @Test
-    void whatIsNotAPlaceMovedByANumberIsLeftUnread() {
-        assertEquals(List.of(), bordersOf("x: Int", "Int.floorMod(x * 2, 7) == 0"));
-        assertEquals(List.of(), bordersOf("x: Int, y: Int", "Int.floorMod(x + y, 7) == 0"));
+    void whatIsNotAPlaceMovedByANumberIsTheRemainderOfAForm() {
+        assertEquals(List.of("0"), bordersOf("x: Int", "Int.floorMod(x * 2, 7) == 0"));
+        assertEquals(List.of("0"), bordersOf("x: Int, y: Int", "Int.floorMod(x + y, 7) == 0"));
         assertEquals(List.of(), bordersOf("x: Int", "Int.floorMod(x + 1, 0 - 7) == 0"));
-        assertFalse(reasonsOf("x: Int", "Int.floorMod(x * 2, 7) == 0").isEmpty());
+        assertFalse(reasonsOf("x: Int", "Int.floorMod(x + 1, 0 - 7) == 0").isEmpty());
     }
 
     /**

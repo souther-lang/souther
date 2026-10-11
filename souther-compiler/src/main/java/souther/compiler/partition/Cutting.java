@@ -34,6 +34,7 @@ import souther.compiler.meaning.WhereEachLineDecides;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.reach.ComparisonArrival;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -397,6 +398,52 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return drawn == null ? null : cutsOrRefused(drawn);
     }
 
+    /** {@code first} where it drew a line, and what {@code otherwise} draws where it did not. */
+    private static Read firstDrawn(Read first, Supplier<Read> otherwise) {
+        return first != null ? first : otherwise.get();
+    }
+
+    /**
+     * The line a relation over what a division leaves of a form of the input's numbers draws — or
+     * null where the relation is no such thing: the remainder alone against a number, over numbers
+     * each of which is counted.
+     *
+     * <p>A line on the remainder, which runs from nought to one below the divisor, and not on the
+     * form: the values the form takes at the remainder come round every divisor, so what a row is
+     * at is which remainder its values leave.
+     */
+    private static Read onARemainder(String behavior, Relation.Affine affine, boolean holds,
+                                     InputReading read) {
+        if (affine.form().coefs().size() != 1
+                || !(affine.form().coefs().entrySet().iterator().next().getKey()
+                        instanceof Quantity.RemainderOfADividend remainder)) {
+            return null;
+        }
+        ExactRatio weight = affine.form().coefs().get(remainder);
+        if (!(affine.form().constant().negated().dividedBy(weight)
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level))
+                || !(remainder.dividend().constant().floor()
+                        instanceof ExactAnswer.Held<BigInteger> shift)) {
+            return null;
+        }
+        Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
+        for (NumericTerm term : remainder.dividend().coefs().keySet()) {
+            TermOrders orders = read.quantities().ordersOf(term);
+            if (orders == null || orders.answered() == null || !orders.answered().counts()) {
+                return null;
+            }
+            on.put(term, orders);
+        }
+        ComparisonClaim claim = ComparisonClaim.stating(
+                holds ? affine.proposition() : affine.proposition().denied());
+        BorderQuantity.RemainderOfAForm of = new BorderQuantity.RemainderOfAForm(behavior,
+                new BorderQuantity.OverAForm(behavior,
+                        new LinearForm<>(ExactRatio.ZERO, remainder.dividend().coefs()), on),
+                shift.value(), remainder.divisor());
+        Cutting drawn = made(of, new Level.OfTheQuantity(level), claim, read.quantities());
+        return drawn == null ? null : cutsOrRefused(drawn);
+    }
+
     /**
      * The line a relation over how many elements of a container meet something and numbers of the
      * input draws — or null where the relation is no such thing: one count, and nothing but numbers
@@ -470,6 +517,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Read counted = overTheInput == null && stated.proposition() instanceof Proposition.Compared(
                 Relation.Affine affine, boolean holds, String _)
                 ? onACount(behavior, affine, holds, read) : null;
+        // And what a division leaves of a form of them, which is a line on the remainder.
+        Read remainder = overTheInput == null && counted == null
+                && stated.proposition() instanceof Proposition.Compared(
+                        Relation.Affine affine, boolean holds, String _)
+                ? onARemainder(behavior, affine, holds, read) : null;
         return switch (stated.proposition()) {
             case Proposition.Always _ -> new Read.CutsNothing(
                     settledAt(stated, comparison, read, reads, answering));
@@ -479,6 +531,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             holds ? affine.proposition() : affine.proposition().denied(),
                             comparison.left(), reads, read.rules()), read.quantities());
             case Proposition.Compared _ when counted != null -> counted;
+            case Proposition.Compared _ when remainder != null -> remainder;
             case Proposition.Compared(Relation.Ordered(
                     DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel proposition),
                     boolean holds, String _) when term.atOnePosition() != null ->
@@ -851,7 +904,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 LinearForm<NumericTerm> over = WhatTheRulesLeave.ofTheInput(affine.form());
                 // A relation over no form of the input's numbers may be one over how many elements
                 // meet something, which is a line too.
-                yield over == null ? onACount(behavior, affine, true, read)
+                yield over == null ? firstDrawn(onACount(behavior, affine, true, read),
+                        () -> onARemainder(behavior, affine, true, read))
                         : realized(behavior, AffineReading.stating(over, affine.proposition(),
                                 written, reads, read.rules()), read.quantities());
             }

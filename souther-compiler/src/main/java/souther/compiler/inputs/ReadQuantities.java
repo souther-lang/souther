@@ -1741,6 +1741,15 @@ final class ReadQuantities implements Quantities {
         // The class every fixed remainder leaves the value in together: narrowing by each in turn
         // would name an end of the run that is of one class and not of the other.
         Congruences together = null;
+        Congruences declared = classDeclaredAt(here);
+        if (declared != null) {
+            // The declared class is of the value, so a remainder by `own` is held to the class of it
+            // the two divisors share.
+            BigInteger shared = own == null ? declared.modulus() : own.gcd(declared.modulus());
+            if (shared.compareTo(BigInteger.ONE) > 0) {
+                together = new Congruences(declared.residue(), shared);
+            }
+        }
         for (Map.Entry<NumericTerm.TakenOf, BigInteger> each : remaindersPinned().entrySet()) {
             NumericTerm.TakenOf other = each.getKey();
             if (other.equals(term) || !other.position().equals(here.position())) {
@@ -1800,6 +1809,23 @@ final class ReadQuantities implements Quantities {
             }
         }
         return pinned;
+    }
+
+    /**
+     * The class the declarations of the value at {@code here} hold it to, from the remainders they
+     * leave at one number each — or null where they hold none.
+     *
+     * <p>Read off the value's own rules ({@link FieldDomains#valueClassAt}) under the context the
+     * term is asked in, so the clause that says it may be spelled any way the rules read.
+     */
+    private Congruences classDeclaredAt(NumericTerm.FromOnePosition here) {
+        UnderARoot at = rootOf(here.subjectPath());
+        if (at == null) {
+            return null;
+        }
+        OpenedRules opened = byRoot.get(at.root());
+        return opened == null || !asked(Set.of(here)).holds(opened.opening()) ? null
+                : opened.rules().bounds().valueClassAt(at.named());
     }
 
     /** The magnitude of the divisor {@code taken} is a remainder by, or null where it is no

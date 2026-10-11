@@ -364,15 +364,39 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior f : (a: Int, b: Int) -> Answer
                 let f (a, b) = if a / b > 10 then Yes else No
                 """.formatted(ANSWER)));
-        // A rule about a value an operation made of the positions. Where the value came from is
-        // known; what the rule says about the values at either position is not, because a remainder
-        // by a divisor no constant gives is no period the positions can be told apart by.
-        out.put(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE, of("""
+        // And a remainder by one: it has no period the positions could be told apart by, which is
+        // said of the divisor and not of a value made of the positions.
+        out.put(UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR, of("""
                 module m
                 %s
                 behavior f : (a: Int, b: Int) -> Answer
                 let f (a, b) = if Int.floorMod(a, b) > 10 then Yes else No
                 """.formatted(ANSWER)));
+        // A line on what a division by a written number leaves of a number made of two positions:
+        // the border is drawn on the remainder and neither position is divided by it.
+        out.put(UndividedPosition.Reason.RULE_ABOUT_A_REMAINDER, of("""
+                module m
+                %s
+                behavior f : (a: Int, b: Int) -> Answer
+                let f (a, b) = if Int.floorMod(a - b, 7) >= 1 then Yes else No
+                """.formatted(ANSWER)));
+        // A rule about a value an operation made of a position. Where the value came from is known;
+        // what the rule says about the values there is not, because the value is one the body
+        // worked out and no form of the input says it.
+        out.put(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE, of("""
+                module m
+
+                data Person = { age: Int }
+                data Score = Int
+                data Count = Int
+
+                behavior scored : (people: List<Person>) -> Count
+                    constructs Count, Score
+                let scored (people) =
+                    Count(List.length(
+                        List.filter(s -> s.value >= 18,
+                            List.filterMap(q -> List.get(0, [Score(q.age + 100)]), people))))
+                """));
         // One block written once and handed to two walks. The name it reads the element under
         // holds an element of a different container on each run, so the rule inside it is about one
         // of the two and nothing here says which — and each of them is told so.

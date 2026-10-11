@@ -20,6 +20,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -145,6 +146,19 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 return failure.at();
             }
         }
+    }
+
+    /**
+     * One expression as a form of the input's numbers, or null where the arithmetic stops on it.
+     *
+     * <p>The reading a side of a comparison gets ({@link #read}), asked of a part of one: a
+     * dividend is read as a side is, so the same expression is the same form wherever it stands.
+     */
+    static LinearForm<NumericTerm> formOf(Core expression, InputReads reads, InputReading read) {
+        AffineForms.Outcome<NumericTerm, InputReads> outcome = AffineForms.outcome(expression,
+                reads, reading(read.domain(), read.rules(), new LinkedHashSet<>()));
+        return outcome instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> composed
+                ? composed.form() : null;
     }
 
     /** The same, of the input {@code read} reads, with the names as {@code reads} has them. */

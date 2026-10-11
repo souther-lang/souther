@@ -27,6 +27,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
+import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -171,6 +172,37 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
                         LevelSpace.steppingBy(ExactRatio.ONE),
                         new Criterion.AtTheLevel(Level.OfTheQuantity.of(0))),
                 "a form stands over the positions it names");
+    }
+
+    /**
+     * And what a division leaves of a form: where the values the region leaves the form have no
+     * member of the class a remainder names, the remainder is out of reach, and where they have one
+     * it is not.
+     *
+     * <p>The form is held at nought by the region, so it leaves nought and nothing else by seven.
+     * Asked for three the walk of the class is of no member and ends, which is the proof; asked for
+     * nought it finds the one.
+     */
+    @Test
+    void aRemainderOfAFormTheRegionLeavesNoMemberOfIsOutOfReach() {
+        SearchRegion holdingNought = region().assuming(form(1, 0, 0), Rel.EQ).taken()
+                .assuming(form(0, 1, 0), Rel.EQ).taken();
+
+        assertInstanceOf(Realization.Impossible.class,
+                realize(remainderAt(3), holdingNought),
+                "the form stands at nought, which leaves nought by seven and not three");
+        assertFalse(realize(remainderAt(0), holdingNought) instanceof Realization.Impossible,
+                "and nought is the remainder it does leave");
+    }
+
+    /** A remainder of {@code x + y} by seven, at one of the remainders. */
+    private static Standing remainderAt(long remainder) {
+        Map<NumericTerm, Carrier> on = new LinkedHashMap<>();
+        on.put(term("x"), Carrier.WHOLE);
+        on.put(term("y"), Carrier.WHOLE);
+        return new Standing.OfARemainder(form(1, 1, 0), on, LevelSpace.steppingBy(ExactRatio.ONE),
+                BigInteger.valueOf(7),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(remainder)));
     }
 
     /** And where nothing narrowed the region at all, which is every item of a border nothing is on

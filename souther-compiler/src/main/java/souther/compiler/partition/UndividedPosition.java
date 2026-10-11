@@ -279,6 +279,17 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         RULE_ABOUT_A_RUN,
         /**
+         * The rule draws its line on what a division by a written number leaves of a number made of
+         * this position and others, so it divides none of them.
+         *
+         * <p>Its own word and not the shape above. The rule is read and its border is drawn, on the
+         * remainder, which runs from nought to one below the divisor. The values here that leave
+         * one remainder come round at every divisor, so there is no run of them for a class to be:
+         * a reader told the rule relates two positions would go looking for a pair, and one told it
+         * is about a run would go looking for a total.
+         */
+        RULE_ABOUT_A_REMAINDER,
+        /**
          * The rule holds this position to the values it admits, and places no end on them.
          *
          * <p>A format states which strings stand here, and everything else is refused at
@@ -437,7 +448,16 @@ public record UndividedPosition(TermPath at, Why why) {
          * a product of two numbers may be re-stated over one of them, while a divisor that
          * varies is a different shape of rule.
          */
-        NON_CONSTANT_DIVISOR
+        NON_CONSTANT_DIVISOR,
+        /**
+         * The same for a remainder by a value that is not a constant.
+         *
+         * <p>Its own word beside {@link #NON_CONSTANT_DIVISOR}. A quotient by a varying value is a
+         * shape of rule no line says; a remainder by one has, besides, no period — the values it
+         * holds of come round at a distance the row chooses, so there is no remainder to draw a
+         * line on either.
+         */
+        NON_CONSTANT_REMAINDER_DIVISOR
     }
 
     /**

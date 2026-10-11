@@ -669,6 +669,20 @@ final class Term {
         return shape;
     }
 
+    /** The operation this term is a call of, or null where it is no call. */
+    ValueName calledOperation() {
+        return shape == Shape.CALLED ? (ValueName) of : null;
+    }
+
+    /** The whole number this term writes, below nought where it is a number negated, or null where
+     *  it writes none. */
+    Long writtenNumber() {
+        if (shape == Shape.NEG && parts.getFirst().shape == Shape.INT) {
+            return -(Long) parts.getFirst().of;
+        }
+        return shape == Shape.INT ? (Long) of : null;
+    }
+
     @Override
     public int hashCode() {
         return hash;

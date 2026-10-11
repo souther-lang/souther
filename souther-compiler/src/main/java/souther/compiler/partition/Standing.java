@@ -5,6 +5,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.numeric.LinearForm;
 
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 
@@ -100,6 +101,35 @@ public sealed interface Standing {
                         + " on one order: "
                         + NumericTerms.inOrder(form.coefs().keySet())
                         + " against " + NumericTerms.inOrder(on.keySet()));
+            }
+        }
+    }
+
+    /**
+     * What a division by a written number leaves of a form of several positions, at a remainder or
+     * in a run of them.
+     *
+     * <p>The form is held at some value that leaves it, and which value that is a search over the
+     * form's own values: every one of the class the remainder and the divisor name, that the rules
+     * leave the form room for. The remainders are the item and the values of the form are how a row
+     * gets to one of them, so two rows at one remainder by two values of the form are one item.
+     *
+     * @param dividend the form the division is of, with the constant it is moved by
+     * @param on       the order each number of the form stands on
+     * @param levels   the remainders it can leave, which is what the criterion is about
+     * @param divisor  the number it is divided by, above nought
+     */
+    record OfARemainder(LinearForm<NumericTerm> dividend, Map<NumericTerm, Carrier> on,
+                        LevelSpace levels, BigInteger divisor, Criterion where)
+            implements Standing {
+
+        public OfARemainder {
+            on = Map.copyOf(on);
+            if (dividend.coefs().isEmpty() || !on.keySet().equals(dividend.coefs().keySet())
+                    || divisor.signum() <= 0) {
+                throw new IllegalArgumentException("a remainder is of a form over the numbers it"
+                        + " names, each on one order, and by a divisor above nought: " + dividend
+                        + " against " + on.keySet() + " by " + divisor);
             }
         }
     }

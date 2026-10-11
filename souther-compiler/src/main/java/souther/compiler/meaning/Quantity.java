@@ -1,11 +1,14 @@
 package souther.compiler.meaning;
 
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,7 +24,51 @@ import java.util.Optional;
  */
 public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent, Quantity.SumOver,
-        Quantity.CodePointsOfAPiece {
+        Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend {
+
+    /**
+     * What a division by a written number leaves of a form of the input's numbers: the remainder of
+     * {@code a - d} by seven, of the length of a list by eleven.
+     *
+     * <p>A number of its own and no position's. It runs from nought to one below the divisor
+     * whatever the form comes to, and which rows stand at one of its values is which values of the
+     * form leave it — a class of values of the form and no line on it, so a rule about it is a line
+     * on the remainder and never on the form.
+     *
+     * <p>Whole numbers throughout. A form that weighs a number by a fraction, or is moved by one, is
+     * no dividend of a remainder, and nothing here reads it as one.
+     *
+     * @param dividend the form the division is of, constant included
+     * @param divisor the number it is divided by, above nought
+     */
+    record RemainderOfADividend(LinearForm<NumericTerm> dividend, BigInteger divisor)
+            implements Quantity {
+
+        public RemainderOfADividend {
+            if (dividend == null || dividend.coefs().isEmpty() || divisor == null
+                    || divisor.signum() <= 0) {
+                throw new IllegalArgumentException("a remainder is of a form of some numbers and"
+                        + " by a divisor above nought: " + dividend + " by " + divisor);
+            }
+        }
+
+        @Override
+        public String spelled() {
+            StringBuilder out = new StringBuilder("floorMod(");
+            NumericTerms.entriesInOrder(dividend.coefs()).forEach(each -> out
+                    .append(out.charAt(out.length() - 1) == '(' ? "" : " + ")
+                    .append(each.getValue().spelled()).append('·').append(each.getKey()));
+            if (dividend.constant().signum() != 0) {
+                out.append(" + ").append(dividend.constant().spelled());
+            }
+            return out.append(", ").append(divisor).append(')').toString();
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
 
     /**
      * How many of the code points of one piece of a string are in a class.

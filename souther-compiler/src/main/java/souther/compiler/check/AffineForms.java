@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.function.BiFunction;
 
 /**
@@ -829,6 +830,18 @@ public final class AffineForms {
         };
     }
 
+    /** Whether {@code call} is a floor remainder whose divisor is a form with a number of the
+     *  input in it. */
+    private static <A, E> boolean remainderByAValue(Core.PreservedCall call, E at,
+                                                    Reading<A, E> reading, Walk<A, E> following) {
+        OptionalInt divides =
+                DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(call.operation());
+        return divides.isPresent() && call.args().size() > divides.getAsInt()
+                && of(call.args().get(divides.getAsInt()), at, reading, following)
+                        instanceof Outcome.Composed<A, E> composed
+                && !composed.form().coefs().isEmpty();
+    }
+
     /** No form, and {@code e} recorded as where the reading stopped and why — where nothing
      *  stopped it first. */
     private static <A, E> LinearForm<A> halted(Core e, E at, Halt<A, E> why, Stop<A, E> stopped) {
@@ -887,6 +900,13 @@ public final class AffineForms {
             // And a call the environment takes as what a case of its operation's definition
             // answers is that arithmetic over the values it was given, on the reading that is on
             // the case.
+            // What a division by a number a row writes leaves is a remainder with no period: the
+            // values it holds of come round at a distance the row chooses, so it is arithmetic and
+            // no form over the atoms says it. Said where it is met, as a product of two unknowns
+            // is, and only where nothing names the call as an atom of its own.
+            case Core.PreservedCall call when remainderByAValue(call, at, reading, following) ->
+                    halted(e, at, new Halt.NotLinear<>(
+                            NonAffineOperation.REMAINDER_BY_NON_CONSTANT_VALUE), stopped);
             case Core.PreservedCall _ when reading.takenAsAForm(e, at) != null ->
                     overTheValues(e, reading.takenAsAForm(e, at), at, reading, following, stopped);
             case Core.PreservedCall _ when formSaidOf(e) != null ->

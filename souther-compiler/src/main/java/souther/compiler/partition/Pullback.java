@@ -504,6 +504,7 @@ final class Pullback {
                 () -> ofTheYearOfADate(stated, at, fixed, reads),
                 () -> ofACountOfWholeUnits(stated, at, fixed, reads),
                 () -> ofAShiftedRemainder(stated, at, fixed, reads),
+                () -> partOf(at, ofARemainderOfAForm(stated, reads)),
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
                 () -> ofASizeInCases(stated, at, reads),
                 () -> ofAChoice(stated, at, reads),
@@ -3358,6 +3359,59 @@ final class Pullback {
         }
         return theStatementStands(shifted.statement(), shifted.remainder(), at, fixed,
                 shifted.at());
+    }
+
+    /**
+     * A comparison of what a division by a written number leaves of a form of the input's numbers,
+     * read as a comparison of that remainder — or null where it is no such comparison.
+     *
+     * <p>{@code Int.floorMod(a - d, 7) >= 1} is no line on {@code a} or on {@code d}: the values it
+     * holds of come round every seventh of their difference. It is a line on the remainder, which is
+     * a number of its own between nought and six, and a row is a pair of values whose difference
+     * leaves it ({@link Quantity.RemainderOfADividend}).
+     *
+     * <p>The dividend is read as any side of a comparison is, so it is the form the arithmetic would
+     * make of it anywhere else; and it is read whole, its moving part of its constant. Only whole
+     * numbers: a remainder of a form that weighs a number by a fraction is the remainder of what
+     * the host cannot hold, and is left unread.
+     */
+    private Derivation ofARemainderOfAForm(StatedComparison stated, InputReads reads) {
+        RemainderOfAShiftedValue.OfAForm<InputReads> over =
+                RemainderOfAShiftedValue.readOverAForm(stated, reads, sides());
+        if (over == null) {
+            return null;
+        }
+        LinearForm<NumericTerm> dividend = AffineReading.formOf(over.dividend(), over.at(), read);
+        if (dividend == null || dividend.coefs().isEmpty() || !isWhole(dividend)) {
+            return null;
+        }
+        return switch (over.statement()) {
+            case ConstantComparison.Settled(boolean holds) -> new Derivation.WrittenOut(holds);
+            case ConstantComparison.Against(Rel rel, BigInteger against) -> {
+                // The constant by the divisor's own remainder, so a dividend moved by a whole turn
+                // is the dividend it was before the moving.
+                LinearForm<NumericTerm> moved = new LinearForm<>(
+                        ExactRatio.of(constantOf(dividend).mod(over.divisor())), dividend.coefs());
+                Quantity remainder = new Quantity.RemainderOfADividend(moved, over.divisor());
+                LinearForm<Quantity> relation = LinearForm.<Quantity>atom(remainder)
+                        .minus(LinearForm.<Quantity>constant(ExactRatio.of(against))).orNull();
+                yield relation == null ? null
+                        : aRelation(Derivation.ComparisonReading.AS_A_CUT, relation, rel);
+            }
+            // What the range of a remainder leaves a comparison is one line or a settled answer.
+            case ConstantComparison.Both _, ConstantComparison.Either _ -> null;
+        };
+    }
+
+    /** Whether every number of {@code form}, its constant included, is a whole one. */
+    private static boolean isWhole(LinearForm<NumericTerm> form) {
+        return form.constant().isWhole()
+                && form.coefs().values().stream().allMatch(ExactRatio::isWhole);
+    }
+
+    /** The constant of a form every number of which is whole. */
+    private static BigInteger constantOf(LinearForm<NumericTerm> form) {
+        return ((ExactAnswer.Held<BigInteger>) form.constant().floor()).value();
     }
 
     /**
