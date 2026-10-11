@@ -400,9 +400,25 @@ public final class StandingAtAPoint {
          *  once however many quantities and items ask it. */
         private final Map<TermPath, WalkResult<ObservationAtPoint>> found = new HashMap<>();
 
-        WalkOfARow(BehaviorInputs where, ObservedInputs observedInputs) {
+        /**
+         * The values the row wrote at each path, with the elements taken to reach each — shared by
+         * every reading of the row, since which values a row wrote does not turn on which element
+         * a reading chose. Walked once per path for the row, and not once per path for each of its
+         * readings: a row of many elements has as many readings, and each walks the whole row.
+         */
+        private final Map<TermPath, WalkResult<List<BehaviorInputs.Occurrence>>> occurrences;
+
+        WalkOfARow(BehaviorInputs where, ObservedInputs observedInputs,
+                   Map<TermPath, WalkResult<List<BehaviorInputs.Occurrence>>> occurrences) {
             this.where = where;
             this.observedInputs = observedInputs;
+            this.occurrences = occurrences;
+        }
+
+        /** The values the row wrote at {@code path}, as every reading of the row has them. */
+        private WalkResult<List<BehaviorInputs.Occurrence>> occurrencesAt(TermPath path) {
+            return occurrences.computeIfAbsent(path,
+                    each -> where.occurrencesAt(observedInputs.inputs(), each));
         }
 
         @Override
@@ -413,7 +429,7 @@ public final class StandingAtAPoint {
         private WalkResult<ObservationAtPoint> walkedTo(TermPath path) {
             // Over the arms, so that a walk coming to answer a third way is one this has to be
             // taught about rather than one quietly read as a walk that could not be made.
-            return switch (where.occurrencesAt(observedInputs.inputs(), path)) {
+            return switch (occurrencesAt(path)) {
                 // The walk and the type disagree, which is the quantity's to report.
                 case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
                         WalkResult.couldNotWalk();
@@ -454,7 +470,7 @@ public final class StandingAtAPoint {
             if (at(container) instanceof WalkResult.CouldNotWalk<ObservationAtPoint>) {
                 return WalkResult.couldNotWalk();
             }
-            return switch (where.occurrencesAt(observedInputs.inputs(), container.element())) {
+            return switch (occurrencesAt(container.element())) {
                 case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
                         WalkResult.couldNotWalk();
                 case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) -> {
@@ -469,7 +485,8 @@ public final class StandingAtAPoint {
                     for (int element : elements) {
                         Map<TermPath, Integer> choosing = new LinkedHashMap<>(chosen());
                         choosing.put(container, element);
-                        out.add(new OneReadingOfARow(where, observedInputs, choosing));
+                        out.add(new OneReadingOfARow(where, observedInputs, choosing,
+                                occurrences));
                     }
                     yield WalkResult.reached(List.copyOf(out));
                 }
@@ -490,7 +507,7 @@ public final class StandingAtAPoint {
             if (mine == null) {
                 return WalkResult.couldNotWalk();
             }
-            return switch (where.occurrencesAt(observedInputs.inputs(), position)) {
+            return switch (occurrencesAt(position)) {
                 case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
                         WalkResult.couldNotWalk();
                 case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) -> {
@@ -571,7 +588,13 @@ public final class StandingAtAPoint {
         private final Map<TermPath, Integer> containers = new LinkedHashMap<>();
 
         DiscoveringRow(BehaviorInputs where, ObservedInputs observedInputs) {
-            super(where, observedInputs);
+            super(where, observedInputs, new HashMap<>());
+        }
+
+        /** What the row wrote at each path this walk was asked about, for the readings made of it
+         *  to take rather than walk again. */
+        Map<TermPath, WalkResult<List<BehaviorInputs.Occurrence>>> occurrencesWalked() {
+            return super.occurrences;
         }
 
         @Override
@@ -628,8 +651,9 @@ public final class StandingAtAPoint {
         private final Map<TermPath, Integer> chosen;
 
         OneReadingOfARow(BehaviorInputs where, ObservedInputs observedInputs,
-                         Map<TermPath, Integer> chosen) {
-            super(where, observedInputs);
+                         Map<TermPath, Integer> chosen,
+                         Map<TermPath, WalkResult<List<BehaviorInputs.Occurrence>>> occurrences) {
+            super(where, observedInputs, occurrences);
             this.chosen = chosen;
         }
 
@@ -704,7 +728,8 @@ public final class StandingAtAPoint {
             out.add(discovering);
         } else {
             for (Map<TermPath, Integer> choice : readingsOver(containers)) {
-                out.add(new OneReadingOfARow(where, observed, choice));
+                out.add(new OneReadingOfARow(where, observed, choice,
+                        discovering.occurrencesWalked()));
             }
         }
         // Said by the walk that stopped, which is the only thing that knows it stopped. Worked out
