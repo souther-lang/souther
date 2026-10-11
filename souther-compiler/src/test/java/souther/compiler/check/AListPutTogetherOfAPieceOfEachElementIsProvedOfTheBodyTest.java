@@ -3,7 +3,14 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ArgumentRef;
+import souther.compiler.semantics.LawNumber;
+import souther.compiler.semantics.LawProposition;
+import souther.compiler.semantics.LawSubject;
+import souther.compiler.semantics.OperationLaw;
+import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.PieceOfAnElement;
@@ -44,6 +51,38 @@ class AListPutTogetherOfAPieceOfEachElementIsProvedOfTheBodyTest {
         assertEquals(PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS, facts.assembles(FILTER).piece());
         assertEquals(PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS, facts.assembles(FLAT_MAP).piece());
         assertEquals(List.of(), unproved(facts), "nothing stated of the three is left open");
+    }
+
+    /**
+     * How many an operation putting a list together of pieces answers is what the piece says it
+     * is: one for each element, as many as the closure holds of, or what the closure's answers
+     * hold added up. The law of the size is another observation and proved by a proof of its own;
+     * this holds the two statements about one answer to each other, so neither is changed alone.
+     */
+    @Test
+    void howManyItAnswersIsWhatThePieceSays() {
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        for (ValueName operation : List.of(MAP, FILTER, FLAT_MAP)) {
+            BoundOperationFacts.Assembled assembled = facts.assembles(operation);
+            DeclaredArgument source = assembled.source();
+            LawSubject<DeclaredArgument> answered =
+                    new LawSubject.WhatTheClosureAnswers<>(assembled.closure());
+            LawNumber<DeclaredArgument> expected = switch (assembled.piece()) {
+                case THE_CLOSURES_ANSWER -> new LawNumber.SizeOf<>(new LawSubject.Argument<>(source));
+                case THE_ELEMENT_WHERE_IT_HOLDS -> new LawNumber.HowManyMeet<>(source,
+                        new LawProposition.Observed<>(answered,
+                                new SideAnswered(AnswerAspect.TRUTH, true)));
+                case WHAT_THE_CLOSURE_ANSWERS -> new LawNumber.SumOver<>(source,
+                        new LawNumber.SizeOf<>(answered));
+            };
+            BoundOperationFacts.Settled settled =
+                    facts.settled(operation, OperationLaw.Observed.SIZE);
+            assertTrue(settled instanceof BoundOperationFacts.Settled.ByALaw(
+                            OperationLaw.Size<DeclaredArgument> size, var _)
+                            && LinearForm.atom(expected).equals(size.unconditional()),
+                    () -> operation + " is settled " + settled + ", and its piece says "
+                            + expected);
+        }
     }
 
     /**

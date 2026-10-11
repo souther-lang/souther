@@ -73,7 +73,36 @@ public final class OperationFacts {
      * beside it would be a kind nothing validates until someone remembers — and the arrangement is
      * meant to make remembering unnecessary.
      */
-    private static final List<Declared> DECLARED = declared();
+    private static final List<Declared> DECLARED = withWhereThePiecesCameFrom(declared());
+
+    /**
+     * {@code declared}, with where the elements of each list put together of pieces came from
+     * stated from what the piece is: the closure's answer on each element, one for each; the
+     * element itself, at most one for each; or inside what the closure answered, any number.
+     *
+     * <p>Stated from the piece and never beside it. The piece says which values the answer holds,
+     * in which order and how often, and where they came from is the weaker part of that — written
+     * twice, the two could be changed apart. Each is proved of the body all the same, by the proof
+     * of its own kind.
+     */
+    private static List<Declared> withWhereThePiecesCameFrom(List<Declared> declared) {
+        List<Declared> out = new ArrayList<>(declared);
+        for (Declared each : declared) {
+            if (each.fact() instanceof OperationFact.AssemblesPieces(
+                    ArgumentRef source, PieceOfAnElement piece)) {
+                out.add(new Declared(each.operation(), switch (piece) {
+                    case THE_CLOSURES_ANSWER -> maps(source, SizeAgainstItsSource.SAME);
+                    case THE_ELEMENT_WHERE_IT_HOLDS -> keeps(source, SizeAgainstItsSource.AT_MOST);
+                    // Any number for each, which is neither of the two counts a building can
+                    // state, so the lineage stands alone and is no row the discharge reads.
+                    case WHAT_THE_CLOSURE_ANSWERS -> new OperationFact.ElementsComeFrom(
+                            new ElementLineage.InsideClosureResult<>(
+                                    new ElementLineage.Source<>(source, 1)));
+                }));
+            }
+        }
+        return List.copyOf(out);
+    }
 
     private static List<Declared> declared() {
         return List.of(
@@ -230,10 +259,8 @@ public final class OperationFacts {
             about("List", "reverse", keeps(at(0), SizeAgainstItsSource.SAME)),
             about("List", "sort", keeps(at(0), SizeAgainstItsSource.SAME)),
             about("List", "sortBy", keeps(CONTAINER, SizeAgainstItsSource.SAME)),
-            about("List", "map", maps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("List", "mapIndexed", maps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("Map", "mapValues", maps(CONTAINER, SizeAgainstItsSource.SAME)),
-            about("List", "filter", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
             about("List", "distinct", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
             about("List", "take", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
             about("List", "drop", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
@@ -259,21 +286,15 @@ public final class OperationFacts {
                             new ElementLineage.ClosureResult<>(
                                     new ElementLineage.Source<>(CONTAINER, 1)))),
                     SizeAgainstItsSource.SAME))),
-            // Inside what the closure answered, which is an optional here and a list in a
-            // `flatMap`. One lineage for the two, told apart by what the closure's own signature
-            // says it answers with. A `filterMap` answers no more than it was given and says so;
-            // a `flatMap` answers any number for each, which is neither of the two counts a
-            // building can state, so its lineage is declared alone and is not a row the discharge
-            // reads.
+            // Inside what the closure answered, an optional. A `filterMap` answers no more than it
+            // was given and says so.
             about("List", "filterMap", new OperationFact.BuildsItsResultFrom(new BuiltFrom<>(
                     new ElementLineage.InsideClosureResult<>(
                             new ElementLineage.Source<>(CONTAINER, 1)), SizeAgainstItsSource.AT_MOST))),
-            about("List", "flatMap", new OperationFact.ElementsComeFrom(
-                    new ElementLineage.InsideClosureResult<>(
-                            new ElementLineage.Source<>(CONTAINER, 1)))),
-            // And the answer itself, a piece of each element in the order of the list walked,
+            // A list put together of a piece of each element of the list walked, in its order —
             // which is what a reader writing the answer out takes. The three differ in the piece
-            // and in nothing else.
+            // and in nothing else, and where their elements came from is stated from the piece
+            // ({@link #withWhereThePiecesCameFrom}) rather than beside it.
             about("List", "map", new OperationFact.AssemblesPieces(CONTAINER,
                     PieceOfAnElement.THE_CLOSURES_ANSWER)),
             about("List", "filter", new OperationFact.AssemblesPieces(CONTAINER,
