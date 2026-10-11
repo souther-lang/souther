@@ -10,6 +10,7 @@ import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.ValueName;
@@ -140,16 +141,21 @@ public final class WhereTheElementsCameFrom {
     }
 
     /**
-     * Whether the elements of {@code operation}'s answer stand in the order of the elements of its
-     * argument at {@code source} they came from: its body is a walk over that argument as it stands,
-     * from its first element, started from nothing, every step of which keeps what it carries or
-     * puts one value after all of it.
+     * Whether {@code operation}'s answer is, for each element of its argument at {@code source} in
+     * that argument's order, the piece {@code piece} says the closure at {@code closure} makes of
+     * it, put end to end: its body is a walk over that argument as it stands, from its first
+     * element, started from nothing, every way of every step of which puts that element's piece
+     * after all of what it carries.
      *
      * <p>A walk is handed a list's elements in the list's order, so what each step puts after the
-     * rest stands after everything put for the elements before it. Nothing about which values are
-     * put is read here; that is where the elements came from, and is proved apart.
+     * rest stands after everything put for the elements before it. Which value is put, and on which
+     * way of the step, is read off the step as well: a step that kept an element where the closure
+     * held of it and one that kept it where the closure did not have the same shape, and only one of
+     * them is a filter.
      */
-    public LibraryProver.Outcome inOrder(ValueName.Stdlib.Operation operation, int source) {
+    public LibraryProver.Outcome assemblesPieces(ValueName.Stdlib.Operation operation, int source,
+                                                 int closure,
+                                                 PieceOfAnElement piece) {
         Reading reading = new Reading(library, readThrough);
         try {
             List<Value> params = new ArrayList<>();
@@ -172,7 +178,8 @@ public final class WhereTheElementsCameFrom {
                         || !(Building.at(args.get(walk.seed()), path)
                                 instanceof Value.Listed(List<Value> seeded))
                         || !seeded.isEmpty()
-                        || !appendsAtTheEnd(args.get(walk.step()), walk, path, reading)) {
+                        || !putsThePieceAfter(args.get(walk.step()), walk, path, closure, piece,
+                                reading)) {
                     return new LibraryProver.Outcome.Open(new Unproved.DoesNotFollow(
                             Unproved.Obligation.WHERE_ITS_ELEMENTS_CAME_FROM));
                 }
@@ -184,21 +191,39 @@ public final class WhereTheElementsCameFrom {
         }
     }
 
-    /** Whether every case of {@code step} keeps what is carried at {@code path} or puts one value
-     *  after all of it. */
-    private static boolean appendsAtTheEnd(Value step, TheWalk walk, List<Integer> path,
-                                           Reading reading) {
+    /**
+     * Whether every way of {@code step} puts, after what is carried at {@code path}, the piece
+     * {@code piece} says the closure at {@code closure} makes of the element it is handed.
+     *
+     * <p>The closure is an argument of the operation, so what it answers on the element is that
+     * application and nothing read into it. A piece that is the element where the closure holds is
+     * put on the way taken where the closure's answer is true, and nothing is put on the way taken
+     * where it is false — each way being exactly that, and not a way that implies it.
+     */
+    private static boolean putsThePieceAfter(Value step, TheWalk walk, List<Integer> path,
+                                             int closure,
+                                             PieceOfAnElement piece,
+                                             Reading reading) {
         Value carried = new Value.Fresh(1, "what the walk carries");
         Value next = new Value.Fresh(3, "the element the walk is handed next");
         List<Value> handed = new ArrayList<>(List.of(next, next));
         handed.set(walk.accumulator(), carried);
         handed.set(walk.element(), next);
         Value before = Building.at(carried, path);
+        Value answered = new Value.AppliedTo(new Value.Argument(closure), List.of(next));
+        LawProposition<Value> holds = reading.side(answered, AnswerAspect.TRUTH);
         for (Reading.Case each : reading.applied(step, handed)) {
             Value after = Building.at(each.is(), path);
-            if (!after.equals(before) && !(after instanceof Value.Joined(Value left, Value right)
-                    && left.equals(before) && right instanceof Value.Listed(List<Value> one)
-                    && one.size() == 1)) {
+            boolean put = switch (piece) {
+                case THE_CLOSURES_ANSWER ->
+                        after.equals(new Value.Joined(before, new Value.Listed(List.of(answered))));
+                case WHAT_THE_CLOSURE_ANSWERS -> after.equals(new Value.Joined(before, answered));
+                case THE_ELEMENT_WHERE_IT_HOLDS ->
+                        each.when().equals(holds) ? after.equals(new Value.Joined(before,
+                                new Value.Listed(List.of(next))))
+                                : each.when().equals(holds.denied()) && after.equals(before);
+            };
+            if (!put) {
                 return false;
             }
         }

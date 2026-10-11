@@ -13,6 +13,7 @@ import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.NumericResult;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.SideAnswered;
@@ -197,9 +198,10 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record IsRelated(DeclaredOperation operation, LawProposition<Slot> holds)
             implements SeveralAboutAnOperation {}
 
-    /** The elements of the operation's answer stand in the order of the elements of {@code source}
-     *  they came from. */
-    record KeepsTheOrderOf(DeclaredOperation operation, DeclaredArgument source)
+    /** The operation's answer is the piece {@code closure} makes of each element of {@code source},
+     *  as {@code piece} says, put end to end in the order of those elements. */
+    record AssemblesPieces(DeclaredOperation operation, DeclaredArgument source,
+                           DeclaredArgument closure, PieceOfAnElement piece)
             implements OneAboutAnOperation {}
 
     /** The operation answers what {@code into} holds with {@code value} put in: at most one element

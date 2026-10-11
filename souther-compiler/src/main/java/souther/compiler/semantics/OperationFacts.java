@@ -231,9 +231,6 @@ public final class OperationFacts {
             about("List", "sort", keeps(at(0), SizeAgainstItsSource.SAME)),
             about("List", "sortBy", keeps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("List", "map", maps(CONTAINER, SizeAgainstItsSource.SAME)),
-            // And in the order of the list it was handed, which is what a reader writing the
-            // answer out itself takes.
-            about("List", "map", new OperationFact.KeepsTheOrderOf(CONTAINER)),
             about("List", "mapIndexed", maps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("Map", "mapValues", maps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("List", "filter", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
@@ -274,6 +271,15 @@ public final class OperationFacts {
             about("List", "flatMap", new OperationFact.ElementsComeFrom(
                     new ElementLineage.InsideClosureResult<>(
                             new ElementLineage.Source<>(CONTAINER, 1)))),
+            // And the answer itself, a piece of each element in the order of the list walked,
+            // which is what a reader writing the answer out takes. The three differ in the piece
+            // and in nothing else.
+            about("List", "map", new OperationFact.AssemblesPieces(CONTAINER,
+                    PieceOfAnElement.THE_CLOSURES_ANSWER)),
+            about("List", "filter", new OperationFact.AssemblesPieces(CONTAINER,
+                    PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS)),
+            about("List", "flatMap", new OperationFact.AssemblesPieces(CONTAINER,
+                    PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS)),
             about("Set", "map", maps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
             // Every value is the second component of some entry, filed under the first. A later
             // entry under a key replaces an earlier one, so not every entry's is there.
