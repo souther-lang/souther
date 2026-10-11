@@ -314,6 +314,11 @@ final class Pullback {
         if (Proposition.leavesSomethingUnread(stated)) {
             return false;
         }
+        // Values of the input stood against one another are a relation the check itself states:
+        // the operation it was carried through has no position of its own for a rule to be read at.
+        if (Cutting.valuesItRelates(stated) != null) {
+            return false;
+        }
         return (!Cutting.onlyRelations(stated) && !Cutting.drawsLines(stated))
                 || read.turnsOn().stream()
                         .allMatch(leaf -> aComparisonWrittenInside(leaf.from().value(), check));

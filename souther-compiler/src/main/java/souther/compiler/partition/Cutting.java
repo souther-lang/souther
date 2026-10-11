@@ -522,6 +522,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 && stated.proposition() instanceof Proposition.Compared(
                         Relation.Affine affine, boolean holds, String _)
                 ? onARemainder(behavior, affine, holds, read) : null;
+        // And numbers about how its values stand to one another, which no position holds.
+        List<FilingCoordinate> related = overTheInput == null && counted == null
+                && remainder == null
+                ? heldOverValuesRelatedToOneAnother(stated.proposition()) : null;
         return switch (stated.proposition()) {
             case Proposition.Always _ -> new Read.CutsNothing(
                     settledAt(stated, comparison, read, reads, answering));
@@ -532,6 +536,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             comparison.left(), reads, read.rules()), read.quantities());
             case Proposition.Compared _ when counted != null -> counted;
             case Proposition.Compared _ when remainder != null -> remainder;
+            case Proposition.Compared _ when related != null ->
+                    new Read.AgainstAnotherValue(related);
+            case Proposition.Some some when valuesItRelates(some) != null ->
+                    new Read.AgainstAnotherValue(valuesItRelates(some));
             case Proposition.Compared(Relation.Ordered(
                     DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel proposition),
                     boolean holds, String _) when term.atOnePosition() != null ->
@@ -653,6 +661,52 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
         }
         return input.isEmpty() || !another ? null : AffineReading.filedAt(input);
+    }
+
+    /**
+     * Where {@code stated} weighs numbers that are about how the values of the input stand to one
+     * another, read to the end, the coordinates of those values — or null where it is no such
+     * relation.
+     *
+     * <p>Two kinds of number are about that. How many elements of one container are, or are not,
+     * one of the elements of another is what the size of a union, an intersection or a difference
+     * of two sets comes to ({@link Quantity.HowManyMeet} over a statement that two values are
+     * one); and how many different values a container holds is a number of the values against one
+     * another and of none of them alone ({@link Quantity.HowManyDifferent}). Neither is a number a
+     * position holds, so no line is drawn on one, and nothing in either stopped a reading: the
+     * numbers of the input beside them are the ones a line could be drawn on, and which side of it
+     * a row falls on moves with the other values.
+     */
+    private static List<FilingCoordinate> heldOverValuesRelatedToOneAnother(Proposition stated) {
+        if (!(stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, String _))
+                || !Proposition.stopsIn(stated).isEmpty()) {
+            return null;
+        }
+        List<NumericTerm> input = new ArrayList<>();
+        List<FilingCoordinate> related = new ArrayList<>();
+        for (Quantity each : affine.form().coefs().keySet()) {
+            switch (each) {
+                case DecisionAtom.OfTheInput(NumericTerm term) -> input.add(term);
+                case Quantity.HowManyMeet count
+                        when valuesItRelates(count.ofTheElement()) instanceof List<FilingCoordinate>
+                        values -> related.addAll(values);
+                case Quantity.HowManyDifferent different ->
+                        related.add(FilingCoordinate.at(different.ofTheElement()));
+                default -> {
+                    return null;
+                }
+            }
+        }
+        if (related.isEmpty()) {
+            return null;
+        }
+        List<FilingCoordinate> out = new ArrayList<>(AffineReading.filedAt(input));
+        for (FilingCoordinate each : related) {
+            if (!out.contains(each)) {
+                out.add(each);
+            }
+        }
+        return out;
     }
 
     /**
@@ -778,7 +832,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * <p>Two values being one is a relation between them, and a class of a position is a set of
      * that position's values: the statement divides neither, whichever way it comes out.
      */
-    private static List<FilingCoordinate> valuesItRelates(Proposition stated) {
+    static List<FilingCoordinate> valuesItRelates(Proposition stated) {
         List<FilingCoordinate> out = new ArrayList<>();
         return relates(stated, out) && !out.isEmpty() ? List.copyOf(out) : null;
     }
