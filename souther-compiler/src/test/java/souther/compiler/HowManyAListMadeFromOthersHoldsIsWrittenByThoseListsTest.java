@@ -53,11 +53,12 @@ class HowManyAListMadeFromOthersHoldsIsWrittenByThoseListsTest {
                 "List.flatMap(e -> [ String.trim(e) ], ds)",
                 "List.flatMap(e -> one(e), ds)",
                 "{ let ma = List.flatMap(e -> [ e ], ds)\n ma }")) {
-            String guard = "List.length(" + made + ") + List.length(cs) >= 1";
-            String report = report(model(guard));
+            Compilation compilation =
+                    compiled(model("List.length(" + made + ") + List.length(cs) >= 1"));
+            String report = report(compilation);
             assertFalse(report.contains("not read"), () -> made + ": " + report);
             assertFalse(report.contains("made from this one"), () -> made + ": " + report);
-            List<Integer> held = heldByEachRow(rowsOf(model(guard)));
+            List<Integer> held = heldByEachRow(rowsOf(compilation));
             assertTrue(held.contains(1), () -> made + ": the point on the line: " + held);
             assertTrue(held.contains(0), () -> made + ": the point just off it: " + held);
         }
@@ -68,10 +69,11 @@ class HowManyAListMadeFromOthersHoldsIsWrittenByThoseListsTest {
     @Test
     void whatAMappingHoldsIsWrittenAsTheListItMapped() {
         for (String closure : List.of("e -> e", "e -> String.trim(e)")) {
-            String guard = "List.length(List.map(" + closure + ", ds)) + List.length(cs) >= 2";
-            String report = report(model(guard));
+            Compilation compilation = compiled(model(
+                    "List.length(List.map(" + closure + ", ds)) + List.length(cs) >= 2"));
+            String report = report(compilation);
             assertFalse(report.contains("not read"), () -> closure + ": " + report);
-            List<Integer> held = heldByEachRow(rowsOf(model(guard)));
+            List<Integer> held = heldByEachRow(rowsOf(compilation));
             assertTrue(held.contains(2), () -> closure + ": the point on the line: " + held);
             assertTrue(held.contains(1), () -> closure + ": the point just off it: " + held);
         }
@@ -97,13 +99,12 @@ class HowManyAListMadeFromOthersHoldsIsWrittenByThoseListsTest {
         return n;
     }
 
-    private static String rowsOf(String model) {
-        return GeneratedRows.of(compiled(model), null, null,
+    private static String rowsOf(Compilation compilation) {
+        return GeneratedRows.of(compilation, null, null,
                 SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
     }
 
-    private static String report(String model) {
-        Compilation compilation = compiled(model);
+    private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }

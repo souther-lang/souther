@@ -2620,7 +2620,15 @@ final class Pullback {
             Core given = applied.argument(at);
             Denotation container = reads.standing(given, read.rules().symbols(),
                     read.rules().newtypes());
-            Beneath beneath = beneath(container, counting);
+            return elementsOf(given, container, beneath(container, counting), counting);
+        }
+
+        /**
+         * The same, of {@code given} standing as {@code container}, with what is beneath it read
+         * off already.
+         */
+        private Located elementsOf(Core given, Denotation container, Beneath beneath,
+                                   boolean counting) {
             Core over = beneath == null ? given : beneath.at().value();
             InputReads in = beneath == null ? reads : beneath.at().at();
             return locate(beneath == null ? container : beneath.at(), over, in,
@@ -2690,7 +2698,8 @@ final class Pullback {
          * quantity of the container states.
          */
         private Sized sumOver(DeclaredArgument at, LawNumber<DeclaredArgument> ofTheElement) {
-            Denotation container = reads.standing(applied.argument(at), read.rules().symbols(),
+            Core given = applied.argument(at);
+            Denotation container = reads.standing(given, read.rules().symbols(),
                     read.rules().newtypes());
             Beneath beneath = beneath(container, true);
             List<Denotation> values = eachValue(beneath == null ? container : beneath.at());
@@ -2700,7 +2709,7 @@ final class Pullback {
                                 new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER))
                         : sumOverWrittenOut(at, values, ofTheElement);
             }
-            Located located = elementsOf(at, true);
+            Located located = elementsOf(given, container, beneath, true);
             if (located == null || !located.kept().isEmpty()) {
                 return new Sized.NotSized(
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
