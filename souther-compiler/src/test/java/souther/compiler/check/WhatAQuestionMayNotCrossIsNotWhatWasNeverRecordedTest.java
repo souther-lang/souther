@@ -11,6 +11,7 @@ import souther.compiler.inputs.HeldIn;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -68,7 +69,7 @@ class WhatAQuestionMayNotCrossIsNotWhatWasNeverRecordedTest {
                 Map.of(CONTAINER, read("held", HELD)),
                 provenance, Map.of());
         return InputReads.ofParameters(Map.of(HELD, "held", MADE_FROM, "made"),
-                DeclaredInput.NONE, elements, Membership.none());
+                DeclaredInput.NONE, elements, ValueDefinitions.NONE, Membership.none());
     }
 
     private static ElementProvenance madeFrom() {

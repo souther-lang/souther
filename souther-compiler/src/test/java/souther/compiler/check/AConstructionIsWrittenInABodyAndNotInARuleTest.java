@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * A construction is written in a body and is refused in a rule, which is why the two readings of a
  * written value are not the same reading.
  *
- * <p>{@link Carrier#literalOf(souther.compiler.core.Core, Symbols)} takes the names off what it
+ * <p>{@link Carrier#literalOf(ValueStanding.Standing, Symbols)} takes the names off what it
  * reads, because a body may compare a position against its own construction:
  * {@code guard at < Cutoff(Time("16:00:00"))}. {@link Carrier#literalOf(souther.compiler.ast.Hir.Expr)}
  * does not, and the difference is not one of the two forgetting. An invariant and an {@code ensures}

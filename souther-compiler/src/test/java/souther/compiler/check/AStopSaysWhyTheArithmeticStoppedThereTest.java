@@ -188,16 +188,16 @@ class AStopSaysWhyTheArithmeticStoppedThereTest {
             }
 
             @Override
-            public AffineForms.ReadThrough<String> readThrough(Core.Read read, String at) {
+            public ValueStanding.ReadThrough<String> readThrough(Core.Read read, String at) {
                 return null;
             }
 
             @Override
-            public List<AffineForms.ReadThrough<String>> alternativesOf(Core.Read read,
+            public List<ValueStanding.ReadThrough<String>> alternativesOf(Core.Read read,
                                                                         String at) {
                 return read.equals(ONE_OF_TWO) ? List.of(
-                        new AffineForms.ReadThrough<>(new Core.Int(1, Type.INT, POS), at),
-                        new AffineForms.ReadThrough<>(new Core.Int(2, Type.INT, POS), at))
+                        new ValueStanding.ReadThrough<>(new Core.Int(1, Type.INT, POS), at),
+                        new ValueStanding.ReadThrough<>(new Core.Int(2, Type.INT, POS), at))
                         : null;
             }
 

@@ -12,6 +12,7 @@ import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
+import souther.compiler.coverage.Arrivals;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
@@ -282,7 +283,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * every step and asked of whichever copy a reader happened to hold.
      */
     private record Body(String behavior, InputReading read,
-                        souther.compiler.coverage.Arrivals answering, Templates templates,
+                        Arrivals answering, Templates templates,
                         List<TruthMet> truths, List<ForkDecided> decided,
                         WhatAnAnswerTakesUp dependencies, StatedHere stated,
                         WhatConditionsState conditions) {
@@ -310,8 +311,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * tree could make on its own.
      */
     static ComparisonReadings of(String behavior, AnalysisBody analysis, InputReading read,
-                                 InputReads reads, InputReads insideATemplate,
-                                 WhatAnAnswerTakesUp dependencies) {
+                                 InputReads reads, WhatAnAnswerTakesUp dependencies) {
         Core body = analysis.core();
         List<Reading> readings = new ArrayList<>();
         List<ForkMet> forks = new ArrayList<>();
@@ -327,24 +327,30 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 new ConditionNumbering(read.symbols().module(), behavior);
         StatedHere stated = new StatedHere(behavior);
         WhatConditionsState conditions = WhatConditionsState.of(read);
-        walk(body, new Body(behavior, read,
-                        souther.compiler.coverage.Arrivals.inTheTree(body,
-                                analysis.templates()::bodyOf),
+        // Whether a node answers a value is asked of the tree it stands in: the body, or the
+        // template of a value the body builds. A reading that follows a name given a build is in
+        // the template from there on, and is answered there — asked of the body instead, a node of
+        // the template is one the body was never rooted at.
+        List<Core> trees = new ArrayList<>();
+        trees.add(body);
+        trees.addAll(analysis.templatesAfterTheirBuilders());
+        Arrivals answering = Arrivals.inTheTrees(trees, analysis.templates()::bodyOf);
+        walk(body, new Body(behavior, read, answering,
                         templates, truths, decided, dependencies, stated, conditions),
                 reads, ClosureApplications.OUTSIDE,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
         // built, so what is read of it is one reading however many builds there are; what differs
         // between them is what stood on the way to each, and that is joined into what stood on the
-        // way to all of them before the template is read.
+        // way to all of them before the template is read — where a definition is read, which is
+        // where a name the body gave a build is read as well.
+        InputReads defined = reads.whereValuesAreDefined();
         for (Core template : analysis.templatesAfterTheirBuilders()) {
             Entry entry = templates.joined(template);
             if (entry != null) {
-                walk(template, new Body(behavior, read,
-                                souther.compiler.coverage.Arrivals.inTheTree(template,
-                                        analysis.templates()::bodyOf),
+                walk(template, new Body(behavior, read, answering,
                         templates, truths, decided, dependencies, stated, conditions),
-                        insideATemplate, ClosureApplications.OUTSIDE, LiveFlow.of(template),
+                        defined, ClosureApplications.OUTSIDE, LiveFlow.of(template),
                         entry.assumed(), entry.live(),
                         readings, forks, numbering);
             }

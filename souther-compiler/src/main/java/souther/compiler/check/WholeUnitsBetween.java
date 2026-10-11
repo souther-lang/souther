@@ -66,7 +66,7 @@ public final class WholeUnitsBetween {
     public static <E> Read<E> read(StatedComparison comparison, E at,
                                    TheSignOfAnOrder.Sides<E> sides) {
         for (boolean countFirst : List.of(true, false)) {
-            AffineForms.ReadThrough<E> count =
+            ValueStanding.ReadThrough<E> count =
                     sides.standing(countFirst ? comparison.left() : comparison.right(), at);
             AnOperationApplied applied = AnOperationApplied.of(Core.withoutStanding(count.value()));
             BoundOperationFact.CountsWholeUnitsBetween counts = applied == null ? null

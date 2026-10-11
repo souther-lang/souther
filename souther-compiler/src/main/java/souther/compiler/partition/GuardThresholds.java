@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.carrier.Membership;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Choice;
@@ -8,6 +7,7 @@ import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.RuleAt;
+import souther.compiler.check.ValueStanding;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
@@ -15,7 +15,6 @@ import souther.compiler.check.UnreadComparison;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
@@ -204,10 +203,6 @@ public final class GuardThresholds {
         ComparisonReadings comparisons = ComparisonReadings.of(behavior, states, read,
                 InputReads.ofParametersWhereCallsStand(inputs.parameterReads(), read.declared(),
                         elements, inputs.dependencies()),
-                // What a value states is read where nothing of the behavior's inputs is in force: a
-                // value takes none and names none, and stands nothing in.
-                InputReads.ofParametersWhereCallsStand(Map.of(), DeclaredInput.NONE, elements,
-                        Membership.none()),
                 WhatAnAnswerTakesUp.of(read));
         // And what the tree that runs says about each of them, joined on the construct of the model
         // the two readings agree about.
@@ -493,7 +488,7 @@ public final class GuardThresholds {
              * itself where a name's value is read, beside a reader that was told.
              */
             @Override
-            public souther.compiler.check.AffineForms.ReadThrough<InputReads> readThrough(
+            public ValueStanding.ReadThrough<InputReads> readThrough(
                     Core.Read read, InputReads at) {
                 return NameAnswers.denoting(read, at, symbols, newtypes);
             }

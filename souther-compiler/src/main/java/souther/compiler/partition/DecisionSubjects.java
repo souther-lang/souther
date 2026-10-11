@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.ValueStanding;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.NumericMeasures;
@@ -271,18 +272,18 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
             }
 
             @Override
-            public AffineForms.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
+            public ValueStanding.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
                 return NameAnswers.denoting(read, at, symbols, newtypes);
             }
 
             @Override
-            public List<AffineForms.ReadThrough<InputReads>> alternativesOf(Core.Read read,
+            public List<ValueStanding.ReadThrough<InputReads>> alternativesOf(Core.Read read,
                                                                            InputReads at) {
                 return NameAnswers.alternativesOf(read, at, symbols, newtypes);
             }
 
             @Override
-            public AffineForms.ReadThrough<InputReads> taken(Core node, InputReads at) {
+            public ValueStanding.ReadThrough<InputReads> taken(Core node, InputReads at) {
                 return NameAnswers.taken(node, at);
             }
 

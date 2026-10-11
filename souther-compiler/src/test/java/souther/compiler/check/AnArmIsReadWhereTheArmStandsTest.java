@@ -69,7 +69,7 @@ class AnArmIsReadWhereTheArmStandsTest {
         }
 
         @Override
-        public AffineForms.ReadThrough<String> readThrough(Core.Read read, String at) {
+        public ValueStanding.ReadThrough<String> readThrough(Core.Read read, String at) {
             return null;
         }
 
@@ -112,7 +112,7 @@ class AnArmIsReadWhereTheArmStandsTest {
         }
 
         @Override
-        public AffineForms.ReadThrough<String> readThrough(Core.Read read, String at) {
+        public ValueStanding.ReadThrough<String> readThrough(Core.Read read, String at) {
             return null;
         }
 

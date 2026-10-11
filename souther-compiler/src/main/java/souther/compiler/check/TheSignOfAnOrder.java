@@ -52,7 +52,7 @@ public final class TheSignOfAnOrder {
 
         /** What {@code e} stands for where it is read — a name followed to what it was given — and
          *  the environment that is read in; {@code e} itself where it is no name. */
-        AffineForms.ReadThrough<E> standing(Core e, E at);
+        ValueStanding.ReadThrough<E> standing(Core e, E at);
 
         /** The number {@code e} is on every run, or null where it is none. */
         ExactRatio constant(Core e, E at);
@@ -133,7 +133,7 @@ public final class TheSignOfAnOrder {
      */
     public static <E> Read<E> read(StatedComparison comparison, E at, Sides<E> sides) {
         for (boolean signFirst : List.of(true, false)) {
-            AffineForms.ReadThrough<E> sign =
+            ValueStanding.ReadThrough<E> sign =
                     sides.standing(signFirst ? comparison.left() : comparison.right(), at);
             Core answered = Core.withoutStanding(sign.value());
             AnOperationApplied applied = AnOperationApplied.of(answered);

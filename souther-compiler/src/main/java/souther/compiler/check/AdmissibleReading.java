@@ -518,10 +518,12 @@ final class AdmissibleReading {
      *
      * <p>Read through the one fold there is, so a value written as an expression of values — two
      * strings joined — is the value it comes to. A case of an enumeration holds nothing and is not
-     * folded to anything; what it is is which declaration it is.
+     * folded to anything; what it is is which declaration it is, and a name given one is that case
+     * ({@link Terms#writtenValue}), as a name given a number is the number it folds to.
      */
     private Value valueOf(Core e, Denotations at) {
-        if (Core.withoutStanding(e) instanceof Core.UnitValue unit) {
+        Core written = terms.writtenValue(e, at);
+        if (Core.withoutStanding(written != null ? written : e) instanceof Core.UnitValue unit) {
             return Value.of(unit.data());
         }
         Object folded = Terms.folded(e, symbols, at);
