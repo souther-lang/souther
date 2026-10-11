@@ -692,7 +692,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         when valuesItRelates(count.ofTheElement()) instanceof List<FilingCoordinate>
                         values -> related.addAll(values);
                 case Quantity.HowManyDifferent different ->
-                        related.add(FilingCoordinate.at(different.ofTheElement()));
+                        related.add(FilingCoordinate.at(different.ofTheElement().inputPosition()));
                 default -> {
                     return null;
                 }

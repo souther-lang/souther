@@ -218,7 +218,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
             assertTrue(stated.stream().anyMatch(each -> each instanceof OnTheWay.TakenIn taken
                             && (taken.demand().positions().contains(totals.key())
                                     || (taken.demand() instanceof RowDemand.ForTheRun(
-                                            Proposition.Some(TermPath over,
+                                            Proposition.Some(DecisionSubject.AnInput(TermPath over),
                                                     Proposition.SameValue(
                                                             DecisionSubject.AnInput(TermPath one),
                                                             DecisionSubject.AnInput(TermPath other),

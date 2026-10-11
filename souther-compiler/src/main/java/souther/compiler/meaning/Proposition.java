@@ -1,7 +1,6 @@
 package souther.compiler.meaning;
 
 import souther.compiler.inputs.CasesLeft;
-import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -51,7 +50,7 @@ public sealed interface Proposition {
      * container holding something — and a quantifier left holding it would turn on the container
      * without any part of it saying so.
      */
-    default boolean mayTurnOnAnElementOf(TermPath container) {
+    default boolean mayTurnOnAnElementOf(DecisionSubject container) {
         return switch (this) {
             case Always _ -> false;
             case Unread unread -> !unread.fixed();
@@ -78,37 +77,39 @@ public sealed interface Proposition {
 
     /** Whether {@code quantity} may be read off an element of {@code container}. A value a body
      *  bound or a dependency answered is computed from something nothing here names, so it may. */
-    private static boolean mayBeAnElementOf(Quantity quantity, TermPath container) {
+    private static boolean mayBeAnElementOf(Quantity quantity, DecisionSubject container) {
         return switch (quantity) {
-            case DecisionAtom.OfTheInput(var term) -> isAnElementOf(term.subjectPath(), container);
+            case DecisionAtom.OfTheInput(var term) ->
+                    isAnElementOf(new DecisionSubject.AnInput(term.subjectPath()), container);
             case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _ -> true;
             // A piece of a string is whatever the statement it is read inside says it is, and
             // that statement is about the string and no container's element.
             case Quantity.CodePointsOfAPiece _ -> false;
-            case Quantity.HowManyMeet(TermPath counted, Proposition each) ->
+            case Quantity.HowManyMeet(DecisionSubject counted, Proposition each) ->
                     isAnElementOf(counted, container) || each.mayTurnOnAnElementOf(container);
             case Quantity.HowManyHold(List<Proposition> each) -> each.stream()
                     .anyMatch(one -> one.mayTurnOnAnElementOf(container));
-            case Quantity.HowManyDifferent(TermPath counted, TermPath _) ->
+            case Quantity.HowManyDifferent(DecisionSubject counted, DecisionSubject _) ->
                     isAnElementOf(counted, container);
-            case Quantity.SumOver(TermPath summed, var each) ->
+            case Quantity.SumOver(DecisionSubject summed, var each) ->
                     isAnElementOf(summed, container) || each.coefs().keySet().stream()
                             .anyMatch(one -> mayBeAnElementOf(one, container));
             case Quantity.RemainderOfADividend(var dividend, var _) -> dividend.coefs().keySet()
-                    .stream().anyMatch(term -> isAnElementOf(term.subjectPath(), container));
+                    .stream().anyMatch(term -> isAnElementOf(
+                            new DecisionSubject.AnInput(term.subjectPath()), container));
         };
     }
 
     /** Whether {@code subject} may be an element of {@code container}, the same way. */
-    private static boolean mayBeAnElementOf(DecisionSubject subject, TermPath container) {
+    private static boolean mayBeAnElementOf(DecisionSubject subject, DecisionSubject container) {
         return switch (subject) {
-            case DecisionSubject.AnInput(TermPath at) -> isAnElementOf(at, container);
+            case DecisionSubject.AnInput _ -> isAnElementOf(subject, container);
             case DecisionSubject.AnAnswer _ -> true;
         };
     }
 
     /** Whether {@code at} is an element of {@code container}, or a key of it, or under one. */
-    private static boolean isAnElementOf(TermPath at, TermPath container) {
+    private static boolean isAnElementOf(DecisionSubject at, DecisionSubject container) {
         return at.isAtOrUnder(container.element()) || at.isAtOrUnder(container.key());
     }
 
@@ -318,10 +319,10 @@ public sealed interface Proposition {
      *
      * @param key spelled from the rest when it is made, whatever is handed in
      */
-    record Some(TermPath container, Proposition ofTheElement, boolean holds, String key)
+    record Some(DecisionSubject container, Proposition ofTheElement, boolean holds, String key)
             implements Proposition {
 
-        public Some(TermPath container, Proposition ofTheElement, boolean holds) {
+        public Some(DecisionSubject container, Proposition ofTheElement, boolean holds) {
             this(container, ofTheElement, holds, null);
         }
 
@@ -572,7 +573,7 @@ public sealed interface Proposition {
         if (!(relation instanceof Relation.Affine(LinearForm<Quantity> form, Rel rel))
                 || form.coefs().size() != 1
                 || !(form.coefs().keySet().iterator().next()
-                        instanceof Quantity.HowManyMeet(TermPath container, Proposition each))) {
+                        instanceof Quantity.HowManyMeet(DecisionSubject container, Proposition each))) {
             return null;
         }
         // a·count + k rel 0 with a positive, as a relation is written: count rel t.

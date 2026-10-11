@@ -152,13 +152,14 @@ final class AStatementAtARow {
             case Proposition.Any any -> any.parts().forEach(part ->
                     gather(part, behavior, quantities, into, elements, positions));
             case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
-                    _ -> new OverTheElements(some.container(),
+                    _ -> new OverTheElements(some.container().inputPosition(),
                             of(some.ofTheElement(), behavior, quantities)));
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
                     && countIn(affine) instanceof Quantity.HowManyMeet count ->
                     elements.computeIfAbsent(keyOf(count), _ -> new OverTheElements(
-                            count.container(), of(count.ofTheElement(), behavior, quantities)));
+                            count.container().inputPosition(),
+                            of(count.ofTheElement(), behavior, quantities)));
             case Proposition.Compared compared -> into.computeIfAbsent(compared.relation(),
                     relation -> OneRelation.of(relation, behavior, quantities));
             default -> throw new IllegalStateException("a statement put to rows is over relations"

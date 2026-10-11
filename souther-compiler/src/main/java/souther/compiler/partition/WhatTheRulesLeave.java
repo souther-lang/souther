@@ -213,11 +213,12 @@ public final class WhatTheRulesLeave {
                                            InputReading read) {
         AWayThrough element = admits(some.ofTheElement(), someMeets, read);
         if (someMeets) {
-            return element instanceof AWayThrough.RuledOut || mayHold(some.container(), true, read)
+            TermPath container = some.container().inputPosition();
+            return element instanceof AWayThrough.RuledOut || mayHold(container, true, read)
                     ? element : new AWayThrough.RuledOut(
-                            new WhyRuledOut.NothingIsHeldIn(some.container()));
+                            new WhyRuledOut.NothingIsHeldIn(container));
         }
-        return mayHold(some.container(), false, read) ? LEFT : element;
+        return mayHold(some.container().inputPosition(), false, read) ? LEFT : element;
     }
 
     /**

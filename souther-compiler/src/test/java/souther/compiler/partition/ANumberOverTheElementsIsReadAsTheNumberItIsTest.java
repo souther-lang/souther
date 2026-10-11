@@ -12,6 +12,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
@@ -77,13 +78,14 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
     @Test
     void howManyADistinctListHoldsIsHowManyDifferentValuesTheListHolds() {
         Quantity read = theOnlyNumber("varied");
-        assertEquals(new Quantity.HowManyDifferent(CODES, CODES.element()), read);
+        assertEquals(new Quantity.HowManyDifferent(new DecisionSubject.AnInput(CODES),
+                new DecisionSubject.AnInput(CODES.element())), read);
     }
 
     @Test
     void howManyListsPutEndToEndHoldIsWhatTheirSizesAddUpTo() {
         Quantity.SumOver read = assertInstanceOf(Quantity.SumOver.class, theOnlyNumber("stocked"));
-        assertEquals(BINS, read.container());
+        assertEquals(new DecisionSubject.AnInput(BINS), read.container());
         assertEquals(0, read.ofTheElement().constant().signum(), () -> "nothing beside: " + read);
         Map.Entry<Quantity, ExactRatio> each = read.ofTheElement().coefs().entrySet().iterator()
                 .next();
@@ -96,7 +98,8 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
 
     @Test
     void howManyDifferentValuesAMappedListHoldsIsHowManyDifferentValuesOfWhatIsTakenOfEach() {
-        assertEquals(new Quantity.HowManyDifferent(ITEMS, ITEMS.element().then("code")),
+        assertEquals(new Quantity.HowManyDifferent(new DecisionSubject.AnInput(ITEMS),
+                new DecisionSubject.AnInput(ITEMS.element().then("code"))),
                 theOnlyNumber("variedItems"));
     }
 
@@ -104,7 +107,7 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
     void whatTheListsOfAMappedListAddUpToIsWhatTheirSizesInTheSourceAddUpTo() {
         Quantity.SumOver read = assertInstanceOf(Quantity.SumOver.class,
                 theOnlyNumber("stockedItems"));
-        assertEquals(ITEMS, read.container());
+        assertEquals(new DecisionSubject.AnInput(ITEMS), read.container());
         NumericTerm.TakenOf size = assertInstanceOf(NumericTerm.TakenOf.class,
                 assertInstanceOf(DecisionAtom.OfTheInput.class,
                         read.ofTheElement().coefs().keySet().iterator().next()).term());

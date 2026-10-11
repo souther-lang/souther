@@ -3,6 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
@@ -52,7 +53,7 @@ class WhatAPathCannotHoldSaysWhatStoppedItsPartsTest {
         List<Proposition> declined = List.of(
                 new Proposition.Any(List.of(first, second)),
                 new Proposition.OnAnApplication(List.of(first, second)),
-                new Proposition.Some(TermPath.of("xs"), new Proposition.All(List.of(first, second)),
+                new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("xs")),new Proposition.All(List.of(first, second)),
                         true));
         for (Proposition stated : declined) {
             for (boolean positive : List.of(true, false)) {

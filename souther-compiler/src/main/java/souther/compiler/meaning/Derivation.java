@@ -673,7 +673,7 @@ public sealed interface Derivation {
                                   Derivation read) {
                 return switch (read) {
                     case Stopped _ -> true;
-                    case SomeElementMeeting(TermPath container, Derivation ofTheElement,
+                    case SomeElementMeeting(DecisionSubject container, Derivation ofTheElement,
                                             boolean holds, var _) ->
                             holds && standsAt(some.container(), container)
                                     && reads(some.ofTheElement(), ofTheElement);
@@ -714,9 +714,9 @@ public sealed interface Derivation {
 
             /** Whether the container {@code argument} is, read at {@code container}, stands
              *  there: at the position the call has it at, where it has it at one. */
-            private boolean standsAt(DeclaredArgument argument, TermPath container) {
+            private boolean standsAt(DeclaredArgument argument, DecisionSubject container) {
                 TermPath at = call.standingAt().get(argument);
-                return at == null || at.equals(container);
+                return at == null || new DecisionSubject.AnInput(at).equals(container);
             }
 
             /**
@@ -818,13 +818,16 @@ public sealed interface Derivation {
                         TermPath at = positionOf(container);
                         TermPath element = positionOf(each);
                         yield at == null || element == null
-                                || new Quantity.HowManyDifferent(at, element).equals(atom);
+                                || new Quantity.HowManyDifferent(new DecisionSubject.AnInput(at),
+                                new DecisionSubject.AnInput(element)).equals(atom);
                     }
                     case LawNumber.SumOver<DeclaredArgument>(var container, var each) -> {
                         TermPath at = positionOf(container);
                         yield at == null
-                                || (atom instanceof Quantity.SumOver(TermPath summed, var ofEach)
-                                && summed.equals(at) && numberStands(each, ofEach, leaf));
+                                || (atom instanceof Quantity.SumOver(DecisionSubject summed,
+                                var ofEach)
+                                && summed.equals(new DecisionSubject.AnInput(at))
+                                && numberStands(each, ofEach, leaf));
                     }
                     case LawNumber.HowManyMeet<DeclaredArgument>(var container, var statement) -> {
                         TermPath at = positionOf(container);
@@ -842,12 +845,14 @@ public sealed interface Derivation {
             private boolean counts(LawProposition<DeclaredArgument> statement, TermPath at,
                                    LinearForm<Quantity> form, Quantity atom, ALawComparison leaf) {
                 Conclusion asked = new Conclusion(Optional.empty());
-                if (atom instanceof Quantity.HowManyMeet(TermPath counted, var _)) {
-                    return counted.equals(at) && leaf.counts().stream().anyMatch(count ->
-                            count.container().equals(at) && atom.equals(count.counted(asked))
+                DecisionSubject container = new DecisionSubject.AnInput(at);
+                if (atom instanceof Quantity.HowManyMeet(DecisionSubject counted, var _)) {
+                    return counted.equals(container) && leaf.counts().stream().anyMatch(count ->
+                            count.container().equals(container)
+                                    && atom.equals(count.counted(asked))
                                     && reads(statement, count.ofTheElement()));
                 }
-                return leaf.alike().stream().anyMatch(count -> count.container().equals(at)
+                return leaf.alike().stream().anyMatch(count -> count.container().equals(container)
                         && reads(statement, count.ofTheElement())
                         && count.ofTheElement().concludes(Optional.empty())
                         instanceof Proposition.Always(boolean all)
@@ -1220,7 +1225,7 @@ public sealed interface Derivation {
      * @param holdsSomething that the container holds something, held only where the conclusion
      *                       has it as a part ({@link #asksWhetherItHoldsAnything})
      */
-    record SomeElementMeeting(TermPath container, Derivation ofTheElement, boolean holds,
+    record SomeElementMeeting(DecisionSubject container, Derivation ofTheElement, boolean holds,
                               Optional<Derivation> holdsSomething) implements Derivation {
 
         public SomeElementMeeting {
@@ -1233,7 +1238,7 @@ public sealed interface Derivation {
          * Whether some element meeting {@code ofTheElement} has the container's holding anything as
          * a part.
          */
-        public static boolean asksWhetherItHoldsAnything(TermPath container,
+        public static boolean asksWhetherItHoldsAnything(DecisionSubject container,
                                                          Proposition ofTheElement) {
             if (!ofTheElement.mayTurnOnAnElementOf(container)) {
                 return !(ofTheElement instanceof Proposition.Always(boolean holds) && !holds);
@@ -1452,7 +1457,7 @@ public sealed interface Derivation {
          * How many elements of the container at {@code container} meet what {@code ofTheElement}
          * was read as.
          */
-        public record Counted(TermPath container, Derivation ofTheElement) {
+        public record Counted(DecisionSubject container, Derivation ofTheElement) {
 
             public Counted {
                 Objects.requireNonNull(container, "a count is of a container");

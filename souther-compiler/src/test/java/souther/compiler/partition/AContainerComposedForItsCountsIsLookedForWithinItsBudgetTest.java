@@ -13,6 +13,7 @@ import souther.compiler.inputs.Position;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
@@ -144,7 +145,7 @@ class AContainerComposedForItsCountsIsLookedForWithinItsBudgetTest {
         Proposition meets = new Proposition.Compared(new Relation.Affine(new LinearForm<>(
                 ExactRatio.ZERO, Map.of(new DecisionAtom.OfTheInput(element), ExactRatio.ONE)),
                 Rel.GT), true);
-        return CountedElements.of("counted", new Quantity.HowManyMeet(read.xs(), meets),
+        return CountedElements.of("counted", new Quantity.HowManyMeet(new DecisionSubject.AnInput(read.xs()), meets),
                 read.measuring(), anElementMeeting);
     }
 
@@ -164,7 +165,7 @@ class AContainerComposedForItsCountsIsLookedForWithinItsBudgetTest {
                     ExactRatio.of(-above[i]),
                     Map.of(new DecisionAtom.OfTheInput(element), ExactRatio.ONE)), Rel.GT), true);
             RealizationTarget.ACount count = new RealizationTarget.ACount(CountedElements.of(
-                    "counted", new Quantity.HowManyMeet(xs, meets), measuring, Optional.empty()));
+                    "counted", new Quantity.HowManyMeet(new DecisionSubject.AnInput(xs), meets), measuring, Optional.empty()));
             counts.add(count);
             demands.put(count, AskedAt.oneNumberOf(NumbersAskedFor.of(LevelRegion.point(
                     new Level.OfTheQuantity(ExactRatio.of(asked[i])))), Count.of(asked[i])));

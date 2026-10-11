@@ -117,7 +117,7 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
     @Test
     void aSetWithAValueTakenOutHoldsSomeOtherValue() {
         TermPath set = TermPath.of("b").then("set");
-        assertEquals(new Proposition.Some(set, new Proposition.SameValue(
+        assertEquals(new Proposition.Some(new DecisionSubject.AnInput(set),new Proposition.SameValue(
                         new DecisionSubject.AnInput(set.element()),
                         new DecisionSubject.AnInput(TermPath.of("b").then("n")), false), true),
                 stated("if Bool.not(Set.isEmpty(Set.remove(b.n, b.set))) then 1 else 0"));

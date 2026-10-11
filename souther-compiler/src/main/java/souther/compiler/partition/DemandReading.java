@@ -426,7 +426,7 @@ final class DemandReading {
      * well, since an entry is its key and its value.
      */
     private static List<Read> ofSomeElement(Proposition.Some some, InputReading read) {
-        TermPath held = some.container();
+        TermPath held = some.container().inputPosition();
         List<TermPath> element = elementOf(held);
         boolean everyElement = !some.holds();
         Proposition asked = everyElement ? some.ofTheElement().denied() : some.ofTheElement();

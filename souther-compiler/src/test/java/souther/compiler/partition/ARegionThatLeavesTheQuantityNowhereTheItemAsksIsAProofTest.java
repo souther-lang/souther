@@ -15,6 +15,7 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
@@ -282,7 +283,8 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
         atMost.put(new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(pathIn(COUNTED, "limit"))),
                 ExactRatio.ONE);
         atMost.put(new DecisionAtom.OfTheInput(element), ExactRatio.ONE.negated());
-        CountedElements counted = CountedElements.of("counted", new Quantity.HowManyMeet(xs,
+        CountedElements counted = CountedElements.of("counted", new Quantity.HowManyMeet(
+                new DecisionSubject.AnInput(xs),
                 new Proposition.Compared(new Relation.Affine(
                         new LinearForm<>(ExactRatio.ZERO, atMost), Rel.GE), false)), measuring,
                 Optional.empty());
@@ -311,7 +313,8 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
         Map<Quantity, ExactRatio> atMost = new LinkedHashMap<>();
         atMost.put(new DecisionAtom.OfTheInput(limit), ExactRatio.ONE);
         atMost.put(new DecisionAtom.OfTheInput(element), ExactRatio.ONE.negated());
-        CountedElements counted = CountedElements.of("counted", new Quantity.HowManyMeet(xs,
+        CountedElements counted = CountedElements.of("counted", new Quantity.HowManyMeet(
+                new DecisionSubject.AnInput(xs),
                 new Proposition.Compared(new Relation.Affine(
                         new LinearForm<>(ExactRatio.ZERO, atMost), Rel.GE), false)), measuring,
                 Optional.empty());

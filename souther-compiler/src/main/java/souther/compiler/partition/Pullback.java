@@ -1470,14 +1470,15 @@ final class Pullback {
                 return somePiece(located.pieces(), answered, element, over, in);
             }
             Optional<Derivation> holdsSomething = Optional.empty();
-            if (Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(held, element)) {
+            DecisionSubject heldAt = new DecisionSubject.AnInput(held);
+            if (Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(heldAt, element)) {
                 NumericTerm.TakenOf size = sizeAt(held);
                 holdsSomething = Optional.of(size != null
                         ? leaf(new Derivation.SizeAboveNought(size),
                                 askedAt != null ? askedAt : new Denotation(e, reads))
                         : unread(over, reads, new WhyUnread.NoMeasureOfItsSize()));
             }
-            return new Derivation.SomeElementMeeting(held, answered, true, holdsSomething);
+            return new Derivation.SomeElementMeeting(heldAt, answered, true, holdsSomething);
         }
 
         /**
@@ -2308,7 +2309,8 @@ final class Pullback {
             };
             return each == null ? new Sized.NotSized(
                     new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT))
-                    : new Sized.AsAForm(LinearForm.atom(new Quantity.HowManyDifferent(held, each)));
+                    : new Sized.AsAForm(LinearForm.atom(new Quantity.HowManyDifferent(
+                            new DecisionSubject.AnInput(held), new DecisionSubject.AnInput(each))));
         }
 
         /**
@@ -2337,7 +2339,9 @@ final class Pullback {
                 quantifying.remove(held);
             }
             return each instanceof Sized.AsAForm(LinearForm<Quantity> form)
-                    ? new Sized.AsAForm(LinearForm.atom(new Quantity.SumOver(held, form))) : each;
+                    ? new Sized.AsAForm(LinearForm.atom(
+                            new Quantity.SumOver(new DecisionSubject.AnInput(held), form)))
+                    : each;
         }
 
         /** How many what stands at {@code at} holds, as a number of the input. */
@@ -2425,10 +2429,11 @@ final class Pullback {
                 return new Sized.NotSized(stopped);
             }
             // What is the same for every element counts all of them or none.
-            if (!element.mayTurnOnAnElementOf(held)) {
+            DecisionSubject heldAt = new DecisionSubject.AnInput(held);
+            if (!element.mayTurnOnAnElementOf(heldAt)) {
                 if (element instanceof Proposition.Always(boolean holds)) {
                     if (alike != null) {
-                        alike.add(new Derivation.AComparisonRead.Counted(held, answered));
+                        alike.add(new Derivation.AComparisonRead.Counted(heldAt, answered));
                     }
                     NumericTerm.TakenOf size = sizeAt(held);
                     return !holds ? new Sized.AsAForm(LinearForm.constant(ExactRatio.ZERO))
@@ -2437,8 +2442,8 @@ final class Pullback {
                 }
                 return new Sized.NotSized(new WhyUnread.NotArithmetic());
             }
-            Quantity.HowManyMeet count = new Quantity.HowManyMeet(held, element);
-            counting.putIfAbsent(count, new Derivation.AComparisonRead.Counted(held, answered));
+            Quantity.HowManyMeet count = new Quantity.HowManyMeet(heldAt, element);
+            counting.putIfAbsent(count, new Derivation.AComparisonRead.Counted(heldAt, answered));
             return new Sized.AsAForm(LinearForm.atom(count));
         }
     }

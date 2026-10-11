@@ -76,8 +76,8 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
                 on.put(each, orders.observed());
             }
         }
-        return new CountedElements(behavior, count.container(), count.ofTheElement(), perElement,
-                on, anElementMeeting);
+        return new CountedElements(behavior, count.container().inputPosition(),
+                count.ofTheElement(), perElement, on, anElementMeeting);
     }
 
     /** Every number of a row the statement reads, the element's own among them. */

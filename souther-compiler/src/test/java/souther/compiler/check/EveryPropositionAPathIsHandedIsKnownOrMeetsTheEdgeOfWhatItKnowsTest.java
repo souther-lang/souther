@@ -118,7 +118,7 @@ class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
                 new DecisionSubject.AnInput(TermPath.of("s")), true));
         out.put("both", new Proposition.All(List.of(above, truth)));
         out.put("either", new Proposition.Any(List.of(above, truth)));
-        out.put("some element", new Proposition.Some(TermPath.of("xs"), element, true));
+        out.put("some element", new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("xs")),element, true));
         out.put("on some application", new Proposition.OnAnApplication(List.of(above, truth)));
         out.put("unread", new Proposition.Unread(Optional.empty(), 0,
                 new WhyUnread.NotMetByTheReading(), false, true));

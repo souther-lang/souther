@@ -107,7 +107,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * <p>A number about every pair of elements and not about each: whether one adds to it turns on
      * the ones beside it, so it is no count of elements meeting something.
      */
-    record HowManyDifferent(TermPath container, TermPath ofTheElement) implements Quantity {
+    record HowManyDifferent(DecisionSubject container, DecisionSubject ofTheElement)
+            implements Quantity {
 
         public HowManyDifferent {
             if (container == null || ofTheElement == null) {
@@ -137,7 +138,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * input's own totals are of a value standing at one position inside each element
      * ({@code NumericTerm.TakenOver}); this is of any number of the element.
      */
-    record SumOver(TermPath container, LinearForm<Quantity> ofTheElement) implements Quantity {
+    record SumOver(DecisionSubject container, LinearForm<Quantity> ofTheElement)
+            implements Quantity {
 
         public SumOver {
             if (container == null || ofTheElement == null) {
@@ -213,7 +215,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * is the container's size or none, and a count of what nobody read is no number anything can be
      * said of.
      */
-    record HowManyMeet(TermPath container, Proposition ofTheElement) implements Quantity {
+    record HowManyMeet(DecisionSubject container, Proposition ofTheElement) implements Quantity {
 
         public HowManyMeet {
             if (container == null || ofTheElement == null) {
