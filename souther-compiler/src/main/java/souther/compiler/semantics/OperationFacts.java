@@ -748,6 +748,21 @@ public final class OperationFacts {
                     atLeast(codePointsOf(at(0), new CodePointClass.NotWhitespace()), 1, -1))),
             about("String", "replace", unsaid(AnswerAspect.EMPTINESS,
                     Unsayable.MADE_UP_OF_COPIES_OF_A_TEXT)),
+            // A word is a run of code points that are not whitespace and a character is one code
+            // point, so each holds something.
+            about("String", "words", new OperationFact.EveryElementOfItsAnswerIs(
+                    new SideAnswered(AnswerAspect.EMPTINESS, true))),
+            about("String", "characters", new OperationFact.EveryElementOfItsAnswerIs(
+                    new SideAnswered(AnswerAspect.EMPTINESS, true))),
+            // A case mapping takes a code point that is not whitespace to some that are not, and
+            // takes whitespace to itself; the composition that follows it joins code points that
+            // are not whitespace into one that is not. Trimming takes off whitespace alone.
+            about("String", "lowercase", new OperationFact.KeepsWhetherItHoldsACodePointOf(
+                    new CodePointClass.NotWhitespace(), at(0))),
+            about("String", "uppercase", new OperationFact.KeepsWhetherItHoldsACodePointOf(
+                    new CodePointClass.NotWhitespace(), at(0))),
+            about("String", "trim", new OperationFact.KeepsWhetherItHoldsACodePointOf(
+                    new CodePointClass.NotWhitespace(), at(0))),
 
             // What every operation answering a truth comes out true for. A container holding a
             // value is some element being it, and a denial is the other answer of its argument;

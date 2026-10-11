@@ -436,31 +436,58 @@ final class Pullback {
      * value.
      */
     private Derivation observe(Core standing, AnswerAspect aspect, InputReads reads) {
+        return observe(standing, new Asked.OnASide(aspect), reads);
+    }
+
+    /**
+     * What is asked of a value, read wherever the value is made: through the binding or name that
+     * stands for it and into each arm of the choice that answers it, the same way whatever is asked.
+     * A value made by none of those is asked by what is asked of it.
+     */
+    private sealed interface Asked {
+
+        /** How the value comes out on one side: holding, holding something, holding a value. */
+        record OnASide(AnswerAspect aspect) implements Asked {}
+
+        /**
+         * Whether some element of the value, a container, meets {@code some}, which a law {@code
+         * law} is being read at a call states of the container the call was handed.
+         */
+        record SomeElement(ALawRead law, LawProposition.SomeElement<DeclaredArgument> some)
+                implements Asked {}
+    }
+
+    /** How {@code standing} answers {@code asked}, read where the value is made. */
+    private Derivation observe(Core standing, Asked asked, InputReads reads) {
         Core e = Core.withoutStanding(standing);
         switch (e) {
             case Core.LetIn let -> {
                 return new Derivation.ThroughABinding(
-                        observe(let.body(), aspect, reads.and(let.binder(), let.value())));
+                        observe(let.body(), asked, reads.and(let.binder(), let.value())));
             }
             case Core.Read name when reads.meaningOf(name, read.rules().symbols(),
                     read.rules().newtypes()) instanceof ReadMeaning.Through through -> {
                 return new Derivation.ThroughABinding(
-                        observe(through.denotes().value(), aspect, through.denotes().at()));
+                        observe(through.denotes().value(), asked, through.denotes().at()));
             }
             case Core.If iff -> {
                 Derivation cond = observe(iff.cond(), AnswerAspect.TRUTH, reads);
-                Derivation then = observe(iff.then(), aspect, reads);
-                return new Derivation.IfThenElse(cond, then, observe(iff.els(), aspect, reads));
+                Derivation then = observe(iff.then(), asked, reads);
+                return new Derivation.IfThenElse(cond, then, observe(iff.els(), asked, reads));
             }
             case Core.Match match -> {
-                return ofAMatch(match, aspect, reads);
+                return armsOf(match, reads, (body, inside) -> observe(body, asked, inside));
             }
             default -> { }
         }
-        return switch (aspect) {
-            case TRUTH -> truth(e, reads);
-            case EMPTINESS -> holdingSomething(e, reads);
-            case PRESENCE -> present(e, reads);
+        return switch (asked) {
+            case Asked.OnASide(AnswerAspect aspect) -> switch (aspect) {
+                case TRUTH -> truth(e, reads);
+                case EMPTINESS -> holdingSomething(e, reads);
+                case PRESENCE -> present(e, reads);
+            };
+            case Asked.SomeElement(ALawRead law, var some) ->
+                    law.someElementOf(new Denotation(e, reads), some);
         };
     }
 
@@ -488,7 +515,7 @@ final class Pullback {
                 () -> BooleanMeaning.asAComparison(e).map(stated -> comparison(stated,
                         new Denotation(e, reads), fixed(e, reads), reads)).orElse(null),
                 () -> byALaw(applied, e, AnswerAspect.TRUTH, reads, new Denotation(e, reads)),
-                () -> inTheCalledBody(e, AnswerAspect.TRUTH, reads)));
+                () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.TRUTH), reads)));
         return taken != null ? taken
                 : unread(e, reads, unreadAs(applied, AnswerAspect.TRUTH, reads));
     }
@@ -625,7 +652,7 @@ final class Pullback {
         Derivation taken = firstThatReadsIt(List.of(
                 () -> writtenOut(e, AnswerAspect.EMPTINESS),
                 () -> byALaw(applied, e, AnswerAspect.EMPTINESS, reads, asked),
-                () -> inTheCalledBody(e, AnswerAspect.EMPTINESS, reads),
+                () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.EMPTINESS), reads),
                 () -> {
                     DecisionSubject held = reads.pathOf(e, read.rules().newtypes())
                             instanceof PathResolution.At(TermPath at)
@@ -651,7 +678,7 @@ final class Pullback {
         Derivation taken = firstThatReadsIt(List.of(
                 () -> writtenOut(e, AnswerAspect.PRESENCE),
                 () -> byALaw(applied, e, AnswerAspect.PRESENCE, reads, new Denotation(e, reads)),
-                () -> inTheCalledBody(e, AnswerAspect.PRESENCE, reads),
+                () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.PRESENCE), reads),
                 () -> {
                     DecisionSubject subject = reads.pathOf(e, read.rules().newtypes())
                             instanceof PathResolution.At(TermPath at)
@@ -713,20 +740,13 @@ final class Pullback {
     }
 
     /**
-     * How a match answering {@code aspect} was read: some arm taken, and what that arm answers.
+     * Some arm of {@code match} taken, and what {@code states} reads of that arm's body where it is
+     * taken — for a match a condition is, and for one that chooses a value a condition compares.
      *
      * <p>An arm is taken where the value is one of its cases and none of an arm before it. Which
      * cases a value written in the source is is settled before any row ({@link
      * InputReads#whetherEveryRowTakes}); one a row controls is a case the row writes at its position
      * or stands the dependency in with.
-     */
-    private Derivation ofAMatch(Core.Match match, AnswerAspect aspect, InputReads reads) {
-        return armsOf(match, reads, (body, inside) -> observe(body, aspect, inside));
-    }
-
-    /**
-     * Some arm of {@code match} taken, and what {@code states} reads of that arm's body where it is
-     * taken — for a match a condition is, and for one that chooses a value a condition compares.
      */
     private Derivation.MatchArms armsOf(Core.Match match, InputReads reads,
                                         BiFunction<Core, InputReads, Derivation> states) {
@@ -1388,15 +1408,22 @@ final class Pullback {
                         new Derivation.ALawSettles(always);
                 case LawProposition.All<DeclaredArgument> all ->
                         new Derivation.ALawJoins(all, all.parts().stream().map(this::of).toList());
-                case LawProposition.Any<DeclaredArgument> any ->
-                        new Derivation.ALawJoins(any, any.parts().stream().map(this::of).toList());
+                case LawProposition.Any<DeclaredArgument> any -> {
+                    List<Derivation> parts = new ArrayList<>();
+                    for (LawProposition<DeclaredArgument> part : any.parts()) {
+                        Derivation nothing = addingNothingTo(any, part);
+                        parts.add(nothing != null ? nothing : of(part));
+                    }
+                    yield new Derivation.ALawJoins(any, parts);
+                }
                 case LawProposition.Observed<DeclaredArgument> observed ->
                         new Derivation.OnTheSideALawNames(observed,
                                 observed(observed.of(), observed.side().aspect()));
                 case LawProposition.Compared<DeclaredArgument> compared -> compared(compared);
                 case LawProposition.SomeElement<DeclaredArgument> some ->
-                        new Derivation.ALawQuantifies(some, meeting(
-                                applied.argument(some.container()), some));
+                        new Derivation.ALawQuantifies(some, observe(
+                                applied.argument(some.container()),
+                                new Asked.SomeElement(this, some), reads));
                 case LawProposition.Same<DeclaredArgument> same -> {
                     DecisionSubject one = subject(same.one());
                     DecisionSubject other = subject(same.other());
@@ -1406,6 +1433,50 @@ final class Pullback {
                             : leaf(new Derivation.TheSameValue(same, one, other), e, reads);
                 }
             };
+        }
+
+        /**
+         * {@code part} of {@code any} read as adding nothing to the others, where it implies one of
+         * them at this call ({@link Derivation.ImpliesAnotherPart}) — or null where it implies
+         * none.
+         */
+        private Derivation addingNothingTo(LawProposition.Any<DeclaredArgument> any,
+                                           LawProposition<DeclaredArgument> part) {
+            for (LawProposition<DeclaredArgument> other : any.parts()) {
+                if (other instanceof LawProposition.SomeElement<DeclaredArgument> some
+                        && some.holds() && Derivation.ImpliesAnotherPart
+                                .holdsOnlyWhereItHoldsSomething(part, some.container())) {
+                    ValueName made = answeredBy(applied.argument(some.container()), reads);
+                    if (made != null
+                            && Derivation.EveryElementMeetsIt.askedOfEveryElement(some, made)) {
+                        return new Derivation.ImpliesAnotherPart(part, some, made);
+                    }
+                }
+            }
+            return null;
+        }
+
+        /**
+         * Some element of {@code made} meeting {@code some}, where what {@code some} asks of it is
+         * what every element of the operation's answer {@code made} is meets
+         * ({@link Derivation.EveryElementMeetsIt}): the answer holding something — or null where
+         * {@code made} is no such answer.
+         */
+        private Derivation everyElementMeets(Denotation made,
+                                             LawProposition.SomeElement<DeclaredArgument> some) {
+            ValueName operation = answeredBy(made.value(), made.at());
+            return operation == null
+                    || !Derivation.EveryElementMeetsIt.askedOfEveryElement(some, operation) ? null
+                    : new Derivation.EveryElementMeetsIt(some, operation,
+                            observe(made.value(), AnswerAspect.EMPTINESS, made.at()));
+        }
+
+        /** The operation whose answer {@code given} stands for, read in {@code at}, or null where
+         *  it stands for no operation's answer. */
+        private ValueName answeredBy(Core given, InputReads at) {
+            AnOperationApplied made = AnOperationApplied.of(
+                    at.standing(given, read.rules().symbols(), read.rules().newtypes()).value());
+            return made == null ? null : made.operation();
         }
 
         /** How {@code subject} coming out on {@code aspect}'s holding side was read. */
@@ -1508,18 +1579,33 @@ final class Pullback {
         }
 
         /**
+         * Some element of {@code made}, a container no binding, name or choice made, meeting
+         * {@code some} — by the first of the rules for it that reads all of it ({@link RuleChoice}).
+         */
+        Derivation someElementOf(Denotation made,
+                                 LawProposition.SomeElement<DeclaredArgument> some) {
+            return firstThatReadsIt(List.of(
+                    () -> meeting(made, some),
+                    () -> everyElementMeets(made, some),
+                    () -> inTheCalledBody(made.value(), new Asked.SomeElement(this, some),
+                            made.at())));
+        }
+
+        /**
          * Some element of a container meeting a statement, read as the quantifier over the
          * container's element where it stands, or element by element where it was written out.
          */
-        private Derivation meeting(Core given, LawProposition.SomeElement<DeclaredArgument> some) {
-            Denotation container = reads.standing(given, read.rules().symbols(),
+        private Derivation meeting(Denotation made,
+                                   LawProposition.SomeElement<DeclaredArgument> some) {
+            Core given = made.value();
+            Denotation container = made.at().standing(given, read.rules().symbols(),
                     read.rules().newtypes());
             // Another order of the same elements has some element meeting a statement where they
             // do, and what an operation kept of them has one where some element it was handed
             // meets that and what it kept by.
             Beneath beneath = beneath(container, false);
             Core over = beneath == null ? given : beneath.at().value();
-            InputReads in = beneath == null ? reads : beneath.at().at();
+            InputReads in = beneath == null ? made.at() : beneath.at().at();
             List<Kept> kept = beneath == null ? List.of() : beneath.kept();
             if (beneath != null) {
                 container = beneath.at();
@@ -1551,11 +1637,18 @@ final class Pullback {
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
             DecisionSubject heldAt = located.held();
-            Derivation answered = located.handed() == null
-                    ? aboutAnElement(some.container(), heldAt, located.each(),
-                            some.ofTheElement())
-                    : aboutTheValue(some.container(), heldAt, some.ofTheElement(),
-                            located.handed());
+            InputReads outer = application;
+            Derivation answered;
+            try {
+                application = handingTheChosenElement(made, some, located);
+                answered = located.handed() == null
+                        ? aboutAnElement(some.container(), heldAt, located.each(),
+                                some.ofTheElement())
+                        : aboutTheValue(some.container(), heldAt, some.ofTheElement(),
+                                located.handed());
+            } finally {
+                application = outer;
+            }
             if (answered == null) {
                 return unread(e, reads, new WhyUnread.TwoElementsOfOneContainer());
             }
@@ -1582,9 +1675,36 @@ final class Pullback {
                 holdsSomething = Optional.of(size != null
                         ? leaf(new Derivation.SizeAboveNought(size),
                                 askedAt != null ? askedAt : new Denotation(e, reads))
-                        : unread(over, reads, new WhyUnread.NoMeasureOfItsSize()));
+                        : unread(over, in, new WhyUnread.NoMeasureOfItsSize()));
             }
             return new Derivation.SomeElementMeeting(heldAt, answered, true, holdsSomething);
+        }
+
+        /**
+         * Where the closure {@code some} names is read, where the container its elements arrive on
+         * was chosen by a case, or answered by a body, and stands at a position there as
+         * {@code located}: on that case the element handed the closure is the one standing at the
+         * container's element. Where the container is the argument itself, or its element is
+         * anything but the one standing there, it is where it was.
+         */
+        private InputReads handingTheChosenElement(Denotation made,
+                                                   LawProposition.SomeElement<DeclaredArgument>
+                                                           some, Located located) {
+            Core argument = applied.argument(some.container());
+            DeclaredArgument named = closureIn(some.ofTheElement());
+            if (named == null || Core.withoutStanding(made.value())
+                    == Core.withoutStanding(argument) || located.handed() != null
+                    || !(located.each() instanceof ElementAt.AtASubject(
+                            DecisionSubject.AnInput(TermPath list)))) {
+                return application;
+            }
+            Denotation closure = reads.denotes(applied.argument(named), read.rules().symbols(),
+                    read.rules().newtypes());
+            if (!(Core.withoutStanding(closure.value()) instanceof Core.Block block)) {
+                return application;
+            }
+            InputReads handing = closure.at().namingTheElement(block, argument, list.element());
+            return handing != null ? handing : application;
         }
 
         /**
@@ -2146,6 +2266,10 @@ final class Pullback {
          * quantities a condition is read over.
          */
         private Derivation compared(LawProposition.Compared<DeclaredArgument> compared) {
+            Derivation kept = whereAnOperationKeepsIt(compared);
+            if (kept != null) {
+                return kept;
+            }
             LinearForm<LawNumber<DeclaredArgument>> form = compared.form();
             // An argument chosen by cases is compared on each of them, and one a behavior's call
             // answers through its body, as a comparison the source wrote is
@@ -2206,6 +2330,41 @@ final class Pullback {
                 counting = outer;
                 alike = outerAlike;
             }
+        }
+
+        /**
+         * {@code compared}, which says only whether a string holds a code point of a class, read
+         * as the same statement of what the operation that answered the string was handed, where
+         * that operation keeps whether it holds one ({@link Derivation.WhereAnOperationKeepsIt}) —
+         * or null where it says more, or the string is no such answer.
+         */
+        private Derivation whereAnOperationKeepsIt(
+                LawProposition.Compared<DeclaredArgument> compared) {
+            CodePointClass counted = Derivation.WhereAnOperationKeepsIt.whetherItHoldsOne(compared);
+            if (counted == null) {
+                return null;
+            }
+            Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> only =
+                    compared.form().coefs().entrySet().iterator().next();
+            if (!(only.getKey() instanceof LawNumber.CodePointsOf<DeclaredArgument>(
+                    LawSubject.Argument<DeclaredArgument>(DeclaredArgument at), var _))) {
+                return null;
+            }
+            Denotation string = reads.standing(applied.argument(at), read.rules().symbols(),
+                    read.rules().newtypes());
+            AnOperationApplied made = AnOperationApplied.of(string.value());
+            if (made == null || !(DefaultBoundOperationFacts.get()
+                    .keepsWhetherItHoldsACodePointOf(made.operation())
+                    instanceof BoundOperationFacts.KeptCodePoints(var keeps, var from))
+                    || !keeps.equals(counted)) {
+                return null;
+            }
+            LawProposition.Compared<DeclaredArgument> same = new LawProposition.Compared<>(
+                    new LinearForm<>(compared.form().constant(), Map.of(
+                            new LawNumber.CodePointsOf<>(new LawSubject.Argument<>(from), counted),
+                            only.getValue())), compared.states());
+            return new Derivation.WhereAnOperationKeepsIt(compared, made.operation(),
+                    new ALawRead(made, string.value(), string.at()).compared(same));
         }
 
         /** The argument a number of a law is of. */
@@ -3575,14 +3734,14 @@ final class Pullback {
     }
 
     /**
-     * How {@code e}, a call of a behavior no row stands in, coming out on {@code aspect} was read
-     * off the behavior's body where the call stands — or null where it is no such call, or the body
-     * is not read there ({@link #intoACall}).
+     * How {@code e}, a call of a behavior no row stands in, answers {@code asked}, read off the
+     * behavior's body where the call stands — or null where it is no such call, or the body is not
+     * read there ({@link #intoACall}).
      */
-    private Derivation inTheCalledBody(Core e, AnswerAspect aspect, InputReads reads) {
+    private Derivation inTheCalledBody(Core e, Asked asked, InputReads reads) {
         Inside.ACall called = intoACall(new Denotation(e, reads));
         return called == null ? null : new Derivation.ABehaviorsBody(called.behavior(),
-                observe(called.body().value(), aspect, called.body().at()));
+                observe(called.body().value(), asked, called.body().at()));
     }
 
     /**

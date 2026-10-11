@@ -11,11 +11,13 @@ import souther.compiler.proof.AppliedClosures;
 import souther.compiler.proof.Slot;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ClosurePositions;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
+import souther.compiler.semantics.SideAnswered;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -36,8 +38,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * that takes it is as sound as it is. These are the axioms the proofs of the library's written
  * operations take beside a kernel's laws (which {@code EveryLawHoldsOfWhatTheLibraryComputesTest}
  * runs): what its answer comes to beside what others answer, the containers it is no smaller than,
- * the one value it puts in, what it lists, what it builds its answer from, and how far it goes
- * applying its closure. Each is written from the axiom itself and run
+ * the one value it puts in, what every element of its answer is, which code points it keeps the
+ * having of, what it lists, what it builds its answer from, and how far it goes applying its
+ * closure. Each is written from the axiom itself and run
  * ({@link WhatTheLibraryComputes}); how far a closure is applied is run through a closure that
  * stops the call at the one element it is marked to stop on, so whether the call stops is whether
  * that element was handed to it.
@@ -74,6 +77,27 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
                     instanceof AppliedClosures.Listing listing) {
                 statements.add(new WhatTheLibraryComputes.Statement(operation, "lists",
                         lists(listing)));
+            }
+            // No element of the answer comes out on the other side.
+            if (facts.everyElementOfItsAnswerIs(operation) instanceof SideAnswered side) {
+                statements.add(new WhatTheLibraryComputes.Statement(operation,
+                        "every element is " + side, new LawProposition.SomeElement<>(
+                                new Slot.Answer(), new LawProposition.Observed<>(
+                                        new LawSubject.ElementOf<>(new Slot.Answer()),
+                                        new SideAnswered(side.aspect(), !side.holds())), false)));
+            }
+            if (facts.keepsWhetherItHoldsACodePointOf(operation)
+                    instanceof BoundOperationFacts.KeptCodePoints kept) {
+                statements.add(new WhatTheLibraryComputes.Statement(operation,
+                        "keeps whether it holds " + kept.counted(), new LawProposition.Any<>(List.of(
+                                new LawProposition.All<>(List.of(
+                                        holdsOne(ANSWER, kept.counted(), true),
+                                        holdsOne(at(kept.string().position()), kept.counted(),
+                                                true))),
+                                new LawProposition.All<>(List.of(
+                                        holdsOne(ANSWER, kept.counted(), false),
+                                        holdsOne(at(kept.string().position()), kept.counted(),
+                                                false)))))));
             }
             if (facts.buildsItsResultFrom(operation) instanceof BuiltFrom<DeclaredArgument> built) {
                 statements.add(new WhatTheLibraryComputes.Statement(operation, "builds",
@@ -341,6 +365,14 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
 
     private static LinearForm<LawNumber<Slot>> size(LawSubject<Slot> of) {
         return LinearForm.atom(new LawNumber.SizeOf<>(of));
+    }
+
+    /** That the string {@code of} holds a code point of {@code counted}, or holds none. */
+    private static LawProposition<Slot> holdsOne(LawSubject<Slot> of, CodePointClass counted,
+                                                 boolean holds) {
+        return new LawProposition.Compared<>(new LinearForm<>(ExactRatio.of(holds ? -1 : 0),
+                Map.of(new LawNumber.CodePointsOf<>(of, counted), ExactRatio.ONE)),
+                holds ? Rel.GE : Rel.EQ);
     }
 
     /** {@code one} and {@code other} together, plus {@code constant}, standing as {@code rel}

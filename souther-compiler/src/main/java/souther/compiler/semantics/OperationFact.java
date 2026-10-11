@@ -286,6 +286,42 @@ public sealed interface OperationFact {
     }
 
     /**
+     * Every element of what the operation answers comes out on {@code side}: each word a string is
+     * split into at whitespace holds something, and so does each character of one.
+     *
+     * <p>What some element of the answer meeting a statement comes to where that statement is this
+     * side: an element there is is one meeting it, so some element meets it exactly where the
+     * answer holds something, and how many elements the answer holds says so too — one or more is
+     * some element meeting it. Said of the answer alone, of no argument, and so not a law: a law is
+     * what an observation of the answer comes to over the arguments, and this holds of every answer
+     * whatever it was handed.
+     */
+    record EveryElementOfItsAnswerIs(SideAnswered side) implements OperationFact {
+
+        public EveryElementOfItsAnswerIs {
+            Objects.requireNonNull(side, "this one names the side every element comes out on");
+        }
+    }
+
+    /**
+     * What the operation answers holds a code point of {@code counted} exactly where {@code string}
+     * does: a case mapping takes a code point that is not whitespace to some that are not, and
+     * leaves whitespace as it is.
+     *
+     * <p>Whether there is one and not how many. A case mapping can widen one code point to several,
+     * so the count of the answer is no number of the argument, and only a statement that is the
+     * same for every count of one or more is carried across.
+     */
+    record KeepsWhetherItHoldsACodePointOf(CodePointClass counted, ArgumentRef string)
+            implements OperationFact {
+
+        public KeepsWhetherItHoldsACodePointOf {
+            Objects.requireNonNull(counted, "this one names the code points it keeps");
+            Objects.requireNonNull(string, "and the string it keeps them of");
+        }
+    }
+
+    /**
      * The operation answers what {@code into} holds with {@code value} put in: every element of the
      * answer is one of {@code into}'s or {@code value}, it holds at most one element more than
      * {@code into}, and of {@code into}'s it holds each as many times as {@code into} does or fewer.

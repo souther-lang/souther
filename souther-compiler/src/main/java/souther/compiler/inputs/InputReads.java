@@ -471,6 +471,31 @@ public final class InputReads {
     }
 
     /**
+     * The reading where the parameter of {@code block} the elements of {@code container} arrive on
+     * stands at {@code element} — or null where no parameter of it takes the elements of
+     * {@code container}.
+     *
+     * <p>For a container chosen by cases, read in the case that chose it: there the container is the
+     * one that case answers, so the element handed the closure is an element of that one.
+     */
+    public InputReads namingTheElement(Core.Block block, Core container, TermPath element) {
+        for (Core.Binder param : block.params()) {
+            if (param != null && param.binding() != null
+                    && names.roleOf(param.binding()) instanceof BindingRole.Element(var held)
+                    && held.part() == HeldIn.Part.ELEMENT && held.container() == container) {
+                Map<BindingId, List<Denotation>> narrower = new LinkedHashMap<>(alternatives);
+                narrower.remove(param.binding());
+                Set<BindingId> handed = new HashSet<>(applied.handed());
+                handed.add(param.binding());
+                return new InputReads(names.naming(param.binding(), element), narrower,
+                        declared, dependencies, new Applied(handed, applied.readings(),
+                                applied.taken(), applied.given(), applied.entered()));
+            }
+        }
+        return null;
+    }
+
+    /**
      * The container {@code e} stands for an element of, where it is a parameter a walk hands each
      * element of one — or null where it is no such parameter.
      *

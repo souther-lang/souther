@@ -544,6 +544,28 @@ final class InputPath {
                 }
             };
         }
+        // What a binding's body answers is read with the binding in scope, as a body a call was
+        // expanded into binds its parameters around what it answers.
+        if (e instanceof Core.LetIn let) {
+            return heldAt(let.body(), wanted, names.inside(let.binder(), let.value()));
+        }
+        // A container chosen by cases holds what the one each case answers holds, and a list
+        // written empty holds nothing for any of them to be.
+        List<Core> arms = switch (e) {
+            case Core.If iff -> List.of(iff.then(), iff.els());
+            case Core.Match match -> match.cases().stream().map(Core.Case::body).toList();
+            default -> null;
+        };
+        if (arms != null) {
+            List<PathResolution> each = new ArrayList<>();
+            for (Core arm : arms) {
+                if (!(Core.withoutStanding(arm) instanceof Core.ListLit written
+                        && written.elements().isEmpty())) {
+                    each.add(heldAt(arm, wanted, names));
+                }
+            }
+            return PathResolution.anyOf(each);
+        }
         // Or through an operation that answers what it was given, in either of the two shapes a
         // representation gives an application: the call a name reached where the operation has been
         // expanded away, and the operation standing as itself where it has not. What the library
