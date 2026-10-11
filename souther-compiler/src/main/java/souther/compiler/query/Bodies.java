@@ -10,6 +10,10 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.CalledBody;
+import souther.compiler.check.ElementProvenance;
+import souther.compiler.check.RecursionChecker;
+import souther.compiler.check.ValueTemplates;
 import souther.compiler.check.Expansion;
 import souther.compiler.check.BehaviorChecker;
 import souther.compiler.check.BindingEvidence;
@@ -2639,6 +2643,63 @@ public final class Bodies {
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
+        }
+    }
+
+    /**
+     * The body of the recursive helper {@code fn} as a call of it is read ({@link CalledBody}): the
+     * tree the analysis reads, typed with the language's operations standing, the bindings its
+     * parameters arrive on, and what it binds to the elements of what.
+     *
+     * <p>Asked of the helper and not of a body that calls it, so it is typed once however many
+     * calls read it. Absent where the expansion or its check is, or where a parameter declares no
+     * type.
+     */
+    public record RecursionAtACall(String module, String fn) implements Key<CalledBody> {
+
+        @Override
+        public Answer<CalledBody> compute(Db db) {
+            Answer<Expansion<Hir.FnDef>> lowered = db.ask(new BodyForInvariantDischarge(module, fn));
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
+            Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(module));
+            Answer<Map<String, StandingSignature>> sigs =
+                    db.ask(new RecursiveCallSigsForBody(module, fn));
+            Answer<ModuleCheck.Of> valuesChecked = db.ask(new ModuleCheck(module));
+            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, module);
+            if (!lowered.present() || !scope.present() || !reqSigs.present() || !sigs.present()
+                    || !valuesChecked.present() || !reading.present()) {
+                return Answer.absent();
+            }
+            Hir.FnDef helper = lowered.value().value();
+            Answer<SequencedMap<ReachName.Declaration, InvariantChecker.Template>> built =
+                    templatesBuiltBy(db, module, helper.writtenBody());
+            if (!built.present()) {
+                return Answer.absent();
+            }
+            RecursionChecker.Typed typed;
+            try {
+                typed = RecursionChecker.check(helper, scope.value(), Shapes.declarationAccess(db),
+                        Shapes.reachedValueLocations(db), reqSigs.value(), sigs.value(),
+                        valuesChecked.value().settledValues());
+            } catch (Unanswerable _) {
+                return Answer.absent();
+            } catch (CompileException e) {
+                return Answer.absent(e);
+            }
+            if (typed == null) {
+                return Answer.absent();
+            }
+            ElementProvenance elements = lowered.value().provenance();
+            Map<ReachName.Declaration, Core> templates = new LinkedHashMap<>();
+            for (Map.Entry<ReachName.Declaration, InvariantChecker.Template> each
+                    : built.value().entrySet()) {
+                templates.put(each.getKey(), each.getValue().body());
+                elements = elements.and(each.getValue().elements());
+            }
+            AnalysisBody analysis = new AnalysisBody(typed.body(), elements,
+                    new ValueTemplates(templates));
+            return Answer.of(new CalledBody(typed.body(), typed.parameters(),
+                    ElementBindings.of(analysis, reading.value().newtypes())));
         }
     }
 

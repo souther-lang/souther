@@ -8743,11 +8743,974 @@
         "code" : "E1935"
       } ]
     } ]
+  }, {
+    "module" : "conformance.searching",
+    "status" : "partial",
+    "weakening" : [ "rewrite_undecided" ],
+    "incompleteness" : [ ],
+    "declarations" : [ ],
+    "behaviors" : [ {
+      "name" : "restockByRecursion",
+      "implementation" : "implemented",
+      "rows" : 3,
+      "pending" : 0,
+      "rowObligations" : [ {
+        "obligationId" : {
+          "behavior" : "restockByRecursion",
+          "source" : "4",
+          "name" : "a count below the floor is restocked"
+        },
+        "at" : {
+          "sourceId" : "4",
+          "line" : 28,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "restockByRecursion",
+          "source" : "4",
+          "name" : "a shelf at the floor everywhere is fine"
+        },
+        "at" : {
+          "sourceId" : "4",
+          "line" : 30,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "restockByRecursion",
+          "source" : "4",
+          "name" : "an empty shelf is fine"
+        },
+        "at" : {
+          "sourceId" : "4",
+          "line" : 32,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      } ],
+      "status" : "complete",
+      "signature" : {
+        "status" : "complete",
+        "output" : {
+          "declared" : [ "Fine", "Restock" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "restockByRecursion",
+              "case" : "Fine"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "restockByRecursion",
+              "case" : "Restock"
+            }
+          } ],
+          "status" : "complete",
+          "specified" : [ "Fine", "Restock" ],
+          "observed" : [ "Fine", "Restock" ],
+          "verified" : [ "Fine", "Restock" ],
+          "unclassifiedRows" : 0
+        },
+        "inputs" : [ {
+          "declared" : [ ],
+          "excluded" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        } ]
+      },
+      "partition" : {
+        "axesMeasure" : {
+          "status" : "unavailable",
+          "reason" : "nothing_is_divided"
+        },
+        "boundariesMeasure" : {
+          "status" : "unavailable",
+          "reason" : "no_rule_draws_a_line"
+        },
+        "axes" : [ ],
+        "claimsOffAxis" : [ ],
+        "boundaries" : [ ],
+        "obligations" : [ ],
+        "pairs" : {
+          "total" : 0,
+          "between" : [ ],
+          "status" : "complete",
+          "covered" : 0,
+          "unknown" : 0
+        },
+        "notDerivable" : [ "shelf.counts", "shelf.counts[*]" ],
+        "notRead" : [ ]
+      },
+      "branch" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "module" : "conformance.searching",
+            "definition" : "restockByRecursion",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "then",
+          "kind" : "then",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "4",
+            "line" : 25,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        }, {
+          "obligationId" : {
+            "module" : "conformance.searching",
+            "definition" : "restockByRecursion",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "else",
+          "kind" : "else",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "4",
+            "line" : 25,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        } ],
+        "denominatorSettled" : true
+      },
+      "decision" : {
+        "coverage" : {
+          "status" : "complete"
+        },
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "restockByRecursion",
+            "conditions" : [ {
+              "kind" : "statement",
+              "condition" : "no shelf.counts [!Affine[form=LinearForm[constant=-3, coefs={shelf.counts[*]=1}], proposition=GE]]",
+              "outcome" : "held"
+            } ]
+          },
+          "taken" : true
+        }, {
+          "obligationId" : {
+            "behavior" : "restockByRecursion",
+            "conditions" : [ {
+              "kind" : "statement",
+              "condition" : "no shelf.counts [!Affine[form=LinearForm[constant=-3, coefs={shelf.counts[*]=1}], proposition=GE]]",
+              "outcome" : "denied"
+            } ]
+          },
+          "taken" : true
+        } ]
+      },
+      "replacement" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "restockByRecursion",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.searching",
+            "definition" : "restockByRecursion",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "restockByRecursion",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.searching",
+            "definition" : "restockByRecursion",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
+        } ]
+      },
+      "findings" : [ {
+        "kind" : "partition_not_derivable",
+        "disposition" : "reported",
+        "subject" : "shelf.counts"
+      }, {
+        "kind" : "partition_not_derivable",
+        "disposition" : "reported",
+        "subject" : "shelf.counts[*]"
+      } ]
+    }, {
+      "name" : "restockByFold",
+      "implementation" : "implemented",
+      "rows" : 4,
+      "pending" : 0,
+      "rowObligations" : [ {
+        "obligationId" : {
+          "behavior" : "restockByFold",
+          "source" : "4",
+          "name" : "a count below the floor is restocked"
+        },
+        "at" : {
+          "sourceId" : "4",
+          "line" : 45,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "restockByFold",
+          "source" : "4",
+          "name" : "one short of the floor is short"
+        },
+        "at" : {
+          "sourceId" : "4",
+          "line" : 47,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "restockByFold",
+          "source" : "4",
+          "name" : "a shelf at the floor everywhere is fine"
+        },
+        "at" : {
+          "sourceId" : "4",
+          "line" : 49,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "restockByFold",
+          "source" : "4",
+          "name" : "an empty shelf is fine"
+        },
+        "at" : {
+          "sourceId" : "4",
+          "line" : 51,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      } ],
+      "status" : "partial",
+      "weakening" : [ "rewrite_undecided" ],
+      "signature" : {
+        "status" : "complete",
+        "output" : {
+          "declared" : [ "Fine", "Restock" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "restockByFold",
+              "case" : "Fine"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "restockByFold",
+              "case" : "Restock"
+            }
+          } ],
+          "status" : "complete",
+          "specified" : [ "Fine", "Restock" ],
+          "observed" : [ "Fine", "Restock" ],
+          "verified" : [ "Fine", "Restock" ],
+          "unclassifiedRows" : 0
+        },
+        "inputs" : [ {
+          "declared" : [ ],
+          "excluded" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        } ]
+      },
+      "partition" : {
+        "axesMeasure" : {
+          "status" : "complete"
+        },
+        "boundariesMeasure" : {
+          "status" : "complete"
+        },
+        "axes" : [ {
+          "axis" : "restockByFold/shelf.counts[*]",
+          "path" : "shelf.counts[*]",
+          "read" : {
+            "extent" : "complete"
+          },
+          "classes" : [ "shelf.counts[*]/x < 3", "shelf.counts[*]/3 <= x" ],
+          "excluded" : [ ],
+          "unprovenClaims" : [ ],
+          "status" : "complete",
+          "covered" : [ "shelf.counts[*]/3 <= x", "shelf.counts[*]/x < 3" ],
+          "unclassifiedRows" : 0
+        } ],
+        "claimsOffAxis" : [ ],
+        "boundaries" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part_of_comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.searching",
+                  "definition" : "restockByFold",
+                  "behavior" : "restockByFold",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                },
+                "part" : 0
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "3"
+            }
+          },
+          "lineId" : {
+            "target" : {
+              "behavior" : "restockByFold",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "shelf.counts[*]"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "3"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part_of_comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.searching",
+                  "definition" : "restockByFold",
+                  "behavior" : "restockByFold",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                },
+                "part" : 0
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
+          "axis" : "restockByFold/shelf.counts[*]",
+          "origin" : "comparison@4:39:51",
+          "kind" : "at_value",
+          "value" : "3",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "relation" : "=",
+            "against" : "2",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "3",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "relation" : "in",
+            "against" : "shelf.counts[*] < 2",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "3 < shelf.counts[*]",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          } ]
+        } ],
+        "obligations" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part_of_comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.searching",
+                  "definition" : "restockByFold",
+                  "behavior" : "restockByFold",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                },
+                "part" : 0
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "3"
+            },
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            }
+          },
+          "point" : "on",
+          "rule" : "comparison@4:39:51",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.searching",
+            "definition" : "restockByFold",
+            "behavior" : "restockByFold",
+            "ordinal" : 3,
+            "lowered" : 0
+          },
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "restockByFold",
+            "axis" : "restockByFold/shelf.counts[*]",
+            "relation" : "=",
+            "against" : "2",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part_of_comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.searching",
+                  "definition" : "restockByFold",
+                  "behavior" : "restockByFold",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                },
+                "part" : 0
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "3"
+            },
+            "location" : {
+              "kind" : "at_the_line"
+            }
+          },
+          "point" : "off",
+          "rule" : "comparison@4:39:51",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.searching",
+            "definition" : "restockByFold",
+            "behavior" : "restockByFold",
+            "ordinal" : 3,
+            "lowered" : 0
+          },
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "restockByFold",
+            "axis" : "restockByFold/shelf.counts[*]",
+            "relation" : "=",
+            "against" : "3",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part_of_comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.searching",
+                  "definition" : "restockByFold",
+                  "behavior" : "restockByFold",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                },
+                "part" : 0
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "3"
+            },
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "stops" : {
+              "kind" : "at_the_order_end",
+              "towards" : "below"
+            }
+          },
+          "point" : "in",
+          "rule" : "comparison@4:39:51",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.searching",
+            "definition" : "restockByFold",
+            "behavior" : "restockByFold",
+            "ordinal" : 3,
+            "lowered" : 0
+          },
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "restockByFold",
+            "axis" : "restockByFold/shelf.counts[*]",
+            "relation" : "in",
+            "against" : "shelf.counts[*] < 2",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part_of_comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.searching",
+                  "definition" : "restockByFold",
+                  "behavior" : "restockByFold",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                },
+                "part" : 0
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "3"
+            },
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "stops" : {
+              "kind" : "at_the_order_end",
+              "towards" : "above"
+            }
+          },
+          "point" : "out",
+          "rule" : "comparison@4:39:51",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.searching",
+            "definition" : "restockByFold",
+            "behavior" : "restockByFold",
+            "ordinal" : 3,
+            "lowered" : 0
+          },
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "restockByFold",
+            "axis" : "restockByFold/shelf.counts[*]",
+            "relation" : "in",
+            "against" : "3 < shelf.counts[*]",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        } ],
+        "pairs" : {
+          "total" : 0,
+          "between" : [ ],
+          "status" : "complete",
+          "covered" : 0,
+          "unknown" : 0
+        },
+        "notDerivable" : [ "shelf.counts" ],
+        "notRead" : [ ]
+      },
+      "branch" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "module" : "conformance.searching",
+            "definition" : "restockByFold",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "then",
+          "kind" : "then",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "4",
+            "line" : 39,
+            "column" : 13,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        }, {
+          "obligationId" : {
+            "module" : "conformance.searching",
+            "definition" : "restockByFold",
+            "construct" : 2,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "then",
+          "kind" : "then",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "4",
+            "line" : 39,
+            "column" : 42,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        }, {
+          "obligationId" : {
+            "module" : "conformance.searching",
+            "definition" : "restockByFold",
+            "construct" : 2,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "else",
+          "kind" : "else",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "4",
+            "line" : 39,
+            "column" : 42,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        }, {
+          "obligationId" : {
+            "module" : "conformance.searching",
+            "definition" : "restockByFold",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "else",
+          "kind" : "else",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "4",
+            "line" : 39,
+            "column" : 13,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        }, {
+          "obligationId" : {
+            "module" : "conformance.searching",
+            "definition" : "restockByFold",
+            "construct" : 8,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "then",
+          "kind" : "then",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "4",
+            "line" : 41,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        }, {
+          "obligationId" : {
+            "module" : "conformance.searching",
+            "definition" : "restockByFold",
+            "construct" : 8,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "else",
+          "kind" : "else",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "4",
+            "line" : 41,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        } ],
+        "denominatorSettled" : true
+      },
+      "decision" : {
+        "coverage" : {
+          "status" : "complete"
+        },
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "restockByFold",
+            "conditions" : [ {
+              "kind" : "statement",
+              "condition" : "no shelf.counts [!Affine[form=LinearForm[constant=-3, coefs={shelf.counts[*]=1}], proposition=GE]]",
+              "outcome" : "held"
+            } ]
+          },
+          "taken" : true
+        }, {
+          "obligationId" : {
+            "behavior" : "restockByFold",
+            "conditions" : [ {
+              "kind" : "statement",
+              "condition" : "no shelf.counts [!Affine[form=LinearForm[constant=-3, coefs={shelf.counts[*]=1}], proposition=GE]]",
+              "outcome" : "denied"
+            } ]
+          },
+          "taken" : true
+        } ]
+      },
+      "replacement" : {
+        "status" : "partial",
+        "weakening" : [ "rewrite_undecided" ],
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "restockByFold",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.searching",
+            "definition" : "restockByFold",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "restockByFold",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.searching",
+            "definition" : "restockByFold",
+            "construct" : 2,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "restockByFold",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.searching",
+            "definition" : "restockByFold",
+            "construct" : 2,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "restockByFold",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.searching",
+            "definition" : "restockByFold",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "undecided",
+          "undecidedBecause" : [ "nothing_was_composed" ]
+        }, {
+          "obligationId" : {
+            "behavior" : "restockByFold",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.searching",
+            "definition" : "restockByFold",
+            "construct" : 8,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "restockByFold",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.searching",
+            "definition" : "restockByFold",
+            "construct" : 8,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
+        } ]
+      },
+      "findings" : [ {
+        "kind" : "partition_not_derivable",
+        "disposition" : "reported",
+        "subject" : "shelf.counts"
+      } ]
+    } ]
   } ],
   "sources" : {
     "0" : "catalog.sou",
     "1" : "splitting.sou",
     "3" : "shipping.examples.sou",
-    "2" : "shipping.sou"
+    "2" : "shipping.sou",
+    "4" : "searching.sou"
   }
 }

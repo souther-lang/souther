@@ -1,0 +1,52 @@
+// A list searched for an element, written as a recursion and as a fold.
+//
+// A recursive helper is not expanded where it is called, so what decides on its answer is read off
+// its body: a walk of the list by its head, which answers something exactly where some element it
+// reaches meets what the step asks of it. The fold says the same with what it carries. Both behaviors
+// decide the same thing about the same list, which is what this file is for.
+module conformance.searching exposing
+    ( Shelf, Restock, Fine, restockByRecursion, restockByFold )
+
+data Shelf = { counts: List<Int> }
+
+data Restock
+
+data Fine
+
+// The first count below the floor, where there is one. Every element before it is at or above it, so
+// the answer holds something exactly where some count is below.
+partial let firstShort (counts: List<Int>): List<Int> =
+    match List.get(0, counts) with
+        | None -> []
+        | Some count -> if count < 3 then [ count ] else firstShort(List.drop(1, counts))
+
+behavior restockByRecursion : (shelf: Shelf) -> Restock | Fine
+let restockByRecursion (shelf) =
+    if List.isEmpty(firstShort(shelf.counts)) then Fine else Restock
+
+example restockByRecursion
+    | "a count below the floor is restocked" :
+        (Shelf { counts = [ 5, 1, 0 ] }) -> Restock
+    | "a shelf at the floor everywhere is fine" :
+        (Shelf { counts = [ 3, 4 ] }) -> Fine
+    | "an empty shelf is fine" :
+        (Shelf { counts = [] }) -> Fine
+
+// The same search as a fold: once something is found it is carried as it is.
+behavior restockByFold : (shelf: Shelf) -> Restock | Fine
+let restockByFold (shelf) = {
+    let short = List.fold((found, count) ->
+            if List.isEmpty(found) then (if count < 3 then [ count ] else []) else found,
+        [], shelf.counts)
+    if List.isEmpty(short) then Fine else Restock
+}
+
+example restockByFold
+    | "a count below the floor is restocked" :
+        (Shelf { counts = [ 5, 1, 0 ] }) -> Restock
+    | "one short of the floor is short" :
+        (Shelf { counts = [ 2 ] }) -> Restock
+    | "a shelf at the floor everywhere is fine" :
+        (Shelf { counts = [ 3, 4 ] }) -> Fine
+    | "an empty shelf is fine" :
+        (Shelf { counts = [] }) -> Fine

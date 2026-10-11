@@ -145,6 +145,28 @@ public sealed interface Derivation {
     }
 
     /**
+     * What a recursive helper a call names answers, read off its body where the call stands: what
+     * {@code inItsBody} states of the walk the body makes ({@link AcrossAWalk}).
+     */
+    record ARecursionsBody(ValueName.Helper helper, Derivation inItsBody) implements Derivation {
+
+        public ARecursionsBody {
+            Objects.requireNonNull(helper, "a call names a helper");
+            Objects.requireNonNull(inItsBody, "whose body states something");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(inItsBody);
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(inItsBody);
+        }
+    }
+
+    /**
      * What is read where a name stands for one of the values a container was written with, read once
      * for each of them: on an application the name is that value, so what is stated is what is
      * stated on the application handing it each ({@link Proposition.OnAnApplication}).
@@ -1314,10 +1336,71 @@ public sealed interface Derivation {
         }
     }
 
+    /**
+     * What a walk from a seed ends with, coming out on the side asked of it, read by induction over
+     * the elements walked: the step keeps what it carried where that came out one way, so the end
+     * comes out that way where the seed did or where the step's answer on some element did.
+     *
+     * <p>A recursion over a list by its head is such a walk taken from the other end: what it
+     * answers on the rest is what the step is carried, and what it answers on a list holding
+     * nothing is the seed.
+     *
+     * <p>Read as a step whose answer {@code F} turns on what it was carried only through that
+     * coming out on the same side. Where {@code F} holds whenever what was carried does, {@code F}
+     * is what it is where nothing held carried, or what was carried: so the end holds where the
+     * seed does or some element meets the step carried nothing that held ({@link
+     * ConditionJoin#EITHER}). Where {@code F} fails whenever what was carried does, the end holds
+     * where the seed does and every element meets the step carried something that held ({@link
+     * ConditionJoin#BOTH}) — no element failing it, which is what {@code walked} states denied.
+     *
+     * <p>Whether the walk ends, and in what order it hands the elements, is not a premise. Each
+     * element is walked once, and a run that does not end comes to no answer to be read.
+     *
+     * @param seed     what the seed comes out as
+     * @param walked   some element meeting the step's answer on it: carried nothing that held,
+     *                 where {@code how} is either; carried something that held and denied, where it
+     *                 is both
+     * @param keeps    the step's answer on the other of the two, which comes out as what was
+     *                 carried whatever the element is, and is what lets the walk be read so
+     * @param how      which of the two the step keeps
+     */
+    record AcrossAWalk(Derivation seed, SomeElementMeeting walked, Derivation keeps,
+                       ConditionJoin how) implements Derivation {
+
+        public AcrossAWalk {
+            Objects.requireNonNull(seed, "a walk starts from a seed");
+            Objects.requireNonNull(walked, "and walks the elements of something");
+            Objects.requireNonNull(keeps, "with a step that keeps what it carried");
+            Objects.requireNonNull(how, "one way or the other");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            Proposition start = numbering.of(seed);
+            Proposition some = numbering.of(walked);
+            return switch (how) {
+                case EITHER -> Proposition.any(List.of(start, some));
+                case BOTH -> Proposition.all(List.of(start, some.denied()));
+            };
+        }
+    }
+
     // The grounds: a part made from what one kind of thing says, and nothing else.
 
     /** A truth, a container's holding anything or an optional's holding a value, written out. */
     record WrittenOut(boolean holds) implements Derivation {
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return new Proposition.Always(holds);
+        }
+    }
+
+    /**
+     * What a walk carried into its step, supposed to have come out as {@code holds} on the side the
+     * walk's end is asked about, while the step is read ({@link AcrossAWalk}).
+     */
+    record WhatAWalkCarried(boolean holds) implements Derivation {
 
         @Override
         public Proposition conclusion(Conclusion numbering) {

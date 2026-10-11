@@ -600,6 +600,40 @@ public final class InputReads {
                 new Applied(applied.handed(), applied.readings(), applied.taken(), given, entered));
     }
 
+    /**
+     * Where one step of a recursion over a list is read: the body a call of it names, with its
+     * parameters standing for what the call handed as {@link #calling} has them, and {@code element}
+     * standing at {@code at}, an element of the list the recursion walks — or null where the call
+     * hands another number of values than the body takes.
+     *
+     * <p>What the step's own calls of the recursion answer is no binding here; a reader of the step
+     * says what it takes them to answer.
+     */
+    public InputReads steppingThrough(CalledBody body, List<Core> args, BindingId element,
+                                      TermPath at, DeclarationNewtypes newtypes) {
+        if (args.size() != body.parameters().size()) {
+            return null;
+        }
+        BindingEnvironment inside =
+                names.entering(body.elements()).overStandingCalls().naming(element, at);
+        Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
+        for (int i = 0; i < args.size(); i++) {
+            Core.Binder parameter = body.parameters().get(i);
+            if (parameter == null || parameter.binding() == null) {
+                continue;
+            }
+            if (pathOf(args.get(i), newtypes) instanceof PathResolution.At(TermPath stands)) {
+                inside = inside.naming(parameter.binding(), stands);
+            } else {
+                given.put(parameter.binding(), new Denotation(args.get(i), this));
+            }
+        }
+        return new InputReads(inside, alternatives, declared,
+                souther.compiler.carrier.Membership.none(),
+                new Applied(applied.handed(), applied.readings(), applied.taken(), given,
+                        applied.entered()));
+    }
+
     /** Whether the body of {@code behavior} was entered on the way here ({@link #calling}). */
     public boolean entered(ValueName.Behavior behavior) {
         return applied.entered().contains(behavior);

@@ -190,6 +190,11 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record KeepsTheOrderOf(DeclaredOperation operation, DeclaredArgument source)
             implements OneAboutAnOperation {}
 
+    /** The operation answers the elements of {@code list} from the index {@code count} names on, in
+     *  their order, each once and nothing else. */
+    record HoldsTheElementsFrom(DeclaredOperation operation, DeclaredArgument count,
+                                DeclaredArgument list) implements OneAboutAnOperation {}
+
     /** The operation answers what {@code into} holds with {@code value} put in: at most one element
      *  more, each element one of {@code into}'s or {@code value}. */
     record PutsAValueIn(DeclaredOperation operation, DeclaredArgument value, DeclaredArgument into)

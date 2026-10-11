@@ -456,6 +456,17 @@ final class OperationFactBinder {
                                 new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
                                 "what the order is of"));
             }
+            // The elements of a list from an index on are a list's, and the index is a number.
+            case OperationFact.HoldsTheElementsFrom from -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
+                        "what holds the elements of a list from an index on");
+                yield new BoundOperationFact.HoldsTheElementsFrom(operation,
+                        holdToTheDeclaration(declaration, from.count(), from.count(),
+                                TypeRequirement.NUMBER, "the index the elements are kept from"),
+                        holdToTheDeclaration(declaration, from.list(),
+                                new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                                "the list the elements are kept of"));
+            }
             // What a value is put in answers a container like it, and what is put in is one of what
             // such a container holds.
             case OperationFact.PutsAValueIn puts -> {

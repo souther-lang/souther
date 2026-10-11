@@ -13,9 +13,13 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.semantics.HowAClosureIsApplied;
+import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.UnaryOperator;
@@ -66,15 +70,21 @@ sealed interface ClosureApplications {
     /**
      * One application.
      *
-     * @param reads   the names in force at it, with the value it was handed in place of the
-     *                parameter
-     * @param reached what has to hold for a run to make it
+     * @param reads             the names in force at it, with the value it was handed in place of
+     *                          the parameter
+     * @param reached           what has to hold for a run to make it
+     * @param carriedIntoTheFirst what each walk from a seed this is inside carries into its first
+     *                          step — its seed — by the binding the step takes it on
+     *                          ({@link #taking})
      */
-    record Application(InputReads reads, Proposition reached) {
+    record Application(InputReads reads, Proposition reached,
+                       Map<BindingId, Denotation> carriedIntoTheFirst) {
 
         public Application {
             Objects.requireNonNull(reads, "an application is read in some names");
             Objects.requireNonNull(reached, "and is made under something");
+            carriedIntoTheFirst = Collections.unmodifiableMap(
+                    new LinkedHashMap<>(carriedIntoTheFirst));
         }
     }
 
@@ -86,7 +96,8 @@ sealed interface ClosureApplications {
                                      InputReading read) {
         return switch (this) {
             case Outside _ -> applied(block, step,
-                    List.of(new Application(reads, WhereAnApplicationIsMade.nothingAsked())),
+                    List.of(new Application(reads, WhereAnApplicationIsMade.nothingAsked(),
+                            Map.of())),
                     read, true);
             case Each(var outer) -> applied(block, step, outer, read, false);
             case NotSaid _ -> this;
@@ -116,7 +127,8 @@ sealed interface ClosureApplications {
                     List<Proposition> reached = WhereAnApplicationIsMade.reached(answers,
                             each.size(), how, around.reached());
                     for (int at = 0; at < each.size(); at++) {
-                        out.add(new Application(each.get(at), reached.get(at)));
+                        out.add(new Application(each.get(at), reached.get(at),
+                                around.carriedIntoTheFirst()));
                     }
                 }
                 case InputReads.Applications.NoneHanded _ -> {
@@ -127,7 +139,8 @@ sealed interface ClosureApplications {
                     out.add(new Application(around.reads().entering(step, symbols, newtypes),
                             appliedOver.isEmpty() ? around.reached()
                                     : WhereAnApplicationIsMade.whereOneOfTheContainersHoldsSomething(
-                                            around.reached(), appliedOver)));
+                                            around.reached(), appliedOver),
+                            around.carriedIntoTheFirst()));
                 }
                 case InputReads.Applications.Unsaid _,
                      InputReads.Applications.MoreThanAreRead _ -> {
@@ -169,17 +182,59 @@ sealed interface ClosureApplications {
         return this instanceof Each;
     }
 
-    /** The same applications past {@code condition} coming out {@code holding} on each of them. */
+    /**
+     * The same applications past {@code condition} coming out {@code holding} on each of them.
+     *
+     * <p>A condition on what a walk carried says nothing a row can be asked for, but on the walk's
+     * first step what it carried is its seed. Where the condition, read with each walk around the
+     * application carrying its seed, comes out {@code holding} whatever the row is, the first step
+     * gets past it, so a run making the application at all makes one past it, and it is left
+     * standing under what it was reached under. Anything less settled than that is no such
+     * account: a later step past it would be a step the seed says nothing of.
+     */
     default ClosureApplications taking(Core condition, boolean holding, InputReading read) {
         return switch (this) {
             case Each(var each) -> new Each(each.stream().map(one -> {
                 Proposition stated = Pullback.ofATruth(condition, one.reads(), read,
                         Optional.empty()).proposition();
-                return new Application(one.reads(), WhereAnApplicationIsMade.past(one.reached(),
-                        holding ? stated : stated.denied()));
+                Proposition past = holding ? stated : stated.denied();
+                return Proposition.leavesSomethingUnread(past)
+                        && pastOnTheFirstStep(condition, holding, one, read) ? one
+                        : new Application(one.reads(), WhereAnApplicationIsMade.past(
+                                one.reached(), past), one.carriedIntoTheFirst());
             }).toList());
             case Outside _, NotSaid _ -> this;
         };
+    }
+
+    /** Whether {@code condition} comes out {@code holding} on {@code one} whatever the row is,
+     *  read with every walk around it carrying its seed. */
+    private static boolean pastOnTheFirstStep(Core condition, boolean holding, Application one,
+                                              InputReading read) {
+        if (one.carriedIntoTheFirst().isEmpty()) {
+            return false;
+        }
+        InputReads first = one.reads();
+        for (Map.Entry<BindingId, Denotation> seed : one.carriedIntoTheFirst().entrySet()) {
+            first = first.handing(seed.getKey(), seed.getValue(), read.newtypes());
+        }
+        return Pullback.ofATruth(condition, first, read, Optional.empty()).proposition()
+                instanceof Proposition.Always(boolean holds) && holds == holding;
+    }
+
+    /**
+     * The same applications, inside the step of a walk from a seed that takes what it carries on
+     * {@code accumulator} and starts from {@code seed}.
+     */
+    default ClosureApplications carryingIntoTheFirst(Core.Binder accumulator, Denotation seed) {
+        if (!(this instanceof Each(var each))) {
+            return this;
+        }
+        return new Each(each.stream().map(one -> {
+            Map<BindingId, Denotation> carried = new LinkedHashMap<>(one.carriedIntoTheFirst());
+            carried.put(accumulator.binding(), seed);
+            return new Application(one.reads(), one.reached(), carried);
+        }).toList());
     }
 
     /** The same applications past {@code step}. */
@@ -210,7 +265,7 @@ sealed interface ClosureApplications {
         List<Application> entering = each.stream()
                 .filter(one -> mayEnter(one, decidedBy, symbols, newtypes))
                 .map(one -> new Application(one.reads().choosing(decidedBy, symbols, newtypes),
-                        one.reached()))
+                        one.reached(), one.carriedIntoTheFirst()))
                 .toList();
         return entering.isEmpty() ? new NotSaid() : new Each(entering);
     }
@@ -236,7 +291,8 @@ sealed interface ClosureApplications {
     private ClosureApplications moved(UnaryOperator<InputReads> step) {
         return switch (this) {
             case Each(var each) -> new Each(each.stream()
-                    .map(one -> new Application(step.apply(one.reads()), one.reached()))
+                    .map(one -> new Application(step.apply(one.reads()), one.reached(),
+                            one.carriedIntoTheFirst()))
                     .toList());
             case Outside _, NotSaid _ -> this;
         };

@@ -99,6 +99,12 @@ final class Reductions {
         return Derived.WALK_ENDS && DefaultStdlib.get().walk().operation().equals(operation);
     }
 
+    /** What the library's walk reads the element at its index with, handed the index first and the
+     *  list second. */
+    static ValueName.Stdlib.Operation readsTheElementAtAnIndex() {
+        return DefaultStdlib.get().walk().reads();
+    }
+
     /** Read once. The library is the same library for every module compiled. */
     private static final class Derived {
         private static final Map<ValueName.Stdlib.Operation, Reduction> RULES = read();

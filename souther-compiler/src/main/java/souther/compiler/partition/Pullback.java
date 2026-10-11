@@ -20,7 +20,9 @@ import souther.compiler.check.KeyedAccumulation;
 import souther.compiler.check.Location;
 import souther.compiler.check.NonAffineOperation;
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.RecursionOverAList;
 import souther.compiler.check.RemainderOfAShiftedValue;
+import souther.compiler.check.SeededWalk;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
@@ -48,6 +50,7 @@ import souther.compiler.meaning.MeaningsOfABody.Meaning;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.TruthTable;
 import souther.compiler.meaning.WhichCase;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactAnswer;
@@ -245,6 +248,21 @@ final class Pullback {
      * stand as that case says.
      */
     private final Map<Core, LinearForm<Quantity>> sizedInACase = new HashMap<>();
+    /**
+     * What each walk whose step is being read carried into it, supposed to have come out one way
+     * on the side its end is asked about ({@link #acrossAWalk}).
+     */
+    private final Map<BindingId, Carried> carried = new HashMap<>();
+    /**
+     * What each call a recursion whose step is being read makes of itself on the rest of its list
+     * is supposed to have come out as, on the side the recursion is asked about
+     * ({@link #acrossARecursion}). By the call, since another call of the same helper is not a step
+     * of this walk.
+     */
+    private final Map<Core, Carried> recursed = new IdentityHashMap<>();
+
+    /** What a walk carried, supposed to have come out as {@code holds} on {@code aspect}. */
+    private record Carried(AnswerAspect aspect, boolean holds) {}
 
     private Pullback(InputReading read, Optional<ModelOccurrence> where) {
         this.read = read;
@@ -438,6 +456,18 @@ final class Pullback {
     private Derivation observe(Core standing, AnswerAspect aspect, InputReads reads) {
         Core e = Core.withoutStanding(standing);
         switch (e) {
+            case Core.Read name when carried.get(name.binding()) instanceof Carried supposed -> {
+                return supposed.aspect() == aspect
+                        ? new Derivation.WhatAWalkCarried(supposed.holds())
+                        : unread(e, reads,
+                                new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT));
+            }
+            case Core.Call call when recursed.get(call) instanceof Carried supposed -> {
+                return supposed.aspect() == aspect
+                        ? new Derivation.WhatAWalkCarried(supposed.holds())
+                        : unread(e, reads,
+                                new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT));
+            }
             case Core.LetIn let -> {
                 return new Derivation.ThroughABinding(
                         observe(let.body(), aspect, reads.and(let.binder(), let.value())));
@@ -488,6 +518,8 @@ final class Pullback {
                 () -> BooleanMeaning.asAComparison(e).map(stated -> comparison(stated,
                         new Denotation(e, reads), fixed(e, reads), reads)).orElse(null),
                 () -> byALaw(applied, e, AnswerAspect.TRUTH, reads, new Denotation(e, reads)),
+                () -> acrossAWalk(e, AnswerAspect.TRUTH, reads),
+                () -> acrossARecursion(e, AnswerAspect.TRUTH, reads),
                 () -> inTheCalledBody(e, AnswerAspect.TRUTH, reads)));
         return taken != null ? taken
                 : unread(e, reads, unreadAs(applied, AnswerAspect.TRUTH, reads));
@@ -625,6 +657,8 @@ final class Pullback {
         Derivation taken = firstThatReadsIt(List.of(
                 () -> writtenOut(e, AnswerAspect.EMPTINESS),
                 () -> byALaw(applied, e, AnswerAspect.EMPTINESS, reads, asked),
+                () -> acrossAWalk(e, AnswerAspect.EMPTINESS, reads),
+                () -> acrossARecursion(e, AnswerAspect.EMPTINESS, reads),
                 () -> inTheCalledBody(e, AnswerAspect.EMPTINESS, reads),
                 () -> {
                     DecisionSubject held = reads.pathOf(e, read.rules().newtypes())
@@ -651,6 +685,8 @@ final class Pullback {
         Derivation taken = firstThatReadsIt(List.of(
                 () -> writtenOut(e, AnswerAspect.PRESENCE),
                 () -> byALaw(applied, e, AnswerAspect.PRESENCE, reads, new Denotation(e, reads)),
+                () -> acrossAWalk(e, AnswerAspect.PRESENCE, reads),
+                () -> acrossARecursion(e, AnswerAspect.PRESENCE, reads),
                 () -> inTheCalledBody(e, AnswerAspect.PRESENCE, reads),
                 () -> {
                     DecisionSubject subject = reads.pathOf(e, read.rules().newtypes())
@@ -3583,6 +3619,159 @@ final class Pullback {
         Inside.ACall called = intoACall(new Denotation(e, reads));
         return called == null ? null : new Derivation.ABehaviorsBody(called.behavior(),
                 observe(called.body().value(), aspect, called.body().at()));
+    }
+
+    /**
+     * How what a walk from a seed ends with coming out on {@code aspect} was read, by induction
+     * over the elements it walks ({@link Derivation.AcrossAWalk}) — or null where {@code e} is no
+     * such walk, the elements it walks stand at no subject, or its step does not keep what it
+     * carried on that side.
+     *
+     * <p>The step is read twice, with what it was carried supposed to have come out each way. Where
+     * every part of both readings was read and one of them comes out as what was carried whatever
+     * those parts are, the step keeps that side, and the other reading is what an element has to
+     * meet.
+     */
+    private Derivation acrossAWalk(Core e, AnswerAspect aspect, InputReads reads) {
+        SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
+        DecisionSubject container = walk == null ? null : subjectOf(walk.container(), reads);
+        if (container == null || !quantifying.add(container)) {
+            return null;
+        }
+        Derivation carriedNothing;
+        Derivation carriedSomething;
+        try {
+            carriedNothing = stepCarrying(walk, aspect, false, reads);
+            carriedSomething = stepCarrying(walk, aspect, true, reads);
+        } finally {
+            quantifying.remove(container);
+        }
+        return closed(observe(walk.seed(), aspect, reads), container, walk.container(),
+                carriedNothing, carriedSomething, e, reads);
+    }
+
+    /**
+     * How what a recursion over a list ({@link RecursionOverAList}) answers coming out on
+     * {@code aspect} was read, by induction over the elements it walks, as a walk's end is
+     * ({@link #acrossAWalk}) — or null where {@code e} calls no such recursion, the list it is
+     * handed stands at no position, or its step does not keep what the rest answered on that side.
+     *
+     * <p>The step is the arm taken where the list holds something, read with its head standing for
+     * an element of the list and its calls of itself supposed to have come out each way; the end is
+     * the arm taken where it holds nothing, which is read only where it comes out the same whatever
+     * the row is — read on the list as handed, it would be read of a list that holds something.
+     */
+    private Derivation acrossARecursion(Core e, AnswerAspect aspect, InputReads reads) {
+        if (!(AnOperationApplied.of(e) instanceof AnOperationApplied(
+                ValueName.Helper helper, List<Core> args))) {
+            return null;
+        }
+        CalledBody body = read.rules().declarations().answers().bodyOf(helper).orElse(null);
+        RecursionOverAList walk = body == null ? null : RecursionOverAList.of(helper, body);
+        if (walk == null || !(reads.pathOf(args.get(walk.walked()), read.rules().newtypes())
+                instanceof PathResolution.At(TermPath list))) {
+            return null;
+        }
+        InputReads step = reads.steppingThrough(body, args, walk.element().binding(),
+                list.element(), read.rules().newtypes());
+        DecisionSubject container = new DecisionSubject.AnInput(list);
+        if (step == null || !quantifying.add(container)) {
+            return null;
+        }
+        Derivation end;
+        Derivation carriedNothing;
+        Derivation carriedSomething;
+        try {
+            end = observe(walk.none().body(), aspect, step);
+            carriedNothing = stepRecursing(walk, aspect, false, step);
+            carriedSomething = stepRecursing(walk, aspect, true, step);
+        } finally {
+            quantifying.remove(container);
+        }
+        if (!(trying.of(end) instanceof Proposition.Always)) {
+            return null;
+        }
+        Derivation closed = closed(end, container, args.get(walk.walked()), carriedNothing,
+                carriedSomething, e, reads);
+        return closed == null ? null : new Derivation.ARecursionsBody(helper, closed);
+    }
+
+    /** {@code walk}'s step coming out on {@code aspect}, with every call it makes of itself
+     *  supposed to have come out as {@code holds} there. */
+    private Derivation stepRecursing(RecursionOverAList walk, AnswerAspect aspect, boolean holds,
+                                     InputReads step) {
+        for (Core.Call again : walk.again()) {
+            recursed.put(again, new Carried(aspect, holds));
+        }
+        try {
+            return observe(walk.some().body(), aspect, step);
+        } finally {
+            walk.again().forEach(recursed::remove);
+        }
+    }
+
+    /**
+     * What a walk over {@code container} ends with, from {@code start}, where its step read with
+     * what was carried supposed to have come out each way came to {@code carriedNothing} and
+     * {@code carriedSomething} — or null where neither of them keeps what was carried whatever its
+     * parts are, or some part of them was not read.
+     *
+     * @param walked the expression the container is, whose size is read where some element meeting
+     *               the step has the container's holding anything as a part
+     */
+    private Derivation closed(Derivation start, DecisionSubject container, Core walked,
+                              Derivation carriedNothing, Derivation carriedSomething, Core e,
+                              InputReads reads) {
+        Proposition whereNothing = trying.of(carriedNothing);
+        Proposition whereSomething = trying.of(carriedSomething);
+        if (Proposition.leavesSomethingUnread(whereNothing)
+                || Proposition.leavesSomethingUnread(whereSomething)) {
+            return null;
+        }
+        ConditionJoin how;
+        Derivation meets;
+        Derivation keeps;
+        if (TruthTable.holdsWhateverItsPartsAre(whereSomething)) {
+            how = ConditionJoin.EITHER;
+            meets = carriedNothing;
+            keeps = carriedSomething;
+        } else if (TruthTable.failsWhateverItsPartsAre(whereNothing)) {
+            how = ConditionJoin.BOTH;
+            meets = carriedSomething;
+            keeps = carriedNothing;
+        } else {
+            return null;
+        }
+        boolean holds = how == ConditionJoin.EITHER;
+        Proposition element = holds ? trying.of(meets) : trying.of(meets).denied();
+        Optional<Derivation> holdsSomething = Optional.empty();
+        if (Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(container, element)) {
+            DecisionAtom size = sizeOfSubject(container, Core.withoutStanding(walked).type());
+            holdsSomething = Optional.of(size != null
+                    ? leaf(new Derivation.SizeAboveNought(size),
+                            askedAt != null ? askedAt : new Denotation(e, reads))
+                    : unread(walked, reads, new WhyUnread.NoMeasureOfItsSize()));
+        }
+        return new Derivation.AcrossAWalk(start,
+                new Derivation.SomeElementMeeting(container, meets, holds, holdsSomething), keeps,
+                how);
+    }
+
+    /** {@code walk}'s step coming out on {@code aspect}, with what it was carried supposed to
+     *  have come out as {@code holds} there. */
+    private Derivation stepCarrying(SeededWalk walk, AnswerAspect aspect, boolean holds,
+                                    InputReads reads) {
+        BindingId accumulator = walk.accumulator().binding();
+        Carried outer = carried.put(accumulator, new Carried(aspect, holds));
+        try {
+            return observe(walk.step().body(), aspect, reads);
+        } finally {
+            if (outer == null) {
+                carried.remove(accumulator);
+            } else {
+                carried.put(accumulator, outer);
+            }
+        }
     }
 
     /**
