@@ -718,7 +718,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     : new StatedAt(written, new Stated.AComparison(compared.get()));
         }
         Cutting.Read answered = e instanceof Core.PreservedCall call
-                && Type.BOOL.equals(call.type()) ? here.ofAnApplication(call, names) : null;
+                && (Type.BOOL.equals(call.type()) || call.type() instanceof Type.OptionOf)
+                ? here.ofAnApplication(call, names) : null;
         return answered == null ? null
                 : new StatedAt(written, new Stated.AnApplication(e, answered));
     }
@@ -781,8 +782,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                      Supplier<WhatNamesStandFor> names) {
             WhatNamesStandFor standing = names.get();
             return applications.computeIfAbsent(new Asked(application, standing.reads()), _ -> {
-                Pullback.Pulled stated = WhatConditionsState.of(standing.read())
-                        .truth(application, standing.reads(), standing.read());
+                // Whether an optional holds a value is what it states, as a truth is what it
+                // answers.
+                WhatConditionsState state = WhatConditionsState.of(standing.read());
+                Pullback.Pulled stated = application.type() instanceof Type.OptionOf
+                        ? state.presence(application, standing.reads(), standing.read())
+                        : state.truth(application, standing.reads(), standing.read());
                 boolean itsOwn = stated.turnsOn().stream().anyMatch(leaf ->
                         Core.withoutStanding(leaf.from().value()) == application);
                 if (!itsOwn || Proposition.leavesSomethingUnread(stated.proposition())) {

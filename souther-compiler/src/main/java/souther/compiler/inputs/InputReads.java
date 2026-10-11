@@ -1,5 +1,7 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.AnIndexedMap;
+import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
@@ -85,6 +87,8 @@ import java.util.Set;
  * nothing stands a dependency in for, is read where none is.
  */
 public final class InputReads {
+
+    private static final ValueName.Stdlib.Operation GET = ValueName.Stdlib.operation("Map", "get");
 
     private final BindingEnvironment names;
     private final Map<BindingId, java.util.List<Denotation>> alternatives;
@@ -802,6 +806,12 @@ public final class InputReads {
         if (arm.binder() == null || arm.binder().binding() == null) {
             return this;
         }
+        EntryLookedUp entry = entryLookedUp(scrutinee, arm, symbols, newtypes);
+        if (entry != null) {
+            return new InputReads(names.naming(arm.binder().binding(), entry.element())
+                    .selecting(entry.element(), entry.lookup()), alternatives, declared,
+                    dependencies, applied);
+        }
         // An arm over an optional's two carriers at once leaves a position nothing to narrow it to.
         CasesLeft selected = CasesLeft.selectedBy(arm.pattern());
         if (selected == null) {
@@ -846,6 +856,79 @@ public final class InputReads {
         // that stands for a place no row reaches — which the reading refuses when it is asked.
         return new InputReads(names.naming(arm.binder().binding(), narrowed), alternatives,
                 declared, dependencies, applied);
+    }
+
+    /**
+     * The value of an entry of the input's map, where {@code arm} opens what a lookup in that map
+     * answered — or null where it opens anything else.
+     *
+     * <p>The name under the arm stands at the map's elements. Which entry is the one whose key was
+     * asked for, and that the arm's condition is about that entry, is what the proposition over the
+     * arm says; the position is only where the value is read.
+     */
+    public TermPath valueOfTheEntryLookedUp(Core scrutinee, Core.Case arm, Symbols symbols,
+                                            DeclarationNewtypes newtypes) {
+        EntryLookedUp entry = entryLookedUp(scrutinee, arm, symbols, newtypes);
+        return entry == null ? null : entry.element();
+    }
+
+    /**
+     * Where an entry a lookup answered stands, and the lookup that picked it out.
+     *
+     * @param element where the entry's value stands: the element of the map or of the list the
+     *                map was filed from
+     * @param lookup  the call that asked for the key, as the tree has it
+     */
+    private record EntryLookedUp(TermPath element, Core lookup) {}
+
+    private EntryLookedUp entryLookedUp(Core scrutinee, Core.Case arm, Symbols symbols,
+                                        DeclarationNewtypes newtypes) {
+        if (!(arm.binding() instanceof Core.ArmBinding.Payload)) {
+            return null;
+        }
+        Denotation looked = standing(scrutinee, symbols, newtypes);
+        if (!(AnOperationApplied.of(Core.withoutStanding(looked.value()))
+                instanceof AnOperationApplied(ValueName operation, List<Core> args))
+                || !GET.equals(operation) || args.size() != 2) {
+            return null;
+        }
+        if (looked.at().forkedOn(args.get(1), newtypes) instanceof PathResolution.At(
+                TermPath map)) {
+            return new EntryLookedUp(map.element(), looked.value());
+        }
+        // A map filed from a list holds the list's own elements, so what a lookup in it answers is
+        // one of them.
+        Denotation held = looked.at().standing(args.get(1), symbols, newtypes);
+        AnIndexedMap indexed = AnIndexedMap.of(held.value(), closure ->
+                Core.withoutStanding(held.at().standing(closure, symbols, newtypes).value())
+                        instanceof Core.Block block ? block : null);
+        if (indexed == null) {
+            return null;
+        }
+        Denotation walked = held.at().standing(indexed.walked(), symbols, newtypes);
+        return walked.at().forkedOn(walked.value(), newtypes) instanceof PathResolution.At(
+                TermPath list) ? new EntryLookedUp(list.element(), looked.value()) : null;
+    }
+
+    /**
+     * The lookups that picked out the entries the names in force stand at, each by the element it
+     * is: what is stated of such an element is stated of the entry the lookup answered.
+     */
+    public Map<TermPath, Core> entriesLookedUp() {
+        return names.selected();
+    }
+
+    /**
+     * The position the key {@code key} makes of the element at {@code element} stands at, or null
+     * where it is no position: a closure answering a field of its parameter, which is what each
+     * entry of a map filed from a list is under.
+     */
+    public TermPath keyOfTheElement(Core.Block key, TermPath element,
+                                    DeclarationNewtypes newtypes) {
+        InputReads handed = new InputReads(names.naming(key.params().getFirst().binding(),
+                element), alternatives, declared, dependencies, applied);
+        return handed.forkedOn(key.body(), newtypes) instanceof PathResolution.At(TermPath at)
+                ? at : null;
     }
 
     /**

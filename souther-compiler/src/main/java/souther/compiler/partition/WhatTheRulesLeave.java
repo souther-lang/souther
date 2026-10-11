@@ -125,7 +125,7 @@ public final class WhatTheRulesLeave {
                     amongCases(at, cases, holds == want, read);
             // Whether two values are one is no rule of either position alone, so asked of each
             // on its own, nothing rules it out.
-            case Proposition.SameValue _ -> LEFT;
+            case Proposition.SameValue _, Proposition.LastToHold _ -> LEFT;
             case Proposition.Some some -> someElement(some, some.holds() == want, read);
         };
     }

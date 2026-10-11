@@ -1541,5 +1541,18 @@ public sealed interface BorderQuantity
          * at, has no elements to read.
          */
         WalkResult<java.util.List<Observation>> eachElementOf(TermPath container);
+
+        /**
+         * Whether the element of the container at {@code container} this row is read with chosen
+         * is the last of those the row wrote that hold, at {@code position}, the value it holds
+         * there.
+         *
+         * <p>Of the reading and not of the row: it says something only where an element of the
+         * container was chosen, and a walk that chose none could not walk to an answer. A walk
+         * that holds one element at a time, with the others left out, answers the same.
+         */
+        default WalkResult<Boolean> lastToHold(TermPath container, TermPath position) {
+            return WalkResult.couldNotWalk();
+        }
     }
 }

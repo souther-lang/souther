@@ -4708,8 +4708,7 @@ public final class Generator {
         // container be composed after the parameters it is handed a value of.
         // The order is one for every way of writing them under the cases, since which parameter a
         // container is handed a value of does not turn on the case it is written under.
-        ContentsAsked asked = ContentsAsked.of(reaching.boundedOnTheWay());
-        CompositionOrder order;
+        ContentsAsked asked = ContentsAsked.of(reaching.boundedOnTheWay());        CompositionOrder order;
         switch (CompositionOrder.of(parametersOf(subject), asked)) {
             case CompositionOrder.Result.Ordered(CompositionOrder ordered) -> order = ordered;
             case CompositionOrder.Result.Circular circular -> {

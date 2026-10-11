@@ -109,6 +109,9 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("DecisionReadingIncomplete", "answers/MAY_CHANGE");
         // A rule read short is short of words, which no figure gives it.
         table.put("DecisionRuleReadShort", "answers/UNAFFECTED");
+        // The rows written hold each key once, and a run allowed more writes no row that holds
+        // one twice: what is short is a capacity and not a figure.
+        table.put("KeyedOverwriteCasesUnmeasured", "answers/UNAFFECTED");
         // A rewrite left open asks why: a search stopped at how many rows a generation writes may
         // go further where more are allowed, and nothing else that leaves one open is an allowance.
         table.put("RewriteUndecided", "asks why it was left open/MAY_CHANGE");
@@ -236,7 +239,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                  Weakening.DecisionOfRowUnreadable _, Weakening.DecisionRunNotWatched _,
                  Weakening.MeetingsNotWalked _,
                  Weakening.DecisionReadingIncomplete _,
-                 Weakening.DecisionRuleReadShort _ -> "answers";
+                 Weakening.DecisionRuleReadShort _,
+                 Weakening.KeyedOverwriteCasesUnmeasured _ -> "answers";
         };
     }
 
@@ -282,6 +286,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                         souther.compiler.partition.CompositionBudget
                                 .PATHS_OF_A_DECISION_READ)));
         out.add(new Weakening.DecisionRuleReadShort("b"));
+        out.add(new Weakening.KeyedOverwriteCasesUnmeasured("b"));
         out.add(new Weakening.RewriteUndecided("b",
                 new Replacement.ByOneAnswer(new ObservedValue.Integer(0),
                         new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1))),

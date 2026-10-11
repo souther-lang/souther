@@ -7,6 +7,7 @@ import souther.compiler.flow.Paths;
 import souther.compiler.flow.ValueArrivals;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.meaning.Proposition;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -115,6 +116,25 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
         public Ruled display() {
             return occurrences.getFirst();
         }
+    }
+
+    /**
+     * Whether some rule of the decision consults a distinction that rests on which of several
+     * elements of one key a map filed from a list holds.
+     *
+     * <p>Read off the distinctions the rules consult, which is where such a condition is a column:
+     * a statement saying some element is the last of those holding a value.
+     */
+    public boolean consultsWhichElementOfAKeyIsLast() {
+        for (Ruled each : found) {
+            for (DecisionCondition condition : each.rule().consulted().keySet()) {
+                if (condition instanceof DecisionCondition.AStatement(var statement)
+                        && Proposition.saysTheLastToHold(statement)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

@@ -413,8 +413,13 @@ final class Witnesses {
      */
     static FixtureTemplate holding(Shape.Mapping map,
                                    List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
-                                   Filed filed, DeclaredBounds.CountRange holds,
+                                   Filed filed, List<FixtureTemplate> keysKeptOut,
+                                   DeclaredBounds.CountRange holds,
                                    RuleReadingContext reading) {
+        if (filed != null && keysKeptOut.stream()
+                .anyMatch(each -> each.text().equals(filed.key().text()))) {
+            return null;
+        }
         // A key chosen over no value in particular needs an entry to be the key of, so the map holds
         // at least one value whatever else is asked of it.
         DeclaredBounds.CountRange room = filed != null && filed.value() == null
@@ -445,12 +450,14 @@ final class Witnesses {
         if (filed != null) {
             written.add(filed.key().text());
         }
+        // A key no entry may have is one no other entry is filed under either.
+        keysKeptOut.forEach(each -> written.add(each.text()));
         // One more than is needed, so that the key already chosen being one of them still leaves
-        // enough beside it.
+        // enough beside it, and as many more as are kept out.
         List<FixtureTemplate> others = new ArrayList<>();
         int needed = filed == null ? values.size() : values.size() - 1;
-        for (FixtureTemplate each : distinctValuesOf(map.key(), values.size() + 1, reading,
-                Set.of())) {
+        for (FixtureTemplate each : distinctValuesOf(map.key(),
+                values.size() + 1 + keysKeptOut.size(), reading, Set.of())) {
             if (others.size() == needed) {
                 break;
             }

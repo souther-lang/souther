@@ -74,6 +74,9 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
         out.put("a value being there",
                 "match Option.map(x -> x + 1, i.h.o) with | Some v -> true | None -> false");
         out.put("some element being a value", "List.contains(i.key, i.keys)");
+        out.put("the last element of a value",
+                "match Map.get(i.key, List.indexBy(k -> k, i.keys)) with"
+                        + " | Some v -> true | None -> false");
         out.put("both", "i.n > 5 && i.b");
         out.put("either", "i.n > 5 || i.b");
         out.put("both, in one check", "List.length(if i.b then i.xs else []) >= 1");
@@ -129,7 +132,7 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
             case Proposition.OnAnApplication each -> each.each().forEach(one -> kindsIn(one, into));
             case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                 Proposition.Unread _ -> { }
+                 Proposition.LastToHold _, Proposition.Unread _ -> { }
         }
     }
 

@@ -23,8 +23,9 @@ class WhatAParameterTurnsOnReachesThroughTheParametersBetweenTest {
     /** `outer` holds `box.held`, and `box` holds `n`; declared the other way round. */
     private static final ContentsAsked CHAINED = new ContentsAsked(List.of(
             new ContentsAsked.Asked(TermPath.of("outer").then("held"),
-                    TermPath.of("box").then("held"), true),
-            new ContentsAsked.Asked(TermPath.of("box").then("held"), TermPath.of("n"), true)));
+                    TermPath.of("box").then("held"), true, false),
+            new ContentsAsked.Asked(TermPath.of("box").then("held"), TermPath.of("n"), true,
+                    false)));
 
     private static final List<String> DECLARED = List.of("outer", "box", "n");
 
@@ -49,9 +50,9 @@ class WhatAParameterTurnsOnReachesThroughTheParametersBetweenTest {
     void parametersEachHoldingTheOthersValueAreSaidInTheOrderTheyAreDeclared() {
         ContentsAsked circular = new ContentsAsked(List.of(
                 new ContentsAsked.Asked(TermPath.of("b").then("xs"), TermPath.of("a").then("v"),
-                        true),
+                        true, false),
                 new ContentsAsked.Asked(TermPath.of("a").then("ys"), TermPath.of("b").then("w"),
-                        true)));
+                        true, false)));
         CompositionOrder.Result.Circular said = assertInstanceOf(
                 CompositionOrder.Result.Circular.class,
                 CompositionOrder.of(List.of("a", "b", "c"), circular));

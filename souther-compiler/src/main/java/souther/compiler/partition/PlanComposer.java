@@ -115,6 +115,8 @@ final class PlanComposer {
                                         RuleReadingContext reading) {
         List<FixtureTemplate> holding = new ArrayList<>();
         List<FixtureTemplate> keptOut = List.of();
+        List<FixtureTemplate> keysHeld = List.of();
+        List<FixtureTemplate> keysKeptOut = List.of();
         FixtureTemplate element = null;
         if (plan.under().isPresent()) {
             element = compose(plan.under().get(), values, reading);
@@ -131,6 +133,8 @@ final class PlanComposer {
             }
             holding.addAll(contents.holding());
             keptOut = contents.keptOut();
+            keysHeld = contents.keysHeld();
+            keysKeptOut = contents.keysKeptOut();
         }
         RuleReadingSource ruleSource = reading.source();
         // What may stand beside them is the carrier's business — a list may hold the same value
@@ -150,6 +154,14 @@ final class PlanComposer {
                 return null;
             }
         }
+        // A key the rules ask the entry to be filed under is a value of another position, and one
+        // entry is filed under one key.
+        for (FixtureTemplate asked : keysHeld) {
+            if (key != null && !key.text().equals(asked.text())) {
+                return null;
+            }
+            key = asked;
+        }
         FixtureTemplate collection = switch (container) {
             case Shape.Sequence carrier -> {
                 if (key != null) {
@@ -159,7 +171,7 @@ final class PlanComposer {
                 yield Witnesses.holding(carrier, holding, keptOut, plan.holds(), reading);
             }
             case Shape.Mapping carrier -> Witnesses.holding(carrier, holding, keptOut,
-                    key == null ? null : new Witnesses.Filed(key, element),
+                    key == null ? null : new Witnesses.Filed(key, element), keysKeptOut,
                     plan.holds(), reading);
         };
         if (collection == null) {

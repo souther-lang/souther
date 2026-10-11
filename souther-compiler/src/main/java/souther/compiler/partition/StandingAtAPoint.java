@@ -477,6 +477,62 @@ public final class StandingAtAPoint {
         }
 
         /**
+         * Whether the element this reading chose in {@code container} is the last of those that
+         * hold the value it holds at {@code position}.
+         *
+         * <p>Asked of every occurrence of the position the reading is consistent with, so an
+         * element of another container this reading chose against is not a later element of this
+         * one's. A reading that chose no element of the container has none to be last.
+         */
+        @Override
+        public final WalkResult<Boolean> lastToHold(TermPath container, TermPath position) {
+            Integer mine = chosen().get(container);
+            if (mine == null) {
+                return WalkResult.couldNotWalk();
+            }
+            return switch (where.occurrencesAt(observedInputs.inputs(), position)) {
+                case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
+                        WalkResult.couldNotWalk();
+                case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) -> {
+                    ObservedValue held = null;
+                    for (BehaviorInputs.Occurrence each : values) {
+                        if (agreesBeside(container, each)
+                                && mine.equals(each.at().elementAt(container))) {
+                            held = each.value();
+                        }
+                    }
+                    if (held == null) {
+                        yield WalkResult.couldNotWalk();
+                    }
+                    boolean last = true;
+                    for (BehaviorInputs.Occurrence each : values) {
+                        Integer taken = each.at().elementAt(container);
+                        if (agreesBeside(container, each) && taken != null && taken > mine
+                                && held.equals(each.value())) {
+                            last = false;
+                        }
+                    }
+                    yield WalkResult.reached(last);
+                }
+            };
+        }
+
+        /** Whether {@code each} was reached through the elements this walk chose in every
+         *  container but {@code container}, whose elements are what is being told apart. */
+        private boolean agreesBeside(TermPath container, BehaviorInputs.Occurrence each) {
+            for (Map.Entry<TermPath, Integer> picked : chosen().entrySet()) {
+                if (picked.getKey().equals(container)) {
+                    continue;
+                }
+                Integer taken = each.at().elementAt(picked.getKey());
+                if (taken != null && !taken.equals(picked.getValue())) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /**
          * Every value the row wrote at {@code path}, whichever elements a reading chose.
          *
          * <p>No choosing and nothing recorded to choose between. A number taken over a run is over

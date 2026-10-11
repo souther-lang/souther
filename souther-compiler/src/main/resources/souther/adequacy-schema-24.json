@@ -258,6 +258,7 @@
           "arms_unsettled",
           "decision_not_fully_read",
           "decision_rule_read_short",
+          "keyed_overwrite_cases_unmeasured",
           "decision_of_row_unreadable",
           "decision_run_not_watched",
           "rewrite_undecided"
