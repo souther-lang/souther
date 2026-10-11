@@ -61,7 +61,7 @@ final class NestedContainersAddingUp {
      * it holds, each the container of the level below; for the innermost, how many leaves it
      * holds.
      */
-    private record Layout(List<Layout> within, int leaves) {
+    record Layout(List<Layout> within, int leaves) {
 
         /** Every element this writes, at every level: the leaves, and the elements each of them is
          *  held in, and the elements each of those is. */
@@ -175,8 +175,9 @@ final class NestedContainersAddingUp {
         ContainersAddingUp.WhatIsOffered offered = new ContainersAddingUp.WhatIsOffered();
         Walk walk = new Walk(total.at(), ends, levels, elements, alsoHolding, reading, offered,
                 left);
-        long fewest = leaves(levels, 0, false);
-        long most = leaves(levels, 0, true);
+        List<DeclaredBounds.CountRange> counts = levels.stream().map(Level::howMany).toList();
+        long fewest = leaves(counts, 0, false);
+        long most = leaves(counts, 0, true);
         if (fewest > most) {
             return none(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
         }
@@ -226,13 +227,13 @@ final class NestedContainersAddingUp {
     }
 
     /** How many leaves a container of level {@code at} holds, at the fewest or at the most. */
-    private static long leaves(List<Level> levels, int at, boolean most) {
-        DeclaredBounds.CountRange count = levels.get(at).howMany();
+    private static long leaves(List<DeclaredBounds.CountRange> counts, int at, boolean most) {
+        DeclaredBounds.CountRange count = counts.get(at);
         long here = most ? count.most() : Math.max(count.least(), 0);
-        if (at == levels.size() - 1) {
+        if (at == counts.size() - 1) {
             return here;
         }
-        return times(here, leaves(levels, at + 1, most));
+        return times(here, leaves(counts, at + 1, most));
     }
 
     /**
@@ -260,6 +261,36 @@ final class NestedContainersAddingUp {
     }
 
     /**
+     * The groupings made of {@code leaves} leaves, and whether the room turned any other away.
+     *
+     * @param made    the groupings, none of them alike
+     * @param refused whether a grouping the counts of the levels allow was not made for being past
+     *                the room
+     */
+    record Groupings(List<Layout> made, boolean refused) {}
+
+    /**
+     * Every grouping this writes of {@code leaves} leaves into containers whose counts are
+     * {@code counts}, outermost first, within {@code room} elements in all.
+     *
+     * <p>Every element of every level is one the row carries, so the room is for all of them
+     * together and not for the leaves alone: a container that has to hold a great many lists of
+     * nothing is as much to carry as one holding the same number of leaves.
+     */
+    static Groupings groupingsOf(List<DeclaredBounds.CountRange> counts, long leaves,
+                                 ContainersAddingUp.HowManyIsAskedFor asked, long room) {
+        List<Layout> made = new ArrayList<>();
+        Cut cut = new Cut();
+        for (boolean loadedFirst : new boolean[] {false, true}) {
+            Layout one = layoutOf(counts, 0, leaves, loadedFirst, asked, room, cut);
+            if (one != null && !made.contains(one)) {
+                made.add(one);
+            }
+        }
+        return new Groupings(List.copyOf(made), cut.by());
+    }
+
+    /**
      * The leaves {@code count} of them, grouped into the containers of the levels from {@code at}
      * down, or null where no grouping this writes meets every level's count.
      *
@@ -267,12 +298,13 @@ final class NestedContainersAddingUp {
      * shared as evenly as the counts below allow, and every container below holding as few as it
      * may with what is left on the first. Which of the many groupings they are is not claimed.
      */
-    private static Layout layoutOf(List<Level> levels, int at, long count, boolean loadedFirst,
+    private static Layout layoutOf(List<DeclaredBounds.CountRange> counts, int at, long count,
+                                   boolean loadedFirst,
                                    ContainersAddingUp.HowManyIsAskedFor asked, long room,
                                    Cut cut) {
-        DeclaredBounds.CountRange here = levels.get(at).howMany();
+        DeclaredBounds.CountRange here = counts.get(at);
         long least = Math.max(here.least(), 0);
-        if (at == levels.size() - 1) {
+        if (at == counts.size() - 1) {
             if (count < least || count > here.most()
                     || (asked != null && !asked.holds((int) count))) {
                 return null;
@@ -283,8 +315,8 @@ final class NestedContainersAddingUp {
             }
             return new Layout(List.of(), (int) count);
         }
-        long eachFewest = leaves(levels, at + 1, false);
-        long eachMost = leaves(levels, at + 1, true);
+        long eachFewest = leaves(counts, at + 1, false);
+        long eachMost = leaves(counts, at + 1, true);
         long from = eachMost == 0 ? least : Math.max(least, dividedUp(count, eachMost));
         // Without a floor on what an element holds there is no number of elements the count
         // bounds, so a few of them are tried.
@@ -309,7 +341,7 @@ final class NestedContainersAddingUp {
             List<Layout> within = new ArrayList<>();
             long left = room - many;
             for (long share : shares) {
-                Layout one = layoutOf(levels, at + 1, share, loadedFirst, null, left, cut);
+                Layout one = layoutOf(counts, at + 1, share, loadedFirst, null, left, cut);
                 if (one == null) {
                     within = null;
                     break;
@@ -354,6 +386,7 @@ final class NestedContainersAddingUp {
         private final BigDecimal total;
         private final ContainersAddingUp.Ends ends;
         private final List<Level> levels;
+        private final List<DeclaredBounds.CountRange> counts;
         private final Carrier elements;
         private final ContainersAddingUp.HowManyIsAskedFor alsoHolding;
         private final RuleReadingContext reading;
@@ -366,6 +399,7 @@ final class NestedContainersAddingUp {
             this.total = total;
             this.ends = ends;
             this.levels = levels;
+            this.counts = levels.stream().map(Level::howMany).toList();
             this.elements = elements;
             this.alsoHolding = alsoHolding;
             this.reading = reading;
@@ -378,28 +412,19 @@ final class NestedContainersAddingUp {
             if (count > figure().maximum()) {
                 return Taken.NOT_TAKEN;
             }
-            List<Layout> layouts = new ArrayList<>();
-            Cut cut = new Cut();
-            for (boolean loadedFirst : new boolean[] {false, true}) {
-                // Every element of every level is one the row carries, so the figure is the room
-                // for all of them together and not for the leaves alone: a container that has to
-                // hold a great many lists of nothing is as much to carry as one holding the same
-                // number of leaves.
-                Layout one = layoutOf(levels, 0, count, loadedFirst, alsoHolding,
-                        figure().maximum(), cut);
-                if (one != null && !layouts.contains(one)) {
-                    layouts.add(one);
-                }
+            Groupings groupings = groupingsOf(counts, count, alsoHolding, figure().maximum());
+            // What the room turned away is said whether or not another grouping was made: that a
+            // row was built is one fact, and that a piece in front of the walk was refused is
+            // another, and a reader told only the first takes the offer for everything there was.
+            if (groupings.refused()) {
+                left.refused(figure());
             }
+            List<Layout> layouts = groupings.made();
+            // Nothing made says nothing of the counts after this one: the counts of a level can
+            // leave this number of leaves no grouping at all and the next a small one, so only a
+            // count of leaves past the room, which every grouping carries at least once over, ends
+            // the counts.
             if (layouts.isEmpty()) {
-                // A grouping the room had none for is a piece the figure refused, and the walk
-                // says so. It does not say there is none for the counts after this one: the
-                // counts of a level can leave this number of leaves no grouping at all and the
-                // next a small one, so only a count of leaves past the room, which every grouping
-                // carries at least once over, ends the counts.
-                if (cut.by()) {
-                    left.refused(figure());
-                }
                 return Taken.AND_MORE;
             }
             // The groupings are some of the many, always.
