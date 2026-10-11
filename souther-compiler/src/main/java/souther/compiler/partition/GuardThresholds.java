@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.carrier.Membership;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Choice;
@@ -16,7 +15,6 @@ import souther.compiler.check.UnreadComparison;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
@@ -205,10 +203,6 @@ public final class GuardThresholds {
         ComparisonReadings comparisons = ComparisonReadings.of(behavior, states, read,
                 InputReads.ofParametersWhereCallsStand(inputs.parameterReads(), read.declared(),
                         elements, inputs.dependencies()),
-                // What a value states is read where nothing of the behavior's inputs is in force: a
-                // value takes none and names none, and stands nothing in.
-                InputReads.ofParametersWhereCallsStand(Map.of(), DeclaredInput.NONE, elements,
-                        Membership.none()),
                 WhatAnAnswerTakesUp.of(read));
         // And what the tree that runs says about each of them, joined on the construct of the model
         // the two readings agree about.

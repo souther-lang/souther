@@ -1,14 +1,12 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.carrier.Membership;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.query.Adequacy;
@@ -83,8 +81,6 @@ class AValueComparedInTwoRegionsIsOneComparisonOfTheModelTest {
                 InputReads.ofParametersWhereCallsStand(read.inputs().parameterReads(),
                         read.inputs().declared(read.rules()), elements,
                         read.inputs().dependencies()),
-                InputReads.ofParametersWhereCallsStand(Map.of(), DeclaredInput.NONE, elements,
-                        Membership.none()),
                 WhatAnAnswerTakesUp.of(read.inputs().reading(read.rules())))
                 .comparisons();
 

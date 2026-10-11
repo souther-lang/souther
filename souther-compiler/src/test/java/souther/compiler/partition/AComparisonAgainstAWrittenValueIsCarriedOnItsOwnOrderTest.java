@@ -300,7 +300,8 @@ class AComparisonAgainstAWrittenValueIsCarriedOnItsOwnOrderTest {
             souther.compiler.inputs.InputDomain inputs =
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(name);
             InputReads reads = InputReads.ofParameters(inputs.parameterReads(), inputs.declared(rules),
-                    checked.elementBindings().get(name), ValueDefinitions.NONE,
+                    checked.elementBindings().get(name),
+                    ValueDefinitions.of(checked.analysisBodies().get(name), rules.newtypes()),
                     inputs.dependencies());
             return new Read(body, inputs.reading(rules), reads, rules, module, name);
         });

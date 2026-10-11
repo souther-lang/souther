@@ -311,8 +311,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * tree could make on its own.
      */
     static ComparisonReadings of(String behavior, AnalysisBody analysis, InputReading read,
-                                 InputReads reads, InputReads insideATemplate,
-                                 WhatAnAnswerTakesUp dependencies) {
+                                 InputReads reads, WhatAnAnswerTakesUp dependencies) {
         Core body = analysis.core();
         List<Reading> readings = new ArrayList<>();
         List<ForkMet> forks = new ArrayList<>();
@@ -343,13 +342,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         // What each value the body builds states, read once. A value means the same wherever it is
         // built, so what is read of it is one reading however many builds there are; what differs
         // between them is what stood on the way to each, and that is joined into what stood on the
-        // way to all of them before the template is read.
+        // way to all of them before the template is read — where a definition is read, which is
+        // where a name the body gave a build is read as well.
+        InputReads defined = reads.whereValuesAreDefined();
         for (Core template : analysis.templatesAfterTheirBuilders()) {
             Entry entry = templates.joined(template);
             if (entry != null) {
                 walk(template, new Body(behavior, read, answering,
                         templates, truths, decided, dependencies, stated, conditions),
-                        insideATemplate, ClosureApplications.OUTSIDE, LiveFlow.of(template),
+                        defined, ClosureApplications.OUTSIDE, LiveFlow.of(template),
                         entry.assumed(), entry.live(),
                         readings, forks, numbering);
             }

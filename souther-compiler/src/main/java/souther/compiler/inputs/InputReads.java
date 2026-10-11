@@ -255,6 +255,16 @@ public final class InputReads {
     }
 
     /**
+     * Where the values this reading meets are read as what they are defined as: the reading a
+     * definition of one is read in ({@link ValueDefinitions#reading}). A reader that walks the
+     * definitions themselves walks them here, so that what a name inside one means is what it
+     * means to a reading that followed a name into it.
+     */
+    public InputReads whereValuesAreDefined() {
+        return names.values().reading();
+    }
+
+    /**
      * Where a value's definition is read ({@link ValueDefinitions#reading}): no parameter, nothing
      * declared under one, nothing a row stands in for, and the operations of the language standing
      * — the bindings the definitions make and what their operations hand their closures, and the
@@ -583,8 +593,6 @@ public final class InputReads {
      * every way a name is given a value comes through here, so a value is read alike however its name
      * was given it.
      *
-     * <p>Where {@code value} is no build, it is the value of what comes back, the same node — so a
-     * caller holding the value as given tells the two apart by identity.
      */
     private static Denotation denoting(Core value, InputReads writtenAt) {
         Denotation defined = definedAs(value, writtenAt);
@@ -1546,9 +1554,9 @@ public final class InputReads {
         if (given != null) {
             // What this reading took goes with a value read where it was given, and not into a
             // definition, which is read where nothing taken on the way here is.
-            Denotation stands = denoting(given.value(), given.at());
-            return new ReadMeaning.Through(stands.value() == given.value()
-                    ? carryingWhatIsTaken(given) : stands);
+            Denotation defined = definedAs(given.value(), given.at());
+            return new ReadMeaning.Through(defined != null ? defined
+                    : carryingWhatIsTaken(given));
         }
         java.util.List<Denotation> narrowed = alternatives.get(read.binding());
         if (narrowed != null) {

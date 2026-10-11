@@ -234,13 +234,9 @@ final class BindingEnvironment {
     Core heldAnywhereBy(BindingId binding) {
         // What is bound on the way here first, and what the body bound anywhere after it. No
         // binding holds nothing — this environment refuses a null value — so what is not here is
-        // absent rather than bound to nothing, and one lookup says so. A build bound on the way
-        // here is answered by the body's own table, which holds what each binding over the whole
-        // of the tree and its definitions holds: a definition read there is read among its own
-        // bindings, which is where it is defined.
+        // absent rather than bound to nothing, and one lookup says so.
         Core here = boundTo(binding);
-        return here != null && values.definitionOf(here) == null ? here
-                : elements.boundTo(binding);
+        return here != null ? here : elements.boundTo(binding);
     }
 
     /**

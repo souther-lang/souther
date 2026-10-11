@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.WhereItSits;
-import souther.compiler.carrier.Membership;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.AnalysisBody;
@@ -11,7 +10,6 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
-import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.query.Adequacy;
@@ -85,11 +83,10 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
                         new AnalysisBody(body, ElementProvenance.NONE, ValueTemplates.NONE),
                         inputs.reading(rules),
                         InputReads.ofParameters(inputs.parameterReads(), inputs.declared(rules),
-                                checked.elementBindings().get("read"), ValueDefinitions.NONE,
+                                checked.elementBindings().get("read"),
+                                ValueDefinitions.of(checked.analysisBodies().get("read"),
+                                        rules.newtypes()),
                                 inputs.dependencies()),
-                        InputReads.ofParameters(Map.of(), DeclaredInput.NONE,
-                                checked.elementBindings().get("read"), ValueDefinitions.NONE,
-                                Membership.none()),
                         WhatAnAnswerTakesUp.of(inputs.reading(rules))).comparisons()) {
             Citation.Written at = assertInstanceOf(
                     Citation.Written.class, each.at(),

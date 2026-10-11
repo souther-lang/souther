@@ -58,7 +58,8 @@ class AForkInACopyOfTheLibraryIsReadForWhatItStatesTest {
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("f");
         InputReading read = inputs.reading(rules);
         InputReads reads = InputReads.ofParameters(inputs.parameterReads(),
-                inputs.declared(rules), ElementBindings.NONE, ValueDefinitions.NONE,
+                inputs.declared(rules), ElementBindings.NONE,
+                ValueDefinitions.of(checked.analysisBodies().get("f"), rules.newtypes()),
                 inputs.dependencies());
 
         Found found = copiedFork(checked.behaviorBodies().get("f"), reads);
