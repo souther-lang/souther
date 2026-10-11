@@ -6,6 +6,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -37,6 +38,7 @@ public final class AnswerAsAnInput {
     private final Map<NumericTerm, ExactRatio> pinned;
     private final boolean askingWhatItIsAbout;
     private final Set<NumericTerm> inputs = new LinkedHashSet<>();
+    private final List<LinearForm<Quantity>> comparisons = new ArrayList<>();
 
     private AnswerAsAnInput(String head, NewtypeInners inners, Symbols symbols,
                             Map<NumericTerm, ExactRatio> pinned, boolean askingWhatItIsAbout) {
@@ -56,6 +58,20 @@ public final class AnswerAsAnInput {
                                  Symbols symbols, Map<NumericTerm, ExactRatio> pinned) {
         return new AnswerAsAnInput(head, inners, symbols, new LinkedHashMap<>(pinned), false)
                 .proposition(stated);
+    }
+
+    /**
+     * A comparison of a form over quantities with nought, as the statement it makes: {@code form}
+     * {@code proposition} nought, holding or not as {@code held} says.
+     *
+     * <p>Made here, where a statement is, for a comparison that was read as a column and is asked of
+     * an answer as one.
+     */
+    public static Proposition ofAComparison(LinearForm<? extends Quantity> form, Rel proposition,
+                                            boolean held) {
+        Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>(form.coefs());
+        return new Proposition.Compared(
+                new Relation.Affine(new LinearForm<>(form.constant(), coefs), proposition), held);
     }
 
     /**
@@ -84,6 +100,23 @@ public final class AnswerAsAnInput {
         return reading == null ? null : Set.copyOf(reading.inputs);
     }
 
+    /**
+     * Every comparison {@code stated} makes, as the form it compares with nought, said of the input
+     * named {@code head} — or null where some part of it is about something no value composed for
+     * one answer can be held to.
+     *
+     * <p>What a search for the numbers of the input puts a statement over: a comparison relates
+     * those numbers to places of the answer, and where the answer's places can lie is what says
+     * where the numbers are worth putting. The forms are the statement's own and are not read again
+     * for what they mean.
+     */
+    public static List<LinearForm<Quantity>> comparisonsIn(Proposition stated, String head,
+                                                           NewtypeInners inners,
+                                                           Symbols symbols) {
+        AnswerAsAnInput reading = new AnswerAsAnInput(head, inners, symbols, Map.of(), true);
+        return reading.proposition(stated) == null ? null : List.copyOf(reading.comparisons);
+    }
+
     private static AnswerAsAnInput asking(Proposition stated) {
         AnswerAsAnInput reading =
                 new AnswerAsAnInput("$answer", null, null, Map.of(), true);
@@ -103,6 +136,7 @@ public final class AnswerAsAnInput {
                 if (over == null) {
                     yield null;
                 }
+                comparisons.add(over);
                 // Every number of it fixed, what is left is a number against nought.
                 if (over.coefs().isEmpty()) {
                     yield new Proposition.Always(rel.holds(over.constant().signum()) == holds);

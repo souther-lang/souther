@@ -11,6 +11,7 @@ import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
+import souther.compiler.query.RuleSearch;
 import souther.compiler.query.RuleSettlement;
 import souther.compiler.report.AdequacyReport;
 
@@ -52,6 +53,25 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
 
             behavior holds : (s: Sched) -> Bool
             let holds (s) = true
+            """;
+
+    /** Every element the dependency answers is at least ten. */
+    private static final String STAMPS = """
+            module p
+
+            data Cat = A | B
+            data Stamp = Int invariant value >= 10
+            data Sched = List<Stamp>
+            data Yes
+            data No
+            data Answer = Yes | No
+
+            behavior sched1 : (c: Cat) -> Sched
+
+            behavior f : (c: Cat, on: Int) -> Answer
+                depends on sched1
+
+            let f (c, on, sched1) = if List.any(x -> BODY, sched1(c).value) then Yes else No
             """;
 
     private static final String MODEL_OF_TWO = """
@@ -208,6 +228,45 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
     }
 
     /**
+     * One value of the dependency answers every call a row makes, so what two calls ask is asked of
+     * that one value together. Two askings that each have a value, and no value in common, may still
+     * have a value that meets both: the value composed for "some element is at most five" is five
+     * and for "at most eight" is eight, and five meets both.
+     */
+    @Test
+    void twoCallsAskingDifferentThingsOfOnePlaceAreMetByOneValue() {
+        List<RowToRun> rows = rowsFoundFor("List.any(x -> x <= 5, sched1(c).value)"
+                + " && List.any(x -> x <= 8, sched1(c).value)");
+
+        assertTrue(rows.stream().anyMatch(row -> {
+                    List<Long> held = elementsOf(
+                            ((StoodInAnswer.OnTheRow) row.answers().getFirst()).value().text());
+                    return held.stream().anyMatch(each -> each <= 5)
+                            && held.stream().anyMatch(each -> each <= 8);
+                }),
+                () -> "a row stands the one dependency in with a value that meets both: " + rows);
+    }
+
+    /**
+     * The same for a comparison, which asked of two calls composed a boundary value apiece: one
+     * above four and one below seven have the value five in common, and the two boundaries that
+     * were composed have none.
+     */
+    @Test
+    void twoCallsComparingOnePlaceAreMetByOneValue() {
+        List<RowToRun> rows = rowsFoundFor("List.length(sched1(c).value) >= 4"
+                + " && List.length(sched1(c).value) <= 5");
+
+        assertTrue(rows.stream().anyMatch(row -> {
+                    long size = elementsOf(
+                            ((StoodInAnswer.OnTheRow) row.answers().getFirst()).value().text())
+                            .size();
+                    return size >= 4 && size <= 5;
+                }),
+                () -> "a row carries a value of the length both ask for: " + rows);
+    }
+
+    /**
      * The number is put where the way leaves it. A way that asks the number to be above a hundred is
      * a way the row reaches only with one, so the answer is composed for such a number and not for
      * the first one that came to mind.
@@ -231,6 +290,100 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
     }
 
     /**
+     * The number is put where the answer can reach it, and not at the first value the way allows.
+     * Every element the dependency answers is at least ten, so "some element is at most the number"
+     * has no value at all for a number below ten — the number has to be put at ten or above before
+     * the answer can be composed for it.
+     */
+    @Test
+    void theNumberOfTheInputIsPutWhereTheTypeOfTheAnswerCanReachIt() {
+        List<RowToRun> rows = rowsFoundIn(STAMPS.replace("BODY", "x.value <= on"));
+
+        assertTrue(rows.stream().anyMatch(row -> someElementMeets(row, (element, on) ->
+                        on >= 10 && element <= on)),
+                () -> "a row reaches the way with a number the elements can be at most: " + rows);
+    }
+
+    /**
+     * And where the value the bounds first suggest is one the statement does not hold at, the next
+     * is tried. "Strictly below" is not met at ten by elements of at least ten, so the number is put
+     * at eleven, which the pair has to move to once the answer has failed to compose for ten.
+     */
+    @Test
+    void aNumberTheAnswerCannotBeComposedForIsFollowedByTheNext() {
+        List<RowToRun> rows = rowsFoundIn(STAMPS.replace("BODY", "x.value < on"));
+
+        assertTrue(rows.stream().anyMatch(row -> someElementMeets(row, (element, on) ->
+                        on > 10 && element < on)),
+                () -> "a row reaches the way with a number above every element's least: " + rows);
+    }
+
+    private static boolean someElementMeets(RowToRun row,
+                                            java.util.function.BiPredicate<Long, Long> holding) {
+        long on = Long.parseLong(row.inputs().get(1).text().trim());
+        return elementsOf(((StoodInAnswer.OnTheRow) row.answers().getFirst()).value().text())
+                .stream().anyMatch(each -> holding.test(each, on));
+    }
+
+    /**
+     * Past the figure the pairs are not looked at, and the search says that was why. Four numbers
+     * of the input are each offered at several values, and every element is at least ten, so no
+     * pair of the first few composes — and the search that stopped is told apart from one that tried
+     * every pair and found none.
+     */
+    @Test
+    void pairsPastTheFigureAreSaidToHaveBeenLeftUntried() {
+        String source = """
+                module p
+
+                data Cat = A | B
+                data Stamp = Int invariant value >= 10
+                data Sched = List<Stamp>
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                behavior sched1 : (c: Cat) -> Sched
+
+                behavior f : (c: Cat, a: Int, b: Int, d: Int, e: Int) -> Answer
+                    depends on sched1
+
+                let f (c, a, b, d, e, sched1) =
+                    if List.any(x -> x.value <= a + b + d + e, sched1(c).value) then Yes else No
+                """;
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+
+        List<RuleSettlement> unsettled = compilation.db()
+                .ask(new Adequacy.DecisionSearch(module, "f")).value().values().stream()
+                .filter(each -> each.requirement()
+                        instanceof RuleRequirement.Unsettled.NothingWasComposedToTry)
+                .toList();
+
+        assertEquals(1, unsettled.size(), "the rule a number must reach the elements for");
+        assertEquals(List.of(Generator.UnresolvedCombination.Reason
+                        .THE_SEARCH_LEFT_SOMETHING_UNTRIED),
+                ((RuleSearch.CameToNothing) unsettled.getFirst().search()).ways().stream()
+                        .map(Generator.UnresolvedCombination::reason).toList(),
+                "a figure ended the search, which is not that every pair was tried and none met it");
+    }
+
+    /** A number of the answer compared with one of the input is met by the same pair. */
+    @Test
+    void aNumberOfTheAnswerComparedWithOneOfTheInputIsMetByThePair() {
+        List<RowToRun> rows = rowsFoundFor("List.length(sched1(c).value) >= on");
+
+        assertEquals(List.of(false, true), rows.stream().map(row -> {
+                    long on = Long.parseLong(row.inputs().get(1).text().trim());
+                    return elementsOf(((StoodInAnswer.OnTheRow) row.answers().getFirst())
+                            .value().text()).size() >= on;
+                }).sorted().toList(),
+                () -> "one row holds as many as the number and the other holds fewer: " + rows);
+    }
+
+    /**
      * And what is about two answers is not composed for, which says so. Which value either may be
      * turns on the other, and nothing here composes two of them together.
      */
@@ -247,6 +400,50 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
         }
     }
 
+    /**
+     * What the issue wrote, as it wrote it: a count over a filter handed back as the answer, with no
+     * decision in the body at all, and a count held against a number beside it.
+     */
+    @Test
+    void theIssuesOwnModelIsNoLongerReportedAsUnread() {
+        String json = reportOfSource("""
+                module p
+
+                data Cat = A | B
+                data Sched = List<Int>
+
+                behavior sched1 : (c: Cat) -> Sched
+
+                behavior f : (c: Cat, on: Int) -> Int
+                    depends on sched1
+
+                let f (c, on, sched1) = List.length(List.filter(x -> x <= on, sched1(c).value))
+
+                behavior g : (c: Cat) -> Bool
+                    depends on sched1
+
+                let g (c, sched1) = List.length(sched1(c).value) >= 1
+                """);
+
+        assertFalse(json.contains("unsupported_syntax"), "no rule is left as a form nobody reads");
+        assertFalse(json.contains("rule_unread"), "and none weakens what the report claims");
+        assertFalse(json.contains("rule_about_a_derived_value"),
+                "and none is about a value made from another one");
+    }
+
+    /**
+     * What is held of a container is wider than what is read of an answer. How many different values
+     * the elements come to is a number of the input's own places, which an answer has none of, so
+     * it is said to be unread — a quantity that can be written is not thereby one that is composed.
+     */
+    @Test
+    void aNumberOverTheElementsOfAnAnswerIsSaidToBeUnreadAndNotThrown() {
+        String json = reportOf("List.length(List.distinct(sched1(c).value)) >= 2");
+
+        assertTrue(json.contains("container_at_no_position"),
+                "the container is said to stand at no position a row writes");
+    }
+
     /** What the issue wrote is read: no rule of it is left as one nothing read. */
     @Test
     void whatTheIssueWroteIsNoLongerReportedAsUnread() {
@@ -258,7 +455,11 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
 
     /** The row the search stood each rule of the way in with. */
     private static List<RowToRun> rowsFoundFor(String body) {
-        Compilation compilation = Compilation.ofSource(MODEL.replace("BODY", body), "Main");
+        return rowsFoundIn(MODEL.replace("BODY", body));
+    }
+
+    private static List<RowToRun> rowsFoundIn(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String module = compilation.modules().getFirst();
@@ -313,7 +514,11 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
     }
 
     private static String reportOf(String body) {
-        Compilation compilation = Compilation.ofSource(MODEL.replace("BODY", body), "Main");
+        return reportOfSource(MODEL.replace("BODY", body));
+    }
+
+    private static String reportOfSource(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation)

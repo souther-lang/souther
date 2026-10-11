@@ -13,6 +13,7 @@ import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.DemandGap;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.MeasuredInput;
 import souther.compiler.meaning.InjectedAnswer;
 import souther.compiler.partition.StandInAttempt;
 import souther.compiler.partition.StoodInAnswer;
@@ -66,6 +67,16 @@ import java.util.Map;
 record AnswersForARule(RequiredDependencies requires,
                        Map<ValueName.Behavior, AnswerSubjects> standing,
                        FakeTables blocks) {
+
+    /**
+     * The subject a value for the whole of what {@code dependency} answers is composed over, or
+     * null where there is none: nothing stands in for it, or its answer is a union of cases and has
+     * a subject for each.
+     */
+    MeasuredInput subjectOf(ValueName.Behavior dependency) {
+        AnswerSubjects subjects = standing.get(dependency);
+        return subjects == null || subjects.whole() == null ? null : subjects.whole().subject();
+    }
 
     /**
      * Every way a row taking {@code demanded} could stand the dependencies in, or the one answer
@@ -291,6 +302,28 @@ record AnswersForARule(RequiredDependencies requires,
                                   Map<NumericTerm, ExactRatio> pinned) {
         if (asked.isEmpty() && stated(required.dependency())) {
             return byTheModule(required, Evidence.NOTHING);
+        }
+        // A row writes one value for a dependency, which answers every call of it, so what every
+        // asking wants is asked of that one value together. Which askings are which is
+        // InjectedAnswer's and stays in the account; it is no reason to compose a value apiece and
+        // look for one they share, since two askings with a value each may have none in common
+        // and still have a value that meets both.
+        if (asked.size() > 1) {
+            List<AnswerDemand> every = new ArrayList<>();
+            asked.values().forEach(every::addAll);
+            Composing together = composed(required, every, pinned);
+            if (!together.values().isEmpty()) {
+                List<Alternative> alternatives = new ArrayList<>();
+                List<AnswerDemand> met = new ArrayList<>();
+                for (Candidate each : together.values()) {
+                    alternatives.add(new Alternative(
+                            new StoodInAnswer.OnTheRow(required.dependency(), each.value()),
+                            new Evidence(each.met(), each.said())));
+                    met.addAll(each.met());
+                }
+                return new StandingIn.Any(alternatives,
+                        new Evidence(met, together.written()));
+            }
         }
         Map<InjectedAnswer, List<Candidate>> values = new LinkedHashMap<>();
         List<DemandGap> said = new ArrayList<>();

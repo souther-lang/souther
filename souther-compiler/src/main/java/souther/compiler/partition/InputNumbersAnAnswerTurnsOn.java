@@ -3,14 +3,19 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.meaning.AnswerAsAnInput;
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -18,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * The numbers of the input a statement about an answer turns on, put at values before the answer is
@@ -30,17 +36,43 @@ import java.util.Set;
  * held to the same values — a pair that meets the statement together, which neither half composed
  * alone could promise.
  *
- * <p><b>One value for each number, taken from what the way leaves it.</b> A value outside what the
- * rules on the way allow is a row that does not arrive, so each is looked for among the ones the
- * region of the way holds, and put only where the region takes the pin in. Where none is, the
- * number is left out and the statement is one no value was composed against: said by the caller in
- * the words it already has, and not read as the statement having no value.
+ * <p><b>Several pairs to try, and the first that composes is the one taken.</b> A value that suits
+ * the way for the number need not suit the answer: the type of the answer may keep its elements
+ * above ten, and the number then has to be ten or more for any element to be at most it. So a
+ * number is offered at the values the answer's own bounds make the statement hold at, ahead of the
+ * ones the way alone leaves, and the caller asks whether the answer composed for a pair, going on
+ * to the next where it did not. Each pair puts the number at a value the region of the way takes
+ * in, so a row that reaches the way is not given up for one that does not.
  *
- * <p>A search and not a proof. The first value that serves is the one taken, so a statement that
- * needs another is one this composes nothing for, and what comes back says nothing about whether a
- * value exists.
+ * <p>Looked along as far as {@link CompositionBudget#PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED}
+ * and no further, and said where it stopped ({@link Pairs#someLeftUntried}): a statement that none
+ * of those composed for is one nothing was composed against, and never one no value meets.
  */
 public final class InputNumbersAnAnswerTurnsOn {
+
+    /**
+     * The pairs to try, and whether there were more than the figure lets this offer.
+     *
+     * @param tried          the pairs, the most promising first; one that puts nothing anywhere
+     *                       where no statement names a number of the input
+     * @param someLeftUntried that a pair the way takes in was left out because of the figure, which
+     *                       is the one thing a search that found none has to say about why
+     */
+    public record Pairs(List<InputNumbersAnAnswerTurnsOn> tried, boolean someLeftUntried) {
+
+        public Pairs {
+            tried = List.copyOf(tried);
+        }
+    }
+
+    /** What the subject an answer is composed over is, which says where the answer's places can
+     *  lie. */
+    public interface AnswerSubjectOf {
+
+        /** The subject for the whole of what {@code dependency} answers, or null where there is
+         *  none — an answer that is a union of cases has one subject apiece. */
+        MeasuredInput of(ValueName.Behavior dependency);
+    }
 
     private final Map<NumericTerm, ExactRatio> values;
     private final Reachability.Reaching reaching;
@@ -62,44 +94,87 @@ public final class InputNumbersAnAnswerTurnsOn {
     }
 
     /**
-     * The numbers {@code demands} turn on, put at values the way leaves them.
+     * The pairs to try for {@code demands} along {@code reaching}, the most promising first.
      *
-     * <p>The way itself where no statement names a number of the input, which is every way over an
-     * answer alone.
+     * <p>One, and the way itself, where no statement names a number of the input — which is every
+     * way over an answer alone. And one where no value of the numbers the statements name is taken
+     * in by the way: the way left as it was, and the statements for those numbers are ones no value
+     * was composed against.
      */
-    public static InputNumbersAnAnswerTurnsOn of(AnswersDemanded demands,
-                                                 Reachability.Reaching reaching) {
-        Set<NumericTerm> terms = new LinkedHashSet<>();
+    public static Pairs of(AnswersDemanded demands, Reachability.Reaching reaching,
+                           AnswerSubjectOf answers) {
+        InputNumbersAnAnswerTurnsOn unpinned =
+                new InputNumbersAnAnswerTurnsOn(Map.of(), reaching);
+        Map<NumericTerm, List<ExactRatio>> offered = new LinkedHashMap<>();
         ConditionReportAnchor anchor = null;
         for (AnswerDemand each : demands.stated()) {
             if (!(each instanceof AnswerDemand.AStatement statement)) {
                 continue;
             }
             Set<NumericTerm> named = AnswerAsAnInput.inputNumbersIn(statement.statement());
-            if (named != null && !named.isEmpty()) {
-                terms.addAll(named);
-                anchor = anchor == null ? statement.anchor() : anchor;
+            if (named == null || named.isEmpty()) {
+                continue;
+            }
+            anchor = anchor == null ? statement.anchor() : anchor;
+            MeasuredInput subject = answers.of(statement.of().dependency());
+            for (NumericTerm term : named) {
+                offered.computeIfAbsent(term, _ -> new ArrayList<>())
+                        .addAll(boundedByTheAnswer(statement, term, subject));
             }
         }
-        if (terms.isEmpty()) {
-            return new InputNumbersAnAnswerTurnsOn(Map.of(), reaching);
+        if (offered.isEmpty()) {
+            return new Pairs(List.of(unpinned), false);
         }
+        SearchRegion region = reaching.region();
+        List<NumericTerm> terms = new ArrayList<>(offered.keySet());
+        List<List<ExactRatio>> candidates = new ArrayList<>();
+        for (NumericTerm term : terms) {
+            List<ExactRatio> pool = new ArrayList<>(offered.get(term));
+            pool.addAll(allowedByTheWay(region, term));
+            candidates.add(inTheOrderOffered(region, term, pool));
+        }
+        int most = CompositionBudget.PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED.maximum();
+        List<InputNumbersAnAnswerTurnsOn> out = new ArrayList<>();
+        boolean[] someLeftUntried = {false};
+        ConditionReportAnchor at = anchor;
+        eachChoice(candidates, 0, new ArrayList<>(), choice -> {
+            InputNumbersAnAnswerTurnsOn pair = pinned(reaching, terms, choice, at);
+            if (pair == null) {
+                return true;
+            }
+            if (out.size() == most) {
+                someLeftUntried[0] = true;
+                return false;
+            }
+            out.add(pair);
+            return true;
+        });
+        return out.isEmpty() ? new Pairs(List.of(unpinned), false)
+                : new Pairs(out, someLeftUntried[0]);
+    }
+
+    /**
+     * {@code reaching} with {@code terms} held at {@code choice}, or null where the way does not
+     * take that in.
+     */
+    private static InputNumbersAnAnswerTurnsOn pinned(Reachability.Reaching reaching,
+                                                     List<NumericTerm> terms,
+                                                     List<ExactRatio> choice,
+                                                     ConditionReportAnchor anchor) {
         SearchRegion region = reaching.region();
         Map<NumericTerm, ExactRatio> values = new LinkedHashMap<>();
         List<OnTheWay.TakenIn> held = new ArrayList<>();
-        for (NumericTerm term : terms) {
-            for (ExactRatio candidate : candidatesFor(region, term)) {
-                LinearForm<NumericTerm> pin = new LinearForm<>(candidate.negated(),
-                        Map.of(term, ExactRatio.ONE));
-                if (region.assuming(pin, Rel.EQ) instanceof SearchRegion.Assumption.Taken(
-                        SearchRegion narrowed)) {
-                    region = narrowed;
-                    values.put(term, candidate);
-                    held.add(new OnTheWay.TakenIn(anchor, new RowDemand.Relational(
-                            new TakenConstraint.Affine(pin, Rel.EQ))));
-                    break;
-                }
+        for (int at = 0; at < terms.size(); at++) {
+            LinearForm<NumericTerm> pin = new LinearForm<>(choice.get(at).negated(),
+                    Map.of(terms.get(at), ExactRatio.ONE));
+            if (!(region.assuming(pin, Rel.EQ)
+                    instanceof SearchRegion.Assumption.Taken(SearchRegion narrowed))) {
+                return null;
             }
+            region = narrowed;
+            values.put(terms.get(at), choice.get(at));
+            held.add(new OnTheWay.TakenIn(anchor, new RowDemand.Relational(
+                    new TakenConstraint.Affine(pin, Rel.EQ))));
         }
         List<OnTheWay.TakenIn> cuts = new ArrayList<>(reaching.boundedOnTheWay());
         cuts.addAll(held);
@@ -108,10 +183,152 @@ public final class InputNumbersAnAnswerTurnsOn {
     }
 
     /**
-     * The values {@code term} may be put at, in the order they are tried: the ends of what the way
-     * holds of it, the values just inside them, and then nought and one.
+     * Each way of choosing one value for every number, the first number changing slowest, handed
+     * to {@code visit} one at a time until it says to stop.
+     *
+     * <p>One at a time and never the product built first: how many ways there are is the figure of
+     * the search's to bound, and a list of every one would be the size of what it declines.
+     *
+     * @return whether every way was visited, which is false where {@code visit} stopped it
      */
-    private static List<ExactRatio> candidatesFor(SearchRegion region, NumericTerm term) {
+    private static boolean eachChoice(List<List<ExactRatio>> candidates, int at,
+                                      List<ExactRatio> chosen,
+                                      Predicate<List<ExactRatio>> visit) {
+        if (at == candidates.size()) {
+            return visit.test(List.copyOf(chosen));
+        }
+        for (ExactRatio value : candidates.get(at)) {
+            chosen.add(value);
+            boolean more = eachChoice(candidates, at + 1, chosen, visit);
+            chosen.removeLast();
+            if (!more) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The values of {@code term} at which {@code statement} can hold, given where the places of the
+     * answer it is compared with can lie.
+     *
+     * <p>Each comparison that names the number and places of the answer alone is solved for the
+     * number at the ends of those places' bounds: "{@code x - on <= 0}" with {@code x} at least ten
+     * holds from {@code on = 10}. The value itself and the ones beside it, since a strict relation
+     * holds one past. A comparison that names another number of the input is not solved here — that
+     * number's value is not known yet.
+     */
+    private static List<ExactRatio> boundedByTheAnswer(AnswerDemand.AStatement statement,
+                                                       NumericTerm term, MeasuredInput subject) {
+        if (subject == null) {
+            return List.of();
+        }
+        String head = subject.parameters().getFirst();
+        List<LinearForm<Quantity>> comparisons = AnswerAsAnInput.comparisonsIn(
+                statement.statement(), head, subject.rules().inners(), subject.symbols());
+        if (comparisons == null) {
+            return List.of();
+        }
+        SearchRegion answerRegion = subject.quantities().region();
+        List<ExactRatio> out = new ArrayList<>();
+        for (LinearForm<Quantity> form : comparisons) {
+            ExactRatio by = coefficientOf(form, term);
+            if (by == null || by.signum() == 0) {
+                continue;
+            }
+            List<NumericTerm> places = new ArrayList<>();
+            List<ExactRatio> weights = new ArrayList<>();
+            boolean solvable = true;
+            for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm other))
+                        || other.equals(term)) {
+                    continue;
+                }
+                if (!other.subjectPath().head().equals(head)) {
+                    solvable = false;
+                    break;
+                }
+                places.add(other);
+                weights.add(each.getValue());
+            }
+            if (!solvable || places.isEmpty()) {
+                continue;
+            }
+            for (ExactRatio solved : solvedAtTheEnds(form.constant(), by, places, weights,
+                    answerRegion)) {
+                for (ExactRatio near : List.of(solved, plusOne(solved), minusOne(solved))) {
+                    if (near != null) {
+                        out.add(near);
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    private static ExactRatio coefficientOf(LinearForm<Quantity> form, NumericTerm term) {
+        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+            if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm one)
+                    && one.equals(term)) {
+                return each.getValue();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * {@code term} such that {@code constant + by·term + Σ weights·places} is nought, with each
+     * place at each end of what the answer's bounds hold of it.
+     */
+    private static List<ExactRatio> solvedAtTheEnds(ExactRatio constant, ExactRatio by,
+                                                    List<NumericTerm> places,
+                                                    List<ExactRatio> weights,
+                                                    SearchRegion answerRegion) {
+        List<List<ExactRatio>> ends = new ArrayList<>();
+        for (NumericTerm place : places) {
+            List<ExactRatio> here = new ArrayList<>();
+            if (answerRegion.projectionOf(place)
+                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds)) {
+                for (Endpoint end : Arrays.asList(bounds.min(), bounds.max())) {
+                    if (end != null && end.at() instanceof Count at) {
+                        here.add(at.exactly());
+                    }
+                }
+            }
+            if (here.isEmpty()) {
+                return List.of();
+            }
+            ends.add(here);
+        }
+        List<ExactRatio> out = new ArrayList<>();
+        eachChoice(ends, 0, new ArrayList<>(), choice -> {
+            ExactRatio rest = constant;
+            for (int at = 0; at < choice.size() && rest != null; at++) {
+                ExactRatio weighed = weights.get(at).times(choice.get(at)).orNull();
+                rest = weighed == null ? null : rest.plus(weighed).orNull();
+            }
+            ExactRatio solved = rest == null ? null : rest.negated().dividedBy(by).orNull();
+            if (solved != null) {
+                out.add(solved);
+            }
+            return true;
+        });
+        return out;
+    }
+
+    private static ExactRatio plusOne(ExactRatio value) {
+        return value.plus(ExactRatio.ONE).orNull();
+    }
+
+    private static ExactRatio minusOne(ExactRatio value) {
+        return value.minus(ExactRatio.ONE).orNull();
+    }
+
+    /**
+     * The values {@code term} may be put at that the way alone suggests: the ends of what it holds
+     * of it, the values just inside them, and then nought and one.
+     */
+    private static List<ExactRatio> allowedByTheWay(SearchRegion region, NumericTerm term) {
         if (!(region.projectionOf(term)
                 instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds))) {
             return List.of();
@@ -127,13 +344,23 @@ public final class InputNumbersAnAnswerTurnsOn {
         }
         out.add(ExactRatio.ZERO);
         out.add(ExactRatio.ONE);
-        List<ExactRatio> inside = new ArrayList<>();
-        for (ExactRatio each : out) {
-            if (!inside.contains(each) && admits(bounds, each)) {
-                inside.add(each);
+        return out;
+    }
+
+    /** {@code pool} without repeats and without what the way does not allow, in the order it was
+     *  offered. */
+    private static List<ExactRatio> inTheOrderOffered(SearchRegion region, NumericTerm term,
+                                                      List<ExactRatio> pool) {
+        NumericDomain.Bounds bounds = region.projectionOf(term)
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
+                ? within : null;
+        Set<ExactRatio> seen = new LinkedHashSet<>();
+        for (ExactRatio each : pool) {
+            if (bounds == null || admits(bounds, each)) {
+                seen.add(each);
             }
         }
-        return inside;
+        return List.copyOf(seen);
     }
 
     private static boolean admits(NumericDomain.Bounds bounds, ExactRatio value) {

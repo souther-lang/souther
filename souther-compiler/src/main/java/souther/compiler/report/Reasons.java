@@ -163,6 +163,9 @@ final class Reasons {
                 case WAYS_A_WAY_IS_SPLIT_INTO ->
                         "how many ways a way is split into where a condition on it is one of"
                                 + " several things";
+                case PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED ->
+                        "how many values of the input's numbers are tried with an answer composed"
+                                + " for each";
                 case PLACES_A_PAIR_IS_TRIED_AT -> "how many places a pair is tried at";
                 case PLACES_A_PAIR_IS_LOOKED_AT ->
                         "how many places along a pair's line are looked at";

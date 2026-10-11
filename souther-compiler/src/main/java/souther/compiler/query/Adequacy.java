@@ -102,6 +102,8 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.FixtureTemplate;
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputClassifications;
 import souther.compiler.partition.InputNumbersAnAnswerTurnsOn;
@@ -125,6 +127,7 @@ import souther.compiler.types.TypeSymbol;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -2913,18 +2916,40 @@ public final class Adequacy {
                 // One per way of standing the dependencies in. Which of them answers what was asked
                 // is not something this can tell — where a row goes is read by whoever asked — so
                 // all of them go back and none is chosen here.
-                List<Generator.BoundaryAttempt> out = new ArrayList<>();
                 // A statement about an answer that also names a number of the input is met by the
-                // pair: the number is put at a value the way leaves it, the answer is composed for
-                // that, and the row is held to the same value.
-                InputNumbersAnAnswerTurnsOn pinned =
-                        InputNumbersAnAnswerTurnsOn.of(demands, reaching);
-                for (souther.compiler.partition.StandInAttempt stood
-                        : answers.of(demands, pinned.values())) {
-                    out.add(Generator.probeFixing(subject, label, fixing, asking,
-                            pinned.reaching(), check, stood));
+                // pair: the number is put at a value, the answer is composed for that, and the row
+                // is held to the same value. Which value suits is not known until the answer is
+                // composed for it, so each is tried in turn and the first pair every part of which
+                // composed is the one taken — and where none did, the first pair's attempts, which
+                // say what it was short of.
+                List<Generator.BoundaryAttempt> first = null;
+                InputNumbersAnAnswerTurnsOn.Pairs pairs =
+                        InputNumbersAnAnswerTurnsOn.of(demands, reaching, answers::subjectOf);
+                for (InputNumbersAnAnswerTurnsOn pinned : pairs.tried()) {
+                    List<Generator.BoundaryAttempt> out = new ArrayList<>();
+                    for (souther.compiler.partition.StandInAttempt stood
+                            : answers.of(demands, pinned.values())) {
+                        out.add(Generator.probeFixing(subject, label, fixing, asking,
+                                pinned.reaching(), check, stood));
+                    }
+                    if (out.stream().allMatch(Adequacy::composedAgainstEverythingAsked)) {
+                        return List.copyOf(out);
+                    }
+                    first = first == null ? out : first;
                 }
-                return List.copyOf(out);
+                // Every pair tried composed short of something, and there were more than the figure
+                // lets this try. That is the answer this has — a budget ended the search — and
+                // not that the first pair was the best there is.
+                if (pairs.someLeftUntried()) {
+                    CompositionBudget budget =
+                            CompositionBudget.PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED;
+                    return List.of(new Generator.BoundaryAttempt.Stopped(
+                            new Generator.UnresolvedCombination(List.of(label),
+                                    Generator.UnresolvedCombination.Reason.wordFor(Set.of(budget))),
+                            CompositionShortfall.of(EnumSet.of(budget)),
+                            first.getFirst().unrepresented()));
+                }
+                return List.copyOf(first);
             } catch (LinkageError _) {
                 // The generated classes would not link, so nothing can be built to find out what a
                 // model admits. Nothing was tried, which is not the same as everything tried being
@@ -2945,6 +2970,12 @@ public final class Adequacy {
         }
     }
 
+
+    /** Whether a row was built and nothing asked of an answer was left uncomposed. */
+    private static boolean composedAgainstEverythingAsked(Generator.BoundaryAttempt attempt) {
+        return attempt instanceof Generator.BoundaryAttempt.Built built
+                && built.unrepresented().onAnAnswer().isEmpty();
+    }
 
     /**
      * A subject of one position for what one dependency answers.

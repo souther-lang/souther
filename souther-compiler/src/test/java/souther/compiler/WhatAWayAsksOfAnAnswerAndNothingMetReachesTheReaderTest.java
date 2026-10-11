@@ -54,9 +54,9 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
             }
             """;
 
-    /** And one the reading has no way of stating at all: the answer against a number of the
-     *  input. */
-    private static final String THE_ANSWER_AGAINST_THE_INPUT = """
+    /** And one the reading has no way of stating at all: what one dependency answered against what
+     *  another did. */
+    private static final String THE_ANSWER_AGAINST_ANOTHER = """
             module example.against
 
             data Reading = { n: Int, at: Int }
@@ -65,10 +65,11 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
             data Answer = Yes | No
 
             behavior look : (at: Int) -> Reading
+            behavior peek : (at: Int) -> Reading
 
             behavior decides : (at: Int) -> Answer
-                depends on look
-            let decides (at, look) = if look(at).n > at then Yes else No
+                depends on look, peek
+            let decides (at, look, peek) = if look(at).n > peek(at).n then Yes else No
             """;
 
     /** A truth of a place inside the answer, which the reading states and the answer is composed
@@ -166,12 +167,12 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
     /** And so is what the reading could not state. */
     @Test
     void aDemandTheReadingCannotStateIsNamedWhereItIsWritten() {
-        String said = whereNothingCouldShowARow(THE_ANSWER_AGAINST_THE_INPUT);
+        String said = whereNothingCouldShowARow(THE_ANSWER_AGAINST_ANOTHER);
 
         assertTrue(said.contains(LEFT_OUT), () -> said);
         assertTrue(said.contains("a comparison over more than one answer"),
                 () -> "in the words of the stage that let it go: " + said);
-        assertTrue(said.contains("12:40"),
+        assertTrue(said.contains("13:46"),
                 () -> "and at the place the condition is written: " + said);
     }
 

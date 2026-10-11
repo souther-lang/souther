@@ -219,6 +219,22 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "past the figure looks along the way whole, which every row past it is on,"
                             + " and keeps the conditions it did not split at, which the row's"
                             + " account says"),
+            // The pairs of a number of the input and the answer composed for it. The figure bounds
+            // how many are offered, and what it hands over is whether some were left out, which the
+            // search that composed for none of them answers with.
+            Map.entry("souther.compiler.partition.InputNumbersAnAnswerTurnsOn#of("
+                            + "Lsouther/compiler/partition/AnswersDemanded;"
+                            + "Lsouther/compiler/partition/Reachability$Reaching;"
+                            + "Lsouther/compiler/partition/InputNumbersAnAnswerTurnsOn$AnswerSubjectOf;)"
+                            + "Lsouther/compiler/partition/InputNumbersAnAnswerTurnsOn$Pairs;",
+                    "stops offering pairs at the figure and says whether some were left out"),
+            Map.entry("souther.compiler.query.Adequacy$ARowBuiltAndRun#attempt("
+                            + "Ljava/lang/String;Ljava/util/Map;"
+                            + "Lsouther/compiler/partition/NumbersAskedFor;"
+                            + "Lsouther/compiler/partition/Reachability$Reaching;"
+                            + "Lsouther/compiler/partition/AnswersDemanded;)Ljava/util/List;",
+                    "names the figure as what stopped the search where no pair composed and some"
+                            + " were left untried"),
             Map.entry("souther.compiler.query.Coverages$2#endedBy("
                             + "Lsouther/compiler/query/SearchOutcomes;"
                             + "Lsouther/compiler/partition/Realization;)"

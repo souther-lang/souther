@@ -716,6 +716,9 @@ public final class Generator {
                              // not be assembled at all ({@link CompositionBudget#splitFrom}).
                              PLACES_A_PAIR_IS_LOOKED_AT -> NOTHING_COMPOSES_ONE;
                         case PAIRINGS_BUILT_AT_ONCE, ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
+                             // The pairs past it were never composed for, so what the search came
+                             // to is about the pairs it tried.
+                             PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
                              SHAPES_OF_A_TOTAL_OFFERED, ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
                              CONTAINERS_A_COUNT_IS_OFFERED, SHARES_A_COUNT_IS_TRIED_AT,
                              WAYS_DOWN_TO_A_TOTAL_TRIED,

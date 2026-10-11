@@ -100,6 +100,18 @@ public enum CompositionBudget {
      *  them, and nothing is proved of it from its alternatives. */
     WAYS_A_WAY_IS_SPLIT_INTO(16),
 
+    /**
+     * How many values of the numbers of the input a statement about an answer names are tried, each
+     * with the answer composed for it.
+     *
+     * <p>A pair and not a number: what suits the way for one number need not suit the answer, so
+     * each value is tried by composing the answer for it, and the first pair every part of which
+     * composed is the one taken. A search that went through every pair and found none says the
+     * statement was composed against nothing; one that was ended here says this was why, and that a
+     * pair past it was not looked at.
+     */
+    PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED(8),
+
     /** How many places along a line a pair is tried at, which is places the walk offered and not
      *  places it went past. What it costs to step over a place the anchored position may not stand
      *  at is {@link #PLACES_A_PAIR_IS_LOOKED_AT}. */
@@ -360,6 +372,7 @@ public enum CompositionBudget {
                  ELEMENTS_A_COUNT_IS_COMPOSED_WITH, CONTAINERS_A_COUNT_IS_OFFERED,
                  SHARES_A_COUNT_IS_TRIED_AT,
                  WAYS_DOWN_TO_A_TOTAL_TRIED, WAYS_UNDER_THE_CASES_TRIED,
+                 PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
                  PLACES_A_PAIR_IS_TRIED_AT, STEPS_A_SEARCH_MAY_TAKE,
                  ASSIGNMENTS_A_SEARCH_COMPOSES, VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                  LEVELS_A_SIDE_IS_ASKED_AT, TIMES_THE_RULES_ARE_ASKED_AGAIN,
