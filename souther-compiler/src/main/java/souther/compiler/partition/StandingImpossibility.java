@@ -5,8 +5,11 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Rel;
 
 /**
  * Whether the rules a row passes on the way to an item leave its quantity no value the item asks
@@ -23,6 +26,11 @@ import souther.compiler.numeric.NumericDomain;
  * ({@link Criterion#region()}); whether the two meet is a question neither of them answers, and
  * where nobody asks it a contradiction with a finite proof is handed to a search and comes back as
  * a figure of this compiler's. Nothing here reads a rule, walks an order or composes a value.
+ *
+ * <p>Two runs that cross are not the whole of that question: a run is an interval, and a value the
+ * rules hold the quantity away from lies inside it. So where the runs do cross, the item's values
+ * are taken into the region as the constraints they come to and the region says whether anything
+ * is left.
  *
  * <p>And why it is here rather than on the region. What a row has to satisfy is the item's
  * vocabulary and the region is the algebra underneath it; asked to answer about a {@link Standing},
@@ -75,11 +83,64 @@ final class StandingImpossibility {
         // one direction, since ends that do not cross say nothing about a value between them.
         LevelInterval possible = asked.runBetween(runs);
         for (LevelInterval part : asked.where().region().parts()) {
-            if (part.intersect(possible) != null) {
+            if (part.intersect(possible) != null && !theRegionHoldsNothingIn(region, asked, part)) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Whether the region, narrowed to the values of the quantity in {@code part}, holds nothing.
+     *
+     * <p>The run the region projects the quantity onto is an interval, and a value the rules keep
+     * the quantity away from sits inside it: where two numbers are held apart their difference runs
+     * everywhere and is never nought. Crossing runs says nothing there, and the region itself does
+     * — asked to take the run in as the constraints it comes to, its own algebra finds the
+     * contradiction with the hole.
+     *
+     * <p>False where the run is not one the region can take in, which proves nothing. A run on a
+     * carrier is written in places and not numbers, and a bound of a form the exact arithmetic
+     * cannot hold is a bound nobody wrote down.
+     */
+    private static boolean theRegionHoldsNothingIn(
+            SearchRegion region, Asked asked, LevelInterval part) {
+        if (asked.on() != null) {
+            return false;
+        }
+        SearchRegion narrowed = region;
+        if (part.low() != null) {
+            narrowed = narrowedTo(narrowed, asked.quantity(), part.low(),
+                    part.low().inclusive() ? Rel.GE : Rel.GT);
+        }
+        if (narrowed != null && part.high() != null) {
+            narrowed = narrowedTo(narrowed, asked.quantity(), part.high(),
+                    part.high().inclusive() ? Rel.LE : Rel.LT);
+        }
+        return narrowed != null && narrowed.emptiness().isPresent();
+    }
+
+    /** The region with {@code quantity rel end} taken in, or null where it could not be. */
+    private static SearchRegion narrowedTo(
+            SearchRegion region, LinearForm<NumericTerm> quantity, Bound end, Rel rel) {
+        if (!(end.at().written() instanceof Level.OfTheQuantity(ExactRatio written))) {
+            return null;
+        }
+        // The cut is where per * quantity reaches what was written, so what is asked is
+        // per * quantity - written against nought.
+        ExactAnswer<LinearForm<NumericTerm>> weighed = quantity.times(end.at().per());
+        if (!(weighed instanceof ExactAnswer.Held<LinearForm<NumericTerm>> held)) {
+            return null;
+        }
+        ExactAnswer<LinearForm<NumericTerm>> shifted =
+                held.value().plus(LinearForm.constant(written.negated()));
+        if (!(shifted instanceof ExactAnswer.Held<LinearForm<NumericTerm>> cut)) {
+            return null;
+        }
+        return switch (region.assuming(cut.value(), rel)) {
+            case SearchRegion.Assumption.Taken(SearchRegion narrowed) -> narrowed;
+            case SearchRegion.Assumption.Refused _ -> null;
+        };
     }
 
     /**
