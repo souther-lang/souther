@@ -247,6 +247,53 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
                 rows);
     }
 
+    /**
+     * A count of leaves no grouping is made for does not end the counts after it.
+     *
+     * <p>Where the lists of the innermost level hold exactly two, one leaf is no grouping at all and
+     * two are one, and a count that was turned away for the room is no count past which nothing
+     * fits. A walk that stopped at the first of them would write no row for a total that a row of
+     * sixty-three elements reaches.
+     */
+    @Test
+    void aCountOfLeavesTheRoomHadNoGroupingForDoesNotEndTheCountsAfterIt() {
+        String model = """
+                module example.deep
+
+                data Many
+                data Few
+
+                data C = { q: Int }
+                data B = { cs: List<C> }
+                    invariant List.length(cs) >= 2 && List.length(cs) <= 2
+                data Entry = { bs: List<B> }
+                    invariant List.length(bs) <= 1
+                data Root = { entries: List<Entry> }
+                    invariant List.length(entries) >= 60 && List.length(entries) <= 70
+
+                behavior decide : (root: Root) -> Many | Few
+
+                let decide (root) =
+                    if List.sum(List.map(c -> c.q,
+                            List.flatMap(.cs, List.flatMap(.bs, root.entries)))) >= 5
+                    then Many else Few
+                """;
+        String rows = rowsOf(model);
+        Pattern leaf = Pattern.compile("C \\{ q = (-?\\d+) \\}");
+        boolean reached = false;
+        for (String row : rows.split("\n    \\| ")) {
+            Matcher found = leaf.matcher(row);
+            long total = 0;
+            while (found.find()) {
+                total += Long.parseLong(found.group(1));
+            }
+            reached |= total == 5L && count(row, "Entry \\{") == 60 && count(row, "B \\{") == 1
+                    && count(row, "C \\{") == 2;
+        }
+        assertTrue(reached, () -> "the point on the line, written with the one list of two: "
+                + rows.substring(0, Math.min(rows.length(), 3000)));
+    }
+
     /** The same spreading through three levels of lists. */
     @Test
     void aTotalOverThreeLevelsOfListsIsSpreadOverTheLeavesOfAll() {

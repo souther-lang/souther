@@ -291,16 +291,16 @@ final class NestedContainersAddingUp {
         long to = eachFewest == 0 ? Math.min(here.most(), from + 8)
                 : Math.min(here.most(), count / eachFewest);
         for (long many = from; many <= to; many++) {
-            // Asked before anything is made: a count of elements past what is left of the room is
-            // no grouping to build, however few leaves it holds, and each count after it is past
-            // the room as well.
-            if (many > room) {
-                cut.reached();
-                break;
-            }
             if (times(many, eachMost) < count || times(many, eachFewest) > count
                     || (asked != null && !asked.holds((int) many))) {
                 continue;
+            }
+            // Asked of a count of elements that the counts of this level and of the levels below
+            // allow, and before anything is made: one past what is left of the room is a grouping
+            // that was in front of the walk and is not built, and so is each count after it.
+            if (many > room) {
+                cut.reached();
+                break;
             }
             List<Long> shares = shared(count, many, eachFewest, eachMost, loadedFirst);
             if (shares == null) {
@@ -392,10 +392,15 @@ final class NestedContainersAddingUp {
                 }
             }
             if (layouts.isEmpty()) {
-                // What stops the counts after this one is the room, since a grouping needs at
-                // least as many elements for more leaves, and the walk says so rather than going
-                // on to counts it has no room for.
-                return cut.by() ? Taken.NOT_TAKEN : Taken.AND_MORE;
+                // A grouping the room had none for is a piece the figure refused, and the walk
+                // says so. It does not say there is none for the counts after this one: the
+                // counts of a level can leave this number of leaves no grouping at all and the
+                // next a small one, so only a count of leaves past the room, which every grouping
+                // carries at least once over, ends the counts.
+                if (cut.by()) {
+                    left.refused(figure());
+                }
+                return Taken.AND_MORE;
             }
             // The groupings are some of the many, always.
             left.notAllOf(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD);
