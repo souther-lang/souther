@@ -1563,11 +1563,8 @@ final class Pullback {
                                             WhyUnread.AtNoPosition.Place.SUBJECT));
                         };
                 case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(DeclaredArgument at) -> {
-                    Denotation closure = reads.denotes(applied.argument(at),
-                            read.rules().symbols(), read.rules().newtypes());
-                    yield Core.withoutStanding(closure.value()) instanceof Core.Block block
-                            ? observe(block.body(), aspect,
-                                    application != null ? application : closure.at())
+                    Denotation answered = whatTheClosureAnswers(at);
+                    yield answered != null ? observe(answered.value(), aspect, answered.at())
                             : unread(e, reads, aClosureNotMet());
                 }
                 case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) -> {
@@ -1590,6 +1587,20 @@ final class Pullback {
                             new WhyUnread.NoMeasureOfItsSize(), false), e, reads);
                 }
             };
+        }
+
+        /**
+         * What the closure handed as the argument {@code at} answers: its body, read where one
+         * application of it is, or where the closure stands where no application is being read —
+         * or null where it stands for no block whose body the reading can read.
+         */
+        private Denotation whatTheClosureAnswers(DeclaredArgument at) {
+            Denotation closure = reads.denotes(applied.argument(at), read.rules().symbols(),
+                    read.rules().newtypes());
+            return Core.withoutStanding(closure.value()) instanceof Core.Block block
+                    ? new Denotation(block.body(),
+                            application != null ? application : closure.at())
+                    : null;
         }
 
         /**
@@ -2525,16 +2536,10 @@ final class Pullback {
                                                 new Sized.NotSized(new WhyUnread.AtNoPosition(
                                                         WhyUnread.AtNoPosition.Place.SUBJECT));
                                     };
-                            // As many as the body answers, read where its parameter is the
-                            // element handed it, as what the closure answers is observed.
                             case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(
                                     DeclaredArgument at) -> {
-                                Denotation closure = reads.denotes(applied.argument(at),
-                                        read.rules().symbols(), read.rules().newtypes());
-                                yield Core.withoutStanding(closure.value())
-                                        instanceof Core.Block block
-                                        ? sizeOf(block.body(),
-                                                application != null ? application : closure.at())
+                                Denotation answered = whatTheClosureAnswers(at);
+                                yield answered != null ? sizeOf(answered.value(), answered.at())
                                         : new Sized.NotSized(aClosureNotMet());
                             }
                             case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) -> {
@@ -2940,8 +2945,16 @@ final class Pullback {
     private static DeclaredArgument closureIn(LawProposition<DeclaredArgument> law) {
         return switch (law) {
             case LawProposition.Always<DeclaredArgument> _,
-                 LawProposition.Compared<DeclaredArgument> _,
                  LawProposition.Same<DeclaredArgument> _ -> null;
+            case LawProposition.Compared<DeclaredArgument> compared -> {
+                for (LawNumber<DeclaredArgument> number : compared.form().coefs().keySet()) {
+                    DeclaredArgument closure = closureIn(number);
+                    if (closure != null) {
+                        yield closure;
+                    }
+                }
+                yield null;
+            }
             case LawProposition.All<DeclaredArgument> all -> closureIn(all.parts());
             case LawProposition.Any<DeclaredArgument> any -> closureIn(any.parts());
             case LawProposition.Observed<DeclaredArgument> observed ->

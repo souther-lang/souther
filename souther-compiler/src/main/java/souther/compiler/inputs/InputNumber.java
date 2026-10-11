@@ -199,12 +199,6 @@ public final class InputNumber {
         if (!measured.arguments().none()) {
             return null;
         }
-        // How many values a walk answered is what the walk's operation says of its size, and no
-        // number over the values themselves.
-        if (DefaultBoundOperationFacts.get().takenAs(measured.operation())
-                instanceof TakenAs.HowManyItHolds) {
-            return null;
-        }
         // The walk and the names it stands under, which travel together: a name bound inside a
         // helper stands for what the call handed over, and what is read of that afterwards is read
         // where it stands rather than where the name was.
