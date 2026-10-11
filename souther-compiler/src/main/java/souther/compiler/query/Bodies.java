@@ -52,6 +52,7 @@ import souther.compiler.copied.CopyTarget;
 import souther.compiler.check.HelperTable;
 import souther.compiler.check.InjectionSigs;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.Lower;
@@ -3486,7 +3487,9 @@ public final class Bodies {
                                     analysed.get(spec.name()), read,
                                     () -> Adequacy.readingOf(db, read, reading.value()),
                                     reading.value()),
-                            elements.getOrDefault(spec.name(), ElementBindings.NONE))));
+                            elements.getOrDefault(spec.name(), ElementBindings.NONE),
+                            ValueDefinitions.of(analysed.get(spec.name()),
+                                    Shapes.declarationNewtypes(db)))));
         }
         // In the order the module declares them, which is the order a reader meets the diagnostics
         // these carry. `Map.copyOf` keeps the entries and not the order (see `Ordered`), so a

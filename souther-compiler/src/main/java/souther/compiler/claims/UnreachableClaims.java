@@ -14,6 +14,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValueDefinitions;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -86,8 +87,10 @@ public final class UnreachableClaims {
             return NONE;
         }
         List<Claim> found = new ArrayList<>();
+        // What a value the body builds is defined as is not asked: a claim is about a position of
+        // the input, and a value names none.
         claimedUnder(body, InputReads.ofParameters(read.parameterReads(), read.declared(source),
-                        ElementBindings.NONE, read.dependencies()),
+                        ElementBindings.NONE, ValueDefinitions.NONE, read.dependencies()),
                 symbols, source.newtypes(), plan, NormalReturn.ofBody(body), true, found);
         return found.isEmpty() ? NONE
                 : new UnreachableClaims(found, Optional.of(plan.identity()));

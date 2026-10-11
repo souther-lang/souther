@@ -10,6 +10,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.query.Adequacy;
@@ -57,7 +58,9 @@ class AForkInACopyOfTheLibraryIsReadForWhatItStatesTest {
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("f");
         InputReading read = inputs.reading(rules);
         InputReads reads = InputReads.ofParameters(inputs.parameterReads(),
-                inputs.declared(rules), ElementBindings.NONE, inputs.dependencies());
+                inputs.declared(rules), ElementBindings.NONE,
+                ValueDefinitions.of(checked.analysisBodies().get("f"), rules.newtypes()),
+                inputs.dependencies());
 
         Found found = copiedFork(checked.behaviorBodies().get("f"), reads);
         assertNotNull(found, "the run of f holds a copy of Bool.not with a fork in it");

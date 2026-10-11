@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.types.BinOp;
-import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
 import souther.compiler.core.IntNegation;
 import souther.compiler.numeric.Count;
@@ -44,7 +43,7 @@ import java.util.function.BiFunction;
  * took a leaf rule that could answer a binder's reads with the form its value had — an account of
  * arithmetic standing in for an account of meaning, weaker than the environment's by exactly the
  * values the arithmetic cannot read, and inside a reduction's step the only account there was
- * (ADR-0106). {@link Reading#readThrough} puts back a way to reach what a name was given, and its
+ * (ADR-0106). {@link ValueStanding.Names#readThrough} puts back a way to reach what a name was given, and its
  * answer is an expression: a caller can say which value a name denotes and cannot say what the
  * arithmetic of it comes to, so reading that expression is this walk's and no one else's
  * (ADR-0111).
@@ -57,21 +56,13 @@ import java.util.function.BiFunction;
 public final class AffineForms {
 
     /**
-     * What a name was given, and what to read it in.
-     *
-     * <p>The environment comes with the value because the two belong together: a value stands for
-     * the name in the environment the binding was made in, which is not always the one the name was
-     * read in. Where a caller cannot tell the two apart it hands back the environment it was given
-     * and says why — carried in the type either way, so the day they come apart there is one place
-     * that answers for it.
-     */
-    public record ReadThrough<E>(Core value, E at) {}
-
-    /**
      * The answers this walk asks its caller for: what depends on the caller's environment, and
      * nothing else.
+     *
+     * <p>How far a value is followed before it is read is {@link ValueStanding}'s, over the answers
+     * about names this gives; what the value it ends at comes to is this walk's.
      */
-    public interface Reading<A, E> {
+    public interface Reading<A, E> extends ValueStanding.Names<E, Reading<A, E>> {
 
         /** The symbols the expression being read was resolved against. A call folds to a number
          *  when it computes one, which is a fact about the library, so the walk asks the caller
@@ -97,53 +88,9 @@ public final class AffineForms {
             return leafOf(e, at);
         }
 
-        /** What {@code li}'s body is read in. The one place a binding is entered, so that what a
-         *  name means is settled once and no reader interprets a binder for itself. */
-        E inside(Core.LetIn li, E at);
-
-
-        /**
-         * The value {@code read}'s name denotes, where the name and that value are one value — or
-         * null where the name stands for something of its own and reading through it would say of
-         * one value what was written about another.
-         *
-         * <p>Answered from the environment, which is what knows. A name is a place the caller's
-         * seeding wrote about, or a position of a behavior's input, or an element an operation
-         * handed out, or the expression it was given, and which of those it is decides whether
-         * anything may stand where it stands. What is answered is the expression alone: what its
-         * arithmetic comes to is read here, once, so no caller keeps a second account of it.
-         */
-        ReadThrough<E> readThrough(Core.Read read, E at);
-
-        /**
-         * Every value {@code read}'s name can stand for, where the environment has all of them — or
-         * null where it has not.
-         *
-         * <p>Beside {@link #readThrough} and answering the other half of one question. That one says
-         * the name and one value are one value; this says the name is one of these and names them
-         * all. A name has at most one of the two answers, and which it is is the environment's to
-         * say: a reader that took a plurality for a denotation would state of one value what the
-         * model says of several, and one that took a denotation for a plurality would be asking what
-         * a single value agrees with.
-         *
-         * <p><b>Exhaustive, or null.</b> What this walk does with the answer is keep what every
-         * member comes to, and a member left out makes that a statement about a value the name can
-         * take with nothing said. So an environment that can write out some of them answers none.
-         */
-        java.util.List<ReadThrough<E>> alternativesOf(Core.Read read, E at);
-
-        /**
-         * The value the environment takes {@code node} as — the answer of the arm a reading is on,
-         * where it is a choice; the body a reading entered, where it is a call — or null where it
-         * takes it as nothing else.
-         *
-         * <p>The environment's answer and not a rule here, for the reason a name's is: this walk
-         * chooses nothing and calls nothing. A caller reading something once for each arm of a
-         * choice inside it, or reading a call through what it calls, hands this walk an environment
-         * that says so, and the node is then one value, as a name the environment reads through is.
-         */
-        default ReadThrough<E> taken(Core node, E at) {
-            return null;
+        @Override
+        default Reading<A, E> oneAtATime() {
+            return new OneAtATime<>(this);
         }
 
         /**
@@ -273,7 +220,7 @@ public final class AffineForms {
          * The expression the reading stopped at, what it was being read in, and why it stopped
          * there.
          *
-         * <p>The environment travels with the expression, for the reason {@link ReadThrough} says:
+         * <p>The environment travels with the expression, for the reason {@link ValueStanding.ReadThrough} says:
          * a value stands for a name in the environment the binding was made in, which is not always
          * the one the name was read in. A caller handed the expression alone read it again in
          * whatever it happened to hold, which is that reading being done twice and the second one
@@ -373,7 +320,7 @@ public final class AffineForms {
     private static <A, E> Outcome<A, E> of(Core raw, E at, Reading<A, E> reading,
                                            Walk<A, E> following) {
         // A value the environment takes as another is that value, read where it is.
-        ReadThrough<E> taken = reading.taken(raw, at);
+        ValueStanding.Standing<E, Reading<A, E>> taken = ValueStanding.taken(raw, at, reading);
         if (taken != null) {
             return of(taken.value(), taken.at(), reading, following);
         }
@@ -465,74 +412,36 @@ public final class AffineForms {
         if (!(e instanceof Core.Read r)) {
             return null;
         }
-        ReadThrough<E> through = reading.readThrough(r, at);
-        if (through != null) {
-            if (through.value() == e || !following.enter(r.binding())) {
-                return null;
-            }
+        ValueStanding.Named<E, Reading<A, E>> led = ValueStanding.named(r, at, reading);
+        if (led == null || !following.enter(r.binding())) {
+            return null;
+        }
+        Outcome<A, E> read = switch (led) {
             // Asked once per question. What a name comes to is the value it was given read in the
             // environment it was given in, and a second occurrence of the name is that same
             // question — so the walk holds the answer rather than composing the value again.
-            Outcome<A, E> form = following.readingOf(r.binding(), through.value(), through.at(),
-                    () -> of(through.value(), through.at(), reading, following));
-            following.leave(r.binding());
-            return form;
-        }
-        java.util.List<ReadThrough<E>> alternatives = reading.alternativesOf(r, at);
-        if (alternatives == null || alternatives.isEmpty() || !following.enter(r.binding())) {
-            return null;
-        }
-        Stop<A, E> stopped = new Stop<>();
-        LinearForm<A> agreed =
-                commonForm(membersOf(alternatives, reading), e, at, following, stopped);
+            case ValueStanding.Named.One<E, Reading<A, E>>(
+                    ValueStanding.Standing<E, Reading<A, E>> one) ->
+                    following.readingOf(r.binding(), one.value(), one.at(),
+                            () -> of(one.value(), one.at(), one.names(), following));
+            case ValueStanding.Named.OneOf<E, Reading<A, E>>(
+                    List<ValueStanding.Standing<E, Reading<A, E>>> members) -> {
+                Stop<A, E> stopped = new Stop<>();
+                LinearForm<A> agreed = commonForm(members, e, at, following, stopped);
+                yield agreed != null ? new Outcome.Composed<>(agreed) : stopped.at;
+            }
+        };
         following.leave(r.binding());
-        if (agreed != null) {
-            return new Outcome.Composed<>(agreed);
-        }
-        return stopped.at;
-    }
-
-    /**
-     * An occurrence resolved as far as one value can be followed, what to read it in, and what to
-     * read it with.
-     *
-     * <p>The environment travels with the value for the reason {@link ReadThrough} gives: what a
-     * name was given is written in the environment the binding was made in, and a projection out of
-     * it is read in that one rather than in the one the projection was written in.
-     *
-     * <p>And the reading travels with it for the same kind of reason. A value reached by taking one
-     * of several is read with less than the value the walk started from: the plurality it came out
-     * of is the one this walk reads, and a second one inside it is not read at all
-     * ({@link #membersOf}). Left behind, the restriction would hold over the step that produced the
-     * members and be gone by the time their parts were read — which is the whole of what it is for.
-     */
-    private record Standing<A, E>(Core value, E at, Reading<A, E> reading) {}
-
-    /**
-     * The values a name stands for, each to be read without a plurality of its own.
-     *
-     * <p><b>One plurality per rule, said here and nowhere else.</b> What this walk answers about a
-     * position several values stand at is what all of them support, and reading a member that is
-     * itself several means asking that of every pairing: two members whose members have two each is
-     * four readings, and a rule written down a chain of them is two to the power of its depth. That
-     * is a capability with a cost, and it is not the one this rule is: a container written out in
-     * the source is what a model states its numbers in.
-     *
-     * <p>Said as what the members are read with rather than as a count or a depth. A reading with no
-     * plurality in it cannot expand one however far down a member the walk goes, so the boundary
-     * holds over the parts of a member as well as over the member — which a guard at the point of
-     * expansion would not, since the parts are read after it.
-     */
-    private static <A, E> java.util.List<Standing<A, E>> membersOf(
-            java.util.List<ReadThrough<E>> alternatives, Reading<A, E> reading) {
-        java.util.List<Standing<A, E>> out = new java.util.ArrayList<>();
-        Reading<A, E> once = new OneAtATime<>(reading);
-        alternatives.forEach(each -> out.add(new Standing<>(each.value(), each.at(), once)));
-        return out;
+        return read;
     }
 
     /** {@code of} with no plurality in it, which is what the members of one are read with. */
     private record OneAtATime<A, E>(Reading<A, E> of) implements Reading<A, E> {
+
+        @Override
+        public Reading<A, E> oneAtATime() {
+            return this;
+        }
 
         @Override
         public Symbols symbols() {
@@ -561,17 +470,17 @@ public final class AffineForms {
 
 
         @Override
-        public ReadThrough<E> readThrough(Core.Read read, E at) {
+        public ValueStanding.ReadThrough<E> readThrough(Core.Read read, E at) {
             return of.readThrough(read, at);
         }
 
         @Override
-        public java.util.List<ReadThrough<E>> alternativesOf(Core.Read read, E at) {
+        public List<ValueStanding.ReadThrough<E>> alternativesOf(Core.Read read, E at) {
             return null;
         }
 
         @Override
-        public ReadThrough<E> taken(Core node, E at) {
+        public ValueStanding.ReadThrough<E> taken(Core node, E at) {
             return of.taken(node, at);
         }
 
@@ -584,195 +493,6 @@ public final class AffineForms {
         public boolean readsThrough(Core.FieldAccess fa, E at) {
             return of.readsThrough(fa, at);
         }
-    }
-
-    /**
-     * {@code e} under the reductions this reading licenses, as far as they go.
-     *
-     * <p><b>A normal form and never a failure.</b> What comes back is where the reductions run out:
-     * a written construction where the occurrence resolves to one, and the occurrence itself where
-     * nothing licensed applies. Reaching a {@code Core.If} is such a result and not an absence —
-     * what stands there is known perfectly well, and it is a choice rather than a value — so a
-     * caller reads what it was handed and never treats getting its own expression back as an answer
-     * about this walk.
-     *
-     * <p><b>Nothing here chooses.</b> The reductions that leave one value are the ones with a single
-     * successor: a name the reading says denotes one value, a binding's body, and an elimination
-     * standing against the introduction that wrote it. Where the reading names every value a name
-     * can stand for, all of them come back — none of them is picked, and what a caller may do with
-     * several is state what they agree on. An arm of a choice is neither: the reading gives it no
-     * plurality and there is no rule here for one, which is what keeps a rule about
-     * {@code Big { threshold = 100000 }} from being answered for a position where a second
-     * construction can stand as well. That boundary is the absence of a rule and not a refusal, so
-     * nothing has to be kept in step with it. Where the environment says which arm a reading is on
-     * ({@link Reading#taken}), the choice is that arm's answer, as a name it reads through is the
-     * value it was given: the environment chose, and this follows.
-     *
-     * <p><b>Closed under its own eliminations.</b> A projection resolves through whatever the target
-     * resolves to, so a construction inside a construction is reached the same way a construction
-     * behind a name is. Left at one step, this would cross a single introduction and no more, and
-     * which spellings that admits is nothing either the language or a reader states.
-     *
-     * <p><b>The authority is the reading's and none is added here.</b> A name is followed only
-     * where {@link Reading#readThrough} licenses that occurrence, and a binding is entered only
-     * through {@link Reading#inside}. What is derived is how far those answers reach, which is not
-     * the same kind of thing as the answers — so this is not the place to ask what an environment
-     * happens to hold. {@code Terms.given} is that question and peels every name a binding gave a
-     * value to; a name it would peel is one this leaves alone unless the reading says the two are
-     * one value.
-     */
-    private static <A, E> java.util.List<Standing<A, E>> standing(
-            Core asPlaced, E at, Reading<A, E> reading, Walk<A, E> following) {
-        // What a value is does not turn on the type it stands as at its position.
-        Core e = Core.withoutStanding(asPlaced);
-        return switch (e) {
-            case Core.Read r -> {
-                ReadThrough<E> through = reading.readThrough(r, at);
-                if (through != null) {
-                    if (through.value() == e || !following.enter(r.binding())) {
-                        yield java.util.List.of(new Standing<>(e, at, reading));
-                    }
-                    java.util.List<Standing<A, E>> denoted =
-                            standing(through.value(), through.at(), reading, following);
-                    following.leave(r.binding());
-                    yield denoted;
-                }
-                java.util.List<ReadThrough<E>> alternatives = reading.alternativesOf(r, at);
-                if (alternatives == null || alternatives.isEmpty()
-                        || !following.enter(r.binding())) {
-                    yield java.util.List.of(new Standing<>(e, at, reading));
-                }
-                java.util.List<Standing<A, E>> each = new java.util.ArrayList<>();
-                for (Standing<A, E> one : membersOf(alternatives, reading)) {
-                    each.addAll(standing(one.value(), one.at(), one.reading(), following));
-                }
-                following.leave(r.binding());
-                yield each;
-            }
-            case Core.LetIn li -> standing(li.body(), reading.inside(li, at), reading, following);
-            // The elimination below a name at a time, along the names rather than down the stack.
-            // A name with nothing written to stand against leaves the whole projection standing,
-            // as it leaves every access above it standing when they are written out.
-            case Core.FieldProjection p -> {
-                List<Standing<A, E>> reached = standing(p.base(), at, reading, following);
-                // Asked before the names are written out: a base standing at no construction has
-                // nothing written against its first name, and the names are as many as the chain
-                // is deep.
-                if (!allConstructions(reached)) {
-                    yield List.of(new Standing<>(e, at, reading));
-                }
-                for (Core.FieldProjection.Step step : p.steps().inOrder()) {
-                    List<Standing<A, E>> written = given(reached, step.field());
-                    if (written == null) {
-                        yield List.of(new Standing<>(e, at, reading));
-                    }
-                    reached = new ArrayList<>();
-                    for (Standing<A, E> one : written) {
-                        reached.addAll(standing(one.value(), one.at(), one.reading(), following));
-                    }
-                }
-                yield reached;
-            }
-            case Core.FieldAccess _, Core.TupleGet _ -> {
-                java.util.List<Standing<A, E>> written = eliminated(e, at, reading, following);
-                if (written == null) {
-                    yield java.util.List.of(new Standing<>(e, at, reading));
-                }
-                java.util.List<Standing<A, E>> each = new java.util.ArrayList<>();
-                for (Standing<A, E> one : written) {
-                    each.addAll(standing(one.value(), one.at(), one.reading(), following));
-                }
-                yield each;
-            }
-            default -> {
-                ReadThrough<E> taken = reading.taken(e, at);
-                yield taken == null ? List.of(new Standing<>(e, at, reading))
-                        : standing(taken.value(), taken.at(), reading, following);
-            }
-        };
-    }
-
-    /**
-     * What this elimination stands against, or null where nothing written stands against it.
-     *
-     * <p><b>One question with one answer, asked by the two readings that have it.</b> Resolving an
-     * occurrence needs to know what an elimination came to so it can go on, and reading a form
-     * needs to know it so it can compose — and where it comes to nothing, the second has another
-     * proof to try. Written out at each of them, one copy would come to read a shape the other did
-     * not, and which shapes a rule about eliminations covers would depend on which reader met it.
-     *
-     * <p><b>Null is the rule not applying, and never the kind of node.</b> A construction that does
-     * not give the field asked for has nothing written to stand against, exactly as an expression
-     * that is no construction has not — so a caller asking whether the structural reading produced
-     * a successor is asking one thing. Read off the node instead, a construction missing the field
-     * would count as a reduction this never made.
-     *
-     * <p>The target resolves before the field is taken, which is what closes this under itself: the
-     * value a construction gives a field is reached whether the construction was written where the
-     * projection is or stands behind a name and another projection.
-     *
-     * <p><b>Taken of every value the target can stand at, or of none of them.</b> A projection out
-     * of a name that stands for several is that projection out of each of them, and one member with
-     * nothing written to stand against takes the answer away for all of them: what a caller is going
-     * to state is what the members agree on, and a member this could not eliminate is one it has
-     * nothing to compare.
-     */
-    private static <A, E> java.util.List<Standing<A, E>> eliminated(
-            Core e, E at, Reading<A, E> reading, Walk<A, E> following) {
-        return switch (Core.withoutStanding(e)) {
-            case Core.FieldAccess fa ->
-                    given(standing(fa.target(), at, reading, following), fa.field());
-            // Its last name against what the names before it reach.
-            case Core.FieldProjection p -> given(standing(p.target(), at, reading, following),
-                    p.steps().last().field());
-            case Core.TupleGet get -> {
-                java.util.List<Standing<A, E>> out = new java.util.ArrayList<>();
-                for (Standing<A, E> tuple : standing(get.tuple(), at, reading, following)) {
-                    if (!(Core.withoutStanding(tuple.value()) instanceof Core.Tuple written)
-                            || get.index() < 0
-                            || get.index() >= written.elements().size()) {
-                        yield null;
-                    }
-                    out.add(new Standing<>(written.elements().get(get.index()), tuple.at(),
-                            tuple.reading()));
-                }
-                yield out;
-            }
-            default -> null;
-        };
-    }
-
-    /**
-     * What each of {@code targets} gives {@code field}, or null where one of them is no construction
-     * giving it — one field taken off what a projection's target stands at.
-     */
-    private static <A, E> List<Standing<A, E>> given(List<Standing<A, E>> targets, String field) {
-        if (!allConstructions(targets)) {
-            return null;
-        }
-        List<Standing<A, E>> out = new ArrayList<>();
-        for (Standing<A, E> target : targets) {
-            Core.Construct nd = (Core.Construct) Core.withoutStanding(target.value());
-            Core written = ConstructionProjection.given(nd, field);
-            if (written == null) {
-                return null;
-            }
-            // What a member gives a field is read with what the member is read with, which is how
-            // one plurality stays one over the parts of it.
-            out.add(new Standing<>(written, target.at(), target.reading()));
-        }
-        return out;
-    }
-
-    /** Whether every one of {@code targets} stands at a construction, which is all a field can be
-     *  written against: one that does not has nothing written for any name taken off it. */
-    private static <A, E> boolean allConstructions(List<Standing<A, E>> targets) {
-        for (Standing<A, E> target : targets) {
-            if (!(Core.withoutStanding(target.value()) instanceof Core.Construct)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /**
@@ -789,13 +509,13 @@ public final class AffineForms {
      * the values agree or this walk has nothing to say about the position — and says so at
      * {@code e}, the expression that stands for all of them.
      */
-    private static <A, E> LinearForm<A> commonForm(List<Standing<A, E>> these, Core e, E at,
-                                                   Walk<A, E> following,
-                                                   Stop<A, E> stopped) {
+    private static <A, E> LinearForm<A> commonForm(
+            List<ValueStanding.Standing<E, Reading<A, E>>> these, Core e, E at,
+            Walk<A, E> following, Stop<A, E> stopped) {
         LinearForm<A> agreed = null;
-        for (Standing<A, E> each : these) {
+        for (ValueStanding.Standing<E, Reading<A, E>> each : these) {
             LinearForm<A> here =
-                    formOf(each.value(), each.at(), each.reading(), following, stopped);
+                    formOf(each.value(), each.at(), each.names(), following, stopped);
             if (here == null) {
                 return null;
             }
@@ -857,7 +577,7 @@ public final class AffineForms {
                                                  Walk<A, E> following,
                                                  Stop<A, E> stopped) {
         Core e = Core.withoutStanding(asPlaced);
-        LinearForm<A> written = literal(e, reading);
+        LinearForm<A> written = literal(e, at, reading);
         if (written != null) {
             return written;
         }
@@ -935,8 +655,8 @@ public final class AffineForms {
             // eliminate, the reading's own evidence that the projection keeps what it reads —
             // which is how a name a call was given is read through with no construction in sight.
             case Core.FieldAccess fa -> {
-                java.util.List<Standing<A, E>> eliminated =
-                        eliminated(fa, at, reading, following);
+                List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
+                        ValueStanding.eliminated(fa, at, reading, following);
                 if (eliminated != null) {
                     yield commonForm(eliminated, e, at, following, stopped);
                 }
@@ -950,8 +670,8 @@ public final class AffineForms {
             // fall back on, because nothing declares a tuple transparent the way a newtype's
             // declaration does.
             case Core.TupleGet get -> {
-                java.util.List<Standing<A, E>> eliminated =
-                        eliminated(get, at, reading, following);
+                List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
+                        ValueStanding.eliminated(get, at, reading, following);
                 yield eliminated == null ? null
                         : commonForm(eliminated, e, at, following, stopped);
             }
@@ -992,12 +712,13 @@ public final class AffineForms {
             Stop<A, E> stop = stops.getLast();
             // What a carrier counts a written value as is asked ahead of the arms, as it is for
             // any expression ({@link #composed}).
-            LinearForm<A> written = literal(here, reading);
+            LinearForm<A> written = literal(here, at, reading);
             if (written != null) {
                 form = written;
                 break;
             }
-            List<Standing<A, E>> eliminated = eliminated(here, at, reading, following);
+            List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
+                    ValueStanding.eliminated(here, at, reading, following);
             if (eliminated != null) {
                 form = commonForm(eliminated, here, at, following, stop);
                 break;
@@ -1071,14 +792,17 @@ public final class AffineForms {
      * it as arithmetic or as a leaf. Treated as "not affine" instead, an expression a carrier does
      * not recognise would stop a reading the grammar below can still take apart.
      */
-    private static <A, E> LinearForm<A> literal(Core e, Reading<A, E> reading) {
+    private static <A, E> LinearForm<A> literal(Core e, E at, Reading<A, E> reading) {
         Carrier carrier =
                 Carrier.ofValue(e.type(), reading.declarations());
         if (carrier == null || !carrier.counts()) {
             return null;
         }
-        Place at = carrier.literalOf(e, reading.symbols());
-        return at == null ? null : LinearForm.constant(Count.number(at).exactly());
+        // The expression as this walk stands at it: a name in front of it is read by this walk,
+        // once, and what the carrier takes apart is followed where the expression was written.
+        Place place = carrier.literalOf(new ValueStanding.Standing<>(e, at, reading),
+                reading.symbols());
+        return place == null ? null : LinearForm.constant(Count.number(place).exactly());
     }
 
     /**

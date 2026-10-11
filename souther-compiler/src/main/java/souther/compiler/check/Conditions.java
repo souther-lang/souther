@@ -289,16 +289,16 @@ final class Conditions {
         return new TheSignOfAnOrder.Sides<>() {
 
             @Override
-            public AffineForms.ReadThrough<Denotations> standing(Core e, Denotations at) {
+            public ValueStanding.ReadThrough<Denotations> standing(Core e, Denotations at) {
                 Core value = e;
                 Denotations in = at;
                 while (Core.withoutStanding(value) instanceof Core.Read name
                         && terms.readThrough(name, in)
-                                instanceof AffineForms.ReadThrough<Denotations> through) {
+                                instanceof ValueStanding.ReadThrough<Denotations> through) {
                     value = through.value();
                     in = through.at();
                 }
-                return new AffineForms.ReadThrough<>(value, in);
+                return new ValueStanding.ReadThrough<>(value, in);
             }
 
             @Override

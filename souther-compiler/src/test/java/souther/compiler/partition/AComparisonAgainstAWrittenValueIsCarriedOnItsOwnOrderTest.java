@@ -8,6 +8,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Adequacy;
@@ -299,7 +300,9 @@ class AComparisonAgainstAWrittenValueIsCarriedOnItsOwnOrderTest {
             souther.compiler.inputs.InputDomain inputs =
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(name);
             InputReads reads = InputReads.ofParameters(inputs.parameterReads(), inputs.declared(rules),
-                    checked.elementBindings().get(name), inputs.dependencies());
+                    checked.elementBindings().get(name),
+                    ValueDefinitions.of(checked.analysisBodies().get(name), rules.newtypes()),
+                    inputs.dependencies());
             return new Read(body, inputs.reading(rules), reads, rules, module, name);
         });
     }

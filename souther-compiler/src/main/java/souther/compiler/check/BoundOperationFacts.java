@@ -10,6 +10,7 @@ import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.LawNumber;
@@ -394,6 +395,29 @@ public final class BoundOperationFacts {
 
     /** The separator and the string an operation answers the pieces of. */
     public record Pieces(DeclaredArgument separator, DeclaredArgument string) {}
+
+    /**
+     * The side every element of what {@code operation} answers comes out on, or null where it says
+     * no such thing.
+     */
+    public SideAnswered everyElementOfItsAnswerIs(ValueName operation) {
+        BoundOperationFact.EveryElementOfItsAnswerIs held =
+                one(BoundOperationFact.EveryElementOfItsAnswerIs.class, operation);
+        return held == null ? null : held.side();
+    }
+
+    /**
+     * Which code points what {@code operation} answers holds one of exactly where an argument of it
+     * does, and which argument — or null where it keeps no such thing.
+     */
+    public KeptCodePoints keepsWhetherItHoldsACodePointOf(ValueName operation) {
+        BoundOperationFact.KeepsWhetherItHoldsACodePointOf held =
+                one(BoundOperationFact.KeepsWhetherItHoldsACodePointOf.class, operation);
+        return held == null ? null : new KeptCodePoints(held.counted(), held.string());
+    }
+
+    /** The class of code points an operation's answer holds one of where {@code string} does. */
+    public record KeptCodePoints(CodePointClass counted, DeclaredArgument string) {}
 
     /**
      * What the answer of {@code operation} holds an image of every element of, or null where it

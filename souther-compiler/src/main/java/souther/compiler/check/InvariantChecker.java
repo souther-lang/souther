@@ -2938,7 +2938,7 @@ public final class InvariantChecker {
              * the two that already agree.
              */
             @Override
-            public AffineForms.ReadThrough<Denotations> readThrough(Core.Read name,
+            public ValueStanding.ReadThrough<Denotations> readThrough(Core.Read name,
                                                                     Denotations where) {
                 return terms.readThrough(name, where);
             }

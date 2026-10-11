@@ -39,8 +39,9 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
 
     private static final String INPUT = """
             data Item = { price: Int, tag: String? }
-            data Box = { xs: List<Int>, items: List<Item>, open: Bool, x: Int, y: Int,
-                         m: Map<String, Int>, s: String }
+            data Box = { xs: List<Int>, items: List<Item>, others: List<Item>, open: Bool, x: Int,
+                         y: Int, m: Map<String, Int>, s: String }
+            let chosen (b: Box) = if b.open then b.items else []
             """;
 
     @Test
@@ -114,6 +115,103 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
                 "Bool.not(List.isEmpty(if b.open then b.xs else []))");
         assertEquals(Proposition.all(List.of(stated("b.open"),
                 stated("Bool.not(List.isEmpty(b.xs))"))), branch);
+    }
+
+    /**
+     * Some element of a list chosen by cases meeting a statement is some element of the list the
+     * case taken answers meeting it, and a list written empty has none: every element meeting it is
+     * the case that answers nothing, or every element of the other meeting it. Chosen where the
+     * quantifier is written, under a name, or in a body a call reads, it is one statement.
+     */
+    @Test
+    void aQuantifierOverAListChosenByCasesIsReadInEachCase() {
+        Proposition every = stated("Bool.not(b.open) || List.all(i -> i.price >= 1, b.items)");
+        Proposition some = stated("b.open && List.any(i -> i.price >= 1, b.items)");
+        for (String chosen : List.of("if b.open then b.items else []", "chosen(b)",
+                "{ let xs = if b.open then b.items else []\n xs }")) {
+            assertEquals(every, stated("List.all(i -> i.price >= 1, " + chosen + ")"), chosen);
+            assertEquals(some, stated("List.any(i -> i.price >= 1, " + chosen + ")"), chosen);
+        }
+        assertEquals(stated("""
+                        (Bool.not(b.open) || List.all(i -> i.price >= 1, b.items))
+                            && (b.open || List.all(i -> i.price >= 1, b.others))"""),
+                stated("List.all(i -> i.price >= 1, if b.open then b.items else b.others)"),
+                "the element handed the closure in each case is one of the list that case chose");
+    }
+
+    /**
+     * A list chosen by cases holds every element of the list one case answers only on that case: on
+     * the other it holds none, so a total over it is no total of everything that list holds. A list
+     * that every case answers is.
+     */
+    @Test
+    void aTotalOverAListChosenByCasesIsNoTotalOfTheListOneCaseChose() {
+        String total = "List.fold((acc, x) -> acc + x, 0, %s) >= 10";
+        for (String other : List.of("[]", "[1]")) {
+            assertEquals(stated("(b.open && " + total.formatted("b.xs") + ") || (Bool.not(b.open)"
+                            + " && " + total.formatted(other) + ")"),
+                    stated(total.formatted("if b.open then b.xs else " + other)),
+                    "on a closed box the total is the other list's, whatever b.xs holds");
+        }
+        assertEquals(stated(total.formatted("b.xs")),
+                stated(total.formatted("if b.open then b.xs else b.xs")),
+                "a list every case answers is that list on every run");
+    }
+
+    /**
+     * A string put together from the words or the characters of another holds something where some
+     * of them does, and each of them holds something; so it holds something where the other falls
+     * into any, whatever stands between them. A case mapping before it keeps whether there is a
+     * code point that is not whitespace.
+     */
+    @Test
+    void aStringMadeOfTheWordsOrCharactersOfAnotherHoldsSomethingWhereThatOneHasAny() {
+        Proposition aWord = stated("Bool.not(String.isEmpty(String.trim(b.s)))");
+        for (String made : List.of("String.join(\"-\", String.words(b.s))",
+                "String.join(\"\", String.words(b.s))",
+                "String.join(\"-\", String.words(String.lowercase(b.s)))",
+                "String.concat(String.words(String.uppercase(b.s)))")) {
+            assertEquals(aWord, stated("String.length(" + made + ") >= 1"), made);
+            assertEquals(aWord.denied(), stated("String.isEmpty(" + made + ")"), made);
+        }
+        assertEquals(stated("String.length(b.s) >= 1"),
+                stated("String.length(String.concat(String.characters(b.s))) >= 1"));
+    }
+
+    /**
+     * What every word is, asked of a word a closure is handed, is what it is asked of the element:
+     * it comes out the same for every word, so some word meeting it is the string having one where
+     * it holds and none where it fails, and every word meets it.
+     */
+    @Test
+    void whatEveryWordIsIsAskedTheSameOfAClosuresParameter() {
+        Proposition aWord = stated("Bool.not(String.isEmpty(String.trim(b.s)))");
+        assertEquals(aWord,
+                stated("List.any(w -> Bool.not(String.isEmpty(w)), String.words(b.s))"));
+        assertEquals(aWord, stated("List.any(w -> String.length(w) >= 1, String.words(b.s))"));
+        assertEquals(stated("String.length(b.s) >= 1"), stated(
+                "List.any(c -> Bool.not(String.isEmpty(c)), String.characters(b.s))"));
+        assertEquals(new Proposition.Always(false),
+                stated("List.any(w -> String.isEmpty(w), String.words(b.s))"));
+        assertEquals(new Proposition.Always(true),
+                stated("List.all(w -> Bool.not(String.isEmpty(w)), String.words(b.s))"));
+    }
+
+    /**
+     * What every word is says nothing of a word but that it holds something, and a case mapping
+     * keeps whether there is a code point that is not whitespace and not how many there are.
+     */
+    @Test
+    void whatEveryWordIsAndWhatAMappingKeepsSayNothingMore() {
+        Proposition aWord = stated("Bool.not(String.isEmpty(String.trim(b.s)))");
+        for (String more : List.of("List.any(w -> String.length(w) >= 2, String.words(b.s))",
+                "String.length(String.lowercase(b.s)) >= 2",
+                "List.length(String.words(String.lowercase(b.s))) >= 2")) {
+            assertInstanceOf(Proposition.Unread.class, stated(more), more);
+        }
+        assertNotEquals(aWord,
+                stated("String.length(String.join(\"-\", String.split(\",\", b.s))) >= 1"),
+                "a piece a split leaves may hold nothing");
     }
 
     /**

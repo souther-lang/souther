@@ -140,7 +140,15 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
         return right != null && right.at() != null ? right : left != null ? left : right;
     }
 
-    /** What {@code side} names, or null where it names no number of this input. */
+    /**
+     * What {@code side} names, or null where it names no number of this input.
+     *
+     * <p>Both sides are read where they stand. The number is what this reading says {@code side}
+     * names, and the other side is the value it stands for here — a value given a name, a parameter
+     * a helper was handed, a value the module declares — before the order is asked where it falls.
+     * Read as written, a value behind a name would place no line where the same value written out
+     * places one.
+     */
     private static OnASide onOneSide(Core side, Core other, boolean turned, InputReading read,
                                      InputReads reads) {
         Named named = namedBy(side, read, reads);
@@ -148,7 +156,9 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
             return null;
         }
         Carrier order = named.orders() == null ? null : named.orders().answered();
-        return new OnASide(named, order == null ? null : order.literalOf(other, read.symbols()),
+        return new OnASide(named, order == null ? null
+                : order.literalOf(reads.standingValue(other, read.symbols(), read.newtypes()),
+                        read.symbols()),
                 turned);
     }
 

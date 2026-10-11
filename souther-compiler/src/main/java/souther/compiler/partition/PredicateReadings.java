@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.carrier.Membership;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PredicateStatement;
@@ -12,7 +11,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
-import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 
@@ -148,18 +146,18 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
                 Collections.newSetFromMap(new IdentityHashMap<>());
         if (body != null) {
             Builds builds = new Builds(body.templates());
-            walk(body.core(), behavior, read,
-                    InputReads.ofParametersWhereCallsStand(parameters, read.declared(),
-                            elements, read.domain().dependencies()),
+            InputReads reads = InputReads.ofParametersWhereCallsStand(parameters,
+                    read.declared(), elements, read.domain().dependencies());
+            walk(body.core(), behavior, read, reads,
                     LiveFlow.of(body.core()), true, predicates, reaches, statedAt, builds);
-            // What each value the body builds states, read once and where nothing of the
-            // behavior's inputs is in force: a value takes none, names none and stands nothing in.
+            // What each value the body builds states, read once and where a definition is read,
+            // where nothing of the behavior's inputs is in force: a value takes none, names none
+            // and stands nothing in.
+            InputReads defined = reads.whereValuesAreDefined();
             for (Core template : body.templatesAfterTheirBuilders()) {
                 Boolean live = builds.read().get(template);
                 if (live != null) {
-                    walk(template, behavior, read,
-                            InputReads.ofParametersWhereCallsStand(Map.of(), DeclaredInput.NONE,
-                                    elements, Membership.none()),
+                    walk(template, behavior, read, defined,
                             LiveFlow.of(template), live, predicates, reaches, statedAt, builds);
                 }
             }

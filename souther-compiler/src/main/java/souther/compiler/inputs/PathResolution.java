@@ -133,6 +133,25 @@ public sealed interface PathResolution {
     }
 
     /**
+     * Where a value that is whichever of {@code these} the run makes stands as a whole: the one
+     * place every one of them is, and no position where any of them is elsewhere or nowhere.
+     *
+     * <p>Beside {@link #anyOf} and not one of its answers. That one is where a value may be, and a
+     * case that holds none of it adds no place; this is where all of a value is on every run, and a
+     * case that holds none of it is a run where the place is not all of it.
+     */
+    static PathResolution inEveryCase(List<PathResolution> these) {
+        TermPath every = null;
+        for (PathResolution each : these) {
+            if (!(each instanceof At(var at)) || (every != null && !every.equals(at))) {
+                return new NotAPosition();
+            }
+            every = at;
+        }
+        return every == null ? new NotAPosition() : new At(every);
+    }
+
+    /**
      * The same answer, with every narrowing to several cases on the way to the place taken out
      * ({@link TermPath#position}).
      *

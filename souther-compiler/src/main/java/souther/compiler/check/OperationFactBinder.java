@@ -368,6 +368,21 @@ final class OperationFactBinder {
                         holdToTheDeclaration(declaration, pieces.string(), null,
                                 TypeRequirement.TEXT, "the string that falls into pieces"));
             }
+            case OperationFact.EveryElementOfItsAnswerIs every -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
+                        "a container every element of which comes out on a side");
+                holdTheSide(every.side().aspect(), Type.elementOfAContainer(declaration.result()),
+                        "an element of what " + ((ValueName.Stdlib) operation.operation())
+                                .qualified() + " answers");
+                yield new BoundOperationFact.EveryElementOfItsAnswerIs(operation, every.side());
+            }
+            case OperationFact.KeepsWhetherItHoldsACodePointOf keeps -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.TEXT,
+                        "a string holding a code point where another does");
+                yield new BoundOperationFact.KeepsWhetherItHoldsACodePointOf(operation,
+                        keeps.counted(), holdToTheDeclaration(declaration, keeps.string(), null,
+                                TypeRequirement.TEXT, "the string whose code points are kept"));
+            }
             // A key kept is the same key, so the answer is a map keyed by what the map named is.
             case OperationFact.KeepsTheKeysOf kept -> {
                 DeclaredArgument map = holdToTheDeclaration(declaration, kept.map(),

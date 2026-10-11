@@ -172,7 +172,7 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
         Core.If fork = assertInstanceOf(Core.If.class, Core.withoutStanding(analysis.core()));
         Proposition stated =
                 Pullback.ofATruth(fork.cond(), reads, read, Optional.empty()).proposition();
-        ComparisonReadings walk = ComparisonReadings.of("f", analysis, read, reads, reads,
+        ComparisonReadings walk = ComparisonReadings.of("f", analysis, read, reads,
                 WhatAnAnswerTakesUp.of(read));
         List<BlockReason.RuleWithoutLineReason> said = new ArrayList<>();
         for (ComparisonReadings.Reading each : walk.comparisons()) {

@@ -35,6 +35,13 @@ it was derived. Nothing is pushed back by guessing: a step is taken only where t
 declared facts or the construct's own semantics make the two statements equivalent, and where none
 does, the proposition says it stopped there and why.
 
+How a value was made is read by one walk, whatever is asked of it. A binding, a name, the arms of a
+choice and the body of a call are crossed the same way for a side of the value — that it holds,
+holds something, holds a value — and for some element of it meeting a statement. Only what none of
+them made is asked of an operation's facts or of the position it stands at, so a statement about
+some element of a container chosen by cases is read in each case, with the closure handed an element
+of the container that case chose, rather than stopping because the choice stands at no position.
+
 The runnable representation represents execution: which paths a run takes, where a construct is
 materialised, and what a run records. No analysis defines the meaning of a condition of the model
 from it. A fork inside a copy of a library operation is no condition of the model, so no obligation
