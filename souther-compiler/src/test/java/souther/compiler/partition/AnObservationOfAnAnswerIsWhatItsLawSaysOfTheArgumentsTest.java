@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.BooleanMeaning;
@@ -125,6 +126,27 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
                 "if List.length(List.filter(x -> x > 0, " + written + ")) == 1 then 1 else 0")));
         assertInstanceOf(WhyUnread.MoreReadingsThanAreMade.class, Proposition.firstStopIn(stated(
                 "if List.length(List.filter(x -> x > 0, " + written + ")) == 9 then 1 else 0")));
+    }
+
+    /**
+     * A count compared by an operation's law and not as written is held to the same figure: what
+     * {@code List.drop} leaves is empty by how many the list holds against how many it drops, so
+     * dropping ten of thirty values written out is eleven or more of them kept, every way of
+     * picking eleven. Read where the law's comparison is made, past the readings of a condition it
+     * is said to be — and not written out however many ways that is.
+     */
+    @Test
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void aCountALawComparesIsHeldToTheFigureToo() {
+        List<String> thirty = new ArrayList<>();
+        for (int i = 0; i < 30; i++) {
+            thirty.add("b.n + " + i);
+        }
+        String kept = "List.filter(x -> x > 0, [" + String.join(", ", thirty) + "])";
+        assertInstanceOf(WhyUnread.MoreReadingsThanAreMade.class, Proposition.firstStopIn(stated(
+                "if List.isEmpty(List.drop(10, " + kept + ")) then 1 else 0")));
+        assertNull(Proposition.firstStopIn(stated(
+                "if List.isEmpty(List.drop(0, " + kept + ")) then 1 else 0")));
     }
 
     /** What a set holds once a value is taken out is some other value, read as the quantifier over

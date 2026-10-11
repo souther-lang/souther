@@ -14,6 +14,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * How many of some statements hold, held against a number, is which of them hold: a choice for each
@@ -24,6 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * statement, and one of them is nothing a row can be: the same value meets it twice or not at all.
  */
 class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
+
+    /** How many choices of which statements hold a comparison here is written out as. */
+    private static final long CHOICES = 256;
 
     private static final Proposition P =
             new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("p")), true);
@@ -61,12 +65,13 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
     @Test
     void atMostOneOfTwoIsEitherOfThemFailing() {
         assertEquals(Proposition.any(List.of(P.denied(), Q.denied())),
-                Proposition.compared(relation(List.of(P, Q), Rel.GE, 2), false));
+                Proposition.compared(relation(List.of(P, Q), Rel.GE, 2), false, CHOICES));
     }
 
     @Test
     void denyingTheComparisonDeniesWhichOfThemHold() {
-        assertEquals(P.denied(), Proposition.compared(relation(List.of(P, P), Rel.EQ, 2), false));
+        assertEquals(P.denied(),
+                Proposition.compared(relation(List.of(P, P), Rel.EQ, 2), false, CHOICES));
     }
 
     /** A statement written twice weighs two: two of three writings is it alone or the other with
@@ -94,9 +99,15 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
     void moreChoicesThanAreMadeAreNotWrittenOut() {
         Relation half = relation(distinct(18), Rel.EQ, 9);
 
-        assertNull(Proposition.compared(half, true, 256));
-        assertEquals(Proposition.compared(relation(distinct(18), Rel.EQ, 1), true),
-                Proposition.compared(relation(distinct(18), Rel.EQ, 1), true, 256));
+        assertNull(Proposition.compared(half, true, CHOICES));
+    }
+
+    /** A count of statements compared with no figure in hand is refused rather than written out
+     *  however many choices it comes to. */
+    @Test
+    void aCountComparedWithNoFigureIsRefused() {
+        assertThrows(IllegalArgumentException.class,
+                () -> Proposition.compared(relation(distinct(18), Rel.EQ, 9), true));
     }
 
     /**
@@ -115,7 +126,7 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
         Relation odd = relation(twice, Rel.EQ, 39);
 
         assertEquals(0, Proposition.choicesIn(odd, 256));
-        assertEquals(new Proposition.Always(false), Proposition.compared(odd, true, 256));
+        assertEquals(new Proposition.Always(false), Proposition.compared(odd, true, CHOICES));
     }
 
     /** {@code count} statements, each about a position of its own. */
@@ -129,7 +140,7 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
 
     /** {@code #each - against} standing to nought as {@code rel} says. */
     private static Proposition howMany(List<Proposition> each, Rel rel, long against) {
-        return Proposition.compared(relation(each, rel, against), true);
+        return Proposition.compared(relation(each, rel, against), true, CHOICES);
     }
 
     private static Relation relation(List<Proposition> each, Rel rel, long against) {

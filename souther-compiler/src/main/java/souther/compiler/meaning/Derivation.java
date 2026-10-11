@@ -1109,11 +1109,14 @@ public sealed interface Derivation {
      *               it there; a count on both sides comes to nought and names none
      * @param alike  how each count every element settles alike was read: the statement came out
      *               the same for each, so the count is all of the container or none of it
+     * @param mostChoices how many choices of which statements hold the reading writes the
+     *                    comparison out as ({@link AComparisonRead})
      */
     record ALawComparison(LawProposition.Compared<?> part,
                           Map<LawNumber<?>, LinearForm<Quantity>> numbers,
                           List<AComparisonRead.Counted> counts,
-                          List<AComparisonRead.Counted> alike)
+                          List<AComparisonRead.Counted> alike,
+                          long mostChoices)
             implements ALawPart {
 
         /**
@@ -1124,8 +1127,26 @@ public sealed interface Derivation {
                                         Map<LawNumber<?>, LinearForm<Quantity>> numbers,
                                         Map<Quantity.HowManyMeet, AComparisonRead.Counted>
                                                 counting,
-                                        List<AComparisonRead.Counted> alike) {
-            return new ALawComparison(part, numbers, List.copyOf(counting.values()), alike);
+                                        List<AComparisonRead.Counted> alike,
+                                        long mostChoices) {
+            return new ALawComparison(part, numbers, List.copyOf(counting.values()), alike,
+                    mostChoices);
+        }
+
+        /**
+         * The relation {@code part} states over {@code numbers}, faced the one way, or null where
+         * the numbers cancel and it is settled.
+         *
+         * @throws IllegalArgumentException where the form is over numbers it cannot hold
+         */
+        public static Relation.OneWay<Quantity> relationOf(
+                LawProposition.Compared<?> part, Map<LawNumber<?>, LinearForm<Quantity>> numbers) {
+            if (!(formOf(part.form(), numbers)
+                    instanceof ExactAnswer.Held<LinearForm<Quantity>>(LinearForm<Quantity> form))) {
+                throw new IllegalArgumentException("a comparison over numbers it cannot hold is"
+                        + " stopped at, and not read: " + part);
+            }
+            return form.coefs().isEmpty() ? null : Relation.OneWay.of(form, part.states());
         }
 
         public ALawComparison {
@@ -1137,10 +1158,11 @@ public sealed interface Derivation {
                 throw new IllegalArgumentException("a comparison over " + part.form().coefs()
                         .keySet() + " is read with " + numbers.keySet());
             }
-            if (!(formOf(part.form(), numbers)
-                    instanceof ExactAnswer.Held<LinearForm<Quantity>>)) {
-                throw new IllegalArgumentException("a comparison over numbers it cannot hold is"
-                        + " stopped at, and not read: " + part);
+            Relation.OneWay<Quantity> one = relationOf(part, numbers);
+            if (one != null && AComparisonRead.pastTheChoicesRead(
+                    new Relation.Affine(one.form(), one.proposition()), mostChoices)) {
+                throw new IllegalArgumentException("a comparison written out as more choices than"
+                        + " are read is stopped at, and not read: " + part);
             }
         }
 
@@ -1168,20 +1190,20 @@ public sealed interface Derivation {
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            LinearForm<Quantity> form = ((ExactAnswer.Held<LinearForm<Quantity>>)
-                    formOf(part.form(), numbers)).value();
-            if (form.coefs().isEmpty()) {
+            Relation.OneWay<Quantity> one = relationOf(part, numbers);
+            if (one == null) {
+                LinearForm<Quantity> form = ((ExactAnswer.Held<LinearForm<Quantity>>)
+                        formOf(part.form(), numbers)).value();
                 return new Proposition.Always(part.states().holds(form.constant().signum()));
             }
-            Relation.OneWay<Quantity> one = Relation.OneWay.of(form, part.states());
             // The counts the relation still names: one on both sides came to nought and names none.
             Conclusion asked = new Conclusion(Optional.empty());
             List<AComparisonRead.Counted> named = counts.stream()
                     .filter(count -> one.form().coefs().containsKey(count.counted(asked)))
                     .toList();
             return new AComparisonRead(ComparisonReading.BY_A_LAW,
-                    new Relation.Affine(one.form(), one.proposition()), one.holds(), named)
-                    .conclusion(numbering);
+                    new Relation.Affine(one.form(), one.proposition()), one.holds(), named,
+                    mostChoices).conclusion(numbering);
         }
     }
 
@@ -2025,19 +2047,38 @@ public sealed interface Derivation {
      * the relation names is one of {@code counts}, concluded from the reading of what its elements
      * meet, and a count the relation names that none of these reads is refused where it is
      * concluded.
+     *
+     * <p>Every comparison a reading concludes enters here, so this is where a count of statements
+     * about values written out is held to how many choices of which hold one condition is read in
+     * ({@link WhichOfThemHold}). One that would be written out as more is stopped at by the reading
+     * and never made.
+     *
+     * @param mostChoices how many choices of which statements hold the reading writes one
+     *                    comparison out as
      */
     record AComparisonRead(ComparisonReading by, Relation relation, boolean holds,
-                           List<Counted> counts)
+                           List<Counted> counts, long mostChoices)
             implements Derivation {
 
-        public AComparisonRead(ComparisonReading by, Relation relation, boolean holds) {
-            this(by, relation, holds, List.of());
+        public AComparisonRead(ComparisonReading by, Relation relation, boolean holds,
+                               long mostChoices) {
+            this(by, relation, holds, List.of(), mostChoices);
         }
 
         public AComparisonRead {
             Objects.requireNonNull(by, "a comparison is read by something");
             Objects.requireNonNull(relation, "a comparison states a relation");
             counts = List.copyOf(counts);
+            if (pastTheChoicesRead(relation, mostChoices)) {
+                throw new IllegalArgumentException("a comparison written out as more choices than"
+                        + " are read is stopped at, and not read: " + relation);
+            }
+        }
+
+        /** Whether {@code relation} is a count of statements written out as more than
+         *  {@code mostChoices} choices of which of them hold. */
+        public static boolean pastTheChoicesRead(Relation relation, long mostChoices) {
+            return Proposition.choicesIn(relation, mostChoices) > mostChoices;
         }
 
         @Override
@@ -2053,7 +2094,7 @@ public sealed interface Derivation {
                 throw new IllegalStateException("a relation over " + named
                         + " is read from counts of " + read);
             }
-            return Proposition.compared(relation, holds);
+            return Proposition.compared(relation, holds, mostChoices);
         }
 
         /**

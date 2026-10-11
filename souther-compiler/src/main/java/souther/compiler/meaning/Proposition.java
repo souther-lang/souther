@@ -697,13 +697,18 @@ public sealed interface Proposition {
      * a count of elements against nought ({@link #ofACount}), or a count of statements about values
      * written out as which of them hold ({@link WhichOfThemHold}).
      *
-     * <p>Every choice of a count of statements is written out, so this is for a relation whose
-     * choices the reading that formed it already held to how many it makes ({@link #choicesIn});
-     * one formed anywhere else is compared with that figure in hand
+     * <p>For a relation that is no count of statements: how many choices one of those is written
+     * out as is held to a figure, and a figure is what a reading that compares one has in hand
      * ({@link #compared(Relation, boolean, long)}).
+     *
+     * @throws IllegalArgumentException where {@code relation} is a count of statements
      */
     static Proposition compared(Relation relation, boolean holds) {
-        return compared(relation, holds, Long.MAX_VALUE);
+        if (WhichOfThemHold.of(relation) != null) {
+            throw new IllegalArgumentException("a count of statements is compared with how many"
+                    + " choices of which hold are read: " + relation);
+        }
+        return compared(relation, holds, 0);
     }
 
     /**
