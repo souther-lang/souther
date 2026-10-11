@@ -1065,7 +1065,9 @@ final class Pullback {
 
     /** Where a container's elements stand, what each is there for the statement quantified over
      *  them, and what was kept of them on the way — and, where they are the pieces of a string
-     *  rather than something standing at a position, which pieces. */
+     *  rather than something standing at a position, which pieces. What stands there is held only
+     *  for a value a dependency answered, whose type nothing else says; a position of the input has
+     *  its type from the declarations, which is asked where it is wanted. */
     private record Located(DecisionSubject held, Type heldType, ElementAt each,
                            Denotation handed, List<Kept> kept, Pieces pieces) {}
 
@@ -1746,11 +1748,9 @@ final class Pullback {
                     ElementAt each = new ElementAt.APiece(pieces);
                     settle(pending, each, null, located);
                     DecisionSubject string = new DecisionSubject.AnInput(pieces.string());
-                    Type stringType = read.domain().typeAt(pieces.string(), read.rules());
                     return outerEach == null
-                            ? new Located(string, stringType, each, null, located, pieces)
-                            : new Located(string, stringType, outerEach, outerHanded, located,
-                                    pieces);
+                            ? new Located(string, null, each, null, located, pieces)
+                            : new Located(string, null, outerEach, outerHanded, located, pieces);
                 }
                 ElementBindings.StepOnEachElement walk = aWalk(at);
                 boolean answers = false;
@@ -1863,9 +1863,8 @@ final class Pullback {
             ElementAt each = new ElementAt.AnEntry();
             settle(pending, each, null, located);
             DecisionSubject heldAt = new DecisionSubject.AnInput(held);
-            Type heldType = read.domain().typeAt(held, read.rules());
-            return outerEach == null ? new Located(heldAt, heldType, each, null, located, null)
-                    : new Located(heldAt, heldType, outerEach, outerHanded, located, null);
+            return outerEach == null ? new Located(heldAt, null, each, null, located, null)
+                    : new Located(heldAt, null, outerEach, outerHanded, located, null);
         }
 
         /** What was kept at one level of a container, as the elements of that level are read. */

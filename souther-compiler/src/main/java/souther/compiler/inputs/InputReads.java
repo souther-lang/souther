@@ -684,6 +684,18 @@ public final class InputReads {
     }
 
     /**
+     * Whether any value read here may be an answer of a dependency.
+     *
+     * <p>A body that stands nothing in has no answer anywhere in it, and the names it reads are not
+     * walked to find that out — unless it is a body a call entered, whose parameters are read where
+     * the call stands. Asked first by a reader that would otherwise do work to find an answer in a
+     * body that has none.
+     */
+    public boolean mayHoldAnAnswer() {
+        return !dependencies.isEmpty() || !applied.given().isEmpty();
+    }
+
+    /**
      * What a dependency answered that {@code e} is, at a place inside the answer — or null where
      * it is no such thing.
      *
@@ -698,10 +710,7 @@ public final class InputReads {
      *         the fields read off the answer in the order they are written
      */
     public AnAnswerAt answerAt(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
-        // A body that stands nothing in has no answer anywhere in it, and the names it reads are
-        // not walked to find that out — unless it is a body a call entered, whose parameters are
-        // read where the call stands.
-        if (dependencies.isEmpty() && applied.given().isEmpty()) {
+        if (!mayHoldAnAnswer()) {
             return null;
         }
         List<TermPath.Step> steps = new ArrayList<>();

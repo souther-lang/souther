@@ -108,6 +108,11 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
      * this adds is only whose value it is taken of.
      */
     DecisionAtom.TakenOfAnAnswer takenOfAnAnswer(Core e, InputReads at) {
+        // Asked of every number a comparison names, so a body with no answer in it is not asked
+        // what an operation takes of one.
+        if (!at.mayHoldAnAnswer()) {
+            return null;
+        }
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols);
         if (measured == null || !(anAnswer(measured.of(), at) instanceof DecisionSubject.AnAnswer
                 answer)) {
