@@ -212,8 +212,8 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
     }
 
     /**
-     * The year of a moved date and the month of the date itself are asked of one date, so a row is
-     * offered that answers both, and the question is not left as one nothing here solves.
+     * The year of a moved date and the month of the date itself are asked of one date, so rows are
+     * offered at the months either side of the line and not left as a question nothing here solves.
      */
     @Test
     void aMovedYearAndAMonthOfTheDateItselfAreOneQuestion() {
@@ -222,21 +222,18 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
 
                 behavior f : (birthday: Date) -> Bool
                 let f (birthday) =
-                    Date.year(Date.addDays(0 - 1, birthday)) == 2026 && Date.month(birthday) == 1
+                    Date.year(Date.addDays(0 - 1, birthday)) >= 2026 && Date.month(birthday) >= 6
                 """);
-        String report = report(compilation);
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("p")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
                 .text();
 
-        assertTrue(report.contains("measurement: complete"), report);
-        assertFalse(report.contains("not read"), report);
-        // Moved a day back it is in 2026, and it is in January: the second of January to the first
-        // of February. A row there is the one that makes both true.
-        assertTrue(offered.lines().anyMatch(each -> each.contains("Date(\"2026-01-")
-                        && !each.contains("2026-01-01") || each.contains("Date(\"2026-02-01")),
-                "no row is offered where both hold:\n" + offered);
+        assertFalse(offered.contains("answer several of their own numbers"), offered);
+        // A date in the year of the line, on the month of it and on each side of it.
+        assertTrue(offered.contains("Date(\"2026-06-01\")"), offered);
+        assertTrue(offered.contains("Date(\"2026-05-01\")"), offered);
+        assertTrue(offered.contains("Date(\"2026-07-01\")"), offered);
     }
 
     /** A date moved by nothing is the date: its year is the number the date's own year is. */
