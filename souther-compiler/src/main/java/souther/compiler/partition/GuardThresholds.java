@@ -631,8 +631,9 @@ public final class GuardThresholds {
         // stands at no position of the input, so what a walk over it meets is what a walk over each
         // side meets.
         List<TermPath> named = new ArrayList<>();
-        mentioned(comparison.left(), reads, symbols, read.newtypes(), answering, named);
-        mentioned(comparison.right(), reads, symbols, read.newtypes(), answering, named);
+        ReadMeaning.WhereKept kept = KeptTruths.readIn(read);
+        mentioned(comparison.left(), reads, symbols, read.newtypes(), kept, answering, named);
+        mentioned(comparison.right(), reads, symbols, read.newtypes(), kept, answering, named);
         for (TermPath each : named) {
             if (out.stream().noneMatch(had -> had.path().equals(each))) {
                 add(FilingCoordinate.at(each), out);
@@ -649,14 +650,14 @@ public final class GuardThresholds {
 
     /** The same, added to what a caller has already gathered from beside it. */
     private static void mentioned(Core e, InputReads reads, Symbols symbols,
-                                  DeclarationNewtypes newtypes, Arrivals answering,
-                                  List<TermPath> out) {
+                                  DeclarationNewtypes newtypes, ReadMeaning.WhereKept kept,
+                                  Arrivals answering, List<TermPath> out) {
         for (TermPath each : originOf(e, reads, symbols, newtypes, answering).positions()) {
             if (!out.contains(each)) {
                 out.add(each);
             }
         }
-        throughEachValue(e, reads, symbols, newtypes, answering, out);
+        throughEachValue(e, reads, symbols, newtypes, kept, answering, out);
     }
 
     /**
@@ -669,17 +670,17 @@ public final class GuardThresholds {
      * rule about nothing — read by no measure and reported by none.
      */
     private static void throughEachValue(Core e, InputReads reads, Symbols symbols,
-                                         DeclarationNewtypes newtypes, Arrivals answering,
-                                         List<TermPath> out) {
-        // Every value it may be, kept or not, since where the reading looked takes in each.
+                                         DeclarationNewtypes newtypes, ReadMeaning.WhereKept kept,
+                                         Arrivals answering, List<TermPath> out) {
+        // Every value it takes on some row: one no run has is nowhere the reading looked.
         if (Core.withoutStanding(e) instanceof Core.Read read
                 && reads.meaningOf(read, symbols, newtypes) instanceof ReadMeaning.OneOf one) {
-            one.everyValueItMayBe().forEach(value -> mentioned(value.value(), value.at(), symbols,
-                    newtypes, answering, out));
+            one.valuesWhere(kept).forEach(value -> mentioned(value.value(), value.at(), symbols,
+                    newtypes, kept, answering, out));
             return;
         }
         ScopeStep.forEachChild(e, (child, step) -> throughEachValue(child,
-                reads.entering(step, symbols, newtypes), symbols, newtypes, answering, out));
+                reads.entering(step, symbols, newtypes), symbols, newtypes, kept, answering, out));
     }
 
     /**

@@ -140,6 +140,91 @@ class AComparisonOverAListAFlatMapOrAFilterAnsweredIsReadTest {
         assertTrue(headed(report, "border").contains("borders 1"), report);
     }
 
+    /**
+     * A closure handed the elements of a list that holds none is applied by no run, so a comparison
+     * inside it is no boundary — whether the list is written empty or put together of empty pieces.
+     */
+    @Test
+    void aComparisonInAClosureAppliedToNothingIsNoLine() {
+        for (String none : List.of("none", "List.flatMap(k -> none, [1])",
+                "List.filter(k -> k > 5, [1])")) {
+            String report = measured("""
+                    module p
+                    behavior f : (n: Int) -> Bool
+                    let f (n) = {
+                        let none: List<Int> = []
+                        List.any(x -> n > 0, %s)
+                    }
+                    example f
+                        | "a" : (1) -> false
+                    """.formatted(none));
+            assertEquals(List.of(), notRead(report), none);
+            assertTrue(headed(report, "border").contains("not applicable"), report);
+        }
+    }
+
+    /**
+     * And so of an arm no application enters, every value handed being one whose part the arm
+     * decides on is a case it does not take — which is known of each application and not of the
+     * element read as all of them at once.
+     */
+    @Test
+    void aComparisonInAnArmNoApplicationEntersIsNoLine() {
+        String report = measured("""
+                module p
+                data Yes
+                data No
+                data Answer = Yes | No
+                data Item = { answer: Answer }
+                behavior f : (n: Int) -> Bool
+                let f (n) = List.any(i -> match i.answer with
+                                              | Yes -> n > 0
+                                              | No -> false,
+                                     [Item { answer = No }, Item { answer = No }])
+                example f
+                    | "a" : (1) -> false
+                """);
+        assertEquals(List.of(), notRead(report));
+        assertTrue(headed(report, "border").contains("not applicable"), report);
+    }
+
+    /**
+     * What a closure states of an element a filter drops is no part of what is read, and one that
+     * cannot be read leaves the elements kept read: {@code n < n * n} is no line this compiler
+     * draws, and no run compares it.
+     */
+    @Test
+    void aComparisonOnAnElementDroppedOnEveryRowLeavesTheKeptOnesRead() {
+        String report = measured("""
+                module p
+                data Item = { keep: Bool, value: Int }
+                behavior f : (n: Int) -> Bool
+                let f (n) = List.any(x -> n < x.value, List.filter(x -> x.keep,
+                    [Item { keep = true, value = 1 }, Item { keep = false, value = n * n }]))
+                example f
+                    | "below" : (0) -> true
+                    | "at" : (1) -> false
+                """);
+        assertEquals(List.of(), notRead(report));
+        assertTrue(headed(report, "border").contains("borders 1"), report);
+    }
+
+    /** And so of an application no run makes because the walk has stopped before it on every
+     *  row. */
+    @Test
+    void aComparisonOnAnApplicationAfterTheWalkStoppedIsNotRead() {
+        String report = measured("""
+                module p
+                data Item = { keep: Bool, value: Int }
+                behavior f : (n: Int) -> Bool
+                let f (n) = List.any(x -> x.keep || n < x.value,
+                    [Item { keep = true, value = 1 }, Item { keep = false, value = n * n }])
+                example f
+                    | "always" : (0) -> true
+                """);
+        assertEquals(List.of(), notRead(report));
+    }
+
     /** And so where what it keeps by is which case the element is, either way round. */
     @Test
     void aFilterKeepingByACaseIsReadAsTheElementsItKeeps() {

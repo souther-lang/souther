@@ -435,11 +435,15 @@ public final class InputReads {
      * allows and not what the nesting would. A container holding more than is written out is past
      * it already.
      *
-     * <p>Each application is handed one occurrence of each container, and is made only where the
-     * container holds it: what each occurrence was kept by goes with the application.
+     * <p>Each application is handed one occurrence of each container there on some row, as
+     * {@code kept} decides, and is made only where the container holds it: what each occurrence is
+     * still kept by goes with the application. A parameter handed the elements of a container that
+     * holds none — written so, or with every occurrence dropped on every row — is handed nothing,
+     * and the closure is applied to nothing ({@link Applications.NoneMade}).
      */
     public Applications applicationsOf(Core.Block block, Symbols symbols,
-                                       DeclarationNewtypes newtypes, int most) {
+                                       DeclarationNewtypes newtypes, int most,
+                                       ReadMeaning.WhereKept kept) {
         List<Core.Binder> handed = new ArrayList<>();
         List<List<ReadMeaning.Occurrence>> occurrencesOf = new ArrayList<>();
         HowAClosureIsApplied how = HowAClosureIsApplied.TO_EVERY_ELEMENT;
@@ -452,7 +456,11 @@ public final class InputReads {
             Core.Read read = new Core.Read(param.name(), param.binding(),
                     block.paramTypes().get(at), block.pos());
             switch (meaningOf(read, symbols, newtypes)) {
-                case ReadMeaning.OneOf(var occurrences) -> {
+                case ReadMeaning.OneOf one -> {
+                    List<ReadMeaning.Occurrence> occurrences = one.occurrencesWhere(kept);
+                    if (occurrences.isEmpty()) {
+                        return new Applications.NoneMade();
+                    }
                     if (!alternatives.containsKey(param.binding())
                             && names.roleOf(param.binding())
                                     instanceof BindingRole.Element(var held)) {
@@ -464,6 +472,9 @@ public final class InputReads {
                         return new Applications.MoreThanAreRead();
                     }
                     readings *= occurrences.size();
+                }
+                case ReadMeaning.NoneHeld _ -> {
+                    return new Applications.NoneMade();
                 }
                 case ReadMeaning.MoreThanAreWrittenOut _ -> {
                     return new Applications.MoreThanAreRead();
@@ -480,10 +491,10 @@ public final class InputReads {
             List<Applications.Made> wider = new ArrayList<>();
             for (Applications.Made each : applications) {
                 for (ReadMeaning.Occurrence occurrence : occurrencesOf.get(at)) {
-                    List<ReadMeaning.Occurrence.Kept> kept = new ArrayList<>(each.keptWhere());
-                    kept.addAll(occurrence.keptWhere());
+                    List<ReadMeaning.Occurrence.Kept> keptBy = new ArrayList<>(each.keptWhere());
+                    keptBy.addAll(occurrence.keptWhere());
                     wider.add(new Applications.Made(each.reads().handing(
-                            handed.get(at).binding(), occurrence.value(), newtypes), kept));
+                            handed.get(at).binding(), occurrence.value(), newtypes), keptBy));
                 }
             }
             applications = wider;
@@ -738,6 +749,16 @@ public final class InputReads {
 
         /** No parameter is handed values written out: the body is read once, as it stands. */
         record NoneHanded() implements Applications {}
+
+        /**
+         * A parameter is handed the elements of a container that holds none on any row, so the
+         * closure is applied to nothing and nothing in its body is reached.
+         *
+         * <p>Beside {@link NoneHanded} and the opposite of it. That one says which values the
+         * closure is handed are not written out, and its body is read once as it stands because
+         * some run may apply it to something; this one says no run applies it at all.
+         */
+        record NoneMade() implements Applications {}
 
         /**
          * One environment for each application a run may make, where which of them it makes is not
@@ -1237,7 +1258,7 @@ public final class InputReads {
         ReadMeaning.OneOf one = pluralityOf(scrutinee, symbols, newtypes);
         List<ReadMeaning.Occurrence> values;
         if (one != null) {
-            values = one.occurrences();
+            values = one.asWritten();
         } else {
             Denotation stands = standing(new Denotation(scrutinee, this), symbols, newtypes,
                     new HashSet<>());
@@ -1710,12 +1731,12 @@ public final class InputReads {
                 Denotation container = standing(new Denotation(held.container(), this), symbols,
                         newtypes, met);
                 switch (WrittenOutElements.of(container, symbols, newtypes, met)) {
-                    case WrittenOutElements.Walked.Each(var each) when !each.isEmpty() -> {
-                        yield new ReadMeaning.OneOf(each);
+                    // No element at all, which is an answer of its own and not a set of none.
+                    case WrittenOutElements.Walked.Each each when each.asWritten().isEmpty() -> {
+                        yield new ReadMeaning.NoneHeld();
                     }
-                    // No element, which is not a set of none ({@link ReadMeaning.OneOf}).
-                    case WrittenOutElements.Walked.Each _ -> {
-                        yield new ReadMeaning.Element();
+                    case WrittenOutElements.Walked.Each each -> {
+                        yield new ReadMeaning.OneOf(each.asWritten());
                     }
                     case WrittenOutElements.Walked.PastTheFigure _ -> {
                         yield new ReadMeaning.MoreThanAreWrittenOut();

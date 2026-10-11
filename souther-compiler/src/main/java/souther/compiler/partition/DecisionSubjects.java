@@ -43,7 +43,7 @@ import java.util.Set;
  * fact about the body being read: a rule a declaration states is read where nothing is.
  */
 record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess declarations,
-                        DeclarationNewtypes newtypes) {
+                        DeclarationNewtypes newtypes, ReadMeaning.WhereKept kept) {
 
     DecisionSubjects {
         if (declarations == null || newtypes == null) {
@@ -200,13 +200,13 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
                                 workedOut(denotes.value(), denotes.at(), met);
                         case ReadMeaning.OneOf one -> {
                             List<String> each = new ArrayList<>();
-                            one.everyValueItMayBe().forEach(value -> each.add(
+                            one.valuesWhere(kept).forEach(value -> each.add(
                                     workedOut(value.value(), value.at(), new HashSet<>(met))));
                             yield "one of " + each;
                         }
                         case ReadMeaning.Position _, ReadMeaning.Element _,
-                             ReadMeaning.MoreThanAreWrittenOut _, ReadMeaning.Unknown _ ->
-                                name.name();
+                             ReadMeaning.NoneHeld _, ReadMeaning.MoreThanAreWrittenOut _,
+                             ReadMeaning.Unknown _ -> name.name();
                     };
             case Core.Read name -> name.name();
             case Core.LetIn let -> workedOut(let.body(), at.and(let.binder(), let.value()), met);
@@ -280,7 +280,7 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
             @Override
             public List<ValueStanding.ReadThrough<InputReads>> alternativesOf(Core.Read read,
                                                                            InputReads at) {
-                return NameAnswers.alternativesOf(read, at, symbols, newtypes);
+                return NameAnswers.alternativesOf(read, at, symbols, newtypes, kept);
             }
 
             @Override

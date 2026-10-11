@@ -1,0 +1,51 @@
+package souther.compiler.partition;
+
+import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.meaning.Proposition;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Which occurrences of a container written out are there on some row: each truth an occurrence was
+ * kept by, read as any truth is ({@link Pullback#ofATruth}) where it was decided.
+ *
+ * <p>The one decision every reader of an occurrence takes. A truth that holds on no row drops the
+ * occurrence for every reader alike — no run hands it to a closure, nothing stated of it is part of
+ * a statement about some element or of a count of them, and no value of it is one a name takes —
+ * and one that holds on every row is no condition. Decided by each reader for itself, one would
+ * read an application another had left out, and a reading that stopped on an element no run has
+ * would stop the elements that are there.
+ */
+final class KeptTruths {
+
+    private KeptTruths() {
+    }
+
+    /** What decides, for a reading of {@code read}'s input, which occurrences are there. */
+    static ReadMeaning.WhereKept readIn(InputReading read) {
+        return keptWhere -> stillOpen(keptWhere, read);
+    }
+
+    private static List<ReadMeaning.Occurrence.Kept> stillOpen(
+            List<ReadMeaning.Occurrence.Kept> keptWhere, InputReading read) {
+        if (keptWhere.isEmpty()) {
+            return keptWhere;
+        }
+        List<ReadMeaning.Occurrence.Kept> out = new ArrayList<>();
+        for (ReadMeaning.Occurrence.Kept kept : keptWhere) {
+            Proposition stated = Pullback.ofATruth(kept.truth().value(), kept.truth().at(), read,
+                    Optional.empty()).proposition();
+            switch (kept.holds() ? stated : stated.denied()) {
+                case Proposition.Always(boolean holds) when !holds -> {
+                    return null;
+                }
+                case Proposition.Always _ -> { }
+                default -> out.add(kept);
+            }
+        }
+        return out.size() == keptWhere.size() ? keptWhere : out;
+    }
+}

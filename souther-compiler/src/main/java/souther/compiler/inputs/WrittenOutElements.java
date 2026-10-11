@@ -54,11 +54,27 @@ public final class WrittenOutElements {
     /** What a walk of a container came to. */
     public sealed interface Walked {
 
-        /** Every element, in order, each with what it was kept by. Empty where it holds none. */
-        record Each(List<ReadMeaning.Occurrence> each) implements Walked {
+        /**
+         * Every element, in order, each with what it was kept by — none where it holds none. A
+         * reader outside this reading of names takes them as {@link ReadMeaning.OneOf} hands them
+         * out: through what decides which of them are there.
+         */
+        final class Each implements Walked {
 
-            public Each {
-                each = List.copyOf(each);
+            private final List<ReadMeaning.Occurrence> each;
+
+            Each(List<ReadMeaning.Occurrence> each) {
+                this.each = List.copyOf(each);
+            }
+
+            /** The occurrences there on some row ({@link ReadMeaning.OneOf#occurrencesWhere}). */
+            public List<ReadMeaning.Occurrence> occurrencesWhere(ReadMeaning.WhereKept kept) {
+                return ReadMeaning.decided(each, kept);
+            }
+
+            /** Every occurrence as written. */
+            List<ReadMeaning.Occurrence> asWritten() {
+                return each;
             }
         }
 
@@ -106,9 +122,10 @@ public final class WrittenOutElements {
         }
         Walked from = of(InputReads.standing(new Denotation(pieces.walked(), at), symbols,
                 newtypes, new HashSet<>(met)), symbols, newtypes, met, walked);
-        if (!(from instanceof Walked.Each(List<ReadMeaning.Occurrence> elements))) {
+        if (!(from instanceof Walked.Each walkedEach)) {
             return from;
         }
+        List<ReadMeaning.Occurrence> elements = walkedEach.asWritten();
         BindingId element = pieces.element().binding();
         List<ReadMeaning.Occurrence> out = new ArrayList<>();
         for (ReadMeaning.Occurrence each : elements) {
@@ -133,10 +150,10 @@ public final class WrittenOutElements {
                 case WHAT_THE_CLOSURE_ANSWERS -> {
                     Walked inside = of(InputReads.standing(answered, symbols, newtypes,
                             new HashSet<>(met)), symbols, newtypes, met, walked);
-                    if (!(inside instanceof Walked.Each(List<ReadMeaning.Occurrence> made))) {
+                    if (!(inside instanceof Walked.Each made)) {
                         return inside;
                     }
-                    made.forEach(one -> out.add(one.keptAlsoWhere(each.keptWhere())));
+                    made.asWritten().forEach(one -> out.add(one.keptAlsoWhere(each.keptWhere())));
                 }
             }
         }

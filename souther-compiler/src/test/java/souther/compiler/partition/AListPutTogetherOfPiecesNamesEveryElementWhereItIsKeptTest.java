@@ -52,6 +52,23 @@ class AListPutTogetherOfPiecesNamesEveryElementWhereItIsKeptTest {
                 "List.filter(k -> k.threshold > 1, [ Big { threshold = 1 }, Big { threshold = 2 } ])"));
     }
 
+    /**
+     * What is there on some row, as a reader is handed it: an element a filter drops on every row
+     * is left out, and one it keeps on every row is kept by nothing.
+     */
+    @Test
+    void whatIsThereOnSomeRowLeavesOutWhatAFilterDropsOnEveryRow() {
+        assertEquals("[2]", there(
+                "List.filter(k -> k.threshold > 1, [ Big { threshold = 1 }, Big { threshold = 2 } ])"));
+    }
+
+    /** And keeps what a filter keeps by what the row holds, still kept by it. */
+    @Test
+    void whatIsThereOnSomeRowKeepsWhatTheRowDecides() {
+        assertEquals("[1 where [the row], 2 where [the row]]", there(
+                "List.filter(k -> k.threshold > n, [ Big { threshold = 1 }, Big { threshold = 2 } ])"));
+    }
+
     /** A filter keeping by what the row holds keeps each element where the row says so. */
     @Test
     void aFilterKeepingByTheInputKeepsEachWhereTheRowDoes() {
@@ -117,6 +134,16 @@ class AListPutTogetherOfPiecesNamesEveryElementWhereItIsKeptTest {
      * occurrence's threshold, and how each truth it was kept by reads.
      */
     private static String standingOn(String ks) {
+        return occurrencesOf(ks, false);
+    }
+
+    /** The same, of the occurrences there on some row, as every reader is handed them
+     *  ({@link KeptTruths}). */
+    private static String there(String ks) {
+        return occurrencesOf(ks, true);
+    }
+
+    private static String occurrencesOf(String ks, boolean decided) {
         String source = """
                 module g
 
@@ -148,7 +175,12 @@ class AListPutTogetherOfPiecesNamesEveryElementWhereItIsKeptTest {
             return meaning.getClass().getSimpleName();
         }
         List<String> each = new ArrayList<>();
-        for (ReadMeaning.Occurrence occurrence : one.occurrences()) {
+        // Undecided, every occurrence as written, kept or not: which of them are there is what
+        // that shows.
+        ReadMeaning.WhereKept deciding = decided
+                ? KeptTruths.readIn(read.inputs().reading(read.rules()))
+                : ReadMeaning.WhereKept.NOTHING_DECIDED;
+        for (ReadMeaning.Occurrence occurrence : one.occurrencesWhere(deciding)) {
             String value = thresholdOf(occurrence.value(), read);
             if (occurrence.keptWhere().isEmpty()) {
                 each.add(value);

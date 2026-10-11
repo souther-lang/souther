@@ -254,7 +254,7 @@ final class Pullback {
         this.read = read;
         this.where = where;
         this.subjects = new DecisionSubjects(read.domain(), read.rules().symbols(),
-                read.rules().declarations(), read.rules().newtypes());
+                read.rules().declarations(), read.rules().newtypes(), KeptTruths.readIn(read));
     }
 
     /**
@@ -503,7 +503,7 @@ final class Pullback {
         Core e = Core.withoutStanding(standing);
         AnOperationApplied applied = AnOperationApplied.of(e);
         Derivation taken = firstThatReadsIt(List.of(
-                () -> writtenOut(e, AnswerAspect.TRUTH),
+                () -> writtenOut(e, AnswerAspect.TRUTH, reads),
                 () -> ofAnElementOfAnAnswer(e, AnswerAspect.TRUTH, reads),
                 () -> BooleanMeaning.underADenial(e, true).<Derivation>map(denied ->
                         new Derivation.UnderADenial(
@@ -523,6 +523,25 @@ final class Pullback {
                 () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.TRUTH), reads)));
         return taken != null ? taken
                 : unread(e, reads, unreadAs(applied, AnswerAspect.TRUTH, reads));
+    }
+
+    /**
+     * What a value the source wrote out answers about {@code aspect}, where {@code e} is one or
+     * stands as one — or null where it is neither.
+     *
+     * <p>Stands as one through what a reading of it here follows: a field of a construction written
+     * out, which is what an element a filter or a closure is handed holds. {@code x.keep} over an
+     * element written {@code Item { keep = false, .. }} is false on every row. A name was followed
+     * before this was asked ({@link #observe}), so only a field is followed here.
+     */
+    private Derivation writtenOut(Core e, AnswerAspect aspect, InputReads reads) {
+        Derivation written = writtenOut(e, aspect);
+        if (written != null || !(Core.withoutStanding(e) instanceof Core.FieldAccess
+                || Core.withoutStanding(e) instanceof Core.FieldProjection)) {
+            return written;
+        }
+        return writtenOut(reads.standing(e, read.rules().symbols(), read.rules().newtypes())
+                .value(), aspect);
     }
 
     /**
@@ -604,7 +623,7 @@ final class Pullback {
     /** The arithmetic over the input {@code stated} is read through, when a rule asks for it. */
     private Once<AffineReading.OfAComparison> arithmeticOf(StatedComparison stated,
                                                           InputReads reads) {
-        return new Once<>(() -> AffineReading.read(stated, read.domain(), reads, read.rules()));
+        return new Once<>(() -> AffineReading.read(stated, reads, read));
     }
 
     /** The same, read through {@code arithmetic}. */
@@ -671,7 +690,7 @@ final class Pullback {
         // question that asked it, where something asked it.
         Denotation asked = askedAt != null ? askedAt : new Denotation(e, reads);
         Derivation taken = firstThatReadsIt(List.of(
-                () -> writtenOut(e, AnswerAspect.EMPTINESS),
+                () -> writtenOut(e, AnswerAspect.EMPTINESS, reads),
                 () -> ofAnElementOfAnAnswer(e, AnswerAspect.EMPTINESS, reads),
                 () -> byALaw(applied, e, AnswerAspect.EMPTINESS, reads, asked),
                 () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.EMPTINESS), reads),
@@ -698,7 +717,7 @@ final class Pullback {
         Core e = Core.withoutStanding(standing);
         AnOperationApplied applied = AnOperationApplied.of(e);
         Derivation taken = firstThatReadsIt(List.of(
-                () -> writtenOut(e, AnswerAspect.PRESENCE),
+                () -> writtenOut(e, AnswerAspect.PRESENCE, reads),
                 () -> ofAnElementOfAnAnswer(e, AnswerAspect.PRESENCE, reads),
                 () -> byALaw(applied, e, AnswerAspect.PRESENCE, reads, new Denotation(e, reads)),
                 () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.PRESENCE), reads),
@@ -750,11 +769,13 @@ final class Pullback {
 
     /**
      * {@code block}'s body read on each of its applications in {@code at}, held to how many readings
-     * of one condition are made — for every reader of a closure over values written out.
+     * of one condition are made, each handed an occurrence there on some row ({@link KeptTruths}) —
+     * for every reader of a closure over values written out.
      */
     static InputReads.Applications applicationsOf(Core.Block block, InputReads at,
-                                                  Symbols symbols, DeclarationNewtypes newtypes) {
-        return at.applicationsOf(block, symbols, newtypes, READINGS.maximum());
+                                                  InputReading read) {
+        return at.applicationsOf(block, read.rules().symbols(), read.rules().newtypes(),
+                READINGS.maximum(), KeptTruths.readIn(read));
     }
 
     /** The one of {@code rules} an expression is read by ({@link RuleChoice}). */
@@ -1681,8 +1702,8 @@ final class Pullback {
             // the occurrences it holds does and is kept; and so does a list an operation put
             // together of pieces of one, each occurrence kept where what made it says.
             WrittenOutElements.Walked whole = eachValue(standing);
-            if (whole instanceof WrittenOutElements.Walked.Each(var occurrences)) {
-                return someOf(some, occurrences);
+            if (whole instanceof WrittenOutElements.Walked.Each each) {
+                return someOf(some, there(each));
             }
             if (whole instanceof WrittenOutElements.Walked.PastTheFigure) {
                 return unread(e, reads, new WhyUnread.MoreReadingsThanAreMade());
@@ -1709,8 +1730,8 @@ final class Pullback {
                 return unread(over, in,
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
-            if (values instanceof WrittenOutElements.Walked.Each(var occurrences)) {
-                return someOf(some, occurrences);
+            if (values instanceof WrittenOutElements.Walked.Each each) {
+                return someOf(some, there(each));
             }
             // A container at a position has the element standing there; a walk's answer over one
             // has, for each element there, the step's answer on it.
@@ -1966,30 +1987,12 @@ final class Pullback {
         }
 
         /**
-         * The truths of {@code keptWhere} still to be read with what is stated of an occurrence,
-         * or null where one of them holds on no row.
-         *
-         * <p>An occurrence kept by a truth that holds on no row is no element of the container, so
-         * nothing stated of it is any part of a statement about some element or of a count of them,
-         * and it is not read: a filter over values written out decides most of what it keeps, and
-         * what is read of each value is the body of a closure. A truth that holds on every row adds
-         * nothing to what is stated, and is left out of it.
+         * The occurrences {@code each} holds on some row, each with the truths it is still kept by
+         * ({@link KeptTruths}): one dropped on every row is no element, and nothing stated of it is
+         * part of a statement about some element or of a count of them.
          */
-        private List<ReadMeaning.Occurrence.Kept> stillToBeRead(
-                List<ReadMeaning.Occurrence.Kept> keptWhere) {
-            List<ReadMeaning.Occurrence.Kept> out = new ArrayList<>();
-            for (ReadMeaning.Occurrence.Kept kept : keptWhere) {
-                Proposition stated = ofATruth(kept.truth().value(), kept.truth().at(), read,
-                        Optional.empty()).proposition();
-                switch (kept.holds() ? stated : stated.denied()) {
-                    case Proposition.Always(boolean holds) when !holds -> {
-                        return null;
-                    }
-                    case Proposition.Always _ -> { }
-                    default -> out.add(kept);
-                }
-            }
-            return out;
+        private List<ReadMeaning.Occurrence> there(WrittenOutElements.Walked.Each each) {
+            return each.occurrencesWhere(KeptTruths.readIn(read));
         }
 
         /**
@@ -2262,18 +2265,13 @@ final class Pullback {
          * {@code container}: of the value itself where the law names the element, of what the
          * closure states on the application that hands it that value where the law names what the
          * closure answers, and of both together, on that application, where it names both — each
-         * together with what its occurrence was kept by.
+         * together with what its occurrence is still kept by.
+         *
+         * @param occurrences the ones there on some row ({@link #there})
          */
         private WrittenOutRead ofEachWrittenOut(DeclaredArgument container,
-                                                List<ReadMeaning.Occurrence> written,
+                                                List<ReadMeaning.Occurrence> occurrences,
                                                 LawProposition<DeclaredArgument> law) {
-            List<ReadMeaning.Occurrence> occurrences = new ArrayList<>();
-            for (ReadMeaning.Occurrence each : written) {
-                List<ReadMeaning.Occurrence.Kept> kept = stillToBeRead(each.keptWhere());
-                if (kept != null) {
-                    occurrences.add(new ReadMeaning.Occurrence(each.value(), kept));
-                }
-            }
             if (occurrences.isEmpty()) {
                 return new WrittenOutRead.Each(List.of());
             }
@@ -2305,11 +2303,13 @@ final class Pullback {
             // What the closure states on each application a run may make, where which it makes is
             // not said as much as where it is — each where the element it is handed is kept.
             List<InputReads.Applications.Made> applications = switch (applicationsOf(block,
-                    closure.at(), read.rules().symbols(), read.rules().newtypes())) {
+                    closure.at(), read)) {
                 case InputReads.Applications.Each(var each, var _) -> each;
                 case InputReads.Applications.Unsaid(var each) -> each;
                 case InputReads.Applications.NoneHanded _ ->
                         List.of(new InputReads.Applications.Made(closure.at(), List.of()));
+                // Applied to nothing, so nothing it states is part of what is read.
+                case InputReads.Applications.NoneMade _ -> List.of();
                 case InputReads.Applications.MoreThanAreRead _ -> null;
             };
             if (applications == null) {
@@ -2318,12 +2318,8 @@ final class Pullback {
             InputReads outer = application;
             try {
                 for (InputReads.Applications.Made one : applications) {
-                    List<ReadMeaning.Occurrence.Kept> kept = stillToBeRead(one.keptWhere());
-                    if (kept == null) {
-                        continue;
-                    }
                     application = one.reads();
-                    ofEach.add(whereItIsKept(of(law), kept));
+                    ofEach.add(whereItIsKept(of(law), one.keptWhere()));
                 }
             } finally {
                 application = outer;
@@ -2746,8 +2742,9 @@ final class Pullback {
          * be looked for at a position.
          *
          * <p>A number and not a quantity: every value is written, so how many differ is the same on
-         * every row. Only where every element is held whatever the row is. One kept by a truth is
-         * counted where the truth holds, and the count would turn on which of them do.
+         * every row. Only where every element there on some row is there on every row
+         * ({@link #there}). One kept by a truth that turns on the row is counted where the truth
+         * holds, and the count would turn on which of them do.
          */
         private Sized differentWrittenOut(DeclaredArgument at,
                                           LawSubject<DeclaredArgument> ofTheElement) {
@@ -2755,7 +2752,7 @@ final class Pullback {
                     read.rules().newtypes());
             List<ReadMeaning.Occurrence> occurrences;
             switch (eachValue(container)) {
-                case WrittenOutElements.Walked.Each(var each) -> occurrences = each;
+                case WrittenOutElements.Walked.Each each -> occurrences = there(each);
                 case WrittenOutElements.Walked.PastTheFigure _ -> {
                     return new Sized.NotSized(new WhyUnread.MoreReadingsThanAreMade());
                 }
@@ -2896,7 +2893,8 @@ final class Pullback {
                 return new Sized.NotSized(
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
-            if (values instanceof WrittenOutElements.Walked.Each(var occurrences)) {
+            if (values instanceof WrittenOutElements.Walked.Each walked) {
+                List<ReadMeaning.Occurrence> occurrences = there(walked);
                 return switch (ofEachWrittenOut(counted.container(), occurrences,
                         counted.ofTheElement())) {
                     case WrittenOutRead.Stops(WhyUnread why) -> new Sized.NotSized(why);
@@ -3407,7 +3405,7 @@ final class Pullback {
                     return null;
                 }
                 return switch (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
-                    case ReadMeaning.Element _, ReadMeaning.OneOf _,
+                    case ReadMeaning.Element _, ReadMeaning.OneOf _, ReadMeaning.NoneHeld _,
                          ReadMeaning.MoreThanAreWrittenOut _, ReadMeaning.Position _ -> null;
                     // A name given a choice between values holds whichever arm was taken, which
                     // is a number for each case and not one the body bound.
@@ -3453,7 +3451,7 @@ final class Pullback {
             public List<ValueStanding.ReadThrough<InputReads>> alternativesOf(Core.Read name,
                                                                            InputReads at) {
                 return NameAnswers.alternativesOf(name, at, read.rules().symbols(),
-                        read.rules().newtypes());
+                        read.rules().newtypes(), subjects.kept());
             }
 
             @Override
@@ -3910,12 +3908,14 @@ final class Pullback {
         Denotation stands = value.at().standing(value.value(), read.rules().symbols(),
                 read.rules().newtypes());
         Core e = Core.withoutStanding(stands.value());
-        // Every value it may be handed, kept or not: what is read on each is a statement of an
-        // application it may be handed ({@link Proposition.OnAnApplication}).
+        // Every value it may be handed on some row: what is read on each is a statement of an
+        // application it may be handed ({@link Proposition.OnAnApplication}), and one dropped on
+        // every row is handed on none. Where none is left there is no value to go into.
         if (e instanceof Core.Read name && met.add(name.binding())
                 && stands.at().meaningOf(name, read.rules().symbols(), read.rules().newtypes())
                         instanceof ReadMeaning.OneOf one) {
-            return new Inside.OneOfTheValues(name, one.everyValueItMayBe());
+            List<Denotation> values = one.valuesWhere(KeptTruths.readIn(read));
+            return values.isEmpty() ? null : new Inside.OneOfTheValues(name, values);
         }
         // A closure's body is read where it is applied, and is no part of this value.
         if (e instanceof Core.Block) {
@@ -4623,7 +4623,9 @@ final class Pullback {
         InputReads in = end.at();
         if (e instanceof Core.Read name) {
             return switch (in.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
-                case ReadMeaning.Element _ ->
+                // An element of a container this reading cannot write out, or of one that holds
+                // none, stands at no position.
+                case ReadMeaning.Element _, ReadMeaning.NoneHeld _ ->
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER);
                 // Read once for each value it can be handed ({@link #aWayInto}), so one met here is
                 // past how many readings of one condition are made; and one of a container holding
