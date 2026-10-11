@@ -314,14 +314,25 @@ final class Pullback {
         if (Proposition.leavesSomethingUnread(stated)) {
             return false;
         }
-        // Values of the input stood against one another are a relation the check itself states:
-        // the operation it was carried through has no position of its own for a rule to be read at.
+        // Values of the input stood against one another are a relation the check itself states,
+        // unless something written inside it states it: a call answering a truth reads its own
+        // relation, and the operation an emptiness check was carried through answers a set.
         if (Cutting.valuesItRelates(stated) != null) {
-            return false;
+            return read.turnsOn().stream()
+                    .allMatch(leaf -> aTruthStatedWhereItIsWritten(leaf.from().value(), check));
         }
         return (!Cutting.onlyRelations(stated) && !Cutting.drawsLines(stated))
                 || read.turnsOn().stream()
                         .allMatch(leaf -> aComparisonWrittenInside(leaf.from().value(), check));
+    }
+
+    /** Whether {@code from} is a comparison or a call answering a truth, written inside
+     *  {@code check}, which states its own relation. */
+    private static boolean aTruthStatedWhereItIsWritten(Core from, Core check) {
+        Core node = Core.withoutStanding(from);
+        return aComparisonWrittenInside(from, check)
+                || node != Core.withoutStanding(check) && node instanceof Core.PreservedCall call
+                        && Type.BOOL.equals(call.type());
     }
 
     /** Whether {@code from} is a comparison written inside {@code check}, which draws its own

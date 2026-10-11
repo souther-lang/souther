@@ -124,6 +124,19 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
                 """, "f"), List.of("xs[*]"));
     }
 
+    /**
+     * What a call answering a truth inside the closure states is its own, and the emptiness check
+     * around it does not state it a second time.
+     */
+    @Test
+    void aRelationAClosureStatesIsNotStatedAgainByTheCheckAroundIt() {
+        relatesValues(of("""
+                behavior f : (xs: List<String>, ys: List<String>) -> Int
+                let f (xs, ys) =
+                    if List.isEmpty(List.filter(x -> List.contains(x, ys), xs)) then 1 else 0
+                """, "f"), List.of("xs[*]", "ys[*]"));
+    }
+
     @Test
     void aDifferenceOfWhatAProjectionOfAListComesToIsReadAsItsElementsAre() {
         Said throughASet = of("""
