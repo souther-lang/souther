@@ -10,11 +10,14 @@ import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Classification;
 import souther.compiler.meaning.MeaningsOfABody;
+import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
+import souther.compiler.partition.RulesTaken;
+import souther.compiler.partition.RunPlacement;
 import souther.compiler.partition.ShownBy;
 import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.inputs.TermPath;
@@ -981,6 +984,32 @@ public final class Adequacy {
     }
 
     /**
+     * What {@code behavior} takes, as the rows written for it are walked, or null where its input
+     * was not read.
+     *
+     * <p>Asked where a run is placed and never kept in an answer: what it is made of compares by
+     * identity, so an answer holding it would be an answer no two computations agree about.
+     */
+    static BehaviorInputs inputsOf(Db db, String module, String behavior) {
+        Map<String, InputDomain> read = db.ask(new Inputs(module)).value();
+        RuleReadingSource source = Shapes.ruleReading(db, module).value();
+        InputDomain domain = read == null ? null : read.get(behavior);
+        return domain == null || source == null ? null
+                : BehaviorInputs.of(readingOf(db, domain, source));
+    }
+
+    /**
+     * The rules {@code behavior}'s body states and the inputs its rows are walked by, or null where
+     * either is missing.
+     */
+    static RunPlacement placementOf(Db db, String module, Map<String, RulesTaken> placed,
+                                    String behavior) {
+        RulesTaken rules = placed == null ? null : placed.get(behavior);
+        BehaviorInputs inputs = rules == null ? null : inputsOf(db, module, behavior);
+        return inputs == null ? null : new RunPlacement(rules, inputs);
+    }
+
+    /**
      * What each condition of {@code analysis} states, for a reader of the tree that runs to take in
      * where it passes one ({@link MeaningsOfABody}). Nothing where there is no analysis to read it
      * off, which is a body whose conditions a path takes in as it reads them.
@@ -1483,8 +1512,7 @@ public final class Adequacy {
                 souther.compiler.partition.MeasuredInput subject =
                         unanswered.regions().isEmpty() ? null : subjectOf(db, name, behavior);
                 out.put(behavior, new DecisionEvidence(rules,
-                        whatTheRowsTook(behavior, rules,
-                                placed == null ? null : placed.get(behavior),
+                        whatTheRowsTook(behavior, rules, placementOf(db, name, placed, behavior),
                                 RowReadings.readingFor(byTarget, behavior), numbering),
                         subject == null ? Map.of()
                                 : DecisionEvidence.unansweredIn(rules, unanswered, subject.axes())));
@@ -1508,7 +1536,7 @@ public final class Adequacy {
          */
         private static Measure<DecisionEvidence.RowsPlaced> whatTheRowsTook(String behavior,
                 souther.compiler.partition.DecisionReading rules,
-                souther.compiler.partition.RulesTaken against,
+                RunPlacement against,
                 RowReading observed, Optional<SiteNumbering> numbering) {
             if (!observed.recordedArms()) {
                 return new Measurement.NotMeasured<>(DecisionEvidence.NotAsked.NOT_ASKED);
@@ -1544,9 +1572,9 @@ public final class Adequacy {
             // One entry per row, whether or not anything watched it. Taking only the accounts would
             // leave a row nothing watched out of every number the reading answers with, which is a
             // reading that went without something and does not say so.
-            List<Generator.Watched> watched = new ArrayList<>();
+            List<ObservedInputs> watched = new ArrayList<>();
             for (RowOutcome row : rows) {
-                watched.add(ObservedInputs.of(row, numbering).watched());
+                watched.add(ObservedInputs.of(row, numbering));
             }
             return DecisionEvidence.of(rules.behavior(), against, watched,
                     observed.measured().weakening());
@@ -2375,11 +2403,13 @@ public final class Adequacy {
             // entry for.
             Map<String, souther.compiler.partition.RulesTaken> placed =
                     db.ask(new Placements(name)).value();
-            souther.compiler.partition.RulesTaken taken =
+            souther.compiler.partition.RulesTaken rulesTaken =
                     placed == null ? null : placed.get(behavior);
-            if (taken == null) {
+            BehaviorInputs inputs = inputsOf(db, name, behavior);
+            if (rulesTaken == null || inputs == null) {
                 return Answer.absent();
             }
+            RunPlacement taken = new RunPlacement(rulesTaken, inputs);
             souther.compiler.inputs.SearchRegion declared = subject.quantities().region();
             // The arms the branch count leaves out, which is what says a way is one the model
             // refuses rather than one a search came up short on. Asked of the same subtraction the
@@ -2464,7 +2494,7 @@ public final class Adequacy {
          */
         private static RuleSettlement whatSettles(
                 souther.compiler.partition.DecisionReading.Ruled ruled, Coverages.Probe probe,
-                souther.compiler.partition.RulesTaken taken,
+                RunPlacement taken,
                 souther.compiler.inputs.SearchRegion declared,
                 Set<CoverageSites.AsWritten> unreachedArms, boolean everyRowAborts) {
             CoverageSites.AsWritten unreached = armNothingReaches(ruled, unreachedArms);
@@ -2544,7 +2574,7 @@ public final class Adequacy {
          */
         private static RuleSettlement whatASearchFinds(
                 souther.compiler.partition.DecisionReading.Ruled ruled, Coverages.Probe probe,
-                souther.compiler.partition.RulesTaken taken,
+                RunPlacement taken,
                 souther.compiler.partition.Reachability.Reaching reaching) {
             // Where a condition on the way came out one of several ways, a row is composed along
             // each of them first. A row of one that the run places at the rule is a witness of it;
@@ -2618,7 +2648,7 @@ public final class Adequacy {
          */
         private static RuleSettlement whatItsRunSettles(
                 Generator.BoundaryAttempt.Built built, Coverages.Probe probe,
-                souther.compiler.partition.RulesTaken taken,
+                RunPlacement taken,
                 souther.compiler.partition.DecisionReading.Ruled ruled) {
             RuleRequirement went = whereItWent(built.row().toRun(), probe, taken, ruled);
             if (went instanceof RuleRequirement.Unsettled.AComposedRowWentElsewhere
@@ -2702,9 +2732,10 @@ public final class Adequacy {
          */
         private static RuleRequirement whereItWent(
                 souther.compiler.partition.RowToRun composed, Coverages.Probe probe,
-                souther.compiler.partition.RulesTaken taken,
+                RunPlacement taken,
                 souther.compiler.partition.DecisionReading.Ruled ruled) {
-            if (!(probe.read(composed).watched() instanceof Generator.Watched.Ran(var seen))) {
+            RowAsRead read = probe.read(composed);
+            if (!(read.watched() instanceof Generator.Watched.Ran(var seen))) {
                 return new RuleRequirement.Unsettled.NothingWatchedTheRow();
             }
             // What the row did, and not what it was composed against. A row steered here by a
@@ -2715,7 +2746,7 @@ public final class Adequacy {
             // this reading could not place is this compiler falling short and says nothing about
             // where the row went, so a reason added to that reading is a case to decide about here
             // rather than a run quietly reported as having gone elsewhere.
-            return switch (taken.takenBy(seen)) {
+            return switch (taken.takenBy(seen, read.values() == null ? List.of() : read.values())) {
                 case souther.compiler.partition.RulesTaken.WhichRule.TookThis took
                         when took.rule().equals(ruled.rule()) ->
                         new RuleRequirement.Required(composed);

@@ -3,7 +3,9 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.RulesTaken;
+import souther.compiler.partition.RunPlacement;
 
 import java.util.List;
 
@@ -69,7 +71,7 @@ class EveryRowTheReadingWasGivenIsInOneOfItsCountsTest {
     @Test
     void andARowNothingWatchedIsCountedAsOne() {
         DecisionEvidence.RowsPlaced read = DecisionEvidence.of("classify", rulesTakenOf(compiled()),
-                        List.of(new Generator.Watched.NoAccount()),
+                        List.of(new ObservedInputs(List.of(), new Generator.Watched.NoAccount())),
                         WeakeningSet.none())
                 .made().orElseThrow(
                         () -> new AssertionError("a row is read whether or not anything watched it"));
@@ -96,12 +98,14 @@ class EveryRowTheReadingWasGivenIsInOneOfItsCountsTest {
     }
 
     /** What the rules of this body are matched against, which a reading of no runs never asks. */
-    private static RulesTaken rulesTakenOf(Compilation compilation) {
+    private static RunPlacement rulesTakenOf(Compilation compilation) {
         String module = compilation.modules().get(0);
         DecisionEvidence evidence =
                 compilation.db().ask(new Adequacy.Decides(module)).value().get("decides");
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         CoverageSites.Plan plan = checked.plan();
-        return RulesTaken.of(evidence.read(), checked.behaviorBodies().get("decides"), plan);
+        return new RunPlacement(
+                RulesTaken.of(evidence.read(), checked.behaviorBodies().get("decides"), plan),
+                InputsOfTheBody.of(compilation, "decides"));
     }
 }

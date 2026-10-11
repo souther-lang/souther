@@ -9,6 +9,9 @@ import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
@@ -40,7 +43,9 @@ import java.util.Set;
  * <p><b>And a rule no run can be recognised at is not refuted by any run.</b> A path carrying a
  * condition with no construct of the model to be seen at, or one the emitter numbered no site for,
  * is one this compiler cannot tell a run took — so it is set aside rather than answered no, which
- * would report the rules a body has as rules its rows never reach.
+ * would report the rules a body has as rules its rows never reach. A truth the body was handed
+ * and passed on is the one condition of that kind a run is still seen at: the row wrote the value,
+ * and the position it wrote it at is a position of the declared inputs.
  *
  * <p>A rule that is not {@link DecisionReading.Ruled#whole} is set aside too. Its path carries fewer
  * conditions than its way turns on, so a run matching every condition it carries has not been shown
@@ -114,20 +119,47 @@ public final class RulesTaken {
      */
     private sealed interface ColumnWitness {
 
-        ExecutionEvidence in(AlignedObservation seen);
+        ExecutionEvidence in(Run run);
 
         /** A construct answering a truth, at each place it is recorded. */
         record AtOutcomes(Set<ConditionOutcomeSite> sites, boolean held) implements ColumnWitness {
 
             @Override
-            public ExecutionEvidence in(AlignedObservation seen) {
+            public ExecutionEvidence in(Run run) {
                 boolean asTheRuleSays = false;
                 boolean theOtherWay = false;
                 for (ConditionOutcomeSite each : sites) {
-                    asTheRuleSays |= seen.saw(each, held);
-                    theOtherWay |= seen.saw(each, !held);
+                    asTheRuleSays |= run.seen().saw(each, held);
+                    theOtherWay |= run.seen().saw(each, !held);
                 }
                 return ExecutionEvidence.of(asTheRuleSays, theOtherWay);
+            }
+        }
+
+        /**
+         * A truth the body was handed and passed on, which no construct answers and so no run is
+         * recorded at: the value the row wrote at the position is the whole of what there is to see.
+         *
+         * <p>Only a position the declared inputs walk to one value at. A position the walk does not
+         * reach, or reaches several values at, is a condition this has seen nothing of, and not one
+         * the row answered the other way.
+         */
+        record AtAnInputTruth(TermPath at, boolean held) implements ColumnWitness {
+
+            @Override
+            public ExecutionEvidence in(Run run) {
+                if (run.inputs().indexOf(at) < 0
+                        || run.inputs().indexOf(at) >= run.values().size()) {
+                    return ExecutionEvidence.UNOBSERVED;
+                }
+                if (run.inputs().valuesAt(run.values(), at)
+                        instanceof WalkResult.Reached<List<ObservedValue>>(var found)
+                        && found.size() == 1
+                        && found.getFirst() instanceof ObservedValue.Bool it) {
+                    return it.value() == held ? ExecutionEvidence.AS_THE_RULE_SAYS
+                            : ExecutionEvidence.THE_OTHER_WAY;
+                }
+                return ExecutionEvidence.UNOBSERVED;
             }
         }
 
@@ -135,8 +167,8 @@ public final class RulesTaken {
         record AtArms(Set<ControlClaim> arm, Set<ControlClaim> besides) implements ColumnWitness {
 
             @Override
-            public ExecutionEvidence in(AlignedObservation seen) {
-                return ExecutionEvidence.of(anyOf(arm, seen), anyOf(besides, seen));
+            public ExecutionEvidence in(Run run) {
+                return ExecutionEvidence.of(anyOf(arm, run.seen()), anyOf(besides, run.seen()));
             }
 
             private static boolean anyOf(Set<ControlClaim> claims, AlignedObservation seen) {
@@ -158,13 +190,13 @@ public final class RulesTaken {
                 implements ColumnWitness {
 
             @Override
-            public ExecutionEvidence in(AlignedObservation seen) {
-                ExecutionEvidence down = arm.in(seen);
+            public ExecutionEvidence in(Run run) {
+                ExecutionEvidence down = arm.in(run);
                 if (down != ExecutionEvidence.AS_THE_RULE_SAYS) {
                     return down;
                 }
                 for (ConditionOutcomeSite each : notReached) {
-                    if (seen.reached(each)) {
+                    if (run.seen().reached(each)) {
                         return ExecutionEvidence.THE_OTHER_WAY;
                     }
                 }
@@ -173,14 +205,21 @@ public final class RulesTaken {
         }
     }
 
+    /**
+     * One run as the conditions of a rule are read off it: where it went, and the values it was
+     * given, which are read at the positions the declared inputs name.
+     */
+    private record Run(AlignedObservation seen, List<ObservedValue> values,
+                       BehaviorInputs inputs) {}
+
     /** One rule and where each condition of its path is recorded. */
     private record Recognised(DecisionRule rule, List<ColumnWitness> conditions) {
 
-        /** What {@code seen} shows of each condition, in the order of the path. */
-        List<ExecutionEvidence> in(AlignedObservation seen) {
+        /** What {@code run} shows of each condition, in the order of the path. */
+        List<ExecutionEvidence> in(Run run) {
             List<ExecutionEvidence> out = new ArrayList<>();
             for (ColumnWitness each : conditions) {
-                out.add(each.in(seen));
+                out.add(each.in(run));
             }
             return out;
         }
@@ -228,7 +267,8 @@ public final class RulesTaken {
             List<ColumnWitness> conditions = new ArrayList<>();
             boolean everyOne = true;
             for (ShownBy each : ruled.shownBy()) {
-                Optional<ColumnWitness> seen = witnessOf(each, comparisons, answers, arms, plan);
+                Optional<ColumnWitness> seen =
+                        witnessOf(each, ruled.rule(), comparisons, answers, arms, plan);
                 everyOne &= seen.isPresent();
                 seen.ifPresent(conditions::add);
             }
@@ -248,6 +288,7 @@ public final class RulesTaken {
      * ones it holds. None of them is anything about the model, so they arrive here as one.
      */
     private static Optional<ColumnWitness> witnessOf(ShownBy shown,
+                                                     DecisionRule rule,
                                                      ComparisonEmissionIndex comparisons,
                                                      AnswerEmissionIndex answers,
                                                      ArmEmissionIndex arms,
@@ -274,7 +315,15 @@ public final class RulesTaken {
                         ? Optional.empty()
                         : Optional.of(new ColumnWitness.DownAnArmShortOf(arm.get(), sites));
             }
-            case ShownBy.ShortOf _, ShownBy.NothingIsRecorded _ -> Optional.empty();
+            // Only a truth that is an input position itself. Any other condition nothing records is
+            // not read off the values, which would be evaluating the body a second time.
+            case ShownBy.NothingIsRecorded(var condition) -> switch (rule.at(condition)) {
+                case DecidedCondition.Stood(
+                        DecisionCondition.ATruth(DecisionSubject.AnInput(var at)), var held) ->
+                        Optional.of(new ColumnWitness.AtAnInputTruth(at, held));
+                case null, default -> Optional.empty();
+            };
+            case ShownBy.ShortOf _ -> Optional.empty();
         };
     }
 
@@ -323,15 +372,29 @@ public final class RulesTaken {
         return Set.copyOf(out);
     }
 
-    /** Which rule {@code seen} took. */
-    public WhichRule takenBy(AlignedObservation seen) {
+    /**
+     * Which rule a run took, given where it went and the values it was given.
+     *
+     * <p>Takes the run's account and not whether there is one: a row nothing watched took no rule
+     * this can name, and a caller holding one says so before asking.
+     *
+     * <p>The declared inputs are asked of rather than held, since this is an answer of the query
+     * graph and what they are made of compares by identity.
+     *
+     * @param values what the row wrote, one per parameter, or empty where they were not read, which
+     *               leaves every truth read off them unobserved
+     * @param inputs what the behavior takes, which says where in {@code values} a position is
+     */
+    public WhichRule takenBy(AlignedObservation seen, List<ObservedValue> values,
+                             BehaviorInputs inputs) {
         if (recognisable.isEmpty()) {
             return new WhichRule.CouldNotTell(WhichRule.Why.NO_RULE_IS_RECOGNISABLE);
         }
+        Run run = new Run(seen, values, inputs);
         DecisionRule took = null;
         boolean butForBothWays = false;
         for (Recognised each : recognisable) {
-            List<ExecutionEvidence> evidence = each.in(seen);
+            List<ExecutionEvidence> evidence = each.in(run);
             if (evidence.stream().allMatch(ExecutionEvidence.AS_THE_RULE_SAYS::equals)) {
                 if (took != null) {
                     return new WhichRule.CouldNotTell(WhichRule.Why.MORE_THAN_ONE_RULE_MATCHES);

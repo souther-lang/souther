@@ -7,12 +7,14 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.Observation;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.partition.AnswersDemanded;
+import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionCondition;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.RulesTaken;
+import souther.compiler.partition.RunPlacement;
 import souther.compiler.partition.ShownBy;
 import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.types.ModelOccurrence;
@@ -60,7 +62,7 @@ class ARunThatAnsweredAConditionBothWaysTookNoOneRuleTest {
     void aRunDownOneArmTakesTheRuleOfThatArm() {
         Fixture at = new Fixture();
         assertEquals(new RulesTaken.WhichRule.TookThis(THEN),
-                at.rules(THEN).takenBy(at.seenDown(0)),
+                at.rules(THEN).takenBy(at.seenDown(0), List.of()),
                 "the control: one arm lit, and the rule that takes it that way");
     }
 
@@ -69,9 +71,9 @@ class ARunThatAnsweredAConditionBothWaysTookNoOneRuleTest {
         Fixture at = new Fixture();
         RulesTaken.WhichRule bothWays = new RulesTaken.WhichRule.CouldNotTell(
                 RulesTaken.WhichRule.Why.A_CONDITION_CAME_OUT_BOTH_WAYS);
-        assertEquals(bothWays, at.rules(THEN).takenBy(at.seenDown(0, 1)),
+        assertEquals(bothWays, at.rules(THEN).takenBy(at.seenDown(0, 1), List.of()),
                 "the run went the rule's way and the other, so it is not shown to have taken it");
-        assertEquals(bothWays, at.rules(THEN, ELSE).takenBy(at.seenDown(0, 1)),
+        assertEquals(bothWays, at.rules(THEN, ELSE).takenBy(at.seenDown(0, 1), List.of()),
                 "and with a rule for each arm it took neither, rather than both");
     }
 
@@ -84,10 +86,12 @@ class ARunThatAnsweredAConditionBothWaysTookNoOneRuleTest {
 
         private final Bodies.Elaborated checked;
         private final CoverageSites.Plan plan;
+        private final BehaviorInputs inputs;
         private final List<ControlPlace.Arm> arms = new ArrayList<>();
 
         Fixture() {
             Compilation compilation = Compilation.ofSource(MODEL, "Main");
+            inputs = InputsOfTheBody.of(compilation, "f");
             checked = compilation.db().ask(new Bodies.Checked(compilation.modules().get(0)))
                     .value();
             plan = checked.plan();
@@ -98,7 +102,7 @@ class ARunThatAnsweredAConditionBothWaysTookNoOneRuleTest {
         }
 
         /** The rules {@code taken}, the first down the fork's first arm and so on. */
-        RulesTaken rules(DecisionRule... taken) {
+        RunPlacement rules(DecisionRule... taken) {
             ModelOccurrence fork = ModelOccurrence.statedAt(arms.get(0).arm().fork()).orElseThrow();
             List<DecisionReading.Ruled> found = new ArrayList<>();
             for (int i = 0; i < taken.length; i++) {
@@ -106,9 +110,9 @@ class ARunThatAnsweredAConditionBothWaysTookNoOneRuleTest {
                         List.of(new ShownBy.AtAnArm(fork, partOf(taken[i]))),
                         WayToTheBorder.UNTOUCHED, AnswersDemanded.NOTHING, true));
             }
-            return RulesTaken.of(new DecisionReading("f", found,
+            return new RunPlacement(RulesTaken.of(new DecisionReading("f", found,
                     new DecisionReading.Enumeration.Complete()),
-                    checked.behaviorBodies().get("f"), plan);
+                    checked.behaviorBodies().get("f"), plan), inputs);
         }
 
         /** A run recorded down the arms {@code parts} of the fork. */

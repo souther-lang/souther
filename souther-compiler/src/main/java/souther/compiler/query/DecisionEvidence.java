@@ -6,8 +6,10 @@ import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InteractionCells;
 import souther.compiler.partition.MeasuredInput;
+import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.RowRegion;
 import souther.compiler.partition.RulesTaken;
+import souther.compiler.partition.RunPlacement;
 import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.publish.CanonicalSelection;
 
@@ -367,27 +369,28 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
      * all the same, and taking the accounts first and the rows never would leave it out of every
      * number here — which is a reading that went without something reporting that it did not.
      *
-     * @param watched what watched each row, which is an account or the fact that there is none
+     * @param rows what each row wrote and what watched it, which is an account or the fact that
+     *             there is none
      * @param whatTheRowsWentWithout what the reading of the rows went without, which this reading
      *                               is short of as well: a rule nothing was seen taking may be
      *                               taken by a row that reading never saw
      */
-    public static Measure<RowsPlaced> of(String behavior, RulesTaken against,
-                                         List<Generator.Watched> watched,
+    public static Measure<RowsPlaced> of(String behavior, RunPlacement against,
+                                         List<ObservedInputs> rows,
                                          WeakeningSet whatTheRowsWentWithout) {
         Set<DecisionRule> took = new LinkedHashSet<>();
         List<Weakening> whyNotPlaced = new ArrayList<>();
         int placed = 0;
         int notPlaced = 0;
         int notWatched = 0;
-        for (Generator.Watched each : watched) {
+        for (ObservedInputs row : rows) {
             // Exhaustive, so a row cannot fall through into none of the counts. What a row that was
             // watched came to is asked below; that a row was not watched is answered here, because
             // it is a fact about this build rather than about where the row went.
-            switch (each) {
+            switch (row.watched()) {
                 case Generator.Watched.NoAccount _ -> notWatched++;
                 case Generator.Watched.Ran(var seen) -> {
-                    switch (against.takenBy(seen)) {
+                    switch (against.takenBy(seen, row.inputs())) {
                         case RulesTaken.WhichRule.TookThis it -> {
                             took.add(it.rule());
                             placed++;
@@ -416,7 +419,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                     WeakeningSet.of(new Weakening.DecisionRunNotWatched(behavior)));
         }
         RowsPlaced made =
-                new RowsPlaced(watched.size(), took, placed, notPlaced, notWatched);
+                new RowsPlaced(rows.size(), took, placed, notPlaced, notWatched);
         // A row this reading could not place says what stopped it, and a row nothing watched says
         // what the run went without. Either leaves the placement partial; neither may arrive as a
         // complete reading of the rows.

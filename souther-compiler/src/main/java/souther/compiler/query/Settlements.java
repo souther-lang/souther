@@ -947,7 +947,9 @@ public record Settlements(List<ObligationIdentity> requested,
                 return new Settlement.DoesNotSettle();
             }
             return switch (asRead.watched()) {
-                case Generator.Watched.Ran(var account) -> switch (rules.takenBy(account)) {
+                case Generator.Watched.Ran(var account) -> switch (rules.takenBy(account,
+                        asRead.values() == null ? List.of() : asRead.values(),
+                        subject.inputs())) {
                     case RulesTaken.WhichRule.TookThis took ->
                             took.rule().equals(owed.rule())
                                     ? new Settlement.Settles() : new Settlement.DoesNotSettle();

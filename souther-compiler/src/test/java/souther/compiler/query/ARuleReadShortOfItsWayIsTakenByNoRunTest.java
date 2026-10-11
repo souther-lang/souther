@@ -12,6 +12,7 @@ import souther.compiler.partition.DecisionCondition;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.RulesTaken;
+import souther.compiler.partition.RunPlacement;
 import souther.compiler.partition.WayToTheBorder;
 
 import java.util.List;
@@ -69,7 +70,7 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
         assertEquals(new RulesTaken.WhichRule.CouldNotTell(
                         RulesTaken.WhichRule.Why.NO_RULE_IS_RECOGNISABLE),
                 rulesOf(compilation, reading(ruled(NO_DISTINCTION, false)))
-                        .takenBy(nothingSeen(compilation)));
+                        .takenBy(nothingSeen(compilation), List.of()));
     }
 
     @Test
@@ -77,7 +78,7 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         assertEquals(new RulesTaken.WhichRule.TookThis(NO_DISTINCTION),
                 rulesOf(compilation, reading(ruled(NO_DISTINCTION, true)))
-                        .takenBy(nothingSeen(compilation)));
+                        .takenBy(nothingSeen(compilation), List.of()));
     }
 
     /**
@@ -159,9 +160,11 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
                 rulesOf(compilation, read), List.of(), WeakeningSet.none()), Map.of());
     }
 
-    private static RulesTaken rulesOf(Compilation compilation, DecisionReading read) {
+    private static RunPlacement rulesOf(Compilation compilation, DecisionReading read) {
         Bodies.Elaborated checked = checkedOf(compilation);
-        return RulesTaken.of(read, checked.behaviorBodies().get("decides"), checked.plan());
+        return new RunPlacement(
+                RulesTaken.of(read, checked.behaviorBodies().get("decides"), checked.plan()),
+                InputsOfTheBody.of(compilation, "decides"));
     }
 
     /** A run that was seen doing nothing, under the numbering of this compilation. */
