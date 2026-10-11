@@ -577,7 +577,7 @@ final class TermReading {
         if (!(read instanceof Count count) || observed.onTheGrid(count) == null) {
             return new Reading.NotNumber();
         }
-        Count moved = movedBy(from, count);
+        Count moved = from instanceof ValueTransformation.Identity ? count : movedBy(from, count);
         if (moved == null) {
             // The date is one the shifts that made the value this is taken of stop at: the program
             // aborts before there is a date to take a part of, as it does for a quotient past what

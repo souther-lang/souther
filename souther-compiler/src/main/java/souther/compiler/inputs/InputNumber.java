@@ -107,6 +107,11 @@ public final class InputNumber {
      */
     private static ObservationSource movedFromALocation(Core of, InputReads reads,
                                                         RuleReadingSource source) {
+        // A shift of a date answers a date, so anything else is no chain and the walk below, which
+        // resolves names, is not spent on it.
+        if (!Type.DATE.equals(Core.withoutStanding(of).type())) {
+            return null;
+        }
         Symbols symbols = source.symbols();
         List<Long> days = new ArrayList<>();
         Denotation met = reads.denotes(of, symbols, source.newtypes());
