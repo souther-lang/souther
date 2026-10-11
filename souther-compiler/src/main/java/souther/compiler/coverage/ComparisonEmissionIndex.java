@@ -82,6 +82,9 @@ public final class ComparisonEmissionIndex {
         for (Map.Entry<String, Core> method : of.methods().entrySet()) {
             walk(method.getValue(), plan, emitted);
         }
+        for (Map.Entry<String, Core> passage : of.passages().entrySet()) {
+            walk(passage.getValue(), plan, emitted);
+        }
         return new ComparisonEmissionIndex(copy(emitted));
     }
 
@@ -89,7 +92,8 @@ public final class ComparisonEmissionIndex {
      * The same over one body, for a reader that holds one rather than the module's.
      *
      * <p>Of the body and of the methods it calls, which is what a behavior emits: a comparison the
-     * model states is in the body it was written in, and a value's is in the value's method.
+     * model states is in the body it was written in, a value's is in the value's method, and a
+     * recursive helper's is in the helper's.
      */
     public static ComparisonEmissionIndex ofBody(Core body, CoverageSites.Plan plan) {
         Map<ModelOccurrence, Map<ConstructOccurrence, EmittedComparison>> emitted =
@@ -97,6 +101,9 @@ public final class ComparisonEmissionIndex {
         walk(body, plan, emitted);
         for (Core method : plan.methods().calledFrom(body)) {
             walk(method, plan, emitted);
+        }
+        for (Core passage : plan.methods().passedThroughFrom(body)) {
+            walk(passage, plan, emitted);
         }
         return new ComparisonEmissionIndex(copy(emitted));
     }

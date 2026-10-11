@@ -81,7 +81,8 @@ public final class ComparisonCatalog {
     }
 
     /**
-     * The comparisons of every behavior body of one module.
+     * The comparisons of every body of one module a run passes through: its behaviors', its values'
+     * methods' and the helpers' it emits as methods.
      *
      * <p>Taken as one value because what this answers is about the pair: the module says whose
      * bodies these are, and a caller handed the two apart could put one module's name beside
@@ -96,6 +97,9 @@ public final class ComparisonCatalog {
         }
         for (Map.Entry<String, Core> method : of.methods().entrySet()) {
             walk(method.getValue(), method.getKey(), byOccurrence, met);
+        }
+        for (Map.Entry<String, Core> passage : of.passages().entrySet()) {
+            walk(passage.getValue(), passage.getKey(), byOccurrence, met);
         }
         return new ComparisonCatalog(byOccurrence);
     }

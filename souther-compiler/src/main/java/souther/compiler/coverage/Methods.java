@@ -27,9 +27,10 @@ import java.util.function.Predicate;
  * Which bodies those are is asked here and nowhere else: a reader that took a behavior's body alone
  * would be looking for a comparison in a body that does not hold it.
  *
- * <p>A helper emitted as a method is a body a run passes through as well, with no places counted.
- * It is a node of the graph all the same: a value's method called from inside it is reached by a
- * run that reaches the helper, and a graph of the counted bodies alone loses that method with it.
+ * <p>A helper emitted as a method is a body a run passes through as well, with no arm counted and
+ * its comparisons owed by no behavior. It is a node of the graph all the same: a value's method
+ * called from inside it is reached by a run that reaches the helper, and a graph of the counted
+ * bodies alone loses that method with it.
  *
  * <p>Which method a call runs is answered here too, and the closures are made of that answer. A
  * reader that goes into a method where a call runs it and a closure that says which methods a
@@ -85,6 +86,19 @@ record Methods(Map<String, Core> entries, Map<String, Core> bodies, Map<String, 
         for (String name : reached) {
             if (bodies.containsKey(name)) {
                 out.add(bodies.get(name));
+            }
+        }
+        return out;
+    }
+
+    /** The helpers' methods {@code emitted} reaches, directly or through another method. */
+    List<Core> passedThroughFrom(Core emitted) {
+        Map<String, Core> all = all();
+        Set<String> reached = closure(callsOf(emitted, all), name -> callsOf(all.get(name), all));
+        List<Core> out = new ArrayList<>();
+        for (String name : reached) {
+            if (passages.containsKey(name)) {
+                out.add(passages.get(name));
             }
         }
         return out;

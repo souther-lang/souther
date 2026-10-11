@@ -4449,9 +4449,10 @@ public final class Bodies {
         // Held apart from the behaviors: it declares no rows and states no answer, and the places of
         // a behavior are its own and those of the methods it calls.
         //
-        // A helper emitted as a method of its own is a body a run passes through too, and its
-        // places are not counted. It is held for what it calls: a value's method run from inside it
-        // is a body the run passes through as much as one the behavior calls itself.
+        // A helper emitted as a method of its own is a body a run passes through too, and its arms
+        // are not counted. It is held for what it calls — a value's method run from inside it is a
+        // body the run passes through as much as one the behavior calls itself — and for what it
+        // compares, which a caller's reading holds its rows to.
         SequencedMap<String, Core> methods = new LinkedHashMap<>();
         SequencedMap<String, Core> passages = new LinkedHashMap<>();
         for (Hir.FnDef fn : settled.fns()) {

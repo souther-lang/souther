@@ -134,14 +134,23 @@ final class BodyGen {
          * Whether a coverage plan counted the arms and comparisons of a body.
          *
          * <p>Said by whoever makes a generator, with no default. Much of what goes through here is no
-         * body the plan was made from — an invariant's clause, a codec, a recursive helper shared by
-         * every behavior that calls it — and a behavior's body and a value's method
-         * ({@link souther.compiler.check.EmittedDefinition#placesAreCounted()}) are. A default would
-         * answer for a body of a new kind before anyone asked which it is.
+         * body the plan was made from — an invariant's clause, a codec — and a behavior's body and a
+         * value's method ({@link souther.compiler.check.EmittedDefinition#onARun()}) are.
+         * A recursive helper shared by every behavior that calls it is between the two. A default
+         * would answer for a body of a new kind before anyone asked which it is.
          */
         enum Places {
             /** The plan was made from these very nodes, so a run through them is recorded. */
             COUNTED,
+            /**
+             * The plan numbered the comparisons of these nodes and none of their arms, so which way
+             * a comparison came out is recorded and which arm a run took is not.
+             *
+             * <p>A recursive helper's body. No behavior owes an arm of it, and a comparison in it is
+             * the rule of whichever call the run made — which only the caller's reading can say, so
+             * the run is recorded and the reading decides whose it was.
+             */
+            COMPARISONS,
             /** The plan holds no place in this body, so nothing here is recorded. */
             NUMBERED_NOWHERE
         }
@@ -635,7 +644,7 @@ final class BodyGen {
          * condition this plan instruments, and the emitter walks comparisons everywhere else too.
          */
         private void comparisonProbe(Core.Binary bin) {
-            if (places != Places.COUNTED || !ctx.measuring()) {
+            if (places == Places.NUMBERED_NOWHERE || !ctx.measuring()) {
                 return;
             }
             ctx.comparisonSiteOf(bin).ifPresent(this::comparisonProbeAt);

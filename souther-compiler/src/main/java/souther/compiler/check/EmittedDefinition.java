@@ -64,20 +64,6 @@ public record EmittedDefinition(Core body, List<Parameter> parameters, LoweringR
         }
     }
 
-    /**
-     * Whether what this method compares and forks on is among the places of its module.
-     *
-     * <p>A value's method is: it is a body a run of every behavior that calls the value passes
-     * through. A helper is not, nor is an entry or a row's value. The plan numbers the places of
-     * exactly these bodies and the emitter records a run through exactly these, so both read it
-     * here; asked apart, one of them can number a place the other never writes. Every role is
-     * answered by name, so a method of a new kind is neither counted nor left out until someone
-     * says which.
-     */
-    public boolean placesAreCounted() {
-        return onARun() == OnARun.PLACES_COUNTED;
-    }
-
     /** What a method is to a run of a behavior of its module. */
     public enum OnARun {
 
@@ -85,9 +71,13 @@ public record EmittedDefinition(Core body, List<Parameter> parameters, LoweringR
         PLACES_COUNTED,
 
         /**
-         * A body the run passes through, whose places are not. A helper on a call cycle is one: it
-         * is emitted as a method because it recurses, and what it calls — a value's method among
-         * them — is run from inside it.
+         * A body the run passes through, whose arms are not among the module's places. A helper on
+         * a call cycle is one: it is emitted as a method because it recurses, and what it calls — a
+         * value's method among them — is run from inside it.
+         *
+         * <p>Its comparisons are numbered and owed by nobody. Which caller a comparison in it is a
+         * rule of is the caller's reading to say, and a run recorded there is what that reading
+         * holds a row to.
          */
         PASSED_THROUGH,
 
