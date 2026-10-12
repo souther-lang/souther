@@ -23,6 +23,7 @@ import souther.compiler.observe.ObservedValue;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -300,9 +301,13 @@ final class AStatementAtARow {
      *
      * <p>A relation over a position the row wrote nothing at holds of no value there, so the
      * statement fails there.
+     *
+     * <p>Each part once at the row, by its spelling: a statement where a line decides holds the
+     * same quantifier and the same relation in many places, and each comes to one answer at one
+     * row wherever it stands.
      */
     Answer at(BorderQuantity.Observation row) {
-        return at(stated, row);
+        return at(stated, row, new HashMap<>());
     }
 
     /**
@@ -375,7 +380,19 @@ final class AStatementAtARow {
         }
     }
 
-    private Answer at(Proposition part, BorderQuantity.Observation row) {
+    private Answer at(Proposition part, BorderQuantity.Observation row,
+                      Map<String, Answer> answered) {
+        Answer known = answered.get(part.key());
+        if (known != null) {
+            return known;
+        }
+        Answer answer = atOnce(part, row, answered);
+        answered.put(part.key(), answer);
+        return answer;
+    }
+
+    private Answer atOnce(Proposition part, BorderQuantity.Observation row,
+                          Map<String, Answer> answered) {
         return switch (part) {
             case Proposition.Always(boolean holds) -> holds ? Answer.HOLDS : Answer.FAILS;
             // Of the element this row is read with chosen: the last of those holding the value it
@@ -401,9 +418,9 @@ final class AStatementAtARow {
                                        DecisionSubject.AnInput(TermPath other), boolean holds,
                                        String _) -> heldAs(holds, theSame(one, other, row));
             case Proposition.All all -> joined(all.parts().stream()
-                    .map(each -> at(each, row)).toList(), true);
+                    .map(each -> at(each, row, answered)).toList(), true);
             case Proposition.Any any -> joined(any.parts().stream()
-                    .map(each -> at(each, row)).toList(), false);
+                    .map(each -> at(each, row, answered)).toList(), false);
             case Proposition.Some some -> {
                 OverTheElements over = elements.get(keyOf(some));
                 HowManyAtARow counted = over.ofTheElement().howManyMeetIn(over.container(), row);

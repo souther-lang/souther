@@ -181,6 +181,52 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
         }
     }
 
+    /**
+     * Two quantifiers over one container are about two elements, and a line inside one of them
+     * decides where the other holds of an element of its own.
+     *
+     * <p>Both wants are met only where the list holds an A above nought and a B above nought. The
+     * line on an A's number turns the statement where some B is above nought, which an element
+     * other than the A is — so the line is owed rows. Read as one element at both quantifiers,
+     * that would ask the A to be a B as well, and the line would be said to turn the statement
+     * nowhere.
+     */
+    @Test
+    void aLineInsideOneOfTwoQuantifiersOverOneContainerDecidesBesideAnotherElement() {
+        JsonNode report = reportOfSource("""
+                module probe
+
+                import List ( filter, any, length )
+
+                data A = { n: Int }
+                data B = { n: Int }
+                data Item = A | B
+                data Wanted = WantA | WantB
+                data Both
+                data NotBoth
+
+                let wanted = [ WantA, WantB ]
+
+                let meets (x: Item, w: Wanted): Bool =
+                    match x with
+                        | A { n } -> w == WantA && n > 0
+                        | B { n } -> w == WantB && n > 0
+
+                behavior f : (xs: List<Item>) -> Both | NotBoth
+
+                let f (xs) =
+                    if length(filter(w -> any(x -> meets(x, w), xs), wanted)) == 2
+                    then Both else NotBoth
+                """);
+        for (String position : List.of("xs[*]@A.n", "xs[*]@B.n")) {
+            assertFalse(reasonsAt(report, position).contains("rule_never_turns_on_this_line"),
+                    () -> position + " turns the statement beside an element of the other kind: "
+                            + reasonsAt(report, position));
+        }
+        assertEquals(Set.of("f/xs[*]@A.n", "f/xs[*]@B.n"), axesOfParts(report),
+                "a line through each kind's number is owed rows");
+    }
+
     /** The axes the lines of a statement of several are owed rows on. */
     private static Set<String> axesOfParts(JsonNode report) {
         Set<String> axes = new TreeSet<>();
