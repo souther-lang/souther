@@ -1946,6 +1946,24 @@ public sealed interface Core {
     }
 
     /**
+     * Whether two expressions are one value: one name, or one field read off one value.
+     *
+     * <p>By what they read and not by where they were written. Two reads of {@code value} in one
+     * clause are two nodes at two positions and one value, and a reader asking whether two
+     * predicates are about the same thing is asking the second question.
+     */
+    static boolean sameValue(Core one, Core other) {
+        Core left = withoutStanding(one);
+        Core right = withoutStanding(other);
+        if (left instanceof Read read && right instanceof Read there) {
+            return read.binding().equals(there.binding());
+        }
+        return left instanceof FieldAccess access && right instanceof FieldAccess there
+                && access.field().equals(there.field())
+                && sameValue(access.target(), there.target());
+    }
+
+    /**
      * {@code value} standing as {@code type}: {@code value} itself where it already is of that type,
      * and a {@link Widen} of it where it is not.
      *
