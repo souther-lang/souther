@@ -9,6 +9,7 @@ import souther.compiler.types.TypeSymbol;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What a value for one dependency's answer is composed over.
@@ -86,9 +87,10 @@ record AnswerSubjects(Standing whole, List<TypeSymbol> cases,
         // union answer — its truth, or a comparison over it — is one nothing here composes for: the
         // demand stays in hand, and no value meets it.
         List<Feasible> out = new ArrayList<>();
+        Set<TypeSymbol> narrowed = left == null ? null : left.leavesOfASum();
         for (TypeSymbol each : cases) {
             Standing standing = byCase.get(each);
-            if (standing != null && (left == null || left.leaves(each))) {
+            if (standing != null && (narrowed == null || narrowed.contains(each))) {
                 out.add(new Feasible(each, standing, left == null ? demands : rest));
             }
         }
