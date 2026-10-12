@@ -1,0 +1,180 @@
+package souther.compiler.meaning;
+
+import net.unit8.notation199x.pattern.CodePoints;
+import net.unit8.notation199x.pattern.PatternMachine;
+import net.unit8.notation199x.pattern.PatternMeaning;
+import net.unit8.notation199x.pattern.PatternParser;
+import net.unit8.notation199x.pattern.PatternRead;
+import net.unit8.notation199x.pattern.StringPattern;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+
+import souther.compiler.DefaultStdlib;
+import souther.compiler.check.ScopedDeclarations;
+import souther.compiler.check.Symbols;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.CodePointClass;
+import souther.compiler.semantics.LawNumber;
+import souther.compiler.semantics.LawProposition;
+import souther.compiler.semantics.LawSubject;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A reading of some piece of a string, and of some element of a container that comes out the same
+ * for every one, concludes what its own parts give and is refused anything else: what a pattern
+ * says of a character is what the pattern accepts, what the string's pieces hold is counted of
+ * that string by that set, and a value said to be written without the element is one that reads
+ * none of it.
+ */
+class AReadingOfAStringsPiecesConcludesOnlyWhatItsEvidenceGivesTest {
+
+    private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
+    private static final TermPath TITLE = TermPath.of("title");
+    private static final TermPath OTHER = TermPath.of("other");
+    private static final CodePoints LOWER = CodePoints.between('a', 'z');
+
+    private static NumericTerm.CodePointClassCount counting(TermPath of, CodePointClass counted) {
+        return NumericTerm.CodePointClassCount.of(of, counted, Type.STRING,
+                ScopedDeclarations.wrapsOf(SYMBOLS));
+    }
+
+    /** A character read as matching {@code [a-z]}. */
+    private static Derivation aLowerCaseLetter() {
+        return new Derivation.ACharacterInAClass(new PatternMeaning.Symbols(LOWER));
+    }
+
+    @Test
+    void someCharacterIsCountedOfItsOwnStringByTheSetItWasReadAs() {
+        Derivation.SomePieceMeeting met = new Derivation.SomePieceMeeting(TITLE,
+                OptionalInt.empty(), Optional.of(counting(TITLE, CodePointClass.of(LOWER))),
+                aLowerCaseLetter());
+        assertInstanceOf(Proposition.Compared.class, met.concludes(Optional.empty()));
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.SomePieceMeeting(
+                TITLE, OptionalInt.empty(),
+                Optional.of(counting(TITLE, new CodePointClass.NotWhitespace())),
+                aLowerCaseLetter()), "another class of the same string");
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.SomePieceMeeting(
+                TITLE, OptionalInt.empty(),
+                Optional.of(counting(OTHER, CodePointClass.of(LOWER))),
+                aLowerCaseLetter()), "the same class of another string");
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.SomePieceMeeting(
+                TITLE, OptionalInt.empty(), Optional.empty(), aLowerCaseLetter()),
+                "no count where a character can meet it");
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.SomePieceMeeting(
+                TITLE, OptionalInt.of(','),
+                Optional.of(counting(TITLE, CodePointClass.of(LOWER))), aLowerCaseLetter()),
+                "a split piece is read only as holding a code point that is not whitespace");
+    }
+
+    @Test
+    void aValueSaidToBeWrittenWithoutTheElementReadsNoneOfIt() {
+        BindingOwner owner = new BindingOwner.OfValue("demo", "f");
+        BindingId element = new BindingId(owner, 0);
+        BindingId other = new BindingId(owner, 1);
+        assertEquals(Set.of(other),
+                new Derivation.EveryElementMeetsIt.Alike.WrittenWithoutTheElement(element,
+                        Set.of(other)).read());
+        assertThrows(IllegalArgumentException.class,
+                () -> new Derivation.EveryElementMeetsIt.Alike.WrittenWithoutTheElement(element,
+                        Set.of(element, other)));
+    }
+
+    @Test
+    void whatTurnsOnTheElementIsNotSaidToSettle() {
+        LawProposition.SomeElement<String> some = new LawProposition.SomeElement<>("xs",
+                new LawProposition.Always<>(true), true);
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.EveryElementMeetsIt(
+                some, aLowerCaseLetter(), new Derivation.WrittenOut(true),
+                new Derivation.EveryElementMeetsIt.Alike.Settled()));
+    }
+
+    /**
+     * A statement an operation keeps is read of what the operation was handed, and a reading that
+     * is no reading of that statement — a value settled on its own — is not taken for one.
+     */
+    @Test
+    void whatAnOperationKeepsIsReadOfWhatItWasHandedAndOfNothingElse() {
+        LawProposition.Compared<String> holdsOne = new LawProposition.Compared<>(
+                new LinearForm<>(ExactRatio.of(-1), Map.of(new LawNumber.CodePointsOf<>(
+                        new LawSubject.Argument<>("s"), new CodePointClass.NotWhitespace()),
+                        ExactRatio.ONE)), Rel.GE);
+        assertThrows(IllegalArgumentException.class, () ->
+                new Derivation.WhereAnOperationKeepsIt(holdsOne,
+                        ValueName.Stdlib.operation("String", "lowercase"),
+                        new Derivation.WrittenOut(true)));
+    }
+
+    /**
+     * What a pattern is read as accepting of a string of one code point is what the run time's
+     * matcher accepts, over patterns that choose, follow one another, repeat and take nothing.
+     */
+    @Test
+    void theCodePointsAPatternIsReadAsAcceptingAloneAreTheOnesTheRunTimeMatches() {
+        List<String> patterns = List.of("[a-z0-9]", "[^a-z]", "a|[0-9]", "ab", "a?b?",
+                "(ab)?c", "a*", "a+", "a{2}", "a{0,1}b{0,1}", "x?[a-c]y?", "(|a)", "(a|)b",
+                "\\d", "\\s", "[a-z]{1,3}", "(a|bc)", "a{0}");
+        List<Integer> asked = new ArrayList<>();
+        for (int codePoint = 0; codePoint < 0x300; codePoint++) {
+            asked.add(codePoint);
+        }
+        asked.addAll(List.of(0x2028, 0x2029, 0x3000, 0x4E00, 0x1F600));
+        List<String> wrong = new ArrayList<>();
+        for (String written : patterns) {
+            PatternMeaning meaning = assertInstanceOf(PatternRead.Read.class,
+                    PatternParser.read(written), written).meaning();
+            CodePoints alone = Derivation.ACharacterInAClass.alone(meaning);
+            StringPattern runs = PatternMachine.of(meaning).pattern();
+            for (int codePoint : asked) {
+                if (alone.has(codePoint) != runs.matches(Character.toString(codePoint))) {
+                    wrong.add(written + " at U+" + Integer.toHexString(codePoint));
+                }
+            }
+        }
+        assertEquals(List.of(), wrong);
+    }
+
+    /**
+     * The code points many classes tell apart are as many as the runs they are written with make,
+     * and not one for each way of being in or out of each: forty classes, each a run of its own
+     * overlapping the next, are told apart into no more than the runs between their ends.
+     */
+    @Test
+    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void manyClassesAreToldApartIntoNoMoreThanTheRunsTheyAreWrittenWith() {
+        List<CodePoints> classes = new ArrayList<>();
+        for (int at = 0; at < 40; at++) {
+            classes.add(CodePoints.between(0x100 + at * 4, 0x100 + at * 4 + 9));
+        }
+        List<CodePoints> alike = CodePointClass.toldApart(classes);
+        int ends = 0;
+        for (CodePoints each : classes) {
+            ends += 2 * each.ranges().size();
+        }
+        assertTrue(alike.size() <= ends + 2, alike.size() + " sets told apart");
+        CodePoints all = CodePoints.NONE;
+        for (CodePoints each : alike) {
+            assertTrue(all.and(each).isEmpty(), "two of them hold a code point in common");
+            all = all.or(each);
+        }
+        assertEquals(CodePoints.EVERYTHING, all, "together they hold every code point");
+    }
+}

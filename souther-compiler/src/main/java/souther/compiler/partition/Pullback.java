@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import net.unit8.notation199x.pattern.CodePoints;
-import net.unit8.notation199x.pattern.PatternMeaning;
 
 import souther.compiler.check.ARecursion;
 import souther.compiler.check.AffineForms;
@@ -1624,7 +1623,7 @@ final class Pullback {
             List<Kept> pending = new ArrayList<>();
             ElementAt outerEach = null;
             Denotation outerHanded = null;
-            boolean writtenWithoutTheElement = false;
+            Derivation.EveryElementMeetsIt.Alike.WrittenWithoutTheElement writtenWithout = null;
             Denotation at = standing;
             boolean peeled = false;
             while (true) {
@@ -1645,8 +1644,11 @@ final class Pullback {
                 if (outerEach == null) {
                     outerEach = each;
                     outerHanded = handed;
-                    writtenWithoutTheElement = walk.element().binding() != null
-                            && !WhatABodyReads.binding(step.value(), walk.element().binding());
+                    BindingId element = walk.element().binding();
+                    Set<BindingId> read = WhatABodyReads.bindings(step.value());
+                    writtenWithout = element == null || read.contains(element) ? null
+                            : new Derivation.EveryElementMeetsIt.Alike.WrittenWithoutTheElement(
+                                    element, read);
                 }
                 at = walk.walked();
                 peeled = true;
@@ -1675,12 +1677,10 @@ final class Pullback {
             ofTheElement = alsoWhatWasKept(ofTheElement, located);
             Derivation.EveryElementMeetsIt.Alike alike =
                     trying.of(ofTheElement) instanceof Proposition.Always
-                            ? Derivation.EveryElementMeetsIt.Alike.SETTLED
-                            : writtenWithoutTheElement && Derivation.EveryElementMeetsIt
+                            ? new Derivation.EveryElementMeetsIt.Alike.Settled()
+                            : writtenWithout != null && Derivation.EveryElementMeetsIt
                                     .keptOnlyByWhatSettlesTrue(ofTheElement)
-                                    ? Derivation.EveryElementMeetsIt.Alike
-                                            .WRITTEN_WITHOUT_THE_ELEMENT
-                                    : null;
+                                    ? writtenWithout : null;
             if (alike == null) {
                 return null;
             }
@@ -1932,98 +1932,38 @@ final class Pullback {
 
         /**
          * Some piece of the string meeting {@code element}, which is what was read of one piece:
-         * the string holding a code point of the class the piece was asked to hold one of that is
-         * not the separator — where that is all that was asked of the piece.
+         * the string holding a code point the pieces meeting it hold ({@link
+         * Derivation.SomePieceMeeting}) — where that is all that was asked of the piece.
          *
-         * <p>What else may be asked of a piece is not what the string holds. That it holds none, or
-         * how many, or that it is as long as something, turns on how the separator stands in the
-         * string, and nothing of the input says that: it stops there.
+         * <p>What else may be asked of a piece split at a separator is not what the string holds.
+         * That it holds none, or how many, or that it is as long as something, turns on how the
+         * separator stands in the string, and nothing of the input says that: it stops there. Of
+         * a character, every code point the set holds, the string holding one is the string
+         * holding anything, which is how long it is.
          */
         private Derivation somePiece(Pieces pieces, Derivation answered, Proposition element,
                                      Core over, InputReads in) {
-            if (pieces.separator().isEmpty()) {
-                return someCharacter(pieces.string(), answered, element, over, in);
-            }
-            CodePointClass asked = pieceMustHoldOneOf(element);
-            CodePointClass counted = asked instanceof CodePointClass.NotWhitespace
-                    ? new CodePointClass.NotWhitespaceNorEqualTo(pieces.separator().getAsInt())
-                    : null;
-            Type type = counted == null ? null
-                    : read.domain().typeAt(pieces.string(), read.rules());
-            NumericTerm.CodePointClassCount term = type == null ? null
-                    : NumericTerm.CodePointClassCount.of(pieces.string(), counted, type,
-                            read.rules().inners());
-            if (term == null) {
-                WhyUnread stopped = Proposition.firstStopIn(element);
-                return unread(over, in, stopped != null ? stopped : new WhyUnread.AtNoPosition(
-                        WhyUnread.AtNoPosition.Place.CONTAINER));
-            }
-            // Met as a part of its own, as how many a container holds above nought is: it is a
-            // statement about a number of the string, which is what a line is drawn on.
-            return leaf(new Derivation.SomePieceMeeting(term, answered),
-                    askedAt != null ? askedAt : new Denotation(e, reads));
-        }
-
-        /**
-         * Some character of the string at {@code string} meeting {@code element}, which is what
-         * was read of one character: the string holding a code point of the set a character
-         * meeting it is one of ({@link Derivation.SomeCharacterMeeting}) — where all that was
-         * asked of the character is which classes its code point is in.
-         *
-         * <p>Of every code point the set, the string holding one is the string holding anything,
-         * which is how long it is.
-         */
-        private Derivation someCharacter(TermPath string, Derivation answered,
-                                         Proposition element, Core over, InputReads in) {
-            CodePoints meeting = Derivation.SomeCharacterMeeting.charactersMeeting(element);
-            if (meeting == null) {
+            CodePoints held = Derivation.SomePieceMeeting.held(pieces.separator(), element);
+            if (held == null) {
                 WhyUnread stopped = Proposition.firstStopIn(element);
                 return unread(over, in, stopped != null ? stopped : new WhyUnread.AtNoPosition(
                         WhyUnread.AtNoPosition.Place.CONTAINER));
             }
             NumericTerm counted = null;
-            if (!meeting.isEmpty()) {
-                Type type = read.domain().typeAt(string, read.rules());
-                counted = meeting.isEverything() ? sizeAt(string) : type == null ? null
-                        : NumericTerm.CodePointClassCount.of(string, CodePointClass.of(meeting),
-                                type, read.rules().inners());
+            if (!held.isEmpty()) {
+                Type type = read.domain().typeAt(pieces.string(), read.rules());
+                counted = held.isEverything() ? sizeAt(pieces.string()) : type == null ? null
+                        : NumericTerm.CodePointClassCount.of(pieces.string(),
+                                CodePointClass.of(held), type, read.rules().inners());
                 if (counted == null) {
                     return unread(over, in, new WhyUnread.NoMeasureOfItsSize());
                 }
             }
-            return leaf(new Derivation.SomeCharacterMeeting(Optional.ofNullable(counted),
-                    answered), askedAt != null ? askedAt : new Denotation(e, reads));
-        }
-
-        /**
-         * The class {@code element} says a piece holds a code point of, where that is all it says —
-         * and null where it says anything else.
-         *
-         * <p>A relation over the one count of a piece: it holds exactly where the piece holds
-         * none and does not where it holds one or more. Asked at the three counts that tell it
-         * from every other relation over one number — a count of none, of one, and of two — and a
-         * relation over one number comes out one way at the first, the other at the second, and
-         * the second's way again at the third only where it is the number being one or more.
-         */
-        private static CodePointClass pieceMustHoldOneOf(Proposition element) {
-            if (!(element instanceof Proposition.Compared(Relation relation, boolean holds, var _))
-                    || !(relation instanceof Relation.Affine(LinearForm<Quantity> form, Rel rel))
-                    || form.coefs().size() != 1) {
-                return null;
-            }
-            Map.Entry<Quantity, ExactRatio> only = form.coefs().entrySet().iterator().next();
-            if (!(only.getKey() instanceof Quantity.CodePointsOfAPiece(CodePointClass counted))) {
-                return null;
-            }
-            boolean[] expected = {false, true, true};
-            for (int count = 0; count < expected.length; count++) {
-                ExactRatio value = only.getValue().times(ExactRatio.of(count))
-                        .flatMap(form.constant()::plus).orNull();
-                if (value == null || (rel.holds(value.signum()) == holds) != expected[count]) {
-                    return null;
-                }
-            }
-            return counted;
+            // Met as a part of its own, as how many a container holds above nought is: it is a
+            // statement about a number of the string, which is what a line is drawn on.
+            return leaf(new Derivation.SomePieceMeeting(pieces.string(), pieces.separator(),
+                    Optional.ofNullable(counted), answered),
+                    askedAt != null ? askedAt : new Denotation(e, reads));
         }
 
         /**
@@ -2350,13 +2290,9 @@ final class Pullback {
 
         /**
          * The call, a pattern matched against one character of a string, as the character being
-         * one of the code points the pattern accepts a string of one of — or null where it is no
-         * such call: another predicate, a subject that is not a character, or a pattern the
-         * strings of one code point it accepts are not worked out of.
-         *
-         * <p>A pattern is matched against the whole of the string (spec §string-patterns), and a
-         * character is one code point, so it matches exactly where the pattern accepts the string
-         * of that one code point.
+         * one of the code points the pattern accepts the string of alone ({@link
+         * Derivation.ACharacterInAClass}) — or null where it is no such call: another predicate,
+         * or a subject that is not a character.
          */
         Derivation aCharacterInAClass() {
             if (!(Core.withoutStanding(e) instanceof Core.PreservedCall call)
@@ -2368,69 +2304,8 @@ final class Pullback {
                     StringPredicates.of(read.rules().symbols().kernelOf(operation));
             Pieces piece = predicate == null ? null
                     : pieceThatIs(call.args().get(predicate.subject()), reads);
-            CodePoints accepted = piece == null || piece.separator().isPresent() ? null
-                    : oneCodePointAccepted(matches.meaning());
-            return accepted == null ? null : leaf(new Derivation.ACharacterInAClass(
-                    CodePointClass.of(accepted)), e, reads);
-        }
-
-        /**
-         * The code points the string of which alone {@code meaning} accepts, or null where that is
-         * not worked out here.
-         */
-        private static CodePoints oneCodePointAccepted(PatternMeaning meaning) {
-            return switch (meaning) {
-                case PatternMeaning.Nothing _, PatternMeaning.Never _ -> CodePoints.NONE;
-                case PatternMeaning.Symbols(CodePoints held) -> held;
-                case PatternMeaning.EitherOf(List<PatternMeaning> arms) -> {
-                    CodePoints all = CodePoints.NONE;
-                    for (PatternMeaning arm : arms) {
-                        CodePoints one = oneCodePointAccepted(arm);
-                        if (one == null) {
-                            yield null;
-                        }
-                        all = all.or(one);
-                    }
-                    yield all;
-                }
-                // One part takes the code point, and every other takes nothing.
-                case PatternMeaning.InTurn(List<PatternMeaning> parts) -> {
-                    CodePoints all = CodePoints.NONE;
-                    for (int at = 0; at < parts.size(); at++) {
-                        boolean restTakeNothing = true;
-                        for (int other = 0; other < parts.size(); other++) {
-                            restTakeNothing &= other == at || acceptsNothing(parts.get(other));
-                        }
-                        CodePoints one = oneCodePointAccepted(parts.get(at));
-                        if (one == null) {
-                            yield null;
-                        }
-                        if (restTakeNothing) {
-                            all = all.or(one);
-                        }
-                    }
-                    yield all;
-                }
-                // One turn takes the code point, and as many more as it asks take nothing.
-                case PatternMeaning.Repeated(PatternMeaning what, int least, int most) ->
-                        most == 0 ? CodePoints.NONE
-                                : least <= 1 || acceptsNothing(what)
-                                        ? oneCodePointAccepted(what) : CodePoints.NONE;
-            };
-        }
-
-        /** Whether {@code meaning} accepts the empty string. */
-        private static boolean acceptsNothing(PatternMeaning meaning) {
-            return switch (meaning) {
-                case PatternMeaning.Nothing _ -> true;
-                case PatternMeaning.Never _, PatternMeaning.Symbols _ -> false;
-                case PatternMeaning.EitherOf(List<PatternMeaning> arms) ->
-                        arms.stream().anyMatch(ALawRead::acceptsNothing);
-                case PatternMeaning.InTurn(List<PatternMeaning> parts) ->
-                        parts.stream().allMatch(ALawRead::acceptsNothing);
-                case PatternMeaning.Repeated(PatternMeaning what, int least, int _) ->
-                        least == 0 || acceptsNothing(what);
-            };
+            return piece == null || piece.separator().isPresent() ? null
+                    : leaf(new Derivation.ACharacterInAClass(matches.meaning()), e, reads);
         }
 
         /**
@@ -2757,29 +2632,14 @@ final class Pullback {
             AnOperationApplied made = AnOperationApplied.of(string.value());
             if (made == null || !(DefaultBoundOperationFacts.get()
                     .keepsWhetherItHoldsACodePointOf(made.operation())
-                    instanceof BoundOperationFacts.KeptCodePoints(var keeps, var from, var held))
-                    || !keeps.equals(counted)) {
+                    instanceof BoundOperationFacts.KeptCodePoints kept)
+                    || !kept.counted().equals(counted)) {
                 return null;
             }
-            ALawRead there = new ALawRead(made, string.value(), string.at());
             return new Derivation.WhereAnOperationKeepsIt(compared, made.operation(),
-                    switch (held) {
-                        case THE_STRING -> there.compared(sameOf(compared,
-                                new LawSubject.Argument<>(from)));
-                        // Some element holding one, or none of them, as the statement says of
-                        // the string: it holds one exactly where some element does.
-                        case SOME_ELEMENT -> {
-                            LawProposition.Compared<DeclaredArgument> ofAnElement =
-                                    sameOf(compared, new LawSubject.ElementOf<>(from));
-                            boolean holdsAtOne = compared.states().holds(
-                                    only.getValue().plus(compared.form().constant()).orNull()
-                                            .signum());
-                            yield there.of(holdsAtOne
-                                    ? new LawProposition.SomeElement<>(from, ofAnElement, true)
-                                    : new LawProposition.SomeElement<>(from,
-                                            ofAnElement.denied(), false));
-                        }
-                    });
+                    new ALawRead(made, string.value(), string.at()).of(
+                            Derivation.WhereAnOperationKeepsIt.saidOfWhatItWasHanded(compared,
+                                    kept)));
         }
 
         /**
@@ -2833,18 +2693,6 @@ final class Pullback {
             }
         }
 
-        /** {@code compared}, which counts the code points of one string, said of {@code of}. */
-        private static LawProposition.Compared<DeclaredArgument> sameOf(
-                LawProposition.Compared<DeclaredArgument> compared,
-                LawSubject<DeclaredArgument> of) {
-            Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> only =
-                    compared.form().coefs().entrySet().iterator().next();
-            CodePointClass counted = ((LawNumber.CodePointsOf<DeclaredArgument>) only.getKey())
-                    .counted();
-            return new LawProposition.Compared<>(new LinearForm<>(compared.form().constant(),
-                    Map.of(new LawNumber.CodePointsOf<>(of, counted), only.getValue())),
-                    compared.states());
-        }
 
         /** The argument a number of a law is of. */
         private static DeclaredArgument argumentOf(LawNumber<DeclaredArgument> number) {

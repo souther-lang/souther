@@ -3,6 +3,9 @@ package souther.compiler.semantics;
 import net.unit8.notation199x.WhiteSpace;
 import net.unit8.notation199x.pattern.CodePoints;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Which code points of a string are counted by {@link NumericTerm.CodePointClassCount}.
  *
@@ -35,6 +38,33 @@ public sealed interface CodePointClass {
     static CodePointClass of(CodePoints held) {
         CodePointClass named = named(held);
         return named != null ? named : new OneOf(held);
+    }
+
+    /**
+     * The code points told apart by {@code sets}: each set of code points that is in exactly the
+     * same ones of them, the empty one left out, in the order splitting by each in turn leaves —
+     * what is in a set before what is not.
+     *
+     * <p>As many as there are runs between the ends of the runs the sets are written with, and
+     * never more: no end of a run falls inside one of those runs, so each is in or out of every set
+     * as a whole, and two of what this answers hold none of them in common. So how many there are
+     * grows with how much the sets are written with, and not with how many ways the sets could be
+     * in or out — a model has to write out as many runs as it would make.
+     */
+    static List<CodePoints> toldApart(List<CodePoints> sets) {
+        List<CodePoints> alike = List.of(CodePoints.EVERYTHING);
+        for (CodePoints by : sets) {
+            List<CodePoints> split = new ArrayList<>();
+            for (CodePoints cell : alike) {
+                for (CodePoints part : List.of(cell.and(by), cell.less(by))) {
+                    if (!part.isEmpty()) {
+                        split.add(part);
+                    }
+                }
+            }
+            alike = split;
+        }
+        return List.copyOf(alike);
     }
 
     /** The named class counting exactly {@code held}, or null where none does. */

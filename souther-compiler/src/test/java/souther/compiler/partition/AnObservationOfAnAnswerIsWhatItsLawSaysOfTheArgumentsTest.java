@@ -355,6 +355,12 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
         Proposition stated = stated("if String.length(String.concat(List.map(c -> lookUp(c),"
                 + " String.characters(b.s)))) >= 1 then 1 else 0", true);
         assertTrue(Proposition.leavesSomethingUnread(stated), stated.toString());
+        // Nor where the character reaches the call through a name the closure gives it.
+        Proposition throughAName = stated("if String.length(String.concat(List.map(c -> {\n"
+                + "    let d = c\n"
+                + "    lookUp(d)\n"
+                + "}, String.characters(b.s)))) >= 1 then 1 else 0", true);
+        assertTrue(Proposition.leavesSomethingUnread(throughAName), throughAName.toString());
     }
 
     /**

@@ -2467,19 +2467,7 @@ final class TermRealizations {
                 by.add(each.counted().held());
             }
         }
-        List<CodePoints> cells = List.of(CodePoints.EVERYTHING);
-        for (CodePoints one : by) {
-            List<CodePoints> split = new ArrayList<>();
-            for (CodePoints cell : cells) {
-                for (CodePoints part : List.of(cell.and(one), cell.less(one))) {
-                    if (!part.isEmpty()) {
-                        split.add(part);
-                    }
-                }
-            }
-            cells = split;
-        }
-        List<CodePoints> ordered = new ArrayList<>(cells);
+        List<CodePoints> ordered = new ArrayList<>(CodePointClass.toldApart(by));
         ordered.sort(Comparator.comparing((CodePoints cell) -> !by.getFirst().has(cell.least()))
                 .thenComparingInt(cell -> firstLeavingOut(by, cell)));
         List<KindOfCodePoint> out = new ArrayList<>();
