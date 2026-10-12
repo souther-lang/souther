@@ -2100,6 +2100,13 @@ public final class Generator {
                 out.add(place);
             }
         }
+        for (souther.compiler.reading.WayIn way : waysNamedInto(probe, read,
+                axes.subject().partitioning().armsNamed())) {
+            CellSelection at = InteractionCells.at(way, way.claims().getLast(), axes);
+            if (at != null && out.stream().noneMatch(already -> already.at.sameAs(at))) {
+                out.add(new WhereToLook(at, List.of(probe)));
+            }
+        }
         if (read.armAt(probe) instanceof PathAccess.Ways ways) {
             for (souther.compiler.reading.WayIn way : ways.ways()) {
                 CellSelection at = InteractionCells.at(way, ways.arrivesAt(), axes);
@@ -2115,6 +2122,46 @@ public final class Generator {
                     out.add(new WhereToLook(at, List.of(probe)));
                 }
             }
+        }
+        return out;
+    }
+
+    /**
+     * The ways into {@code probe} where it is an arm of a {@code match} on what a closure was
+     * handed, which the reading of the runs names no way into and the tree the operations stand in
+     * names the case of ({@link ArmsNamed}): each way a run was read taking to the arm, with every
+     * such arm on it read as the case it is.
+     *
+     * <p>A run down the arm is one application, handed one element of that case, so a row holding
+     * such an element is where to look. Only where to look: what a run through the row does is
+     * what watching it says, and the operation may stop before the element. Two applications on
+     * the way about one position are looked for in one element, which a row of one element of
+     * the case both ask meets, and which two cases leave no cell for — nowhere to look, and
+     * nothing said about the arm.
+     */
+    private static List<souther.compiler.reading.WayIn> waysNamedInto(
+            ArmProbe probe, souther.compiler.reading.CoverageRead.Read read, ArmsNamed named) {
+        if (!(read.armAt(probe) instanceof PathAccess.Unsupported(var why))
+                || why != PathAccess.Unsupported.Why.RUNS_WHERE_SOMETHING_CALLS_IT) {
+            return List.of();
+        }
+        List<souther.compiler.reading.WayIn> out = new ArrayList<>();
+        for (souther.compiler.reading.WayIn way : read.taken()) {
+            if (way.decisions().isEmpty()
+                    || !(way.claims().getLast().at() instanceof ControlPlace.Arm arm)
+                    || !arm.probe().equals(Optional.of(probe))) {
+                continue;
+            }
+            List<souther.compiler.reading.Decision> asCases = new ArrayList<>();
+            for (souther.compiler.reading.Decision decision : way.decisions()) {
+                asCases.add(decision.constrains()
+                        instanceof souther.compiler.reading.Condition.Arm at
+                        && named.of(at).orElse(null) instanceof souther.compiler.reading.Condition.Case
+                                taken
+                        ? new souther.compiler.reading.Decision(taken, decision.claims())
+                        : decision);
+            }
+            out.add(new souther.compiler.reading.WayIn(asCases));
         }
         return out;
     }

@@ -654,7 +654,10 @@ class EveryFindingHasAGenerationDispositionTest {
                 "the reading says the ways into this arm are not enumerable: " + arms);
     }
 
-    /** A fork inside a block, whose body runs where something applies it. */
+    /**
+     * A fork inside a block run over a list, inside another block run over the same list: an arm
+     * of the inner one past the outer `On` asks an `On` and an `Off` of the list.
+     */
     private static final String IN_A_BLOCK = """
             module example.block
 
@@ -664,7 +667,10 @@ class EveryFindingHasAGenerationDispositionTest {
 
             let mark (flags) = List.map(f ->
                 match f with
-                    | On -> 1
+                    | On -> List.length(List.map(g ->
+                        match g with
+                            | On -> 1
+                            | Off -> 0, flags))
                     | Off -> 0, flags)
 
             example mark
@@ -674,9 +680,9 @@ class EveryFindingHasAGenerationDispositionTest {
     /**
      * An arm no strategy reaches is {@link GenerationOutcome.NotSupported} rather than unanswered.
      *
-     * <p>What steers a row into this one is what the thing applying the block applies it to, which
-     * is not a class of this behavior's inputs — so there is nothing for a search to work from, and
-     * that is a fact about what this compiler can state rather than about the body.
+     * <p>What steers a row into this one is two applications over one list, which may be handed one
+     * element or two — which is not read, so there is nothing for a search to work from, and that
+     * is a fact about what this compiler can state rather than about the body.
      */
     @Test
     void anArmNoStrategyReachesIsNotSupportedRatherThanUnanswered() {
@@ -686,9 +692,13 @@ class EveryFindingHasAGenerationDispositionTest {
                         .filter(d -> d.finding().kind() == Adequacy.Kind.ARM_UNREACHED).toList();
 
         assertFalse(arms.isEmpty(), "the arm the row does not take is found");
-        assertTrue(arms.stream().allMatch(
-                        d -> d.outcome() instanceof GenerationOutcome.NotSupported),
-                "no strategy composes an input to reach an arm inside a block: " + arms);
+        // The outer `Off` is one application, and a list holding an `Off` is where to look. The
+        // inner `Off` is the arm nothing composes for.
+        List<Adequacy.GenerationDisposition> none = arms.stream()
+                .filter(d -> !(d.outcome() instanceof GenerationOutcome.Generated)).toList();
+        assertEquals(1, none.size(), () -> "one arm no strategy reaches: " + arms);
+        assertTrue(none.getFirst().outcome() instanceof GenerationOutcome.NotSupported,
+                () -> "and it is not supported rather than unanswered: " + none);
     }
 
     // --- a case of an input, which is the one gap the three answers all reach ---------------------
