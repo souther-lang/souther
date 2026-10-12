@@ -3199,7 +3199,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RuleRequirement.Unsettled.NothingWasComposedToTry _ ->
                     new Said(1, PublicationOrders.positionOf(
                                     came.synthesisShortfall().reason()),
-                            GeneratedRows.beside(whyUnresolved(came.synthesisShortfall()),
+                            GeneratedRows.beside(saidOrWhy(came.synthesisShortfall()),
                                     came.synthesisShortfall(), rendering, places));
             case RuleRequirement.Unsettled.CouldNotTellWhereTheRowWent(var reading) ->
                     new Said(2, PublicationOrders.positionOf(reading), switch (reading) {
@@ -3259,7 +3259,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                PublishedRuleHandle.WhereARuleIs places) {
         List<String> clauses = new ArrayList<>();
         for (Generator.UnresolvedCombination why : proofs.ways()) {
-            String clause = GeneratedRows.beside(whyUnresolved(why), why, rendering, places);
+            String clause = GeneratedRows.beside(saidOrWhy(why), why, rendering, places);
             if (!clauses.contains(clause)) {
                 clauses.add(clause);
             }
@@ -3622,7 +3622,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case ItemAssessment.Attempt.Stopped it ->
                     " — this compiler stopped at " + Reasons.said(it.stoppedBy())
                             + andWritesSomeOf(it.notAllOf()) + andCouldNotHold(it.unheld()) + ": "
-                            + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
+                            + saidOrWhy(it.why())
                             + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
             // Said as what this compiler writes rather than as a number it stopped at, because
             // there is no number: an author told to raise one would raise it and get the same
@@ -3631,7 +3631,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // what reaches it is a wider run or nothing.
             case ItemAssessment.Attempt.Unexhausted it ->
                     " — this compiler " + leftUntried(it.notAllOf(), it.unheld()) + ": "
-                            + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
+                            + saidOrWhy(it.why())
                             + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
             // Both halves, because neither says what the other does. The word is what the search
             // itself came to; the figure is why that word is not about the whole of the point. Said
@@ -3641,7 +3641,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     " — over less than the point had, which stops at "
                             + Reasons.said(it.limitedBy()) + andWritesSomeOf(it.notAllOf())
                             + andCouldNotHold(it.unheld()) + ": "
-                            + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
+                            + saidOrWhy(it.why())
                             + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
             // No search to report on, which is what this says instead of saying what one found. The
             // figure is what an author would raise to get one made at all.
@@ -3666,7 +3666,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // that follows keeps saying an empty search does not make the point unreachable.
             case ItemAssessment.Attempt.Unresolved it -> {
                 String word = (it.why().reason().provesInfeasible() ? "" : "nothing composed one: ")
-                        + it.why().said().orElseGet(() -> whyUnresolved(it.why()));
+                        + saidOrWhy(it.why());
                 String leftOut =
                         whatTheRegionLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
                 yield " — " + (leftOut.isEmpty() ? word : leftOut + "; " + word);
@@ -4074,6 +4074,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     private static final String NEITHER_A_COMPARISON_NOR_A_COMBINATION =
             "a condition that is neither a comparison nor a combination of them";
+
+    /**
+     * What a search that came to nothing said of itself, and the category it came back with where
+     * it said nothing.
+     *
+     * <p>The one reading for every sentence about such a search. A reader that wrote the category
+     * alone would drop the one part an author can act on.
+     */
+    private static String saidOrWhy(Generator.UnresolvedCombination why) {
+        return why.said().orElseGet(() -> whyUnresolved(why));
+    }
 
     /** The category a search came back with, where the class it was about said nothing itself. */
     private static String whyUnresolved(Generator.UnresolvedCombination why) {
