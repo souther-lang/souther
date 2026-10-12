@@ -374,8 +374,11 @@ final class BindingEnvironment {
     public int hashCode() {
         int h = hash;
         if (h == 0) {
-            h = Objects.hash(roots, handed, bound().keySet(), heldHash.get(), callsStand,
-                    selected);
+            // The names of what was handed and what was selected, as of what was bound: what each
+            // is handed or picked out by is a tree, and equality reads it where a hash would walk
+            // it for every environment made.
+            h = Objects.hash(roots, handed.keySet(), bound().keySet(), heldHash.get(), callsStand,
+                    selected.keySet());
             hash = h;
         }
         return h;

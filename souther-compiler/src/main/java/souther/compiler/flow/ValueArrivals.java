@@ -515,8 +515,13 @@ public final class ValueArrivals<P> {
             return already;
         }
         OccurrenceLineage.Expansion outer = standingIn;
-        ACopyOfAnApplication copy = copyStatedAt(e);
-        if (ACopyOfAnApplication.occurrenceOf(e) != null) {
+        ACopyOfAnApplication code = operations == WhereTheOperationsAre.STAND_IN_IT
+                ? ACopyOfAnApplication.of(e) : null;
+        ACopyOfAnApplication copy = code != null && stated(code) ? code : null;
+        // The model's own code where the node says it is; the copy it is code of where the model
+        // states that copy's application; and where the copy was made inside another copy's code,
+        // which the model states nothing of, still the copy its parent is code of.
+        if (ACopyOfAnApplication.occurrenceOf(e) != null && (code == null || copy != null)) {
             standingIn = copy == null ? null : copy.copy();
         }
         Paths<P> answer;
@@ -534,21 +539,16 @@ public final class ValueArrivals<P> {
     }
 
     /**
-     * The copy of an application the model states that {@code e} is code of, where the operations
-     * stand — or null.
+     * Whether the model states the application {@code copy} was made for.
      *
-     * <p>Where they stand, an application the model writes is one value of the model's, as a call
-     * of one the language keeps standing is, and the walk the operation's code does is the
-     * operation's: no way through it is a way of the body. Where they are expanded, that walk is
-     * part of the tree that runs, and its ways are ways of it.
+     * <p>Where the operations stand, an application the model writes is one value of the model's,
+     * as a call of one the language keeps standing is, and the walk the operation's code does is
+     * the operation's: no way through it is a way of the body. Where they are expanded, that walk
+     * is part of the tree that runs, and its ways are ways of it.
      */
-    private ACopyOfAnApplication copyStatedAt(Core e) {
-        if (operations != WhereTheOperationsAre.STAND_IN_IT) {
-            return null;
-        }
-        ACopyOfAnApplication copy = ACopyOfAnApplication.of(e);
-        return copy == null || !stated.computeIfAbsent(copy.copy(),
-                each -> ModelOccurrence.statedAt(copy.application()).isPresent()) ? null : copy;
+    private boolean stated(ACopyOfAnApplication copy) {
+        return stated.computeIfAbsent(copy.copy(),
+                each -> ModelOccurrence.statedAt(copy.application()).isPresent());
     }
 
     /**
@@ -610,8 +610,10 @@ public final class ValueArrivals<P> {
                                 inside(into, naming, comparisons, bound))
                         : new Paths.Held<>(List.of());
             }
-            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() ->
-                    through(binary, naming, comparisons, bound);
+            // Not inside a copy of an application: the operation stopping early is its own walk,
+            // and the value comes out as the application answers.
+            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled()
+                    && standingIn == null -> through(binary, naming, comparisons, bound);
             // A fork inside one of the language's own operations is the operation's and not the
             // body's: what the language defines the meaning of is the operation, so the ways
             // through the walk it does are no ways of the body. It arrives as one value, as a call

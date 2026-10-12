@@ -3952,7 +3952,8 @@ final class Pullback {
         }
         Object left = valueWrittenAt(stated.left(), reads);
         Object right = left == null ? null : valueWrittenAt(stated.right(), reads);
-        return right == null ? null
+        // Two of one kind: a case and a string are not compared, and are no answer here.
+        return right == null || left.getClass() != right.getClass() ? null
                 : new Derivation.WrittenOut(left.equals(right) == (rel == Rel.EQ));
     }
 

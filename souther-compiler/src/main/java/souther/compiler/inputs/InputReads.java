@@ -111,12 +111,6 @@ public final class InputReads {
      *  {@link #pathsUnder}; null until it is first asked. No part of what this reading is. */
     private Map<Core, PathResolution> paths;
     private DeclarationNewtypes pathsUnder;
-    /** What each block entered from here was read as, under the declarations
-     *  {@link #blocksUnder}; null until a block is first entered. No part of what this reading
-     *  is. Entered once, a reading inside it is the same reading each time, and the questions
-     *  asked of it keep their answers. */
-    private Map<Core.Block, InputReads> blocks;
-    private DeclarationNewtypes blocksUnder;
 
     /**
      * The applications of closures, the arms of choices and the calls of behaviors a reading here is
@@ -1173,11 +1167,9 @@ public final class InputReads {
         if (GET.equals(operation)) {
             return args.size() == 2 ? entryLookedUp(looked, args, symbols, newtypes) : null;
         }
-        BoundOperationFacts.ClosureOnWhatItHolds made =
-                DefaultBoundOperationFacts.get().answersTheClosureOnWhatItHolds(operation);
-        int at = made == null ? -1 : CallArguments.positionOf(made.option(), operation);
-        return at < 0 || at >= args.size() ? null
-                : looked.at().entryHeldBy(args.get(at), symbols, newtypes);
+        AClosureOnWhatItHolds made = closureOnWhatItHolds(looked, operation, args, symbols,
+                newtypes);
+        return made == null ? null : entryHeldBy(made.option(), symbols, newtypes);
     }
 
     /**
@@ -1228,6 +1220,23 @@ public final class InputReads {
     private MadeOfWhatItHolds madeOfWhatItHolds(Denotation looked, ValueName operation,
                                                 List<Core> args, Symbols symbols,
                                                 DeclarationNewtypes newtypes) {
+        AClosureOnWhatItHolds made = closureOnWhatItHolds(looked, operation, args, symbols,
+                newtypes);
+        return made == null ? null : new MadeOfWhatItHolds(made.closure(),
+                handingWhatItHolds(made.option(), made.parameter(), symbols, newtypes));
+    }
+
+    /**
+     * The closure an operation answering its closure on what an option holds was handed, its one
+     * parameter, and the option, where all three are this reading's — or null.
+     *
+     * <p>The one place this is settled, for the question which entry a value was made of and the
+     * question what the value is: asked apart, the first could follow a closure the second does
+     * not read, and an arm would be put under an entry its name was never bound to.
+     */
+    private AClosureOnWhatItHolds closureOnWhatItHolds(Denotation looked, ValueName operation,
+                                                       List<Core> args, Symbols symbols,
+                                                       DeclarationNewtypes newtypes) {
         BoundOperationFacts.ClosureOnWhatItHolds made =
                 DefaultBoundOperationFacts.get().answersTheClosureOnWhatItHolds(operation);
         if (made == null || looked.at() != this) {
@@ -1244,9 +1253,12 @@ public final class InputReads {
                 || block.params().getFirst().binding() == null) {
             return null;
         }
-        return new MadeOfWhatItHolds(block, handingWhatItHolds(args.get(option),
-                block.params().getFirst().binding(), symbols, newtypes));
+        return new AClosureOnWhatItHolds(block, block.params().getFirst().binding(),
+                args.get(option));
     }
+
+    /** A closure handed what an option holds, the parameter it is handed it on, and the option. */
+    private record AClosureOnWhatItHolds(Core.Block closure, BindingId parameter, Core option) {}
 
     /**
      * This reading, with {@code parameter} — a closure's, handed what {@code option} holds —
@@ -1721,22 +1733,6 @@ public final class InputReads {
      */
     private InputReads handedWhatOptionsHold(Core.Block block, Symbols symbols,
                                              DeclarationNewtypes newtypes) {
-        if (blocks == null) {
-            blocks = new IdentityHashMap<>();
-            blocksUnder = newtypes;
-        } else if (blocksUnder != newtypes) {
-            return handingWhatOptionsHold(block, symbols, newtypes);
-        }
-        InputReads entered = blocks.get(block);
-        if (entered == null) {
-            entered = handingWhatOptionsHold(block, symbols, newtypes);
-            blocks.put(block, entered);
-        }
-        return entered;
-    }
-
-    private InputReads handingWhatOptionsHold(Core.Block block, Symbols symbols,
-                                              DeclarationNewtypes newtypes) {
         InputReads out = this;
         for (Core.Binder param : block.params()) {
             if (param != null && param.binding() != null

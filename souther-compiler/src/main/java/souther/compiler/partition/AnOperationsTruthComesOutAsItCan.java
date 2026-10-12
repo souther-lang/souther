@@ -7,6 +7,7 @@ import souther.compiler.core.Core;
 import souther.compiler.flow.ComparisonWays;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -60,10 +61,11 @@ final class AnOperationsTruthComesOutAsItCan implements ComparisonWays {
                 && outcomes.allows(want);
     }
 
-    /** Whether {@code e} is code of a copy of an application of one of the language's operations,
-     *  which the reading of the ways asks of where the copy is entered, and only there. */
+    /** Whether {@code e} is code of a copy of an application the model states, which the reading
+     *  of the ways asks of where the copy is entered, and only there. */
     private static boolean answersAnApplication(Core e) {
-        return ACopyOfAnApplication.of(Core.withoutStanding(e)) != null;
+        ACopyOfAnApplication copy = ACopyOfAnApplication.of(Core.withoutStanding(e));
+        return copy != null && ModelOccurrence.statedAt(copy.application()).isPresent();
     }
 
     @Override
