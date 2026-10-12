@@ -1,11 +1,8 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
-import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.ValueTransformation;
-import souther.compiler.semantics.TakenAs;
 
 import java.util.List;
 
@@ -69,24 +66,41 @@ public final class ClassCoexistence {
 
     /**
      * For each class of {@code counting}, whether it leaves no room for {@code standing}: whether
-     * {@code counting} is how many some container {@code standing} is inside holds, and the class
-     * admits none of the counts that would put anything in it.
-     *
-     * <p>How many the container itself holds, as it stands. A count of something made from it is a
-     * count of another value, and an empty one says nothing about whether the container is.
+     * {@code standing} is inside the container {@code counting} counts, and the class leaves that
+     * container nothing to hold.
      */
     private static boolean[] noRoomLeftBy(Axis counting, Axis standing) {
         boolean[] out = new boolean[counting.classes().size()];
-        if (!(counting.term() instanceof NumericTerm.TakenOf taken)
-                || !(taken.takenAs() instanceof TakenAs.HowManyItHolds)
-                || !taken.transformation().equals(ValueTransformation.NONE)
-                || !standing.path().containersHoldingIt().contains(taken.position())) {
+        if (!standsInside(standing, counting)) {
             return out;
         }
         for (int c = 0; c < out.length; c++) {
-            out[c] = admitsNoCountFromOne(counting.classes().get(c).recognises());
+            out[c] = leavesNothingInside(counting, c);
         }
         return out;
+    }
+
+    /**
+     * Whether {@code counting} is how many some container {@code standing} is inside holds
+     * ({@link Axis#countsWhatItsPathHolds}).
+     *
+     * <p>The half of the answer that is about the two positions alone. A reader settling classes
+     * one position at a time asks it once for each two positions and keeps it.
+     */
+    public static boolean standsInside(Axis standing, Axis counting) {
+        return counting.countsWhatItsPathHolds()
+                && standing.path().containersHoldingIt().contains(counting.path());
+    }
+
+    /**
+     * Whether a row in the {@code cls}th class of {@code counting} holds nothing in the container
+     * it counts: whether the class admits none of the counts from one up.
+     *
+     * <p>The half of the answer that is about one class alone, kept by the same reader.
+     */
+    public static boolean leavesNothingInside(Axis counting, int cls) {
+        return counting.countsWhatItsPathHolds()
+                && admitsNoCountFromOne(counting.classes().get(cls).recognises());
     }
 
     /**

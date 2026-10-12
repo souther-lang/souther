@@ -5,6 +5,8 @@ import souther.compiler.check.NarrowedBounds;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.semantics.TakenAs;
 
 import java.util.List;
 
@@ -205,6 +207,18 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term,
      */
     public Requirements requiring(PartitionClass cls) {
         return requirements().and(path(), cls == null ? null : cls.selects());
+    }
+
+    /**
+     * Whether this is how many the container at {@link #path()} holds, as it stands.
+     *
+     * <p>Of the container itself and not of something made from it: a count of a value made from the
+     * container is a count of another value, and says nothing about how many this one holds.
+     */
+    public boolean countsWhatItsPathHolds() {
+        return term instanceof NumericTerm.TakenOf taken
+                && taken.takenAs() instanceof TakenAs.HowManyItHolds
+                && taken.transformation().equals(ValueTransformation.NONE);
     }
 
     /** Whether the model divides this position into classes to cover. */

@@ -31,6 +31,8 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.CountDomain;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -49,6 +51,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
+import java.math.RoundingMode;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -2787,14 +2790,15 @@ public final class Generator {
         // say; how many of them may be built is this class's own budget.
         Building building = new Building(axes, pins, purposes, label, check, MOST_REPAIRS,
                 references, answers, held, accepts, rechoosing, answersNothing);
-        Traversal stated = nearestFirst(axes.axes(), reading, origins, admits, building);
+        WhatEachClassRequires requires = new WhatEachClassRequires(axes.axes());
+        Traversal stated = nearestFirst(requires, reading, origins, admits, building);
         if (stated == Traversal.SATISFIED) {
             return new Searched(building.found, building.foundAt, building.foundAgainst, null);
         }
         // The composition, whatever the stated values spent, and with a budget of its own.
         Building composing = new Building(axes, pins, purposes, label, check, MOST_REPAIRS,
                 references, answers, held, accepts, rechoosing, answersNothing);
-        Traversal composed = composing(axes.axes(), reading, origins, admits, composing);
+        Traversal composed = composing(requires, reading, origins, admits, composing);
         if (composed == Traversal.SATISFIED) {
             return new Searched(composing.found, composing.foundAt, composing.foundAgainst, null);
         }
@@ -3433,11 +3437,22 @@ public final class Generator {
 
         private final List<List<Map<TermPath, CasesLeft>>> read = new ArrayList<>();
 
+        /** Which classes leave the container their position counts nothing to hold, by position
+         *  and class, read as they are first asked. */
+        private final List<List<Boolean>> leaveNothingInside = new ArrayList<>();
+
+        /** Which positions stand inside a container another position counts, by the two, read as
+         *  they are first asked. */
+        private final Boolean[][] inside;
+
         WhatEachClassRequires(List<Axis> axes) {
             this.axes = axes;
             for (Axis axis : axes) {
                 read.add(new ArrayList<>(Collections.nCopies(axis.classes().size(), null)));
+                leaveNothingInside.add(
+                        new ArrayList<>(Collections.nCopies(axis.classes().size(), null)));
             }
+            this.inside = new Boolean[axes.size()][axes.size()];
         }
 
         /** What standing {@code axis} at its class {@code cls} requires. */
@@ -3446,6 +3461,35 @@ public final class Generator {
             if (known == null) {
                 known = axes.get(axis).requiring(axes.get(axis).classes().get(cls)).refinements();
                 read.get(axis).set(cls, known);
+            }
+            return known;
+        }
+
+        /**
+         * Whether a row at the {@code one}th position's class {@code here} and the {@code other}th
+         * position's class {@code there} is no row, because one of the two leaves the container
+         * the other stands inside nothing to hold. The rest of what {@link ClassCoexistence} says
+         * beside the requirements {@link #of} reads.
+         */
+        boolean leaveNoRoom(int one, int here, int other, int there) {
+            return (standsInside(other, one) && leavesNothingInside(one, here))
+                    || (standsInside(one, other) && leavesNothingInside(other, there));
+        }
+
+        private boolean standsInside(int standing, int counting) {
+            Boolean known = inside[standing][counting];
+            if (known == null) {
+                known = ClassCoexistence.standsInside(axes.get(standing), axes.get(counting));
+                inside[standing][counting] = known;
+            }
+            return known;
+        }
+
+        private boolean leavesNothingInside(int axis, int cls) {
+            Boolean known = leaveNothingInside.get(axis).get(cls);
+            if (known == null) {
+                known = ClassCoexistence.leavesNothingInside(axes.get(axis), cls);
+                leaveNothingInside.get(axis).set(cls, known);
             }
             return known;
         }
@@ -3484,9 +3528,10 @@ public final class Generator {
      * origin that happened to repair on an earlier set beat an earlier origin that repaired on a
      * later one.
      */
-    private static Traversal nearestFirst(List<Axis> axes, Interpretation reading,
+    private static Traversal nearestFirst(WhatEachClassRequires requires, Interpretation reading,
                                           List<ResolvedOrigin> origins, Admits admits,
                                           TakingCandidates taking) {
+        List<Axis> axes = requires.axes;
         int[] about = about(axes, reading);
         Set<String> asked = reading.heads(axes);
         // The origins that state most of what the demand is about, whole and at every distance,
@@ -3501,7 +3546,7 @@ public final class Generator {
             if (here.isEmpty()) {
                 continue;
             }
-            Traversal walked = gather(axes, reading, about, here, admits, taking);
+            Traversal walked = gather(requires, reading, about, here, admits, taking);
             if (walked != Traversal.EXHAUSTED) {
                 return walked;
             }
@@ -3523,15 +3568,15 @@ public final class Generator {
      * out never reached it — which is what left a class the model can hold a row for saying the
      * search had stopped.
      */
-    private static Traversal composing(List<Axis> axes, Interpretation reading,
+    private static Traversal composing(WhatEachClassRequires requires, Interpretation reading,
                                        List<ResolvedOrigin> origins, Admits admits,
                                        TakingCandidates taking) {
-        int[] about = about(axes, reading);
+        int[] about = about(requires.axes, reading);
         for (ResolvedOrigin origin : origins) {
             if (!origin.composes()) {
                 continue;
             }
-            Traversal walked = gather(axes, reading, about, List.of(origin), admits, taking);
+            Traversal walked = gather(requires, reading, about, List.of(origin), admits, taking);
             if (walked != Traversal.EXHAUSTED) {
                 return walked;
             }
@@ -3551,15 +3596,17 @@ public final class Generator {
      * many — which is what lets this hand them over in distance order without holding the whole
      * space to sort it.
      */
-    private static Traversal gather(List<Axis> axes, Interpretation reading, int[] about,
-                                    List<ResolvedOrigin> origins, Admits admits,
+    private static Traversal gather(WhatEachClassRequires requires, Interpretation reading,
+                                    int[] about, List<ResolvedOrigin> origins, Admits admits,
                                     TakingCandidates taking) {
+        List<Axis> axes = requires.axes;
         // What the demand asks for settled first, and each origin's own classes kept at every
         // position that can keep them beside it. Worked out once per origin: it is where that
         // origin's walk starts from and does not change with how far the walk has gone.
         List<Started> bases = new ArrayList<>();
         for (ResolvedOrigin origin : origins) {
-            int[] base = standing(axes, wanting(axes, origin.stands(), reading), about, admits);
+            int[] base = standing(requires, wanting(axes, origin.stands(), reading), about,
+                    admits);
             if (base != null) {
                 bases.add(new Started(origin, base));   // null is this reading not being one value
             }
@@ -3567,7 +3614,6 @@ public final class Generator {
         // Produced further away than the number of positions that produced them, kept until the
         // walk reaches that distance rather than handed over early.
         Map<Integer, List<Candidate>> waiting = new LinkedHashMap<>();
-        WhatEachClassRequires requires = new WhatEachClassRequires(axes);
         // What moves is a position the row is not about, so the most that can be moved is every
         // position but those. Walked further, nothing is produced and the only thing left to do is
         // hand over what the readings moved beyond them, which is what happens below either way.
@@ -3823,7 +3869,7 @@ public final class Generator {
 
     /** Where every position stands when a row is composed from the classes alone. */
     private static int[] composes(List<Axis> axes) {
-        return standing(axes, null, new int[0]);
+        return standing(new WhatEachClassRequires(axes), null, new int[0]);
     }
 
     /**
@@ -4970,6 +5016,58 @@ public final class Generator {
         return most < 0 ? null : new DeclaredBounds.CountRange(least, most);
     }
 
+    /**
+     * From how few to how many a class of how many a container holds takes, or null where the
+     * class is not one run of counts.
+     *
+     * <p>Off the set the class is about and not off the values standing for it ({@link #sizesOf}).
+     * A class from none to one may stand for itself with an empty container, and a row asking the
+     * container to hold an element as well needs the other count the class takes.
+     */
+    private static DeclaredBounds.CountRange countsOf(PartitionClass cls) {
+        Recognition what = cls.recognises();
+        while (what instanceof Recognition.Under under) {
+            what = under.inner();
+        }
+        if (!(what instanceof Recognition.OfACount count)
+                || !(count.is().asOneRun() instanceof NumericDomain.Bounds run)) {
+            return null;
+        }
+        Count least = run.min() == null ? Count.ZERO : wholeAt(run.min(), true);
+        Count most = run.max() == null ? null : wholeAt(run.max(), false);
+        if (least == null || (run.max() != null && most == null)) {
+            return null;
+        }
+        int fewest = least.signum() < 0 ? 0 : CountDomain.asCount(least);
+        if (fewest < 0) {
+            return null;
+        }
+        if (most == null) {
+            return new DeclaredBounds.CountRange(fewest, Integer.MAX_VALUE);
+        }
+        if (most.signum() < 0) {
+            return new DeclaredBounds.CountRange(fewest, -1);
+        }
+        // Past what an int holds is as many as anything is built to hold.
+        int many = CountDomain.asCount(most);
+        return new DeclaredBounds.CountRange(fewest, many < 0 ? Integer.MAX_VALUE : many);
+    }
+
+    /**
+     * The nearest whole count inside {@code end}, going up from a lower end and down from an upper
+     * one, or null where the end is not a count.
+     */
+    private static Count wholeAt(Endpoint end, boolean lower) {
+        if (!(end.at() instanceof Count count)) {
+            return null;
+        }
+        Count inside = count.rounded(lower ? RoundingMode.CEILING : RoundingMode.FLOOR);
+        if (!end.inclusive() && inside.compareTo(count) == 0) {
+            inside = lower ? inside.plus(1) : inside.minus(1);
+        }
+        return inside;
+    }
+
     /** {@code holds}, narrowed to {@code to} where there is one. */
     private static DeclaredBounds.CountRange within(DeclaredBounds.CountRange holds,
                                                     DeclaredBounds.CountRange to) {
@@ -5078,7 +5176,8 @@ public final class Generator {
                 cameToNothing.add(after[0]);
                 return Acceptance.PASSED;
             };
-            Outcome tried = valueAt(subject, p, here, settled, reaching.requirements(),
+            Outcome tried = valueAt(subject, p, here, sizesUnder(decided,
+                            TermPath.of(head)), settled, reaching.requirements(),
                     new Handed(contents, elsewhere), certified, found, taking);
             return switch (tried) {
                 // Taken where the rest was composed with it, and taken first where nothing after
@@ -7089,6 +7188,7 @@ public final class Generator {
                         List<ResolvedOrigin> origins,
                         FixtureReferences references, List<StoodInAnswer> answers) {
             this.axes = axes;
+            this.requires = new WhatEachClassRequires(axes.axes());
             this.selection = selection;
             this.check = check;
             this.trial = trial;
@@ -7099,6 +7199,10 @@ public final class Generator {
             this.references = references;
             this.answers = answers;
         }
+
+        /** What each class of this combination's positions requires, read once for every reading
+         *  of it. */
+        private final WhatEachClassRequires requires;
 
         /** The run's minter for the references what this composes will hold. */
         private final FixtureReferences references;
@@ -7114,7 +7218,7 @@ public final class Generator {
             // Whether one value can hold what this reading asks, which is the model's answer and not
             // the combination's. Asked of the classes it pins alone: what they require is required
             // whichever value the row is written against, so this does not change with the origin.
-            if (standing(axes.axes(), wanting(axes.axes(), null, reading), about,
+            if (standing(requires, wanting(axes.axes(), null, reading), about,
                     selection.cell()::admits)
                     == null) {
                 // not a reading, and so no part of what this search is allowed
@@ -7128,12 +7232,12 @@ public final class Generator {
             // runs. Then the composition, whatever they spent: it is not one of them and was not
             // competing with them for their share, and a caller told the stated values were all
             // refused would go looking for a value the model cannot hold.
-            Traversal walked = nearestFirst(axes.axes(), reading, origins, selection.cell()::admits,
+            Traversal walked = nearestFirst(requires, reading, origins, selection.cell()::admits,
                     new Running(MOST_RUNS_PER_INTERPRETATION));
             if (walked == Traversal.SATISFIED) {
                 return Taken.AND_DONE;
             }
-            Traversal composed = composing(axes.axes(), reading, origins, selection.cell()::admits,
+            Traversal composed = composing(requires, reading, origins, selection.cell()::admits,
                     new Running(MOST_RUNS_PER_INTERPRETATION));
             if (composed == Traversal.SATISFIED) {
                 return Taken.AND_DONE;
@@ -7586,6 +7690,17 @@ public final class Generator {
         return new DemandsInside(among, required);
     }
 
+    /** Whether this row stands at a class of some position strictly inside {@code location}. */
+    private static boolean somethingStandsInside(MeasuredInput.MeasuredAxes axes, int[] where,
+                                                 TermPath location) {
+        for (int i = 0; i < axes.size(); i++) {
+            if (where[i] != NOT_HERE && isStrictlyUnder(axes.get(i).path(), location)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Whether {@code path} names a position inside {@code location} and not the location. */
     private static boolean isStrictlyUnder(TermPath path, TermPath location) {
         return path.isAtOrUnder(location) && !path.equals(location);
@@ -8034,8 +8149,21 @@ public final class Generator {
                     // is already in it.
                     boolean inThatValue = composedWhole.stream()
                             .anyMatch(each -> isStrictlyUnder(path, each));
+                    List<FixtureTemplate> offered = write == null ? values.written() : write;
+                    // A class of how many a container holds, beside a class of this row standing
+                    // inside it, asks the container to hold that many and not to be one of the
+                    // values standing for the class: written whole, the container would leave the
+                    // position inside it nowhere to be written. Built to hold what is asked inside
+                    // it, to a size the class takes ({@link #countsOf}).
+                    DeclaredBounds.CountRange holds = null;
+                    if (write == null && axes.get(i).countsWhatItsPathHolds()
+                            && somethingStandsInside(axes, where, path)) {
+                        DeclaredBounds.CountRange ofTheClass = countsOf(cls);
+                        holds = ofTheClass != null ? ofTheClass : sizesOf(offered);
+                    }
                     if (cls.selects() == null && !inThatValue
-                            && decided.write(path, write == null ? values.written() : write)
+                            && (holds != null ? decided.size(path, holds)
+                                    : decided.write(path, offered))
                                     == LocationWrites.Written.CONFLICTING) {
                         // Two of this row's classes are of one location and offer different values
                         // for it. Taking either leaves the other's class unanswered while the row
@@ -8468,6 +8596,18 @@ public final class Generator {
         return alone ? why.localTo(p) : why;
     }
 
+    /** How many the containers of the parameter at {@code root} are asked to hold. */
+    private static Map<TermPath, DeclaredBounds.CountRange> sizesUnder(LocationWrites decided,
+                                                                        TermPath root) {
+        Map<TermPath, DeclaredBounds.CountRange> out = new LinkedHashMap<>();
+        decided.sizes().forEach((at, holds) -> {
+            if (at.head().equals(root.head())) {
+                out.put(at, holds);
+            }
+        });
+        return out;
+    }
+
     /**
      * One parameter's value, searched for on its own.
      *
@@ -8503,7 +8643,8 @@ public final class Generator {
                 here.putIfAbsent(location, already);
             }
         }
-        return valueAt(subject, p, here, settledIn(here), required, handed, check, found, taking);
+        return valueAt(subject, p, here, sizesUnder(decided, at), settledIn(here), required,
+                handed, check, found, taking);
     }
 
     /**
@@ -8536,9 +8677,12 @@ public final class Generator {
      *
      * @param handed what this parameter's containers are to hold and to hold nothing equal to, and
      *               what the parameters composed before it came to where those are read
+     * @param asked  how many the containers of this parameter a class asked to hold so many are to
+     *               hold ({@link LocationWrites#size})
      */
     private static Outcome valueAt(MeasuredInput subject, int p,
                                    Map<TermPath, List<FixtureTemplate>> decided,
+                                   Map<TermPath, DeclaredBounds.CountRange> asked,
                                    Map<TermPath, Place> settled,
                                    Requirements additional, Handed handed, CandidateCheck check,
                                    FoundOut found, ValueTaking taking) {
@@ -8587,6 +8731,7 @@ public final class Generator {
                 sized.put(each.getKey(), counted);
             }
         }
+        asked.forEach((at, holds) -> sized.merge(at, holds, Generator::within));
         ConstructionPlan.Result planned = ConstructionPlan.of(subject.types().get(p), root,
                 subject.rules().inners(), subject.symbols(), subject.rules().kinds(),
                 subject.rules().sums(),
@@ -9382,8 +9527,21 @@ public final class Generator {
      *
      * @return which axis the row is about, or {@link #NOT_HERE} where it is about none
      */
-    private static int[] standing(List<Axis> axes, int[] from, int[] anchors) {
-        return standing(axes, from, anchors, (_, _) -> true);
+    private static int[] standing(WhatEachClassRequires requires, int[] from, int[] anchors) {
+        return standing(requires, from, anchors, (_, _) -> true);
+    }
+
+    /** Whether {@code cls} at {@code axis} and a class already standing in {@code where} leave
+     *  each other no room ({@link WhatEachClassRequires#leaveNoRoom}). */
+    private static boolean leavesNoRoomBeside(WhatEachClassRequires requires, int[] where,
+                                              int axis, int cls) {
+        for (int other = 0; other < where.length; other++) {
+            if (other != axis && where[other] != NOT_HERE
+                    && requires.leaveNoRoom(axis, cls, other, where[other])) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -9425,7 +9583,9 @@ public final class Generator {
      *                counting classes off produces what it would like, and this is what says which
      *                of it a value can be
      */
-    private static int[] standing(List<Axis> axes, int[] from, int[] anchors, Admits admits) {
+    private static int[] standing(WhatEachClassRequires requires, int[] from, int[] anchors,
+                                  Admits admits) {
+        List<Axis> axes = requires.axes;
         int[] where = new int[axes.size()];
         java.util.Arrays.fill(where, NOT_HERE);
         // What the row is about, settled before anything is chosen beside it. A class never
@@ -9435,6 +9595,9 @@ public final class Generator {
         for (int at : anchors) {
             if (from == null || from[at] == NOT_HERE) {
                 continue;
+            }
+            if (leavesNoRoomBeside(requires, where, at, from[at])) {
+                return null;
             }
             where[at] = from[at];
             if (!(required.merge(axes.get(at).requiring(axes.get(at).classes().get(from[at])))
@@ -9455,12 +9618,17 @@ public final class Generator {
                 continue;
             }
             int here = i;
+            // And beside what already stands: a class leaving a container nothing to hold is no
+            // class beside one inside it, and a position with no class that can be beside them
+            // takes none.
             int kept = from != null && i < from.length && from[i] != NOT_HERE
                     && admits.at(here, from[i])
                     && soFar.compatibleWith(axis.requiring(axis.classes().get(from[i])))
+                    && !leavesNoRoomBeside(requires, where, here, from[i])
                     ? from[i]
                     : standingAt(axis, c -> admits.at(here, c) && soFar.compatibleWith(
-                            axis.requiring(axis.classes().get(c))));
+                            axis.requiring(axis.classes().get(c)))
+                            && !leavesNoRoomBeside(requires, where, here, c));
             where[i] = kept;
             if (kept != NOT_HERE
                     && soFar.merge(axis.requiring(axis.classes().get(kept)))
