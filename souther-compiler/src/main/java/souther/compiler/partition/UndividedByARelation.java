@@ -46,8 +46,9 @@ import java.util.Set;
  * <p><b>Three things are shown of the term reaching, and none of them stands in for another.</b>
  * That it takes every value of a run, as above. That the run a way leaves it is every value between
  * the ends: a way placing an end on the term itself narrows where it runs, and what the region then
- * leaves it is taken only where the rules are certified to leave the whole run, no value is taken
- * out and no class of whole numbers is fixed. And that nothing ties it to another place. A term
+ * leaves it is taken only as the region answers it whole ({@link SearchRegion#wholeRunOf}) — never
+ * put together from where the values lie and a proof given beside it, since the one may be rounded
+ * past the rules and the other is not about that. And that nothing ties it to another place. A term
  * that takes every value alone may take only some of them beside a value of another term: under
  * {@code x + y <= 1} over nought and one, {@code x} at one is beside no {@code y} at one. Runs say
  * nothing of that — the runs of each, and of every sum and difference of the two, can be what they
@@ -167,7 +168,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * <p>Shown along each way apart, and a place is left undivided where every way shows it. Two
      * ways put together run over more than either, and what a term takes beside another along both
      * is not what it takes along each: the runs of each may join without a gap while a pair one way
-     * keeps out is one the other never reaches. Nothing here shows what they come to together.
+     * keeps out is one the other never reaches. Nothing here shows what they come to together. A
+     * way split at a choice is each of its branches, so each is a way here, and a way some of whose
+     * branches were not split out shows nothing.
      */
     Set<FilingCoordinate> undividedWhereRowsArrive(InputReading read,
                                                    List<Reachability.Reaching> ways) {
@@ -185,8 +188,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (ways.isEmpty()) {
             return undividedAlong(sources, read.quantities().region(), List.of(), true);
         }
-        Set<FilingCoordinate> out = null;
+        List<Reachability.Reaching> branches = new ArrayList<>();
         for (Reachability.Reaching each : ways) {
+            if (!branchesOf(each, branches)) {
+                return new LinkedHashSet<>(amongThemselves);
+            }
+        }
+        Set<FilingCoordinate> out = null;
+        for (Reachability.Reaching each : branches) {
             Set<FilingCoordinate> along = undividedAlong(sources, each.region(),
                     conditionsOf(each), each.declined().isEmpty());
             if (out == null) {
@@ -196,6 +205,32 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return out;
+    }
+
+    /**
+     * Adds to {@code into} each way {@code way} comes to where a condition on it came out one of
+     * several ways, and the way itself where none did — false where some of it was not split.
+     *
+     * <p>A way split at a choice is the choices together, and what it states of the places is
+     * stated by each branch and by none of them whole: under {@code x == 0 || x == 1}, a row
+     * holds {@code x} at nought or at one, which the way whole says nothing of. A way looked along
+     * whole past the figure is one whose branches past it were not split out, and nothing is shown
+     * of those.
+     */
+    private static boolean branchesOf(Reachability.Reaching way,
+                                      List<Reachability.Reaching> into) {
+        return switch (way.ways()) {
+            case Reachability.Ways.One _ -> into.add(way);
+            case Reachability.Ways.Each each -> {
+                for (Reachability.Reaching branch : each.along()) {
+                    if (!branchesOf(branch, into)) {
+                        yield false;
+                    }
+                }
+                yield true;
+            }
+            case Reachability.Ways.Whole _ -> false;
+        };
     }
 
     /**
@@ -223,8 +258,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param runOf     the one number it places an end on, where it is an end on one number and
      *                  nothing else; null where it is anything else
      * @param aCase     whether it is which case a value is, which says what is there and nothing
-     *                  of the values that stand there beside another — a case of an enumeration
-     *                  is a value taken out of its order, which the region holds
+     *                  of the values that stand there beside another — a case of a value around a
+     *                  term says nothing of the term's values, and a case of the term's own value,
+     *                  as an enumeration's, is a value taken out of its order, which the region
+     *                  holds
      */
     private record OnAWay(Set<TermPath> positions, NumericTerm runOf, boolean aCase) {}
 
@@ -240,16 +277,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
-            NumericDomain.Bounds run = each.term() != null
+            NumericDomain.Bounds holds = each.term() != null
                     && region.projectionOf(each.term())
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
-                    ? within : null;
-            NumericDomain.Bounds holds = run == null ? NumericDomain.Bounds.OPEN : run;
+                    ? within : NumericDomain.Bounds.OPEN;
             Way way = each.term() == null || !heldWhole ? Way.TIES
                     : wayOf(each.term(), conditions);
             Takes source = way == Way.TIES ? null : sources.get(i);
             NumericDomain.Bounds realizes = source == null ? null
-                    : realized(each.term(), source, region, run, way);
+                    : realized(each.term(), source, region, way);
             Takes takes = way == Way.UNTOUCHED && each.term() instanceof NumericTerm.ValueOf
                     ? source : null;
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
@@ -281,7 +317,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static Way wayOf(NumericTerm.FromOnePosition term, List<OnAWay> conditions) {
         Way out = Way.UNTOUCHED;
         for (OnAWay each : conditions) {
-            if (!touches(term, each.positions())) {
+            // Which case a value around the term is says what stands there and nothing of the
+            // values the term takes; which case the term's own value is takes values out of its
+            // order, which narrows it.
+            if (!touches(term, each.positions())
+                    || (each.aCase() && onlyAround(term, each.positions()))) {
                 continue;
             }
             if (!each.aCase() && !term.equals(each.runOf())) {
@@ -305,45 +345,42 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return false;
     }
 
+    /** Whether every one of {@code positions} that a place {@code term} is read off touches is a
+     *  value that place sits in, and not the place or one under it. */
+    private static boolean onlyAround(NumericTerm.FromOnePosition term, Set<TermPath> positions) {
+        for (TermPath place : term.placesReadOff()) {
+            for (TermPath each : positions) {
+                if (each.isAtOrUnder(place)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     /**
      * A run every value of which {@code term} is shown to take in {@code region}, or null where
      * none is shown.
      *
      * <p>A value no rule restricts, untouched on the way, takes every value of its type. Where a
-     * way places ends on it, or it is a number taken of such a value, what it takes is what the
-     * region leaves it — where that is shown to be every value between the ends: the rules
-     * certified to leave the whole of the run, no value taken out, no class of whole numbers.
+     * way places ends on it, or it is a number taken of such a value, what it takes is the run the
+     * region shows it fills ({@link SearchRegion#wholeRunOf}).
      *
      * @param source what the declarations leave the value {@code term} is, or is taken of
-     * @param run    what {@code region} leaves {@code term}, or null where it runs nowhere
      */
     private static NumericDomain.Bounds realized(NumericTerm.FromOnePosition term, Takes source,
-                                                 SearchRegion region, NumericDomain.Bounds run,
-                                                 Way way) {
+                                                 SearchRegion region, Way way) {
         if (!source.every()) {
             return null;
         }
         return switch (term) {
             case NumericTerm.ValueOf value -> way == Way.UNTOUCHED ? NumericDomain.Bounds.OPEN
-                    : wholeRun(value, region, run);
+                    : region.wholeRunOf(value);
             case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
                     .everyAnswerItCanGiveHasASourceValue(taken.operation())
-                    ? wholeRun(taken, region, run) : null;
+                    ? region.wholeRunOf(taken) : null;
             case NumericTerm.CodePointClassCount _ -> null;
         };
-    }
-
-    /** {@code run}, what {@code region} leaves {@code term}, where that is shown to be every value
-     *  between its ends; null otherwise. */
-    private static NumericDomain.Bounds wholeRun(NumericTerm.FromOnePosition term,
-                                                 SearchRegion region, NumericDomain.Bounds run) {
-        if (run == null || !region.projectionCertifiedFor(term)
-                || !region.apartAt(term).isEmpty()
-                || (term instanceof NumericTerm.ValueOf value
-                        && region.valueClassAt(value) != null)) {
-            return null;
-        }
-        return run;
     }
 
     /**

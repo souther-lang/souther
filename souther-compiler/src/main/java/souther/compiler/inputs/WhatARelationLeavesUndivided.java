@@ -69,7 +69,11 @@ public final class WhatARelationLeavesUndivided {
      * @param madeOf   the places its value is made of, in the order the relation names them
      * @param weight   what it is weighed by in the relation
      * @param holds    a run every value it may take lies in, open on a side nothing bounds it
-     * @param realizes a run every value of which it is shown to take, or null where none is shown
+     * @param realizes a run every value of which it is shown to take, or null where none is shown.
+     *                 Each end is one it takes, or, where its values are dense, one some value it
+     *                 takes is as near as any other value asked of: so a value beyond an end is
+     *                 one it takes, and an end that is not taken matters only where it is the
+     *                 value asked of
      * @param takes    what values it takes, compared with another term's by equality — null where
      *                 nothing says
      * @param itsPlace whether it is the value at its one place, so that an end of its type it runs
@@ -302,10 +306,8 @@ public final class WhatARelationLeavesUndivided {
             if (runsDown()) {
                 return false;
             }
-            // An end the run does not take says nothing of the value nearest it, which a run of
-            // whole numbers may not have below a needed value that is not whole.
             Integer order = againstTheLeast(end.at());
-            return order != null && end.inclusive() && (order < 0 || (order == 0 && !beyond));
+            return order != null && (order < 0 || (order == 0 && !beyond && end.inclusive()));
         }
 
         private boolean highTo(Endpoint end, boolean beyond) {
@@ -316,7 +318,7 @@ public final class WhatARelationLeavesUndivided {
                 return false;
             }
             Integer order = againstTheGreatest(end.at());
-            return order != null && end.inclusive() && (order > 0 || (order == 0 && !beyond));
+            return order != null && (order > 0 || (order == 0 && !beyond && end.inclusive()));
         }
     }
 

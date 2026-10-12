@@ -217,23 +217,27 @@ public interface SearchRegion {
         return null;
     }
 
-    /**
-     * Whether the rules {@code term} is said with are shown to leave each number they relate the
-     * whole of its run, so that what {@link #projectionOf} answers of it is every value between
-     * the ends — a value taken out of it ({@link #apartAt}) and a class of whole numbers it is
-     * held to ({@link #valueClassAt}) aside.
-     *
-     * <p>False where nothing showed it, which is not that the run has gaps — and so for a region
-     * that has no proof to give, which is what the default is.
-     */
-    default boolean projectionCertifiedFor(NumericTerm term) {
-        return false;
-    }
-
     /** The same, of one term — the one-term case of the question above and not a second answer to
      *  it. */
     default NumericDomain.FormProjection projectionOf(NumericTerm term) {
         return projectionOf(LinearForm.atom(term));
+    }
+
+    /**
+     * A run of {@code term} every value of which some row in this region takes, at the term's own
+     * spacing — or null where that is not shown.
+     *
+     * <p>Not {@link #projectionOf}, which is where the values lie: a run can be known without being
+     * filled, its ends can be rounded past the rules', and a value can be taken out of it
+     * ({@link #apartAt}) or the values held to a class of whole numbers ({@link #valueClassAt}).
+     * This is shown of all of that at once and answered as the run itself, so a reader is never
+     * left to put a range from one answer together with a proof from another.
+     *
+     * <p>Null where nothing showed it, which is not that the run has gaps — and so for a region
+     * that has no proof to give, which is what the default is.
+     */
+    default NumericDomain.Bounds wholeRunOf(NumericTerm.FromOnePosition term) {
+        return null;
     }
 
     /**

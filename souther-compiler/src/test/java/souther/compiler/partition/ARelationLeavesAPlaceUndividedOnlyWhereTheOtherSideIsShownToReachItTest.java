@@ -152,6 +152,44 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "if h >= 0 && h <= 20 then 2 * h + y.value < 0 else false", "4:58"));
     }
 
+    /**
+     * A way that chooses is proved along each choice: under {@code x == 0 || x == 1} a row holds
+     * {@code x} at nought or at one, so a {@code y} of two makes {@code x == y} false wherever the
+     * row arrives, though the two choices together leave {@code x} anything a whole number can be
+     * between them.
+     */
+    @Test
+    void aWayThatChoosesIsProvedAlongEachChoice() {
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN),
+                left("x: Int, y: Int", "data Unused = Int",
+                        "if x == 0 || x == 1 then x == y else false", "4:43"));
+    }
+
+    /**
+     * A run whose end the rules put at a third is handed over from a hair below it, which no
+     * value of {@code x} is, so it is not taken as a run {@code x} fills — here, where the values
+     * asked of it are all above a third, as anywhere. An end at a half is written as it is.
+     */
+    @Test
+    void anEndRoundedPastTheRulesIsNotTakenAsOneTheTermReaches() {
+        String declarations = "data Y = Decimal invariant value >= 0.6m && value <= 0.9m";
+        assertEquals(Map.of("x", NOT_SHOWN, "y", NOT_SHOWN),
+                left("x: Decimal, y: Y", declarations,
+                        "if x + x + x >= 1m && x <= 1m then x == y.value else false", "4:53"));
+        assertEquals(Map.of("x", NOT_SHOWN, "y", RELATES),
+                left("x: Decimal, y: Y", declarations,
+                        "if x + x >= 1m && x <= 1m then x == y.value else false", "4:49"));
+    }
+
+    /** An end a run of dense values does not take is no value asked of where every value asked of
+     *  is inside it: between nought and one, {@code x} is at every value from a fifth to a half. */
+    @Test
+    void anEndADenseRunDoesNotTakeIsNoGapInsideIt() {
+        assertEquals(Map.of("x", NOT_SHOWN, "y", RELATES),
+                left("x: Decimal, y: Y", "data Y = Decimal invariant value >= 0.2m && value <= 0.5m",
+                        "if x > 0m && x < 1m then x == y.value else false", "4:43"));
+    }
+
     /** A way over two places ties them, however each runs on its own. */
     @Test
     void aWayOverTwoPlacesTiesThem() {

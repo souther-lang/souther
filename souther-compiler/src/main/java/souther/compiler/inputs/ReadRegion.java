@@ -65,8 +65,12 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
-    public boolean projectionCertifiedFor(NumericTerm term) {
-        return within.projectionCertifiedFor(term);
+    public NumericDomain.Bounds wholeRunOf(NumericTerm.FromOnePosition term) {
+        if (!apartAt(term).isEmpty()
+                || (term instanceof NumericTerm.ValueOf value && valueClassAt(value) != null)) {
+            return null;
+        }
+        return within.wholeRunOf(term);
     }
 
     @Override
