@@ -3,6 +3,8 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.ClauseMeaning;
+import souther.compiler.check.ClauseRead;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.meta.ModulePath;
@@ -112,24 +114,57 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
     }
 
     /**
-     * And which of them it reads for nothing but how many a container there holds: every read of
-     * the field is what a count is taken of, and the field holds a list, a set or a map. A
-     * string's length is not one of those, and a clause that reads a container's elements as well
-     * reads more than how many there are.
+     * And which places of the value it reads, and what it reads at each: the end of a chain of
+     * fields and not its first field, and how many a list, a set or a map holds where that is all
+     * that is read of it. A string's length is what stands at the string, and a clause that reads
+     * a container's elements as well reads them.
      */
     @Test
-    void andWhichOfThemItReadsOnlyForHowManyTheyHold() {
+    void andWhichPlacesItReadsAndWhatItReadsThere() {
         Compilation c = started("""
-                module shop.prices exposing ( Range )
+                module shop.prices exposing ( Inner, Range )
 
-                data Range = { tags: Set<String>, items: List<Int>, name: String }
+                data Inner = { low: Int, high: Int, members: Set<String> }
+
+                data Range = { inner: Inner, tags: Set<String>, items: List<Int>, name: String }
+                    invariant inner.low <= inner.high
                     invariant Set.size(tags) >= 1
                     invariant String.length(name) >= 1
                     invariant Set.size(tags) <= 3 && Set.contains("a", tags)
-                    invariant List.length(items) <= Set.size(tags)
+                    invariant List.length(items) <= Set.size(inner.members)
                 """);
-        assertEquals(List.of(Set.of("tags"), Set.of(), Set.of(), Set.of("items", "tags")),
-                clausesSay(c, ClauseMeaning.Stated::fieldsReadOnlyForHowManyTheyHold));
+        assertEquals(List.of(
+                        Set.of(values("inner", "low"), values("inner", "high")),
+                        Set.of(howMany("tags")),
+                        Set.of(values("name")),
+                        Set.of(howMany("tags"), values("tags")),
+                        Set.of(howMany("items"), howMany("inner", "members"))),
+                clausesSay(c, ClauseMeaning.Stated::reads));
+    }
+
+    /** A newtype's own {@code value} is the value itself, so a newtype wrapping a record reads its
+     *  places as a rule of the record would. */
+    @Test
+    void aNewtypeReadsThePlacesOfWhatItWrapsAsItsOwn() {
+        Compilation c = started("""
+                module shop.prices exposing ( Inner, Range )
+
+                data Inner = { low: Int, high: Int, members: Set<String> }
+
+                data Range = Inner
+                    invariant value.low <= value.high
+                    invariant Set.size(value.members) >= 1
+                """);
+        assertEquals(List.of(Set.of(values("low"), values("high")), Set.of(howMany("members"))),
+                clausesSay(c, ClauseMeaning.Stated::reads));
+    }
+
+    private static ClauseRead values(String... steps) {
+        return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.ITS_VALUES);
+    }
+
+    private static ClauseRead howMany(String... steps) {
+        return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.HOW_MANY_IT_HOLDS);
     }
 
     /** What each clause of {@code Range} says it reads, in the order the declaration writes them. */
@@ -138,8 +173,8 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
     }
 
     /** What each clause of {@code Range} says, in the order the declaration writes them. */
-    private static List<Set<String>> clausesSay(Compilation c,
-                                                Function<ClauseMeaning.Stated, Set<String>> says) {
+    private static <T> List<Set<T>> clausesSay(Compilation c,
+                                               Function<ClauseMeaning.Stated, Set<T>> says) {
         PublishedDeclarationResult said = c.db().ask(new Shapes.MeaningOf(RANGE)).value();
         DeclarationMeaning meaning = assertInstanceOf(PublishedDeclarationResult.Found.class, said,
                 "the declaration under test is published").said();

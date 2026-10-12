@@ -491,8 +491,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "check/Choice", "of", "(" + core + ")L" + c + "check/Choice;", 1,
                 "what a choice is, asked of a node: a Widen is none, and the walks that open a"
                         + " choice find it one step down and replace it there, under the Widen");
-        row(out, c + "check/Clauses", "readsOf",
-                "(" + core + "Ljava/util/function/Consumer;Ljava/util/function/Consumer;)V", 2,
+        row(out, c + "check/Clauses$ReadsOfAClause", "walk", "(" + core + ")V", 2,
                 "a read and a count taken of a container, each asked of a node: a Widen is neither,"
                         + " and the walk goes on into it and meets the one under it");
         row(out, c + "check/RecursionOverAList", "callsOf", "(" + core + "L" + c

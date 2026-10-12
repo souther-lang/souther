@@ -274,6 +274,53 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         }
     }
 
+    /**
+     * A rule of a value two out reads places, not fields: a record's rule over
+     * {@code pending.low} and a newtype's over {@code value.low} read beside {@code boss}, and the
+     * same rules over {@code boss} read it.
+     */
+    @Test
+    void aRuleFurtherOutReadsThePlacesItNamesAndNotTheFieldTheyStartAt() {
+        String pending = EMPLOYEE + "\ndata Pending = { me: EmpId, boss: EmpId, low: Int, high: Int }";
+        assertEquals(Map.of("approver", RELATES, "e.pending.boss", RELATES),
+                left("e: Envelope, approver: EmpId", pending
+                        + "\ndata Envelope = { pending: Pending } invariant pending.low <= pending.high",
+                        "approver == e.pending.boss", "6:32"));
+        assertEquals(Map.of("approver", NOT_SHOWN, "e.pending.boss", NOT_SHOWN),
+                left("e: Envelope, approver: EmpId", pending
+                        + "\ndata Envelope = { pending: Pending } invariant pending.boss == pending.me",
+                        "approver == e.pending.boss", "6:32"));
+        assertEquals(Map.of("approver", RELATES, "p.boss", RELATES),
+                left("p: WrappedPending, approver: EmpId", pending
+                        + "\ndata WrappedPending = Pending invariant value.low <= value.high",
+                        "approver == p.value.boss", "6:32"));
+        assertEquals(Map.of("approver", NOT_SHOWN, "p.boss", NOT_SHOWN),
+                left("p: WrappedPending, approver: EmpId", pending
+                        + "\ndata WrappedPending = Pending invariant value.boss == value.me",
+                        "approver == p.value.boss", "6:32"));
+    }
+
+    /** How many a set holds, read down a chain of fields from a newtype wrapping a record. */
+    @Test
+    void aRuleOverHowManyASetFurtherDownHoldsBackNoElement() {
+        assertEquals(Map.of("champ", RELATES, "w.members[*]", RELATES), left("champ: EmpId, w: Wrapped",
+                EMPLOYEE + "\ndata Inner = { members: Set<EmpId> }"
+                        + "\ndata Wrapped = Inner invariant Set.size(value.members) >= 1",
+                "Set.contains(champ, w.value.members)", "6:20"));
+    }
+
+    /** How many a set holds is shown of the count, however little the rules of the record it
+     *  sits in are shown of the rest: a pattern a field beside it is held to, which no range
+     *  states, says nothing of the count. */
+    @Test
+    void aSetsCountIsShownOfItselfBesideAFieldWhoseRuleNoRangeStates() {
+        assertEquals(Map.of("champ", RELATES, "o.makers[*]", RELATES), left("champ: EmpId, o: Opp",
+                EMPLOYEE + "\ndata Ds = Set<EmpId> invariant Set.size(value) >= 1"
+                        + "\ndata Code = String invariant String.matches(\"[A-Z]{2}\", value)"
+                        + "\ndata Opp = { code: Code, makers: Ds }",
+                "Set.contains(champ, o.makers.value)", "7:20"));
+    }
+
     /** A rule of a record a field sits in, two records out, over another of its fields. */
     @Test
     void aRuleOfARecordFurtherOutOverAnotherOfItsFieldsTiesTheFieldComparedToNothing() {
@@ -296,6 +343,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 "Set.contains(champ, ds.members)", "5:21"));
         assertEquals(NOT_SHOWN, left("champ: EmpId, ds: Ds",
                 EMPLOYEE + "\ndata Ds = Set<EmpId> invariant Set.size(value) <= 0",
+                "Set.contains(champ, ds.value)", "5:21").get("champ"));
+    }
+
+    /** Held to more than one, a set's elements are that many values apart, which is a question
+     *  of the element's type this does not ask: not shown, though a type of strings has them. */
+    @Test
+    void aSetHeldToMoreThanOneIsNotShownToLeaveItsElementsEveryValue() {
+        assertEquals(NOT_SHOWN, left("champ: EmpId, ds: Ds",
+                EMPLOYEE + "\ndata Ds = Set<EmpId> invariant Set.size(value) == 2",
                 "Set.contains(champ, ds.value)", "5:21").get("champ"));
     }
 }
