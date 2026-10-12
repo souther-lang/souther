@@ -30,6 +30,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * A relation this stage read over the input, held as what is asked of it: which of its places it
@@ -404,7 +405,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *  rule of a value it sits in may tie it to another. */
     private static Takes takes(NumericTerm.ValueOf value, InputReading read) {
         Position at = read.domain().at(value.position().position());
-        if (at == null || mayBeTiedByTheDeclarations(value.position(), read)) {
+        if (at == null || TiedByTheDeclarations.of(read).answered().computeIfAbsent(
+                value.position(), path -> mayBeTiedByTheDeclarations(path, read))) {
             return null;
         }
         PositionBounds bounds = at.boundsFor(value);
@@ -413,6 +415,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 && at.admitted().completeness() instanceof AdmissibleSet.Completeness.Complete
                 && ends == null;
         return new Takes(at.type(), at.admitted(), ends, every);
+    }
+
+    /**
+     * What {@link #mayBeTiedByTheDeclarations} answered of each path of one reading, and the rules
+     * of each name it read, kept with the reading: every relation over the input asks it of the
+     * places it relates, many relations relate one place, and many places sit in one value.
+     */
+    private record TiedByTheDeclarations(Map<TermPath, Boolean> answered,
+                                         Map<TypeSymbol.AtModule, PublishedRules> rules) {
+
+        static TiedByTheDeclarations of(InputReading read) {
+            return read.derived(TiedByTheDeclarations.class,
+                    _ -> new TiedByTheDeclarations(new ConcurrentHashMap<>(),
+                            new ConcurrentHashMap<>()));
+        }
     }
 
     /**
@@ -476,7 +493,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (!(worn instanceof TypeSymbol.AtModule named)) {
             return false;
         }
-        PublishedRules rules = PublishedRules.governing(named, read.rules().published());
+        PublishedRules rules = TiedByTheDeclarations.of(read).rules().computeIfAbsent(named,
+                name -> PublishedRules.governing(name, read.rules().published()));
         if (!rules.everyRuleReached()) {
             return true;
         }

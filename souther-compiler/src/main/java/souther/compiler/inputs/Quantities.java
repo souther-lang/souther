@@ -183,6 +183,16 @@ public sealed interface Quantities permits ReadQuantities {
     }
 
     /**
+     * The same question, with a term no value stands at kept apart from a range: what
+     * {@link #runsBetween} answers as every value there is.
+     *
+     * <p>For a reader drawing the lines of a position, which owes none where no value stands — the
+     * elements of a container the rules hold to none, in an input that has values. One projection
+     * answers both, so such a reader asks this alone rather than this and the range.
+     */
+    NumericDomain.FormProjection projectionOfTheRules(NumericTerm term);
+
+    /**
      * The same rules, with these positions fixed at these values.
      *
      * <p>A refinement of what is asked and not a new reading. Fixing accumulates, so a caller that

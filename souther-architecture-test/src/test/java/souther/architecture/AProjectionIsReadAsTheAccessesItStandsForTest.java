@@ -300,10 +300,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.STRUCTURE, "finds the builds of values, which no name read is");
         row(out, c + "check/RecursionOverAList", "callsOf", "(" + core + "L" + c
                 + "types/ValueName$Helper;Ljava/util/List;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
-        row(out, c + "check/Clauses", "readsOf", "(" + core + "Ljava/util/function/Consumer;)V",
+        row(out, c + "check/Clauses", "readsOf",
+                "(" + core + "Ljava/util/function/Consumer;Ljava/util/function/Consumer;)V",
                 Reading.STRUCTURE, BINDINGS);
-        row(out, c + "check/Clauses", "readsForTheirValues",
-                "(" + core + "Ljava/util/function/Consumer;)V", Reading.STRUCTURE, BINDINGS);
         row(out, c + "inputs/InputReads", "walkNames", "(" + core + "Ljava/util/Set;Ljava/util/Set;)V",
                 Reading.STRUCTURE, BINDINGS);
         row(out, c + "flow/ValueArrivals", "readCopies", "(" + core + "L" + c

@@ -1203,15 +1203,19 @@ final class ReadQuantities implements Quantities {
         if (form.coefs().isEmpty()) {
             return null;
         }
-        // What the declarations were read to prove, which is what a reader drawing the lines of a
-        // position wants: where they admit no value there are no lines owed, and that is answered
-        // where a value's own emptiness is rather than by a range here. A caller looking for
-        // somewhere to put a value asks the region face, and that one keeps the difference
-        // ({@link #projectionOf}).
+        // What the declarations were read to prove. Where they admit no value there are no lines
+        // owed, which a range cannot say, so a reader drawing lines asks projectionOfTheRules; a
+        // caller looking for somewhere to put a value asks the region face. Both keep the
+        // difference ({@link #projectionOf}).
         return switch (projectionOf(form, false)) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) -> bounds;
             case NumericDomain.FormProjection.NothingIsLeft _ -> NumericDomain.Bounds.OPEN;
         };
+    }
+
+    @Override
+    public NumericDomain.FormProjection projectionOfTheRules(NumericTerm term) {
+        return projectionOf(LinearForm.atom(term), false);
     }
 
     /**

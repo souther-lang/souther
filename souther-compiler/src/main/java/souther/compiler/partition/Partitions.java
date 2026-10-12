@@ -1068,10 +1068,9 @@ public final class Partitions {
             List<Axis> axes, Quantities reading, LinesRead read) {
         Map<AxisId, List<Border>> out = new LinkedHashMap<>();
         for (Axis axis : axes) {
-            if (axis.asksForARow() && !(reading.region().projectionOf(axis.term())
-                    instanceof NumericDomain.FormProjection.NothingIsLeft)) {
-                out.put(axis.id(),
-                        bordersOf(axis, reading, reading.runsBetween(axis.term()), read));
+            if (axis.asksForARow() && reading.projectionOfTheRules(axis.term())
+                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)) {
+                out.put(axis.id(), bordersOf(axis, reading, within, read));
             }
         }
         return out;
