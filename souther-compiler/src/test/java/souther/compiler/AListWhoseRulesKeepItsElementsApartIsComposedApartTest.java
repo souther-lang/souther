@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourceRendering;
@@ -19,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -324,11 +326,17 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
             Map.entry(SUMMED, List.of(List.of())),
             Map.entry(SUMMED_APART_AT_ANOTHER_FIELD, List.of(List.of("sku"))));
 
+    /** Each model measured once for the class: the methods below read the same models, and only
+     *  read them. */
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return MEASURED.computeIfAbsent(source, text -> {
+            Compilation compilation = Compilation.ofSource(text, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            return compilation;
+        });
     }
 
     private static String report(Compilation compilation) {
@@ -573,6 +581,33 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
         assertFalse(said.contains(
                 Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
                 said::toString);
+    }
+
+    /**
+     * Records told apart by how many a list of theirs holds run out where that list's values do,
+     * and the walk over sizes stops there: a list of booleans kept apart holds two at the most,
+     * and nothing caps how many the rules let it hold.
+     */
+    @Test
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void recordsToldApartBySizeRunOutWhereTheirListsValuesDo() {
+        String flags = """
+                module p
+                data Flags = { fs: List<Bool> }
+                    invariant apart = List.allDistinctBy(k -> k, fs)
+                data Many = List<Flags>
+                    invariant several = List.length(value) >= 5
+                    invariant apart = List.allDistinctBy(f -> f, value)
+                behavior pick : (m: Many) -> Int
+                let pick (m) =
+                    if List.any(f -> List.isEmpty(f.fs), m.value) then 1 else 0
+                example pick
+                    | "a" : (Many([Flags { fs = [] }, Flags { fs = [true] },
+                            Flags { fs = [false] }, Flags { fs = [true, false] },
+                            Flags { fs = [false, true] }])) -> 1
+                """;
+        List<GenerationOutcome> outcomes = outcomes(measured(flags));
+        assertFalse(outcomes.isEmpty());
     }
 
     /**

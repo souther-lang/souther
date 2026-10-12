@@ -6,6 +6,9 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.ElementsApart;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.ReadingPolicy;
+import souther.compiler.revision.RevisionKnowledge;
+import souther.compiler.revision.RevisionWork;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
@@ -962,7 +965,8 @@ final class Witnesses {
         if (out.size() >= many) {
             return List.copyOf(out);
         }
-        for (FixtureTemplate each : differing(type, many, held, reading, expanding)) {
+        for (FixtureTemplate each : reading.revision().settled(
+                new Differing(type, many, held, reading, expanding))) {
             if (out.size() >= many) {
                 return List.copyOf(out);
             }
@@ -985,6 +989,64 @@ final class Witnesses {
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The values {@link #differing} builds, as work settled by everything they are built from: the
+     * type, how many, what holds it, the names it is inside, and the source and policy the rules
+     * are read under — the source by its origin, as {@link Partitions.ARecordComposed} is keyed.
+     *
+     * <p>Kept, because each is a record or a collection composed under its rules, and a list kept
+     * apart asks for them at every size and every point a search visits.
+     */
+    private static final class Differing implements RevisionWork<List<FixtureTemplate>> {
+
+        private final Type type;
+
+        private final int many;
+
+        private final FieldDomains.Held held;
+
+        private final Set<TypeSymbol> expanding;
+
+        private final RuleReadingSource.Origin origin;
+
+        private final ReadingPolicy policy;
+
+        private final RuleReadingContext reading;
+
+        Differing(Type type, int many, FieldDomains.Held held, RuleReadingContext reading,
+                  Set<TypeSymbol> expanding) {
+            this.type = type;
+            this.many = many;
+            this.held = held;
+            this.expanding = Set.copyOf(expanding);
+            this.origin = reading.source().origin();
+            this.policy = reading.policy();
+            this.reading = reading;
+        }
+
+        @Override
+        public List<FixtureTemplate> workedOut(RevisionKnowledge revision) {
+            return differing(type, many, held, reading, expanding);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Differing it && type.equals(it.type) && many == it.many
+                    && Objects.equals(held, it.held) && expanding.equals(it.expanding)
+                    && origin.equals(it.origin) && policy.equals(it.policy);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(type, many, held, expanding, origin, policy);
+        }
+
+        @Override
+        public String toString() {
+            return "Differing[" + many + " of " + type + " inside " + expanding + "]";
+        }
     }
 
     /**
@@ -1025,12 +1087,16 @@ final class Witnesses {
                 DeclaredBounds.CountRange range = Partitions.heldRange(type, reading, held);
                 List<List<String>> apart = ElementsKeptApart.heldBy(held);
                 List<FixtureTemplate> out = new ArrayList<>();
+                // Up to the first size that builds nothing: one holding more is built of what
+                // that one could not have, so the sizes past it are walked for nothing — and
+                // where the rules cap no size, walked as far as a count goes.
                 for (int size = Math.max(range.least(), 0);
                      size <= range.most() && out.size() < many; size++) {
                     Sized one = ofSize(view, size, apart, reading, inside);
-                    if (!one.values().isEmpty()) {
-                        out.add(one.values().getFirst());
+                    if (one.values().isEmpty()) {
+                        break;
                     }
+                    out.add(one.values().getFirst());
                 }
                 yield out;
             }
