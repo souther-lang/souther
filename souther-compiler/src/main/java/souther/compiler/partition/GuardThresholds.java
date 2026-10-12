@@ -205,8 +205,7 @@ public final class GuardThresholds {
         // and the other one's answer would be about bindings this tree does not have.
         ComparisonReadings comparisons = ComparisonReadings.of(behavior, states, read,
                 InputReads.ofParametersWhereCallsStand(inputs.parameterReads(), read.declared(),
-                        elements, inputs.dependencies()),
-                WhatAnAnswerTakesUp.of(read));
+                        elements, inputs.dependencies()));
         // And what the tree that runs says about each of them, joined on the construct of the model
         // the two readings agree about.
         ComparisonEmissionIndex index =

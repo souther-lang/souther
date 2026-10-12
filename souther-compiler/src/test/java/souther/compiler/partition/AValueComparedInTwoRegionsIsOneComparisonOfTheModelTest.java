@@ -80,8 +80,7 @@ class AValueComparedInTwoRegionsIsOneComparisonOfTheModelTest {
                 read.inputs().reading(read.rules()),
                 InputReads.ofParametersWhereCallsStand(read.inputs().parameterReads(),
                         read.inputs().declared(read.rules()), elements,
-                        read.inputs().dependencies()),
-                WhatAnAnswerTakesUp.of(read.inputs().reading(read.rules())))
+                        read.inputs().dependencies()))
                 .comparisons();
 
         long ofTheValue = readings.stream()

@@ -86,8 +86,7 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
                                 checked.elementBindings().get("read"),
                                 ValueDefinitions.of(checked.analysisBodies().get("read"),
                                         rules.newtypes()),
-                                inputs.dependencies()),
-                        WhatAnAnswerTakesUp.of(inputs.reading(rules))).comparisons()) {
+                                inputs.dependencies())).comparisons()) {
             Citation.Written at = assertInstanceOf(
                     Citation.Written.class, each.at(),
                     "the model under test is written in this compile's own source");

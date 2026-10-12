@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.AnswerAsAnInput;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.InjectedAnswer;
 import souther.compiler.meaning.Proposition;
@@ -72,20 +73,27 @@ public sealed interface AnswerDemand {
      * a row is the one a statement about the input has, so what is carried is the statement and
      * not a second vocabulary for what it asks.
      *
-     * <p>Of one answer and of nothing beside it. A statement that also names a number of the input
-     * or a second answer is one about the pair, for the reason a comparison over them is, and is not
+     * <p>Of one answer and the input beside it. A number of the input it names is put at a value
+     * before the answer is composed, and the row is held to the same statement with that value in
+     * ({@link AnswerAsAnInput#ofTheRow}); a statement that also names a
+     * second answer is one about the pair, for the reason a comparison over them is, and is not
      * stated as a demand.
      *
-     * @param statement what has to hold, on the side the path took
+     * @param statement   what has to hold, on the side the path took
+     * @param readOnTheWay what the way took in of the same condition, read with the answer left
+     *                     out: what the row is asked of it with the values in replaces these, and
+     *                     only these, since another condition written alike is not this one
      */
-    record AStatement(InjectedAnswer of, ConditionReportAnchor anchor, Proposition statement)
+    record AStatement(InjectedAnswer of, ConditionReportAnchor anchor, Proposition statement,
+                      List<OnTheWay.TakenIn> readOnTheWay)
             implements AnswerDemand {
 
         public AStatement {
-            if (of == null || anchor == null || statement == null) {
+            if (of == null || anchor == null || statement == null || readOnTheWay == null) {
                 throw new IllegalArgumentException("a statement asked of an answer is some"
                         + " statement");
             }
+            readOnTheWay = List.copyOf(readOnTheWay);
         }
     }
 

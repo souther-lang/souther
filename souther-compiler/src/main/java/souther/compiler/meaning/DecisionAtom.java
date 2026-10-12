@@ -2,9 +2,14 @@ package souther.compiler.meaning;
 
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * One quantity a comparison of a decision is written over.
@@ -20,6 +25,13 @@ public sealed interface DecisionAtom extends Quantity {
 
     /** The answer of a dependency this is a number of, or null where it is a number of the input. */
     DecisionSubject.AnAnswer ofTheAnswer();
+
+    /** {@code form}, every term of which is a number of the input, as a form over those numbers. */
+    static LinearForm<DecisionAtom> ofTheInput(LinearForm<NumericTerm> form) {
+        Map<DecisionAtom, ExactRatio> coefs = new LinkedHashMap<>();
+        form.coefs().forEach((term, coefficient) -> coefs.put(new OfTheInput(term), coefficient));
+        return new LinearForm<>(form.constant(), coefs);
+    }
 
     /** A number of the behavior's input. */
     record OfTheInput(NumericTerm term) implements DecisionAtom {

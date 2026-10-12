@@ -96,12 +96,14 @@ public sealed interface DemandGap {
         record APlaceOnTheAnswersOwnOrder() implements WhyNotStated {}
 
         /**
-         * A statement about an answer that is not about that answer alone: it also names a number
-         * of the input, a value the body bound, or a second answer.
+         * A statement about an answer that is not about that answer and the input beside it: it
+         * also names a value the body bound or a second answer, or holds the answer to a value of
+         * the input other than by the input's numbers.
          *
          * <p>Which value the answer may take turns on what the other took, for the reason a
          * comparison over the pair does, and what this stage composes is a value of one answer
-         * from what is asked of it.
+         * from what is asked of it. A number of the input is no such part: it is put at a value
+         * first and the row is held to it.
          */
         record AStatementOfSeveralParts() implements WhyNotStated {}
     }

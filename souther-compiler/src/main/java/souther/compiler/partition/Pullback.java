@@ -4004,7 +4004,7 @@ final class Pullback {
                     }
                 }
                 yield aRelation(Derivation.ComparisonReading.AS_A_CUT,
-                        asQuantities(DecisionComparison.ofTheInput(against)), states);
+                        asQuantities(DecisionAtom.ofTheInput(against)), states);
             }
             case AffineReading.OfAComparison.CutsNothing constant ->
                     new Derivation.ACutThatCutsNothing(

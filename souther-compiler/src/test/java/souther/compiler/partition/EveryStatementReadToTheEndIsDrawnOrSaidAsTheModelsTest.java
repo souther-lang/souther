@@ -172,8 +172,7 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
         Core.If fork = assertInstanceOf(Core.If.class, Core.withoutStanding(analysis.core()));
         Proposition stated =
                 Pullback.ofATruth(fork.cond(), reads, read, Optional.empty()).proposition();
-        ComparisonReadings walk = ComparisonReadings.of("f", analysis, read, reads,
-                WhatAnAnswerTakesUp.of(read));
+        ComparisonReadings walk = ComparisonReadings.of("f", analysis, read, reads);
         List<BlockReason.RuleWithoutLineReason> said = new ArrayList<>();
         for (ComparisonReadings.Reading each : walk.comparisons()) {
             if (each.standing() instanceof BoundaryPolicy.Standing.Admitted(var assessment)) {

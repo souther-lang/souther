@@ -453,8 +453,6 @@ sealed interface ComparisonAssessment {
      * stands inside, on each of which it is read. {@code answer} is the binding a clause calls what
      * the behavior answers, or
      * null where the comparison is written in a body and there is nothing to be the answer.
-     * {@code dependencies} is what the decision table takes up of a body that stands dependencies
-     * in, which a clause stands none of.
      *
      * <p><b>The arithmetic answers before anything else is asked.</b> Which positions a rule is
      * about is what the quantity it cuts is over: every atom of a form is a number of a location
@@ -469,8 +467,7 @@ sealed interface ComparisonAssessment {
     static ComparisonAssessment of(String behavior, StatedComparison comparison, Citation at,
                                    InputReading read, InputReads reads,
                                    ClosureApplications applying,
-                                   BindingId answer, WhatAnAnswerTakesUp dependencies,
-                                   Arrivals answering,
+                                   BindingId answer, Arrivals answering,
                                    boolean drawnByAnInvariant, WhatConditionsState conditions) {
         // Asked first, and of the whole comparison. A rule that reads the answer anywhere in it is
         // one this reading does not put on the input space, whichever side the answer is on and
@@ -500,9 +497,12 @@ sealed interface ComparisonAssessment {
             // Where the reading stopped and the comparison is over what a dependency answered, it is
             // the decision table's. A number of an answer is no number of the input, so this reading
             // stops at it however the comparison was written, and the stop is about whose subject
-            // the comparison is rather than about a form this compiler does not read.
+            // the comparison is rather than about a form this compiler does not read. Asked of what
+            // the comparison states, which is what the table makes its column of.
             case Cutting.Read.Stopped _, Cutting.Read.AgainstAnotherValue _
-                    when dependencies.comparison(comparison, reads) -> new OnADependencysAnswer();
+                    when WhatAnAnswerTakesUp.comparison(
+                            conditions.comparison(comparison, reads, read).stated().proposition())
+                    -> new OnADependencysAnswer();
             // A relation of the input to another value, read to the end, which the rule is and
             // nothing short of it.
             case Cutting.Read.AgainstAnotherValue against -> AgainstAnotherValue.of(against, read);

@@ -199,8 +199,7 @@ class WhatAConditionStatesIsDrawnWhereNothingElseDrawsItTest {
         InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
                 inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
                 inputs.dependencies());
-        ComparisonReadings walked = ComparisonReadings.of("f", analysis, read, reads,
-                WhatAnAnswerTakesUp.of(read));
+        ComparisonReadings walked = ComparisonReadings.of("f", analysis, read, reads);
         return new Walked(walked.comparisons(), walked.forks().stream()
                 .flatMap(fork -> fork.leftHere().stream()).toList());
     }
