@@ -120,13 +120,16 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
     @Test
     void theAnswerSaysWhatTheRulesLeaveRoomFor() {
         for (CameToNothing each : unresolved()) {
-            String said = each.why().detail();
+            String said = each.why().said().orElse(null);
 
             assertNotNull(said, () -> "the answer says what it is about: " + each);
             assertTrue(said.contains("box.xs") && said.contains("hold 1")
                             && said.contains("room for 0"),
                     () -> "and says the collection, what it would have to hold, and what the rules"
                             + " leave room for: " + said);
+            assertEquals(String.join(" x ", each.why().classes()), each.why().subject(),
+                    () -> "and it is said of the combination, which stays what it is about: "
+                            + each);
         }
     }
 
