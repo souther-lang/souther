@@ -166,6 +166,7 @@ final class CardinalityComposer {
         boolean distinct = !ElementsKeptApart.at(view, keptApart, reading).isEmpty();
         int perPart = distinct ? MOST_ELEMENTS : 1;
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
+        Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
         List<Place> candidates = List.of();
         if (element.carrier().counts()) {
             List<ExactRatio> turns = new ArrayList<>();
@@ -178,7 +179,8 @@ final class CardinalityComposer {
                 turns.addAll(where);
             }
             if (run != null) {
-                candidates = valuesAlong(element.carrier(), run, turns, perPart, unheld);
+                candidates = valuesAlong(element.carrier(), run, turns, perPart, unheld,
+                        unnamed);
             }
         } else {
             List<Place> turns = new ArrayList<>();
@@ -191,7 +193,7 @@ final class CardinalityComposer {
                 turns.addAll(where);
             }
             if (run != null) {
-                candidates = valuesAlongAnOrder(element.carrier(), run, turns, perPart);
+                candidates = valuesAlongAnOrder(element.carrier(), run, turns, perPart, unnamed);
             }
         }
         Groups groups = Groups.of(asked, container, element, written, candidates);
@@ -229,10 +231,10 @@ final class CardinalityComposer {
                 break;
             }
         }
-        CompositionShortfall rest = CompositionShortfall.of(refused,
-                groups.unread().isEmpty() ? Set.of()
-                        : Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT),
-                unheld);
+        if (!groups.unread().isEmpty()) {
+            unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
+        }
+        CompositionShortfall rest = CompositionShortfall.of(refused, unnamed, unheld);
         if (!built.isEmpty()) {
             return new TermRealizations.Realization.Built(built, rest);
         }
@@ -422,9 +424,10 @@ final class CardinalityComposer {
         // of it is apart as numbers.
         boolean distinct = !ElementsKeptApart.at(view, keptApart, reading).isEmpty();
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
+        Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
         List<Place> candidates = carrier.counts()
-                ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld)
-                : valuesAlongAnOrder(carrier, run, List.of(), MOST_ELEMENTS + 1);
+                ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld, unnamed)
+                : valuesAlongAnOrder(carrier, run, List.of(), MOST_ELEMENTS + 1, unnamed);
         TypeView ofTheElement = TypeView.of(holding.element(), ruleSource.inners(),
                 ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
         List<FixtureTemplate> built = new ArrayList<>();
@@ -466,7 +469,7 @@ final class CardinalityComposer {
         if (mostOften == null || mostOften.at().compareTo(Count.of(MOST_ELEMENTS)) > 0) {
             refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
         }
-        CompositionShortfall rest = CompositionShortfall.of(refused, Set.of(), unheld);
+        CompositionShortfall rest = CompositionShortfall.of(refused, unnamed, unheld);
         if (!built.isEmpty()) {
             return new TermRealizations.Realization.Built(built, rest);
         }
@@ -577,31 +580,16 @@ final class CardinalityComposer {
                         ? AStatementAtARow.Answer.HOLDS : AStatementAtARow.Answer.FAILS;
             }
 
-            /** The ends of the set, which are where standing in it turns over. */
+            /** Where standing in the set turns over, which the set says ({@link NumericSet#turnsAt}). */
             @Override
             public List<ExactRatio> turnsAt(NumericTerm element, Map<NumericTerm, Place> beside) {
-                List<ExactRatio> out = new ArrayList<>();
-                NumericDomain.Bounds extent = set.extent();
-                for (Endpoint end : Arrays.asList(extent.min(), extent.max())) {
-                    if (end != null) {
-                        out.add(Count.number(end.at()).exactly());
-                    }
-                }
-                return out;
+                return set.turnsAt().stream().map(at -> Count.number(at).exactly()).toList();
             }
 
-            /** The ends of the set, which are where standing in it turns over on an order with no
-             *  numbers as on one with them. */
+            /** The same on an order with no numbers, where the places are the answer. */
             @Override
             public List<Place> placesTurnedAt(NumericTerm element, Map<NumericTerm, Place> beside) {
-                List<Place> out = new ArrayList<>();
-                NumericDomain.Bounds extent = set.extent();
-                for (Endpoint end : Arrays.asList(extent.min(), extent.max())) {
-                    if (end != null) {
-                        out.add(end.at());
-                    }
-                }
-                return out;
+                return set.turnsAt();
             }
         }
     }
@@ -680,9 +668,10 @@ final class CardinalityComposer {
      */
     static List<Place> valuesAlong(Carrier carrier, NumericDomain.Bounds run,
                                    List<ExactRatio> turns, int each,
-                                   Set<CompositionCapacity> unheld) {
+                                   Set<CompositionCapacity> unheld,
+                                   Set<CompositionRepertoire> unnamed) {
         if (turns.isEmpty()) {
-            return walked(carrier, run.min(), run.max(), each);
+            return walked(carrier, run.min(), run.max(), each, unnamed);
         }
         ExactEnd low = ExactEnd.of(run.min());
         ExactEnd high = ExactEnd.of(run.max());
@@ -711,7 +700,7 @@ final class CardinalityComposer {
             }
             switch (inward(from, to)) {
                 case Part.Between(Endpoint lo, Endpoint hi) ->
-                        out.addAll(walked(carrier, lo, hi, each));
+                        out.addAll(walked(carrier, lo, hi, each, unnamed));
                 case Part.Empty _ -> { }
                 // A part this could not write leaves its values unoffered, which is a number not
                 // held and is said.
@@ -741,7 +730,8 @@ final class CardinalityComposer {
      * the carrier, which names a value inside it where there is one.
      */
     static List<Place> valuesAlongAnOrder(Carrier carrier, NumericDomain.Bounds run,
-                                          List<Place> turns, int each) {
+                                          List<Place> turns, int each,
+                                          Set<CompositionRepertoire> unnamed) {
         List<Place> inside = new ArrayList<>();
         for (Place turn : turns) {
             if (holds(run, turn) && inside.stream().noneMatch(turn::sameAs)) {
@@ -752,11 +742,11 @@ final class CardinalityComposer {
         List<Place> out = new ArrayList<>();
         Endpoint from = run.min();
         for (Place turn : inside) {
-            out.addAll(walked(carrier, from, Endpoint.exclusive(turn), each));
+            out.addAll(walked(carrier, from, Endpoint.exclusive(turn), each, unnamed));
             out.add(turn);
             from = Endpoint.exclusive(turn);
         }
-        out.addAll(walked(carrier, from, run.max(), each));
+        out.addAll(walked(carrier, from, run.max(), each, unnamed));
         return out;
     }
 
@@ -880,14 +870,24 @@ final class CardinalityComposer {
         });
     }
 
-    /** Up to {@code each} different values between two ends, from the end there is. */
-    private static List<Place> walked(Carrier carrier, Endpoint low, Endpoint high, int each) {
+    /**
+     * Up to {@code each} different values between two ends, from the end there is.
+     *
+     * <p>A run that holds a value and of which the carrier named none is put in {@code unnamed}:
+     * a string above every string a rule wrote is there and is not one this invents, and the run
+     * left without a value is this compiler's reach and no answer about the model.
+     */
+    private static List<Place> walked(Carrier carrier, Endpoint low, Endpoint high, int each,
+                                      Set<CompositionRepertoire> unnamed) {
         List<Place> out = new ArrayList<>();
         Towards from = low == null && high != null ? Towards.BELOW : Towards.ABOVE;
         Endpoint lo = low;
         Endpoint hi = high;
         while (out.size() < each && Endpoint.someValueLiesBetween(lo, hi)) {
             Place next = carrier.somethingInside(lo, hi, from);
+            if (next == null && out.isEmpty()) {
+                unnamed.add(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
+            }
             if (next == null || out.stream().anyMatch(next::sameAs)) {
                 break;
             }
