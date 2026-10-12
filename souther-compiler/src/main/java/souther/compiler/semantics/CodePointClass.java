@@ -39,7 +39,7 @@ public sealed interface CodePointClass {
 
     /** The named class counting exactly {@code held}, or null where none does. */
     private static CodePointClass named(CodePoints held) {
-        CodePoints notWhitespace = NotWhitespace.HELD;
+        CodePoints notWhitespace = NotWhitespace.Held.SET;
         if (held.equals(notWhitespace)) {
             return new NotWhitespace();
         }
@@ -51,9 +51,6 @@ public sealed interface CodePointClass {
     /** The code points that are not whitespace. */
     record NotWhitespace() implements CodePointClass {
 
-        /** The code points that are not whitespace, worked out once. */
-        private static final CodePoints HELD = notWhitespace();
-
         @Override
         public boolean contains(int codePoint) {
             return !WhiteSpace.contains(codePoint);
@@ -61,7 +58,7 @@ public sealed interface CodePointClass {
 
         @Override
         public CodePoints held() {
-            return HELD;
+            return Held.SET;
         }
 
         @Override
@@ -69,15 +66,25 @@ public sealed interface CodePointClass {
             return "not whitespace";
         }
 
-        /** Every code point but those with the {@code White_Space} property. */
-        private static CodePoints notWhitespace() {
-            CodePoints whitespace = CodePoints.NONE;
-            for (int codePoint = 0; codePoint <= CodePoints.LAST; codePoint++) {
-                if (!CodePoints.isSurrogate(codePoint) && WhiteSpace.contains(codePoint)) {
-                    whitespace = whitespace.or(CodePoints.of(codePoint));
+        /**
+         * The code points that are not whitespace, worked out the first time the set is asked
+         * for: every code point is asked whether it is whitespace, and a class that is only
+         * asked of one code point at a time never needs it.
+         */
+        private static final class Held {
+
+            private static final CodePoints SET = notWhitespace();
+
+            /** Every code point but those with the {@code White_Space} property. */
+            private static CodePoints notWhitespace() {
+                CodePoints whitespace = CodePoints.NONE;
+                for (int codePoint = 0; codePoint <= CodePoints.LAST; codePoint++) {
+                    if (!CodePoints.isSurrogate(codePoint) && WhiteSpace.contains(codePoint)) {
+                        whitespace = whitespace.or(CodePoints.of(codePoint));
+                    }
                 }
+                return whitespace.not();
             }
-            return whitespace.not();
         }
     }
 
@@ -99,7 +106,7 @@ public sealed interface CodePointClass {
 
         @Override
         public CodePoints held() {
-            return NotWhitespace.HELD.less(CodePoints.of(separator));
+            return NotWhitespace.Held.SET.less(CodePoints.of(separator));
         }
 
         @Override

@@ -2723,6 +2723,10 @@ final class TermRealizations {
 
         private final List<KindOfCodePoint> written;
         private final List<OfAString> wanted;
+        /** Whether each number wanted counts each kind of code point, asked once. */
+        private final boolean[][] countedBy;
+        /** How many ways of writing a kind the kind with the most of them has. */
+        private final int ways;
         private final int most;
         private final int steps;
         private final Set<String> found = new LinkedHashSet<>();
@@ -2733,6 +2737,16 @@ final class TermRealizations {
                      int steps) {
             this.written = written;
             this.wanted = wanted;
+            this.countedBy = new boolean[wanted.size()][written.size()];
+            for (int number = 0; number < wanted.size(); number++) {
+                CodePointClass counted = wanted.get(number).counted();
+                for (int kind = 0; kind < written.size(); kind++) {
+                    countedBy[number][kind] = counted == null
+                            || counted.contains(written.get(kind).held().least());
+                }
+            }
+            this.ways = written.stream().mapToInt(each -> each.writtenWith().size()).max()
+                    .orElse(0);
             this.most = most;
             this.steps = steps;
         }
@@ -2783,10 +2797,8 @@ final class TermRealizations {
             }
             if (kind == counts.length) {
                 looked++;
-                if (sumsAreAdmitted(counts, written, wanted)) {
+                if (sumsAreAdmitted(counts)) {
                     boolean adopted = false;
-                    int ways = written.stream().mapToInt(each -> each.writtenWith().size())
-                            .max().orElse(0);
                     for (int way = 0; way < ways && !adopted; way++) {
                         adopted = adopt(writtenWith(counts, written, way));
                     }
@@ -2798,6 +2810,25 @@ final class TermRealizations {
                 counts[kind] = each;
                 over(kind + 1, counts, kinds);
             }
+        }
+
+        /**
+         * Whether every demand admits the number the counts chosen come to: the length is all of
+         * them, and a class holds the kinds of code point it counts.
+         */
+        private boolean sumsAreAdmitted(int[] counts) {
+            for (int number = 0; number < wanted.size(); number++) {
+                long sum = 0;
+                for (int kind = 0; kind < counts.length; kind++) {
+                    if (countedBy[number][kind]) {
+                        sum += counts[kind];
+                    }
+                }
+                if (!wanted.get(number).holds().test(Count.of(sum))) {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 
@@ -2811,27 +2842,6 @@ final class TermRealizations {
             out.append(new String(Character.toChars(codePoint)).repeat(counts[at]));
         }
         return out.toString();
-    }
-
-    /**
-     * Whether every demand admits the number the counts chosen come to: the length is all of
-     * them, and a class holds the kinds of code point it counts.
-     */
-    private static boolean sumsAreAdmitted(int[] counts, List<KindOfCodePoint> written,
-                                           List<OfAString> wanted) {
-        for (OfAString each : wanted) {
-            long number = 0;
-            for (int at = 0; at < written.size(); at++) {
-                if (each.counted() == null
-                        || each.counted().contains(written.get(at).held().least())) {
-                    number += counts[at];
-                }
-            }
-            if (!each.holds().test(Count.of(number))) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /** Whether the string reads back as a number every demand admits. */
