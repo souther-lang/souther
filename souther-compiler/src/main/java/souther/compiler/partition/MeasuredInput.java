@@ -9,6 +9,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.PositionId;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.RuleRoots;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.Type;
@@ -82,6 +83,19 @@ public final class MeasuredInput {
      */
     private final NameReach reach;
     /**
+     * Whose rules reach each position a value is composed at.
+     *
+     * <p>Held because a value composed under a case, or inside a container, is held to the rules of
+     * the case or the element as much as to the parameter's, and which of them reach a position is
+     * what the reading settled when it opened them. Worked out again from the value being built, it
+     * would be a second answer that agrees only while every value built is the parameter's own
+     * record.
+     *
+     * <p>Part of what makes two of these one: two readings whose rules reach a position differently
+     * compose differently there.
+     */
+    private final RuleRoots ruleRoots;
+    /**
      * What has been offered at a position, by its type and what the rules leave it.
      *
      * <p>Kept because every point a search looks for a row at composes the row again, and each
@@ -94,19 +108,28 @@ public final class MeasuredInput {
      * fill it alike.
      */
     private final Map<Offered, List<FixtureTemplate>> offered = new ConcurrentHashMap<>();
+    /**
+     * Which values' rules name each position, as {@link #ruleRoots} answers it.
+     *
+     * <p>Kept because every value composed for every point asks it of the same positions, and the
+     * answer is the reading's and nothing a point brings. No part of what makes two of these one,
+     * for the reason {@link #offered} is not.
+     */
+    private final Map<TermPath, List<RuleRoots.Naming>> named = new ConcurrentHashMap<>();
 
     /** A position as what it is offered turns on. */
     private record Offered(Type type, NumericDomain.Bounds within, FieldDomains.Held held) {}
 
     private MeasuredInput(String behavior, BehaviorInputs written, Quantities quantities,
                           Partitions.Partitioning divided, DeclarationReadings machines,
-                          NameReach reach) {
+                          NameReach reach, RuleRoots ruleRoots) {
         this.machines = machines;
         this.behavior = behavior;
         this.written = written;
         this.quantities = quantities;
         this.divided = divided;
         this.reach = reach;
+        this.ruleRoots = ruleRoots;
     }
 
     /**
@@ -146,7 +169,7 @@ public final class MeasuredInput {
             read.quantities().ordersOf(axis.term());
         }
         return new MeasuredInput(behavior, BehaviorInputs.of(read), read.quantities(), divided,
-                read.domain().machines(), read.domain().reach());
+                read.domain().machines(), read.domain().reach(), read.domain().ruleRoots());
     }
 
     /**
@@ -167,12 +190,13 @@ public final class MeasuredInput {
                 && written.equals(that.written)
                 && quantities.equals(that.quantities)
                 && divided.equals(that.divided)
-                && reach.equals(that.reach);
+                && reach.equals(that.reach)
+                && ruleRoots.equals(that.ruleRoots);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(behavior, written, quantities, divided, reach);
+        return java.util.Objects.hash(behavior, written, quantities, divided, reach, ruleRoots);
     }
 
     @Override
@@ -223,6 +247,14 @@ public final class MeasuredInput {
      */
     NameReach reach() {
         return reach;
+    }
+
+    /**
+     * Every value whose rules name {@code path}, as the reading opened them
+     * ({@link RuleRoots#naming}).
+     */
+    List<RuleRoots.Naming> rulesNaming(TermPath path) {
+        return named.computeIfAbsent(path, ruleRoots::naming);
     }
 
     /**

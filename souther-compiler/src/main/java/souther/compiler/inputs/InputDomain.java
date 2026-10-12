@@ -488,6 +488,11 @@ public final class InputDomain {
         return reach;
     }
 
+    /** Whose rules reach the positions of this input, for a reader composing a value at them. */
+    public RuleRoots ruleRoots() {
+        return new RuleRoots(roots);
+    }
+
     /**
      * The address a rule naming {@code path} would write it at, or null where this reading has no
      * value whose rules can name it.
