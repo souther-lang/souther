@@ -18,6 +18,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.ArrayList;
@@ -250,7 +251,7 @@ final class AStatementAtARow {
      */
     List<NumericTerm> numbers() {
         Set<NumericTerm> out = new LinkedHashSet<>();
-        relations.values().forEach(each -> out.addAll(each.over().terms()));
+        relations.values().forEach(each -> out.addAll(each.terms()));
         elements.values().forEach(each -> out.addAll(each.ofTheElement().numbers()));
         return NumericTerms.inOrder(out);
     }
@@ -270,8 +271,9 @@ final class AStatementAtARow {
     /** The same, beside the containers {@code taken} whose elements are read together. */
     void lookAt(BorderQuantity.Observation row, Set<TermPath> taken) {
         for (OneRelation each : relations.values()) {
-            if (each.over().terms().stream().noneMatch(term -> under(term.subjectPath(), taken))) {
-                each.over().lookAt(row);
+            if (each instanceof OneRelation.OnAQuantity read && read.terms().stream()
+                    .noneMatch(term -> under(term.subjectPath(), taken))) {
+                read.over().lookAt(row);
             }
         }
         for (TermPath each : positions) {
@@ -426,7 +428,10 @@ final class AStatementAtARow {
                         .map(sum -> rel.holds(sum.signum())));
             }
             case Proposition.Compared compared when askable(compared) -> {
-                Answer held = heldAt(relations.get(compared.relation()), row);
+                Answer held = switch (relations.get(compared.relation())) {
+                    case OneRelation.OnAQuantity read -> heldAt(read, row);
+                    case OneRelation.NoQuantity unread -> unread.at();
+                };
                 yield compared.holds() || held instanceof Answer.CouldNotTell ? held
                         : held instanceof Answer.Holds ? Answer.FAILS : Answer.HOLDS;
             }
@@ -446,7 +451,8 @@ final class AStatementAtARow {
                 Proposition.firstStopIn(part))));
     }
 
-    private static Answer heldAt(OneRelation relation, BorderQuantity.Observation row) {
+    private static Answer heldAt(OneRelation.OnAQuantity relation,
+                                 BorderQuantity.Observation row) {
         LinearQuantity over = relation.over();
         return switch (over.valuesOf(over.read(row))) {
             case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
@@ -626,6 +632,12 @@ final class AStatementAtARow {
                         out.add(Count.number(at).exactly());
                     }
                 }
+                // A relation no row is read at turns wherever it does, which is not known.
+                case OneRelation.NoQuantity(LinearForm<NumericTerm> form) -> {
+                    if (form.coefs().containsKey(term)) {
+                        return null;
+                    }
+                }
             }
         }
         return out;
@@ -633,27 +645,40 @@ final class AStatementAtARow {
 
     /**
      * Where each relation this reads over {@code term} turns over, for a term whose values are
-     * ordered and not counted: the places the term is held against.
+     * ordered and not counted, with every other position it reads standing where {@code beside}
+     * says: the places the term is held against.
      *
-     * <p>A form cannot be over such a term, since there is no number to weigh, so the one place a
-     * relation turns is the place the term is compared with. Between two of them, and past the
-     * last, every relation reads any value of the term the same way.
+     * <p>There is no number to weigh such a term by, so the one place a relation turns is the place
+     * the term is compared with: written in the relation, or held at the other position the
+     * quantity reads it against ({@link LinearQuantity#levelWith}). Between two of them, and past
+     * the last, every relation reads any value of the term the same way.
      *
-     * @return null where a form reads the term, which a value chosen from a run could answer
-     *         either way
+     * @return null where the quantity a relation reads the term on says no one place is level with
+     *         it, which a value chosen from a run could answer either way
      */
-    List<Place> placesTurnedAt(NumericTerm term) {
+    List<Place> placesTurnedAt(NumericTerm term, Map<NumericTerm, Place> beside) {
         List<Place> out = new ArrayList<>();
         for (OneRelation each : relations.values()) {
             switch (each) {
-                case OneRelation.OfAForm(LinearQuantity _, LinearForm<NumericTerm> form, Rel _) -> {
-                    if (form.coefs().containsKey(term)) {
+                case OneRelation.OfAForm(LinearQuantity over, LinearForm<NumericTerm> form,
+                                         Rel _) -> {
+                    if (!form.coefs().containsKey(term)) {
+                        continue;
+                    }
+                    Place level = over.levelWith(term, form.constant(), beside);
+                    if (level == null) {
                         return null;
                     }
+                    out.add(level);
                 }
                 case OneRelation.OnAnOrder(LinearQuantity _, NumericTerm on, Place at, Rel _) -> {
                     if (on.equals(term)) {
                         out.add(at);
+                    }
+                }
+                case OneRelation.NoQuantity(LinearForm<NumericTerm> form) -> {
+                    if (form.coefs().containsKey(term)) {
+                        return null;
                     }
                 }
             }
@@ -667,25 +692,58 @@ final class AStatementAtARow {
     /** One relation, as the quantity a row is read at and what its numbers have to come to. */
     private sealed interface OneRelation {
 
-        LinearQuantity over();
+        /** The numbers of a row the relation is about, whether or not a row can be read at them. */
+        List<NumericTerm> terms();
 
-        /** Whether the relation holds at the numbers a row read at {@link #over}. */
-        ExactAnswer<Boolean> holdsAt(Map<NumericTerm, Place> values);
+        /** A relation read at a quantity of the row's numbers. */
+        sealed interface OnAQuantity extends OneRelation {
+
+            LinearQuantity over();
+
+            /** Whether the relation holds at the numbers a row read at {@link #over}. */
+            ExactAnswer<Boolean> holdsAt(Map<NumericTerm, Place> values);
+
+            @Override
+            default List<NumericTerm> terms() {
+                return over().terms();
+            }
+        }
+
+        /**
+         * A form over positions some of which have no numbers under them, and which is not two of
+         * them held against each other: no quantity reads a row at it.
+         *
+         * <p>Kept, and not dropped from the statement, because what it is about is still the row's:
+         * every row answers it as not known, and where a value of one of its terms turns it over is
+         * not known either.
+         */
+        record NoQuantity(LinearForm<NumericTerm> form) implements OneRelation {
+
+            @Override
+            public List<NumericTerm> terms() {
+                return NumericTerms.inOrder(form.coefs().keySet());
+            }
+
+            /** What every row comes to: a sum of what has no number has none to come to. */
+            Answer at() {
+                return new Answer.CouldNotTell(Set.of(
+                        ReadingGap.of(UnheldNumber.NO_REPRESENTATION_EXISTS)));
+            }
+        }
 
         /** A form of the input's numbers against nought. */
         record OfAForm(LinearQuantity over, LinearForm<NumericTerm> form, Rel rel)
-                implements OneRelation {
+                implements OnAQuantity {
 
             @Override
             public ExactAnswer<Boolean> holdsAt(Map<NumericTerm, Place> values) {
-                return OrderedAffineBoundary.at(form, values)
-                        .map(sum -> rel.holds(sum.signum()));
+                return over.signAt(values, form.constant()).map(rel::holds);
             }
         }
 
         /** One position against a place on the order it stands on. */
         record OnAnOrder(LinearQuantity over, NumericTerm term, Place at, Rel rel)
-                implements OneRelation {
+                implements OnAQuantity {
 
             @Override
             public ExactAnswer<Boolean> holdsAt(Map<NumericTerm, Place> values) {
@@ -701,8 +759,9 @@ final class AStatementAtARow {
                         throw new IllegalStateException("a relation put to rows is over the"
                                 + " input's own numbers: " + affine);
                     }
-                    yield new OfAForm(Cutting.readAt(behavior, form, quantities), form,
-                            affine.proposition());
+                    LinearQuantity over = Cutting.readAt(behavior, form, quantities);
+                    yield over == null ? new NoQuantity(form)
+                            : new OfAForm(over, form, affine.proposition());
                 }
                 case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel rel)
                         when term.atOnePosition() != null -> new OnAnOrder(
@@ -731,10 +790,14 @@ final class AStatementAtARow {
     }
 
     /** Every relation over the input's own numbers this reads, for the quantities a reader of it
-     *  has to read a row at. */
+     *  has to read a row at; a relation no quantity reads a row at has none to read. */
     List<LinearQuantity> over() {
         List<LinearQuantity> out = new ArrayList<>();
-        relations.values().forEach(each -> out.add(each.over()));
+        for (OneRelation each : relations.values()) {
+            if (each instanceof OneRelation.OnAQuantity read) {
+                out.add(read.over());
+            }
+        }
         return List.copyOf(out);
     }
 }

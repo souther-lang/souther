@@ -181,6 +181,38 @@ class HowManyElementsMeetAStatementIsALineOnTheCountTest {
                 "five is above both one and two, and nought is above neither");
     }
 
+    /**
+     * A count of the strings below another string of the input stands where as many elements are
+     * below the one the row holds there, and the same row read against the strings above it stands
+     * where as many are above: which side an element is on is the order of the element against the
+     * other string, the way round the relation names them, and one level with it is on neither.
+     */
+    @Test
+    void aCountOfStringsHeldAgainstAnotherStringFollowsTheWayTheRelationFaces() {
+        String row = """
+                example pick
+                    | "two below and one above" : (["a", "b", "c", "m"], "c") -> High
+                """;
+        JsonNode below = countBorders(reportOf(stringsAgainstU("<") + row)).getFirst();
+        JsonNode above = countBorders(reportOf(stringsAgainstU(">") + row)).getFirst();
+
+        assertTrue(pointAt(below, "on").path("hit").asBoolean(),
+                () -> "a and b are below c, and c is not: " + below);
+        assertTrue(!pointAt(above, "on").path("hit").asBoolean(),
+                () -> "only m is above c: " + above);
+    }
+
+    /** At least two elements of {@code xs} standing {@code rel} {@code u}. */
+    private static String stringsAgainstU(String rel) {
+        return """
+                module probe
+                data Low
+                data High
+                behavior pick : (xs: List<String>, u: String) -> Low | High
+                let pick (xs, u) = if List.length(List.filter(y -> y %s u, xs)) >= 2 then High else Low
+                """.formatted(rel);
+    }
+
     private static JsonNode reportOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
