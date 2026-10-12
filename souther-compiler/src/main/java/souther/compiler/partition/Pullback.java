@@ -1,5 +1,8 @@
 package souther.compiler.partition;
 
+import net.unit8.notation199x.pattern.CodePoints;
+import net.unit8.notation199x.pattern.PatternMeaning;
+
 import souther.compiler.check.ARecursion;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.ValueStanding;
@@ -27,10 +30,12 @@ import souther.compiler.check.RecursionOverATree;
 import souther.compiler.check.RemainderOfAShiftedValue;
 import souther.compiler.check.SeededWalk;
 import souther.compiler.check.StatedComparison;
+import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.check.WholeUnitsBetween;
 import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.check.AnIndexedMap;
 import souther.compiler.inputs.AnIdentityMap;
 import souther.compiler.inputs.CasesLeft;
@@ -103,6 +108,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
@@ -579,6 +585,8 @@ final class Pullback {
                 },
                 () -> BooleanMeaning.asAComparison(e).map(stated -> comparison(stated,
                         new Denotation(e, reads), fixed(e, reads), reads)).orElse(null),
+                () -> applied == null ? null
+                        : new ALawRead(applied, e, reads).aCharacterInAClass(),
                 () -> byALaw(applied, e, AnswerAspect.TRUTH, reads, new Denotation(e, reads)),
                 () -> acrossAWalk(e, AnswerAspect.TRUTH, reads),
                 () -> acrossARecursion(e, AnswerAspect.TRUTH, reads),
@@ -1226,7 +1234,8 @@ final class Pullback {
          */
         record AValue(Core value, InputReads at) implements ElementAt {}
 
-        /** One of the pieces of a string a split leaves, whichever one the statement is about. */
+        /** One of the pieces of a string a split leaves, or one of its characters, whichever one
+         *  the statement is about. */
         record APiece(Pieces of) implements ElementAt {}
 
         /**
@@ -1281,9 +1290,15 @@ final class Pullback {
     private record Located(DecisionSubject held, Type heldType, ElementAt each,
                            Denotation handed, List<Kept> kept, Pieces pieces) {}
 
+    /** One walk a container is the answer of: the step's answer on one element of what it walks,
+     *  read where the walk is, the name the step gives that element, what it walks, and whether
+     *  the container holds what a closure made of every element rather than one value for each. */
+    private record AStep(Denotation answer, Core.Binder element, Denotation walked,
+                         boolean holdsTheAnswers) {}
+
     /** The pieces of the string at {@code string} that a split at {@code separator}, one code
-     *  point, leaves. */
-    private record Pieces(TermPath string, int separator) {}
+     *  point, leaves — or, with no separator, its characters, each code point a piece. */
+    private record Pieces(TermPath string, OptionalInt separator) {}
 
     /** A statement read of each value a container written out holds, or why it was not. */
     private sealed interface WrittenOutRead {
@@ -1583,35 +1598,95 @@ final class Pullback {
         }
 
         /**
-         * Some element of {@code made} meeting {@code some}, where {@code made} is the answer of an
-         * operation every element of which comes out on one side, and what {@code some} asks of an
-         * element known by that side alone comes out the same for every one of them
-         * ({@link Derivation.EveryElementMeetsIt}) — or null where it is no such answer, or what is
-         * asked turns on which element it is.
+         * Some element of {@code made} meeting {@code some}, where what {@code some} asks of an
+         * element comes out the same for every one of them ({@link Derivation.EveryElementMeetsIt})
+         * — or null where what is asked turns on which element it is, or nothing says what an
+         * element is.
+         *
+         * <p>What an element is, is read down through what {@code made} was made of, as
+         * {@link #locate} reads it, to a container nothing below makes: through each walk that
+         * answers one value for each element of what it walks, or what a closure made of every
+         * element and no more, the element is the step's answer on one there; through each
+         * operation that only reorders the elements or keeps some, it is one of them, together
+         * with what it was kept by. Some element of {@code made} is there exactly where that
+         * container holds something. Of the container's own element nothing is known but the
+         * side every element of the operation that answered it comes out on, where it is such an
+         * answer — no position of the input is asked for, since what is asked of the element
+         * settles without one, or is asked of a value written without the element at all: what
+         * the outermost closure answers, where it never reads the element it is handed, is one
+         * value for every element, and what is stated of it is stated once.
          *
          * @param standing what {@code made} stands for, once the names it is are followed
          */
         private Derivation everyElementMeets(Denotation made, Denotation standing,
                                              LawProposition.SomeElement<DeclaredArgument> some) {
-            AnOperationApplied answering = AnOperationApplied.of(standing.value());
+            List<Kept> located = new ArrayList<>();
+            List<Kept> pending = new ArrayList<>();
+            ElementAt outerEach = null;
+            Denotation outerHanded = null;
+            boolean writtenWithoutTheElement = false;
+            Denotation at = standing;
+            boolean peeled = false;
+            while (true) {
+                Beneath below = beneath(at, false);
+                if (below != null) {
+                    pending.addAll(below.kept());
+                    at = below.at();
+                    peeled = true;
+                }
+                AStep walk = stepBeneath(at, false);
+                if (walk == null) {
+                    break;
+                }
+                Denotation step = walk.answer();
+                ElementAt each = new ElementAt.AValue(step.value(), step.at());
+                Denotation handed = walk.holdsTheAnswers() ? step : null;
+                settle(pending, each, handed, located);
+                if (outerEach == null) {
+                    outerEach = each;
+                    outerHanded = handed;
+                    writtenWithoutTheElement = walk.element().binding() != null
+                            && !WhatABodyReads.binding(step.value(), walk.element().binding());
+                }
+                at = walk.walked();
+                peeled = true;
+            }
+            AnOperationApplied answering = AnOperationApplied.of(at.value());
             ValueName operation = answering == null ? null : answering.operation();
             SideAnswered side = operation == null ? null
                     : DefaultBoundOperationFacts.get().everyElementOfItsAnswerIs(operation);
-            if (side == null) {
+            ElementAt beneathAll = side == null ? null
+                    : new ElementAt.OfAnAnswerEveryElementOfWhichIs(operation, side);
+            if (beneathAll == null && (outerEach == null || !pending.isEmpty())) {
                 return null;
             }
+            settle(pending, beneathAll, null, located);
             Derivation ofTheElement;
-            elements.put(some.container(),
-                    new ElementAt.OfAnAnswerEveryElementOfWhichIs(operation, side));
-            try {
-                ofTheElement = of(some.ofTheElement());
-            } finally {
-                elements.remove(some.container());
+            if (outerHanded != null) {
+                ofTheElement = ofTheValue(some.container(), some.ofTheElement(), outerHanded);
+            } else {
+                elements.put(some.container(), outerEach != null ? outerEach : beneathAll);
+                try {
+                    ofTheElement = of(some.ofTheElement());
+                } finally {
+                    elements.remove(some.container());
+                }
             }
-            return trying.of(ofTheElement) instanceof Proposition.Always
-                    ? new Derivation.EveryElementMeetsIt(some, operation, ofTheElement,
-                            observe(made.value(), AnswerAspect.EMPTINESS, made.at()))
-                    : null;
+            ofTheElement = alsoWhatWasKept(ofTheElement, located);
+            Derivation.EveryElementMeetsIt.Alike alike =
+                    trying.of(ofTheElement) instanceof Proposition.Always
+                            ? Derivation.EveryElementMeetsIt.Alike.SETTLED
+                            : writtenWithoutTheElement && Derivation.EveryElementMeetsIt
+                                    .keptOnlyByWhatSettlesTrue(ofTheElement)
+                                    ? Derivation.EveryElementMeetsIt.Alike
+                                            .WRITTEN_WITHOUT_THE_ELEMENT
+                                    : null;
+            if (alike == null) {
+                return null;
+            }
+            Denotation holding = peeled ? at : made;
+            return new Derivation.EveryElementMeetsIt(some, ofTheElement,
+                    observe(holding.value(), AnswerAspect.EMPTINESS, holding.at()), alike);
         }
 
         /** The operation whose answer {@code given} stands for, read in {@code at}, or null where
@@ -1866,9 +1941,13 @@ final class Pullback {
          */
         private Derivation somePiece(Pieces pieces, Derivation answered, Proposition element,
                                      Core over, InputReads in) {
+            if (pieces.separator().isEmpty()) {
+                return someCharacter(pieces.string(), answered, element, over, in);
+            }
             CodePointClass asked = pieceMustHoldOneOf(element);
             CodePointClass counted = asked instanceof CodePointClass.NotWhitespace
-                    ? new CodePointClass.NotWhitespaceNorEqualTo(pieces.separator()) : null;
+                    ? new CodePointClass.NotWhitespaceNorEqualTo(pieces.separator().getAsInt())
+                    : null;
             Type type = counted == null ? null
                     : read.domain().typeAt(pieces.string(), read.rules());
             NumericTerm.CodePointClassCount term = type == null ? null
@@ -1883,6 +1962,37 @@ final class Pullback {
             // statement about a number of the string, which is what a line is drawn on.
             return leaf(new Derivation.SomePieceMeeting(term, answered),
                     askedAt != null ? askedAt : new Denotation(e, reads));
+        }
+
+        /**
+         * Some character of the string at {@code string} meeting {@code element}, which is what
+         * was read of one character: the string holding a code point of the set a character
+         * meeting it is one of ({@link Derivation.SomeCharacterMeeting}) — where all that was
+         * asked of the character is which classes its code point is in.
+         *
+         * <p>Of every code point the set, the string holding one is the string holding anything,
+         * which is how long it is.
+         */
+        private Derivation someCharacter(TermPath string, Derivation answered,
+                                         Proposition element, Core over, InputReads in) {
+            CodePoints meeting = Derivation.SomeCharacterMeeting.charactersMeeting(element);
+            if (meeting == null) {
+                WhyUnread stopped = Proposition.firstStopIn(element);
+                return unread(over, in, stopped != null ? stopped : new WhyUnread.AtNoPosition(
+                        WhyUnread.AtNoPosition.Place.CONTAINER));
+            }
+            NumericTerm counted = null;
+            if (!meeting.isEmpty()) {
+                Type type = read.domain().typeAt(string, read.rules());
+                counted = meeting.isEverything() ? sizeAt(string) : type == null ? null
+                        : NumericTerm.CodePointClassCount.of(string, CodePointClass.of(meeting),
+                                type, read.rules().inners());
+                if (counted == null) {
+                    return unread(over, in, new WhyUnread.NoMeasureOfItsSize());
+                }
+            }
+            return leaf(new Derivation.SomeCharacterMeeting(Optional.ofNullable(counted),
+                    answered), askedAt != null ? askedAt : new Denotation(e, reads));
         }
 
         /**
@@ -2139,13 +2249,7 @@ final class Pullback {
                             ? new Located(string, null, each, null, located, pieces)
                             : new Located(string, null, outerEach, outerHanded, located, pieces);
                 }
-                ElementBindings.StepOnEachElement walk = aWalk(at);
-                boolean answers = false;
-                if (walk == null && !counting) {
-                    walk = ElementBindings.stepHoldingTheAnswerOnEachElement(at.value(),
-                            blockIn(at));
-                    answers = walk != null;
-                }
+                AStep walk = stepBeneath(at, counting);
                 // A map filed under the key of each element of a list: an entry is there for
                 // some element of the list, so some entry is some element's. How many entries
                 // meet a statement is not how many elements do — two elements of one key are one
@@ -2165,16 +2269,15 @@ final class Pullback {
                 if (walk == null) {
                     return null;
                 }
-                Denotation step = new Denotation(walk.step().body(), at.at());
+                Denotation step = walk.answer();
                 ElementAt each = new ElementAt.AValue(step.value(), step.at());
-                Denotation handed = answers ? step : null;
+                Denotation handed = walk.holdsTheAnswers() ? step : null;
                 settle(pending, each, handed, located);
                 if (outerEach == null) {
                     outerEach = each;
                     outerHanded = handed;
                 }
-                at = at.at().standing(walk.walked(), read.rules().symbols(),
-                        read.rules().newtypes());
+                at = walk.walked();
                 Beneath below = beneath(at, counting);
                 if (below != null) {
                     pending.addAll(below.kept());
@@ -2186,9 +2289,30 @@ final class Pullback {
         }
 
         /**
+         * The walk {@code container} is the answer of: one value for each element of what it
+         * walks, or — where how many elements meet a statement is not asked — what a closure made
+         * of every element and no more, which a set made of its answers holds. Or null where it is
+         * the answer of no walk.
+         */
+        private AStep stepBeneath(Denotation container, boolean counting) {
+            ElementBindings.StepOnEachElement walk = aWalk(container);
+            boolean holdsTheAnswers = false;
+            if (walk == null && !counting) {
+                walk = ElementBindings.stepHoldingTheAnswerOnEachElement(container.value(),
+                        blockIn(container));
+                holdsTheAnswers = walk != null;
+            }
+            return walk == null ? null : new AStep(
+                    new Denotation(walk.step().body(), container.at()), walk.element(),
+                    container.at().standing(walk.walked(), read.rules().symbols(),
+                            read.rules().newtypes()),
+                    holdsTheAnswers);
+        }
+
+        /**
          * The pieces {@code container} is, where it is what an operation answering the pieces of a
          * string was given — a string at a position of the input, and a separator written as one
-         * code point — or null where it is not.
+         * code point where it parts the string at one — or null where it is not.
          *
          * <p>A separator that is longer, or is not written out, is a call this does not say the
          * pieces of: a longer one can stand across where a shorter one is looked for, and one that
@@ -2203,21 +2327,110 @@ final class Pullback {
             if (parted == null) {
                 return null;
             }
-            Denotation separator = container.at().standing(
-                    call.args().get(parted.separator().position()), read.rules().symbols(),
-                    read.rules().newtypes());
-            if (!(Core.withoutStanding(separator.value()) instanceof Core.Str written)
-                    || written.value().codePointCount(0, written.value().length()) != 1
-                    || (written.value().length() == 1
-                            && Character.isSurrogate(written.value().charAt(0)))) {
-                return null;
+            OptionalInt separatedBy = OptionalInt.empty();
+            if (parted.separator().isPresent()) {
+                Denotation separator = container.at().standing(
+                        call.args().get(parted.separator().get().position()),
+                        read.rules().symbols(), read.rules().newtypes());
+                if (!(Core.withoutStanding(separator.value()) instanceof Core.Str written)
+                        || written.value().codePointCount(0, written.value().length()) != 1
+                        || (written.value().length() == 1
+                                && Character.isSurrogate(written.value().charAt(0)))) {
+                    return null;
+                }
+                separatedBy = OptionalInt.of(written.value().codePointAt(0));
             }
             Denotation string = container.at().standing(
                     call.args().get(parted.string().position()), read.rules().symbols(),
                     read.rules().newtypes());
             return string.at().pathOf(string.value(), read.rules().newtypes())
                     instanceof PathResolution.At(TermPath at)
-                    ? new Pieces(at, written.value().codePointAt(0)) : null;
+                    ? new Pieces(at, separatedBy) : null;
+        }
+
+        /**
+         * The call, a pattern matched against one character of a string, as the character being
+         * one of the code points the pattern accepts a string of one of — or null where it is no
+         * such call: another predicate, a subject that is not a character, or a pattern the
+         * strings of one code point it accepts are not worked out of.
+         *
+         * <p>A pattern is matched against the whole of the string (spec §string-patterns), and a
+         * character is one code point, so it matches exactly where the pattern accepts the string
+         * of that one code point.
+         */
+        Derivation aCharacterInAClass() {
+            if (!(Core.withoutStanding(e) instanceof Core.PreservedCall call)
+                    || !(call.settled() instanceof Core.KernelFact.StringMatches matches)
+                    || !(call.operation() instanceof ValueName.Stdlib.Operation operation)) {
+                return null;
+            }
+            StringPredicates predicate =
+                    StringPredicates.of(read.rules().symbols().kernelOf(operation));
+            Pieces piece = predicate == null ? null
+                    : pieceThatIs(call.args().get(predicate.subject()), reads);
+            CodePoints accepted = piece == null || piece.separator().isPresent() ? null
+                    : oneCodePointAccepted(matches.meaning());
+            return accepted == null ? null : leaf(new Derivation.ACharacterInAClass(
+                    CodePointClass.of(accepted)), e, reads);
+        }
+
+        /**
+         * The code points the string of which alone {@code meaning} accepts, or null where that is
+         * not worked out here.
+         */
+        private static CodePoints oneCodePointAccepted(PatternMeaning meaning) {
+            return switch (meaning) {
+                case PatternMeaning.Nothing _, PatternMeaning.Never _ -> CodePoints.NONE;
+                case PatternMeaning.Symbols(CodePoints held) -> held;
+                case PatternMeaning.EitherOf(List<PatternMeaning> arms) -> {
+                    CodePoints all = CodePoints.NONE;
+                    for (PatternMeaning arm : arms) {
+                        CodePoints one = oneCodePointAccepted(arm);
+                        if (one == null) {
+                            yield null;
+                        }
+                        all = all.or(one);
+                    }
+                    yield all;
+                }
+                // One part takes the code point, and every other takes nothing.
+                case PatternMeaning.InTurn(List<PatternMeaning> parts) -> {
+                    CodePoints all = CodePoints.NONE;
+                    for (int at = 0; at < parts.size(); at++) {
+                        boolean restTakeNothing = true;
+                        for (int other = 0; other < parts.size(); other++) {
+                            restTakeNothing &= other == at || acceptsNothing(parts.get(other));
+                        }
+                        CodePoints one = oneCodePointAccepted(parts.get(at));
+                        if (one == null) {
+                            yield null;
+                        }
+                        if (restTakeNothing) {
+                            all = all.or(one);
+                        }
+                    }
+                    yield all;
+                }
+                // One turn takes the code point, and as many more as it asks take nothing.
+                case PatternMeaning.Repeated(PatternMeaning what, int least, int most) ->
+                        most == 0 ? CodePoints.NONE
+                                : least <= 1 || acceptsNothing(what)
+                                        ? oneCodePointAccepted(what) : CodePoints.NONE;
+            };
+        }
+
+        /** Whether {@code meaning} accepts the empty string. */
+        private static boolean acceptsNothing(PatternMeaning meaning) {
+            return switch (meaning) {
+                case PatternMeaning.Nothing _ -> true;
+                case PatternMeaning.Never _, PatternMeaning.Symbols _ -> false;
+                case PatternMeaning.EitherOf(List<PatternMeaning> arms) ->
+                        arms.stream().anyMatch(ALawRead::acceptsNothing);
+                case PatternMeaning.InTurn(List<PatternMeaning> parts) ->
+                        parts.stream().allMatch(ALawRead::acceptsNothing);
+                case PatternMeaning.Repeated(PatternMeaning what, int least, int _) ->
+                        least == 0 || acceptsNothing(what);
+            };
         }
 
         /**
@@ -2449,6 +2662,10 @@ final class Pullback {
             if (kept != null) {
                 return kept;
             }
+            Derivation inEachArm = inEachArmOfTheElement(compared);
+            if (inEachArm != null) {
+                return inEachArm;
+            }
             LinearForm<LawNumber<DeclaredArgument>> form = compared.form();
             // An argument chosen by cases is compared on each of them, and one a behavior's call
             // answers through its body, as a comparison the source wrote is
@@ -2540,16 +2757,93 @@ final class Pullback {
             AnOperationApplied made = AnOperationApplied.of(string.value());
             if (made == null || !(DefaultBoundOperationFacts.get()
                     .keepsWhetherItHoldsACodePointOf(made.operation())
-                    instanceof BoundOperationFacts.KeptCodePoints(var keeps, var from))
+                    instanceof BoundOperationFacts.KeptCodePoints(var keeps, var from, var held))
                     || !keeps.equals(counted)) {
                 return null;
             }
-            LawProposition.Compared<DeclaredArgument> same = new LawProposition.Compared<>(
-                    new LinearForm<>(compared.form().constant(), Map.of(
-                            new LawNumber.CodePointsOf<>(new LawSubject.Argument<>(from), counted),
-                            only.getValue())), compared.states());
+            ALawRead there = new ALawRead(made, string.value(), string.at());
             return new Derivation.WhereAnOperationKeepsIt(compared, made.operation(),
-                    new ALawRead(made, string.value(), string.at()).compared(same));
+                    switch (held) {
+                        case THE_STRING -> there.compared(sameOf(compared,
+                                new LawSubject.Argument<>(from)));
+                        // Some element holding one, or none of them, as the statement says of
+                        // the string: it holds one exactly where some element does.
+                        case SOME_ELEMENT -> {
+                            LawProposition.Compared<DeclaredArgument> ofAnElement =
+                                    sameOf(compared, new LawSubject.ElementOf<>(from));
+                            boolean holdsAtOne = compared.states().holds(
+                                    only.getValue().plus(compared.form().constant()).orNull()
+                                            .signum());
+                            yield there.of(holdsAtOne
+                                    ? new LawProposition.SomeElement<>(from, ofAnElement, true)
+                                    : new LawProposition.SomeElement<>(from,
+                                            ofAnElement.denied(), false));
+                        }
+                    });
+        }
+
+        /**
+         * {@code compared} in each arm of the choice an element it numbers is, where that element
+         * is a value chosen by a fork — an {@code if} or a {@code match} a closure answered with:
+         * in each arm the element is the value that arm answers, and the comparison is read of
+         * that. Null where no element it numbers is such a value.
+         */
+        private Derivation inEachArmOfTheElement(
+                LawProposition.Compared<DeclaredArgument> compared) {
+            for (LawNumber<DeclaredArgument> number : compared.form().coefs().keySet()) {
+                DeclaredArgument container = switch (number) {
+                    case LawNumber.CodePointsOf<DeclaredArgument>(
+                            LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at), var _) ->
+                            at;
+                    case LawNumber.SizeOf<DeclaredArgument>(
+                            LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at)) -> at;
+                    default -> null;
+                };
+                if (container == null || !(elements.get(container) instanceof ElementAt.AValue(
+                        Core value, InputReads in))) {
+                    continue;
+                }
+                Denotation stands = in.standing(value, read.rules().symbols(),
+                        read.rules().newtypes());
+                switch (Core.withoutStanding(stands.value())) {
+                    case Core.If iff -> {
+                        return new Derivation.IfThenElse(
+                                observe(iff.cond(), AnswerAspect.TRUTH, stands.at()),
+                                asTheElement(container, iff.then(), stands.at(), compared),
+                                asTheElement(container, iff.els(), stands.at(), compared));
+                    }
+                    case Core.Match match -> {
+                        return armsOf(match, stands.at(), (body, inside) ->
+                                asTheElement(container, body, inside, compared));
+                    }
+                    default -> { }
+                }
+            }
+            return null;
+        }
+
+        /** {@code compared} read where the element of {@code container} is {@code value}. */
+        private Derivation asTheElement(DeclaredArgument container, Core value, InputReads in,
+                                        LawProposition.Compared<DeclaredArgument> compared) {
+            ElementAt was = elements.put(container, new ElementAt.AValue(value, in));
+            try {
+                return compared(compared);
+            } finally {
+                elements.put(container, was);
+            }
+        }
+
+        /** {@code compared}, which counts the code points of one string, said of {@code of}. */
+        private static LawProposition.Compared<DeclaredArgument> sameOf(
+                LawProposition.Compared<DeclaredArgument> compared,
+                LawSubject<DeclaredArgument> of) {
+            Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> only =
+                    compared.form().coefs().entrySet().iterator().next();
+            CodePointClass counted = ((LawNumber.CodePointsOf<DeclaredArgument>) only.getKey())
+                    .counted();
+            return new LawProposition.Compared<>(new LinearForm<>(compared.form().constant(),
+                    Map.of(new LawNumber.CodePointsOf<>(of, counted), only.getValue())),
+                    compared.states());
         }
 
         /** The argument a number of a law is of. */
@@ -2702,38 +2996,64 @@ final class Pullback {
          * a rule over both is one over two numbers of one place.
          */
         private Sized codePointsOf(LawSubject<DeclaredArgument> of, CodePointClass counted) {
+            // A value the element is is read as itself, where it was given.
+            if (of instanceof LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument container)
+                    && elements.get(container) instanceof ElementAt.AValue(Core value,
+                                                                          InputReads in)) {
+                return codePointsOfTheValue(value, in, counted);
+            }
+            if (of instanceof LawSubject.Argument<DeclaredArgument>(DeclaredArgument argument)) {
+                return codePointsOfTheValue(applied.argument(argument), reads, counted);
+            }
             TermPath at = switch (of) {
-                case LawSubject.Argument<DeclaredArgument>(DeclaredArgument argument) ->
-                        reads.pathOf(applied.argument(argument), read.rules().newtypes())
-                                instanceof PathResolution.At(TermPath held) ? held : null;
                 case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument container) ->
                         elements.get(container) instanceof ElementAt.AtASubject(
                                 DecisionSubject.AnInput(TermPath held)) ? held.element() : null;
                 case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument container) ->
                         keyAt(container) instanceof DecisionSubject.AnInput(TermPath key)
                                 ? key : null;
-                case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ -> null;
+                case LawSubject.Argument<DeclaredArgument> _,
+                     LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ -> null;
                 case LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(of);
             };
             if (at == null) {
                 // A piece of a string a split left stands at no position, and its count is the
                 // one of a piece: what the statement about some piece it is read inside comes to
                 // for the string is that statement's to say ({@link #somePiece}).
-                boolean aPiece = switch (of) {
-                    case LawSubject.Argument<DeclaredArgument>(DeclaredArgument argument) ->
-                            pieceThatIs(applied.argument(argument), reads) != null;
-                    case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument container) ->
-                            elements.get(container) instanceof ElementAt.APiece;
-                    case LawSubject.KeyOf<DeclaredArgument> _,
-                         LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ -> false;
-                    case LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(of);
-                };
-                return aPiece
+                return of instanceof LawSubject.ElementOf<DeclaredArgument>(
+                        DeclaredArgument container)
+                        && elements.get(container) instanceof ElementAt.APiece
                         ? new Sized.AsAForm(LinearForm.atom(
                                 new Quantity.CodePointsOfAPiece(counted)))
                         : new Sized.NotSized(new WhyUnread.AtNoPosition(
                                 WhyUnread.AtNoPosition.Place.SUBJECT));
             }
+            return codePointsAt(at, counted);
+        }
+
+        /**
+         * How many of the code points of {@code value}, read in {@code in}, are in
+         * {@code counted}: of the string at a position, where it stands at one; as many as are,
+         * of a string written out; and of a piece, where it is one ({@link #somePiece}).
+         */
+        private Sized codePointsOfTheValue(Core value, InputReads in, CodePointClass counted) {
+            if (in.pathOf(value, read.rules().newtypes()) instanceof PathResolution.At(TermPath at)) {
+                return codePointsAt(at, counted);
+            }
+            Denotation standing = in.standing(value, read.rules().symbols(),
+                    read.rules().newtypes());
+            if (Core.withoutStanding(standing.value()) instanceof Core.Str written) {
+                return new Sized.AsAForm(LinearForm.constant(ExactRatio.of(
+                        written.value().codePoints().filter(counted::contains).count())));
+            }
+            return pieceThatIs(value, in) != null
+                    ? new Sized.AsAForm(LinearForm.atom(new Quantity.CodePointsOfAPiece(counted)))
+                    : new Sized.NotSized(new WhyUnread.AtNoPosition(
+                            WhyUnread.AtNoPosition.Place.SUBJECT));
+        }
+
+        /** How many of the code points of the string at {@code at} are in {@code counted}. */
+        private Sized codePointsAt(TermPath at, CodePointClass counted) {
             Type type = read.domain().typeAt(at, read.rules());
             NumericTerm.CodePointClassCount term = type == null ? null
                     : NumericTerm.CodePointClassCount.of(at, counted, type, read.rules().inners());

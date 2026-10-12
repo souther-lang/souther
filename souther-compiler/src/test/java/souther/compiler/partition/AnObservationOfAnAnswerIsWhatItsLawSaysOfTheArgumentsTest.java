@@ -248,9 +248,139 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
                 stated("if List.length(b.xs ++ b.ys) == 2 then 1 else 0"));
     }
 
+    /**
+     * Strings joined, one made of each character or word of a string, hold something where some
+     * one of them does — and where what each is made of settles that the same way for every one,
+     * that is the string holding a character or a word at all. No element stands at a position
+     * of the input, and none needs to: what is asked of it does not turn on which it is. Whether
+     * the answer is written the same for each, is the element itself, or is chosen by cases each
+     * of which settles it; and through another mapping, another order, or what was kept by a
+     * statement every element meets.
+     */
+    @Test
+    void stringsMadeOneForEachCharacterHoldSomethingWhereTheStringHoldsACharacter() {
+        Proposition aCharacter = stated(
+                "if Bool.not(List.isEmpty(String.characters(b.s))) then 1 else 0");
+        Proposition aWord = stated("if Bool.not(List.isEmpty(String.words(b.s))) then 1 else 0");
+        assertNull(Proposition.firstStopIn(aCharacter));
+        assertNull(Proposition.firstStopIn(aWord));
+        assertNotEquals(aCharacter, aWord);
+        for (String each : List.of("c -> \" \"", "c -> c", "c -> c ++ b.t",
+                "c -> if String.matches(\"[a-z0-9]\", c) then c else \" \"")) {
+            assertEquals(aCharacter, stated("if String.length(String.concat(List.map(" + each
+                    + ", String.characters(b.s)))) >= 1 then 1 else 0"), each);
+            assertEquals(aWord, stated("if String.length(String.concat(List.map(" + each
+                    + ", String.words(b.s)))) >= 1 then 1 else 0"), each);
+        }
+        for (String made : List.of("List.map(d -> d, String.characters(b.s))",
+                "List.reverse(String.characters(b.s))",
+                "Set.toList(Set.fromList(String.characters(b.s)))",
+                "List.filter(c -> String.length(c) >= 1, String.characters(b.s))")) {
+            assertEquals(aCharacter, stated("if String.length(String.concat(List.map(c -> \" \", "
+                    + made + "))) >= 1 then 1 else 0"), made);
+        }
+        assertEquals(new Proposition.Always(false), stated(
+                "if String.length(String.concat(List.map(c -> \"\", String.characters(b.s))))"
+                        + " >= 1 then 1 else 0"));
+    }
+
+    /**
+     * A string written without the character it was made for is one string for every character:
+     * strings joined, that one for each character, hold something where the string holds a
+     * character and that one string holds something — whatever kept the characters, where it
+     * kept every one.
+     */
+    @Test
+    void stringsWrittenWithoutTheCharacterTheyAreMadeForHoldSomethingWhereBothDo() {
+        assertEquals(stated("if String.length(b.s) >= 1 && String.length(b.t) >= 1"
+                        + " then 1 else 0"),
+                stated("if String.length(String.concat(List.map(c -> b.t,"
+                        + " String.characters(b.s)))) >= 1 then 1 else 0"));
+        assertEquals(stated("if Bool.not(List.isEmpty(String.words(b.s)))"
+                        + " && String.length(b.t) >= 1 then 1 else 0"),
+                stated("if String.length(String.concat(List.map(c -> b.t,"
+                        + " List.filter(w -> String.length(w) >= 1, String.words(b.s)))))"
+                        + " >= 1 then 1 else 0"));
+    }
+
+    /**
+     * The words of the characters a pattern of one symbol keeps, each other one a space, are some
+     * word exactly where the string holds a code point the pattern accepts that is not
+     * whitespace: whichever is written, a slug made of them or some character matching, one count
+     * of the string's code points in that set.
+     */
+    @Test
+    void wordsOfTheCharactersAPatternKeepsAreTheStringHoldingOneItAccepts() {
+        Proposition matching = stated("if List.any(c -> String.matches(\"[a-z0-9]\", c),"
+                + " String.characters(b.s)) then 1 else 0");
+        assertNull(Proposition.firstStopIn(matching), matching.toString());
+        Proposition.Compared compared = assertInstanceOf(Proposition.Compared.class, matching);
+        Relation.Affine affine = assertInstanceOf(Relation.Affine.class, compared.relation());
+        assertEquals(List.of("#(one of {0030-0039 0061-007A})(b.s)"), affine.form().coefs()
+                .keySet().stream().map(Object::toString).toList(), "the one number it is about");
+        String kept = "List.map(c -> if String.matches(\"[a-z0-9]\", c) then c else \" \","
+                + " String.characters(b.s))";
+        assertEquals(matching, stated("if Bool.not(List.isEmpty(String.words(String.concat("
+                + kept + ")))) then 1 else 0"));
+        assertEquals(matching, stated("if String.length(String.join(\"-\", String.words("
+                + "String.concat(" + kept + ")))) >= 1 then 1 else 0"));
+        // A space the pattern accepts is still no word.
+        assertEquals(matching, stated("if Bool.not(List.isEmpty(String.words(String.concat("
+                + "List.map(c -> if String.matches(\"[a-z0-9 ]\", c) then c else \"\","
+                + " String.characters(b.s)))))) then 1 else 0"));
+        assertEquals(new Proposition.Always(false), stated("if List.any(c -> String.matches("
+                + "\"[a-z][0-9]\", c), String.characters(b.s)) then 1 else 0"));
+    }
+
+    /**
+     * Characters of a string lowercased are not characters of a string at a position: the case
+     * mapping, and the composition after it, can take a letter the pattern accepts into one it
+     * does not — {@code J} before a combining caron is {@code ǰ} once lowercased — so which code
+     * points of the string make one is not a class of them, and it is not read.
+     */
+    @Test
+    void charactersOfAStringLowercasedAreNotReadAsAClassOfTheString() {
+        Proposition stated = stated("if List.any(c -> String.matches(\"[a-z0-9]\", c),"
+                + " String.characters(String.lowercase(b.s))) then 1 else 0");
+        assertTrue(Proposition.leavesSomethingUnread(stated), stated.toString());
+    }
+
+    /**
+     * What a dependency answers for each character is a string for each, one answer apiece: what
+     * is stated of it is not stated once of every element, and with no position for the character
+     * it is handed it is not read.
+     */
+    @Test
+    void stringsADependencyAnswersForEachCharacterAreNotOneStringForEvery() {
+        Proposition stated = stated("if String.length(String.concat(List.map(c -> lookUp(c),"
+                + " String.characters(b.s)))) >= 1 then 1 else 0", true);
+        assertTrue(Proposition.leavesSomethingUnread(stated), stated.toString());
+    }
+
+    /**
+     * Where what an element was kept by turns on which element it is, some element being kept is
+     * not the string holding a character, and with no position for the element it is not read —
+     * whether the string made of it is written with the element or without.
+     */
+    @Test
+    void stringsMadeOfTheCharactersAStatementKeptAreNotReadAsTheStringHoldingOne() {
+        for (String each : List.of("c -> \" \"", "c -> b.t")) {
+            assertInstanceOf(WhyUnread.AtNoPosition.class, Proposition.firstStopIn(stated(
+                    "if String.length(String.concat(List.map(" + each + ","
+                            + " List.filter(c -> c == \"a\", String.characters(b.s))))) >= 1"
+                            + " then 1 else 0")), each);
+        }
+    }
+
     /** What the condition of the one fork of a body written {@code body} states. */
     private static Proposition stated(String body) {
-        Fork fork = fork(body);
+        return stated(body, false);
+    }
+
+    /** As {@link #stated(String)}, of a behavior that depends on {@code lookUp}, which answers a
+     *  string for a string, where {@code callsLookUp}. */
+    private static Proposition stated(String body, boolean callsLookUp) {
+        Fork fork = fork(body, callsLookUp);
         return Pullback.ofATruth(fork.condition(), fork.reads(), fork.read(), Optional.empty())
                 .proposition();
     }
@@ -258,7 +388,7 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
     /** What each rule that reads all of the condition of the one fork of {@code body}, a
      *  comparison, concludes. */
     private static List<Proposition> byEachRule(String body) {
-        Fork fork = fork(body);
+        Fork fork = fork(body, false);
         StatedComparison comparison = BooleanMeaning.asAComparison(fork.condition())
                 .orElseThrow(() -> new AssertionError(body + " is a comparison"));
         return Pullback.byEachRule(comparison, fork.reads(), fork.read()).stream()
@@ -268,13 +398,21 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
     private record Fork(Core condition, InputReads reads, InputReading read) {}
 
     /** The condition of the one fork of a body written {@code body}, as the reading meets it. */
-    private static Fork fork(String body) {
-        String model = "module demo\n\n" + INPUT + """
+    private static Fork fork(String body, boolean callsLookUp) {
+        String model = "module demo\n\n" + INPUT + (callsLookUp ? """
+
+                behavior lookUp : (s: String) -> String
+
+                behavior f : (b: Box) -> Int
+                    depends on lookUp
+                let f (b, lookUp) =
+                    %s
+                """ : """
 
                 behavior f : (b: Box) -> Int
                 let f (b) =
                     %s
-                """.formatted(body.indent(4).strip());
+                """).formatted(body.indent(4).strip());
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + body);

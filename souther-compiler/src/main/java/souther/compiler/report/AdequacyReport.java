@@ -5003,6 +5003,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         into.put("class", "not_whitespace_nor_equal_to");
                         into.put("separator", apart.separator());
                     }
+                    case CodePointClass.OneOf set -> {
+                        into.put("class", "one_of");
+                        ArrayNode ranges = into.putArray("ranges");
+                        set.held().ranges().forEach(range -> ranges.addArray()
+                                .add(range.from()).add(range.to()));
+                    }
                 }
             }
             // How often the value at the place occurs among the elements of its container.

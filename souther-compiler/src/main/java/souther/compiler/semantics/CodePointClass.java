@@ -1,26 +1,58 @@
 package souther.compiler.semantics;
 
 import net.unit8.notation199x.WhiteSpace;
+import net.unit8.notation199x.pattern.CodePoints;
 
 /**
  * Which code points of a string are counted by {@link NumericTerm.CodePointClassCount}.
  *
- * <p>Two classes and no more, because the readings that need a count are two: what a string holds
- * besides whitespace, which is what is left of it once it is trimmed, and what it holds besides
- * whitespace and one separator, which is what the pieces a split by that separator leaves hold
- * between them. Whitespace is the one alphabet {@code String.trim} and {@code String.words} share
- * (spec §string-whitespace), so a count of what is not in it is a count the run time agrees with.
+ * <p>The classes the readings that need a count come to. What a string holds besides whitespace is
+ * what is left of it once it is trimmed; what it holds besides whitespace and one separator is what
+ * the pieces a split by that separator leaves hold between them. Whitespace is the one alphabet
+ * {@code String.trim} and {@code String.words} share (spec §string-whitespace), so a count of what
+ * is not in it is a count the run time agrees with. And a set of code points one character is read
+ * to be one of — the characters a pattern of one symbol accepts, together with what else was
+ * stated of the same character — is counted as that set ({@link OneOf}).
  *
  * <p>Not a predicate a program writes. A closure counted by is any function and nothing here reads
  * one; these are the classes this compiler can say exactly what a string must hold for.
+ *
+ * <p>One class has one spelling: a set that is one of the named classes is that class ({@link
+ * #of}), so that two readings of one set are equal.
  */
 public sealed interface CodePointClass {
 
     /** Whether {@code codePoint} is one the class counts. */
     boolean contains(int codePoint);
 
+    /** The code points the class counts. */
+    CodePoints held();
+
+    /**
+     * The class counting exactly {@code held}: the named class where it is one, and otherwise the
+     * set itself.
+     */
+    static CodePointClass of(CodePoints held) {
+        CodePointClass named = named(held);
+        return named != null ? named : new OneOf(held);
+    }
+
+    /** The named class counting exactly {@code held}, or null where none does. */
+    private static CodePointClass named(CodePoints held) {
+        CodePoints notWhitespace = NotWhitespace.HELD;
+        if (held.equals(notWhitespace)) {
+            return new NotWhitespace();
+        }
+        CodePoints left = notWhitespace.less(held);
+        return held.less(notWhitespace).isEmpty() && left.size() == 1
+                ? new NotWhitespaceNorEqualTo(left.least()) : null;
+    }
+
     /** The code points that are not whitespace. */
     record NotWhitespace() implements CodePointClass {
+
+        /** The code points that are not whitespace, worked out once. */
+        private static final CodePoints HELD = notWhitespace();
 
         @Override
         public boolean contains(int codePoint) {
@@ -28,8 +60,24 @@ public sealed interface CodePointClass {
         }
 
         @Override
+        public CodePoints held() {
+            return HELD;
+        }
+
+        @Override
         public String toString() {
             return "not whitespace";
+        }
+
+        /** Every code point but those with the {@code White_Space} property. */
+        private static CodePoints notWhitespace() {
+            CodePoints whitespace = CodePoints.NONE;
+            for (int codePoint = 0; codePoint <= CodePoints.LAST; codePoint++) {
+                if (!CodePoints.isSurrogate(codePoint) && WhiteSpace.contains(codePoint)) {
+                    whitespace = whitespace.or(CodePoints.of(codePoint));
+                }
+            }
+            return whitespace.not();
         }
     }
 
@@ -50,8 +98,38 @@ public sealed interface CodePointClass {
         }
 
         @Override
+        public CodePoints held() {
+            return NotWhitespace.HELD.less(CodePoints.of(separator));
+        }
+
+        @Override
         public String toString() {
             return "not whitespace nor U+%X".formatted(separator);
+        }
+    }
+
+    /**
+     * The code points of {@code held}, a set that is none of the named classes ({@link #of}).
+     */
+    record OneOf(CodePoints held) implements CodePointClass {
+
+        public OneOf {
+            if (held == null) {
+                throw new IllegalArgumentException("a class counts some set of code points");
+            }
+            if (named(held) != null) {
+                throw new IllegalArgumentException(held + " is a named class, spelled as that");
+            }
+        }
+
+        @Override
+        public boolean contains(int codePoint) {
+            return held.has(codePoint);
+        }
+
+        @Override
+        public String toString() {
+            return "one of " + held;
         }
     }
 }

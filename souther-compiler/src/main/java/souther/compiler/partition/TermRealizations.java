@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import net.unit8.notation199x.WhiteSpace;
+import net.unit8.notation199x.pattern.CodePoints;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
@@ -40,6 +40,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -678,8 +679,8 @@ final class TermRealizations {
          * One string holding the numbers of code points asked of it in each class, and that many
          * in all where the length is asked too.
          *
-         * <p><b>One string and not one for each number.</b> The counts of one string are tied: no
-         * class holds more than the code points that are not whitespace, and none more than the
+         * <p><b>One string and not one for each number.</b> The counts of one string are tied: two
+         * classes that share code points count those in both, and none counts more than the
          * string is long. A string written for each number alone and put side by side would answer
          * none of them, so the numbers are chosen together and the string is written out of them.
          */
@@ -2389,22 +2390,24 @@ final class TermRealizations {
 
     /**
      * Strings written for the number alone: {@code many} code points of the class, and the ones
-     * that stand beside them where nothing is written — whitespace, and the separator the class
-     * leaves out. Each is a string some value holds, and none is claimed to be the only one.
+     * that stand beside them where nothing is written — whitespace where the class does not count
+     * it, and the separator the class leaves out. Each is a string some value holds, and none is
+     * claimed to be the only one.
      */
     private static List<String> plainStringsHolding(CodePointClass counted, int many) {
-        Set<Integer> apart = counted instanceof CodePointClass.NotWhitespaceNorEqualTo(
-                int separator) ? Set.of(separator) : Set.of();
+        boolean spaceCounted = counted.contains(' ');
         List<String> out = new ArrayList<>();
         // A string of none is offered as whitespace before it is offered as nothing: a row at
         // nothing is a row that passes with whatever trimming did to it.
-        if (many == 0) {
+        if (many == 0 && !spaceCounted) {
             out.add(" ");
         }
-        for (int member : codePointsOutside(apart)) {
+        for (int member : writtenFor(counted.held())) {
             String held = new String(Character.toChars(member)).repeat(many);
             out.add(held);
-            out.add(held + " ");
+            if (!spaceCounted) {
+                out.add(held + " ");
+            }
             if (counted instanceof CodePointClass.NotWhitespaceNorEqualTo(int separator)) {
                 out.add(held + new String(Character.toChars(separator)));
                 out.add(held + new String(Character.toChars(separator)) + " ");
@@ -2414,34 +2417,87 @@ final class TermRealizations {
     }
 
     /**
-     * Code points that are not whitespace and are none of {@code excluded}, which a class that
-     * leaves out some separators counts wherever they stand: the first plain letter there is
-     * outside the set, and the first ideograph of the block that has no gaps.
+     * The code points of {@code held} a string is written with, the first preferred: the space
+     * where it is one of them; and otherwise the first plain letter there is in the set and the
+     * first ideograph of the block that has no gaps — or, where it holds neither, the least of it.
      *
-     * <p>Chosen from outside the set rather than from a list written for the purpose, so that no
-     * set of separators — however many a model writes for one string — leaves nothing to choose.
-     * The letter is first since a row is read by a person. The ideograph is there for the string
-     * the letter cannot be written into: a letter beside a combining separator is one code point
-     * once the text is let in, and no primary composite is made of an ideograph and a mark, so a
-     * string written with it keeps its code points. A set covering every plain letter and every
-     * ideograph is not one a model writes, and is refused as the contradiction it would be.
+     * <p>Chosen from inside the set rather than from a list written for the purpose, so that no
+     * set — however many separators a model writes for one string — leaves nothing to choose. The
+     * letter is first since a row is read by a person. The ideograph is there for the string the
+     * letter cannot be written into: a letter beside a combining separator is one code point once
+     * the text is let in, and no primary composite is made of an ideograph and a mark, so a string
+     * written with it keeps its code points.
      */
-    private static List<Integer> codePointsOutside(Set<Integer> excluded) {
+    private static List<Integer> writtenFor(CodePoints held) {
+        if (held.has(' ')) {
+            return List.of((int) ' ');
+        }
         List<Integer> out = new ArrayList<>();
-        PLAIN_LETTERS_FIRST.codePoints().filter(each -> !excluded.contains(each)).findFirst()
-                .ifPresent(out::add);
+        PLAIN_LETTERS_FIRST.codePoints().filter(held::has).findFirst().ifPresent(out::add);
         for (char each = FIRST_IDEOGRAPH; each <= LAST_IDEOGRAPH; each++) {
-            int codePoint = each;
-            if (!excluded.contains(codePoint)) {
-                out.add(codePoint);
+            if (held.has(each)) {
+                out.add((int) each);
                 break;
             }
         }
-        if (out.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "every plain letter and every ideograph of the block is a separator");
+        if (out.isEmpty() && !held.isEmpty()) {
+            out.add(held.least());
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * One kind of code point a string is written with: the code points standing in exactly the
+     * same classes, and the ones of them it is written with, the first preferred.
+     */
+    private record KindOfCodePoint(CodePoints held, List<Integer> writtenWith) {}
+
+    /**
+     * The kinds of code point a string holding the numbers {@code wanted} asks of it is written
+     * with: the code points told apart by every class counted and by being whitespace, which
+     * stands apart even where no class counts it. In the order a string is written in — what most
+     * classes count first, whitespace last, and the rest by the first class, in the order they
+     * were asked for, that leaves it out.
+     */
+    private static List<KindOfCodePoint> kindsOfCodePoint(List<OfAString> wanted) {
+        List<CodePoints> by = new ArrayList<>();
+        by.add(new CodePointClass.NotWhitespace().held());
+        for (OfAString each : wanted) {
+            if (each.counted() != null && !by.contains(each.counted().held())) {
+                by.add(each.counted().held());
+            }
+        }
+        List<CodePoints> cells = List.of(CodePoints.EVERYTHING);
+        for (CodePoints one : by) {
+            List<CodePoints> split = new ArrayList<>();
+            for (CodePoints cell : cells) {
+                for (CodePoints part : List.of(cell.and(one), cell.less(one))) {
+                    if (!part.isEmpty()) {
+                        split.add(part);
+                    }
+                }
+            }
+            cells = split;
+        }
+        List<CodePoints> ordered = new ArrayList<>(cells);
+        ordered.sort(Comparator.comparing((CodePoints cell) -> !by.getFirst().has(cell.least()))
+                .thenComparingInt(cell -> firstLeavingOut(by, cell)));
+        List<KindOfCodePoint> out = new ArrayList<>();
+        for (CodePoints cell : ordered) {
+            out.add(new KindOfCodePoint(cell, writtenFor(cell)));
+        }
+        return out;
+    }
+
+    /** Where in {@code by} the first set leaving out the code points of {@code cell} stands, or
+     *  -1 where every one of them holds them. */
+    private static int firstLeavingOut(List<CodePoints> by, CodePoints cell) {
+        for (int at = 0; at < by.size(); at++) {
+            if (!by.get(at).has(cell.least())) {
+                return at;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -2482,8 +2538,8 @@ final class TermRealizations {
      * A string holding the numbers asked of it of each class's code points, and as many in all as
      * the length asks.
      *
-     * <p>Written out of how many there are of each kind of code point: ones in no class this
-     * counts, whitespace, and one run of each separator some class leaves out. Every number asked
+     * <p>Written out of how many there are of each kind of code point: the code points standing in
+     * the same classes, with whitespace a kind apart ({@link #kindsOfCodePoint}). Every number asked
      * for is a sum of those, so a string is chosen by choosing them, and what is offered is read
      * back through the one reader before it is — a string that does not answer every demand is not
      * offered however the sums said it would.
@@ -2548,18 +2604,10 @@ final class TermRealizations {
                 largest > CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL.maximum();
         boolean inFull = everyNumberTried && wholeQuestion && !pastWhatIsSearchedInFull;
 
-        // The separators some class leaves out, as the code points that are not whitespace.
-        List<Integer> separators = new ArrayList<>();
-        for (OfAString each : wanted) {
-            if (each.counted() instanceof CodePointClass.NotWhitespaceNorEqualTo apart
-                    && !WhiteSpace.contains(apart.separator())
-                    && !separators.contains(apart.separator())) {
-                separators.add(apart.separator());
-            }
-        }
-        List<Integer> plains = codePointsOutside(Set.copyOf(separators));
-        // Plain code points, each separator and whitespace: how many of each kind a string holds.
-        int kindsOfCodePoint = separators.size() + 2;
+        // The code points told apart by what each class counts: how many of each kind a string
+        // holds.
+        List<KindOfCodePoint> written = kindsOfCodePoint(wanted);
+        int kindsOfCodePoint = written.size();
         int steps = CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.maximum();
         List<Integer> kinds = codePointsOfEachKind(numbers, inFull ? largest : -1,
                 (int) Math.floor(Math.pow(steps, 1.0 / kindsOfCodePoint)));
@@ -2571,7 +2619,7 @@ final class TermRealizations {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                     ((WornNames.Unwritable) wears).why());
         }
-        StringSearch search = new StringSearch(separators, plains, wanted,
+        StringSearch search = new StringSearch(written, wanted,
                 CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(), steps);
         // The strings the type admits come first and are the only ones offered where any of them
         // answers every demand. Written ones stand in only where the type admits none that
@@ -2673,8 +2721,7 @@ final class TermRealizations {
      */
     private static final class StringSearch {
 
-        private final List<Integer> separators;
-        private final List<Integer> plains;
+        private final List<KindOfCodePoint> written;
         private final List<OfAString> wanted;
         private final int most;
         private final int steps;
@@ -2682,10 +2729,9 @@ final class TermRealizations {
         private int looked;
         private boolean leftUnwritten;
 
-        StringSearch(List<Integer> separators, List<Integer> plains, List<OfAString> wanted,
-                     int most, int steps) {
-            this.separators = separators;
-            this.plains = plains;
+        StringSearch(List<KindOfCodePoint> written, List<OfAString> wanted, int most,
+                     int steps) {
+            this.written = written;
             this.wanted = wanted;
             this.most = most;
             this.steps = steps;
@@ -2725,11 +2771,11 @@ final class TermRealizations {
          * Every way of writing how many code points of each kind a string holds, in the order the
          * smaller counts come first, where the string they write answers every demand.
          *
-         * <p>The kinds are the plain ones, each separator and whitespace. The numbers are sums of
-         * the counts chosen, so most assignments are refused without a string being written; one
-         * that is not is written with each plain code point in turn, since which of them the
-         * separators stand beside decides whether the text keeps the code points it was written
-         * with, and is read back as the language holds it.
+         * <p>The kinds are the code points the classes tell apart ({@link #kindsOfCodePoint}). The
+         * numbers are sums of the counts chosen, so most assignments are refused without a string
+         * being written; one that is not is written with each code point of a kind in turn, since
+         * which of them the others stand beside decides whether the text keeps the code points it
+         * was written with, and is read back as the language holds it.
          */
         void over(int kind, int[] counts, List<Integer> kinds) {
             if (looked >= steps || found.size() >= most) {
@@ -2737,15 +2783,14 @@ final class TermRealizations {
             }
             if (kind == counts.length) {
                 looked++;
-                if (sumsAreAdmitted(counts, separators, wanted)) {
-                    boolean written = false;
-                    for (int plain : plains) {
-                        written = adopt(writtenWith(counts, separators, plain));
-                        if (written) {
-                            break;
-                        }
+                if (sumsAreAdmitted(counts, written, wanted)) {
+                    boolean adopted = false;
+                    int ways = written.stream().mapToInt(each -> each.writtenWith().size())
+                            .max().orElse(0);
+                    for (int way = 0; way < ways && !adopted; way++) {
+                        adopted = adopt(writtenWith(counts, written, way));
                     }
-                    leftUnwritten |= !written;
+                    leftUnwritten |= !adopted;
                 }
                 return;
             }
@@ -2756,38 +2801,31 @@ final class TermRealizations {
         }
     }
 
-    /** The string with {@code counts[0]} plain code points, then each separator that many times,
-     *  then whitespace. */
-    private static String writtenWith(int[] counts, List<Integer> separators, int plain) {
+    /** The string with {@code counts[i]} code points of each kind in turn, each written with the
+     *  {@code way}-th code point of its kind, or its last where it has fewer. */
+    private static String writtenWith(int[] counts, List<KindOfCodePoint> written, int way) {
         StringBuilder out = new StringBuilder();
-        out.append(new String(Character.toChars(plain)).repeat(counts[0]));
-        for (int at = 0; at < separators.size(); at++) {
-            out.append(new String(Character.toChars(separators.get(at))).repeat(counts[at + 1]));
+        for (int at = 0; at < written.size(); at++) {
+            List<Integer> with = written.get(at).writtenWith();
+            int codePoint = with.get(Math.min(way, with.size() - 1));
+            out.append(new String(Character.toChars(codePoint)).repeat(counts[at]));
         }
-        out.append(" ".repeat(counts[counts.length - 1]));
         return out.toString();
     }
 
     /**
      * Whether every demand admits the number the counts chosen come to: the length is all of
-     * them, a class holds the plain code points and every separator it does not leave out.
+     * them, and a class holds the kinds of code point it counts.
      */
-    private static boolean sumsAreAdmitted(int[] counts, List<Integer> separators,
+    private static boolean sumsAreAdmitted(int[] counts, List<KindOfCodePoint> written,
                                            List<OfAString> wanted) {
-        long whitespace = counts[counts.length - 1];
-        long outsideWhitespace = counts[0];
-        for (int at = 0; at < separators.size(); at++) {
-            outsideWhitespace += counts[at + 1];
-        }
         for (OfAString each : wanted) {
-            long number;
-            if (each.counted() == null) {
-                number = outsideWhitespace + whitespace;
-            } else if (each.counted() instanceof CodePointClass.NotWhitespaceNorEqualTo apart
-                    && separators.contains(apart.separator())) {
-                number = outsideWhitespace - counts[1 + separators.indexOf(apart.separator())];
-            } else {
-                number = outsideWhitespace;
+            long number = 0;
+            for (int at = 0; at < written.size(); at++) {
+                if (each.counted() == null
+                        || each.counted().contains(written.get(at).held().least())) {
+                    number += counts[at];
+                }
             }
             if (!each.holds().test(Count.of(number))) {
                 return false;

@@ -5,6 +5,7 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * One thing that is true of one of the language's operations.
@@ -314,12 +315,16 @@ public sealed interface OperationFact {
      *
      * <p>Nothing here counts the pieces. How many there are is the number of times the separator
      * stands in the string and is no number the language says.
+     *
+     * <p>With no separator each piece is one code point of the string, every one of them in order:
+     * the characters it is taken apart into.
      */
-    record HoldsThePiecesOf(ArgumentRef separator, ArgumentRef string) implements OperationFact {
+    record HoldsThePiecesOf(Optional<ArgumentRef> separator, ArgumentRef string)
+            implements OperationFact {
 
         public HoldsThePiecesOf {
-            Objects.requireNonNull(separator, "this one names the separator");
-            Objects.requireNonNull(string, "and the string it stands in");
+            Objects.requireNonNull(separator, "this one says where the pieces part, if anywhere");
+            Objects.requireNonNull(string, "and the string they are of");
         }
     }
 
@@ -343,19 +348,31 @@ public sealed interface OperationFact {
 
     /**
      * What the operation answers holds a code point of {@code counted} exactly where {@code string}
-     * does: a case mapping takes a code point that is not whitespace to some that are not, and
-     * leaves whitespace as it is.
+     * does — or, where {@code held} says so, where some element of the strings {@code string}
+     * holds does. A case mapping takes a code point that is not whitespace to some that are not,
+     * and leaves whitespace as it is; strings put end to end hold every code point of each, once
+     * the seams are canonical, and canonical composition joins code points that are not whitespace
+     * into one that is not.
      *
-     * <p>Whether there is one and not how many. A case mapping can widen one code point to several,
-     * so the count of the answer is no number of the argument, and only a statement that is the
-     * same for every count of one or more is carried across.
+     * <p>Whether there is one and not how many. A case mapping can widen one code point to several
+     * and a seam can join two into one, so the count of the answer is no number of the argument,
+     * and only a statement that is the same for every count of one or more is carried across.
      */
-    record KeepsWhetherItHoldsACodePointOf(CodePointClass counted, ArgumentRef string)
-            implements OperationFact {
+    record KeepsWhetherItHoldsACodePointOf(CodePointClass counted, ArgumentRef string,
+                                           HeldBy held) implements OperationFact {
+
+        /** What of the argument holds the code points the answer holds. */
+        public enum HeldBy {
+            /** The argument, a string. */
+            THE_STRING,
+            /** Some element of the argument, a container of strings. */
+            SOME_ELEMENT
+        }
 
         public KeepsWhetherItHoldsACodePointOf {
             Objects.requireNonNull(counted, "this one names the code points it keeps");
             Objects.requireNonNull(string, "and the string it keeps them of");
+            Objects.requireNonNull(held, "and what of the argument holds them");
         }
     }
 

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import net.unit8.notation199x.pattern.CodePoints;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
@@ -37,8 +38,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * The counts of one string's code points and how long it is are tied to each other, and a string
  * is written for all of them at once or for none.
  *
- * <p>No class holds more than the code points that are not whitespace, none holds more than the
- * string is long, and a class that leaves a whitespace separator out leaves nothing out. A string
+ * <p>Two classes count the code points they share in both, none holds more than the string is
+ * long, and a class that leaves a whitespace separator out leaves nothing out. A string
  * written for each number alone and put side by side would answer none of them, so what is held
  * here is that what is offered reads back as every number — and that a group no string answers is
  * told apart from a group this compiler did not look in.
@@ -129,6 +130,28 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
         assertEquals(true, !strings.isEmpty());
         for (String each : strings) {
             assertEquals(2, notWhitespaceNorCommaIn(each), each);
+            assertEquals(3, notWhitespaceIn(each), each);
+            assertEquals(5, lengthOf(each), each);
+        }
+    }
+
+    /**
+     * A class that is a set of code points, the space among them, is counted beside the code
+     * points that are not whitespace and the length: what it shares with each is counted in
+     * both, so a string answering all three is written with code points told apart by every one
+     * of them — whitespace in the set and out of it among them.
+     */
+    @Test
+    void aStringIsWrittenWhoseCountsAreAllThoseAskedOfASetHoldingWhitespace() {
+        CodePointClass set = CodePointClass.of(CodePoints.between('a', 'z')
+                .or(CodePoints.between('0', '9')).or(CodePoints.of(' ')));
+        List<String> strings = offered(new Demands()
+                .exactly(counting(set), 2)
+                .exactly(NOT_WHITESPACE, 3)
+                .exactly(LENGTH, 5).written());
+        assertEquals(true, !strings.isEmpty());
+        for (String each : strings) {
+            assertEquals(2, each.codePoints().filter(set::contains).count(), each);
             assertEquals(3, notWhitespaceIn(each), each);
             assertEquals(5, lengthOf(each), each);
         }

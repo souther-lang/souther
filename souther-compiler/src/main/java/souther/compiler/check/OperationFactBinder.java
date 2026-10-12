@@ -364,8 +364,9 @@ final class OperationFactBinder {
                 holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
                         "the pieces a string falls into");
                 yield new BoundOperationFact.HoldsThePiecesOf(operation,
-                        holdToTheDeclaration(declaration, pieces.separator(), null,
-                                TypeRequirement.TEXT, "where the pieces are parted"),
+                        pieces.separator().map(separator -> holdToTheDeclaration(declaration,
+                                separator, null, TypeRequirement.TEXT,
+                                "where the pieces are parted")),
                         holdToTheDeclaration(declaration, pieces.string(), null,
                                 TypeRequirement.TEXT, "the string that falls into pieces"));
             }
@@ -398,9 +399,27 @@ final class OperationFactBinder {
             case OperationFact.KeepsWhetherItHoldsACodePointOf keeps -> {
                 holdTheResultToTheDeclaration(declaration, TypeRequirement.TEXT,
                         "a string holding a code point where another does");
+                // Compared rather than switched on: a switch over the authored word compiles to a
+                // table of it outside this class.
+                if (keeps.held()
+                        == OperationFact.KeepsWhetherItHoldsACodePointOf.HeldBy.THE_STRING) {
+                    yield new BoundOperationFact.KeepsWhetherItHoldsACodePointOf(operation,
+                            keeps.counted(), holdToTheDeclaration(declaration, keeps.string(),
+                                    null, TypeRequirement.TEXT,
+                                    "the string whose code points are kept"),
+                            BoundOperationFact.KeepsWhetherItHoldsACodePointOf.HeldBy.THE_STRING);
+                }
+                DeclaredArgument strings = holdToTheDeclaration(declaration, keeps.string(), null,
+                        TypeRequirement.CONTAINER, "the strings whose code points are kept");
+                if (!Type.STRING.equals(Type.elementOfAContainer(strings.stands()))) {
+                    throw new IllegalStateException("argument " + (strings.position() + 1)
+                            + " of " + ((ValueName.Stdlib) operation.operation()).qualified()
+                            + " is " + Type.show(strings.stands())
+                            + ", not a container of strings");
+                }
                 yield new BoundOperationFact.KeepsWhetherItHoldsACodePointOf(operation,
-                        keeps.counted(), holdToTheDeclaration(declaration, keeps.string(), null,
-                                TypeRequirement.TEXT, "the string whose code points are kept"));
+                        keeps.counted(), strings,
+                        BoundOperationFact.KeepsWhetherItHoldsACodePointOf.HeldBy.SOME_ELEMENT);
             }
             // A key kept is the same key, so the answer is a map keyed by what the map named is.
             case OperationFact.KeepsTheKeysOf kept -> {
