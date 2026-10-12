@@ -135,6 +135,10 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
             // Which comparisons the bodies hold, and what this plan did about each.
             "method comparisons() : souther.compiler.coverage.ComparisonCatalog",
             "method instruments(souther.compiler.types.ConstructOccurrence) : boolean",
+            // Whether a behavior's run makes one call of a helper once, which says whose a run
+            // recorded in the helper's method is: a yes or no, and nothing of where the call stands.
+            "method runsOnce(souther.compiler.types.ValueName$Helper,souther.compiler.core.Core)"
+                    + " : boolean",
             "method emissionSiteOf(souther.compiler.types.ConstructOccurrence) :"
                     + " java.util.Optional<souther.compiler.coverage.ConditionOutcomeSite>",
             "method outcomeOf(souther.compiler.types.ConstructOccurrence,boolean) :"

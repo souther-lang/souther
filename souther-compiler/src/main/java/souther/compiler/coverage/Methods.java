@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.core.Core;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -27,9 +28,10 @@ import java.util.function.Predicate;
  * Which bodies those are is asked here and nowhere else: a reader that took a behavior's body alone
  * would be looking for a comparison in a body that does not hold it.
  *
- * <p>A helper emitted as a method is a body a run passes through as well, with no places counted.
- * It is a node of the graph all the same: a value's method called from inside it is reached by a
- * run that reaches the helper, and a graph of the counted bodies alone loses that method with it.
+ * <p>A helper emitted as a method is a body a run passes through as well, with no arm counted and
+ * its comparisons owed by no behavior. It is a node of the graph all the same: a value's method
+ * called from inside it is reached by a run that reaches the helper, and a graph of the counted
+ * bodies alone loses that method with it.
  *
  * <p>Which method a call runs is answered here too, and the closures are made of that answer. A
  * reader that goes into a method where a call runs it and a closure that says which methods a
@@ -86,6 +88,54 @@ record Methods(Map<String, Core> entries, Map<String, Core> bodies, Map<String, 
             if (bodies.containsKey(name)) {
                 out.add(bodies.get(name));
             }
+        }
+        return out;
+    }
+
+    /**
+     * The one call of {@code helper} a run of {@code emitted} makes, where it makes one at most
+     * and only one is written: the only call of it in {@code emitted} and in every method a run of
+     * it reaches, the helper's own method left out, standing in {@code emitted} itself. Null
+     * otherwise.
+     *
+     * <p>Standing in the behavior's own body because that is run once per run; a value's method
+     * is run once per call of it. Whether one run passes the call more than once is the plan's to
+     * say ({@link CoverageSites.Plan#runsOnce}).
+     */
+    Core.Call onlyCallOf(ValueName.Helper helper, Core emitted) {
+        List<Core.Call> found = new ArrayList<>();
+        callsIn(emitted, helper, found);
+        if (found.size() != 1) {
+            return null;
+        }
+        Map<String, Core> all = all();
+        Core own = passages.get(helper.name());
+        for (String name : closure(callsOf(emitted, all), each -> callsOf(all.get(each), all))) {
+            if (all.get(name) != own) {
+                callsIn(all.get(name), helper, found);
+            }
+        }
+        return found.size() == 1 ? found.getFirst() : null;
+    }
+
+    private static void callsIn(Core e, ValueName.Helper helper, List<Core.Call> out) {
+        if (e == null) {
+            return;
+        }
+        if (e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
+                && reached.denotes().equals(helper)) {
+            out.add(call);
+        }
+        Core.forEachChild(e, child -> callsIn(child, helper, out));
+    }
+
+    /** Every method {@code emitted} reaches, directly or through another, values' and helpers'
+     *  alike: every body a run of it goes through but its own. */
+    List<Core> runFrom(Core emitted) {
+        Map<String, Core> all = all();
+        List<Core> out = new ArrayList<>();
+        for (String name : closure(callsOf(emitted, all), each -> callsOf(all.get(each), all))) {
+            out.add(all.get(name));
         }
         return out;
     }

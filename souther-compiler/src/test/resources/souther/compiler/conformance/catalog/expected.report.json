@@ -8832,17 +8832,392 @@
       },
       "partition" : {
         "axesMeasure" : {
-          "status" : "unavailable",
-          "reason" : "nothing_is_divided"
+          "status" : "complete"
         },
         "boundariesMeasure" : {
-          "status" : "unavailable",
-          "reason" : "no_rule_draws_a_line"
+          "status" : "complete"
         },
-        "axes" : [ ],
+        "axes" : [ {
+          "axis" : "restockByRecursion/shelf.counts[*]",
+          "path" : "shelf.counts[*]",
+          "read" : {
+            "extent" : "complete"
+          },
+          "classes" : [ "shelf.counts[*]/x < 3", "shelf.counts[*]/3 <= x" ],
+          "excluded" : [ ],
+          "unprovenClaims" : [ ],
+          "status" : "complete",
+          "covered" : [ "shelf.counts[*]/3 <= x", "shelf.counts[*]/x < 3" ],
+          "unclassifiedRows" : 0
+        } ],
         "claimsOffAxis" : [ ],
-        "boundaries" : [ ],
-        "obligations" : [ ],
+        "boundaries" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.searching",
+                  "definition" : "firstShort",
+                  "behavior" : "restockByRecursion",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "3"
+            }
+          },
+          "lineId" : {
+            "target" : {
+              "behavior" : "restockByRecursion",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "shelf.counts[*]"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "3"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.searching",
+                  "definition" : "firstShort",
+                  "behavior" : "restockByRecursion",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
+          "axis" : "restockByRecursion/shelf.counts[*]",
+          "origin" : "comparison@4:24:34",
+          "kind" : "at_value",
+          "value" : "3",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "relation" : "=",
+            "against" : "2",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "complete",
+            "hit" : false
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "3",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "relation" : "in",
+            "against" : "shelf.counts[*] < 2",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "3 < shelf.counts[*]",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          } ]
+        } ],
+        "obligations" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.searching",
+                  "definition" : "firstShort",
+                  "behavior" : "restockByRecursion",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "3"
+            },
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            }
+          },
+          "point" : "on",
+          "rule" : "comparison@4:24:34",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.searching",
+            "definition" : "firstShort",
+            "behavior" : "restockByRecursion",
+            "ordinal" : 3,
+            "lowered" : 0
+          },
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "complete",
+          "hit" : false,
+          "disposition" : "unmet",
+          "readings" : [ {
+            "behavior" : "restockByRecursion",
+            "axis" : "restockByRecursion/shelf.counts[*]",
+            "relation" : "=",
+            "against" : "2",
+            "status" : "complete",
+            "hit" : false
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.searching",
+                  "definition" : "firstShort",
+                  "behavior" : "restockByRecursion",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "3"
+            },
+            "location" : {
+              "kind" : "at_the_line"
+            }
+          },
+          "point" : "off",
+          "rule" : "comparison@4:24:34",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.searching",
+            "definition" : "firstShort",
+            "behavior" : "restockByRecursion",
+            "ordinal" : 3,
+            "lowered" : 0
+          },
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "restockByRecursion",
+            "axis" : "restockByRecursion/shelf.counts[*]",
+            "relation" : "=",
+            "against" : "3",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.searching",
+                  "definition" : "firstShort",
+                  "behavior" : "restockByRecursion",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "3"
+            },
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "stops" : {
+              "kind" : "at_the_order_end",
+              "towards" : "below"
+            }
+          },
+          "point" : "in",
+          "rule" : "comparison@4:24:34",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.searching",
+            "definition" : "firstShort",
+            "behavior" : "restockByRecursion",
+            "ordinal" : 3,
+            "lowered" : 0
+          },
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "restockByRecursion",
+            "axis" : "restockByRecursion/shelf.counts[*]",
+            "relation" : "in",
+            "against" : "shelf.counts[*] < 2",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.searching",
+                  "definition" : "firstShort",
+                  "behavior" : "restockByRecursion",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "3"
+            },
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "stops" : {
+              "kind" : "at_the_order_end",
+              "towards" : "above"
+            }
+          },
+          "point" : "out",
+          "rule" : "comparison@4:24:34",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.searching",
+            "definition" : "firstShort",
+            "behavior" : "restockByRecursion",
+            "ordinal" : 3,
+            "lowered" : 0
+          },
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "restockByRecursion",
+            "axis" : "restockByRecursion/shelf.counts[*]",
+            "relation" : "in",
+            "against" : "3 < shelf.counts[*]",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        } ],
         "pairs" : {
           "total" : 0,
           "between" : [ ],
@@ -8850,7 +9225,7 @@
           "covered" : 0,
           "unknown" : 0
         },
-        "notDerivable" : [ "shelf.counts", "shelf.counts[*]" ],
+        "notDerivable" : [ "shelf.counts" ],
         "notRead" : [ ]
       },
       "branch" : {
@@ -8955,13 +9330,46 @@
         } ]
       },
       "findings" : [ {
-        "kind" : "partition_not_derivable",
-        "disposition" : "reported",
-        "subject" : "shelf.counts"
+        "kind" : "boundary_unmet",
+        "disposition" : "refused",
+        "subject" : "ON point of comparison@4:24:34",
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "comparison",
+              "rule" : {
+                "kind" : "comparison",
+                "declaredIn" : "conformance.searching",
+                "definition" : "firstShort",
+                "behavior" : "restockByRecursion",
+                "ordinal" : 3,
+                "lowered" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : false,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "3"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "below"
+          }
+        },
+        "code" : "E1916"
       }, {
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
-        "subject" : "shelf.counts[*]"
+        "subject" : "shelf.counts"
       } ]
     }, {
       "name" : "restockByFold",

@@ -253,6 +253,9 @@ public final class PublicationOrders {
         out.add(ReadingGap.NO_VALUE);
         out.add(ReadingGap.COULD_NOT_WALK);
         out.add(ReadingGap.COULD_NOT_READ_ROW);
+        for (ReadingGap.ReachNotRead.Why why : ReadingGap.ReachNotRead.Why.values()) {
+            out.add(new ReadingGap.ReachNotRead(why));
+        }
         return out;
     }
 

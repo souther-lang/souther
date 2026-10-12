@@ -81,12 +81,39 @@ final class ConditionNumbering {
      *  a subtree: what is met is the fork and which of its arms, and there is no node of its own to
      *  be at. A {@code match} and an attempt both, since an arm of either is met the same way. */
     private final Map<Core, Map<Integer, ConditionOccurrence>> arms = new IdentityHashMap<>();
-    private final Map<ConditionOccurrence, Citation> metAt = new LinkedHashMap<>();
-    private int next;
+    private final Map<ConditionOccurrence, Citation> metAt;
+    /** How many names this reading has handed out, shared with every place it reads. */
+    private final int[] next;
+    /** What this reading names inside the body of each call of a recursive helper it reads, by the
+     *  call, shared with every place it reads. */
+    private final Map<CallContext, ConditionNumbering> within;
 
     ConditionNumbering(String module, String behavior) {
+        this(module, behavior, new LinkedHashMap<>(), new int[1], new HashMap<>());
+    }
+
+    private ConditionNumbering(String module, String behavior,
+                               Map<ConditionOccurrence, Citation> metAt, int[] next,
+                               Map<CallContext, ConditionNumbering> within) {
         this.module = module;
         this.behavior = behavior;
+        this.metAt = metAt;
+        this.next = next;
+        this.within = within;
+    }
+
+    /**
+     * The same reading, inside the body of a recursive helper read at the call {@code context}
+     * names.
+     *
+     * <p>One body read at two calls is two places the reading has been, and a fork in it is met at
+     * each: what one call's arms are named is not the other's. The names are this reading's and
+     * counted with every other it hands out, so two calls never wear one name.
+     */
+    ConditionNumbering within(CallContext context) {
+        return context.equals(CallContext.OF_THE_BODY) ? this
+                : within.computeIfAbsent(context,
+                        _ -> new ConditionNumbering(module, behavior, metAt, next, within));
     }
 
     /** What this reading already made of the condition at {@code at} under {@code reads}, or null
@@ -102,7 +129,7 @@ final class ConditionNumbering {
 
     /** The name of the condition being recognised now. */
     ConditionOccurrence met() {
-        return new ConditionOccurrence(behavior, next++);
+        return new ConditionOccurrence(behavior, next[0]++);
     }
 
     /**

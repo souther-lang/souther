@@ -1554,7 +1554,66 @@ public sealed interface BorderQuantity
         default Lastness lastToHold(TermPath container, TermPath position) {
             return new Lastness.CouldNotTell(ReadingGap.COULD_NOT_WALK);
         }
+
+        /**
+         * Which occurrence of the container at {@code container} this row is read in, and which
+         * of its elements this reading chose.
+         *
+         * <p>Of the reading and not of the row, as {@link #lastToHold} is; a walk that cannot
+         * tell the elements of the container apart could not walk to an answer. Nothing is read
+         * of the elements here: every reading of a row asks this, and a reader keeps what the
+         * elements of one occurrence came to by what this answers ({@link #elementsOf}).
+         */
+        default WalkResult<Among> among(TermPath container) {
+            return WalkResult.couldNotWalk();
+        }
+
+        /**
+         * The elements of the occurrence of the container at {@code container} this row is read
+         * in, in the order it wrote them, each read as this reading with that element chosen.
+         */
+        default WalkResult<List<AnElement>> elementsOf(TermPath container) {
+            return WalkResult.couldNotWalk();
+        }
+
+        /**
+         * Whether this reading chose an element of some container. A walk that cannot say is taken
+         * to have: what turns on which element is then not known of it, rather than taken to be
+         * about none.
+         */
+        default boolean choseAnElement() {
+            return true;
+        }
     }
+
+    /**
+     * Which occurrence of one container a reading of a row is read in, and which element of it the
+     * reading chose.
+     *
+     * @param walk   what every reading of the row shares, by identity: what tells two readings of
+     *               one row from readings of two rows that wrote the same values, which a reader
+     *               keeping what it worked out of a row's elements keys on
+     * @param beside what the reading chose of every other container, which says which occurrence
+     *               of the container this is — the items of the second order and not of the first
+     * @param chosen the element the reading chose, or null where it chose none
+     */
+    record Among(Object walk, Map<TermPath, Integer> beside, Integer chosen) {
+
+        public Among {
+            beside = Map.copyOf(beside);
+            if (walk == null) {
+                throw new IllegalArgumentException("an occurrence is of some row's walk");
+            }
+        }
+    }
+
+    /**
+     * One element of a container a row wrote, and the row read with it chosen.
+     *
+     * @param element where it stands among the container's elements
+     * @param reading the row, read with it chosen
+     */
+    record AnElement(int element, Observation reading) {}
 
     /**
      * Whether an element is the last of those holding the value it holds at a place.

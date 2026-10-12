@@ -3463,6 +3463,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // nothing here found anything out about one.
             case ReadingGap.CouldNotWalk _ -> "the walk to that position could not be taken";
             case ReadingGap.CouldNotReadRow _ -> "no row came back to read there";
+            // The value was read; what is not known is whether the run compared anything through
+            // the element it stands in, and what that turned on is what is said.
+            case ReadingGap.ReachNotRead(ReadingGap.ReachNotRead.Why unread) -> "whether the run"
+                    + " got to the rule through that reading turns on " + switch (unread) {
+                        case A_PART_NOT_READ -> "a part of the way that was not read";
+                        case MORE_READINGS_THAN_ARE_MADE -> "a part of the way reading which took"
+                                + " more readings than are made";
+                        case NO_VALUE_OF_THE_ROW -> "something the row does not write";
+                    };
             // The values were there, so nothing is said about the row: what stopped is the number
             // they come to, and whether a host with more room would hold it is said with it.
             case ReadingGap.CouldNotWorkOut(UnheldNumber unheld) -> switch (unheld) {
@@ -7374,6 +7383,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // reader weighing the document acts on both the same way.
                 case ReadingGap.CouldNotWalk _, ReadingGap.CouldNotReadRow _ ->
                         WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
+                // The value was read and whether the run got to it through that element was not:
+                // no news about the row either, and acted on the same way.
+                case ReadingGap.ReachNotRead _ -> WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
                 // Every value was read here, so it is not that word: what stopped is the
                 // arithmetic. Both ways of that are one word, and the run sensitivity beside it
                 // says which.

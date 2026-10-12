@@ -38,6 +38,7 @@ import souther.compiler.check.PathReachability;
 import souther.compiler.coverage.AnswerEmissionIndex;
 import souther.compiler.coverage.ComparisonEmissionIndex;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.types.ValueName;
 import souther.compiler.coverage.EmittedComparisonState;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.flow.ValueArrivals;
@@ -45,10 +46,12 @@ import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.function.Function;
 
 /**
  * The values a behavior's body compares its inputs against.
@@ -210,6 +213,10 @@ public final class GuardThresholds {
                 ComparisonEmissionIndex.ofBody(emitted, plan);
         AnswerEmissionIndex answers = AnswerEmissionIndex.ofBody(emitted, plan);
         ReachingCuts.Collected cuts = new ReachingCuts.Collected();
+        // Whether a run of this behavior makes one call of each helper once, asked once per
+        // helper: every comparison read in its body asks it, and it is a walk of every body the
+        // run goes through.
+        Map<ValueName.Helper, Boolean> runsOnce = new HashMap<>();
         for (ComparisonReadings.Reading each : comparisons.comparisons()) {
             // Which comparison of the model this is. Total over what this walk reads, and read off
             // what makes the tree rather than off what the models here happen to hold: the table
@@ -224,7 +231,7 @@ public final class GuardThresholds {
                             + " comparison at " + each.at() + " that states no construct of the"
                             + " model, in a tree where the language's operations stand"));
             List<EmittedComparisonState.Observation> watched =
-                    watchedAt(behavior, each, stated, index, answers, arrives);
+                    watchedAt(behavior, each, index, answers, arrives);
             EmittedComparisonState placed = watched.isEmpty()
                     ? new EmittedComparisonState.NotInstrumented()
                     : new EmittedComparisonState.Instrumented(watched);
@@ -249,6 +256,9 @@ public final class GuardThresholds {
                                 // the rule. A line of a statement of several is asked again with
                                 // where it decides taken in.
                                 lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
+                                        whereMet(each, helper ->
+                                                runsOnce.computeIfAbsent(helper,
+                                                        called -> plan.runsOnce(called, emitted))),
                                         reaches,
                                         ComparisonAssessment.narrowedByWhatArrives(admitted.read(),
                                                 Reachability.of(
@@ -276,7 +286,10 @@ public final class GuardThresholds {
             List<OnTheWay> holding = ReachingCuts.stating(each.condition(), read, true, conditions);
             List<OnTheWay> failing =
                     ReachingCuts.stating(each.condition(), read, false, conditions);
-            Optional<ModelOccurrence> answeredBy = DecisionNaming.answeredAt(each.condition());
+            // As the copy the call a helper's body was read at makes of the construct, which is
+            // the copy every other fact about that call's reading is filed under.
+            Optional<ModelOccurrence> answeredBy =
+                    DecisionNaming.answeredAt(each.condition()).map(each.context()::of);
             if (answeredBy.isPresent()) {
                 cuts.answered(answeredBy.get(),
                         new ReachingCuts.ConditionOnTheWay(each.assumed(), holding, failing));
@@ -290,7 +303,8 @@ public final class GuardThresholds {
                     && Core.withoutStanding(denied.get().part()) instanceof Core.PreservedCall applied
                     && applied.occurrence().isWritten()) {
                 boolean same = denied.get().positive();
-                ModelOccurrence.statedAt(applied.occurrence()).ifPresent(at -> cuts.answered(at,
+                ModelOccurrence.statedAt(each.context().of(applied.occurrence()))
+                        .ifPresent(at -> cuts.answered(at,
                         new ReachingCuts.ConditionOnTheWay(each.assumed(),
                                 same ? holding : failing, same ? failing : holding)));
             }
@@ -305,6 +319,21 @@ public final class GuardThresholds {
         }
         return new Guards(found, withoutALine.found(), between, cuts.made(),
                 comparisons.forks(), comparisons.conditionsMet());
+    }
+
+    /**
+     * Which elements of the input a run recorded through {@code each} made it on.
+     *
+     * <p>A comparison in the body of a helper read at one call of it is recorded in the helper's
+     * method, which every call of it runs; where the run of this behavior makes that one call once
+     * ({@link CoverageSites.Plan#runsOnce}), a run recorded there is this call's, and the way to
+     * the call need not be read off the row.
+     */
+    private static ElementsMetOn whereMet(ComparisonReadings.Reading each,
+                                          Function<ValueName.Helper, Boolean> runsOnce) {
+        ValueName.Helper helper = each.context().helper();
+        return helper != null && runsOnce.apply(helper)
+                ? each.metOn().madeWhereverRecorded() : each.metOn();
     }
 
     /**
@@ -331,13 +360,17 @@ public final class GuardThresholds {
      * — both are a construct nothing watches, which is what an empty list says.
      */
     private static List<EmittedComparisonState.Observation> watchedAt(
-            String behavior, ComparisonReadings.Reading each, ModelOccurrence stated,
+            String behavior, ComparisonReadings.Reading each,
             ComparisonEmissionIndex comparisons, AnswerEmissionIndex answers,
             PathReachability.Answers arrives) {
         List<EmittedComparisonState.Observation> out = new ArrayList<>();
         switch (each.occurrence().origin().kind()) {
+            // Asked by the construct as the tree that runs holds it, which is the one place every
+            // call of a helper that calls itself is recorded at.
             case BINARY -> {
-                List<ComparisonEmissionIndex.EmittedComparison> made = comparisons.madeFor(stated);
+                List<ComparisonEmissionIndex.EmittedComparison> made =
+                        ModelOccurrence.statedAt(each.runsAs())
+                                .map(comparisons::madeFor).orElse(List.of());
                 if (made.isEmpty()) {
                     throw new IllegalStateException("`" + behavior + "` reads a comparison at "
                             + each.at() + " that the tree it runs does not hold");
@@ -346,7 +379,8 @@ public final class GuardThresholds {
                         new EmittedComparisonState.Observation(
                                 one.occurrence(), site, arrives.arrivalAt(one.occurrence())))));
             }
-            case CALL -> answers.madeFor(stated).forEach(one -> out.add(
+            case CALL -> ModelOccurrence.statedAt(each.runsAs()).map(answers::madeFor)
+                    .orElse(List.of()).forEach(one -> out.add(
                     new EmittedComparisonState.Observation(
                             one.application(), one.index(),
                             arrives.arrivalAt(one.application()))));
@@ -697,7 +731,7 @@ public final class GuardThresholds {
     private static void lineAt(String behavior, ModelOccurrence stated,
                                EmittedComparisonState.Instrumented at,
                                SourceConstructOrigin wrote, Citation where,
-                               RuleReachNumbering reaches,
+                               ElementsMetOn metOn, RuleReachNumbering reaches,
                                ComparisonAssessment read,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
@@ -710,7 +744,8 @@ public final class GuardThresholds {
         // same way a clause does. Only where a line's origin comes from is: a guard's is where
         // the run meets the comparison, which is this reading's own place to say.
         ComparisonGeometry geometry = ComparisonGeometry.of(read,
-                (cutting, part) -> originOf(behavior, stated, at, wrote, anchor, part, cutting));
+                (cutting, part) -> originOf(behavior, stated, at, wrote, anchor, metOn, part,
+                        cutting));
         out.addAll(geometry.evidence());
         between.addAll(geometry.between());
     }
@@ -760,7 +795,7 @@ public final class GuardThresholds {
      *  is getting the comparison to answer, because what it is about is a place in a body. */
     private static LineOrigin.ComparisonOrigin originOf(
             String behavior, ModelOccurrence stated, EmittedComparisonState.Instrumented at,
-            SourceConstructOrigin wrote, RuleReportAnchor anchor,
+            SourceConstructOrigin wrote, RuleReportAnchor anchor, ElementsMetOn metOn,
             Optional<WhereAPartDecides> part, Cutting cutting) {
         // Every place a run through the rule is written down, off the join rather than looked up
         // again: the join already asked the plan which of the rule's materialisations it numbered,
@@ -772,7 +807,7 @@ public final class GuardThresholds {
                 new LineOrigin.ComparisonOrigin.Read(
                         new RuleRef.Comparison(behavior, wrote), stated, anchor,
                         at.observations().stream().map(EmittedComparisonState.Observation::site)
-                                .toList()),
+                                .toList(), metOn),
                 part, new LineFacts(cutting.claim()));
     }
 

@@ -410,6 +410,30 @@ public final class InputReads {
     }
 
     /**
+     * How far each operation handing {@code block}'s parameters the elements of a container goes
+     * applying it: one for a parameter handed one container's elements, one for each container a
+     * parameter is handed something of where several hand it. Empty where no parameter is handed
+     * the elements of any — and a parameter handed values written out is read on each
+     * application instead, so it is none of these.
+     */
+    public List<HowAClosureIsApplied> howItIsApplied(Core.Block block) {
+        List<HowAClosureIsApplied> out = new ArrayList<>();
+        for (Core.Binder param : block.params()) {
+            if (param == null || param.binding() == null
+                    || alternatives.containsKey(param.binding())) {
+                continue;
+            }
+            switch (names.roleOf(param.binding())) {
+                case BindingRole.Element(var held) -> out.add(held.applied());
+                case BindingRole.ElementOfSeveral(var held) ->
+                        held.forEach(each -> out.add(each.applied()));
+                case BindingRole.Root _, BindingRole.Alias _, BindingRole.Unknown _ -> { }
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
      * The containers {@code block} is applied over, read here, one for each operation applying it
      * — or empty where something other than an operation over a container may apply it.
      *

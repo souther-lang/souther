@@ -53,8 +53,11 @@ import java.util.Set;
  * question about the source out of the tree that runs, which is how a comprehension came to be
  * reported as a {@code guard} with a {@code then} arm.
  *
- * <p>Helper bodies are not walked: a non-recursive helper is already inlined into the body that uses it,
- * and a recursive one is a shared method rather than a fork in any one behavior.
+ * <p>A non-recursive helper is already inlined into the body that uses it. A recursive one is a shared
+ * method rather than a fork in any one behavior, so its arms are no behavior's to cover; its
+ * comparisons are numbered all the same, owed by nobody, because which caller's rule one of them is
+ * is something only that caller's reading can say — and it can say it only of a run that was
+ * recorded there.
  */
 public final class CoverageSites {
 
@@ -668,6 +671,21 @@ public final class CoverageSites {
             return methods;
         }
 
+        /**
+         * Whether a run of the behavior whose body is {@code emitted} makes one call of
+         * {@code helper} from outside the helper's own method, once: one call written, in the
+         * behavior's own body, at a place one run passes once.
+         *
+         * <p>What says whose a run recorded in the helper's method is. Where this holds, a run
+         * recorded there is that call's. Anything less — two calls written, a call in a value's
+         * method run once per call of the value, a call inside a closure applied once per element
+         * — and it is any of the calls the run made.
+         */
+        public boolean runsOnce(ValueName.Helper helper, Core emitted) {
+            Core.Call only = methods.onlyCallOf(helper, emitted);
+            return only != null && !mayRepeat(only);
+        }
+
         /** What this plan is a numbering of, as two builds can be held against each other by. */
         public NumberingIdentity identity() {
             return numbering.identity();
@@ -888,6 +906,13 @@ public final class CoverageSites {
         for (Map.Entry<String, Core> method : of.methods().entrySet()) {
             walk.behavior(method.getKey(), method.getValue());
             executable.put(method.getKey(), ExecutableIdentity.of(method.getValue(),
+                    Binders.of(of.module(), walk.places)));
+        }
+        // And the helpers a run passes through, last, for the same reason: their comparisons alone,
+        // which no behavior owes and a caller's reading holds its rows to.
+        for (Map.Entry<String, Core> passage : of.passages().entrySet()) {
+            walk.passage(passage.getKey(), passage.getValue());
+            executable.put(passage.getKey(), ExecutableIdentity.of(passage.getValue(),
                     Binders.of(of.module(), walk.places)));
         }
         return new Walked(comparisons, walk, executable, Methods.of(of));
@@ -1186,6 +1211,49 @@ public final class CoverageSites {
             this.identities.clear();
             walk(body, true);
             oneValue.put(name, fromOneValue(body));
+        }
+
+        /**
+         * A helper's method a run passes through, with its comparisons numbered and nothing else.
+         *
+         * <p>Its arms are no behavior's: the method is one however many calls run it, and which
+         * call a fork in it was decided for is not a question this walk can answer. A comparison
+         * is numbered for the run that got an answer out of it, and the caller's reading is what
+         * says which of its calls that was.
+         *
+         * <p>Every node of it is one a run may pass again: the method calls itself.
+         */
+        void passage(String name, Core body) {
+            this.behavior = name;
+            this.ordinal = 0;
+            this.answering = NormalReturn.ofBody(body);
+            this.places = NodeAddresses.of(name, body);
+            this.standingIn = OccurrenceLineage.ORIGINAL;
+            this.identities.clear();
+            comparisonsIn(body, true);
+        }
+
+        private void comparisonsIn(Core e, boolean reachable) {
+            boolean inside = reachable && answers(e);
+            mayRepeat.add(e);
+            switch (e) {
+                case Core.PreservedCall p -> throw p.unexpectedIn("coverage numbering");
+                case Core.MaterialisedValue m -> throw new IllegalStateException(
+                        "the tree that runs builds a value by calling it, and this is a build of one"
+                                + " in the tree an analysis reads: " + m.value());
+                case Core.FieldProjection p -> throw p.unexpectedIn("coverage numbering");
+                case Core.Binary b -> {
+                    number(b, inside);
+                    Core.forEachChild(b, child -> comparisonsIn(child, inside));
+                }
+                // A function the call never applies is not emitted, as in a behavior's body.
+                case Core.Call c -> {
+                    for (int i = 0; i < c.args().size(); i++) {
+                        comparisonsIn(c.args().get(i), inside && !c.omitsFunctionBody(i));
+                    }
+                }
+                default -> Core.forEachChild(e, child -> comparisonsIn(child, inside));
+            }
         }
 
         /**

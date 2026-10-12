@@ -735,8 +735,9 @@ public final class Backend {
      * these is a behavior, so none has injected fields.
      *
      * <p>A value's method records where a run went through it, as a behavior's body does: the plan
-     * numbered its places ({@link EmittedDefinition#placesAreCounted()}). The others are numbered
-     * nowhere, and are emitted without a probe.
+     * numbered its places ({@link EmittedDefinition#onARun()}). A helper a run passes through
+     * records which way each of its comparisons came out and nothing of its arms, which is what the
+     * plan numbered of it. The others are numbered nowhere, and are emitted without a probe.
      */
     private byte[] generateMethods(Map<String, Hir.FnDef> methods) {
         ClassDesc cdFns = ctx.cd(new GeneratedClass.Helpers(pkg));
@@ -763,7 +764,11 @@ public final class Backend {
                 cb.withMethodBody(emitted, desc, ClassFile.ACC_STATIC,
                         code -> {
                     BodyGen gen = new BodyGen(ctx, code, null, cdFns, n,
-                            definition.placesAreCounted() ? Places.COUNTED : Places.NUMBERED_NOWHERE);
+                            switch (definition.onARun()) {
+                                case PLACES_COUNTED -> Places.COUNTED;
+                                case PASSED_THROUGH -> Places.COMPARISONS;
+                                case APART -> Places.NUMBERED_NOWHERE;
+                            });
                     for (int i = 0; i < n; i++) {
                         // a function parameter arrives as an Fn value (a closure); every other parameter
                         // as its boxed value. The type is the one the check settled for it.

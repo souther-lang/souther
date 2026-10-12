@@ -1,7 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ARecursion;
+import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.Choice;
+import souther.compiler.check.RecursionOverAList;
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.DefaultBoundOperationFacts;
@@ -21,7 +24,10 @@ import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhereAnApplicationIsMade;
+import souther.compiler.types.ValueName;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.OperationLaw;
 
@@ -126,8 +132,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * truth that is an answer the body hands back stops nothing.
      *
      * @param assumed every condition on the way to it, each with what became of it
+     * @param context where the truth stands: what a construct answering it is in the model is the
+     *                copy the call a helper's body was read at makes of it
      */
-    record TruthMet(Condition.Truth condition, List<OnTheWay> assumed) {
+    record TruthMet(Condition.Truth condition, List<OnTheWay> assumed, CallContext context) {
 
         TruthMet {
             assumed = List.copyOf(assumed);
@@ -214,14 +222,25 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * @param whereEachDecides what each reading of a line of a statement of several asks of a row
      *                   beside the way — one case of where the statement turns on the line — put on
      *                   the way at this comparison; empty where the comparison is one line
+     * @param metOn      which elements of the input a run makes the comparison on, where it stands
+     *                   inside closures an operation stopping at an answer applies to them
+     * @param runsAs     the construct as the tree that runs holds it, which is {@code occurrence}
+     *                   wherever the body read is the one that runs. A helper's body read at a call
+     *                   is not: it runs as the helper's own method, which every call shares, so
+     *                   where a run through it is recorded is asked of the construct as that
+     *                   method holds it
+     * @param context    where it was read: the body the reading was handed, or a helper's body
+     *                   read at a call of it
      */
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
                    List<OnTheWay> assumed, BoundaryPolicy.Standing standing,
-                   Map<WhereAPartDecides, List<OnTheWay>> whereEachDecides) {
+                   Map<WhereAPartDecides, List<OnTheWay>> whereEachDecides,
+                   ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context) {
 
         Reading {
-            if (occurrence == null || statement == null || at == null) {
+            if (occurrence == null || statement == null || at == null || metOn == null
+                    || runsAs == null || context == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
@@ -287,7 +306,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         Arrivals answering, Templates templates,
                         List<TruthMet> truths, List<ForkDecided> decided,
                         WhatAnAnswerTakesUp dependencies, StatedHere stated,
-                        WhatConditionsState conditions) {
+                        WhatConditionsState conditions, CallContext context, Core root,
+                        InputReads atTheRoot) {
+
+        /** The same reading, in the body of a recursive helper read at a call of it: its own
+         *  tree, and the copy that call makes of each construct in it. */
+        Body inside(Core helperBody, CallContext called, InputReads reads) {
+            return new Body(behavior, read, Arrivals.inTheTree(helperBody), templates, truths,
+                    decided, dependencies, stated, conditions, called, helperBody, reads);
+        }
 
         Symbols symbols() {
             return read.symbols();
@@ -337,7 +364,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         trees.addAll(analysis.templatesAfterTheirBuilders());
         Arrivals answering = Arrivals.inTheTrees(trees, analysis.templates()::bodyOf);
         walk(body, new Body(behavior, read, answering,
-                        templates, truths, decided, dependencies, stated, conditions),
+                        templates, truths, decided, dependencies, stated, conditions,
+                        CallContext.OF_THE_BODY, body, reads),
                 reads, ClosureApplications.OUTSIDE,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
@@ -349,8 +377,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         for (Core template : analysis.templatesAfterTheirBuilders()) {
             Entry entry = templates.joined(template);
             if (entry != null) {
+                // No root a way is read from: what stood on the way to a template is every build's
+                // way joined, which no walk down the template says.
                 walk(template, new Body(behavior, read, answering,
-                        templates, truths, decided, dependencies, stated, conditions),
+                        templates, truths, decided, dependencies, stated, conditions,
+                        CallContext.OF_THE_BODY, null, null),
                         defined, ClosureApplications.OUTSIDE, LiveFlow.of(template),
                         entry.assumed(), entry.live(),
                         readings, forks, numbering);
@@ -437,7 +468,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         if (stated != null) {
             // Which construct of the model it is, off the node. The two readings of a body hold
             // different copies of it and agree about this, so it is what a reader below joins on.
-            ConstructOccurrence stands = stated.written();
+            // Inside a helper's body read at a call, it is the copy that call makes.
+            ConstructOccurrence stands = in.context().of(stated.written());
             Citation where = Citation.of(e.pos());
             // Read only where the policy admits it, and under the names in force here, which is
             // the one environment the comparison is about. `answer` is null: a body has nothing
@@ -456,7 +488,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                                 in.read());
                             }));
             out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing,
-                    whereEachDecides(e, standing, reads, in, numbering)));
+                    whereEachDecides(e, standing, reads, in, numbering),
+                    applying.elementsMetOn(), stated.written(), in.context()));
         }
         switch (e) {
             // The right operand runs only where the left came out the way that leaves the answer
@@ -503,10 +536,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 List<OnTheWay> failing =
                         ReachingCuts.stating(condition, in.read(), false, in.conditions());
                 if (live) {
-                    truthsIn(condition, assumed, in.read(), in.truths(), in.conditions());
+                    truthsIn(condition, assumed, in.read(), in.truths(), in.conditions(),
+                            in.context());
                     if (iff.occurrence() != null) {
-                        in.decided().add(new ForkDecided(iff.occurrence(), assumed, holding,
-                                failing));
+                        in.decided().add(new ForkDecided(in.context().of(iff.occurrence()),
+                                assumed, holding, failing));
                     }
                 }
                 // What this walk found in the condition, for the reader that decides whether the
@@ -531,19 +565,20 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         Denotation atom = part.at().denotes(part.value(), symbols, in.newtypes());
                         atoms.add(new Atom(atom, statedElsewhere(atom, in.read(), in.stated())));
                     }
-                    forks.add(new ForkMet(iff.occurrence(), iff.cond(), Citation.of(iff.pos()),
+                    forks.add(new ForkMet(in.context().of(iff.occurrence()), iff.cond(),
+                            Citation.of(iff.pos()),
                             atoms));
                 }
                 Choice.Decides then = Choice.Decides.ofCondition(iff, true);
                 Choice.Decides els = Choice.Decides.ofCondition(iff, false);
                 walk(iff.then(), in, reads.choosing(then, symbols, in.newtypes()),
                         applying.taking(iff.cond(), true, in.read())
-                                .choosing(then, symbols, in.newtypes()),
+                                .choosing(then, symbols, in.newtypes(), null),
                         flow, applying.saysWhatStandsInIt() ? assumed : past(assumed, holding),
                         live, out, forks, numbering);
                 walk(iff.els(), in, reads.choosing(els, symbols, in.newtypes()),
                         applying.taking(iff.cond(), false, in.read())
-                                .choosing(els, symbols, in.newtypes()),
+                                .choosing(els, symbols, in.newtypes(), null),
                         flow, applying.saysWhatStandsInIt() ? assumed : past(assumed, failing),
                         live, out, forks, numbering);
             }
@@ -581,8 +616,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 for (int part = 0; part < match.cases().size(); part++) {
                     Core.Case arm = match.cases().get(part);
                     Choice.Decides taken = Choice.Decides.ofCase(match, arm);
+                    int which = part;
                     walk(arm.body(), in, reads.choosing(taken, symbols, in.newtypes()),
-                            applying.choosing(taken, symbols, in.newtypes()), flow,
+                            applying.choosing(taken, symbols, in.newtypes(), on ->
+                                    in.conditions().arm(match, which, on).proposition()), flow,
                             entering(match, arm, part, in.read(), reads, assumed, numbering),
                             live, out, forks, numbering);
                 }
@@ -610,6 +647,22 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                         .carryingIntoTheFirst(seeded.accumulator(), seed),
                                 flow, assumed, live, out, forks, numbering));
                     });
+            // A helper that calls itself over a list the input holds, read where the call stands:
+            // what its arguments are, and then the arm that takes an element, read at this call
+            // with the element standing for any element of the list. Read once, as a closure
+            // applied to each element is, and made on an element only where no element before it
+            // ended the walk.
+            case Core.Call call when recursionAt(call, in, reads, applying)
+                    instanceof Recursion over -> {
+                ScopeStep.forEachChild(e, (child, step) ->
+                        walk(child, in, reads.entering(step, symbols, in.newtypes()),
+                                applying.entering(step, symbols, in.newtypes()), flow, assumed,
+                                live, out, forks, numbering));
+                walk(over.step(), in.inside(over.body(), over.context(), over.reads()),
+                        over.reads(),
+                        over.applying(), LiveFlow.of(over.body()), assumed, live, out, forks,
+                        numbering.within(over.context()));
+            }
             // A closure handed the values a container was written with is entered once for all of
             // its applications, each of them carried beside the names as the value it was handed.
             case Core.Block block -> ScopeStep.forEachChild(block, (child, step) ->
@@ -626,8 +679,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 List<Choice.Arm> arms = Choice.of(attempt).arms();
                 for (int part = 0; part < arms.size(); part++) {
                     Choice.Arm arm = arms.get(part);
+                    int which = part;
                     walk(arm.answers(), in, reads.choosing(arm.decidedBy(), symbols, in.newtypes()),
-                            applying.choosing(arm.decidedBy(), symbols, in.newtypes()), flow,
+                            applying.choosing(arm.decidedBy(), symbols, in.newtypes(), on ->
+                                    in.conditions().arm(attempt, which, on).proposition()), flow,
                             past(assumed, ReachingCuts.attempting(attempt, part,
                                     arm.answers().pos(), in.read(), reads, numbering)),
                             live, out, forks, numbering);
@@ -642,23 +697,200 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     }
 
     /**
+     * The body of a helper that calls itself, as one call of it is read.
+     *
+     * @param body    the helper's body, which is the tree what is in it is answered in
+     * @param step    the arm of it that takes an element of the list and goes on
+     * @param context the copy this call makes of each construct in it
+     * @param reads   the names in force in that arm: the call's arguments for the parameters, and
+     *                the element standing for any element of the list
+     * @param applying the one application of that arm, made on an element where no element before
+     *                it ended the walk
+     */
+    private record Recursion(Core body, Core step, CallContext context, InputReads reads,
+                             ClosureApplications applying) { }
+
+    /**
+     * {@code call} read as a call of a helper that walks a list the input holds by its head and
+     * calls itself on the rest — or null where it is no such call, or one this reading reads no
+     * further.
+     *
+     * <p>Only outside every closure handed values written out: inside one, each application would
+     * hand the call other names, and the walk would be read once per application with nothing
+     * yet to say which of them a row's element was met through. Only where the list is a position
+     * of the input itself, whose elements are the row's in the row's order. And not where the body
+     * builds a value: what a build states is read once, where its template is, and a template read
+     * once for every call would be one template read under several calls' names.
+     *
+     * <p>What ends the walk on an element is every way through the arm to a call of itself
+     * failing: the walk goes on past an element exactly where a run through the arm makes one.
+     *
+     * <p>And only where the way to the call can be read from the body the reading was handed,
+     * outside every closure: the helper's method is run by every call of it, so a run recorded
+     * there is this call's only where the row met the way to it. Inside a closure the call is made
+     * once per application, and which of them a run recorded is nothing a row says.
+     */
+    private static Recursion recursionAt(Core.Call call, Body in, InputReads reads,
+                                         ClosureApplications applying) {
+        if (in.root() == null || !in.context().equals(CallContext.OF_THE_BODY)
+                || !(applying instanceof ClosureApplications.Outside(var metOn))
+                || !(AnOperationApplied.of(call) instanceof AnOperationApplied(
+                        ValueName.Helper helper, List<Core> args))) {
+            return null;
+        }
+        ARecursion recursion =
+                in.read().rules().declarations().answers().recursionOf(helper).orElse(null);
+        RecursionOverAList walk = recursion == null ? null : recursion.walk().orElse(null);
+        if (walk == null || buildsAValue(recursion.body().body())
+                || !(reads.pathOf(args.get(walk.walked()), in.newtypes())
+                        instanceof PathResolution.At(TermPath list))) {
+            return null;
+        }
+        Way made = wayTo(in.root(), call, in.atTheRoot(), in);
+        CallContext called = in.context().into(helper, call.occurrence());
+        InputReads step = called == null || made == null || made.stated() == null ? null
+                : reads.steppingThrough(recursion.body(), args, walk.element().binding(),
+                        list.element(), in.newtypes());
+        if (step == null) {
+            return null;
+        }
+        List<Proposition> goesOn = new ArrayList<>();
+        for (Core.Call again : walk.again()) {
+            Way way = wayTo(walk.some().body(), again, step, in);
+            if (way != null && way.stated() == null) {
+                return null;
+            }
+            if (way != null) {
+                goesOn.add(way.stated());
+            }
+        }
+        Proposition onward = WhereAnApplicationIsMade.alongOneOf(goesOn);
+        return new Recursion(recursion.body().body(), walk.some().body(), called, step,
+                new ClosureApplications.Each(List.of(new ClosureApplications.Application(step,
+                        WhereAnApplicationIsMade.nothingAsked(), Map.of(),
+                        metOn.madeWhere(made.stated()).stoppingIn(list, onward.denied())))));
+    }
+
+    /**
+     * The way to somewhere in a tree: what a run has to meet to get there, or nothing where that is
+     * not read — a closure stands on the way, applied wherever whatever it is handed to applies it,
+     * or a fork whose arms no reading here states.
+     */
+    private record Way(Proposition stated) {
+
+        static final Way NOT_READ = new Way(null);
+
+        /** This way, past {@code entered} on the way into it. */
+        Way past(Proposition entered) {
+            return stated == null || entered == null ? NOT_READ
+                    : new Way(WhereAnApplicationIsMade.past(entered, stated));
+        }
+    }
+
+    /**
+     * The way a run of {@code e} under {@code reads} takes to {@code target}, or null where
+     * {@code e} does not hold it.
+     *
+     * <p>Each fork on the way asks the arm it is entered by, and an operator stopping at an answer
+     * asks its left side to leave the answer open.
+     */
+    private static Way wayTo(Core e, Core target, InputReads reads, Body in) {
+        if (e == target) {
+            return new Way(WhereAnApplicationIsMade.nothingAsked());
+        }
+        if (e instanceof Core.Binary both
+                && (both.op() == BinOp.AND || both.op() == BinOp.OR)) {
+            Way left = wayTo(both.left(), target, reads, in);
+            if (left != null) {
+                return left;
+            }
+            Way right = wayTo(both.right(), target, reads, in);
+            if (right == null) {
+                return null;
+            }
+            Proposition leftAnswered =
+                    in.conditions().truth(both.left(), reads, in.read()).proposition();
+            return right.past(both.op() == BinOp.AND ? leftAnswered : leftAnswered.denied());
+        }
+        if (e instanceof Core.Block) {
+            return holds(e, target) ? Way.NOT_READ : null;
+        }
+        Way[] found = {null};
+        ScopeStep.forEachChild(e, (child, step) -> {
+            if (found[0] != null) {
+                return;
+            }
+            Way inside = wayTo(child, target,
+                    reads.entering(step, in.symbols(), in.newtypes()), in);
+            if (inside != null) {
+                found[0] = inside.past(step instanceof ScopeStep.Chosen
+                        ? enteredBy(e, child, reads, in)
+                        : WhereAnApplicationIsMade.nothingAsked());
+            }
+        });
+        return found[0];
+    }
+
+    /**
+     * What a run entering {@code arm}, an arm of {@code fork}, meets: the condition coming out
+     * that arm's way, or what taking the arm states — or null for an arm of a fork no reading here
+     * states the arms of.
+     */
+    private static Proposition enteredBy(Core fork, Core arm, InputReads reads, Body in) {
+        if (fork instanceof Core.If iff) {
+            Proposition holds = in.conditions().truth(iff.cond(), reads, in.read()).proposition();
+            return arm == iff.then() ? holds : holds.denied();
+        }
+        if (fork instanceof Core.Match || fork instanceof Core.IfConstructed) {
+            List<Choice.Arm> arms = Choice.of(fork).arms();
+            for (int part = 0; part < arms.size(); part++) {
+                if (arms.get(part).answers() == arm) {
+                    return in.conditions().arm(fork, part, reads).proposition();
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Whether {@code target} stands in {@code e}. */
+    private static boolean holds(Core e, Core target) {
+        if (e == target) {
+            return true;
+        }
+        boolean[] found = {false};
+        Core.forEachChild(e, child -> found[0] = found[0] || holds(child, target));
+        return found[0];
+    }
+
+    /** Whether {@code e} builds a value anywhere in it. */
+    private static boolean buildsAValue(Core e) {
+        if (e instanceof Core.MaterialisedValue) {
+            return true;
+        }
+        boolean[] found = {false};
+        Core.forEachChild(e, child -> found[0] = found[0] || buildsAValue(child));
+        return found[0];
+    }
+
+    /**
      * Every truth {@code condition} asks, each with what stood on the way to it: what stood before
      * the condition, and for a part after a connective, what the parts before it coming out the
      * way that runs it say.
      */
     private static void truthsIn(Condition condition, List<OnTheWay> assumed, InputReading read,
-                                 List<TruthMet> out, WhatConditionsState conditions) {
+                                 List<TruthMet> out, WhatConditionsState conditions,
+                                 CallContext context) {
         switch (condition) {
-            case Condition.Truth truth -> out.add(new TruthMet(truth, assumed));
+            case Condition.Truth truth -> out.add(new TruthMet(truth, assumed, context));
             case Condition.Compares _ -> { }
             // The right part runs where the left leaves the answer open, which under a conjunction
             // is the left holding and under a disjunction the left failing.
             case Condition.Joined joined -> {
-                truthsIn(joined.left(), assumed, read, out, conditions);
+                truthsIn(joined.left(), assumed, read, out, conditions, context);
                 boolean leftHolding = joined.how().under(true) == ConditionJoin.BOTH;
                 truthsIn(joined.right(),
                         taking(joined.left(), leftHolding, read, assumed, conditions), read, out,
-                        conditions);
+                        conditions, context);
             }
         }
     }

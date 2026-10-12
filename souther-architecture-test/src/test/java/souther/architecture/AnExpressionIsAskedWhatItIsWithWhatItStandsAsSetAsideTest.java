@@ -635,6 +635,18 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + " walked on into what it holds, which is asked the same question next");
         row(out, c + "coverage/Methods", "collectCalls",
                 "(" + core + "Ljava/util/Map;Ljava/util/Set;)V", 1, GOES_ON_INTO_IT);
+        row(out, c + "coverage/CoverageSites$Walk", "comparisonsIn", "(" + core + "Z)V", 1,
+                GOES_ON_INTO_IT);
+        row(out, c + "coverage/Methods", "callsIn", "(" + core + "L" + c
+                + "types/ValueName$Helper;Ljava/util/List;)V", 1, COUNTS_THROUGH_IT);
+        row(out, c + "partition/ComparisonReadings", "wayTo", "(" + core + core + "L" + c
+                + "inputs/InputReads;L" + c + "partition/ComparisonReadings$Body;)L" + c
+                + "partition/ComparisonReadings$Way;", 2, GOES_ON_INTO_IT);
+        row(out, c + "partition/ComparisonReadings", "enteredBy", "(" + core + core + "L" + c
+                + "inputs/InputReads;L" + c + "partition/ComparisonReadings$Body;)L" + c
+                + "meaning/Proposition;", 3, OF_A_FORK);
+        row(out, c + "partition/ComparisonReadings", "buildsAValue", "(" + core + ")Z", 1,
+                GOES_ON_INTO_IT);
         row(out, c + "coverage/NodeAddresses", "binderSlots", "(" + core + ")V", 1,
                 "which names a node binds, asked of every node the descent meets: a Widen binds"
                         + " none");

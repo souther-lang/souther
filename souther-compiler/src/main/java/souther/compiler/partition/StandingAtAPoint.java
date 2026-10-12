@@ -167,6 +167,7 @@ public final class StandingAtAPoint {
         BorderQuantity quantity = line.quantity();
         BehaviorInputs where = line.subject().inputs();
         Optional<WhereAPartDecides.AskedOfRows> decides = whereItDecides(line);
+        MetOnARow reached = metOn(line);
         Set<ReadingGap> unreadable = new LinkedHashSet<>();
         boolean unwatched = false;
         boolean stoppedShort = false;
@@ -195,7 +196,17 @@ public final class StandingAtAPoint {
                         BorderQuantity.Observation reading = tried.get(which);
                         switch (decides.map(asked -> asked.at(reading))
                                 .orElse(WhereAPartDecides.AtARow.DECIDES)) {
-                            case WhereAPartDecides.AtARow.Decides _ -> stands = true;
+                            // And only through an element a run compared anything on: the
+                            // run getting an answer out of the rule on another element says
+                            // nothing of this one.
+                            case WhereAPartDecides.AtARow.Decides _ -> {
+                                switch (reached.at(reading)) {
+                                    case AStatementAtARow.Answer.Holds _ -> stands = true;
+                                    case AStatementAtARow.Answer.Fails _ -> { }
+                                    case AStatementAtARow.Answer.CouldNotTell(var why) ->
+                                            stopped.addAll(why);
+                                }
+                            }
                             case WhereAPartDecides.AtARow.DecidesNothing _ -> { }
                             case WhereAPartDecides.AtARow.CouldNotTell(var why) ->
                                     stopped.addAll(why);
@@ -284,6 +295,7 @@ public final class StandingAtAPoint {
         }
         BehaviorInputs where = line.subject().inputs();
         Optional<WhereAPartDecides.AskedOfRows> decides = whereItDecides(line);
+        MetOnARow reached = metOn(line);
         List<Map<souther.compiler.inputs.NumericTerm, souther.compiler.numeric.Place>> read =
                 new ArrayList<>();
         Set<ReadingGap> unreadable = new LinkedHashSet<>();
@@ -319,6 +331,18 @@ public final class StandingAtAPoint {
                         continue;
                     }
                 }
+                // And only through an element the run met the rule on, for the reason a row that
+                // never met it is not read: its values there are no observation of this border.
+                switch (reached.at(reading)) {
+                    case AStatementAtARow.Answer.Holds _ -> { }
+                    case AStatementAtARow.Answer.Fails _ -> {
+                        continue;
+                    }
+                    case AStatementAtARow.Answer.CouldNotTell(var why) -> {
+                        unreadable.addAll(why);
+                        continue;
+                    }
+                }
                 switch (quantity.valuesOf(quantity.read(reading))) {
                     case ValuesAtARow.Read(Map<souther.compiler.inputs.NumericTerm,
                             souther.compiler.numeric.Place> values) -> read.add(values);
@@ -349,6 +373,16 @@ public final class StandingAtAPoint {
                 ? comparison.part().map(part -> part.askedOfRows(line.quantity().behavior(),
                         line.subject().quantities()))
                 : Optional.empty();
+    }
+
+    /**
+     * Which elements of the input a run gets an answer out of the rule {@code line} reads on, put to
+     * rows: every element a reading can name, for a line no comparison of a body drew.
+     */
+    private static MetOnARow metOn(MeasuredInput.BorderReading line) {
+        ElementsMetOn metOn = line.border().origin() instanceof LineOrigin.ComparisonOrigin drawn
+                ? drawn.read().metOn() : ElementsMetOn.EVERY;
+        return MetOnARow.of(metOn, line.quantity().behavior(), line.subject().quantities());
     }
 
     /**
@@ -547,6 +581,58 @@ public final class StandingAtAPoint {
                     }
                     yield notTold != null ? new Lastness.CouldNotTell(notTold)
                             : new Lastness.Last();
+                }
+            };
+        }
+
+        /**
+         * The occurrence of {@code container} this reading is in — what it chose of every other
+         * container, the items of the order a reading chose and no other order's — and which of
+         * its elements it chose.
+         */
+        @Override
+        public final WalkResult<BorderQuantity.Among> among(TermPath container) {
+            if (at(container) instanceof WalkResult.CouldNotWalk<ObservationAtPoint>
+                    || occurrencesAt(container.element())
+                            instanceof WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>>) {
+                return WalkResult.couldNotWalk();
+            }
+            Map<TermPath, Integer> beside = new LinkedHashMap<>(chosen());
+            beside.remove(container);
+            return WalkResult.reached(new BorderQuantity.Among(occurrences, beside,
+                    chosen().get(container)));
+        }
+
+        @Override
+        public final boolean choseAnElement() {
+            return !chosen().isEmpty();
+        }
+
+        /** The elements of {@code container} the row wrote under what this reading chose of
+         *  every other container, each read with it chosen. */
+        @Override
+        public final WalkResult<List<BorderQuantity.AnElement>> elementsOf(TermPath container) {
+            return switch (occurrencesAt(container.element())) {
+                case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
+                        WalkResult.couldNotWalk();
+                case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) -> {
+                    Set<Integer> elements = new TreeSet<>();
+                    for (BehaviorInputs.Occurrence each : values) {
+                        Integer taken = each.at().elementAt(container);
+                        if (taken != null && agreesBeside(container, each)) {
+                            elements.add(taken);
+                        }
+                    }
+                    Map<TermPath, Integer> beside = new LinkedHashMap<>(chosen());
+                    beside.remove(container);
+                    List<BorderQuantity.AnElement> out = new ArrayList<>();
+                    for (int element : elements) {
+                        Map<TermPath, Integer> choosing = new LinkedHashMap<>(beside);
+                        choosing.put(container, element);
+                        out.add(new BorderQuantity.AnElement(element, new OneReadingOfARow(where,
+                                observedInputs, choosing, occurrences)));
+                    }
+                    yield WalkResult.reached(List.copyOf(out));
                 }
             };
         }
