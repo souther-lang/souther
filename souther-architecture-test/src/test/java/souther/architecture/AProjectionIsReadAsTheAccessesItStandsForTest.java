@@ -419,6 +419,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/CoverageSites$Walk", "descend", "(" + core + "Z)V",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
+        // The comparisons of a helper's method, which is a tree that runs as a behavior's is.
+        row(out, c + "coverage/CoverageSites$Walk", "comparisonsIn", "(" + core + "Z)V",
+                Reading.THE_TREE_THAT_RUNS, RUNS);
         // What carrying an arm's sibling costs, and whether the sibling reads its own arm's name.
         row(out, c + "coverage/CoverageSites$Walk", "nodesIn", "(" + core + ")I",
                 Reading.THE_TREE_THAT_RUNS, RUNS);

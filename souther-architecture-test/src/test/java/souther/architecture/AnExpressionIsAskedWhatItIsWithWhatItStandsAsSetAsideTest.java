@@ -635,6 +635,8 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + " walked on into what it holds, which is asked the same question next");
         row(out, c + "coverage/Methods", "collectCalls",
                 "(" + core + "Ljava/util/Map;Ljava/util/Set;)V", 1, GOES_ON_INTO_IT);
+        row(out, c + "coverage/CoverageSites$Walk", "comparisonsIn", "(" + core + "Z)V", 1,
+                GOES_ON_INTO_IT);
         row(out, c + "coverage/NodeAddresses", "binderSlots", "(" + core + ")V", 1,
                 "which names a node binds, asked of every node the descent meets: a Widen binds"
                         + " none");

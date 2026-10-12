@@ -93,7 +93,7 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                         WeakeningWord.BORDER_VALUE_UNREADABLE, Set.of("Observation"),
                         WeakeningWord.BORDER_VALUE_ABSENT, Set.of("NoValue"),
                         WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE,
-                                Set.of("CouldNotWalk", "CouldNotReadRow"),
+                                Set.of("CouldNotWalk", "CouldNotReadRow", "ReachNotRead"),
                         WeakeningWord.BORDER_VALUE_NOT_WORKED_OUT, Set.of("CouldNotWorkOut")),
                 under,
                 () -> "the words no longer stand over the reasons they were meant to: " + under);
@@ -124,6 +124,11 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                 case "CouldNotWorkOut" -> {
                     for (UnheldNumber why : UnheldNumber.values()) {
                         out.add(ReadingGap.of(why));
+                    }
+                }
+                case "ReachNotRead" -> {
+                    for (ReadingGap.ReachNotRead.Why why : ReadingGap.ReachNotRead.Why.values()) {
+                        out.add(new ReadingGap.ReachNotRead(why));
                     }
                 }
                 // A reason added to the type and not to this list. Written as a failure rather than

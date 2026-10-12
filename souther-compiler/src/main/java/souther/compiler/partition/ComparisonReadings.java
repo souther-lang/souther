@@ -214,14 +214,17 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * @param whereEachDecides what each reading of a line of a statement of several asks of a row
      *                   beside the way — one case of where the statement turns on the line — put on
      *                   the way at this comparison; empty where the comparison is one line
+     * @param metOn      which elements of the input a run makes the comparison on, where it stands
+     *                   inside closures an operation stopping at an answer applies to them
      */
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
                    List<OnTheWay> assumed, BoundaryPolicy.Standing standing,
-                   Map<WhereAPartDecides, List<OnTheWay>> whereEachDecides) {
+                   Map<WhereAPartDecides, List<OnTheWay>> whereEachDecides,
+                   ElementsMetOn metOn) {
 
         Reading {
-            if (occurrence == null || statement == null || at == null) {
+            if (occurrence == null || statement == null || at == null || metOn == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
@@ -456,7 +459,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                                 in.read());
                             }));
             out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing,
-                    whereEachDecides(e, standing, reads, in, numbering)));
+                    whereEachDecides(e, standing, reads, in, numbering),
+                    applying.elementsMetOn()));
         }
         switch (e) {
             // The right operand runs only where the left came out the way that leaves the answer

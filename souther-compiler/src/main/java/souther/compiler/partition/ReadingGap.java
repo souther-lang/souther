@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
@@ -137,7 +138,57 @@ public sealed interface ReadingGap {
         }
     }
 
+    /**
+     * Whether a run got to the rule through what a reading names — the element an operation that
+     * stops at an answer got to, the application of a closure, the arm the way passes — turns on
+     * something that could not be read off the row.
+     *
+     * <p>Not a reason about the value at the point, which was read: the row stands there, and what
+     * is not known is whether the run compared anything through that reading of it.
+     */
+    record ReachNotRead(Why why) implements ReadingGap {
+
+        /** What kept what the way turns on from being read off the row. */
+        public enum Why {
+
+            /** A part of it is one nothing read. */
+            A_PART_NOT_READ,
+
+            /** A part of it would be read once for more applications than a reading makes. */
+            MORE_READINGS_THAN_ARE_MADE,
+
+            /** It is no value the row writes: what a dependency answered, a case nothing here
+             *  puts to a row, or an element of a container made of the input's in another order
+             *  or of other elements. */
+            NO_VALUE_OF_THE_ROW
+        }
+
+        public ReachNotRead {
+            if (why == null) {
+                throw new IllegalArgumentException("what was not read was not read for a reason");
+            }
+        }
+
+        /** A part declined at how many readings are made is one a run allowing more may read. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return why == Why.MORE_READINGS_THAN_ARE_MADE ? RunSensitivity.MAY_CHANGE
+                    : RunSensitivity.UNAFFECTED;
+        }
+
+        /** Why a statement whose reading stopped at {@code unread} could not be read off a row, or
+         *  that it is no value of one where nothing in it stopped. */
+        public static ReachNotRead of(WhyUnread unread) {
+            return new ReachNotRead(unread == null ? Why.NO_VALUE_OF_THE_ROW
+                    : unread instanceof WhyUnread.MoreReadingsThanAreMade
+                            ? Why.MORE_READINGS_THAN_ARE_MADE : Why.A_PART_NOT_READ);
+        }
+    }
+
     ReadingGap NO_VALUE = new NoValue();
+
+    ReadingGap REACH_IS_NO_VALUE_OF_THE_ROW =
+            new ReachNotRead(ReachNotRead.Why.NO_VALUE_OF_THE_ROW);
 
     ReadingGap COULD_NOT_WALK = new CouldNotWalk();
 

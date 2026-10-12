@@ -249,7 +249,7 @@ public final class GuardThresholds {
                                 // the rule. A line of a statement of several is asked again with
                                 // where it decides taken in.
                                 lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
-                                        reaches,
+                                        each.metOn(), reaches,
                                         ComparisonAssessment.narrowedByWhatArrives(admitted.read(),
                                                 Reachability.of(
                                                         new WayToTheBorder(each.assumed()),
@@ -697,7 +697,7 @@ public final class GuardThresholds {
     private static void lineAt(String behavior, ModelOccurrence stated,
                                EmittedComparisonState.Instrumented at,
                                SourceConstructOrigin wrote, Citation where,
-                               RuleReachNumbering reaches,
+                               ElementsMetOn metOn, RuleReachNumbering reaches,
                                ComparisonAssessment read,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
@@ -710,7 +710,8 @@ public final class GuardThresholds {
         // same way a clause does. Only where a line's origin comes from is: a guard's is where
         // the run meets the comparison, which is this reading's own place to say.
         ComparisonGeometry geometry = ComparisonGeometry.of(read,
-                (cutting, part) -> originOf(behavior, stated, at, wrote, anchor, part, cutting));
+                (cutting, part) -> originOf(behavior, stated, at, wrote, anchor, metOn, part,
+                        cutting));
         out.addAll(geometry.evidence());
         between.addAll(geometry.between());
     }
@@ -760,7 +761,7 @@ public final class GuardThresholds {
      *  is getting the comparison to answer, because what it is about is a place in a body. */
     private static LineOrigin.ComparisonOrigin originOf(
             String behavior, ModelOccurrence stated, EmittedComparisonState.Instrumented at,
-            SourceConstructOrigin wrote, RuleReportAnchor anchor,
+            SourceConstructOrigin wrote, RuleReportAnchor anchor, ElementsMetOn metOn,
             Optional<WhereAPartDecides> part, Cutting cutting) {
         // Every place a run through the rule is written down, off the join rather than looked up
         // again: the join already asked the plan which of the rule's materialisations it numbered,
@@ -772,7 +773,7 @@ public final class GuardThresholds {
                 new LineOrigin.ComparisonOrigin.Read(
                         new RuleRef.Comparison(behavior, wrote), stated, anchor,
                         at.observations().stream().map(EmittedComparisonState.Observation::site)
-                                .toList()),
+                                .toList(), metOn),
                 part, new LineFacts(cutting.claim()));
     }
 

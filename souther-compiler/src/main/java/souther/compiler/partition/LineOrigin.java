@@ -209,13 +209,17 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
          *              that runs more than once: a library operation evaluating a closure it was
          *              handed twice writes the comparison twice, and the model states one rule at
          *              one construct all the same
+         * @param metOn which elements of the input a run that got an answer out of the rule got it
+         *              on. A run through any of {@link #recordedAt} got one out of the rule, and
+         *              not on every element: a row standing at the line through an element no run
+         *              compared anything on did not meet the line there
          */
         public record Read(RuleRef.Comparison rule, ModelOccurrence states,
                            RuleReportAnchor anchor,
-                           List<ConditionOutcomeSite> recordedAt) {
+                           List<ConditionOutcomeSite> recordedAt, ElementsMetOn metOn) {
 
             public Read {
-                if (rule == null || states == null || anchor == null) {
+                if (rule == null || states == null || anchor == null || metOn == null) {
                     throw new IllegalArgumentException(
                             "a rule read off a comparison names one, states it somewhere and cites"
                                     + " it");

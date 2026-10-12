@@ -130,8 +130,13 @@ final class AStatementAtARow {
     /**
      * {@code stated}, ready to be asked of rows.
      *
+     * <p>A part that is not {@link #askable} is put to no row and answered as not known wherever it
+     * decides the answer: a row says nothing of what nobody read, or of what it does not write. A
+     * statement that is askable is answered as it always was. Which is what a reader of where a
+     * run got to wants — a way through an arm nothing here reads, or past a closure over what a
+     * dependency answered, is a way nothing knows a row took, and not a way it did not.
+     *
      * @param quantities the reading of the input, which says which order each number is on
-     * @throws IllegalStateException where {@code stated} is not {@link #askable}
      */
     static AStatementAtARow of(Proposition stated, String behavior, Quantities quantities) {
         Map<Relation, OneRelation> relations = new LinkedHashMap<>();
@@ -169,10 +174,11 @@ final class AStatementAtARow {
                     elements.computeIfAbsent(keyOf(count), _ -> new OverTheElements(
                             count.container().inputPosition(),
                             of(count.ofTheElement(), behavior, quantities)));
-            case Proposition.Compared compared -> into.computeIfAbsent(compared.relation(),
-                    relation -> OneRelation.of(relation, behavior, quantities));
-            default -> throw new IllegalStateException("a statement put to rows is over relations"
-                    + " of the input's own numbers, and this is " + stated);
+            case Proposition.Compared compared when askable(compared) ->
+                    into.computeIfAbsent(compared.relation(),
+                            relation -> OneRelation.of(relation, behavior, quantities));
+            // Put to no row: answered as not known where it is asked ({@link #notAsked}).
+            default -> { }
         }
     }
 
@@ -400,14 +406,22 @@ final class AStatementAtARow {
                         .flatMap(weighed -> weighed.plus(affine.form().constant()))
                         .map(sum -> rel.holds(sum.signum())));
             }
-            case Proposition.Compared compared -> {
+            case Proposition.Compared compared when askable(compared) -> {
                 Answer held = heldAt(relations.get(compared.relation()), row);
                 yield compared.holds() || held instanceof Answer.CouldNotTell ? held
                         : held instanceof Answer.Holds ? Answer.FAILS : Answer.HOLDS;
             }
-            default -> throw new IllegalStateException("a statement put to rows is over relations"
-                    + " of the input's own numbers, and this is " + part);
+            default -> notAsked(part);
         };
+    }
+
+    /**
+     * What a part no row can be asked about comes to at every row: not known, and why — a part
+     * nothing read says what stopped it, and any other is something the row does not write.
+     */
+    private static Answer notAsked(Proposition part) {
+        return new Answer.CouldNotTell(Set.of(ReadingGap.ReachNotRead.of(
+                Proposition.firstStopIn(part))));
     }
 
     private static Answer heldAt(OneRelation relation, BorderQuantity.Observation row) {

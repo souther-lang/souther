@@ -410,6 +410,22 @@ public final class InputReads {
     }
 
     /**
+     * How far the operation {@code block} is handed to goes applying it, where a parameter of it is
+     * handed the elements of one container; empty where none is, or where one is handed something
+     * each of several containers holds and each goes its own way.
+     */
+    public Optional<HowAClosureIsApplied> howItIsApplied(Core.Block block) {
+        for (Core.Binder param : block.params()) {
+            if (param != null && param.binding() != null
+                    && !alternatives.containsKey(param.binding())
+                    && names.roleOf(param.binding()) instanceof BindingRole.Element(var held)) {
+                return Optional.of(held.applied());
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
      * The containers {@code block} is applied over, read here, one for each operation applying it
      * — or empty where something other than an operation over a container may apply it.
      *

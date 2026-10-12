@@ -214,7 +214,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
                         new RuleRef.Comparison("weigh", wrote),
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
-                        List.of(WHERE)),
+                        List.of(WHERE), ElementsMetOn.EVERY),
                 Optional.empty(),
                 new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(Towards.BELOW, true)));
     }

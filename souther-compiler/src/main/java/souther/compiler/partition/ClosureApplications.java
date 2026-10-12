@@ -8,6 +8,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
@@ -41,11 +42,22 @@ import java.util.function.UnaryOperator;
  */
 sealed interface ClosureApplications {
 
-    /** Inside no closure handed values written out. */
-    ClosureApplications OUTSIDE = new Outside();
+    /** Inside no closure at all. */
+    ClosureApplications OUTSIDE = new Outside(ElementsMetOn.EVERY);
 
-    /** Inside no closure handed values written out. */
-    record Outside() implements ClosureApplications {}
+    /**
+     * Inside no closure handed values written out.
+     *
+     * @param metOn which elements of the input a run makes what stands here on, where it stands
+     *              inside closures over the input's containers: nothing about each application is
+     *              said here, and which elements a run gets to still is
+     */
+    record Outside(ElementsMetOn metOn) implements ClosureApplications {
+
+        public Outside {
+            Objects.requireNonNull(metOn, "what stands here is made on some elements");
+        }
+    }
 
     /**
      * Inside closures whose applications are said, in the order a run makes them.
@@ -87,16 +99,40 @@ sealed interface ClosureApplications {
      * @param carriedIntoTheFirst what each walk from a seed this is inside carries into its first
      *                          step — its seed — by the binding the step takes it on
      *                          ({@link #taking})
+     * @param metOn             which elements of the containers of the input it is made on, where
+     *                          it is one application standing for every element of one: an
+     *                          operation that stops at an answer makes it on an element only where
+     *                          none before it stopped the operation
      */
     record Application(InputReads reads, Proposition reached,
-                       Map<BindingId, Denotation> carriedIntoTheFirst) {
+                       Map<BindingId, Denotation> carriedIntoTheFirst, ElementsMetOn metOn) {
 
         public Application {
             Objects.requireNonNull(reads, "an application is read in some names");
             Objects.requireNonNull(reached, "and is made under something");
+            Objects.requireNonNull(metOn, "and on some elements");
             carriedIntoTheFirst = Collections.unmodifiableMap(
                     new LinkedHashMap<>(carriedIntoTheFirst));
         }
+    }
+
+    /**
+     * Which elements of the input a comparison standing inside these is made on.
+     *
+     * <p>One answer however many applications there are, where they agree; where they say
+     * different things — closures over values written out, around one over the input — which of
+     * them a row's element was met through is not said.
+     */
+    default ElementsMetOn elementsMetOn() {
+        return switch (this) {
+            case Outside(var metOn) -> metOn;
+            case NotSaid _, None _ -> ElementsMetOn.EVERY;
+            case Each(var each) -> {
+                ElementsMetOn first = each.getFirst().metOn();
+                yield each.stream().allMatch(one -> one.metOn().equals(first)) ? first
+                        : new ElementsMetOn.NotSaid(ReadingGap.REACH_IS_NO_VALUE_OF_THE_ROW);
+            }
+        };
     }
 
     /**
@@ -106,9 +142,9 @@ sealed interface ClosureApplications {
     default ClosureApplications into(Core.Block block, ScopeStep step, InputReads reads,
                                      InputReading read) {
         return switch (this) {
-            case Outside _ -> applied(block, step,
+            case Outside(var metOn) -> applied(block, step,
                     List.of(new Application(reads, WhereAnApplicationIsMade.nothingAsked(),
-                            Map.of())),
+                            Map.of(), metOn)),
                     read, true);
             case Each(var outer) -> applied(block, step, outer, read, false);
             case NotSaid _, None _ -> this;
@@ -144,19 +180,21 @@ sealed interface ClosureApplications {
                             how, around.reached());
                     for (int at = 0; at < each.size(); at++) {
                         out.add(new Application(each.get(at).reads(), reached.get(at),
-                                around.carriedIntoTheFirst()));
+                                around.carriedIntoTheFirst(), around.metOn()));
                     }
                 }
                 case InputReads.Applications.NoneHanded _ -> {
-                    List<DecisionSubject> appliedOver =
-                            positionsAppliedOver(block, around.reads(), read).stream()
-                                    .<DecisionSubject>map(DecisionSubject.AnInput::new).toList();
+                    List<TermPath> positions = positionsAppliedOver(block, around.reads(), read);
+                    List<DecisionSubject> appliedOver = positions.stream()
+                            .<DecisionSubject>map(DecisionSubject.AnInput::new).toList();
                     asked |= !appliedOver.isEmpty();
-                    out.add(new Application(around.reads().entering(step, symbols, newtypes),
+                    InputReads entered = around.reads().entering(step, symbols, newtypes);
+                    out.add(new Application(entered,
                             appliedOver.isEmpty() ? around.reached()
                                     : WhereAnApplicationIsMade.whereOneOfTheContainersHoldsSomething(
                                             around.reached(), appliedOver),
-                            around.carriedIntoTheFirst()));
+                            around.carriedIntoTheFirst(),
+                            metOn(block, around, entered, read)));
                 }
                 case InputReads.Applications.Unsaid _,
                      InputReads.Applications.MoreThanAreRead _ -> {
@@ -167,7 +205,46 @@ sealed interface ClosureApplications {
         if (out.isEmpty()) {
             return new None();
         }
-        return handed || asked || !outside ? new Each(out) : OUTSIDE;
+        // Outside every closure handed values written out, there is one application, and what is
+        // kept of it is which elements it is made on.
+        return handed || asked || !outside ? new Each(out) : new Outside(out.getFirst().metOn());
+    }
+
+    /**
+     * Which elements the application of {@code block} that stands for every element of what it is
+     * handed is made on: those {@code around} is made on, and where the operation stops at an
+     * answer, the elements no element before stopped it at — what the closure answers on one,
+     * read in the names {@code entered} it with.
+     *
+     * <p>Only over a container that is itself a position of the input, whose elements are the
+     * row's in the row's order. Anything made of one — a filter, a reversal, a map filed from a
+     * list — is applied over in an order and over elements the row does not write, so which element
+     * stopped the operation there is said not to be said. An operation applying its closure to
+     * every element adds nothing. One applying it to an element it picks out, or to some, is left
+     * as it was: which it picks is not read here.
+     */
+    private static ElementsMetOn metOn(Core.Block block, Application around, InputReads entered,
+                                       InputReading read) {
+        Optional<HowAClosureIsApplied> how = around.reads().howItIsApplied(block);
+        if (how.isEmpty()) {
+            return around.metOn();
+        }
+        return switch (how.get()) {
+            case TO_EVERY_ELEMENT, AT_MOST_ONE, TO_SOME -> around.metOn();
+            case UNTIL_ONE_HOLDS, UNTIL_ONE_FAILS -> {
+                List<Denotation> containers = around.reads().containersAppliedOver(block);
+                if (containers.size() != 1 || !(containers.getFirst().at().pathOf(
+                        containers.getFirst().value(), read.newtypes())
+                        instanceof PathResolution.At(TermPath container))) {
+                    yield new ElementsMetOn.NotSaid(ReadingGap.REACH_IS_NO_VALUE_OF_THE_ROW);
+                }
+                Proposition answered = Pullback.ofATruth(block.body(), entered, read,
+                        Optional.empty()).proposition();
+                yield around.metOn().stoppingIn(container,
+                        how.get() == HowAClosureIsApplied.UNTIL_ONE_HOLDS ? answered
+                                : answered.denied());
+            }
+        };
     }
 
     /**
@@ -234,7 +311,7 @@ sealed interface ClosureApplications {
                 return Proposition.leavesSomethingUnread(past)
                         && pastOnTheFirstStep(condition, holding, one, read) ? one
                         : new Application(one.reads(), WhereAnApplicationIsMade.past(
-                                one.reached(), past), one.carriedIntoTheFirst());
+                                one.reached(), past), one.carriedIntoTheFirst(), one.metOn());
             }).toList());
             case Outside _, NotSaid _, None _ -> this;
         };
@@ -266,7 +343,7 @@ sealed interface ClosureApplications {
         return new Each(each.stream().map(one -> {
             Map<BindingId, Denotation> carried = new LinkedHashMap<>(one.carriedIntoTheFirst());
             carried.put(accumulator.binding(), seed);
-            return new Application(one.reads(), one.reached(), carried);
+            return new Application(one.reads(), one.reached(), carried, one.metOn());
         }).toList());
     }
 
@@ -298,7 +375,7 @@ sealed interface ClosureApplications {
         List<Application> entering = each.stream()
                 .filter(one -> mayEnter(one, decidedBy, symbols, newtypes))
                 .map(one -> new Application(one.reads().choosing(decidedBy, symbols, newtypes),
-                        one.reached(), one.carriedIntoTheFirst()))
+                        one.reached(), one.carriedIntoTheFirst(), one.metOn()))
                 .toList();
         return entering.isEmpty() ? new None() : new Each(entering);
     }
@@ -325,7 +402,7 @@ sealed interface ClosureApplications {
         return switch (this) {
             case Each(var each) -> new Each(each.stream()
                     .map(one -> new Application(step.apply(one.reads()), one.reached(),
-                            one.carriedIntoTheFirst()))
+                            one.carriedIntoTheFirst(), one.metOn()))
                     .toList());
             case Outside _, NotSaid _, None _ -> this;
         };
