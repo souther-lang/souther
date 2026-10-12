@@ -1,9 +1,13 @@
 package souther.compiler.meaning;
 
+import net.unit8.notation199x.pattern.CodePoints;
+import net.unit8.notation199x.pattern.PatternMeaning;
+
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.TheSignOfAnOrder;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
@@ -28,11 +32,14 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
+import java.util.function.ToIntFunction;
 
 /**
  * How what a condition states was arrived at: the rule each step applied and what it was applied to.
@@ -795,13 +802,13 @@ public sealed interface Derivation {
                     case Stopped _ -> true;
                     // What the container holding something was read as is a reading of what made
                     // the container, held to that call where it was made.
-                    case EveryElementMeetsIt(var part, var _, Derivation ofTheElement, var _) ->
+                    case EveryElementMeetsIt(var part, Derivation ofTheElement, var _, var _) ->
                             part.equals(some) && reads(some.ofTheElement(), ofTheElement);
                     case SomeElementMeeting(DecisionSubject container, Derivation ofTheElement,
                                             boolean holds, var _) ->
                             holds && standsAt(some.container(), container)
                                     && reads(some.ofTheElement(), ofTheElement);
-                    case SomePieceMeeting(var _, Derivation ofThePiece) ->
+                    case SomePieceMeeting(var _, var _, var _, Derivation ofThePiece) ->
                             reads(some.ofTheElement(), ofThePiece);
                     case OverElementsWrittenOut(List<Derivation> ofEach, boolean holds) -> {
                         Set<DeclaredArgument> inside = new HashSet<>(writtenOut);
@@ -1806,69 +1813,334 @@ public sealed interface Derivation {
     }
 
     /**
-     * That some piece of a string, parted at one code point, holds a code point of a class: the
-     * string holding one that is in the class and is not that code point.
+     * That some piece of the string at {@code string} meets what was read of one piece,
+     * {@code ofThePiece}: the string holding a code point the pieces meeting it hold, counted as
+     * {@code counted}, above nought — or, where no piece can meet it, nothing at all.
      *
-     * <p>The pieces together hold every code point of the string but the separator, so one of them
-     * holds a code point of the class exactly where the string does. What the piece was read as is
-     * kept, and is held to be that and nothing more: a statement about a piece that is not the
-     * existence of such a code point — how many it holds, that it holds none — is no statement about
-     * the string, and is not concluded here.
+     * <p>The pieces are what a split at {@code separator}, one code point, leaves, or with no
+     * separator the characters, each one code point. Either way they hold every code point of the
+     * string but the separator, so a piece holding a code point of a class is there exactly where
+     * the string holds one in the class that is not the separator. Of a split piece only that is
+     * read: a statement about how many it holds, or that it holds none, turns on where the
+     * separator stands. A character holds exactly one, so what is read of it is which classes that
+     * one is in, and comes to a set of code points ({@link #held}).
      *
-     * @param counted the count of the string's code points that are in the class and are not the
-     *                separator, which is what the pieces holding one comes to
-     * @param ofThePiece what was read of a piece: that it holds a code point of the class
+     * <p>What is counted is worked out here from what was read and where the string stands, and
+     * {@code counted} is held to it: the count of those code points of that string, its length
+     * where every code point is one, and none where none is.
      */
-    record SomePieceMeeting(NumericTerm.CodePointClassCount counted, Derivation ofThePiece)
-            implements Derivation {
+    record SomePieceMeeting(TermPath string, OptionalInt separator, Optional<NumericTerm> counted,
+                            Derivation ofThePiece) implements Derivation {
 
         public SomePieceMeeting {
-            Objects.requireNonNull(counted, "the pieces' code points are counted of a string");
-            Objects.requireNonNull(ofThePiece, "a piece is read as holding some code point");
+            Objects.requireNonNull(string, "the pieces are of a string at a position");
+            Objects.requireNonNull(separator, "parted at a code point, or into characters");
+            Objects.requireNonNull(counted, "what the pieces hold is counted, or none is");
+            Objects.requireNonNull(ofThePiece, "a piece is read as meeting something");
+            CodePoints meeting = held(separator, ofThePiece.concludes(Optional.empty()));
+            if (meeting == null) {
+                throw new IllegalArgumentException(ofThePiece
+                        + " says more of a piece than which code points it holds");
+            }
+            if (!countsOf(counted, string, meeting)) {
+                throw new IllegalArgumentException(counted + " does not count "
+                        + meeting + " of " + string);
+            }
+        }
+
+        /**
+         * The code points the string holding one of is what {@code read}, said of one piece
+         * parted at {@code separator}, comes to — or null where it says more than that.
+         */
+        public static CodePoints held(OptionalInt separator, Proposition read) {
+            if (separator.isEmpty()) {
+                return charactersMeeting(read);
+            }
+            return pieceMustHoldOneOf(read) instanceof CodePointClass.NotWhitespace
+                    ? new CodePointClass.NotWhitespaceNorEqualTo(separator.getAsInt()).held()
+                    : null;
+        }
+
+        /**
+         * Whether {@code counted} is the count of the code points of {@code string} that are in
+         * {@code meeting}: none where it is empty, how many it holds where it is every code point,
+         * and how many are in that class otherwise.
+         */
+        private static boolean countsOf(Optional<NumericTerm> counted, TermPath string,
+                                        CodePoints meeting) {
+            if (meeting.isEmpty()) {
+                return counted.isEmpty();
+            }
+            if (meeting.isEverything()) {
+                return counted.orElse(null) instanceof NumericTerm.TakenOf size
+                        && size.position().equals(string)
+                        && size.takenAs() instanceof TakenAs.HowManyItHolds;
+            }
+            return counted.orElse(null) instanceof NumericTerm.CodePointClassCount count
+                    && count.position().equals(string)
+                    && count.counted().equals(CodePointClass.of(meeting));
+        }
+
+        /**
+         * The class {@code read} says a piece holds a code point of, where that is all it says —
+         * and null where it says anything else.
+         *
+         * <p>A relation over the one count of a piece: it holds exactly where the piece holds
+         * none and does not where it holds one or more. Asked at the three counts that tell it
+         * from every other relation over one number — a count of none, of one, and of two — and a
+         * relation over one number comes out one way at the first, the other at the second, and
+         * the second's way again at the third only where it is the number being one or more.
+         */
+        private static CodePointClass pieceMustHoldOneOf(Proposition read) {
+            if (!(read instanceof Proposition.Compared(Relation relation, boolean holds, var _))
+                    || !(relation instanceof Relation.Affine(LinearForm<Quantity> form, Rel rel))
+                    || form.coefs().size() != 1) {
+                return null;
+            }
+            Map.Entry<Quantity, ExactRatio> only = form.coefs().entrySet().iterator().next();
+            if (!(only.getKey() instanceof Quantity.CodePointsOfAPiece(CodePointClass counted))) {
+                return null;
+            }
+            boolean[] expected = {false, true, true};
+            for (int count = 0; count < expected.length; count++) {
+                ExactRatio value = only.getValue().times(ExactRatio.of(count))
+                        .flatMap(form.constant()::plus).orNull();
+                if (value == null || (rel.holds(value.signum()) == holds) != expected[count]) {
+                    return null;
+                }
+            }
+            return counted;
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return new Proposition.Compared(new Relation.Affine(
-                    LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(counted)), Rel.GT),
-                    true);
+            return counted.<Proposition>map(term -> new Proposition.Compared(new Relation.Affine(
+                    LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(term)), Rel.GT), true))
+                    .orElse(new Proposition.Always(false));
         }
 
         @Override
         public List<Derivation> oneOf() {
             return List.of(ofThePiece);
         }
+
+        /**
+         * The code points a character meeting {@code element} is one of, where {@code element}
+         * says nothing but which classes the character's code point is in — or null where it
+         * says anything else.
+         *
+         * <p>A character is one code point, so each count of it is nought or one. Worked out over
+         * the code points the classes it names tell apart ({@link CodePointClass#toldApart}): each
+         * set of those is in or out as a whole, and is asked once, with each count of the
+         * character one where the set is in that class and nought where not.
+         */
+        private static CodePoints charactersMeeting(Proposition element) {
+            Set<CodePointClass> named = new LinkedHashSet<>();
+            if (!onlyOfACharacter(element, named)) {
+                return null;
+            }
+            CodePoints meeting = CodePoints.NONE;
+            for (CodePoints cell : CodePointClass.toldApart(
+                    named.stream().map(CodePointClass::held).toList())) {
+                int one = cell.least();
+                if (holds(element, counted -> counted.contains(one) ? 1 : 0)) {
+                    meeting = meeting.or(cell);
+                }
+            }
+            return meeting;
+        }
+
+        /** Whether {@code element} is made of nothing but settled truths and relations over the
+         *  counts of one character, gathering the classes those count into {@code named}. */
+        private static boolean onlyOfACharacter(Proposition element, Set<CodePointClass> named) {
+            return switch (element) {
+                case Proposition.Always _ -> true;
+                case Proposition.All(List<Proposition> parts, var _) ->
+                        parts.stream().allMatch(part -> onlyOfACharacter(part, named));
+                case Proposition.Any(List<Proposition> parts, var _) ->
+                        parts.stream().allMatch(part -> onlyOfACharacter(part, named));
+                case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, var _),
+                                          var _, var _) -> {
+                    for (Quantity each : form.coefs().keySet()) {
+                        if (!(each instanceof Quantity.CodePointsOfAPiece(CodePointClass counted))) {
+                            yield false;
+                        }
+                        named.add(counted);
+                    }
+                    yield true;
+                }
+                default -> false;
+            };
+        }
+
+        /** Whether {@code element} holds where each count of the character is what
+         *  {@code countOf} says of its class. */
+        private static boolean holds(Proposition element,
+                                     ToIntFunction<CodePointClass> countOf) {
+            return switch (element) {
+                case Proposition.Always(boolean holds) -> holds;
+                case Proposition.All(List<Proposition> parts, var _) ->
+                        parts.stream().allMatch(part -> holds(part, countOf));
+                case Proposition.Any(List<Proposition> parts, var _) ->
+                        parts.stream().anyMatch(part -> holds(part, countOf));
+                case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel rel),
+                                          boolean holds, var _) -> {
+                    ExactRatio value = form.constant();
+                    for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+                        CodePointClass counted =
+                                ((Quantity.CodePointsOfAPiece) each.getKey()).counted();
+                        value = each.getValue().times(ExactRatio.of(countOf.applyAsInt(counted)))
+                                .flatMap(value::plus).orNull();
+                        if (value == null) {
+                            throw new IllegalStateException(
+                                    "a count of nought or one held no number in " + form);
+                        }
+                    }
+                    yield rel.holds(value.signum()) == holds;
+                }
+                default -> throw new IllegalStateException(element
+                        + " is not made of the counts of one character");
+            };
+        }
     }
 
     /**
-     * Some element of what {@code operation} answered meeting what {@code part} asks of it, where
-     * that comes out the same for every element: {@code ofTheElement} is it read of an element
-     * known only by the side every element of the answer comes out on, and it settles one way.
-     * Some element meets it exactly where the answer holds something, read as
+     * A character — one code point of a string, one of its pieces — matched against a pattern
+     * that {@code accepts}: the character being one of the code points the string of which alone
+     * the pattern accepts ({@link #accepted}). A count of the character's code points in that set,
+     * above nought.
+     *
+     * <p>A pattern is matched against the whole of a string (spec §string-patterns), and a
+     * character is one code point, so it matches exactly where the pattern accepts the string of
+     * that one code point. The set is worked out here from what the pattern means, which is what
+     * the checker read it as.
+     */
+    record ACharacterInAClass(PatternMeaning accepts) implements Derivation {
+
+        public ACharacterInAClass {
+            Objects.requireNonNull(accepts, "a character is matched against some pattern");
+        }
+
+        /** The code points the string of which alone {@code accepts} accepts. */
+        public CodePointClass accepted() {
+            return CodePointClass.of(alone(accepts));
+        }
+
+        /** The code points the string of which alone {@code meaning} accepts. */
+        public static CodePoints alone(PatternMeaning meaning) {
+            return switch (meaning) {
+                case PatternMeaning.Nothing _, PatternMeaning.Never _ -> CodePoints.NONE;
+                case PatternMeaning.Symbols(CodePoints held) -> held;
+                case PatternMeaning.EitherOf(List<PatternMeaning> arms) -> {
+                    CodePoints all = CodePoints.NONE;
+                    for (PatternMeaning arm : arms) {
+                        all = all.or(alone(arm));
+                    }
+                    yield all;
+                }
+                // One part takes the code point, and every other takes nothing.
+                case PatternMeaning.InTurn(List<PatternMeaning> parts) -> {
+                    CodePoints all = CodePoints.NONE;
+                    for (int at = 0; at < parts.size(); at++) {
+                        boolean restTakeNothing = true;
+                        for (int other = 0; other < parts.size(); other++) {
+                            restTakeNothing &= other == at || acceptsNothing(parts.get(other));
+                        }
+                        if (restTakeNothing) {
+                            all = all.or(alone(parts.get(at)));
+                        }
+                    }
+                    yield all;
+                }
+                // One turn takes the code point, and as many more as it asks take nothing.
+                case PatternMeaning.Repeated(PatternMeaning what, int least, int most) ->
+                        most == 0 ? CodePoints.NONE
+                                : least <= 1 || acceptsNothing(what) ? alone(what)
+                                        : CodePoints.NONE;
+            };
+        }
+
+        /** Whether {@code meaning} accepts the empty string. */
+        private static boolean acceptsNothing(PatternMeaning meaning) {
+            return switch (meaning) {
+                case PatternMeaning.Nothing _ -> true;
+                case PatternMeaning.Never _, PatternMeaning.Symbols _ -> false;
+                case PatternMeaning.EitherOf(List<PatternMeaning> arms) ->
+                        arms.stream().anyMatch(ACharacterInAClass::acceptsNothing);
+                case PatternMeaning.InTurn(List<PatternMeaning> parts) ->
+                        parts.stream().allMatch(ACharacterInAClass::acceptsNothing);
+                case PatternMeaning.Repeated(PatternMeaning what, int least, int _) ->
+                        least == 0 || acceptsNothing(what);
+            };
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return new Proposition.Compared(new Relation.Affine(LinearForm.<Quantity>atom(
+                    new Quantity.CodePointsOfAPiece(accepted())), Rel.GT), true);
+        }
+    }
+
+    /**
+     * Some element of a container meeting what {@code part} asks of it, where that comes out the
+     * same for every element, as {@code alike} says: {@code ofTheElement} is it read of an element
+     * known only by what made it — the side every element of an operation's answer comes out on,
+     * the answer a closure gives on one, what it was kept by. Some element meets it exactly where
+     * the container the elements were made one for each element of holds something, read as
      * {@code holdsSomething}, and it holds.
      *
      * <p>Whether the statement is written of the element ({@code w} holds something) or of what a
      * closure answers on it ({@code w -> Bool.not(String.isEmpty(w))}) is no part of this: both
-     * are read of the same element. A statement it does not settle — how long a word is — is no
-     * statement this reads.
+     * are read of the same element. A statement that turns on which element it is — how long a
+     * word is — is no statement this reads.
      */
-    record EveryElementMeetsIt(LawProposition.SomeElement<?> part, ValueName operation,
-                               Derivation ofTheElement, Derivation holdsSomething)
-            implements Derivation {
+    record EveryElementMeetsIt(LawProposition.SomeElement<?> part, Derivation ofTheElement,
+                               Derivation holdsSomething, Alike alike) implements Derivation {
+
+        /** Why what is stated of one element is stated of every one. */
+        public sealed interface Alike {
+
+            /** It settles one way, whichever element it is read of. */
+            record Settled() implements Alike {}
+
+            /**
+             * The element is what a closure answers, written without the element it is handed:
+             * the walk over the value found it reading the name the closure gives its element
+             * nowhere ({@code walked}, which only that walk makes) — so it is one value for every
+             * element, whatever is stated of it. What the element was kept by is stated of the
+             * element the closure was handed, so each of those settles true.
+             */
+            record WrittenWithoutTheElement(WhatABodyReads.ReadsNothingOf walked)
+                    implements Alike {
+
+                public WrittenWithoutTheElement {
+                    Objects.requireNonNull(walked, "the value was walked for the element's name");
+                }
+            }
+        }
 
         public EveryElementMeetsIt {
             Objects.requireNonNull(part, "some element meets a statement");
-            Objects.requireNonNull(operation, "of what an operation answered");
             Objects.requireNonNull(ofTheElement, "which is read of an element of it");
             Objects.requireNonNull(holdsSomething, "which is read as holding something");
-            if (DefaultBoundOperationFacts.get().everyElementOfItsAnswerIs(operation) == null) {
-                throw new IllegalArgumentException(operation
-                        + " says nothing of every element of what it answers");
-            }
-            if (!(ofTheElement.concludes(Optional.empty()) instanceof Proposition.Always)) {
+            Objects.requireNonNull(alike, "and comes out the same for every element");
+            boolean same = switch (alike) {
+                case Alike.Settled _ -> ofTheElement.concludes(Optional.empty())
+                        instanceof Proposition.Always;
+                case Alike.WrittenWithoutTheElement _ -> keptOnlyByWhatSettlesTrue(ofTheElement);
+            };
+            if (!same) {
                 throw new IllegalArgumentException(ofTheElement
                         + " comes out differently for different elements");
             }
+        }
+
+        /** Whether every statement {@code ofTheElement} says the element was kept by settles
+         *  true, which it does where it says it was kept by none. */
+        public static boolean keptOnlyByWhatSettlesTrue(Derivation ofTheElement) {
+            return !(ofTheElement instanceof OfWhatWasKept(var _, List<Derivation> kept))
+                    || kept.stream().allMatch(one -> new Proposition.Always(true).equals(
+                            one.concludes(Optional.empty())));
         }
 
         /** Whether {@code part} asks of the element of its container the side every element of
@@ -2011,8 +2283,9 @@ public sealed interface Derivation {
     /**
      * A part of a law that says only whether a string holds a code point of a class — the same for
      * every count of them of one or more — where the string is what {@code operation} answered, and
-     * that holds one exactly where its argument does: read as {@code ofWhatItWasHanded}, the same
-     * statement of that argument at the call of {@code operation}.
+     * that holds one exactly where its argument does, or some element of it: read as
+     * {@code ofWhatItWasHanded}, the same statement of that argument, or of some element of it, at
+     * the call of {@code operation}.
      */
     record WhereAnOperationKeepsIt(LawProposition.Compared<?> part, ValueName operation,
                                    Derivation ofWhatItWasHanded) implements ALawPart {
@@ -2022,12 +2295,52 @@ public sealed interface Derivation {
             Objects.requireNonNull(operation, "about what an operation answers");
             Objects.requireNonNull(ofWhatItWasHanded, "read of what it was handed");
             CodePointClass counted = whetherItHoldsOne(part);
-            if (counted == null || !(DefaultBoundOperationFacts.get()
-                    .keepsWhetherItHoldsACodePointOf(operation)
-                    instanceof BoundOperationFacts.KeptCodePoints kept)
+            if (counted == null || !(operation instanceof ValueName.Stdlib library)
+                    || !(DefaultBoundOperationFacts.get()
+                            .keepsWhetherItHoldsACodePointOf(operation)
+                            instanceof BoundOperationFacts.KeptCodePoints kept)
                     || !kept.counted().equals(counted)) {
                 throw new IllegalArgumentException(part + " is not kept by " + operation);
             }
+            if (!ByALaw.readsTheLaw(saidOfWhatItWasHanded(part, kept), ofWhatItWasHanded,
+                    new TheCall(library, Map.of()))) {
+                throw new IllegalArgumentException(ofWhatItWasHanded + " is no reading of "
+                        + part + " said of what " + operation + " was handed");
+            }
+        }
+
+        /**
+         * {@code part}, said of what {@code kept} says the answer keeps it of: the same
+         * comparison of the string the operation was handed, or some element of the strings it
+         * was handed meeting it — or none of them, where {@code part} holds of a string holding
+         * none.
+         */
+        public static LawProposition<DeclaredArgument> saidOfWhatItWasHanded(
+                LawProposition.Compared<?> part, BoundOperationFacts.KeptCodePoints kept) {
+            Map.Entry<? extends LawNumber<?>, ExactRatio> only =
+                    part.form().coefs().entrySet().iterator().next();
+            DeclaredArgument from = kept.string();
+            return switch (kept.held()) {
+                case THE_STRING -> comparedOf(part, only.getValue(),
+                        new LawSubject.Argument<>(from), kept.counted());
+                case SOME_ELEMENT -> {
+                    LawProposition.Compared<DeclaredArgument> ofAnElement = comparedOf(part,
+                            only.getValue(), new LawSubject.ElementOf<>(from), kept.counted());
+                    ExactRatio atOne = only.getValue().plus(part.form().constant()).orNull();
+                    yield atOne != null && part.states().holds(atOne.signum())
+                            ? new LawProposition.SomeElement<>(from, ofAnElement, true)
+                            : new LawProposition.SomeElement<>(from, ofAnElement.denied(), false);
+                }
+            };
+        }
+
+        /** {@code part}'s relation over how many code points of {@code of} are in
+         *  {@code counted}. */
+        private static LawProposition.Compared<DeclaredArgument> comparedOf(
+                LawProposition.Compared<?> part, ExactRatio by, LawSubject<DeclaredArgument> of,
+                CodePointClass counted) {
+            return new LawProposition.Compared<>(new LinearForm<>(part.form().constant(),
+                    Map.of(new LawNumber.CodePointsOf<>(of, counted), by)), part.states());
         }
 
         /**

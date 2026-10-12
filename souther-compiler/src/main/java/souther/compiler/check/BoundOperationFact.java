@@ -24,6 +24,7 @@ import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -111,8 +112,8 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
             implements OneAboutAnOperation {}
 
     /** The operation answers the pieces {@code string} falls into where {@code separator}, a code
-     *  point, stands in it. */
-    record HoldsThePiecesOf(DeclaredOperation operation, DeclaredArgument separator,
+     *  point, stands in it — or, with none, each code point of it alone. */
+    record HoldsThePiecesOf(DeclaredOperation operation, Optional<DeclaredArgument> separator,
                             DeclaredArgument string)
             implements OneAboutAnOperation {}
 
@@ -127,10 +128,19 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
             implements OneAboutAnOperation {}
 
     /** The operation's answer holds a code point of {@code counted} exactly where {@code string}
-     *  does. */
+     *  does, or some element of it, as {@code held} says. */
     record KeepsWhetherItHoldsACodePointOf(DeclaredOperation operation, CodePointClass counted,
-                                           DeclaredArgument string)
-            implements OneAboutAnOperation {}
+                                           DeclaredArgument string, HeldBy held)
+            implements OneAboutAnOperation {
+
+        /** What of the argument holds the code points the answer holds. */
+        public enum HeldBy {
+            /** The argument, a string. */
+            THE_STRING,
+            /** Some element of the argument, a container of strings. */
+            SOME_ELEMENT
+        }
+    }
 
     /** The operation's answer holds the image, under {@code image}, of every element of the
      *  argument the lineage names, and nothing else. */

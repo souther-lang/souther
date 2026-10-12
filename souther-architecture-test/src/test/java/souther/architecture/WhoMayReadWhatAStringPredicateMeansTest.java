@@ -161,6 +161,19 @@ class WhoMayReadWhatAStringPredicateMeansTest {
     private static final String A_CLAUSES_RULE =
             "souther/compiler/partition/ClauseStatements$Statement$TellsStringsApart -> " + OWNER;
 
+    /**
+     * The reading of a condition, asking which argument of a pattern matched against one character
+     * of a string is the character.
+     *
+     * <p>Not a reader of what a rule means about a position. What the pattern accepts is the
+     * checker's, carried on the call; this asks the table only where the subject stands, so that a
+     * pattern applied to a character — a piece of a string, standing at no position — is read as
+     * which code point that character is. No rule about a position is read here, and what the
+     * table says a rule about one does is still said once.
+     */
+    private static final String A_CHARACTER_MATCHED =
+            "souther/compiler/partition/Pullback$ALawRead -> " + OWNER;
+
     private static final String IN_A_DESCRIPTOR = " (in a descriptor)";
 
     private static final List<String> READING_ONE = List.of(
@@ -249,7 +262,11 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             // value the reading came in and never worked out again: a name for a class derived a
             // second time would be one that agrees with the rule until one of the two changes.
             A_BODYS_RULE + "$Stated#statement()Lsouther/compiler/check/PredicateStatement;",
-            A_BODYS_RULE + "$Stated#subject()Lsouther/compiler/core/Core;");
+            A_BODYS_RULE + "$Stated#subject()Lsouther/compiler/core/Core;",
+            A_CHARACTER_MATCHED,
+            A_CHARACTER_MATCHED + IN_A_DESCRIPTOR,
+            A_CHARACTER_MATCHED + "#of(Lsouther/compiler/core/Kernel;)L" + OWNER + ";",
+            A_CHARACTER_MATCHED + "#subject()I");
 
     @Test
     void everyClassThatReadsOneIsWrittenDownWithWhatItReadsItFor() {

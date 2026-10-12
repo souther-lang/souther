@@ -36,6 +36,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.Function;
@@ -347,8 +348,8 @@ public final class BoundOperationFacts {
     }
 
     /**
-     * Which arguments of {@code operation} the pieces it answers are of — the separator and the
-     * string — or null where it answers no pieces of a string.
+     * Which arguments of {@code operation} the pieces it answers are of — the separator, where
+     * there is one, and the string — or null where it answers no pieces of a string.
      */
     public Pieces piecesOf(ValueName operation) {
         BoundOperationFact.HoldsThePiecesOf held =
@@ -356,8 +357,9 @@ public final class BoundOperationFacts {
         return held == null ? null : new Pieces(held.separator(), held.string());
     }
 
-    /** The separator and the string an operation answers the pieces of. */
-    public record Pieces(DeclaredArgument separator, DeclaredArgument string) {}
+    /** The separator and the string an operation answers the pieces of; with no separator, each
+     *  piece is one code point. */
+    public record Pieces(Optional<DeclaredArgument> separator, DeclaredArgument string) {}
 
     /**
      * The option whose value {@code operation} hands its closure, and the closure, where what it
@@ -390,11 +392,14 @@ public final class BoundOperationFacts {
     public KeptCodePoints keepsWhetherItHoldsACodePointOf(ValueName operation) {
         BoundOperationFact.KeepsWhetherItHoldsACodePointOf held =
                 one(BoundOperationFact.KeepsWhetherItHoldsACodePointOf.class, operation);
-        return held == null ? null : new KeptCodePoints(held.counted(), held.string());
+        return held == null ? null
+                : new KeptCodePoints(held.counted(), held.string(), held.held());
     }
 
-    /** The class of code points an operation's answer holds one of where {@code string} does. */
-    public record KeptCodePoints(CodePointClass counted, DeclaredArgument string) {}
+    /** The class of code points an operation's answer holds one of where {@code string} does, or
+     *  some element of it, as {@code held} says. */
+    public record KeptCodePoints(CodePointClass counted, DeclaredArgument string,
+                                 BoundOperationFact.KeepsWhetherItHoldsACodePointOf.HeldBy held) {}
 
     /**
      * What the answer of {@code operation} holds an image of every element of, or null where it

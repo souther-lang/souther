@@ -28,6 +28,7 @@ class AValueIsReadThroughWhatMadeItBeforeWhereItStandsTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors(), "the model compiles");
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -47,6 +48,51 @@ class AValueIsReadThroughWhatMadeItBeforeWhereItStandsTest {
         assertEquals(List.of(), notRead(report));
         assertTrue(report.contains("read as f/#(not whitespace)(t): = 0"), report);
         assertTrue(report.contains("read as f/#(not whitespace)(t): = 1"), report);
+    }
+
+    @Test
+    void aTextMadeOfOneStringForEachCharacterOfATitleIsMeasuredOnTheTitle() {
+        String report = measured("""
+                module p
+                let spaced (title: String): String =
+                    title
+                        |> String.characters
+                        |> List.map(c -> if String.matches("[a-z0-9]", c) then c else " ")
+                        |> String.concat
+                behavior f : (t: String) -> Int
+                let f (t) = {
+                    let text = spaced(t)
+                    if String.length(text) >= 1 then 1 else 0
+                }
+                """);
+        assertEquals(List.of(), notRead(report));
+        assertTrue(report.contains("read as f/String.length(t): = 0"), report);
+        assertTrue(report.contains("read as f/String.length(t): = 1"), report);
+    }
+
+    @Test
+    void aSlugOfTheCharactersAPatternKeepsIsMeasuredOnTheCodePointsOfTheTitleItAccepts() {
+        String report = measured("""
+                module p
+                let slugText (title: String): String =
+                    title
+                        |> String.characters
+                        |> List.map(c -> if String.matches("[a-zA-Z0-9]", c) then c else " ")
+                        |> String.concat
+                        |> String.words
+                        |> String.join("-")
+                        |> String.lowercase
+                behavior f : (t: String) -> Int
+                let f (t) = {
+                    let text = slugText(t)
+                    if String.length(text) >= 1 then 1 else 0
+                }
+                """);
+        assertEquals(List.of(), notRead(report));
+        assertTrue(report.contains(
+                "read as f/#(one of {0030-0039 0041-005A 0061-007A})(t): = 0"), report);
+        assertTrue(report.contains(
+                "read as f/#(one of {0030-0039 0041-005A 0061-007A})(t): = 1"), report);
     }
 
     @Test

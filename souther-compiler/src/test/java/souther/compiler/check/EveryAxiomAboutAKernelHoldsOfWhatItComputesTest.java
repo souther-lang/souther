@@ -94,12 +94,10 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
                         "keeps whether it holds " + kept.counted(), new LawProposition.Any<>(List.of(
                                 new LawProposition.All<>(List.of(
                                         holdsOne(ANSWER, kept.counted(), true),
-                                        holdsOne(at(kept.string().position()), kept.counted(),
-                                                true))),
+                                        argumentHoldsOne(kept, true))),
                                 new LawProposition.All<>(List.of(
                                         holdsOne(ANSWER, kept.counted(), false),
-                                        holdsOne(at(kept.string().position()), kept.counted(),
-                                                false)))))));
+                                        argumentHoldsOne(kept, false)))))));
             }
             if (facts.buildsItsResultFrom(operation) instanceof BuiltFrom<DeclaredArgument> built) {
                 statements.add(new WhatTheLibraryComputes.Statement(operation, "builds",
@@ -438,6 +436,18 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
 
     private static LinearForm<LawNumber<Slot>> size(LawSubject<Slot> of) {
         return LinearForm.atom(new LawNumber.SizeOf<>(of));
+    }
+
+    /** The argument {@code kept} names holding a code point of its class, or not as
+     *  {@code holds} says: the string itself, or some element of the strings it holds. */
+    private static LawProposition<Slot> argumentHoldsOne(BoundOperationFacts.KeptCodePoints kept,
+                                                         boolean holds) {
+        Slot argument = new Slot.Place(kept.string().position());
+        return switch (kept.held()) {
+            case THE_STRING -> holdsOne(at(argument), kept.counted(), holds);
+            case SOME_ELEMENT -> new LawProposition.SomeElement<>(argument,
+                    holdsOne(new LawSubject.ElementOf<>(argument), kept.counted(), true), holds);
+        };
     }
 
     /** That the string {@code of} holds a code point of {@code counted}, or holds none. */

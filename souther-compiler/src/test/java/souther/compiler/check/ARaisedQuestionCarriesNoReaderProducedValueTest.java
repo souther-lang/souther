@@ -129,6 +129,7 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
             "souther/compiler/semantics/CodePointClass",
             "souther/compiler/semantics/CodePointClass$NotWhitespace",
             "souther/compiler/semantics/CodePointClass$NotWhitespaceNorEqualTo",
+            "souther/compiler/semantics/CodePointClass$OneOf",
             "souther/compiler/semantics/TakenArguments",
             "souther/compiler/numeric/ValueTransformation",
             "souther/compiler/numeric/ValueTransformation$Identity",
