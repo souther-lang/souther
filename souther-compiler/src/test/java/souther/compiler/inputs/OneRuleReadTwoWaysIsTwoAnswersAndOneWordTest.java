@@ -27,7 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  *
  * <p>The word is not what was ever shared. A document promises its reader which kind of thing
  * stopped the derivation, and both of these are one kind of thing out there: the projection sends
- * them to one word, which is asserted here beside the split so that the two cannot drift.
+ * the value reading's stop to the word the line reading has where it showed nothing of what the
+ * other position reaches, which is asserted here beside the split so that the two cannot drift.
  */
 class OneRuleReadTwoWaysIsTwoAnswersAndOneWordTest {
 
@@ -68,12 +69,19 @@ class OneRuleReadTwoWaysIsTwoAnswersAndOneWordTest {
         assertInstanceOf(BlockReason.ReadingStopReason.class, THE_VALUE_READING);
     }
 
-    /** And a reader of the document meets one word, which is what the two were made one for. */
+    /**
+     * And a reader of the document meets one word for the value reading's stop and the line
+     * reading's where it, too, showed nothing of what the other position reaches.
+     *
+     * <p>The value reading never shows that; the line reading does where the other position takes
+     * every value its type holds, and says the relation divides nothing — the rule is then taken
+     * in, and the value reading's stop is not one a document says.
+     */
     @Test
     void theDocumentWritesOneWordForBoth() {
         assertEquals(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
                 ReportedReason.of(THE_LINE_READING));
-        assertEquals(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
+        assertEquals(ReportedReason.of(new BlockReason.RelationNotShownToReachEveryValue()),
                 ReportedReason.of(THE_VALUE_READING));
     }
 

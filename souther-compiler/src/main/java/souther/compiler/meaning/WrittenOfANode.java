@@ -80,6 +80,8 @@ public final class WrittenOfANode {
             case Quantity.SumOver sum -> reads(sum.container()) && reads(sum.ofTheElement());
             case Quantity.RemainderOfADividend remainder -> remainder.dividend().coefs().keySet()
                     .stream().allMatch(this::reads);
+            case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
+                    .allMatch(this::reads);
         };
     }
 

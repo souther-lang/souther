@@ -217,8 +217,7 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
 
     /** What this body's conditions decide, made once for the whole reading of it. */
     private static DecisionMeanings meanings(InputReading read) {
-        ConditionMeanings states = new ConditionMeanings(read);
-        WhatAnAnswerTakesUp answers = WhatAnAnswerTakesUp.of(read);
-        return new DecisionMeanings(states, answers.subjects(), answers.comparisons());
+        return new DecisionMeanings(new ConditionMeanings(read),
+                WhatAnAnswerTakesUp.of(read).subjects());
     }
 }

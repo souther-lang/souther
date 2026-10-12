@@ -26,8 +26,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * (the examples are put at each side of the line the dates give, and the report is asked whether
  * every point has its row), and that the program the rows run is the one the expected answers were
  * worked out for ({@code java.time}, and not the reading's own arithmetic).
+ *
+ * <p>Read to the end, and not shown to divide neither date. The years a date can be written in
+ * stop somewhere, so an {@code on} in one of the sixty years after the first of them has no
+ * birthday sixty years before it, and the comparison is false there whatever the birthday is: the
+ * other year does not reach every year this one runs over. What that leaves at each date is said
+ * as that and nothing else ({@link #readSaveForWhatTheOtherYearReaches}).
  */
 class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
+
+    /**
+     * Whether everything {@code report} says went unread is that a relation is not shown to reach
+     * every value of a place, which is a relation whose meaning was read.
+     */
+    private static boolean readSaveForWhatTheOtherYearReaches(String report) {
+        return report.lines().filter(line -> line.strip().startsWith("· not read"))
+                .allMatch(line -> line.contains("not shown to reach every value here"));
+    }
 
     private static final String ATTAINED =
             "Date.year(on) - Date.year(Date.addDays(0 - 1, birthday)) >= 60";
@@ -57,8 +72,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
     void theComparisonOfTheIssueIsReadAndNotLeftUnread() {
         String report = about(ATTAINED);
 
-        assertTrue(report.contains("measurement: complete"), report);
-        assertFalse(report.contains("not read"), report);
+        assertTrue(readSaveForWhatTheOtherYearReaches(report), report);
         assertTrue(report.contains("Date.year((birthday -1 days))"), report);
     }
 
@@ -66,8 +80,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
     void theYearOfTheOtherDateAloneIsReadToo() {
         String report = about("Date.year(on) >= Date.year(Date.addDays(0 - 1, birthday))");
 
-        assertTrue(report.contains("measurement: complete"), report);
-        assertFalse(report.contains("not read"), report);
+        assertTrue(readSaveForWhatTheOtherYearReaches(report), report);
     }
 
     @Test
@@ -75,8 +88,8 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         String first = about("Date.year(on) > Date.year(Date.addDays(1, birthday))");
         String turned = about("Date.year(Date.addDays(1, birthday)) < Date.year(on)");
 
-        assertTrue(first.contains("measurement: complete"), first);
-        assertTrue(turned.contains("measurement: complete"), turned);
+        assertTrue(readSaveForWhatTheOtherYearReaches(first), first);
+        assertTrue(readSaveForWhatTheOtherYearReaches(turned), turned);
         // The line is the same one said of the number the rule was written about first, so what
         // differs is which of the two is the subject and not how many points there are.
         assertEquals(bordersOf(first).size(), bordersOf(turned).size(), turned);
@@ -124,7 +137,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         String report = report(compilation);
 
         assertEquals(0, compilation.errors().size(), report);
-        assertTrue(report.contains("measurement: complete"), report);
+        assertTrue(readSaveForWhatTheOtherYearReaches(report), report);
         assertFalse(report.contains("no row is at the ON point"), report);
         assertFalse(report.contains("no row is at the OFF point"), report);
     }
@@ -161,14 +174,21 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         assertFalse(report.contains("no row is at the ON point"), report);
     }
 
-    /** What the year of a date a day back is, standing beside the year of the date itself. */
+    /**
+     * What the year of a date a day back is, standing beside the year of the date itself.
+     *
+     * <p>Two numbers of one date, so the comparison is about which dates the birthday is — the
+     * first of January and every other day — and neither number reaches every value of the other
+     * apart from it.
+     */
     @Test
     void theYearOfADateAndTheYearOfItADayBackAreTwoNumbersOfOneDate() {
         String report = about("Date.year(birthday) == Date.year(Date.addDays(0 - 1, birthday))");
 
         assertTrue(report.contains("Date.year(birthday)"), report);
         assertTrue(report.contains("Date.year((birthday -1 days))"), report);
-        assertTrue(report.contains("measurement: complete"), report);
+        assertTrue(readSaveForWhatTheOtherYearReaches(report), report);
+        assertFalse(report.contains("rather than dividing the values here"), report);
     }
 
     /**
@@ -323,7 +343,11 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         assertFalse(report.contains("measurement: complete"), report);
     }
 
-    /** A count another input supplies is no shift of one position: it is a number of two. */
+    /**
+     * A count another input supplies is no shift of one position: it is a number of two, and the
+     * comparison relates them. A count at either end of {@code Int} moves every date past the ones
+     * that can be written, so it settles the comparison whatever the date is.
+     */
     @Test
     void aShiftByACountAnotherInputSuppliesIsNotAShiftOfOnePosition() {
         Compilation compilation = compiled("""
@@ -335,6 +359,9 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         String report = report(compilation);
 
         assertFalse(report.contains("Date.year((birthday"), report);
-        assertTrue(report.contains("measurement: complete"), report);
+        assertTrue(report.contains("read as f/birthday + days"), report);
+        assertTrue(report.contains("relates the value here to another value not shown to reach"
+                + " every value here, so which values here settle it on their own is not worked"
+                + " out, about `days`"), report);
     }
 }

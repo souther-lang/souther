@@ -213,8 +213,8 @@ public final class EnsuresThresholds {
         // for it, so it is read where none is ({@link InputReads#ofWhatIsDeclared}).
         ComparisonAssessment whole = ComparisonAssessment.of(out.behavior(), comparison.stated(),
                 Citation.of(e.pos()), read,
-                reads, ClosureApplications.OUTSIDE, rule.value(), WhatAnAnswerTakesUp.of(read),
-                answering, false, WhatConditionsState.of(read));
+                reads, ClosureApplications.OUTSIDE, rule.value(), answering, false,
+                WhatConditionsState.of(read));
         // A statement of several relations holds a line for each only where the statement turns
         // on it, and a clause has nowhere to hold that: no way leads to it for a condition to be
         // carried on. So its lines are said not to be drawn, rather than drawn and owed rows the

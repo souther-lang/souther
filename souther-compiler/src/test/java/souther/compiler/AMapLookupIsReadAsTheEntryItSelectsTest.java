@@ -71,8 +71,21 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
     void aLookupWithADefaultIsReadToTheEnd() {
         String report = report(measured(WITH_DEFAULT));
 
-        assertFalse(report.contains("not read"), report);
-        assertTrue(report.contains("measurement: complete"), report);
+        assertTrue(readSaveForWhatTheOtherValueReaches(report), report);
+    }
+
+    /**
+     * Whether everything {@code report} says went unread is that a relation is not shown to reach
+     * every value of a place.
+     *
+     * <p>The entry's line decides where the default's line does not, and that is a case over the
+     * threshold: along each way to it the threshold runs over only some of its values, so along
+     * neither is it shown to reach every entry. What the two ways reach together is not shown
+     * either, and the comparison itself was read.
+     */
+    private static boolean readSaveForWhatTheOtherValueReaches(String report) {
+        return report.lines().filter(line -> line.strip().startsWith("· not read"))
+                .allMatch(line -> line.contains("not shown to reach every value here"));
     }
 
     /**
@@ -138,7 +151,10 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
         assertEquals(List.of(), answered.errors().stream()
                 .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
                 () -> examples + report(answered));
-        assertTrue(report(answered).contains("adequacy: satisfied"), () -> report(answered));
+        assertFalse(report(answered).contains("adequacy: not satisfied"),
+                () -> report(answered));
+        assertTrue(readSaveForWhatTheOtherValueReaches(report(answered)),
+                () -> report(answered));
         assertEquals(8, offered(WITH_DEFAULT).size(), () -> report(offered));
     }
 

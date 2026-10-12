@@ -204,7 +204,7 @@ final class DecisionPath {
                                     at.steps(), held))
                             : OF_THE_INPUT;
             case DecidedCondition.Compared(var condition, var held) -> switch (condition) {
-                case DecisionCondition.AComparison it -> compared(it, held, anchor);
+                case DecisionCondition.AComparison it -> compared(it, held, one);
                 // A place on a carrier's own order, which is a value and not a form. What this
                 // stage composes against an answer is a form, so a column of that shape is left
                 // unstated here for the reason a form over two answers is.
@@ -227,7 +227,8 @@ final class DecisionPath {
                 yield only == null
                         ? new Asked.NotStated(
                                 new DemandGap.WhyNotStated.AStatementOfSeveralParts())
-                        : new Asked.Stated(new AnswerDemand.AStatement(only, anchor, taken));
+                        : new Asked.Stated(new AnswerDemand.AStatement(only, anchor, taken,
+                                takenIn(one.states())));
             }
             case DecidedCondition.Unread _ -> OF_THE_INPUT;
         };
@@ -253,7 +254,8 @@ final class DecisionPath {
      * nothing to say about it.
      */
     private static Asked compared(DecisionCondition.AComparison condition, boolean held,
-                                  ConditionReportAnchor anchor) {
+                                  Consulted one) {
+        ConditionReportAnchor anchor = one.anchor();
         InjectedAnswer only = null;
         Set<Place> places = new HashSet<>();
         boolean anyOfAnAnswer = false;
@@ -281,13 +283,30 @@ final class DecisionPath {
         if (namesTheInput) {
             return new Asked.Stated(new AnswerDemand.AStatement(only, anchor,
                     AnswerAsAnInput.ofAComparison(condition.form(), condition.proposition(),
-                            held)));
+                            held), takenIn(one.states())));
         }
         // The side the path took, which is what a row has to satisfy. The column faces the way its
         // proposition does whichever side was taken, so the denial is taken here rather than left
         // for a composer to work out from a flag travelling beside the form.
         return new Asked.Stated(new AnswerDemand.AComparison(only, anchor, condition.form(),
                 held ? condition.proposition() : condition.proposition().denied()));
+    }
+
+    /**
+     * What the way took in of one condition, inside every alternative it came out as: the entries
+     * a reading of it put on the way, which a search of one alternative holds some of.
+     */
+    private static List<OnTheWay.TakenIn> takenIn(List<OnTheWay> states) {
+        List<OnTheWay.TakenIn> out = new ArrayList<>();
+        for (OnTheWay each : states) {
+            switch (each) {
+                case OnTheWay.TakenIn taken -> out.add(taken);
+                case OnTheWay.OneOf several ->
+                        several.alternatives().forEach(way -> out.addAll(takenIn(way)));
+                case OnTheWay.Narrowed _, OnTheWay.Settled _, OnTheWay.Declined _ -> { }
+            }
+        }
+        return out;
     }
 
     /**

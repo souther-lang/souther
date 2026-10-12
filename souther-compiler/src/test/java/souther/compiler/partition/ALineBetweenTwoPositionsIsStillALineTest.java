@@ -419,25 +419,28 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     }
 
     /**
-     * The partition is unchanged and says so where it is.
+     * What the relation leaves the partition is said where the partition is.
      *
-     * <p>A rule relating two positions divides neither of them, which is what the classes measure has
-     * always answered here and still answers. The two are separate answers about one comparison, and
-     * the note about the first of them belongs under the first of them — printed under the boundary
-     * count it sat two rows beneath the line that same comparison had drawn.
+     * <p>The rule relates two positions, and what that leaves the classes of one of them is an
+     * answer about the classes: here that the ceiling, held to a thousand and above, is not shown to
+     * reach every charge — a charge at a thousand or below is never above it. The two are separate
+     * answers about one comparison, and the note about the first of them belongs under the first of
+     * them — printed under the boundary count it sat two rows beneath the line that same comparison
+     * had drawn.
      */
     @Test
     void thePositionIsStillOneNothingDividesAndTheNoteIsUnderThePartition() {
         String report = report(TWO_NEWTYPES);
 
+        String said = "it relates the value here to another value not shown to reach every value"
+                + " here, so which values here settle it on their own is not worked out, about"
+                + " `charge`";
         int partition = report.indexOf("    partition ");
-        int note = report.indexOf("dividing the values here, about `charge`");
+        int note = report.indexOf(said);
         int boundary = report.indexOf("    border ");
 
         assertTrue(note > partition && note < boundary,
                 "the note about the classes sits under the classes measure:\n" + report);
-        assertTrue(report.contains("it relates the value here to another value rather than"
-                + " dividing the values here, about `charge`"), report);
     }
 
     /**

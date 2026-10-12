@@ -709,7 +709,7 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
         List<List<Long>> out = new ArrayList<>();
         for (AnswersDemanded each : waysOf(body)) {
             AnAnswerComposed.Attempt attempt = AnAnswerComposed.of(subject,
-                    AnswerStatements.of(reading), each.stated());
+                    StatementsOfAnInput.of(reading), each.stated());
             AnAnswerComposed.Outcome.Composed composed = assertInstanceOf(
                     AnAnswerComposed.Outcome.Composed.class, attempt.outcome(),
                     () -> "a value is composed for " + each + ": " + attempt);

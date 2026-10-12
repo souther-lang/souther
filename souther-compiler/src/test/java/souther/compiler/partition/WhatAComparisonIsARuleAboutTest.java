@@ -86,7 +86,6 @@ class WhatAComparisonIsARuleAboutTest {
                 reading,
                 InputReads.ofWhatIsDeclared(roots, inputs.declared(rules)),
                 ClosureApplications.OUTSIDE, rule.value(),
-                WhatAnAnswerTakesUp.of(reading),
                 Arrivals.inTheTree(read), false,
                 WhatConditionsState.of(reading));
     }

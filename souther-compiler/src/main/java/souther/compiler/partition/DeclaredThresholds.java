@@ -82,7 +82,6 @@ public final class DeclaredThresholds {
                 Citation.of(clause.wrote()), read,
                 InputReads.ofADeclaredClause(roots, read.declared()),
                 ClosureApplications.OUTSIDE, null,
-                WhatAnAnswerTakesUp.of(read),
                 Arrivals.inTheTree(clause.readOutOf()), true,
                 WhatConditionsState.of(read));
         // Only the quantity that is on no position. Why this drew no line where it drew none is not

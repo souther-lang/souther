@@ -2738,6 +2738,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + "how those positions pair up is not worked out";
             case SEVERAL_LINES_IN_ONE_RULE -> "what it states was read, and it is several lines"
                     + " held together, which this compiler does not divide the input by here";
+            case RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE -> "what it states was read, and it relates"
+                    + " the value here to another value not shown to reach every value here, so"
+                    + " which values here settle it on their own is not worked out";
             case RULE_RELATING_TWO_VALUES ->
                     "it relates the value here to another value rather than dividing the values here";
             case RULE_ABOUT_A_RUN ->
@@ -3769,8 +3772,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case DemandGap.WhyNotStated.APlaceOnTheAnswersOwnOrder _ ->
                         "a place on the order an answer's own values stand on";
                 case DemandGap.WhyNotStated.AStatementOfSeveralParts _ ->
-                        "a statement about an answer that is also about the input or another"
-                                + " answer, which nothing here composes values to together";
+                        "a statement about an answer that is also about another answer, a value"
+                                + " the body works out, or a value of the input other than its"
+                                + " numbers, which nothing here composes values to together";
             };
             case DemandGap.Uncomposed(var _, var why) -> switch (why) {
                 // The term the region named is not said. What it is spelled in is the subject the
@@ -3842,6 +3846,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                         + " for " + switch (what) {
                                     case A_VALUE_THE_BODY_WORKS_OUT ->
                                             "a value the body works out, which no position holds";
+                                    case A_VALUE_AN_OPERATION_ANSWERS ->
+                                            "what an operation answers of the input, which no"
+                                                    + " position holds";
                                     case A_COUNT_OF_ELEMENTS ->
                                             "how many elements of a container meet something";
                                     case A_COUNT_AGAINST_A_NUMBER_NOT_HELD ->

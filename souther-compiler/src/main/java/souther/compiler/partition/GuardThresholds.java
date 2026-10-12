@@ -205,8 +205,7 @@ public final class GuardThresholds {
         // and the other one's answer would be about bindings this tree does not have.
         ComparisonReadings comparisons = ComparisonReadings.of(behavior, states, read,
                 InputReads.ofParametersWhereCallsStand(inputs.parameterReads(), read.declared(),
-                        elements, inputs.dependencies()),
-                WhatAnAnswerTakesUp.of(read));
+                        elements, inputs.dependencies()));
         // And what the tree that runs says about each of them, joined on the construct of the model
         // the two readings agree about.
         ComparisonEmissionIndex index =
@@ -268,7 +267,8 @@ public final class GuardThresholds {
                                                         new WayToTheBorder(each.wayTo(part)),
                                                         read.quantities().region()),
                                                 at.observations().stream()
-                                                        .map(one -> one.arrival()).toList(), false),
+                                                        .map(one -> one.arrival()).toList(), false,
+                                                read),
                                         found, between, withoutALine);
                         // Not a rule with no line here: its outcome is about no row, whichever of
                         // the reasons refused it ({@link NotABoundary}), so there is nothing for a

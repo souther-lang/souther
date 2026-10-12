@@ -256,6 +256,17 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         SEVERAL_LINES_IN_ONE_RULE,
         /**
+         * What the rule states was read, and it relates the value here to another value not shown
+         * to reach every value here.
+         *
+         * <p>Its own word and not the one below. A value here the other side never reaches settles
+         * the rule on its own — {@code n == String.length(s)} is false wherever {@code n} is below
+         * nought — so the values here are not all alike under it, and which of them are not is
+         * what nothing here worked out. Told the rule relates two values, a reader would take every
+         * value here as one the rule leaves open.
+         */
+        RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE,
+        /**
          * The rule relates the value here to another value rather than dividing the values here.
          *
          * <p>{@code x < y} says where one position stands against another, and a class here is a

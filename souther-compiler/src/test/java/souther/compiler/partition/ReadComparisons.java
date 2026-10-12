@@ -50,8 +50,7 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
                         inputs.declared(rules), checked.elementBindings().get(behavior),
                         ValueDefinitions.of(checked.analysisBodies().get(behavior),
                                 rules.newtypes()),
-                        inputs.dependencies()),
-                WhatAnAnswerTakesUp.of(inputs.reading(rules))).comparisons(),
+                        inputs.dependencies())).comparisons(),
                 inputs, rules);
     }
 
@@ -75,8 +74,8 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
         return new ReadComparisons(ComparisonReadings.of(behavior, analysis,
                 inputs.reading(rules), InputReads.ofParametersWhereCallsStand(
                         inputs.parameterReads(), inputs.declared(rules),
-                        ElementBindings.of(analysis, rules.newtypes()), inputs.dependencies()),
-                WhatAnAnswerTakesUp.of(inputs.reading(rules))).comparisons(),
+                        ElementBindings.of(analysis, rules.newtypes()), inputs.dependencies()))
+                .comparisons(),
                 inputs, rules);
     }
 

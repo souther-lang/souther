@@ -37,12 +37,10 @@ import java.util.Optional;
  * one without the other would have to pair them again from the order two walks happened to answer
  * in.
  *
- * @param states      what every condition of this body states about its input
- * @param subjects    what the body's expressions name that a row can control
- * @param comparisons how a comparison over one of them is read
+ * @param states   what every condition of this body states about its input
+ * @param subjects what the body's expressions name that a row can control
  */
-record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
-                        DecisionComparison comparisons) {
+record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
 
     /**
      * One condition of a path: the column it is, and what it states about the input.
@@ -214,7 +212,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
                 Rel proposition = taken.rel().orItsDenial();
                 DecisionCondition.Comparison column = switch (taken) {
                     case TakenConstraint.Affine affine -> new DecisionCondition.AComparison(
-                            DecisionComparison.ofTheInput(affine.form()), proposition);
+                            DecisionAtom.ofTheInput(affine.form()), proposition);
                     case TakenConstraint.Ordered ordered ->
                             new DecisionCondition.AnOrderedComparison(
                                     new DecisionAtom.OfTheInput(ordered.term()), ordered.at(),

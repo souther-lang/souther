@@ -83,18 +83,31 @@ class AGuardOverAMapFiledFromAListIsReadAsTheEntryItSelectsTest {
         return true;
     }
 
+    /**
+     * Whether everything {@code report} says went unread is that a relation is not shown to reach
+     * every value of a place.
+     *
+     * <p>Which row of the rows the lookup answers is the one whose key is asked, so the quantity it
+     * holds is the quantity of a row a condition on the keys picked out, and what it reaches beside
+     * the item's quantity is not shown. The comparison itself was read.
+     */
+    private static boolean readSaveForWhatTheOtherValueReaches(String report) {
+        return report.lines().filter(line -> line.strip().startsWith("· not read"))
+                .allMatch(line -> line.contains("not shown to reach every value here"));
+    }
+
     @Test
     void theGuardIsReadToTheEnd() {
         String report = report(measured(MODEL));
 
-        assertFalse(report.contains("not read"), report);
+        assertTrue(readSaveForWhatTheOtherValueReaches(report), report);
         assertTrue(report.contains("borders 2"), report);
     }
 
     /**
      * The last value for a repeated key is read as the last one, and which decisions turn on the
      * order was not measured: the rows written hold each key once. So the measurement says it is
-     * partial, in the word for that and no other.
+     * partial, in the word for that — and beside it only what the relation is not shown to reach.
      */
     @Test
     void theOrderOfARepeatedKeyIsSaidToBeUnmeasured() throws Exception {
@@ -108,7 +121,8 @@ class AGuardOverAMapFiledFromAListIsReadAsTheEntryItSelectsTest {
         List<String> words = new ArrayList<>();
         collectWeakening(document, words);
         assertTrue(words.contains("keyed_overwrite_cases_unmeasured"), words::toString);
-        assertFalse(words.contains("rule_unread"), words::toString);
+        assertTrue(readSaveForWhatTheOtherValueReaches(report(compilation)),
+                () -> report(compilation));
     }
 
     /** What is said of a model whose map is built a key at a time is not said of this one. */

@@ -149,8 +149,13 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
      *  must not. */
     private static List<String> reasonsOf(PartitionEvidence evidence) {
         return evidence.notRead().stream()
-                .map(found -> found instanceof PartitionEvidence.NotRead.ARule rule
-                        ? rule.finding().at() + " " + rule.finding().why() : found.toString())
+                .map(found -> switch (found) {
+                    case PartitionEvidence.NotRead.ARule rule ->
+                            rule.finding().at() + " " + rule.finding().why();
+                    case PartitionEvidence.NotRead.AnUnclassifiedRule _ ->
+                            found.at() + " " + found.reason();
+                    default -> found.toString();
+                })
                 .sorted()
                 .toList();
     }
@@ -174,9 +179,10 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
     /**
      * And arithmetic over two positions, where what has to agree is the reason as much as the line.
      *
-     * <p>A rule relating two positions draws a line and divides neither of them, and the report says
-     * so at each position. The bound spelling said nothing at all — which reads as a model with no
-     * rule there rather than a rule this could not turn into a class.
+     * <p>A rule relating two positions draws a line, and the report says at each position what it
+     * left there — here that the other position, held to its declared run, is not shown to reach
+     * every value at this one. The bound spelling said nothing at all — which reads as a model with
+     * no rule there rather than a rule this could not turn into a class.
      */
     @Test
     void aNameGivenArithmeticOverTwoPositionsIsThatArithmetic() {

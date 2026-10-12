@@ -15,6 +15,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A condition about what a dependency answered is the decision table's, and the reading of the
@@ -47,7 +48,7 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
             let withdraw (r, read) =
                 match read(1) with
                     | Missing -> 0
-                    | Amount as current -> if current.value >= r.amount.value then 1 else 2
+                    | Amount as current -> if CONDITION then HELD else DENIED
             example withdraw
                 | "no account" : (Req { amount = Amount(3) }) with read = Missing -> 0
                 | "enough" : (Req { amount = Amount(3) }) with read = Amount(5) -> 1
@@ -57,6 +58,32 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
             example read
                 | "one" : (1) -> Amount(5)
                 | "none" : (2) -> Missing
+            """;
+
+    /** {@link #WITHDRAW} where it has enough when {@code condition} holds. */
+    private static String withdrawingWhere(String condition) {
+        return WITHDRAW.replace("CONDITION", condition).replace("HELD", "1")
+                .replace("DENIED", "2");
+    }
+
+    /** A lookup of {@code KEY} and a comparison of what it selects, {@code CONDITION}. */
+    private static final String LOOKED_UP = """
+            module probe.f
+            data Amount = Decimal
+                invariant value >= 0.0m
+            data Quota = Decimal
+                invariant value > 0.0m
+            data Forecast = { byPeriod: Map<String, Amount> }
+            behavior quotaFor : (owner: Int, period: String) -> Quota
+            behavior att : (owner: Int, forecast: Forecast, period: String) -> Int
+                depends on quotaFor
+            let att (owner, forecast, period, quotaFor) =
+                match Map.get(KEY, forecast.byPeriod) with
+                    | None -> 0
+                    | Some got -> {
+                        let quota = quotaFor(owner, period)
+                        if CONDITION then 1 else 2
+                    }
             """;
 
     private static final String GREET = """
@@ -74,11 +101,60 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
      *  table asks for is written. */
     @Test
     void aComparisonOfAnAnswerWithTheInputIsTheTables() {
-        AdequacyReport report = measured(WITHDRAW);
+        AdequacyReport report = measured(withdrawingWhere("current.value >= r.amount.value"));
 
         assertEquals(Set.of(), notReadAt(report));
         assertEquals(AdequacyStatus.SATISFIED, report.adequacy(),
                 () -> "what keeps it open: " + report.whatKeepsTheVerdictOpen());
+    }
+
+    /**
+     * The same comparison is the table's however it is spelled: through the order an operation of
+     * the language answers, from either side, and denied. What the table takes up is what the
+     * comparison states, which the spellings share.
+     */
+    @Test
+    void aComparisonOfAnAnswerIsTheTablesHoweverItIsSpelled() {
+        for (String spelled : new String[] {
+                "Int.compare(current.value, r.amount.value) >= 0",
+                "0 <= Int.compare(current.value, r.amount.value)",
+                "Int.compare(r.amount.value, current.value) <= 0",
+                "Bool.not(Int.compare(current.value, r.amount.value) < 0)"}) {
+            AdequacyReport report = measured(withdrawingWhere(spelled));
+
+            assertEquals(Set.of(), notReadAt(report), spelled);
+            assertEquals(AdequacyStatus.SATISFIED, report.adequacy(),
+                    () -> spelled + ": " + report.whatKeepsTheVerdictOpen());
+        }
+    }
+
+    /**
+     * And through the value a lookup selects: the comparison states the entry under the key as well
+     * as the answer, and is the table's with both.
+     */
+    @Test
+    void aComparisonOfAnAnswerWithTheEntryALookupSelectsIsTheTables() {
+        for (String spelled : new String[] {"got.value >= quota.value",
+                "Decimal.compare(got.value, quota.value) >= 0"}) {
+            AdequacyReport report = measured(LOOKED_UP.replace("KEY", "period")
+                    .replace("CONDITION", spelled));
+
+            assertEquals(Set.of(), notReadAt(report), spelled);
+        }
+    }
+
+    /**
+     * Read to the end or not taken up: where the key a lookup is asked for is no value this reads,
+     * which entry the comparison is about is a part nothing read, and the comparison is unread at
+     * the entries of the map however much of it names an answer.
+     */
+    @Test
+    void aComparisonOfAnAnswerWithAPartNothingReadIsUnread() {
+        AdequacyReport report = measured(LOOKED_UP.replace("KEY", "String.lowercase(period)")
+                .replace("CONDITION", "got.value >= quota.value"));
+
+        Set<String> unread = notReadAt(report);
+        assertTrue(unread.contains("forecast.byPeriod[*]"), unread::toString);
     }
 
     /** A truth of an answer is the table's however it is spelled, and through a name. */

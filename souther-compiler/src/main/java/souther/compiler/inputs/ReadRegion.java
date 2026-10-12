@@ -65,6 +65,15 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
+    public NumericDomain.Bounds wholeRunOf(NumericTerm.FromOnePosition term) {
+        if (!apartAt(term).isEmpty()
+                || (term instanceof NumericTerm.ValueOf value && valueClassAt(value) != null)) {
+            return null;
+        }
+        return within.wholeRunOf(term);
+    }
+
+    @Override
     public Congruences valueClassAt(NumericTerm.ValueOf place) {
         return within.valueClassAt(place);
     }

@@ -284,6 +284,20 @@ public sealed interface NumericTerm
             return source;
         }
 
+        /**
+         * Where the operation states its answers lie, of any value it could be given, with what it
+         * was handed beside the value: a size at or above nought, an hour from nought to
+         * twenty-three.
+         *
+         * <p>Without where the value it is taken of can stand, which {@link #intrinsicBounds} meets
+         * this with: a date moved a year's days back is never the last date, and the year that keeps
+         * it from is where dates stop being written rather than anything the operation answers.
+         */
+        public NumericDomain.Bounds whatTheOperationStates() {
+            return ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
+                    argument -> Optional.ofNullable(arguments.at(argument.position())));
+        }
+
         /** What this operation takes of the value at {@link #position()}, given what it was handed
          *  beside it. Never null: one of these cannot be built where there is no such account. */
         public TakenAs takenAs() {
@@ -693,9 +707,7 @@ public sealed interface NumericTerm
             // And what the value it was taken of can be: a date moved a year's days back is never
             // the last date, so its year is never the last year, whatever the operation answers of
             // any date.
-            case TakenOf taken -> ResultRange.of(
-                    DefaultBoundOperationFacts.get().boundsOnTheResult(taken.operation()),
-                    argument -> Optional.ofNullable(taken.arguments().at(argument.position())))
+            case TakenOf taken -> taken.whatTheOperationStates()
                     .meet(taken.takenAs().reachedFrom(taken.transformation()));
             // A count of some of a string's code points is never negative, as how many it holds is
             // not. What it is at most is the string's own length, which is another number of the
