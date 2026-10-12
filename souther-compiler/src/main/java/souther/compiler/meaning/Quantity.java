@@ -151,11 +151,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     /**
      * How many of the code points of one piece of a string are in a class.
      *
-     * <p>Of a piece and of no input position: what a split by one code point leaves of a string
-     * stands at no place a row writes, and the piece is whichever one the statement it is read
-     * inside is about. So it is no number of the input and only appears inside a statement about
-     * some piece, which holds against one of them is what the string holds ({@link
-     * Derivation.SomePieceMeeting}) — and is never compared on its own.
+     * <p>Of a piece and of no input position: what a split by one code point leaves of a string,
+     * and each character it is taken apart into, stands at no place a row writes, and the piece is
+     * whichever one the statement it is read inside is about. So it is no number of the input and
+     * only appears inside a statement about some piece, which holds against one of them is what
+     * the string holds ({@link Derivation.SomePieceMeeting}) — and is never compared on its own.
+     * Of a character, one code point, it is nought or one.
      */
     record CodePointsOfAPiece(CodePointClass counted) implements Quantity {
 

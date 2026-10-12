@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * Statements about what the library's operations answer, written as Souther over the values each
@@ -673,6 +674,9 @@ public final class WhatTheLibraryComputes {
                 case CodePointClass.NotWhitespace _ -> notWhitespace;
                 case CodePointClass.NotWhitespaceNorEqualTo apart -> notWhitespace + " && c /= "
                         + FixtureTemplate.quoted(new String(Character.toChars(apart.separator())));
+                case CodePointClass.OneOf set -> "List.any(p -> " + set.held().ranges().stream()
+                        .map(range -> "(p >= " + range.from() + " && p <= " + range.to() + ")")
+                        .collect(Collectors.joining(" || ")) + ", String.codePoints(c))";
             };
             return "List.length(List.filter(c -> " + kept + ", String.characters(" + text + ")))";
         }

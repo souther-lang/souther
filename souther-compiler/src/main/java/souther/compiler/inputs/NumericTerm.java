@@ -327,12 +327,14 @@ public sealed interface NumericTerm
 
     /**
      * How many of the code points of the string a location holds are in a class: the ones that are
-     * not whitespace, or that are neither whitespace nor one separator.
+     * not whitespace, that are neither whitespace nor one separator, or that are one of a set.
      *
      * <p>A number a rule can be about without any operation of the language answering it. What
      * {@code String.trim} leaves of a string holds something exactly where this is above nought,
-     * and the pieces a split by one code point leaves hold something between them under the same
-     * condition, so a rule about either is a rule about this count of the string it was made from.
+     * the pieces a split by one code point leaves hold something between them under the same
+     * condition, and some character of the string meets what is asked of it exactly where the
+     * string holds a code point of the set a character meeting it is one of — so a rule about
+     * any of them is a rule about this count of the string it was made from.
      * Nothing the language declares is a taking of it: a term {@link TakenOf} stands for is an
      * operation's answer, this is a quantity the reading works out, and the two are kept apart so
      * that a taking is still only of an operation that declares one.

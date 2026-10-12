@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import net.unit8.notation199x.Normalization;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
@@ -27,6 +28,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * string holds one that is not where one of its code points does, and each code point is asked
  * here — through the runtime's own operation, and the alphabet {@code String.words} scans with.
  *
+ * <p>Strings put end to end are canonical at the seams, which is the same composition. Composing
+ * is the inverse of decomposing, so where the canonical decomposition of every code point holds
+ * one that is not whitespace exactly where the code point is not, decomposing and composing again
+ * keep whether a string holds one — whatever stands either side of a seam. That is asked of every
+ * code point too.
+ *
  * <p>The operations asked are the ones the library says keep it. Each is one this knows how to
  * run, and one added fails here until this says how.
  */
@@ -35,7 +42,12 @@ class EveryCodePointKeepsWhetherItIsWhitespaceThroughACaseMappingTest {
     private static final Map<String, UnaryOperator<String>> RUN = Map.of(
             "String.lowercase", Strings::lowercase,
             "String.uppercase", Strings::uppercase,
-            "String.trim", Strings::trim);
+            "String.trim", Strings::trim,
+            "String.concat", one -> Strings.concat(List.of(one)));
+
+    /** Of the operations {@link #RUN} runs, those that keep it of some element of the strings
+     *  they take rather than of the string. */
+    private static final Set<String> OF_SOME_ELEMENT = Set.of("String.concat");
 
     @Test
     void everyCodePointThatIsNotWhitespaceIsKeptAndNoOtherIsMade() {
@@ -47,7 +59,13 @@ class EveryCodePointKeepsWhetherItIsWhitespaceThroughACaseMappingTest {
                 assertEquals(new CodePointClass.NotWhitespace(), kept.counted(),
                         operation.qualified() + " keeps what this asks");
                 assertEquals(0, kept.string().position(),
-                        operation.qualified() + " keeps it of the one string it takes");
+                        operation.qualified() + " keeps it of the one argument it reads");
+                assertEquals(OF_SOME_ELEMENT.contains(operation.qualified())
+                                ? BoundOperationFact.KeepsWhetherItHoldsACodePointOf.HeldBy
+                                        .SOME_ELEMENT
+                                : BoundOperationFact.KeepsWhetherItHoldsACodePointOf.HeldBy
+                                        .THE_STRING,
+                        kept.held(), operation.qualified() + " keeps it of what this runs");
                 declared.add(operation.qualified());
             }
         }
@@ -66,6 +84,10 @@ class EveryCodePointKeepsWhetherItIsWhitespaceThroughACaseMappingTest {
                     wrong.add(name + " of U+" + Integer.toHexString(at));
                 }
             });
+            if (Strings.words(Normalization.normalize(Normalization.Form.NFD, one)).isEmpty()
+                    == holds) {
+                wrong.add("the canonical decomposition of U+" + Integer.toHexString(at));
+            }
         }
         assertEquals(List.of(), wrong);
     }

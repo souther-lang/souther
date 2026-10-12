@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * What is true of the language's own operations, as somebody wrote it down.
@@ -340,8 +341,12 @@ public final class OperationFacts {
                     new ElementLineage.Source<>(at(0), 1)))),
             about("Set", "toList", holdsAnImageOfEvery(new ElementLineage.SameAs<>(
                     new ElementLineage.Source<>(at(0), 1)))),
-            // And what a split answers: the string, parted where the separator stands in it.
-            about("String", "split", new OperationFact.HoldsThePiecesOf(at(0), at(1))),
+            // And what a split answers: the string, parted where the separator stands in it; and
+            // the characters of one, each code point a piece.
+            about("String", "split", new OperationFact.HoldsThePiecesOf(Optional.of(at(0)),
+                    at(1))),
+            about("String", "characters", new OperationFact.HoldsThePiecesOf(Optional.empty(),
+                    at(0))),
 
             // Which keys a map an operation answers is keyed by, where they are keys of a map it
             // was given. A rewrite of the values keeps every key, and taking entries out keeps the
@@ -806,11 +811,19 @@ public final class OperationFacts {
             // takes whitespace to itself; the composition that follows it joins code points that
             // are not whitespace into one that is not. Trimming takes off whitespace alone.
             about("String", "lowercase", new OperationFact.KeepsWhetherItHoldsACodePointOf(
-                    new CodePointClass.NotWhitespace(), at(0))),
+                    new CodePointClass.NotWhitespace(), at(0),
+                    OperationFact.KeepsWhetherItHoldsACodePointOf.HeldBy.THE_STRING)),
             about("String", "uppercase", new OperationFact.KeepsWhetherItHoldsACodePointOf(
-                    new CodePointClass.NotWhitespace(), at(0))),
+                    new CodePointClass.NotWhitespace(), at(0),
+                    OperationFact.KeepsWhetherItHoldsACodePointOf.HeldBy.THE_STRING)),
             about("String", "trim", new OperationFact.KeepsWhetherItHoldsACodePointOf(
-                    new CodePointClass.NotWhitespace(), at(0))),
+                    new CodePointClass.NotWhitespace(), at(0),
+                    OperationFact.KeepsWhetherItHoldsACodePointOf.HeldBy.THE_STRING)),
+            // Strings put end to end hold the code points of each, and the composition at the
+            // seams joins code points that are not whitespace into one that is not.
+            about("String", "concat", new OperationFact.KeepsWhetherItHoldsACodePointOf(
+                    new CodePointClass.NotWhitespace(), at(0),
+                    OperationFact.KeepsWhetherItHoldsACodePointOf.HeldBy.SOME_ELEMENT)),
 
             // What every operation answering a truth comes out true for. A container holding a
             // value is some element being it, and a denial is the other answer of its argument;
