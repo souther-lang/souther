@@ -231,7 +231,7 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
                 Endpoint.inclusive(Count.of(new BigDecimal("0.34"))),
                 Endpoint.inclusive(Count.of(new BigDecimal("0.35"))));
         List<Place> chosen = CardinalityComposer.valuesAlong(Carrier.DENSE, held,
-                List.of(third, half), 1, new LinkedHashSet<>());
+                List.of(third, half), 1, new LinkedHashSet<>(), new LinkedHashSet<>());
         assertFalse(chosen.isEmpty(), "a value between 0.34 and 0.35 is there to choose");
         for (Place each : chosen) {
             ExactRatio at = Count.number(each).exactly();
@@ -254,7 +254,8 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
         ExactRatio half = ExactRatio.of(new BigDecimal("5E-1000000001"));
         List<ExactRatio> chosen = assertTimeoutPreemptively(Duration.ofSeconds(10), () ->
                 CardinalityComposer.valuesAlong(Carrier.DENSE, held,
-                        List.of(ExactRatio.of(-1), half), 1, new LinkedHashSet<>()).stream()
+                        List.of(ExactRatio.of(-1), half), 1, new LinkedHashSet<>(),
+                        new LinkedHashSet<>()).stream()
                         .map(each -> Count.number(each).exactly()).toList());
         assertTrue(chosen.contains(ExactRatio.ZERO), () -> "nought is chosen: " + chosen);
         assertTrue(chosen.contains(half), () -> "and the place it turns at inside: " + chosen);
@@ -271,7 +272,7 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
                 Endpoint.inclusive(Count.of(new BigDecimal("0.33"))),
                 Endpoint.inclusive(Count.of(new BigDecimal("0.34"))));
         List<ExactRatio> chosen = CardinalityComposer.valuesAlong(Carrier.DENSE, held,
-                List.of(third), 1, new LinkedHashSet<>()).stream()
+                List.of(third), 1, new LinkedHashSet<>(), new LinkedHashSet<>()).stream()
                 .map(each -> Count.number(each).exactly()).toList();
         assertTrue(chosen.stream().anyMatch(at -> at.compareTo(third) < 0
                         && at.compareTo(ExactRatio.of(new BigDecimal("0.33"))) >= 0),
@@ -291,7 +292,7 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
         ExactRatio fifteenth = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(15));
         List<Place> chosen = CardinalityComposer.valuesAlong(Carrier.DENSE,
                 NumericDomain.Bounds.OPEN, List.of(thirtieth, fifteenth), 1,
-                new LinkedHashSet<>());
+                new LinkedHashSet<>(), new LinkedHashSet<>());
         assertTrue(chosen.stream().map(each -> Count.number(each).exactly())
                         .anyMatch(at -> at.compareTo(thirtieth) > 0 && at.compareTo(fifteenth) < 0),
                 () -> "one value between a thirtieth and a fifteenth: " + chosen);

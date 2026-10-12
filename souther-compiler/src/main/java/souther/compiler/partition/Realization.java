@@ -49,8 +49,9 @@ public sealed interface Realization {
         /**
          * Held in the terms' own order, so that a reader walking it meets the demands in the same
          * order in every run. Two demands of one term are told apart by where they write, compared
-         * by every part of the path and not by how it is spelled. A count comes after the numbers,
-         * ordered by its container and then by what it counts, which is what makes two of them two.
+         * by every part of the path and not by how it is spelled. A count, and a statement the
+         * elements meet together, come after the numbers, ordered by the container and then by
+         * what they say, which is what makes two of them two.
          */
         public Found {
             Map<NumericTerm, List<RealizationTarget>> byTerm = new HashMap<>();
@@ -59,7 +60,8 @@ public sealed interface Realization {
                 switch (each) {
                     case RealizationTarget.OfANumber number -> byTerm.computeIfAbsent(
                             number.term(), _ -> new ArrayList<>()).add(each);
-                    case RealizationTarget.ACount _ -> counts.add(each);
+                    case RealizationTarget.ACount _,
+                         RealizationTarget.ElementsMeetingTogether _ -> counts.add(each);
                 }
             }
             List<RealizationTarget> ordered = new ArrayList<>();

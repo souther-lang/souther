@@ -157,15 +157,20 @@ record ContentsAsked(List<Asked> asked) {
     static ContentsAsked of(List<OnTheWay.TakenIn> way) {
         List<Asked> out = new ArrayList<>();
         for (OnTheWay.TakenIn each : way) {
+            // One an element meets several ways is written once one of them is chosen, and
+            // until then asks nothing of a container written alike.
+            if (!RowDemand.writtenAlikeAsItStands(each.demand())) {
+                continue;
+            }
             switch (each.demand()) {
                 // A count is composed with the container's other numbers, where its value is
                 // written ({@link CardinalityComposer}), and asks no value written into it here.
                 case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
                      RowDemand.ForTheRun _ -> { }
                 case RowDemand.Exists exists -> asked(exists.container(), true,
-                        exists.ofAnElement(), Optional.empty(), out);
+                        exists.ofAnElement().theWay(), Optional.empty(), out);
                 case RowDemand.ForAll every -> asked(every.container(), false,
-                        every.ofEachElement(), Optional.empty(), out);
+                        every.ofEachElement().theWay(), Optional.empty(), out);
             }
         }
         return new ContentsAsked(out);

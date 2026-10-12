@@ -22,6 +22,7 @@ import souther.compiler.types.Type;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -93,13 +94,15 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
 
     private static ConstructionPlan.ContentsComposed someItemFiled() {
         return composedUnder(
-                asked(new RowDemand.Exists(ITEMS, List.of(keyedInTheShelf(SKU)), HOLDING)),
+                asked(new RowDemand.Exists(ITEMS, only(keyedInTheShelf(SKU)), HOLDING,
+                        Optional.empty())),
                 "items");
     }
 
     private static ConstructionPlan.ContentsComposed everyItemFiled() {
         return composedUnder(
-                asked(new RowDemand.ForAll(ITEMS, List.of(keyedInTheShelf(SKU)), HOLDING)),
+                asked(new RowDemand.ForAll(ITEMS, only(keyedInTheShelf(SKU)), HOLDING,
+                        Optional.empty())),
                 "items");
     }
 
@@ -133,7 +136,8 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
         TermPath deeper = ITEMS.element().then("tags").element();
 
         assertEquals(Set.of(), composedUnder(asked(new RowDemand.Exists(ITEMS,
-                        List.of(keyedInTheShelf(deeper)), HOLDING)), "items").standing());
+                        only(keyedInTheShelf(deeper)), HOLDING, Optional.empty())), "items")
+                .standing());
     }
 
     /**
@@ -167,8 +171,8 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
         RowDemand.WithinIt inside = new RowDemand.WithinIt(SHELF, someEntry, someEntry
                 ? new RowDemand.KeyedAs(value) : new RowDemand.NotKeyedAs(value));
         ContentsAsked asked = asked(someItem
-                ? new RowDemand.Exists(ITEMS, List.of(inside), HOLDING)
-                : new RowDemand.ForAll(ITEMS, List.of(inside), HOLDING));
+                ? new RowDemand.Exists(ITEMS, only(inside), HOLDING, Optional.empty())
+                : new RowDemand.ForAll(ITEMS, only(inside), HOLDING, Optional.empty()));
         ContentsAsked.Asked one = asked.asked().getFirst();
         assertEquals(value, one.value(), () -> "the one thing asked: " + asked);
         return one.standsWhereMet();
@@ -228,8 +232,14 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
 
     private static ConstructionPlan.ContentsComposed someEntryFiled(TermPath value) {
         return composedUnder(
-                asked(new RowDemand.Exists(FILED, List.of(keyedInTheShelf(value)), HOLDING)),
+                asked(new RowDemand.Exists(FILED, only(keyedInTheShelf(value)), HOLDING,
+                        Optional.empty())),
                 "filed");
+    }
+
+    /** What an element asked only {@code asked} meets. */
+    private static RowDemand.AnElementMeets only(RowDemand.OfAnElement asked) {
+        return RowDemand.AnElementMeets.only(List.of(asked));
     }
 
     private static ConstructionPlan planned(int parameter,

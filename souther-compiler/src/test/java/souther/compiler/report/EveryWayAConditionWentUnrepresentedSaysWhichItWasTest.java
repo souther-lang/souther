@@ -144,7 +144,7 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
                         Set.of(CompositionBudget.PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED))));
         out.put(DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.class,
                 notComposed(DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(
-                        Set.of(CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO))));
+                        Set.of(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG))));
         return out;
     }
 

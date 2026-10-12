@@ -6,6 +6,7 @@ import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.flow.Ways;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.DeclaredBounds;
@@ -727,6 +728,7 @@ public final class Generator {
                              CHOICES_OF_INPUT_NUMBERS_LOOKED_AT,
                              SHAPES_OF_A_TOTAL_OFFERED, ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
                              CONTAINERS_A_COUNT_IS_OFFERED, SHARES_A_COUNT_IS_TRIED_AT,
+                             VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                              WAYS_DOWN_TO_A_TOTAL_TRIED,
                              WAYS_UNDER_THE_CASES_TRIED,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
@@ -760,9 +762,10 @@ public final class Generator {
                              // It stops a reading of what a condition means, and what it stopped
                              // is carried as a part nothing read, naming it.
                              READINGS_OF_ONE_CONDITION,
-                             // Past it the way is looked along whole, the row is composed either
-                             // way, and what was not split is carried with the row's account.
-                             WAYS_A_WAY_IS_SPLIT_INTO,
+                             // Past either the way is looked along whole, the row is composed
+                             // either way, and what was not looked along is carried with the row's
+                             // account.
+                             WAYS_A_WAY_IS_LOOKED_ALONG, CHOICES_ON_A_WAY_LOOKED_AT,
                              // What it stops is the looking for a way past a guard, beside a row
                              // already found, and what it stopped is carried beside that row.
                              RUNS_REPAIRING_A_ROW -> throw new IllegalArgumentException(
@@ -4726,6 +4729,104 @@ public final class Generator {
                                               NumbersAskedFor asking,
                                               Reachability.Reaching reaching, CandidateCheck check,
                                               StandInAttempt stood) {
+        // Where an element may meet something several ways, a row writing its elements alike is
+        // composed along each way of choosing one for every element first. A row along one is a
+        // row of the way; one of them coming to nothing says nothing of the rest, or of elements
+        // that differ, so past them the way is composed as it stands and says what it did not
+        // write.
+        // Where the elements of a container a quantifier is over may have to differ — it asks an
+        // element one of several things, a second quantifier is over it, or the item stands at a
+        // number inside an element of it — the container is composed for how many of its elements
+        // meet each statement first, its elements chosen one by one. A row of elements written
+        // alike meets such a way only where one element meets everything asked of all of them.
+        boolean apartFirst = elementsMayDiffer(reaching, fixing);
+        boolean counts = reaching.boundedOnTheWay().stream()
+                .anyMatch(cut -> countedOf(cut.demand()).isPresent());
+        if (apartFirst) {
+            BoundaryAttempt counted = probeFixingAlong(subject, label, fixing, asking, reaching,
+                    check, stood, true, null);
+            if (counted instanceof BoundaryAttempt.Built) {
+                return counted;
+            }
+        }
+        ElementsWrittenAlike.Choices alike = ElementsWrittenAlike.of(reaching);
+        for (ElementsWrittenAlike.Alike one : alike.ways()) {
+            BoundaryAttempt along = probeFixingAlong(subject, label, fixing, asking,
+                    one.reaching(), check, stood, false, one.leftBy());
+            if (along instanceof BoundaryAttempt.Built) {
+                return along;
+            }
+        }
+        BoundaryAttempt whole = probeFixingAlong(subject, label, fixing, asking, reaching, check,
+                stood, false, alike.stoppedBy());
+        // And where that came to nothing, with every container a quantifier is over composed for
+        // its counts. What the way as it stands came to is what is said where this comes to
+        // nothing as well.
+        if (whole instanceof BoundaryAttempt.Built || apartFirst || !counts) {
+            return whole;
+        }
+        BoundaryAttempt counted = probeFixingAlong(subject, label, fixing, asking, reaching, check,
+                stood, true, null);
+        return counted instanceof BoundaryAttempt.Built ? counted : whole;
+    }
+
+    /**
+     * Whether the elements of some container a quantifier that is the whole of a statement is over
+     * may have to differ for a row to meet the way: the quantifier asks an element one of several
+     * things, another such quantifier is over the same container, or {@code fixing} stands at a
+     * number inside one of its elements.
+     */
+    private static boolean elementsMayDiffer(Reachability.Reaching reaching,
+                                             Map<RealizationTarget, Place> fixing) {
+        Set<TermPath> quantified = new HashSet<>();
+        for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+            if (countedOf(cut.demand()).isEmpty()) {
+                continue;
+            }
+            TermPath container = containerOf(cut.demand());
+            if (!RowDemand.writtenAlikeAsItStands(cut.demand()) || !quantified.add(container)) {
+                return true;
+            }
+        }
+        for (RealizationTarget each : fixing.keySet()) {
+            if (insideAnElementOf(each, quantified)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether {@code target} is a value placed inside an element of one of {@code containers}:
+     * the element itself or a number of it, which some element of a container composed for its
+     * counts is chosen holding ({@link TermRealizations}) — and nothing else is.
+     */
+    private static boolean insideAnElementOf(RealizationTarget target, Set<TermPath> containers) {
+        return target instanceof RealizationTarget.AtOnePosition(NumericTerm.FromOnePosition term)
+                && term instanceof NumericTerm.ValueOf value
+                && containers.stream().anyMatch(container ->
+                        value.position().isAtOrUnder(container.element()));
+    }
+
+    /**
+     * {@link #probeFixing}, along a way whose demands of several ways are written as they stand.
+     *
+     * @param byCounts whether every container a quantifier that is the whole of a statement is
+     *                 over is composed for its counts, and not only one whose elements a quantifier
+     *                 asks several things of
+     * @param alikeStoppedBy the figure that left a demand of several ways on {@code reaching}
+     *                       unchosen, where one did: the one a way written alike was handed on
+     *                       with ({@link ElementsWrittenAlike.Alike}), or the one the ways of
+     *                       writing the elements alike were looked along to
+     *                       ({@link ElementsWrittenAlike.Choices})
+     */
+    private static BoundaryAttempt probeFixingAlong(MeasuredInput subject, String label,
+                                                    Map<RealizationTarget, Place> fixing,
+                                                    NumbersAskedFor asking,
+                                                    Reachability.Reaching reaching,
+                                                    CandidateCheck check, StandInAttempt stood,
+                                                    boolean byCounts,
+                                                    CompositionBudget alikeStoppedBy) {
         LocationWrites decided = new LocationWrites();
         // What the rest of the row has to sit beside. A field of a record is not chosen from its own
         // type once another field of that record is fixed: the rule relating them says what is left,
@@ -4741,7 +4842,8 @@ public final class Generator {
         // One map, because a row is one row — walked as two, the second was chosen from what the
         // declarations leave and the first from what reaches the border, and only one of them was
         // about the row being written.
-        Standing where = alsoOnTheWay(subject, fixing, reaching).with(stood.account());
+        Standing where = alsoOnTheWay(subject, fixing, reaching, byCounts, alikeStoppedBy)
+                .with(stood.account());
         // A way the rules leave nothing standing on is a way no row arrives by, so there is no row
         // to compose for this point and the rest of this would be composing one. What comes back is
         // the model's word, which is the same word the realizer's proof comes back with and is
@@ -5312,12 +5414,21 @@ public final class Generator {
      * on, the region says nothing about it, or nothing of the carrier lies in what is left — none of
      * those is a row that cannot be written, and each is a row this composes the way it did before
      * the way was carried here at all.
+     *
+     * @param everyQuantifierCounted whether every container a quantifier that is the whole of a
+     *                               statement is over is composed for how many of its elements
+     *                               meet each statement, and not only one a quantifier asks several
+     *                               things of an element over, or two quantifiers are over
+     * @param alikeStoppedBy the figure the ways of writing the elements alike were looked along
+     *                       to, where one stopped them, or null
      */
     private static Standing alsoOnTheWay(MeasuredInput subject, Map<RealizationTarget, Place> fixing,
-                                         Reachability.Reaching reaching) {
+                                         Reachability.Reaching reaching,
+                                         boolean everyQuantifierCounted,
+                                         CompositionBudget alikeStoppedBy) {
         Map<RealizationTarget, Place> out = new LinkedHashMap<>(fixing);
         Map<NumericTerm.FromOnePosition, RealizationTarget> routed = new LinkedHashMap<>();
-        Map<RealizationTarget.ACount, NumbersAskedFor> counted = new LinkedHashMap<>();
+        Map<RealizationTarget, NumbersAskedFor> counted = new LinkedHashMap<>();
         Set<RealizationTarget> someElement = new LinkedHashSet<>();
         List<ReachabilityGap> gaps = new ArrayList<>();
         SearchRegion here = reaching.region();
@@ -5365,7 +5476,59 @@ public final class Generator {
         // own where it is that count: known before any number of the row is put anywhere, so a
         // count held against such numbers puts them where some of what is left is still there.
         Map<CountedElements.Identity, LevelRegion> leftOfACount = new LinkedHashMap<>();
+        // What an element meets several ways, where it is the whole of what the quantifier asks,
+        // is how many elements meet the statement: one or more of them, or none. A container
+        // composed for that count is composed element by element, so its elements may meet the
+        // statement different ways, which elements written alike do not — and every other
+        // quantifier over it is a count of it as well, since the container is written once. A
+        // container two quantifiers are over is composed for its counts where every quantifier is
+        // asked to be: what each asks of an element may be what no one element is, and elements
+        // written alike are the other way of meeting them, which a container no count is composed
+        // for at is written by.
+        Set<TermPath> byCounts = new HashSet<>();
+        // A condition of several ways the way was not split at is composed past along the whole.
+        // Where it states something of the elements of one container and of nothing else, the
+        // container is composed against the statement whole — every way of it at once and none
+        // taken first — and so composed for its counts, its elements meeting the statement each
+        // their own way. Any other says so: along one of its ways the row would be composed
+        // against more.
+        if (reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure, var _)) {
+            for (OnTheWay.OneOf each : unsplit) {
+                Optional<RealizationTarget.ElementsMeetingTogether> stated =
+                        RealizationTarget.ElementsMeetingTogether.of(subject.behavior(), each);
+                if (stated.isEmpty()) {
+                    gaps.add(new ReachabilityGap.LookedAlongWhole(each, figure));
+                    continue;
+                }
+                RealizationTarget.ElementsMeetingTogether together = stated.get();
+                byCounts.add(together.container());
+                out.put(together, Count.of(1));
+                counted.put(together, NumbersAskedFor.of(LevelRegion.point(
+                        new Level.OfTheQuantity(ExactRatio.ONE))));
+            }
+        }
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+            if (countedOf(cut.demand()).isEmpty()) {
+                continue;
+            }
+            if (everyQuantifierCounted || !RowDemand.writtenAlikeAsItStands(cut.demand())) {
+                byCounts.add(containerOf(cut.demand()));
+            }
+        }
+        List<OnTheWay.TakenIn> cuts = new ArrayList<>();
+        for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+            cuts.add(countedOf(cut.demand()).isPresent()
+                    && byCounts.contains(containerOf(cut.demand())) ? asACount(cut) : cut);
+        }
+        // And a number of the item inside an element of such a container is where some element
+        // stands, which the container is composed holding — its elements are not written alike,
+        // so there is no every element for it to be the value of.
+        for (RealizationTarget each : fixing.keySet()) {
+            if (insideAnElementOf(each, byCounts)) {
+                someElement.add(each);
+            }
+        }
+        for (OnTheWay.TakenIn cut : cuts) {
             if (cut.demand() instanceof RowDemand.SoMany many && !many.againstNumbers()) {
                 leftOfACount.merge(CountedElements.identityOf(subject.behavior(), many.count()),
                         many.counts().values(), LevelRegion::meet);
@@ -5373,12 +5536,7 @@ public final class Generator {
         }
         itemCounts.forEach((identity, itemCount) -> leftOfACount.merge(identity,
                 counted.get(itemCount).values(), LevelRegion::meet));
-        // A condition of several ways the way was not split at is composed past along the whole,
-        // and says so: along one of its ways the row would be composed against more.
-        if (reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure, var _)) {
-            unsplit.forEach(each -> gaps.add(new ReachabilityGap.LookedAlongWhole(each, figure)));
-        }
-        for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+        for (OnTheWay.TakenIn cut : cuts) {
             if (cut.demand() instanceof RowDemand.SoMany many) {
                 CountedElements count = CountedElements.of(subject.behavior(), many.count(),
                         subject.quantities(), many.anElementMeeting());
@@ -5441,6 +5599,18 @@ public final class Generator {
                 countsOnTheWay.merge(count.identity(),
                         new CountsAsked(count, counts, many.againstNumbers(), cut),
                         CountsAsked::and);
+                continue;
+            }
+            // What an element meets one of several ways, with none chosen: a row whose elements
+            // are written alike writes one of them into every element, and which one is chosen
+            // before the row is composed ({@link ElementsWrittenAlike}). Composed with none chosen,
+            // nothing is placed for it and the elements written alike are why — or the figure the
+            // choosing stopped at, where it left some ways unlooked along.
+            if (!RowDemand.writtenAlikeAsItStands(cut.demand())) {
+                gaps.add(new ReachabilityGap.Uncomposed(cut, alikeStoppedBy == null
+                        ? new ReachabilityGap.Why.ElementsWrittenAlike()
+                        : ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(
+                                Set.of(alikeStoppedBy), Set.of())));
                 continue;
             }
             // A statement no composer writes toward: nothing is placed for it, and the run is what
@@ -5701,6 +5871,40 @@ public final class Generator {
 
     private static List<TakenConstraint> constraints(List<RowDemand.Relational> relations) {
         return relations.stream().map(RowDemand.Relational::constraint).toList();
+    }
+
+    /** The count of elements meeting the statement {@code demand} is the whole of, where it is a
+     *  quantifier that is one. */
+    private static Optional<Quantity.HowManyMeet> countedOf(RowDemand.OfACondition demand) {
+        return switch (demand) {
+            case RowDemand.Exists exists -> exists.counted();
+            case RowDemand.ForAll every -> every.counted();
+            case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
+                 RowDemand.ForTheRun _ -> Optional.empty();
+        };
+    }
+
+    /** The container a quantifier is over; null for any other demand. */
+    private static TermPath containerOf(RowDemand.OfACondition demand) {
+        return switch (demand) {
+            case RowDemand.Exists exists -> exists.container();
+            case RowDemand.ForAll every -> every.container();
+            case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
+                 RowDemand.ForTheRun _ -> null;
+        };
+    }
+
+    /**
+     * {@code cut}, a quantifier that is the whole of a statement about elements, as the count of
+     * elements meeting the statement: one or more of them for some element, and none for every
+     * element meeting its denial.
+     */
+    private static OnTheWay.TakenIn asACount(OnTheWay.TakenIn cut) {
+        Quantity.HowManyMeet counted = countedOf(cut.demand()).orElseThrow();
+        boolean some = cut.demand() instanceof RowDemand.Exists;
+        return new OnTheWay.TakenIn(cut.anchor(), new RowDemand.SoMany(counted,
+                some ? Rel.GE : Rel.EQ, some ? ExactRatio.ONE : ExactRatio.ZERO,
+                new LinearForm<>(ExactRatio.ZERO, Map.of()), AnElementMeeting.UNREAD));
     }
 
     /** Whether {@code demand} asks nothing a number stands for: an element to be, or not to be,
@@ -6180,13 +6384,15 @@ public final class Generator {
      *               number is one of, the two would part at exactly that name and a number would be
      *               asked about under a target the row never wrote
      * @param counted the counts a condition on the way asked for, each with the counts the
-     *                condition leaves, which is what the one the row stands at is one of
+     *                condition leaves, which is what the one the row stands at is one of — and
+     *                each statement the elements of a container are to meet together, asked at
+     *                one: holding
      * @param someElement the numbers some element of a container is to stand at, which a
      *                    condition that some element meets something placed
      */
     private record Standing(Map<RealizationTarget, Place> at,
                             Map<NumericTerm.FromOnePosition, RealizationTarget> routed,
-                            Map<RealizationTarget.ACount, NumbersAskedFor> counted,
+                            Map<RealizationTarget, NumbersAskedFor> counted,
                             Set<RealizationTarget> someElement,
                             CompositionAccount unrepresented) {
 
@@ -6498,8 +6704,9 @@ public final class Generator {
     }
 
     /**
-     * The region a group's value is composed in: the way's, and where the group holds a count,
-     * that with every number of the row standing where the row fixed it.
+     * The region a group's value is composed in: the way's, and where the group holds a count or a
+     * statement its elements meet together, that with every number of the row standing where the
+     * row fixed it.
      *
      * <p>A count is met by elements chosen against the numbers its statement reads beside them, and
      * those are numbers of other locations, fixed with the count. Every other group is composed out
@@ -6512,7 +6719,8 @@ public final class Generator {
                                            SearchRegion region,
                                            Map<RealizationTarget, Place> standing) {
         for (RealizationTarget each : group.keySet()) {
-            if (each instanceof RealizationTarget.ACount) {
+            if (each instanceof RealizationTarget.ACount
+                    || each instanceof RealizationTarget.ElementsMeetingTogether) {
                 Map<NumericTerm, Place> fixed = new LinkedHashMap<>();
                 standing.forEach((target, at) -> {
                     if (target instanceof RealizationTarget.OfANumber number
@@ -6655,17 +6863,22 @@ public final class Generator {
 
     /**
      * The element of each container {@code with} composes for how many of its elements meet
-     * something, and where that container is written. Empty where there is no count among them,
-     * which is every row of a model that counts nothing.
+     * something, or for a statement they meet together, and where that container is written.
+     * Empty where there is neither among them, which is every row of a model that counts nothing.
      */
     private static Map<TermPath, TermPath> countedAmong(Collection<RealizationTarget> with) {
         Map<TermPath, TermPath> out = Map.of();
         for (RealizationTarget each : with) {
-            if (each instanceof RealizationTarget.ACount count) {
+            TermPath container = switch (each) {
+                case RealizationTarget.ACount count -> count.count().container();
+                case RealizationTarget.ElementsMeetingTogether together -> together.container();
+                case RealizationTarget.OfANumber _ -> null;
+            };
+            if (container != null) {
                 if (out.isEmpty()) {
                     out = new HashMap<>();
                 }
-                out.put(count.count().container().element(), count.writeRoot());
+                out.put(container.element(), each.writeRoot());
             }
         }
         return out;
@@ -6690,9 +6903,11 @@ public final class Generator {
                 && target instanceof RealizationTarget.AtOnePosition(
                         NumericTerm.FromOnePosition term)
                 && term instanceof NumericTerm.ValueOf) {
-            TermPath container = counted.get(term.position());
-            if (container != null) {
-                return container;
+            // The element itself, or a number inside it.
+            for (Map.Entry<TermPath, TermPath> each : counted.entrySet()) {
+                if (term.position().isAtOrUnder(each.getKey())) {
+                    return each.getValue();
+                }
             }
         }
         return target.writeRoot();
@@ -6748,14 +6963,14 @@ public final class Generator {
     private static Map<RealizationTarget, NumbersAskedFor> whatEachOfThemIsANumberOf(
             MeasuredInput subject, Map<RealizationTarget, Place> fixing,
             Map<NumericTerm.FromOnePosition, RealizationTarget> routed,
-            Map<RealizationTarget.ACount, NumbersAskedFor> counted,
+            Map<RealizationTarget, NumbersAskedFor> counted,
             NumbersAskedFor asking, Reachability.Reaching reaching) {
         Map<RealizationTarget, NumbersAskedFor> out = new LinkedHashMap<>();
         for (RealizationTarget each : fixing.keySet()) {
             out.put(each, asking);
         }
         // Every count the row stands at, which is one of the counts the item and every condition
-        // on the way leave it.
+        // on the way leave it, and every statement its elements meet together.
         counted.forEach((target, counts) -> out.merge(target, counts, NumbersAskedFor::meet));
         // Every number a place was chosen for on the way, and not every number a cut names. A cut
         // may be met more than one way — every element meeting a condition, or a container holding
@@ -7719,7 +7934,7 @@ public final class Generator {
             }
             required = both;
         }
-        Standing where = alsoOnTheWay(subject, fixing, reaching);
+        Standing where = alsoOnTheWay(subject, fixing, reaching, false, null);
         for (ReachabilityGap gap : where.unrepresented().onTheWay()) {
             if (gap instanceof ReachabilityGap.ProvedImpossible) {
                 return new HeldTogether.Refused(new Attempt(null,
@@ -10363,8 +10578,8 @@ public final class Generator {
                 case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
                      NumericTerm.Multiplicity _, NumericTerm.TakenOver _ -> null;
             };
-            // Nor is how many of its elements meet a statement.
-            case RealizationTarget.ACount _ -> null;
+            // Nor is how many of its elements meet a statement, or that they meet one together.
+            case RealizationTarget.ACount _, RealizationTarget.ElementsMeetingTogether _ -> null;
         };
         return new Edge(made, settled);
     }

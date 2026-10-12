@@ -133,9 +133,11 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "BehaviorInputs", "view", "(" + TYPE + ")L" + TYPE_VIEW + ";",
                     THE_POSITION),
             row(PARTITION + "CardinalityComposer", "compose",
-                    "(" + TYPE + "Ljava/util/List;Ljava/util/List;Ljava/util/SequencedMap;L"
-                            + PARTITION + "RealizationTarget$OfANumber;Ljava/util/List;L" + INPUTS
-                            + "SearchRegion;" + CONTEXT + ")" + REALIZATION,
+                    "(" + TYPE + "Ljava/util/List;Ljava/util/List;Ljava/util/List;"
+                            + "Ljava/util/SequencedMap;L" + PARTITION
+                            + "RealizationTarget$OfANumber;Ljava/util/List;L" + INPUTS
+                            + "Quantities;L" + INPUTS + "SearchRegion;" + CONTEXT + ")"
+                            + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "CardinalityComposer", "composeAlike",
                     "(" + TYPE + "Ljava/util/List;L" + PARTITION + "RealizationTarget$OfANumber;L"
@@ -235,6 +237,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "ValuesCarryingANumber", "at",
                     "(L" + PARTITION + "ConstructionPlan$Slot;)L" + PARTITION + "FixtureTemplate;",
+                    THE_POSITION),
+            row(PARTITION + "ValuesOfAnElement", "valuesOf",
+                    "(" + TYPE + "L" + INPUTS + "TermPath;" + SOURCE
+                            + "ILjava/util/function/Function;Ljava/util/Set;)Ljava/util/List;",
                     THE_POSITION),
             row(PARTITION + "Witnesses", "differing",
                     "(" + TYPE + "I" + HELD + CONTEXT + "Ljava/util/Set;)Ljava/util/List;",

@@ -88,7 +88,8 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
     void holdingTheValueIsSomeElementTheValue() {
         RowDemand.Exists some = assertInstanceOf(RowDemand.Exists.class, asked("direct", true));
         assertEquals("lead.campaigns", some.container().toString());
-        assertEquals(List.of(new RowDemand.SameAs(TermPath.of("priority"))), some.ofAnElement());
+        assertEquals(List.of(new RowDemand.SameAs(TermPath.of("priority"))),
+                some.ofAnElement().theWay());
     }
 
     @Test
@@ -96,7 +97,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
         RowDemand.ForAll every = assertInstanceOf(RowDemand.ForAll.class, asked("direct", false));
         assertEquals("lead.campaigns", every.container().toString());
         assertEquals(List.of(new RowDemand.DifferentFrom(TermPath.of("priority"))),
-                every.ofEachElement());
+                every.ofEachElement().theWay());
     }
 
     /** A helper answering a field of what it is handed is that field, both ways round. */
@@ -112,7 +113,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
         RowDemand.Exists some = assertInstanceOf(RowDemand.Exists.class, asked("listed", true));
         assertEquals("lead.names", some.container().toString());
         assertEquals(List.of(new RowDemand.SameAs(TermPath.of("lead").then("picked"))),
-                some.ofAnElement());
+                some.ofAnElement().theWay());
     }
 
     /**
@@ -205,8 +206,8 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                 RowDemand.OfACondition demand = assertInstanceOf(OnTheWay.TakenIn.class, each,
                         () -> "a key is read whole: " + stated).demand();
                 List<RowDemand.OfAnElement> ofAnElement = switch (demand) {
-                    case RowDemand.Exists some -> some.ofAnElement();
-                    case RowDemand.ForAll every -> every.ofEachElement();
+                    case RowDemand.Exists some -> some.ofAnElement().theWay();
+                    case RowDemand.ForAll every -> every.ofEachElement().theWay();
                     case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
                          RowDemand.ForTheRun _ -> List.of();
                 };

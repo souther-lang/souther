@@ -40,9 +40,14 @@ record ElementWrites(List<RowDemand.ATruth> truths, List<RowDemand.InCases> case
         List<RowDemand.ATruth> truths = new ArrayList<>();
         List<RowDemand.InCases> cases = new ArrayList<>();
         for (OnTheWay.TakenIn each : way) {
+            // One an element meets several ways is written once one of them is chosen, and
+            // until then asks nothing of an element written alike.
+            if (!RowDemand.writtenAlikeAsItStands(each.demand())) {
+                continue;
+            }
             List<RowDemand.OfAnElement> asked = switch (each.demand()) {
-                case RowDemand.Exists exists -> exists.ofAnElement();
-                case RowDemand.ForAll every -> every.ofEachElement();
+                case RowDemand.Exists exists -> exists.ofAnElement().theWay();
+                case RowDemand.ForAll every -> every.ofEachElement().theWay();
                 case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
                      RowDemand.ForTheRun _ -> List.of();
             };

@@ -61,6 +61,11 @@ public sealed interface NumericSet {
         public LevelRegion region(Carrier on) {
             return LevelRegion.point(new Level.OnACarrier(on, value));
         }
+
+        @Override
+        public List<Place> turnsAt() {
+            return List.of(value);
+        }
     }
 
     /**
@@ -106,6 +111,11 @@ public sealed interface NumericSet {
             }
             return left;
         }
+
+        @Override
+        public List<Place> turnsAt() {
+            return values;
+        }
     }
 
     /** Inside one of the runs the lines a rule drew cut the position into. */
@@ -129,6 +139,11 @@ public sealed interface NumericSet {
         @Override
         public LevelRegion region(Carrier on) {
             return run.region();
+        }
+
+        @Override
+        public List<Place> turnsAt() {
+            return endsOf(extent());
         }
     }
 
@@ -212,6 +227,14 @@ public sealed interface NumericSet {
             }
             return left;
         }
+
+        /** The run's ends, and each value taken out of it. */
+        @Override
+        public List<Place> turnsAt() {
+            List<Place> out = new ArrayList<>(endsOf(extent()));
+            out.addAll(excluded);
+            return List.copyOf(out);
+        }
     }
 
     /**
@@ -267,4 +290,26 @@ public sealed interface NumericSet {
      * a second account of what each shape means.
      */
     LevelRegion region(Carrier on);
+
+    /**
+     * Every place whether a value is one of these can change at: the ends of a run and each value
+     * singled out or taken out.
+     *
+     * <p>Not {@link #extent()}. The extent says nothing lies outside it, and a value taken out of a
+     * run is inside the extent and still a place a value stops being one of these. A reader choosing
+     * a value either side of each place where membership turns, from the extent alone, would offer
+     * the hole as a member and never the values around it.
+     */
+    List<Place> turnsAt();
+
+    /** The places of the ends {@code bounds} has. */
+    private static List<Place> endsOf(NumericDomain.Bounds bounds) {
+        List<Place> out = new ArrayList<>();
+        for (Endpoint end : new Endpoint[] {bounds.min(), bounds.max()}) {
+            if (end != null) {
+                out.add(end.at());
+            }
+        }
+        return List.copyOf(out);
+    }
 }

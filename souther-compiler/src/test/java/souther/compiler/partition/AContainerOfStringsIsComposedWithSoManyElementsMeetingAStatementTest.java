@@ -94,6 +94,27 @@ class AContainerOfStringsIsComposedWithSoManyElementsMeetingAStatementTest {
                 () -> "a set holds each value once: " + values));
     }
 
+    /**
+     * Against another string of the input, an element is held level with the value the row holds
+     * there: one dropped from what equals {@code u} leaves something only where two did, and a row
+     * is composed below that line and on it.
+     */
+    @Test
+    void aCountOfWhatEqualsAnotherStringIsComposedAgainstTheValueTheRowHoldsThere() {
+        List<RowAgainstAString> offered = rowsAgainstAString("""
+                module probe
+                data Low
+                data High
+                behavior pick : (xs: List<String>, u: String) -> Low | High
+                let pick (xs, u) =
+                    if List.length(List.drop(1, List.filter(y -> y == u, xs))) >= 1 then High else Low
+                """);
+        assertTrue(offered.stream().anyMatch(row -> row.equalToIt() == 1),
+                () -> "one below the line: " + offered);
+        assertTrue(offered.stream().anyMatch(row -> row.equalToIt() == 2),
+                () -> "one on the line: " + offered);
+    }
+
     private static Predicate<List<String>> holding(String value, int times) {
         return values -> values.stream().filter(value::equals).count() == times;
     }
@@ -104,21 +125,48 @@ class AContainerOfStringsIsComposedWithSoManyElementsMeetingAStatementTest {
 
     /** The values of every container the rows offered for {@code source} write. */
     private static List<List<String>> containersOffered(String source) {
+        List<List<String>> out = new ArrayList<>();
+        Matcher written = Pattern.compile("\\[([^\\]]*)\\]").matcher(rowsOffered(source));
+        while (written.find()) {
+            out.add(stringsIn(written.group(1)));
+        }
+        return out;
+    }
+
+    /** A row of a list and the string it is held against. */
+    private record RowAgainstAString(List<String> values, String against) {
+
+        long equalToIt() {
+            return values.stream().filter(against::equals).count();
+        }
+    }
+
+    /** Every row offered for {@code source} whose arguments are a list and then one string. */
+    private static List<RowAgainstAString> rowsAgainstAString(String source) {
+        List<RowAgainstAString> out = new ArrayList<>();
+        Matcher written = Pattern.compile("\\| \\(\\[([^\\]]*)\\], (\"(?:[^\"\\\\]|\\\\.)*\")\\)")
+                .matcher(rowsOffered(source));
+        while (written.find()) {
+            out.add(new RowAgainstAString(stringsIn(written.group(1)),
+                    stringsIn(written.group(2)).getFirst()));
+        }
+        return out;
+    }
+
+    private static String rowsOffered(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        String rows = GeneratedRows.of(compilation, "probe", null,
+        return GeneratedRows.of(compilation, "probe", null,
                 SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
-        List<List<String>> out = new ArrayList<>();
-        Matcher written = Pattern.compile("\\[([^\\]]*)\\]").matcher(rows);
-        while (written.find()) {
-            List<String> values = new ArrayList<>();
-            Matcher each = Pattern.compile("\"((?:[^\"\\\\]|\\\\.)*)\"").matcher(written.group(1));
-            while (each.find()) {
-                values.add(each.group(1));
-            }
-            out.add(values);
+    }
+
+    private static List<String> stringsIn(String written) {
+        List<String> values = new ArrayList<>();
+        Matcher each = Pattern.compile("\"((?:[^\"\\\\]|\\\\.)*)\"").matcher(written);
+        while (each.find()) {
+            values.add(each.group(1));
         }
-        return out;
+        return values;
     }
 }

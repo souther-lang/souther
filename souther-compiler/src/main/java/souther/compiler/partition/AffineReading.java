@@ -395,6 +395,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * b} is not how far two positions stand apart, it is an arithmetic form over both of them.
      */
     NumericTerm[] twoCoordinates() {
+        return twoCoordinates(form);
+    }
+
+    /**
+     * The same of any form of the input's numbers, for every reader that asks which two positions
+     * a form holds apart: the line a comparison draws and the quantity a row is read at are one
+     * question about the form.
+     */
+    static NumericTerm[] twoCoordinates(LinearForm<NumericTerm> form) {
         if (form.coefs().size() != 2) {
             return null;
         }

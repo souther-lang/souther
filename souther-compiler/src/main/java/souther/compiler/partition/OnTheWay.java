@@ -3,10 +3,12 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * One condition on the way to a comparison, and what became of it.
@@ -153,17 +155,23 @@ public sealed interface OnTheWay {
      * on one of {@code alternatives}.
      *
      * <p>Narrows nothing on its own, since no one alternative is what every arriving row met. What
-     * each alternative asks is a way of its own ({@link WayToTheBorder#eachWay}), and a row is
+     * each alternative asks is a way of its own ({@link Reachability#of}), and a row is
      * looked for along each of them; nothing reaches past the condition only where nothing reaches
      * along any of them.
      *
+     * <p>And the statement the alternatives are the ways of, where one proposition says it. Where
+     * the ways are more than are looked along, a composer holding the statement whole composes a
+     * row against all of them at once instead of along none ({@link Generator}).
+     *
      * @param alternatives what each alternative asks, in the order they are kept; two or more
+     * @param stated       the statement read, where one proposition says it
      */
     record OneOf(ConditionOccurrence condition, ConditionReportAnchor anchor,
-                 List<List<OnTheWay>> alternatives) implements OnTheWay {
+                 List<List<OnTheWay>> alternatives, Optional<Proposition> stated)
+            implements OnTheWay {
 
         public OneOf {
-            if (condition == null) {
+            if (condition == null || stated == null) {
                 throw new IllegalArgumentException(
                         "a condition of several ways is some condition the reading met");
             }

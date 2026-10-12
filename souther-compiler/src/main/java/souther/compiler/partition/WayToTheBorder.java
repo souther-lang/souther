@@ -1,11 +1,21 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NameReach;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.partition.OneOfEach.Step;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * How a row for one border came to be looked for where it is: every condition on the way, in the
@@ -105,7 +115,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                     // That some element meets these says nothing every row past it holds of each
                     // element, so the region is narrowed only by the container holding one. What
                     // the element meets is composed where the row is.
-                    case RowDemand.Exists(var _, var _, var holdingOne) ->
+                    case RowDemand.Exists(var _, var _, var holdingOne, var _) ->
                             holdingOne.constraint().narrowing(region);
                     // That every element meets these, which a container holding none does. A
                     // region reads a term inside the elements as the value of one that is there,
@@ -230,70 +240,141 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     }
 
     /**
-     * The ways this one is, each with one alternative of every condition of several ways taken in
-     * where it stands ({@link OnTheWay.OneOf}) — just itself where it has none — as many as
-     * {@code most}, the first condition's alternatives changing slowest.
+     * The ways a row past this one may take, each with one alternative of conditions of several
+     * ways taken in where it stands ({@link OnTheWay.OneOf}) — or why no row takes any of them,
+     * for the cases, the truths or the counts it asks.
      *
-     * <p>Every row past this way is past one of them, since a row past a condition of several ways
-     * met one of its alternatives. So a row is looked for along each, and nothing reaches the border
-     * only where nothing reaches along any of them — which only a split that holds every way can
-     * say, so it is told apart from one the figure cut ({@link Split#everyWay}).
+     * <p>Every row past this way is past one alternative of each such condition. Conditions that
+     * turn on no position in common are chosen apart ({@link OneOfEach}); the ways handed on are
+     * every combination of their open alternatives where the figure lets them all be, and
+     * otherwise some of them with the figure that left the rest. A way with no such condition on
+     * it is judged by the same walk, as the one way it is.
      */
-    public Split eachWay(int most) {
-        List<List<OnTheWay>> out = new ArrayList<>();
-        boolean every = waysFrom(onTheWay, new ArrayList<>(), out, most);
-        return new Split(out.stream().map(WayToTheBorder::new).toList(), every);
+    OneOfEach.Walked<OnTheWay, Reachability> along() {
+        return OneOfEach.walk(onTheWay, ASKED_OF_A_ROW, CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
     }
 
     /**
-     * The ways this one was split into, and whether they are every way it is.
+     * What a way asks of a row as far as whether its conditions hold together: the cases it
+     * requires and the truths it asks, which are what two conditions on one way contradict each
+     * other in ({@link Reachability#of}), a condition no row brings out the way taken — and how
+     * many elements meet each statement it counts, which two conditions asking for counts that
+     * leave none in common contradict each other in as well.
      *
-     * @param ways     the first of them, one or more
-     * @param everyWay whether they are all of them; where not, the figure stopped the splitting and
-     *                 a row past this way may be on a way not among them
+     * @param counts what is left of each count asked, by its spelling
      */
-    public record Split(List<WayToTheBorder> ways, boolean everyWay) {
+    private record HeldTogether(Requirements requirements, List<RowDemand.ATruth> truths,
+                                Map<String, LevelRegion> counts) {
 
-        public Split {
-            ways = List.copyOf(ways);
+        /** These with the count {@code counted} asked to be in {@code region}, or why no row is
+         *  where that leaves it none. */
+        Step<HeldTogether, Reachability> counting(Quantity.HowManyMeet counted,
+                                                  LevelRegion region) {
+            LevelRegion left = counts.containsKey(counted.spelled())
+                    ? counts.get(counted.spelled()).meet(region) : region;
+            if (left.parts().isEmpty()) {
+                return new Step.Closed<>(new Reachability.NothingReaches(
+                        new Reachability.TwoAtOnce.Counts(counted.container().inputPosition())));
+            }
+            Map<String, LevelRegion> out = new LinkedHashMap<>(counts);
+            out.put(counted.spelled(), left);
+            return new Step.Held<>(new HeldTogether(requirements, truths, out));
         }
     }
 
-    /**
-     * Each way of {@code entries}, after {@code so}, put in {@code into} until it holds
-     * {@code most}: a condition of several ways is each of its alternatives in its place in turn,
-     * read as the entries it holds, so one inside an alternative is split where it stands too.
-     *
-     * <p>Made whole one at a time and never as a product first: how many there are is the figure's
-     * to bound, and a list of every one would be the size of what it stops.
-     *
-     * @return whether every way was put, which is false where {@code most} stopped it
-     */
-    private static boolean waysFrom(List<OnTheWay> entries, List<OnTheWay> so,
-                                    List<List<OnTheWay>> into, int most) {
-        int at = 0;
-        while (at < entries.size() && !(entries.get(at) instanceof OnTheWay.OneOf)) {
-            at++;
-        }
-        if (at == entries.size()) {
-            if (into.size() == most) {
-                return false;
+    /** One or more elements, which some element meeting a statement is the count of. */
+    private static final LevelRegion ONE_OR_MORE = LevelRegion.of(new LevelInterval(
+            Bound.at(new Level.OfTheQuantity(ExactRatio.ONE), true), null));
+
+    /** No element, which every element meeting the denial of a statement is the count of. */
+    private static final LevelRegion NONE = LevelRegion.point(new Level.OfTheQuantity(
+            ExactRatio.ZERO));
+
+    private static final OneOfEach.Vocabulary<OnTheWay, HeldTogether, Reachability> ASKED_OF_A_ROW =
+            new OneOfEach.Vocabulary<>() {
+
+                @Override
+                public List<List<OnTheWay>> alternatives(OnTheWay entry) {
+                    return entry instanceof OnTheWay.OneOf several ? several.alternatives() : null;
+                }
+
+                @Override
+                public Set<TermPath> positions(OnTheWay entry) {
+                    return switch (entry) {
+                        case OnTheWay.TakenIn taken -> taken.demand().positions();
+                        case OnTheWay.Narrowed narrowed -> {
+                            Requirements required = narrowed.requirements();
+                            Set<TermPath> out = new LinkedHashSet<>(
+                                    required.refinements().keySet());
+                            for (NameReach.Crossing each : required.crossings()) {
+                                out.add(each.at());
+                                out.add(each.to());
+                            }
+                            yield out;
+                        }
+                        case OnTheWay.Settled _, OnTheWay.Declined _, OnTheWay.OneOf _ ->
+                                Set.of();
+                    };
+                }
+
+                @Override
+                public HeldTogether nothing() {
+                    return new HeldTogether(Requirements.NONE, List.of(), Map.of());
+                }
+
+                /** {@code so} with {@code entry} taken in, or why no row takes them together. */
+                @Override
+                public Step<HeldTogether, Reachability> with(HeldTogether so, OnTheWay entry) {
+                    return takenIn(so, entry);
+                }
+            };
+
+    private static Step<HeldTogether, Reachability> takenIn(HeldTogether so, OnTheWay entry) {
+        return switch (entry) {
+            case OnTheWay.Settled settled -> settled.thisWay() ? new Step.Held<>(so)
+                    : new Step.Closed<>(new Reachability.NothingComesOutThatWay(settled));
+            case OnTheWay.Narrowed narrowed -> switch (so.requirements()
+                    .merge(narrowed.requirements())) {
+                case Requirements.Merge.Merged(Requirements both) ->
+                        new Step.Held<>(new HeldTogether(both, so.truths(), so.counts()));
+                case Requirements.Merge.Conflict conflict -> new Step.Closed<>(
+                        new Reachability.NothingReaches(new Reachability.TwoAtOnce.Cases(conflict)));
+            };
+            case OnTheWay.TakenIn(var _, RowDemand.ATruth truth) -> {
+                List<RowDemand.ATruth> truths = new ArrayList<>(so.truths());
+                truths.add(truth);
+                yield switch (TruthsAsked.of(truths)) {
+                    case TruthsAsked.Merge.Merged _ -> new Step.Held<>(
+                            new HeldTogether(so.requirements(), truths, so.counts()));
+                    case TruthsAsked.Merge.Conflict(var at) -> new Step.Closed<>(
+                            new Reachability.NothingReaches(new Reachability.TwoAtOnce.Truths(at)));
+                };
             }
-            List<OnTheWay> whole = new ArrayList<>(so);
-            whole.addAll(entries);
-            into.add(List.copyOf(whole));
-            return true;
-        }
-        List<OnTheWay> before = new ArrayList<>(so);
-        before.addAll(entries.subList(0, at));
-        List<OnTheWay> after = entries.subList(at + 1, entries.size());
-        for (List<OnTheWay> alternative : ((OnTheWay.OneOf) entries.get(at)).alternatives()) {
-            List<OnTheWay> rest = new ArrayList<>(alternative);
-            rest.addAll(after);
-            if (!waysFrom(rest, before, into, most)) {
-                return false;
+            case OnTheWay.TakenIn(var _, RowDemand.Exists exists)
+                    when exists.counted().isPresent() ->
+                    so.counting(exists.counted().get(), ONE_OR_MORE);
+            case OnTheWay.TakenIn(var _, RowDemand.ForAll every)
+                    when every.counted().isPresent() ->
+                    so.counting(every.counted().get(), NONE);
+            case OnTheWay.TakenIn(var _, RowDemand.SoMany many) when !many.againstNumbers() ->
+                    so.counting(many.count(), many.counts().values());
+            // A relation over a number written under a case is a relation of a value that is
+            // that case: the number is nowhere else.
+            case OnTheWay.TakenIn(var _, RowDemand.Relational relation) -> {
+                Requirements required = so.requirements();
+                for (NumericTerm term : relation.terms()) {
+                    switch (required.merge(term.subjectPath().requirements())) {
+                        case Requirements.Merge.Merged(Requirements both) -> required = both;
+                        case Requirements.Merge.Conflict conflict -> {
+                            yield new Step.Closed<>(new Reachability.NothingReaches(
+                                    new Reachability.TwoAtOnce.Cases(conflict)));
+                        }
+                    }
+                }
+                yield new Step.Held<>(new HeldTogether(required, so.truths(), so.counts()));
             }
-        }
-        return true;
+            case OnTheWay.TakenIn _, OnTheWay.Declined _, OnTheWay.OneOf _ -> new Step.Held<>(so);
+        };
     }
 }

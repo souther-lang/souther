@@ -21,8 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * {@code count < on} — and a search that put {@code on} at nought first and read the empty count
  * region as a proof reported the rule as one the rules leave no value for.
  *
- * <p>And a count held against a number alone is still a proof where it leaves nothing: no count of
- * a filter is below nought.
+ * <p>And counts held against numbers alone are still a proof where they leave nothing.
  */
 class ACountHeldAgainstANumberOfTheRowIsNotProvedImpossibleByTheValueTriedTest {
 
@@ -83,10 +82,12 @@ class ACountHeldAgainstANumberOfTheRowIsNotProvedImpossibleByTheValueTriedTest {
                 "a row on each side of a count held against a number of the row, which there is");
     }
 
+    /** Proved of the way itself, which asks the one count to be two things before any value is
+     *  put anywhere. */
     @Test
     void aCountAgainstANumberAloneThatLeavesNothingIsStillProved() {
         List<String> kinds = kinds(COUNTED + " >= 3 && " + COUNTED + " <= 1");
-        assertEquals(1, kinds.stream().filter("TheRulesLeaveNoValueForIt"::equals).count(),
+        assertEquals(1, kinds.stream().filter("OnePositionCannotBeBoth"::equals).count(),
                 () -> "no count is at least three and at most one, which the counts settle by"
                         + " themselves: " + kinds);
     }

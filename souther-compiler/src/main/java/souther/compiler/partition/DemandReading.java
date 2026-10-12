@@ -33,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -107,17 +108,53 @@ final class DemandReading {
          * every demand of one alternative, and an alternative is no less a way for the others
          * beside it.
          *
-         * @param alternatives what each alternative asks, each once and in the order the parts are
-         *                     kept; two or more, since one is no choice
+         * <p>A value, compared by what it holds, and hashed once: a disjunction inside an
+         * alternative of another is gathered into a set at every level it nests at, and hashed
+         * afresh each time, what is inside was walked once per level.
          */
-        record OneOf(List<List<Read>> alternatives) implements Taken {
+        static final class OneOf implements Taken {
 
-            public OneOf {
-                alternatives = alternatives.stream().map(List::copyOf).distinct().toList();
-                if (alternatives.size() < 2) {
+            /** What each alternative asks, each once and in the order the parts are kept; two or
+             *  more, since one is no choice. */
+            private final List<List<Read>> alternatives;
+            /** The statement the alternatives are the ways of, where one proposition says it:
+             *  what a composer holding all of it at once composes against without taking any one
+             *  way. */
+            private final Optional<Proposition> stated;
+            private final int hash;
+
+            OneOf(List<List<Read>> alternatives, Optional<Proposition> stated) {
+                this.alternatives = alternatives.stream().map(List::copyOf).distinct().toList();
+                if (this.alternatives.size() < 2) {
                     throw new IllegalArgumentException("one of several things is two or more: "
-                            + alternatives);
+                            + this.alternatives);
                 }
+                this.stated = Objects.requireNonNull(stated, "a statement of the ways, or none");
+                this.hash = 31 * this.alternatives.hashCode() + stated.hashCode();
+            }
+
+            List<List<Read>> alternatives() {
+                return alternatives;
+            }
+
+            Optional<Proposition> stated() {
+                return stated;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return this == other || (other instanceof OneOf that && hash == that.hash
+                        && alternatives.equals(that.alternatives) && stated.equals(that.stated));
+            }
+
+            @Override
+            public int hashCode() {
+                return hash;
+            }
+
+            @Override
+            public String toString() {
+                return "OneOf[alternatives=" + alternatives + "]";
             }
         }
 
@@ -180,7 +217,8 @@ final class DemandReading {
                 if (joined.how().under(holding) == ConditionJoin.BOTH) {
                     yield List.copyOf(both(left, right));
                 }
-                yield oneOf(List.of(left, right), Stated::read, each -> new Stated(joined, each));
+                yield oneOf(List.of(left, right), Stated::read, each -> new Stated(joined, each),
+                        Optional.of(holdingAs(statedBy(joined, read, conditions), holding)));
             }
             // What a comparison states, read as what it states: a size held against a number that
             // parts nought from every size above it asks what the container holding something
@@ -232,9 +270,10 @@ final class DemandReading {
      *
      * @param readOf what an entry of a part is read as
      * @param asWhole an entry standing for what the whole asks
+     * @param stated  the statement the parts are the ways of, where one proposition says it
      */
     private static <T> List<T> oneOf(List<List<T>> parts, Function<T, Read> readOf,
-                                     Function<Read, T> asWhole) {
+                                     Function<Read, T> asWhole, Optional<Proposition> stated) {
         List<List<Read>> open = new ArrayList<>();
         List<T> lastOpen = parts.getLast();
         for (List<T> part : parts) {
@@ -250,8 +289,8 @@ final class DemandReading {
                 }
             }
         }
-        return open.stream().distinct().count() <= 1 ? lastOpen
-                : List.of(asWhole.apply(new Read.OneOf(open)));
+        List<List<Read>> each = open.stream().distinct().toList();
+        return each.size() <= 1 ? lastOpen : List.of(asWhole.apply(new Read.OneOf(each, stated)));
     }
 
     /**
@@ -299,17 +338,18 @@ final class DemandReading {
     static AnElementMeeting anElementMeeting(Quantity.HowManyMeet count, InputReading read) {
         List<Read> reads = asked(count.someMeets(), read);
         if (reads.size() != 1
-                || !(reads.getFirst() instanceof Read.Demands(RowDemand.Exists exists))) {
+                || !(reads.getFirst() instanceof Read.Demands(RowDemand.Exists exists))
+                || !exists.ofAnElement().oneWay()) {
             return AnElementMeeting.UNREAD;
         }
+        List<RowDemand.OfAnElement> way = exists.ofAnElement().theWay();
         Optional<List<TakenConstraint>> heldTo =
-                exists.relations().size() == exists.ofAnElement().size()
+                exists.relations().size() == way.size()
                         ? Optional.of(exists.relations().stream()
                                 .map(RowDemand.Relational::constraint).toList())
                         : Optional.empty();
         Optional<RowDemand.WithinIt> handedOn =
-                exists.ofAnElement().size() == 1
-                        && exists.ofAnElement().getFirst() instanceof RowDemand.WithinIt within
+                way.size() == 1 && way.getFirst() instanceof RowDemand.WithinIt within
                         ? Optional.of(within) : Optional.empty();
         return new AnElementMeeting(heldTo, handedOn);
     }
@@ -416,7 +456,8 @@ final class DemandReading {
                 yield List.copyOf(out);
             }
             case Proposition.Any any -> oneOf(any.parts().stream()
-                    .map(part -> projected(part, read, met)).toList(), each -> each, each -> each);
+                    .map(part -> projected(part, read, met)).toList(), each -> each, each -> each,
+                    Optional.of(any));
             // One of several statements, which one turning on which application a run meets the
             // condition on: one alternative per statement that can hold, as a disjunction is. A
             // statement of an application no run makes is an alternative too many and never one
@@ -433,7 +474,7 @@ final class DemandReading {
                 yield switch ((int) open.stream().distinct().count()) {
                     case 0 -> List.of(new Read.Settled(false));
                     case 1 -> open.getFirst();
-                    default -> List.of(new Read.OneOf(open));
+                    default -> List.of(new Read.OneOf(open, Optional.of(applications)));
                 };
             }
             // The elements of a container a dependency answered are what a row stands the
@@ -455,7 +496,7 @@ final class DemandReading {
                     projected(reached.surely(true), read, met),
                     List.of(new Read.Unread(new WhyNotTaken.OutsideDomain(
                             WhyNotTaken.DomainLimit.A_NODE_BELOW_WHAT_A_ROW_WRITES)))),
-                    each -> each, each -> each);
+                    each -> each, each -> each, Optional.of(reached));
         };
     }
 
@@ -476,16 +517,14 @@ final class DemandReading {
      * none meets it whatever that part says, and that is the other way {@link RowDemand.ForAll}
      * is met.
      *
-     * <p>Where the element may meet it several ways, each is an alternative of its own: one of
-     * several things the element meets, or a container inside it holding none where the rest of
-     * it is what every element of that container meets. Some element meeting one of several
-     * things is some element meeting one of them, exactly. Every element meeting one of several
-     * things is more than every element meeting the same one of them: a row whose elements meet
-     * different ones is past the whole and along no alternative here, and a composer writing the
-     * elements of a container alike writes no such row either way. What closes an alternative is
-     * the rules every element is held to leaving no element that meets it, and where that holds
-     * of every alternative no element meets any of them — so a way closed along every alternative
-     * is still one no row takes.
+     * <p>Where the element may meet it several ways — one of several things it meets, or a
+     * container inside it holding none where the rest of it is what every element of that
+     * container meets — the ways stay inside the one demand ({@link RowDemand.AnElementMeets}).
+     * Every element meeting one of several things is not every element meeting the same one of
+     * them, so taken apart into one alternative per way, a row whose elements meet different ones
+     * would be past the whole and along none of them. Only what a way asks of the row beside the
+     * element — a part this reading could not state, or one only the run decides — parts the ways
+     * into alternatives of the row, since that is no element's to meet.
      *
      * <p>The element is what stands at the container's elements — and of a map, at its keys as
      * well, since an entry is its key and its value.
@@ -513,12 +552,22 @@ final class DemandReading {
                     : waysOf(projected(part, read, met), element, everyElement, some, read));
         }
         List<AnElementsWay> ways = AnElementsWay.eachWhole(choices, read);
-        List<List<Read>> alternatives = new ArrayList<>();
-        for (AnElementsWay way : ways) {
-            alternatives.add(everyElement ? everyElementMeeting(held, way, read)
-                    : someElementMeeting(held, way, read));
-        }
-        return oneOf(alternatives, each -> each, each -> each);
+        Optional<Quantity.HowManyMeet> counted = countOf(some);
+        return everyElement ? everyElementMeeting(held, ways, read, counted, Optional.of(some))
+                : someElementMeeting(held, ways, read, counted, Optional.of(some));
+    }
+
+    /**
+     * How many elements meet what {@code some} states of one, where that is a count a row can be
+     * composed for: a statement read through, about the element.
+     */
+    private static Optional<Quantity.HowManyMeet> countOf(Proposition.Some some) {
+        Proposition statement = some.ofTheElement();
+        return statement.mayTurnOnAnElementOf(some.container())
+                && !Proposition.leavesSomethingUnread(statement)
+                && AStatementAtARow.askable(statement)
+                ? Optional.of(new Quantity.HowManyMeet(some.container(), statement))
+                : Optional.empty();
     }
 
     /**
@@ -731,19 +780,33 @@ final class DemandReading {
                     : List.of(AnElementsWay.ofTheRow(each));
             // A quantifier over a container: what it asks of its own elements is asked of
             // positions inside the element, where the container is inside it.
-            case Read.Demands(RowDemand.Exists inner) ->
-                    List.of(everyElement || anyInside(inner.positions(), element)
-                            ? AnElementsWay.asking(within(inner.container(), true,
-                                    inner.ofAnElement()))
-                            : AnElementsWay.ofTheRow(each));
-            // And every element of such a container meeting something is two ways: elements
-            // that meet it, and the container holding none.
-            case Read.Demands(RowDemand.ForAll inner) ->
-                    everyElement || anyInside(inner.positions(), element)
-                            ? List.of(AnElementsWay.asking(within(inner.container(), false,
-                                            inner.ofEachElement())),
-                                    AnElementsWay.asking(inner.holdingNone()))
-                            : List.of(AnElementsWay.ofTheRow(each));
+            // Some element of it meeting one of several things is a way of the outer element for
+            // each of them, exactly.
+            case Read.Demands(RowDemand.Exists inner) -> {
+                if (!everyElement && !anyInside(inner.positions(), element)) {
+                    yield List.of(AnElementsWay.ofTheRow(each));
+                }
+                List<AnElementsWay> out = new ArrayList<>();
+                for (List<RowDemand.OfAnElement> way : inner.ofAnElement().ways()) {
+                    out.add(AnElementsWay.asking(within(inner.container(), true, way)));
+                }
+                yield out;
+            }
+            // And every element of such a container meeting something is elements that meet it,
+            // or the container holding none. A container inside an element is written alike in
+            // every element, so each of its elements meeting one way is a way of the outer
+            // element, and elements of it meeting different ones are not written.
+            case Read.Demands(RowDemand.ForAll inner) -> {
+                if (!everyElement && !anyInside(inner.positions(), element)) {
+                    yield List.of(AnElementsWay.ofTheRow(each));
+                }
+                List<AnElementsWay> out = new ArrayList<>();
+                for (List<RowDemand.OfAnElement> way : inner.ofEachElement().ways()) {
+                    out.add(AnElementsWay.asking(within(inner.container(), false, way)));
+                }
+                out.add(AnElementsWay.asking(inner.holdingNone()));
+                yield out;
+            }
             case Read.Demands(RowDemand.SoMany count) ->
                     List.of(everyElement || anyInside(count.positions(), element)
                             ? AnElementsWay.ofTheRow(forTheRun(whole,
@@ -753,9 +816,9 @@ final class DemandReading {
                     List.of(AnElementsWay.ofTheRow(forTheRun(whole, why, past)));
             // Each way of each alternative: one alternative a figure stopped is said to be, and
             // the others are the ways they are.
-            case Read.OneOf(var alternatives) -> {
+            case Read.OneOf oneOf -> {
                 List<List<AnElementsWay>> ofEach = new ArrayList<>();
-                for (List<Read> alternative : alternatives) {
+                for (List<Read> alternative : oneOf.alternatives()) {
                     ofEach.add(waysOf(alternative, element, everyElement, whole, read));
                 }
                 yield AnElementsWay.oneOfEach(ofEach);
@@ -795,11 +858,7 @@ final class DemandReading {
         if (ways == null) {
             return List.of(forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
         }
-        List<List<Read>> alternatives = new ArrayList<>();
-        for (AnElementsWay way : ways) {
-            alternatives.add(someElementMeeting(map, way, read));
-        }
-        return oneOf(alternatives, each -> each, each -> each);
+        return someElementMeeting(map, ways, read, Optional.empty(), Optional.of(stated));
     }
 
     /**
@@ -850,37 +909,109 @@ final class DemandReading {
         return List.copyOf(out);
     }
 
-    /** What some element meeting what {@code way} asks of it asks of a row. */
-    private static List<Read> someElementMeeting(TermPath held, AnElementsWay way,
-                                                 InputReading read) {
-        // Some element meeting what none meets is no row's.
-        if (way.never()) {
+    /**
+     * What some element meeting one of {@code ways} asks of a row.
+     *
+     * <p>Some element meeting one of several things is some element meeting the first or some
+     * meeting the second, so the ways that ask the row the same beside the element are one demand
+     * with those ways inside it, and ways asking the row different things are alternatives of the
+     * row. One no element meets is none of them, and where every one is that, no row is past it.
+     *
+     * @param counted how many elements meet the statement, which the demand is where it is the
+     *                whole of it: one demand, asking nothing of the row beside the element
+     * @param stated  the statement read, where one proposition says it
+     */
+    private static List<Read> someElementMeeting(TermPath held, List<AnElementsWay> ways,
+                                                 InputReading read,
+                                                 Optional<Quantity.HowManyMeet> counted,
+                                                 Optional<Proposition> stated) {
+        RowDemand.Relational holdingOne = sizeAgainst(held, read, true);
+        Map<List<Read>, List<List<RowDemand.OfAnElement>>> byTheRow = new LinkedHashMap<>();
+        Set<List<Read>> anyElement = new LinkedHashSet<>();
+        for (AnElementsWay way : ways) {
+            if (way.never()) {
+                continue;
+            }
+            List<List<RowDemand.OfAnElement>> these =
+                    byTheRow.computeIfAbsent(way.ofTheRow(), _ -> new ArrayList<>());
+            // An element meeting nothing this reading could state is any element, and the
+            // container holding one is all that is left to ask.
+            if (way.ofTheElement().isEmpty()) {
+                anyElement.add(way.ofTheRow());
+            } else {
+                these.add(way.ofTheElement());
+            }
+        }
+        if (byTheRow.isEmpty()) {
             return List.of(new Read.Settled(false));
         }
-        List<Read> out = new ArrayList<>(way.ofTheRow());
-        RowDemand.Relational holdingOne = sizeAgainst(held, read, true);
-        // An element meeting nothing this reading could state is still the container holding
-        // one, which every row past it does.
-        out.add(new Read.Demands(way.ofTheElement().isEmpty() ? holdingOne
-                : new RowDemand.Exists(held, way.ofTheElement(), holdingOne)));
-        return List.copyOf(out);
+        boolean whole = byTheRow.size() == 1 && byTheRow.containsKey(List.of());
+        List<List<Read>> alternatives = new ArrayList<>();
+        byTheRow.forEach((ofTheRow, ofTheElement) -> {
+            List<Read> out = new ArrayList<>(ofTheRow);
+            out.add(new Read.Demands(anyElement.contains(ofTheRow) ? holdingOne
+                    : new RowDemand.Exists(held, new RowDemand.AnElementMeets(ofTheElement),
+                            holdingOne, whole ? counted : Optional.empty())));
+            alternatives.add(List.copyOf(out));
+        });
+        return oneOf(alternatives, each -> each, each -> each, stated);
     }
 
-    /** What every element meeting what {@code way} asks of it asks of a row. */
-    private static List<Read> everyElementMeeting(TermPath held, AnElementsWay way,
-                                                  InputReading read) {
-        // Every element meeting what none meets is the container holding none, and nothing else
-        // of the predicate is asked of an element that is not there.
-        if (way.never()) {
-            return List.of(new Read.Demands(sizeAgainst(held, read, false)));
+    /**
+     * What every element meeting one of {@code ways} asks of a row.
+     *
+     * <p>One demand, each element along whichever of the ways it meets — the ways that ask
+     * nothing of the row beside the element. A way that does ask the row something is no
+     * element's to meet: the row meeting it and every element meeting that way or one of the
+     * others is enough, so it is an alternative of the row, beside every element meeting one of
+     * the rest. A way no element meets is none of them, and where every one is that, the container
+     * holds none and nothing else is asked of an element that is not there.
+     *
+     * @param counted how many elements meet the statement whose denial every element is to meet,
+     *                which the demand is where it is the whole of it
+     * @param stated  the statement read, where one proposition says it
+     */
+    private static List<Read> everyElementMeeting(TermPath held, List<AnElementsWay> ways,
+                                                  InputReading read,
+                                                  Optional<Quantity.HowManyMeet> counted,
+                                                  Optional<Proposition> stated) {
+        RowDemand.Relational holdingNone = sizeAgainst(held, read, false);
+        List<List<RowDemand.OfAnElement>> ofTheElement = new ArrayList<>();
+        List<AnElementsWay> withTheRow = new ArrayList<>();
+        for (AnElementsWay way : ways) {
+            if (way.never()) {
+                continue;
+            }
+            if (!way.ofTheRow().isEmpty()) {
+                withTheRow.add(way);
+            } else if (way.ofTheElement().isEmpty()) {
+                // Every element meeting what every element meets, whatever the container holds.
+                return List.of(new Read.Settled(true));
+            } else {
+                ofTheElement.add(way.ofTheElement());
+            }
         }
-        List<Read> out = new ArrayList<>(way.ofTheRow());
-        if (!way.ofTheElement().isEmpty()) {
-            out.add(new Read.Demands(new RowDemand.ForAll(held, way.ofTheElement(),
-                    sizeAgainst(held, read, false))));
+        if (ofTheElement.isEmpty() && withTheRow.isEmpty()) {
+            return List.of(new Read.Demands(holdingNone));
         }
-        // Every element meeting what every element meets, whatever the container holds.
-        return out.isEmpty() ? List.of(new Read.Settled(true)) : List.copyOf(out);
+        List<List<Read>> alternatives = new ArrayList<>();
+        if (!ofTheElement.isEmpty()) {
+            alternatives.add(List.of(new Read.Demands(new RowDemand.ForAll(held,
+                    new RowDemand.AnElementMeets(ofTheElement), holdingNone,
+                    withTheRow.isEmpty() ? counted : Optional.empty()))));
+        }
+        for (AnElementsWay way : withTheRow) {
+            List<Read> out = new ArrayList<>(way.ofTheRow());
+            if (!way.ofTheElement().isEmpty()) {
+                List<List<RowDemand.OfAnElement>> these = new ArrayList<>(ofTheElement);
+                these.add(way.ofTheElement());
+                out.add(new Read.Demands(new RowDemand.ForAll(held,
+                        new RowDemand.AnElementMeets(these), holdingNone, Optional.empty())));
+            }
+            alternatives.add(List.copyOf(out));
+        }
+        return alternatives.size() == 1 ? alternatives.getFirst()
+                : oneOf(alternatives, each -> each, each -> each, stated);
     }
 
     /**

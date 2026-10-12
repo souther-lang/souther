@@ -152,12 +152,11 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
     }
 
     /**
-     * Some element meeting one of several things is some element meeting one of them, each an
-     * alternative with what the row is asked beside the element — and nothing of it is left to
-     * the run.
+     * Some element meeting one of several things is one demand with a way for each, beside what
+     * the row is asked whichever element it is — and nothing of it is left to the run.
      */
     @Test
-    void someElementMeetingOneOfSeveralThingsIsOneAlternativeForEach() {
+    void someElementMeetingOneOfSeveralThingsIsOneDemandWithAWayForEach() {
         InputReading read = reading();
         Proposition element = new Proposition.Compared(new Relation.Affine(
                 LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(
@@ -168,20 +167,47 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
                 new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("b")), true))),
                 true);
         List<DemandReading.Read> asked = DemandReading.asked(some, read);
-        assertEquals(1, asked.size(), () -> "one of two things: " + asked);
-        DemandReading.Read.OneOf alternatives =
-                assertInstanceOf(DemandReading.Read.OneOf.class, asked.getFirst());
-        assertEquals(2, alternatives.alternatives().size(), () -> "one for each: " + asked);
-        for (List<DemandReading.Read> one : alternatives.alternatives()) {
-            assertTrue(one.contains(new DemandReading.Read.Demands(beside)),
-                    () -> "the row is asked the truth beside the element: " + one);
-            assertTrue(one.stream().anyMatch(each -> each instanceof DemandReading.Read.Demands(
-                            RowDemand.Exists exists) && exists.relations().size() == 1),
-                    () -> "and an element meeting one of the two: " + one);
-            assertTrue(one.stream().noneMatch(each -> each instanceof DemandReading.Read.Demands(
-                            RowDemand.ForTheRun _)),
-                    () -> "and nothing of it is left to the run: " + one);
-        }
+        assertTrue(asked.contains(new DemandReading.Read.Demands(beside)),
+                () -> "the row is asked the truth beside the element: " + asked);
+        assertTrue(asked.stream().noneMatch(DemandReading.Read.OneOf.class::isInstance),
+                () -> "and no alternative of the row: " + asked);
+        List<RowDemand.Exists> exists = asked.stream()
+                .filter(each -> each instanceof DemandReading.Read.Demands(RowDemand.Exists _))
+                .map(each -> (RowDemand.Exists) ((DemandReading.Read.Demands) each).demand())
+                .toList();
+        assertEquals(1, exists.size(), () -> "one element meeting one of the two: " + asked);
+        List<List<RowDemand.OfAnElement>> ways = exists.getFirst().ofAnElement().ways();
+        assertEquals(2, ways.size(), () -> "a way for each: " + ways);
+        assertTrue(ways.stream().allMatch(way -> RowDemand.relationsAmong(way).size() == 1),
+                () -> "each a relation of the element: " + ways);
+        assertTrue(asked.stream().noneMatch(each -> each instanceof DemandReading.Read.Demands(
+                        RowDemand.ForTheRun _)),
+                () -> "and nothing of it is left to the run: " + asked);
+    }
+
+    /**
+     * Every element meeting one of several things is one demand with a way for each, and not one
+     * of several demands each asking every element the same: a container holding an element of
+     * each kind meets it and meets neither of those.
+     */
+    @Test
+    void everyElementMeetingOneOfSeveralThingsIsOneDemandWithAWayForEach() {
+        InputReading read = reading();
+        Proposition above = new Proposition.Compared(new Relation.Affine(
+                LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(
+                        new NumericTerm.ValueOf(TermPath.of("xs").element()))), Rel.GT), true);
+        Proposition atMostNought = above.denied();
+        // No element meets neither, which is every element meeting one of the two.
+        Proposition none = new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("xs")),
+                new Proposition.All(List.of(above.denied(), atMostNought.denied())), false);
+        List<DemandReading.Read> asked = DemandReading.asked(none, read);
+        assertTrue(asked.stream().noneMatch(DemandReading.Read.OneOf.class::isInstance),
+                () -> "no alternative of the row: " + asked);
+        assertEquals(1, asked.size(), () -> "one demand: " + asked);
+        RowDemand.ForAll every = assertInstanceOf(RowDemand.ForAll.class,
+                assertInstanceOf(DemandReading.Read.Demands.class, asked.getFirst()).demand());
+        assertEquals(2, every.ofEachElement().ways().size(),
+                () -> "each element along one of two ways: " + every);
     }
 
     /** What the three readers decline {@code stated} coming out {@code way} for, together. */
@@ -204,8 +230,8 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
     private static void collect(DemandReading.Read read, List<WhyNotTaken> out) {
         switch (read) {
             case DemandReading.Read.Unread(var whys) -> out.addAll(whys);
-            case DemandReading.Read.OneOf(var alternatives) ->
-                    alternatives.forEach(each -> each.forEach(one -> collect(one, out)));
+            case DemandReading.Read.OneOf oneOf -> oneOf.alternatives()
+                    .forEach(each -> each.forEach(one -> collect(one, out)));
             case DemandReading.Read.Demands _, DemandReading.Read.Settled _,
                  DemandReading.Read.Narrows _ -> { }
         }

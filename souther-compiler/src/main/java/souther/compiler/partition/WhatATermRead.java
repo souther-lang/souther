@@ -47,9 +47,12 @@ sealed interface WhatATermRead {
     record NoNumberOfTheValue() implements WhatATermRead { }
 
     /**
-     * The row wrote nothing at the term's position, so this quantity has no value at this row.
+     * The row wrote nothing at the term's position under this reading, so this quantity has no
+     * value at this reading of the row: either it put no element there at all, or it put them
+     * only under elements this reading did not choose — an element of another case of a sum among
+     * them — and another reading of the row is where those are.
      *
-     * <p>Which settles the row rather than leaving it open, and settles it whatever else the
+     * <p>Which settles the reading rather than leaving it open, and settles it whatever else the
      * quantity met. A number over a position a row put nothing at is a number the row does not
      * have, and it does not have it any more once a wider run keeps what it shortened elsewhere —
      * so a reading stopped at another term is not what a reader is told about this row.
@@ -72,14 +75,12 @@ sealed interface WhatATermRead {
             case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
                 case ObservationAtPoint.Value(ObservedValue value) -> of(on.read(value));
                 // A fact about the row, which answers for it. The row was read and put no element
-                // here, so this quantity has no value at it -- and reporting that as a reading that
-                // came to nothing leaves a point undecided over a row that plainly settles it.
-                case ObservationAtPoint.WroteNothing _ -> new NothingWrittenThere();
-                // The row's values here are under elements another reading chose. The walk arrived
-                // and none of this row's values stands here under this one, which is the reading
-                // coming to nothing and is what the word is for.
-                case ObservationAtPoint.BelongsToAnotherReading _ ->
-                        new CameToNothing(ReadingGap.NO_VALUE);
+                // here, or put them only under elements another reading chose, so this quantity has
+                // no value at it under this reading -- and reporting that as a reading that came to
+                // nothing leaves a point undecided over a row that plainly settles it, every one of
+                // its readings being tried.
+                case ObservationAtPoint.WroteNothing _,
+                     ObservationAtPoint.BelongsToAnotherReading _ -> new NothingWrittenThere();
             };
         };
     }
@@ -101,9 +102,8 @@ sealed interface WhatATermRead {
                                 of(on.readAmong(own, every));
                     };
                 }
-                case ObservationAtPoint.WroteNothing _ -> new NothingWrittenThere();
-                case ObservationAtPoint.BelongsToAnotherReading _ ->
-                        new CameToNothing(ReadingGap.NO_VALUE);
+                case ObservationAtPoint.WroteNothing _,
+                     ObservationAtPoint.BelongsToAnotherReading _ -> new NothingWrittenThere();
             };
         };
     }
@@ -162,9 +162,9 @@ sealed interface WhatATermRead {
                         case ObservationAtPoint.Value(ObservedValue value) -> {
                             return value;
                         }
-                        case ObservationAtPoint.WroteNothing _ -> stop(new NothingWrittenThere());
-                        case ObservationAtPoint.BelongsToAnotherReading _ ->
-                                stop(new CameToNothing(ReadingGap.NO_VALUE));
+                        case ObservationAtPoint.WroteNothing _,
+                             ObservationAtPoint.BelongsToAnotherReading _ ->
+                                stop(new NothingWrittenThere());
                     }
                 }
             }

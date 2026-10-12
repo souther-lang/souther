@@ -238,8 +238,8 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
     private static void limitsIn(DemandReading.Read read, Set<WhyNotTaken.DomainLimit> into) {
         switch (read) {
             case DemandReading.Read.Unread(var whys) -> whys.forEach(why -> limitOf(why, into));
-            case DemandReading.Read.OneOf(var alternatives) ->
-                    alternatives.forEach(each -> each.forEach(one -> limitsIn(one, into)));
+            case DemandReading.Read.OneOf oneOf -> oneOf.alternatives()
+                    .forEach(each -> each.forEach(one -> limitsIn(one, into)));
             case DemandReading.Read.Demands _, DemandReading.Read.Settled _,
                  DemandReading.Read.Narrows _ -> { }
         }
