@@ -5,6 +5,7 @@ import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Shape;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
@@ -17,6 +18,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
@@ -53,11 +55,11 @@ import java.util.Set;
  * {@code x + y <= 1} over nought and one, {@code x} at one is beside no {@code y} at one. Runs say
  * nothing of that — the runs of each, and of every sum and difference of the two, can be what they
  * would be untied — so what is asked is whether anything could tie the term at all. Nothing ties it
- * where nothing names it but ends on itself and which case a value around it is: no rule of a value
- * it sits in, which is where a rule over two of its positions is written; nothing a way took in
- * that turns on another number with it, or on another number of the place it is taken of — a date
- * on the twenty-ninth of February is in a leap year; and nothing a way stated and none of this took
- * in. Where one does, nothing is shown of the term, whether or not the rule ties it.
+ * where nothing names it but ends on itself, which case a value around it is and how many a value
+ * around it holds: no rule of a value it sits in, which is where a rule over two of its positions
+ * is written; nothing a way took in that turns on another number with it, or on another number of
+ * the place it is taken of — a date on the twenty-ninth of February is in a leap year; and nothing
+ * a way stated and none of this took in. Where one does, nothing is shown of the term, whether or not the rule ties it.
  *
  * <p>Held as the relation and not as the answer, because the answer is asked twice: once of what
  * the declarations leave, and again of the rows a way lets through, where {@code n == x} under
@@ -239,11 +241,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static List<OnAWay> conditionsOf(Reachability.Reaching way) {
         List<OnAWay> out = new ArrayList<>();
-        way.boundedOnTheWay().forEach(taken -> out.add(new OnAWay(taken.demand().positions(),
-                taken.demand() instanceof RowDemand.Relational(TakenConstraint.Affine(
-                        LinearForm<NumericTerm> form, Rel rel)) && rel != Rel.NE
-                        && form.coefs().size() == 1 ? form.coefs().keySet().iterator().next()
-                        : null, false)));
+        way.boundedOnTheWay().forEach(taken -> {
+            NumericTerm runOf = taken.demand() instanceof RowDemand.Relational(
+                    TakenConstraint.Affine(LinearForm<NumericTerm> form, Rel rel))
+                    && rel != Rel.NE && form.coefs().size() == 1
+                    ? form.coefs().keySet().iterator().next() : null;
+            out.add(new OnAWay(taken.demand().positions(), runOf,
+                    runOf instanceof NumericTerm.TakenOf count
+                            && count.takenAs() instanceof TakenAs.HowManyItHolds));
+        });
         way.requirements().refinements().keySet()
                 .forEach(at -> out.add(new OnAWay(Set.of(at), null, true)));
         way.requirements().atANameTheCasesShare()
@@ -255,15 +261,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * One statement of a way.
      *
      * @param positions the positions it turns on
-     * @param runOf     the one number it places an end on, where it is an end on one number and
-     *                  nothing else; null where it is anything else
-     * @param aCase     whether it is which case a value is, which says what is there and nothing
-     *                  of the values that stand there beside another — a case of a value around a
-     *                  term says nothing of the term's values, and a case of the term's own value,
-     *                  as an enumeration's, is a value taken out of its order, which the region
-     *                  holds
+     * @param runOf      the one number it places an end on, where it is an end on one number and
+     *                   nothing else; null where it is anything else
+     * @param whatStands whether it says what stands at a value and nothing of the values that
+     *                   stand there beside another: which case the value is, or ends on how many
+     *                   it holds. Either of a value around a term says nothing of the term's
+     *                   values — an element is reached only where the container holds one, and
+     *                   holding one says nothing of what it is. Of the term's own value, a case,
+     *                   as an enumeration's, is a value taken out of its order, which the region
+     *                   holds, and an end on how many is an end on the term itself
      */
-    private record OnAWay(Set<TermPath> positions, NumericTerm runOf, boolean aCase) {}
+    private record OnAWay(Set<TermPath> positions, NumericTerm runOf, boolean whatStands) {}
 
     /**
      * The places shown undivided over the rows in {@code region}, a way stating
@@ -305,8 +313,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** Nothing it states turns on any place the term is read off. */
         UNTOUCHED,
 
-        /** What it states of those places is ends on the term itself, or which case a value
-         *  around it is, and nothing else: that narrows where it runs and ties it to nothing. */
+        /** What it states of those places is ends on the term itself, or what stands at a value
+         *  around it, and nothing else: that narrows where it runs and ties it to nothing. */
         NARROWED,
 
         /** Something it states of them is anything else: about another number with it, about a
@@ -317,14 +325,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static Way wayOf(NumericTerm.FromOnePosition term, List<OnAWay> conditions) {
         Way out = Way.UNTOUCHED;
         for (OnAWay each : conditions) {
-            // Which case a value around the term is says what stands there and nothing of the
-            // values the term takes; which case the term's own value is takes values out of its
-            // order, which narrows it.
+            // What stands at a value around the term says nothing of the values the term takes;
+            // which case the term's own value is takes values out of its order, which narrows it.
             if (!touches(term, each.positions())
-                    || (each.aCase() && onlyAround(term, each.positions()))) {
+                    || (each.whatStands() && onlyAround(term, each.positions()))) {
                 continue;
             }
-            if (!each.aCase() && !term.equals(each.runOf())) {
+            if (!each.whatStands() && !term.equals(each.runOf())) {
                 return Way.TIES;
             }
             out = Way.NARROWED;
@@ -392,11 +399,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private record Takes(Type type, AdmissibleSet admitted, NumericDomain.Bounds ends,
                          boolean every) {}
 
-    /** What the declarations leave {@code value}, or null where it is at no position read or a
-     *  rule of a value it sits in may tie it to another. */
+    /**
+     * What the declarations leave {@code value}, or null where it is at no position read or a rule
+     * of a value it sits in may tie it to another.
+     *
+     * <p>A name the cases of a sum share stands at no position of its own but at one under each
+     * case ({@link NameReach#standingOf}), and a row holds one case. So it is left what every case
+     * leaves it where they leave it the same, and nothing is shown where they differ or where the
+     * reading of some case stopped before putting the name anywhere: what one case leaves it is
+     * not what it takes in a row of another.
+     */
     private static Takes takes(NumericTerm.ValueOf value, InputReading read) {
         Position at = read.domain().at(value.position().position());
-        if (at == null || mayBeTiedByTheDeclarations(value.position(), read)) {
+        if (at == null) {
+            return read.domain().reach().standingOf(value.position())
+                    instanceof NameReach.Standing.UnderTheCases(var standings)
+                    ? takesUnderEvery(standings, read) : null;
+        }
+        if (mayBeTiedByTheDeclarations(value.position(), read)) {
             return null;
         }
         PositionBounds bounds = at.boundsFor(value);
@@ -405,6 +425,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 && at.admitted().completeness() instanceof AdmissibleSet.Completeness.Complete
                 && ends == null;
         return new Takes(at.type(), at.admitted(), ends, every);
+    }
+
+    /** What every one of {@code standings} leaves the value there, where that is one answer, or
+     *  null. */
+    private static Takes takesUnderEvery(List<NameReach.CaseStanding> standings,
+                                         InputReading read) {
+        Takes out = null;
+        for (NameReach.CaseStanding each : standings) {
+            Takes here = takes(new NumericTerm.ValueOf(each.position()), read);
+            if (here == null || (out != null && !out.equals(here))) {
+                return null;
+            }
+            out = here;
+        }
+        return out;
     }
 
     /**
