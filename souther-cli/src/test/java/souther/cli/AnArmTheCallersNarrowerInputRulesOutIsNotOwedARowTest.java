@@ -280,13 +280,14 @@ class AnArmTheCallersNarrowerInputRulesOutIsNotOwedARowTest {
                 () -> "and the row for it covers it:\n" + output.report());
         assertTrue(output.report().contains("adequacy: satisfied"), () -> output.report());
         assertEquals(0, output.exit(), () -> output.report());
-        // Said by what the type declares, which is the reason it holds whatever the rules are: the
-        // first arm takes the one case there is, and nothing is left for the arms after it.
+        // Said by what the type declares, which is the reason it holds whatever the rules are: each
+        // arm after the first is for a case a `Draft` is not.
         assertTrue(output.warnings().contains("declared as Draft"),
                 () -> "the author is told what the position is declared as:\n"
                         + output.warnings());
-        assertTrue(output.warnings().contains("the arms before this one take Draft"),
-                () -> "and that the arms before take all of it:\n" + output.warnings());
+        assertTrue(output.warnings().contains("the arm is for Live")
+                        && output.warnings().contains("the arm is for Done"),
+                () -> "and which case each arm is for:\n" + output.warnings());
     }
 
     @Test

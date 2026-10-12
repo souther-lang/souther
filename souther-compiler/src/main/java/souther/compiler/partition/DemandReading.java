@@ -326,11 +326,12 @@ final class DemandReading {
                     + "` is was read, and the reading of the input holds no type there");
         }
         List<Refinement> others = new ArrayList<>();
+        Set<Refinement> named = Set.copyOf(cases.atoms());
         for (Case each : Distinctions.ofType(TypeView.shapeOf(type, read.rules().inners(),
                         read.rules().symbols(), read.rules().kinds(), read.rules().sums()),
                 read.rules().symbols(), read.rules().kinds(), read.rules().sums())) {
             Refinement one = Refinement.of(each);
-            if (one != null && !cases.atoms().contains(one)) {
+            if (one != null && !named.contains(one)) {
                 others.add(one);
             }
         }

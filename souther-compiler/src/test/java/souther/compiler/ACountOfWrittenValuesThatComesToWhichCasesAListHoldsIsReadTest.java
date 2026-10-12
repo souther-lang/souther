@@ -282,6 +282,9 @@ class ACountOfWrittenValuesThatComesToWhichCasesAListHoldsIsReadTest {
      * and a choice under one case for the first and under the other for the second is no element:
      * read as a way no element meets, and not a question about a number no row has. Asked as that
      * question, the measure ended in an exception and said nothing.
+     *
+     * <p>And each comparison of the second match is a line deciding where the element is in the
+     * case its arm chose, which an element says of itself: the measure reads every rule.
      */
     @Test
     void aWayAskingAnElementToBeTwoCasesIsNoElement() {
@@ -302,7 +305,10 @@ class ACountOfWrittenValuesThatComesToWhichCasesAListHoldsIsReadTest {
                     | "b" : ([]) -> 2
                 """);
 
-        assertEquals("partial", measured.status());
+        assertEquals("complete", measured.status());
+        assertTrue(measured.findings().stream().noneMatch(each ->
+                        "several_lines_in_one_rule".equals(each.path("reason").asString(""))),
+                () -> "every line is drawn: " + measured.findings());
     }
 
     /** A match whose arms both hold states that it holds, so a list every element of which meets

@@ -5,7 +5,9 @@ import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -117,7 +119,7 @@ public final class CasesLeft {
     /** What a value both leave may be, or null where they leave it nothing in common. */
     public CasesLeft meet(CasesLeft other) {
         List<Refinement> both = new ArrayList<>(atoms);
-        both.retainAll(other.atoms);
+        both.retainAll(Set.copyOf(other.atoms));
         return both.isEmpty() ? null : new CasesLeft(both);
     }
 
@@ -127,15 +129,20 @@ public final class CasesLeft {
         return out.isEmpty() ? null : new CasesLeft(out);
     }
 
-    /** Whether this leaves a value the case {@code leaf} of a sum. */
-    public boolean leaves(TypeSymbol leaf) {
-        return atoms.stream().anyMatch(each -> each instanceof Refinement.SumCase sum
-                && sum.leaf().equals(leaf));
+    /** Every case of a sum this leaves a value. */
+    public Set<TypeSymbol> leavesOfASum() {
+        Set<TypeSymbol> out = new HashSet<>();
+        for (Refinement each : atoms) {
+            if (each instanceof Refinement.SumCase sum) {
+                out.add(sum.leaf());
+            }
+        }
+        return out;
     }
 
     /** Whether every value this leaves is one {@code wider} leaves as well. */
     public boolean within(CasesLeft wider) {
-        return wider.atoms.containsAll(atoms);
+        return Set.copyOf(wider.atoms).containsAll(atoms);
     }
 
     /**
