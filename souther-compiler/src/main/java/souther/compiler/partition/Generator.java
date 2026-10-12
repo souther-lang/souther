@@ -1481,6 +1481,9 @@ public final class Generator {
         // for one, so a walk per arm builds every cell of it again for an answer that does not
         // depend on which arm is asking.
         List<WhereToLook>cells = placesFor(new LinkedHashSet<>(armsOwed), offered);
+        // And the ways into the arms inside closures, read off the ways once for every arm asked.
+        Map<ArmProbe, List<souther.compiler.reading.WayIn>> namedWays =
+                waysNamedInto(read, axes.subject().partitioning().armsNamed());
         Set<ArmProbe> notOffered = new LinkedHashSet<>();
         // Which arms each held-back group could have been searched at, kept per group so that the
         // summary at the end can be counted off the entries rather than worked out a second way.
@@ -1501,7 +1504,7 @@ public final class Generator {
                 // says so. Nothing is composed a second time for what a run was seen doing.
                 continue;
             }
-            for (WhereToLook place : whereToLookFor(probe, read, cells, axes)) {
+            for (WhereToLook place : whereToLookFor(probe, read, cells, namedWays, axes)) {
                 if (composed.size() >= budget.rowLimit()) {
                     cutOff.add(probe);
                     break;
@@ -1850,7 +1853,8 @@ public final class Generator {
                             placesFor(new LinkedHashSet<>(arm.occurrences()), offered);
                     GeneratedRow seen = null;
                     for (ArmProbe probe : arm.occurrences()) {
-                        for (WhereToLook place : whereToLookFor(probe, read, here, axes)) {
+                        for (WhereToLook place : whereToLookFor(probe, read, here, namedWays,
+                                axes)) {
                             int stopsBefore = looking.stops();
                             switch (witnessFor(axes, place.at, check, trial, ran,
                                     List.of(new Purpose.ForAReplacement(asked)), looking::of,
@@ -2093,6 +2097,7 @@ public final class Generator {
     private static List<WhereToLook>whereToLookFor(
             ArmProbe probe, souther.compiler.reading.CoverageRead.Read read,
             List<WhereToLook>cells,
+            Map<ArmProbe, List<souther.compiler.reading.WayIn>> namedWays,
             MeasuredInput.MeasuredAxes axes) {
         List<WhereToLook>out = new ArrayList<>();
         for (WhereToLook place : cells) {
@@ -2100,9 +2105,9 @@ public final class Generator {
                 out.add(place);
             }
         }
-        for (souther.compiler.reading.WayIn way : waysNamedInto(probe, read,
-                axes.subject().partitioning().armsNamed())) {
-            CellSelection at = InteractionCells.at(way, way.claims().getLast(), axes);
+        for (souther.compiler.reading.WayIn way : namedWays.getOrDefault(probe, List.of())) {
+            CellSelection at =
+                    InteractionCells.at(way, way.decisions().getLast().claims(), axes);
             if (at != null && out.stream().noneMatch(already -> already.at.sameAs(at))) {
                 out.add(new WhereToLook(at, List.of(probe)));
             }
@@ -2127,10 +2132,10 @@ public final class Generator {
     }
 
     /**
-     * The ways into {@code probe} where it is an arm of a {@code match} on what a closure was
-     * handed, which the reading of the runs names no way into and the tree the operations stand in
-     * names the case of ({@link ArmsNamed}): each way a run was read taking to the arm, with every
-     * such arm on it read as the case it is.
+     * The ways into each arm of a {@code match} on what a closure was handed, which the reading of
+     * the runs names no way into and the tree the operations stand in names the case of
+     * ({@link ArmsNamed}): each way a run was read taking to the arm, with every such arm on it
+     * read as the case it is. Read off the ways once, by the arm each ends at.
      *
      * <p>A run down the arm is one application, handed one element of that case, so a row holding
      * such an element is where to look. Only where to look: what a run through the row does is
@@ -2139,17 +2144,16 @@ public final class Generator {
      * the case both ask meets, and which two cases leave no cell for — nowhere to look, and
      * nothing said about the arm.
      */
-    private static List<souther.compiler.reading.WayIn> waysNamedInto(
-            ArmProbe probe, souther.compiler.reading.CoverageRead.Read read, ArmsNamed named) {
-        if (!(read.armAt(probe) instanceof PathAccess.Unsupported(var why))
-                || why != PathAccess.Unsupported.Why.RUNS_WHERE_SOMETHING_CALLS_IT) {
-            return List.of();
-        }
-        List<souther.compiler.reading.WayIn> out = new ArrayList<>();
+    private static Map<ArmProbe, List<souther.compiler.reading.WayIn>> waysNamedInto(
+            souther.compiler.reading.CoverageRead.Read read, ArmsNamed named) {
+        Map<ArmProbe, List<souther.compiler.reading.WayIn>> out = new HashMap<>();
         for (souther.compiler.reading.WayIn way : read.taken()) {
             if (way.decisions().isEmpty()
-                    || !(way.claims().getLast().at() instanceof ControlPlace.Arm arm)
-                    || !arm.probe().equals(Optional.of(probe))) {
+                    || !(way.decisions().getLast().claims().at() instanceof ControlPlace.Arm arm)
+                    || arm.probe().isEmpty()
+                    || !(read.arms().get(arm.probe().get())
+                            instanceof PathAccess.Unsupported(var why))
+                    || why != PathAccess.Unsupported.Why.RUNS_WHERE_SOMETHING_CALLS_IT) {
                 continue;
             }
             List<souther.compiler.reading.Decision> asCases = new ArrayList<>();
@@ -2161,7 +2165,8 @@ public final class Generator {
                         ? new souther.compiler.reading.Decision(taken, decision.claims())
                         : decision);
             }
-            out.add(new souther.compiler.reading.WayIn(asCases));
+            out.computeIfAbsent(arm.probe().get(), _ -> new ArrayList<>())
+                    .add(new souther.compiler.reading.WayIn(asCases));
         }
         return out;
     }

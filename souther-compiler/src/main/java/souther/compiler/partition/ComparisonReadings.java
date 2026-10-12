@@ -585,11 +585,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 }
                 // And which positions what it turns on may read, under the copy of the fork this
                 // reading is of: the one thing the reading of the runs is told of a fork on what an
-                // operation over a container answers ({@link ForkDependencies}).
+                // operation over a container answers ({@link ForkDependencies}). Read as the
+                // condition's parts were read just above, so a comparison is not read twice.
                 if (iff.occurrence() != null) {
                     ModelOccurrence.statedAt(in.context().of(iff.occurrence())).ifPresent(fork ->
-                            in.dependencies().reads(fork, in.conditions()
-                                    .truth(iff.cond(), reads, in.read()).proposition()));
+                            in.dependencies().reads(fork, DemandReading.statedBy(condition,
+                                    in.read(), in.conditions())));
                 }
                 Choice.Decides then = Choice.Decides.ofCondition(iff, true);
                 Choice.Decides els = Choice.Decides.ofCondition(iff, false);
@@ -1127,9 +1128,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * answers, that construct is what decides the fork ({@link ForkDependencies}).
      *
      * <p>Read on every application, since each is handed a value of its own. A closure no run
-     * applies decides nothing, and one whose applications are not said may turn on anything.
+     * applies decides nothing, and one whose applications are not said may turn on anything. Only
+     * a closure answering a truth decides an operation's fork by what it answers, so one answering
+     * anything else is read as nothing here, which is what a fork finding no entry makes of it.
      */
     private static void answeredBy(Core.Block block, ClosureApplications applied, Body in) {
+        if (!Type.BOOL.equals(block.body().type())) {
+            return;
+        }
         Optional<ModelOccurrence> answers = souther.compiler.reading.Condition.Arm
                 .decidingConstructOf(block.body())
                 .flatMap(at -> ModelOccurrence.statedAt(in.context().of(at)));

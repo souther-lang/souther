@@ -133,16 +133,21 @@ class AForkInAnOperationTurnsOnWhatItsClosureReadsTest {
         return told instanceof BodyDistinction.Unread unread && unread.unplacedHere();
     }
 
+    /** What each behavior of the model tells apart, read once for every test here. */
+    private static final Map<String, PartitionEvidence> MEASURED = measured();
+
     private static Map<String, BodyDistinction> toldApart(String behavior) {
+        Map<String, BodyDistinction> out = new LinkedHashMap<>();
+        MEASURED.get(behavior).axes().forEach(axis -> out.put(axis.name(), axis.toldApart()));
+        return out;
+    }
+
+    private static Map<String, PartitionEvidence> measured() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
                         .map(each -> each.diagnostic().code()).toList(),
                 "the model under test compiles");
-        PartitionEvidence evidence = compilation.db().ask(new Adequacy.Coverage("kept")).value()
-                .get(behavior);
-        Map<String, BodyDistinction> out = new LinkedHashMap<>();
-        evidence.axes().forEach(axis -> out.put(axis.name(), axis.toldApart()));
-        return out;
+        return compilation.db().ask(new Adequacy.Coverage("kept")).value();
     }
 }
