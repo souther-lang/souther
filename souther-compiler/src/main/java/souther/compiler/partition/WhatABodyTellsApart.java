@@ -142,6 +142,20 @@ final class WhatABodyTellsApart {
         record About(int at, List<Boolean> admitted) implements Placed {}
 
         /**
+         * What one application of a closure an operation applies to the elements of a container
+         * admits at the element's position: an arm of a {@code match} on what the closure was
+         * handed, named a case of it where the operations stand.
+         *
+         * <p>About one element, which another application of another closure over the same
+         * container need not be: two of them on one way are about one element or two, and which
+         * is not read, so neither is put to classes there.
+         *
+         * @param about what the case admits at the element's position
+         * @param fork  the fork as the tree that runs has it, which is the application
+         */
+        record OfAnApplication(About about, ConstructOccurrence fork) implements Placed {}
+
+        /**
          * About the positions {@code ats}, and putting nothing it says there to classes: an arm of
          * a fork whose deciding statement may turn on those positions and no other
          * ({@link ForkDependencies}).
@@ -189,13 +203,17 @@ final class WhatABodyTellsApart {
     private Placed placing(souther.compiler.reading.Condition each) {
         // An arm the reading of the runs named no position for, which the tree the operations
         // stand in names as a case of a position: an arm of a `match` on what a closure was handed
-        // out of a container. Placed where that case would be, and put to no class there — the
-        // closure is applied to each element, a different case each time and none on an empty
-        // container, so which class took the arm is not this arm's to say.
+        // out of a container. A run down it is one application, handed one element, and the arm
+        // admits that element's case: a different case each time is a different application down
+        // a different way, and none on an empty container is no run down it at all, which the
+        // count the way stands at says ({@link #oneValueCanTake}). Under the cases of a sum the
+        // element's position is a choice this does not make, and the arm is put to no class.
         if (each instanceof souther.compiler.reading.Condition.Arm arm) {
             Optional<souther.compiler.reading.Condition.Case> named = armsNamed.of(arm);
             if (named.isPresent()) {
-                return withheld(placing(named.get()));
+                return placing(named.get()) instanceof Placed.About about
+                        ? new Placed.OfAnApplication(about, arm.arm().fork())
+                        : withheld(placing(named.get()));
             }
             // A fork on what an operation over a container answers — `List.all(...)` — or a fork of
             // the operation's own body on what a closure the model handed it answers may turn on
@@ -273,6 +291,7 @@ final class WhatABodyTellsApart {
                 }
                 yield new Placed.UnderTheCases(List.copyOf(out));
             }
+            case Placed.OfAnApplication it -> new Placed.About(it.about().at(), null);
             case Placed.AboutThese it -> it;
             case Placed.AboutNoPosition it -> it;
             case Placed.SubjectUnknown it -> it;
@@ -431,6 +450,17 @@ final class WhatABodyTellsApart {
         };
     }
 
+    /** The applications {@code way} goes down, by the element position each is about. */
+    private Map<Integer, Set<ConstructOccurrence>> applicationsAt(WayIn way) {
+        Map<Integer, Set<ConstructOccurrence>> out = new HashMap<>();
+        for (Decision decision : way.decisions()) {
+            if (placedOf(decision.constrains()) instanceof Placed.OfAnApplication it) {
+                out.computeIfAbsent(it.about().at(), _ -> new LinkedHashSet<>()).add(it.fork());
+            }
+        }
+        return out;
+    }
+
     /** One way: what all of its decisions admit together at each position, if a value can take it. */
     private void take(WayIn way) {
         // A place on the way the model's rules prove nothing arrives at is one no run passes, so
@@ -447,12 +477,21 @@ final class WhatABodyTellsApart {
         boolean subjectUnknownHere = false;
         List<Placed.UnderTheCases> underTheCases = new ArrayList<>();
         List<souther.compiler.reading.Condition> saidUnderTheCases = new ArrayList<>();
+        Map<Integer, Set<ConstructOccurrence>> applicationsAt = applicationsAt(way);
         for (Decision decision : way.decisions()) {
             souther.compiler.reading.Condition each = decision.constrains();
             switch (placedOf(each)) {
                 case Placed.About it -> {
                     direct.stands[it.at()] = true;
                     direct.admit(it, each);
+                }
+                // An element taking the arm stands at the element's position. Two applications
+                // on the way about the same position may be about two elements, so what either
+                // admits is read of neither.
+                case Placed.OfAnApplication it -> {
+                    direct.stands[it.about().at()] = true;
+                    direct.admit(applicationsAt.get(it.about().at()).size() > 1
+                            ? new Placed.About(it.about().at(), null) : it.about(), each);
                 }
                 case Placed.UnderTheCases it -> {
                     underTheCases.add(it);

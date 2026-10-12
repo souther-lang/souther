@@ -7,7 +7,7 @@
 // answer is used afterwards is no part of that.
 //
 // told apart at n: 2 groups of 2
-// told apart at xs[*]: unread here
+// told apart at xs[*]: 2 groups of 2
 module example.elementmatchedunread
 
 data North

@@ -2,7 +2,7 @@
 // parameter is what the fold has carried so far, which no position of the input is.
 //
 // told apart at n: 2 groups of 2
-// told apart at xs[*]: unread here
+// told apart at xs[*]: 2 groups of 2
 module example.foldmatched
 
 data North
