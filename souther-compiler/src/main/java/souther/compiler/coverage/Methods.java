@@ -93,30 +93,40 @@ record Methods(Map<String, Core> entries, Map<String, Core> bodies, Map<String, 
     }
 
     /**
-     * How many calls of {@code helper} stand in {@code emitted} and in every method a run of it
-     * reaches, the helper's own method left out: each call as it is written, however often a run
-     * makes it.
+     * The one call of {@code helper} a run of {@code emitted} makes, where it makes one at most
+     * and only one is written: the only call of it in {@code emitted} and in every method a run of
+     * it reaches, the helper's own method left out, standing in {@code emitted} itself. Null
+     * otherwise.
+     *
+     * <p>Standing in the behavior's own body because that is run once per run; a value's method
+     * is run once per call of it. Whether one run passes the call more than once is the plan's to
+     * say ({@link CoverageSites.Plan#runsOnce}).
      */
-    int callsOf(ValueName.Helper helper, Core emitted) {
+    Core.Call onlyCallOf(ValueName.Helper helper, Core emitted) {
+        List<Core.Call> found = new ArrayList<>();
+        callsIn(emitted, helper, found);
+        if (found.size() != 1) {
+            return null;
+        }
         Map<String, Core> all = all();
         Core own = passages.get(helper.name());
-        int count = callsIn(emitted, helper);
         for (String name : closure(callsOf(emitted, all), each -> callsOf(all.get(each), all))) {
             if (all.get(name) != own) {
-                count += callsIn(all.get(name), helper);
+                callsIn(all.get(name), helper, found);
             }
         }
-        return count;
+        return found.size() == 1 ? found.getFirst() : null;
     }
 
-    private static int callsIn(Core e, ValueName.Helper helper) {
+    private static void callsIn(Core e, ValueName.Helper helper, List<Core.Call> out) {
         if (e == null) {
-            return 0;
+            return;
         }
-        int[] count = {e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
-                && reached.denotes().equals(helper) ? 1 : 0};
-        Core.forEachChild(e, child -> count[0] += callsIn(child, helper));
-        return count[0];
+        if (e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
+                && reached.denotes().equals(helper)) {
+            out.add(call);
+        }
+        Core.forEachChild(e, child -> callsIn(child, helper, out));
     }
 
     /** Every method {@code emitted} reaches, directly or through another, values' and helpers'

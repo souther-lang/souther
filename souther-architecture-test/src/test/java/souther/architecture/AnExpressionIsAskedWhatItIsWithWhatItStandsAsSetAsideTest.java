@@ -638,7 +638,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "coverage/CoverageSites$Walk", "comparisonsIn", "(" + core + "Z)V", 1,
                 GOES_ON_INTO_IT);
         row(out, c + "coverage/Methods", "callsIn", "(" + core + "L" + c
-                + "types/ValueName$Helper;)I", 1, COUNTS_THROUGH_IT);
+                + "types/ValueName$Helper;Ljava/util/List;)V", 1, COUNTS_THROUGH_IT);
         row(out, c + "partition/ComparisonReadings", "wayTo", "(" + core + core + "L" + c
                 + "inputs/InputReads;L" + c + "partition/ComparisonReadings$Body;)L" + c
                 + "partition/ComparisonReadings$Way;", 2, GOES_ON_INTO_IT);

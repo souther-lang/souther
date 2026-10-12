@@ -27,38 +27,34 @@ import java.util.Set;
  */
 final class MetOnARow {
 
-    /** Each container stopped short in, the outermost first, as what is put to a row. */
+    /** What is known of each container, the outermost first, as what is put to a row. */
     private final List<Level> levels;
 
     /** What a row meets for the comparison to be made through it at all, put to rows; null where
      *  nothing is asked. */
     private final AStatementAtARow made;
 
-    /** What a reading of no element can say, where this is not said at all. */
-    private final ReadingGap notSaid;
-
-    private MetOnARow(List<Level> levels, AStatementAtARow made, ReadingGap notSaid) {
+    private MetOnARow(List<Level> levels, AStatementAtARow made) {
         this.levels = levels;
         this.made = made;
-        this.notSaid = notSaid;
     }
 
     /** {@code metOn}, ready to be put to the readings of a behavior's rows. */
     static MetOnARow of(ElementsMetOn metOn, String behavior, Quantities quantities) {
-        return switch (metOn) {
-            case ElementsMetOn.NotSaid(ReadingGap why) -> new MetOnARow(List.of(), null, why);
-            case ElementsMetOn.InOrder(var stopping, var madeWhere) -> {
-                List<Level> levels = new ArrayList<>();
-                for (ElementsMetOn.StopsAt each : stopping) {
-                    levels.add(new Level(each.container(),
-                            AStatementAtARow.of(each.stops(), behavior, quantities)));
-                }
-                yield new MetOnARow(List.copyOf(levels),
-                        madeWhere instanceof Proposition.Always(boolean always) && always ? null
-                                : AStatementAtARow.of(madeWhere, behavior, quantities),
-                        null);
-            }
-        };
+        List<Level> levels = new ArrayList<>();
+        for (ElementsMetOn.Level each : metOn.levels()) {
+            levels.add(switch (each) {
+                case ElementsMetOn.Level.StopsAt(TermPath container, Proposition stops) ->
+                        new Stopping(container, AStatementAtARow.of(stops, behavior, quantities));
+                case ElementsMetOn.Level.NotSaidOf(TermPath container, ReadingGap why) ->
+                        new NotSaidOf(container, why);
+                case ElementsMetOn.Level.NotSaidAnywhere(ReadingGap why) ->
+                        new NotSaidAnywhere(why);
+            });
+        }
+        return new MetOnARow(List.copyOf(levels),
+                metOn.made() instanceof Proposition.Always(boolean always) && always ? null
+                        : AStatementAtARow.of(metOn.made(), behavior, quantities));
     }
 
     /**
@@ -69,9 +65,6 @@ final class MetOnARow {
      * before the element in one container never got to the closure inside it.
      */
     AStatementAtARow.Answer at(BorderQuantity.Observation reading) {
-        if (notSaid != null) {
-            return new AStatementAtARow.Answer.CouldNotTell(Set.of(notSaid));
-        }
         // What every comparison inside no such closure comes to, asked of every reading standing
         // at one of its points.
         if (made == null && levels.isEmpty()) {
@@ -100,8 +93,44 @@ final class MetOnARow {
                 : new AStatementAtARow.Answer.CouldNotTell(unknown);
     }
 
+    /** What is known of one container, put to a reading of a row. */
+    private sealed interface Level permits Stopping, NotSaidOf, NotSaidAnywhere {
+
+        /** Whether the comparison was made on what {@code reading} chose of the container. */
+        AStatementAtARow.Answer at(BorderQuantity.Observation reading);
+    }
+
+    /**
+     * Not said of the elements of {@code container}: a reading that chose one of them is not known
+     * to have been met through it, and one that chose none is about none of them.
+     */
+    private record NotSaidOf(TermPath container, ReadingGap why) implements Level {
+
+        @Override
+        public AStatementAtARow.Answer at(BorderQuantity.Observation reading) {
+            return switch (reading.among(container)) {
+                case WalkResult.CouldNotWalk<BorderQuantity.Among> _ ->
+                        new AStatementAtARow.Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
+                case WalkResult.Reached(BorderQuantity.Among among) -> among.chosen() == null
+                        ? AStatementAtARow.Answer.HOLDS
+                        : new AStatementAtARow.Answer.CouldNotTell(Set.of(why));
+            };
+        }
+    }
+
+    /** Not said of the elements of whichever container a reading chose an element of. */
+    private record NotSaidAnywhere(ReadingGap why) implements Level {
+
+        @Override
+        public AStatementAtARow.Answer at(BorderQuantity.Observation reading) {
+            return reading.choseAnElement()
+                    ? new AStatementAtARow.Answer.CouldNotTell(Set.of(why))
+                    : AStatementAtARow.Answer.HOLDS;
+        }
+    }
+
     /** One container stopped short in, and what its occurrences came to on the rows asked. */
-    private static final class Level {
+    private static final class Stopping implements Level {
 
         private final TermPath container;
 
@@ -112,12 +141,13 @@ final class MetOnARow {
         private final Map<Object, Map<Map<TermPath, Integer>, Prefix>> read =
                 new IdentityHashMap<>();
 
-        Level(TermPath container, AStatementAtARow stops) {
+        Stopping(TermPath container, AStatementAtARow stops) {
             this.container = container;
             this.stops = stops;
         }
 
-        AStatementAtARow.Answer at(BorderQuantity.Observation reading) {
+        @Override
+        public AStatementAtARow.Answer at(BorderQuantity.Observation reading) {
             return switch (reading.among(container)) {
                 case WalkResult.CouldNotWalk<BorderQuantity.Among> _ ->
                         new AStatementAtARow.Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));

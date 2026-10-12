@@ -11,6 +11,7 @@ import souther.compiler.report.AdequacyReport;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -138,6 +139,78 @@ class ARowMeetsALineOnlyThroughAnElementTheRunComparedTest {
         assertTrue(hitOn(model, "(Item { kind = K1, v = 7 }, Item { kind = K1, v = 6 })",
                         "pick/b.v", "6"),
                 "b takes the arm, so the comparison is made on it");
+    }
+
+    /**
+     * Inside a closure whose applications are not said — handed more values than are read — which
+     * elements the comparison is made on is not said either, and that includes what the closure
+     * around it already knew: {@code List.any} stops at the first element, and the inner closure is
+     * made on it, but whether it is made on the second is what is not said. The second element's
+     * point is left undecided rather than met for want of knowing.
+     */
+    @Test
+    void insideAClosureWhoseApplicationsAreNotSaidNoElementIsMetForWantOfKnowing() {
+        String many = String.join(", ", Collections.nCopies(257, "n"));
+        String model = """
+                module probe
+
+                data Low
+                data High
+
+                behavior pick : (xs: List<Int>, n: Int) -> Low | High
+                let pick (xs, n) = if GUARD then High else Low
+                """;
+        JsonNode reading = readingAt(model, "List.any(x -> List.any(y -> x > 0, [" + many
+                + "]), xs)", "([1, 0], 0)", "0");
+        assertFalse(reading.path("hit").asBoolean(),
+                () -> "the walk stops at the first element: " + reading);
+        assertEquals("partial", reading.path("status").asString(),
+                () -> "and which elements the inner closure is made on is not said: " + reading);
+    }
+
+    /**
+     * And what is not said is said of the elements it is not known of. A comparison inside such a
+     * closure that reads no element of any container is about none of them: a run recorded through
+     * it is a run that compared what the row stands at there, whichever applications were made.
+     */
+    @Test
+    void aComparisonAboutNoElementIsMetWhereverARunMadeIt() {
+        String many = String.join(", ", Collections.nCopies(257, "n"));
+        String model = """
+                module probe
+
+                data Low
+                data High
+
+                behavior pick : (xs: List<Int>, n: Int) -> Low | High
+                let pick (xs, n) = if GUARD then High else Low
+                """;
+        assertTrue(hitAt(model, "List.any(y -> n > 0, [" + many + "])", "([1], 0)", "0"),
+                "n is compared on the first application, and the row stands at 0");
+    }
+
+    /**
+     * An operation applying its closure to one value it picks out — the value under a key — makes
+     * the comparison on that one: a run getting an answer out of it says nothing of the values it
+     * did not pick.
+     */
+    @Test
+    void anOperationApplyingItsClosureToOneValueSaysNothingOfTheOthers() {
+        String model = """
+                module probe
+
+                data Low
+                data High
+
+                behavior pick : (k: String, m: Map<String, Int>) -> Low | High
+                let pick (k, m) = if GUARD then High else Low
+                """;
+        JsonNode reading = readingAt(model, "Map.size(Map.filterEntries((_, w) -> w == 1,"
+                + " Map.updateIfPresent(k, v -> if v > 0 then 1 else 2, m))) >= 1",
+                "(\"a\", [(\"a\", 1), (\"b\", 0)])", "0");
+        assertFalse(reading.path("hit").asBoolean(),
+                () -> "the closure is applied under a, and b's value is never compared: "
+                        + reading);
     }
 
     /** Whether the reading at {@code against} on {@code axis} was met by the one row, for a model

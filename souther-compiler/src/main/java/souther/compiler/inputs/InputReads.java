@@ -410,19 +410,27 @@ public final class InputReads {
     }
 
     /**
-     * How far the operation {@code block} is handed to goes applying it, where a parameter of it is
-     * handed the elements of one container; empty where none is, or where one is handed something
-     * each of several containers holds and each goes its own way.
+     * How far each operation handing {@code block}'s parameters the elements of a container goes
+     * applying it: one for a parameter handed one container's elements, one for each container a
+     * parameter is handed something of where several hand it. Empty where no parameter is handed
+     * the elements of any — and a parameter handed values written out is read on each
+     * application instead, so it is none of these.
      */
-    public Optional<HowAClosureIsApplied> howItIsApplied(Core.Block block) {
+    public List<HowAClosureIsApplied> howItIsApplied(Core.Block block) {
+        List<HowAClosureIsApplied> out = new ArrayList<>();
         for (Core.Binder param : block.params()) {
-            if (param != null && param.binding() != null
-                    && !alternatives.containsKey(param.binding())
-                    && names.roleOf(param.binding()) instanceof BindingRole.Element(var held)) {
-                return Optional.of(held.applied());
+            if (param == null || param.binding() == null
+                    || alternatives.containsKey(param.binding())) {
+                continue;
+            }
+            switch (names.roleOf(param.binding())) {
+                case BindingRole.Element(var held) -> out.add(held.applied());
+                case BindingRole.ElementOfSeveral(var held) ->
+                        held.forEach(each -> out.add(each.applied()));
+                case BindingRole.Root _, BindingRole.Alias _, BindingRole.Unknown _ -> { }
             }
         }
-        return Optional.empty();
+        return List.copyOf(out);
     }
 
     /**

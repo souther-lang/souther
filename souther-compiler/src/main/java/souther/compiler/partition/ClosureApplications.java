@@ -78,8 +78,20 @@ sealed interface ClosureApplications {
     /**
      * Inside a closure whose applications are not said — more of them than are read, or values
      * handed that this reading cannot name — so what is in it is read once, as it stands.
+     *
+     * <p>And which elements of the input a run makes what is in it on is not said either, for
+     * the same reason: what the closures around it were known of is kept, and within any element
+     * of theirs whether this one is made is what is not said.
+     *
+     * @param metOn which elements what stands here is made on: the closures around it, and nothing
+     *              said of any element within them
      */
-    record NotSaid() implements ClosureApplications {}
+    record NotSaid(ElementsMetOn metOn) implements ClosureApplications {
+
+        public NotSaid {
+            Objects.requireNonNull(metOn, "what stands here is made on some elements, or unsaid ones");
+        }
+    }
 
     /**
      * Inside a closure no run applies: it is handed the elements of a container that holds none on
@@ -122,16 +134,22 @@ sealed interface ClosureApplications {
      *
      * <p>One answer however many applications there are, where they agree; where they say
      * different things — closures over values written out, around one over the input — which of
-     * them a row's element was met through is not said.
+     * them a row's element was met through is not said. Never every element for want of knowing:
+     * a closure whose applications are not said is made on elements nothing here says.
+     *
+     * <p>Inside a closure no run applies, nothing is read, so nothing asks; it is every element
+     * only in the sense that no reading of it is ever put to a row.
      */
     default ElementsMetOn elementsMetOn() {
         return switch (this) {
             case Outside(var metOn) -> metOn;
-            case NotSaid _, None _ -> ElementsMetOn.EVERY;
+            case NotSaid(var metOn) -> metOn;
+            case None _ -> ElementsMetOn.EVERY;
             case Each(var each) -> {
                 ElementsMetOn first = each.getFirst().metOn();
                 yield each.stream().allMatch(one -> one.metOn().equals(first)) ? first
-                        : new ElementsMetOn.NotSaid(ReadingGap.REACH_IS_NO_VALUE_OF_THE_ROW);
+                        : ElementsMetOn.EVERY.notSaidAnywhere(
+                                ReadingGap.REACH_IS_NO_VALUE_OF_THE_ROW);
             }
         };
     }
@@ -197,9 +215,13 @@ sealed interface ClosureApplications {
                             around.carriedIntoTheFirst(),
                             metOn(block, around, entered, read)));
                 }
-                case InputReads.Applications.Unsaid _,
-                     InputReads.Applications.MoreThanAreRead _ -> {
-                    return new NotSaid();
+                case InputReads.Applications.Unsaid _ -> {
+                    return new NotSaid(around.metOn().notSaidAnywhere(new ReadingGap.ReachNotRead(
+                            ReadingGap.ReachNotRead.Why.A_PART_NOT_READ)));
+                }
+                case InputReads.Applications.MoreThanAreRead _ -> {
+                    return new NotSaid(around.metOn().notSaidAnywhere(new ReadingGap.ReachNotRead(
+                            ReadingGap.ReachNotRead.Why.MORE_READINGS_THAN_ARE_MADE)));
                 }
             }
         }
@@ -221,31 +243,67 @@ sealed interface ClosureApplications {
      * row's in the row's order. Anything made of one — a filter, a reversal, a map filed from a
      * list — is applied over in an order and over elements the row does not write, so which element
      * stopped the operation there is said not to be said. An operation applying its closure to
-     * every element adds nothing. One applying it to an element it picks out, or to some, is left
-     * as it was: which it picks is not read here.
+     * every element adds nothing. One applying it to an element it picks out, or to some, makes it
+     * on elements nothing here reads, and so does one handing a parameter the elements of several
+     * containers each applied its own way: said not to be said of those containers, and never
+     * every element for want of knowing. A closure handed no element at all is made on the
+     * elements {@code around} is.
      */
     private static ElementsMetOn metOn(Core.Block block, Application around, InputReads entered,
                                        InputReading read) {
-        Optional<HowAClosureIsApplied> how = around.reads().howItIsApplied(block);
-        if (how.isEmpty()) {
+        List<HowAClosureIsApplied> applied = around.reads().howItIsApplied(block);
+        if (applied.stream().allMatch(HowAClosureIsApplied.TO_EVERY_ELEMENT::equals)) {
             return around.metOn();
         }
-        return switch (how.get()) {
-            case TO_EVERY_ELEMENT, AT_MOST_ONE, TO_SOME -> around.metOn();
+        List<Denotation> containers = around.reads().containersAppliedOver(block);
+        if (applied.size() > 1) {
+            return notSaid(around.metOn(), containers, read,
+                    new ReadingGap.ReachNotRead(ReadingGap.ReachNotRead.Why.A_PART_NOT_READ));
+        }
+        HowAClosureIsApplied how = applied.getFirst();
+        return switch (how) {
+            case TO_EVERY_ELEMENT -> around.metOn();
+            case AT_MOST_ONE, TO_SOME -> notSaid(around.metOn(), containers, read,
+                    new ReadingGap.ReachNotRead(ReadingGap.ReachNotRead.Why.A_PART_NOT_READ));
             case UNTIL_ONE_HOLDS, UNTIL_ONE_FAILS -> {
-                List<Denotation> containers = around.reads().containersAppliedOver(block);
                 if (containers.size() != 1 || !(containers.getFirst().at().pathOf(
                         containers.getFirst().value(), read.newtypes())
                         instanceof PathResolution.At(TermPath container))) {
-                    yield new ElementsMetOn.NotSaid(ReadingGap.REACH_IS_NO_VALUE_OF_THE_ROW);
+                    yield notSaid(around.metOn(), containers, read,
+                            ReadingGap.REACH_IS_NO_VALUE_OF_THE_ROW);
                 }
                 Proposition answered = Pullback.ofATruth(block.body(), entered, read,
                         Optional.empty()).proposition();
                 yield around.metOn().stoppingIn(container,
-                        how.get() == HowAClosureIsApplied.UNTIL_ONE_HOLDS ? answered
+                        how == HowAClosureIsApplied.UNTIL_ONE_HOLDS ? answered
                                 : answered.denied());
             }
         };
+    }
+
+    /**
+     * {@code around}, inside a closure made on elements of {@code containers} nothing here says
+     * which of: of each container that is a position of the input, or of whichever a reading
+     * chooses an element of where one is not — or where which containers is not said at all.
+     */
+    private static ElementsMetOn notSaid(ElementsMetOn around, List<Denotation> containers,
+                                         InputReading read, ReadingGap why) {
+        List<TermPath> positions = new ArrayList<>();
+        for (Denotation each : containers) {
+            if (!(each.at().pathOf(each.value(), read.newtypes())
+                    instanceof PathResolution.At(TermPath container))) {
+                return around.notSaidAnywhere(why);
+            }
+            positions.add(container);
+        }
+        if (positions.isEmpty()) {
+            return around.notSaidAnywhere(why);
+        }
+        ElementsMetOn out = around;
+        for (TermPath container : positions) {
+            out = out.notSaidOf(container, why);
+        }
+        return out;
     }
 
     /**
@@ -349,16 +407,20 @@ sealed interface ClosureApplications {
     }
 
     /**
-     * The same applications past {@code step}.
+     * The same applications past {@code step}, which is no step into an arm.
      *
-     * <p>An arm entered this way adds nothing to what each application is reached under: the forks
-     * whose arms say what entering them states are entered by name ({@link #choosing}).
+     * <p>An arm is entered by name ({@link #choosing}), with what entering it states, so every
+     * application is reached under that as well. Entered here, an arm would add nothing to any of
+     * them, and an application taking another arm would be read as one that reached this one — so
+     * it is refused rather than answered.
      */
     default ClosureApplications entering(ScopeStep step, Symbols symbols,
                                          DeclarationNewtypes newtypes) {
-        return step instanceof ScopeStep.Chosen(Choice.Decides decidedBy)
-                ? choosing(decidedBy, symbols, newtypes, null)
-                : moved(reads -> reads.entering(step, symbols, newtypes));
+        if (step instanceof ScopeStep.Chosen) {
+            throw new IllegalStateException("an arm is entered by naming what entering it states,"
+                    + " and was entered by a step: " + step);
+        }
+        return moved(reads -> reads.entering(step, symbols, newtypes));
     }
 
     /** The same applications with {@code binder} standing for {@code value}. */

@@ -603,6 +603,11 @@ public final class StandingAtAPoint {
                     chosen().get(container)));
         }
 
+        @Override
+        public final boolean choseAnElement() {
+            return !chosen().isEmpty();
+        }
+
         /** The elements of {@code container} the row wrote under what this reading chose of
          *  every other container, each read with it chosen. */
         @Override

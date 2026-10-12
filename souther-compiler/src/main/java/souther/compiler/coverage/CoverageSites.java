@@ -672,14 +672,18 @@ public final class CoverageSites {
         }
 
         /**
-         * How many calls of {@code helper} a run of the behavior whose body is {@code emitted} can
-         * make from outside the helper's own method, each counted where it is written.
+         * Whether a run of the behavior whose body is {@code emitted} makes one call of
+         * {@code helper} from outside the helper's own method, once: one call written, in the
+         * behavior's own body, at a place one run passes once.
          *
-         * <p>What says whose a run recorded in the helper's method is. Where there is one, a run
-         * recorded there is that call's; where there are more, it is any of theirs.
+         * <p>What says whose a run recorded in the helper's method is. Where this holds, a run
+         * recorded there is that call's. Anything less — two calls written, a call in a value's
+         * method run once per call of the value, a call inside a closure applied once per element
+         * — and it is any of the calls the run made.
          */
-        public int callsOf(ValueName.Helper helper, Core emitted) {
-            return methods.callsOf(helper, emitted);
+        public boolean runsOnce(ValueName.Helper helper, Core emitted) {
+            Core.Call only = methods.onlyCallOf(helper, emitted);
+            return only != null && !mayRepeat(only);
         }
 
         /** What this plan is a numbering of, as two builds can be held against each other by. */

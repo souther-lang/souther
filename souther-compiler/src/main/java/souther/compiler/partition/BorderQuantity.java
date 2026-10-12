@@ -1575,6 +1575,15 @@ public sealed interface BorderQuantity
         default WalkResult<List<AnElement>> elementsOf(TermPath container) {
             return WalkResult.couldNotWalk();
         }
+
+        /**
+         * Whether this reading chose an element of some container. A walk that cannot say is taken
+         * to have: what turns on which element is then not known of it, rather than taken to be
+         * about none.
+         */
+        default boolean choseAnElement() {
+            return true;
+        }
     }
 
     /**

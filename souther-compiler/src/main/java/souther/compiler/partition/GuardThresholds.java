@@ -213,10 +213,10 @@ public final class GuardThresholds {
                 ComparisonEmissionIndex.ofBody(emitted, plan);
         AnswerEmissionIndex answers = AnswerEmissionIndex.ofBody(emitted, plan);
         ReachingCuts.Collected cuts = new ReachingCuts.Collected();
-        // How many calls of each helper a run of this behavior can make, asked once per helper:
-        // every comparison read in its body asks it, and it is a walk of every body the run goes
-        // through.
-        Map<ValueName.Helper, Integer> callsOf = new HashMap<>();
+        // Whether a run of this behavior makes one call of each helper once, asked once per
+        // helper: every comparison read in its body asks it, and it is a walk of every body the
+        // run goes through.
+        Map<ValueName.Helper, Boolean> runsOnce = new HashMap<>();
         for (ComparisonReadings.Reading each : comparisons.comparisons()) {
             // Which comparison of the model this is. Total over what this walk reads, and read off
             // what makes the tree rather than off what the models here happen to hold: the table
@@ -257,8 +257,8 @@ public final class GuardThresholds {
                                 // where it decides taken in.
                                 lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                         whereMet(each, helper ->
-                                                callsOf.computeIfAbsent(helper,
-                                                        called -> plan.callsOf(called, emitted))),
+                                                runsOnce.computeIfAbsent(helper,
+                                                        called -> plan.runsOnce(called, emitted))),
                                         reaches,
                                         ComparisonAssessment.narrowedByWhatArrives(admitted.read(),
                                                 Reachability.of(
@@ -325,14 +325,14 @@ public final class GuardThresholds {
      * Which elements of the input a run recorded through {@code each} made it on.
      *
      * <p>A comparison in the body of a helper read at one call of it is recorded in the helper's
-     * method, which every call of it runs; where the run of this behavior can make no other call of
-     * the helper, a run recorded there is this call's, and the way to the call need not be read
-     * off the row.
+     * method, which every call of it runs; where the run of this behavior makes that one call once
+     * ({@link CoverageSites.Plan#runsOnce}), a run recorded there is this call's, and the way to
+     * the call need not be read off the row.
      */
     private static ElementsMetOn whereMet(ComparisonReadings.Reading each,
-                                          Function<ValueName.Helper, Integer> callsOf) {
+                                          Function<ValueName.Helper, Boolean> runsOnce) {
         ValueName.Helper helper = each.context().helper();
-        return helper != null && callsOf.apply(helper) == 1
+        return helper != null && runsOnce.apply(helper)
                 ? each.metOn().madeWhereverRecorded() : each.metOn();
     }
 
