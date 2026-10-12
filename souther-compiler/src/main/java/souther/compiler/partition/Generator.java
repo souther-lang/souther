@@ -5427,7 +5427,7 @@ public final class Generator {
                                          boolean everyQuantifierCounted,
                                          CompositionBudget alikeStoppedBy) {
         Map<RealizationTarget, Place> out = new LinkedHashMap<>(fixing);
-        Map<NumericTerm.FromOnePosition, RealizationTarget> routed = new LinkedHashMap<>();
+        Map<NumericTerm, RealizationTarget> routed = new LinkedHashMap<>();
         Map<RealizationTarget, NumbersAskedFor> counted = new LinkedHashMap<>();
         Set<RealizationTarget> someElement = new LinkedHashSet<>();
         List<ReachabilityGap> gaps = new ArrayList<>();
@@ -5545,10 +5545,8 @@ public final class Generator {
                     // The count is held against what numbers of the row add up to, so which counts
                     // meet it is known once those numbers stand somewhere: placed here, as numbers
                     // beside an element are, and the count asked for is the one that goes with them.
-                    List<NumericTerm.FromOnePosition> added = new ArrayList<>();
-                    for (NumericTerm term : NumericTerms.inOrder(many.against().coefs().keySet())) {
-                        added.add(term.atOnePosition());
-                    }
+                    List<NumericTerm> added =
+                            NumericTerms.inOrder(many.against().coefs().keySet());
                     Function<NumericTerm, Carrier> on = term -> {
                         TermOrders orders = subject.quantities().ordersOf(term);
                         return orders == null ? null : orders.observed();
@@ -5559,14 +5557,14 @@ public final class Generator {
                             Map<NumericTerm, Place> standingAt = new LinkedHashMap<>();
                             for (NumericWitness.Standing.Found.Placed placed
                                     : standing.inFixingOrder()) {
-                                RealizationTarget at = RealizationTarget.of(placed.position());
+                                RealizationTarget.OfANumber at = RealizationTarget.of(placed.term());
                                 // A number already standing was given to the region, so it is
                                 // placed where it stands.
                                 if (out.putIfAbsent(at, placed.place()) == null) {
-                                    routed.put(placed.position(), (RealizationTarget.OfANumber) at);
-                                    here = here.given(placed.position(), placed.place());
+                                    routed.put(placed.term(), at);
+                                    here = here.given(placed.term(), placed.place());
                                 }
-                                standingAt.put(placed.position(), placed.place());
+                                standingAt.put(placed.term(), placed.place());
                             }
                             counts = switch (OrderedAffineBoundary.at(many.against(), standingAt)) {
                                 case ExactAnswer.Held<ExactRatio>(ExactRatio sum) ->
@@ -5633,13 +5631,13 @@ public final class Generator {
             switch (placing(subject, looking, here, out, someElement, assumed, cut)) {
                 case Placed.AtNone(ReachabilityGap why) -> gaps.add(why);
                 case Placed.AtAll(NumericWitness.Standing.Found standing,
-                                  Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
-                                  SequencedMap<RealizationTarget, NumericTerm.FromOnePosition> owing,
+                                  Map<NumericTerm, RealizationTarget> routes,
+                                  SequencedMap<RealizationTarget, NumericTerm> owing,
                                   Requirements taken) -> {
                     assumed = taken;
                     routed.putAll(routes);
                     for (NumericWitness.Standing.Found.Placed each : standing.inFixingOrder()) {
-                        here = here.given(each.position(), each.place());
+                        here = here.given(each.term(), each.place());
                     }
                     // The target this cut's number was routed to, and never one built from the
                     // number again. Built here a second time, the place the row writes would be
@@ -5699,16 +5697,16 @@ public final class Generator {
                     !asked.contains(new Level.OfTheQuantity(ExactRatio.ZERO)), looking)) {
                 case NumericWitness.Standing.Found beside -> {
                     for (NumericWitness.Standing.Found.Placed placed : beside.inFixingOrder()) {
-                        if (placed.position().subjectPath().insideAContainer()) {
+                        if (placed.term().subjectPath().insideAContainer()) {
                             continue;
                         }
-                        RealizationTarget.OfANumber at = RealizationTarget.of(placed.position());
+                        RealizationTarget.OfANumber at = RealizationTarget.of(placed.term());
                         // Placed on the way, so what it is one of is what the rules leave it
                         // there. A number already standing was given to the region, so it is
                         // placed where it stands.
                         if (out.putIfAbsent(at, placed.place()) == null) {
-                            routed.put(placed.position(), at);
-                            here = here.given(placed.position(), placed.place());
+                            routed.put(placed.term(), at);
+                            here = here.given(placed.term(), placed.place());
                         }
                     }
                     out.put(target, least);
@@ -6026,8 +6024,8 @@ public final class Generator {
          *               number it is chosen as
          */
         Placed from(int next, Requirements trying,
-                    Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
-                    SequencedMap<RealizationTarget, NumericTerm.FromOnePosition> owing) {
+                    Map<NumericTerm, RealizationTarget> routes,
+                    SequencedMap<RealizationTarget, NumericTerm> owing) {
             if (next == terms.size()) {
                 return witnessed(trying, routes, owing);
             }
@@ -6057,61 +6055,50 @@ public final class Generator {
         /** The placing with {@code term} written at {@code target}, and the rest after it. */
         private Placed writing(int next, NumericTerm term, RealizationTarget.OfANumber target,
                                Requirements trying,
-                               Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
-                               SequencedMap<RealizationTarget, NumericTerm.FromOnePosition> owing) {
-            Map<NumericTerm.FromOnePosition, RealizationTarget> routed = new LinkedHashMap<>(routes);
-            NumericTerm.FromOnePosition at = term.atOnePosition();
-            if (at != null) {
-                routed.put(at, target);
-            }
+                               Map<NumericTerm, RealizationTarget> routes,
+                               SequencedMap<RealizationTarget, NumericTerm> owing) {
+            Map<NumericTerm, RealizationTarget> routed = new LinkedHashMap<>(routes);
+            routed.put(term, target);
             // This very number already stands somewhere: the item asked for it, or an earlier cut
             // did. Nothing to place, and the cut is answered at it either way.
             if (alreadyStanding.containsKey(target)) {
                 return from(next + 1, trying, routed, owing);
             }
-            List<RealizationTarget> beside = alsoWritingAt(alreadyStanding, target.writeRoot());
-            // A number this reader cannot place beside the ones already standing. What it can do
-            // is choose a value for a position ({@link NumericWitness}); what a number over a run
-            // asks for is a container built to come to it, which is a demand to compose and not a
-            // value to choose.
-            //
-            // Whether that is a second demand at a location this row already writes is the same
-            // question as the one below, and is asked of the root the run is answered of — a run
-            // has no position and the root it runs through is where a row writes it. Left unasked,
-            // a cut naming a total of the container the item already wrote came back as a
-            // condition on positions nothing composed a value at, which is what this reader says
-            // of a position it could not build at rather than of a location it is already writing
-            // for another number.
-            if (at == null) {
-                return new Placed.AtNone(new ReachabilityGap.Uncomposed(cut, beside.isEmpty()
-                        ? new ReachabilityGap.Why.NoValueComposedForItsPositions()
-                        : new ReachabilityGap.Why.TwoNumbersAtOneLocation()));
-            }
             // Another number taken at the same location. A row writes one value where a location
             // is, and that one value has to answer both — the hour of a time beside its minute,
-            // the length of a string beside the string. Whether one value can is
-            // {@link TermRealizations}' answer and is asked before anything is placed here: a group
-            // it builds together is placed and written once, and one it does not is a cut this
-            // could not put a value under.
+            // the length of a string beside the string, how many a list holds beside what its
+            // elements add up to. Whether one value can is {@link TermRealizations}' answer and is
+            // asked before anything is placed here: a group it builds together is placed and
+            // written once, and one it does not is a cut this could not put a value under.
             //
-            // Asked of what is already standing rather than of a list kept beside it, so the
-            // answer is about the demands this row actually has. Which locations are one is asked
-            // of the reader that owns it, because a container written whole and a position inside
-            // it are one location spelled two ways.
+            // A number over a run is placed as any other is. What is chosen here is the number,
+            // which the region relates to every other number the cut names; the container that
+            // comes to it is composed where every number of its location is, out of what that
+            // number is one of ({@link #whatEachOfThemIsANumberOf}).
+            //
+            // Asked of what is already standing and of what this cut has placed before it, rather
+            // than of a list kept beside them, so the answer is about the demands this row actually
+            // has — two numbers of one location named by one cut are as much two demands on it as a
+            // number beside one standing there. Which locations are one is asked of the reader that
+            // owns it, because a container written whole and a position inside it are one location
+            // spelled two ways.
+            List<RealizationTarget> beside = alsoWritingAt(alreadyStanding.keySet(),
+                    target.writeRoot());
+            beside.addAll(alsoWritingAt(owing.keySet(), target.writeRoot()));
             // A number this cut places is some element's where the cut is that some element meets
             // something, and not where it is that every one does.
             Set<RealizationTarget> some = someElement;
             if (cut.demand() instanceof RowDemand.Exists) {
                 some = new HashSet<>(someElement);
+                some.addAll(owing.keySet());
                 some.add(target);
             }
             if (!beside.isEmpty() && !writtenTogether(beside, target, some)) {
                 return new Placed.AtNone(new ReachabilityGap.Uncomposed(cut,
                         new ReachabilityGap.Why.TwoNumbersAtOneLocation()));
             }
-            SequencedMap<RealizationTarget, NumericTerm.FromOnePosition> owed =
-                    new LinkedHashMap<>(owing);
-            owed.put(target, writtenAs(subject, target).atOnePosition());
+            SequencedMap<RealizationTarget, NumericTerm> owed = new LinkedHashMap<>(owing);
+            owed.put(target, writtenAs(subject, target));
             return from(next + 1, trying, routed, owed);
         }
 
@@ -6130,8 +6117,8 @@ public final class Generator {
          * refuse.
          */
         private Placed witnessed(Requirements trying,
-                                 Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
-                                 SequencedMap<RealizationTarget, NumericTerm.FromOnePosition> owing) {
+                                 Map<NumericTerm, RealizationTarget> routes,
+                                 SequencedMap<RealizationTarget, NumericTerm> owing) {
             NumericWitness.Standing found = NumericWitness.of(
                     here.given(remaindersStanding(alreadyStanding)),
                     List.copyOf(new LinkedHashSet<>(owing.values())),
@@ -6179,8 +6166,8 @@ public final class Generator {
          * @param assumed  what the row is taken to be now that these are written
          */
         record AtAll(NumericWitness.Standing.Found standing,
-                     Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
-                     SequencedMap<RealizationTarget, NumericTerm.FromOnePosition> owing,
+                     Map<NumericTerm, RealizationTarget> routes,
+                     SequencedMap<RealizationTarget, NumericTerm> owing,
                      Requirements assumed) implements Placed {}
 
         /** Nothing was put under it, and this is what the way is owed about that. */
@@ -6358,10 +6345,10 @@ public final class Generator {
      * be one answer held twice, and what the question is about is the targets and not the paths:
      * whether a value can answer them together is asked of the numbers.
      */
-    private static List<RealizationTarget> alsoWritingAt(Map<RealizationTarget, Place> standing,
+    private static List<RealizationTarget> alsoWritingAt(Collection<RealizationTarget> standing,
                                                          TermPath position) {
         List<RealizationTarget> beside = new ArrayList<>();
-        for (RealizationTarget target : standing.keySet()) {
+        for (RealizationTarget target : standing) {
             if (LocationWrites.oneLocation(target.writeRoot(), position)) {
                 beside.add(target);
             }
@@ -6391,7 +6378,7 @@ public final class Generator {
      *                    condition that some element meets something placed
      */
     private record Standing(Map<RealizationTarget, Place> at,
-                            Map<NumericTerm.FromOnePosition, RealizationTarget> routed,
+                            Map<NumericTerm, RealizationTarget> routed,
                             Map<RealizationTarget, NumbersAskedFor> counted,
                             Set<RealizationTarget> someElement,
                             CompositionAccount unrepresented) {
@@ -6962,7 +6949,7 @@ public final class Generator {
      */
     private static Map<RealizationTarget, NumbersAskedFor> whatEachOfThemIsANumberOf(
             MeasuredInput subject, Map<RealizationTarget, Place> fixing,
-            Map<NumericTerm.FromOnePosition, RealizationTarget> routed,
+            Map<NumericTerm, RealizationTarget> routed,
             Map<RealizationTarget, NumbersAskedFor> counted,
             NumbersAskedFor asking, Reachability.Reaching reaching) {
         Map<RealizationTarget, NumbersAskedFor> out = new LinkedHashMap<>();

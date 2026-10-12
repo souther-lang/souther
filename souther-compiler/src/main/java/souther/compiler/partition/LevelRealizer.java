@@ -208,8 +208,8 @@ public final class LevelRealizer {
                     case NumericWitness.Standing.Found beside -> {
                         fixing.put(counted, Count.of(many));
                         for (NumericWitness.Standing.Found.Placed each : beside.inFixingOrder()) {
-                            if (!each.position().subjectPath().insideAContainer()) {
-                                fixing.putIfAbsent(RealizationTarget.of(each.position()),
+                            if (!each.term().subjectPath().insideAContainer()) {
+                                fixing.putIfAbsent(RealizationTarget.of(each.term()),
                                         each.place());
                             }
                         }
@@ -288,8 +288,8 @@ public final class LevelRealizer {
                     Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
                     fixing.put(counted, asked);
                     for (NumericWitness.Standing.Found.Placed each : beside.inFixingOrder()) {
-                        if (!each.position().subjectPath().insideAContainer()) {
-                            fixing.put(RealizationTarget.of(each.position()), each.place());
+                        if (!each.term().subjectPath().insideAContainer()) {
+                            fixing.put(RealizationTarget.of(each.term()), each.place());
                         }
                     }
                     Realization made = found(fixing, within, tried);

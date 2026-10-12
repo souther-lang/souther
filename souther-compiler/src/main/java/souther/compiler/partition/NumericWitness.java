@@ -20,7 +20,11 @@ import java.util.Set;
 import java.util.function.Function;
 
 /**
- * One assignment of some positions that a region admits, or nothing.
+ * One assignment of some numbers that a region admits, or nothing.
+ *
+ * <p>A number is a position's, or one taken over the values standing at a position — what the
+ * elements of a container add up to. Both are chosen here as places on their order, and what
+ * comes to a number of the second kind is composed afterwards, where its location is.
  *
  * <p><b>A witness and not a representative.</b> What a region leaves a position is a run, and every
  * value of it is as good as any other until the next position is asked — at which point most of
@@ -80,7 +84,7 @@ final class NumericWitness {
      *                given the sets alone would have to reach for an allowance, and what it reached
      *                for would be a budget nothing granted it
      */
-    static Standing of(SearchRegion within, List<NumericTerm.FromOnePosition> terms,
+    static Standing of(SearchRegion within, List<? extends NumericTerm> terms,
                        Function<NumericTerm, Carrier> on, WitnessSearch looking) {
         // What the rules settle about the question, before any of it is looked for. Two ways for
         // them to settle it and both are the region as it was handed over: it may admit no
@@ -92,7 +96,7 @@ final class NumericWitness {
         if (within.emptiness().isPresent() || leavesNothing(within, terms)) {
             return new Standing.ProvedImpossible();
         }
-        SequencedMap<NumericTerm.FromOnePosition, Place> standing = new LinkedHashMap<>();
+        SequencedMap<NumericTerm, Place> standing = new LinkedHashMap<>();
         java.util.Set<CompositionBudget> stoppedBy =
                 java.util.EnumSet.noneOf(CompositionBudget.class);
         Set<CompositionCapacity> unheld = new HashSet<>();
@@ -110,7 +114,7 @@ final class NumericWitness {
      * question what holds of one branch of it.
      */
     private static boolean leavesNothing(SearchRegion within,
-                                         List<NumericTerm.FromOnePosition> terms) {
+                                         List<? extends NumericTerm> terms) {
         return terms.stream().anyMatch(term ->
                 within.projectionOf(term) instanceof NumericDomain.FormProjection.NothingIsLeft);
     }
@@ -148,40 +152,40 @@ final class NumericWitness {
 
             private Found(List<Placed> inFixingOrder) {
                 this.inFixingOrder = List.copyOf(inFixingOrder);
-                Set<NumericTerm.FromOnePosition> seen = new HashSet<>();
+                Set<NumericTerm> seen = new HashSet<>();
                 for (Placed each : this.inFixingOrder) {
-                    if (!seen.add(each.position())) {
+                    if (!seen.add(each.term())) {
                         throw new IllegalArgumentException(
-                                "a position is placed once: " + each.position());
+                                "a number is placed once: " + each.term());
                     }
                 }
             }
 
-            /** What the walk came to, its positions in the order it fixed them. */
-            private static Found walked(SequencedMap<NumericTerm.FromOnePosition, Place> standing) {
+            /** What the walk came to, its numbers in the order it fixed them. */
+            private static Found walked(SequencedMap<NumericTerm, Place> standing) {
                 List<Placed> placed = new ArrayList<>();
-                standing.forEach((position, place) -> placed.add(new Placed(position, place)));
+                standing.forEach((term, place) -> placed.add(new Placed(term, place)));
                 return new Found(placed);
             }
 
-            /** One position and the place the walk put it at. */
-            record Placed(NumericTerm.FromOnePosition position, Place place) {
+            /** One number and the place the walk put it at. */
+            record Placed(NumericTerm term, Place place) {
 
                 public Placed {
-                    Objects.requireNonNull(position, "a place is a position's");
-                    Objects.requireNonNull(place, "a position is placed somewhere");
+                    Objects.requireNonNull(term, "a place is a number's");
+                    Objects.requireNonNull(place, "a number is placed somewhere");
                 }
             }
 
-            /** The positions and where each stands, in the order the walk fixed them. */
+            /** The numbers and where each stands, in the order the walk fixed them. */
             List<Placed> inFixingOrder() {
                 return inFixingOrder;
             }
 
-            /** Where {@code position} stands, or null where this places no such position. */
-            Place placeOf(NumericTerm.FromOnePosition position) {
+            /** Where {@code term} stands, or null where this places no such number. */
+            Place placeOf(NumericTerm term) {
                 for (Placed each : inFixingOrder) {
-                    if (each.position().equals(position)) {
+                    if (each.term().equals(term)) {
                         return each.place();
                     }
                 }
@@ -238,17 +242,17 @@ final class NumericWitness {
      * that leaves the rest nothing is stepped past here, where there is still another to try, and
      * not reported once every position has been given one.
      */
-    private static boolean walk(SearchRegion within, List<NumericTerm.FromOnePosition> terms,
+    private static boolean walk(SearchRegion within, List<? extends NumericTerm> terms,
                                 int at,
                                 Function<NumericTerm, Carrier> on,
                                 WitnessSearch looking,
-                                Map<NumericTerm.FromOnePosition, Place> standing,
+                                Map<NumericTerm, Place> standing,
                                 java.util.Set<CompositionBudget> stoppedBy,
                                 Set<CompositionCapacity> unheld) {
         if (at == terms.size()) {
             return true;
         }
-        NumericTerm.FromOnePosition term = terms.get(at);
+        NumericTerm term = terms.get(at);
         Carrier carrier = on.apply(term);
         if (carrier == null) {
             return false;
@@ -277,8 +281,8 @@ final class NumericWitness {
         // The three narrowings this position stands under, read once and handed to the walk whole.
         // What the arithmetic leaves the number is one of them; the walk is held to the other two
         // at every place it reaches, and not only at the one it starts from.
-        ValueSet admits = looking.toNarrowBy(term);
-        PlacesApart apart = within.apartAt(term);
+        ValueSet admits = admittedAt(term, looking);
+        PlacesApart apart = apartAt(term, within);
         Place first = carrier.somethingOtherThan(apart, runs, admits, looking.meter());
         if (first == null) {
             return false;
@@ -324,6 +328,31 @@ final class NumericWitness {
                     walked.unheld()));
         }
         return false;
+    }
+
+    /**
+     * What the declarations leave the position {@code term} is read at, or nothing narrowed where
+     * it is read at none.
+     *
+     * <p>A number over a run, or how often a value occurs among a container's elements, is a
+     * number of the values standing there and not one of them: a set a position admits says which
+     * values may be written at it, and no value is written at such a number. What the rules leave
+     * it is the region's, which the walk is held to already.
+     */
+    private static ValueSet admittedAt(NumericTerm term, WitnessSearch looking) {
+        return switch (term) {
+            case NumericTerm.FromOnePosition one -> looking.toNarrowBy(one);
+            case NumericTerm.TakenOver _, NumericTerm.Multiplicity _ -> ValueSet.ANY;
+        };
+    }
+
+    /** The places {@code within} holds the position {@code term} is read at away from, or none
+     *  where it is read at none ({@link #admittedAt}). */
+    private static PlacesApart apartAt(NumericTerm term, SearchRegion within) {
+        return switch (term) {
+            case NumericTerm.FromOnePosition one -> within.apartAt(one);
+            case NumericTerm.TakenOver _, NumericTerm.Multiplicity _ -> PlacesApart.NONE;
+        };
     }
 
     private NumericWitness() {}

@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * was ever made.
  *
  * <p><b>Whichever stage let the condition go.</b> A condition the walk had no words for and one it
- * stated that nothing could place a position of are two different things to do something about,
+ * stated that nothing could compose one value for are two different things to do something about,
  * and the row was composed without either of them alike. Written for one of them, this would be a
  * sentence about the case somebody happened to be looking at.
  *
@@ -35,30 +35,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
 
     /**
-     * A condition above the line over positions nothing composed a value at.
+     * A condition above the line over two numbers of one location nothing composes one value for.
      *
-     * <p>Over a total taken across a run, which is a number of the input and is at no position of
-     * it: what a row writes is the elements, and a composer choosing a value chooses one where a
-     * value stands. So the condition is stated and the row below it is composed without it.
+     * <p>Two totals of one list, each over its own field of the elements: a row writes the list
+     * once, and nothing here builds one list for two totals at once. So the condition is stated
+     * and the row below it is composed without it.
      *
-     * <p>Not a position on an order this compiler cannot write a value on. That reached this arm
-     * too, for as long as fixing took a number and a string is not one — a fixture standing on it
-     * stopped exercising the stage the day a position came to stand at a place.
+     * <p>Not a single total over a run. That reached the stage too, for as long as a number of the
+     * way was placed only where it stood at one position — and a fixture standing on it stopped
+     * exercising the stage the day a total came to be placed as any other number is.
      */
-    private static final String POSITIONS_NOTHING_COMPOSED_A_VALUE_AT = """
-            module example.positions
+    private static final String NUMBERS_NOTHING_COMPOSES_ONE_VALUE_FOR = """
+            module example.numbers
 
             data Yes = { v: Int }
             data No = { why: Int }
 
-            data Line = { each: Int }
+            data Line = { a: Int, b: Int }
 
             behavior f : (xs: List<Line>, n: Int) -> Yes | No
                 constructs Yes
                 constructs No
 
             let f (xs, n) = {
-                guard List.sum(List.map(x -> x.each, xs)) > 0 else No { why = 0 }
+                guard List.sum(List.map(x -> x.a, xs)) + List.sum(List.map(x -> x.b, xs)) > 0
+                    else No { why = 0 }
                 guard n < 10 else No { why = 1 }
                 Yes { v = 1 }
             }
@@ -116,7 +117,7 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
     @Test
     void whateverLetTheConditionGoIsSaidBeforeTheSearchesWord() {
         int openedOnTheClause = 0;
-        for (String model : List.of(POSITIONS_NOTHING_COMPOSED_A_VALUE_AT,
+        for (String model : List.of(NUMBERS_NOTHING_COMPOSES_ONE_VALUE_FOR,
                 A_SHAPE_THE_WALK_HAS_NO_WORDS_FOR)) {
             List<String> said = whereNothingCouldShowARow(model);
 
@@ -155,9 +156,10 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
      */
     @Test
     void whichStageLetItGoIsStillSaid() {
-        assertTrue(only(POSITIONS_NOTHING_COMPOSED_A_VALUE_AT).contains(
-                        "a condition on positions nothing here composed a value at"),
-                () -> only(POSITIONS_NOTHING_COMPOSED_A_VALUE_AT));
+        assertTrue(only(NUMBERS_NOTHING_COMPOSES_ONE_VALUE_FOR).contains(
+                        "a condition on another number taken where this row is already being"
+                                + " written for one"),
+                () -> only(NUMBERS_NOTHING_COMPOSES_ONE_VALUE_FOR));
         assertTrue(only(A_SHAPE_THE_WALK_HAS_NO_WORDS_FOR).contains(
                         "a condition on what String.startsWith answers, which comes to one string"
                                 + " standing inside another — no condition here says that"),
@@ -172,7 +174,7 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
      */
     @Test
     void theOrderSaysWhatWasSearchedAndNotWhyItFailed() {
-        String said = only(POSITIONS_NOTHING_COMPOSED_A_VALUE_AT);
+        String said = only(NUMBERS_NOTHING_COMPOSES_ONE_VALUE_FOR);
 
         assertTrue(said.contains("which does not make it unreachable"),
                 () -> "an empty search is still not a point nothing can be written at: " + said);
