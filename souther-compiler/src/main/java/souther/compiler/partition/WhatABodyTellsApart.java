@@ -18,6 +18,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.Decision;
 import souther.compiler.reading.WayIn;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
 
@@ -68,6 +69,8 @@ final class WhatABodyTellsApart {
     private final List<RuleWithoutALine> noLine;
     /** The case each arm of a {@code match} is, where the tree the operations stand in names it. */
     private final ArmsNamed armsNamed;
+    /** Which positions what decides a fork may turn on, where the same tree reads it. */
+    private final ForkDependencies dependencies;
     /** What the model's rules prove arrives at each place a way passes. */
     private final PathReachability.Answers arrives;
     /** Which classes of two positions can be in one value, asked of the positions a way stands
@@ -78,11 +81,13 @@ final class WhatABodyTellsApart {
 
     private WhatABodyTellsApart(MeasuredInput.MeasuredAxes measured,
                                 List<RuleWithoutALine> noLine, ArmsNamed armsNamed,
+                                ForkDependencies dependencies,
                                 PathReachability.Answers arrives) {
         this.measured = measured;
         this.axes = measured.axes();
         this.noLine = noLine;
         this.armsNamed = armsNamed;
+        this.dependencies = dependencies;
         this.arrives = arrives;
         this.coexistence = ClassCoexistence.among(axes);
         this.unread = new boolean[axes.size()];
@@ -95,16 +100,18 @@ final class WhatABodyTellsApart {
     /**
      * What the body read as {@code read} tells apart at each position {@code measured}, where
      * {@code noLine} is what the reading of the input found about the rules it drew no line for and
-     * {@code armsNamed} the case each arm of a {@code match} is, read where the operations stand,
-     * and {@code arrives} what the model's rules prove arrives at each place a way passes.
+     * {@code armsNamed} the case each arm of a {@code match} is and {@code dependencies} which
+     * positions what decides a fork may turn on, both read where the operations stand, and
+     * {@code arrives} what the model's rules prove arrives at each place a way passes.
      */
     static Map<AxisId, BodyDistinction> of(CoverageRead.Read read,
                                            MeasuredInput.MeasuredAxes measured,
                                            List<RuleWithoutALine> noLine,
                                            ArmsNamed armsNamed,
+                                           ForkDependencies dependencies,
                                            PathReachability.Answers arrives) {
         WhatABodyTellsApart reading =
-                new WhatABodyTellsApart(measured, noLine, armsNamed, arrives);
+                new WhatABodyTellsApart(measured, noLine, armsNamed, dependencies, arrives);
         List<Axis> axes = measured.axes();
         for (WayIn way : read.taken()) {
             reading.take(way);
@@ -133,6 +140,27 @@ final class WhatABodyTellsApart {
          *                 reading can put to the classes
          */
         record About(int at, List<Boolean> admitted) implements Placed {}
+
+        /**
+         * What one application of a closure an operation applies to the elements of a container
+         * admits at the element's position: an arm of a {@code match} on what the closure was
+         * handed, named a case of it where the operations stand.
+         *
+         * <p>About one element, which another application of another closure over the same
+         * container need not be: two of them on one way are about one element or two, and which
+         * is not read, so neither is put to classes there.
+         *
+         * @param about what the case admits at the element's position
+         * @param fork  the fork as the tree that runs has it, which is the application
+         */
+        record OfAnApplication(About about, ConstructOccurrence fork) implements Placed {}
+
+        /**
+         * About the positions {@code ats}, and putting nothing it says there to classes: an arm of
+         * a fork whose deciding statement may turn on those positions and no other
+         * ({@link ForkDependencies}).
+         */
+        record AboutThese(List<Integer> ats) implements Placed {}
 
         /** About nothing this run measures a position of. */
         record AboutNoPosition() implements Placed {}
@@ -175,13 +203,28 @@ final class WhatABodyTellsApart {
     private Placed placing(souther.compiler.reading.Condition each) {
         // An arm the reading of the runs named no position for, which the tree the operations
         // stand in names as a case of a position: an arm of a `match` on what a closure was handed
-        // out of a container. Placed where that case would be, and put to no class there — the
-        // closure is applied to each element, a different case each time and none on an empty
-        // container, so which class took the arm is not this arm's to say.
+        // out of a container. A run down it is one application, handed one element, and the arm
+        // admits that element's case: a different case each time is a different application down
+        // a different way, and none on an empty container is no run down it at all, which the
+        // count the way stands at says ({@link #oneValueCanTake}). Under the cases of a sum the
+        // element's position is a choice this does not make, and the arm is put to no class.
         if (each instanceof souther.compiler.reading.Condition.Arm arm) {
             Optional<souther.compiler.reading.Condition.Case> named = armsNamed.of(arm);
             if (named.isPresent()) {
-                return withheld(placing(named.get()));
+                Placed asTheCase = placing(named.get());
+                return asTheCase instanceof Placed.About about
+                        ? new Placed.OfAnApplication(about, arm.arm().fork())
+                        : withheld(asTheCase);
+            }
+            // A fork on what an operation over a container answers — `List.all(...)` — or a fork of
+            // the operation's own body on what a closure the model handed it answers may turn on
+            // the positions what decides it reads, and on no other. Which class went which way is
+            // not this arm's to say, so it puts nothing to classes there; a position it cannot
+            // turn on is told apart by the ways that do read it.
+            Optional<ForkDependencies.Dependency> turnsOn = dependencyOf(arm);
+            if (turnsOn.orElse(null) instanceof ForkDependencies.Dependency.Known(var positions)) {
+                List<Integer> ats = axesReading(positions);
+                return ats.isEmpty() ? new Placed.AboutNoPosition() : new Placed.AboutThese(ats);
             }
         }
         return switch (ConditionPlacement.of(each, measured)) {
@@ -206,6 +249,34 @@ final class WhatABodyTellsApart {
     }
 
     /**
+     * What decides {@code arm}'s fork may turn on: the fork's own, where the model wrote it, and
+     * otherwise the construct whose answer decides it — the body of a closure the model handed the
+     * operation the fork stands in, or a call of another operation that construct stands for. Empty
+     * where none of them was read.
+     *
+     * <p>A construct of an operation's body stands for that operation's call only where the fork
+     * stands outside the operation: inside it, the construct is a part of what the operation
+     * computes, and what the call answers is nothing the fork is asked.
+     */
+    private Optional<ForkDependencies.Dependency> dependencyOf(
+            souther.compiler.reading.Condition.Arm arm) {
+        Optional<ForkDependencies.Dependency> asWritten =
+                ModelOccurrence.statedAt(arm.arm().fork()).flatMap(dependencies::ofTheFork);
+        if (asWritten.isPresent() || arm.decidedBy().isEmpty()) {
+            return asWritten;
+        }
+        ConstructOccurrence decides = arm.decidedBy().get();
+        Optional<ModelOccurrence> stated = ModelOccurrence.statedAt(decides);
+        if (stated.isPresent()) {
+            return dependencies.ofTheAnswer(stated.get());
+        }
+        Optional<ModelOccurrence> called = ModelOccurrence.operationCalledAround(decides);
+        return called.isEmpty()
+                || called.equals(ModelOccurrence.operationCalledAround(arm.arm().fork()))
+                ? Optional.empty() : dependencies.ofTheAnswer(called.get());
+    }
+
+    /**
      * {@code placed}, about the same positions and putting nothing it says there to classes: a
      * condition this compiler names the position of and cannot place.
      */
@@ -221,9 +292,38 @@ final class WhatABodyTellsApart {
                 }
                 yield new Placed.UnderTheCases(List.copyOf(out));
             }
+            case Placed.OfAnApplication it -> new Placed.About(it.about().at(), null);
+            case Placed.AboutThese it -> it;
             case Placed.AboutNoPosition it -> it;
             case Placed.SubjectUnknown it -> it;
         };
+    }
+
+    /**
+     * The axes a statement reading {@code positions} may tell values apart at: for each position,
+     * the axes at the deepest path it stands at or under — its own, or those of a record measured
+     * whole around it.
+     *
+     * <p>Never an axis below a position. A statement reads what is under a position by naming it,
+     * an element as {@code xs[*]}, so a container it names alone is read for how many it holds.
+     */
+    private List<Integer> axesReading(List<TermPath> positions) {
+        Set<Integer> out = new LinkedHashSet<>();
+        for (TermPath position : positions) {
+            int deepest = -1;
+            for (Axis axis : axes) {
+                if (position.isAtOrUnder(axis.path())) {
+                    deepest = Math.max(deepest, axis.path().steps().size());
+                }
+            }
+            for (int at = 0; at < axes.size(); at++) {
+                TermPath measured = axes.get(at).path();
+                if (position.isAtOrUnder(measured) && measured.steps().size() == deepest) {
+                    out.add(at);
+                }
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -351,6 +451,17 @@ final class WhatABodyTellsApart {
         };
     }
 
+    /** The applications {@code way} goes down, by the element position each is about. */
+    private Map<Integer, Set<ConstructOccurrence>> applicationsAt(WayIn way) {
+        Map<Integer, Set<ConstructOccurrence>> out = new HashMap<>();
+        for (Decision decision : way.decisions()) {
+            if (placedOf(decision.constrains()) instanceof Placed.OfAnApplication it) {
+                out.computeIfAbsent(it.about().at(), _ -> new LinkedHashSet<>()).add(it.fork());
+            }
+        }
+        return out;
+    }
+
     /** One way: what all of its decisions admit together at each position, if a value can take it. */
     private void take(WayIn way) {
         // A place on the way the model's rules prove nothing arrives at is one no run passes, so
@@ -367,6 +478,7 @@ final class WhatABodyTellsApart {
         boolean subjectUnknownHere = false;
         List<Placed.UnderTheCases> underTheCases = new ArrayList<>();
         List<souther.compiler.reading.Condition> saidUnderTheCases = new ArrayList<>();
+        Map<Integer, Set<ConstructOccurrence>> applicationsAt = applicationsAt(way);
         for (Decision decision : way.decisions()) {
             souther.compiler.reading.Condition each = decision.constrains();
             switch (placedOf(each)) {
@@ -374,9 +486,24 @@ final class WhatABodyTellsApart {
                     direct.stands[it.at()] = true;
                     direct.admit(it, each);
                 }
+                // An element taking the arm stands at the element's position. Two applications
+                // on the way about the same position may be about two elements, so what either
+                // admits is read of neither.
+                case Placed.OfAnApplication it -> {
+                    direct.stands[it.about().at()] = true;
+                    direct.admit(applicationsAt.get(it.about().at()).size() > 1
+                            ? new Placed.About(it.about().at(), null) : it.about(), each);
+                }
                 case Placed.UnderTheCases it -> {
                     underTheCases.add(it);
                     saidUnderTheCases.add(each);
+                }
+                // What a statement reads of a position puts no row there: that no element of a
+                // list is `South` is read of the elements and holds of a list with none.
+                case Placed.AboutThese it -> {
+                    for (int at : it.ats()) {
+                        direct.admit(new Placed.About(at, null), each);
+                    }
                 }
                 case Placed.AboutNoPosition _ -> { }
                 case Placed.SubjectUnknown _ -> subjectUnknownHere = true;

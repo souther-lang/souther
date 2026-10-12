@@ -24,7 +24,7 @@ import java.util.List;
 public sealed interface Proof
         permits ConditionsThatCannotAllHold, OutsideInputDomain, EveryCaseRefused,
         NoCaseTheValueCanBeIsTaken, TheDeclarationHoldsNoneOf, TheDeclarationHoldsNothingElse,
-        EveryWayInIsRuledOut {
+        EveryWayInIsRuledOut, ItsClosureIsAppliedToNothing {
 
     /**
      * The sentences a proof can come to, one per arm.
@@ -124,6 +124,22 @@ public sealed interface Proof
          * @param each why each way in is not one, in the order the ways are read; at least two
          */
         T everyWayInIsRuledOut(List<Proof> each);
+
+        /**
+         * The place is in a closure applied to the elements of containers that what holds on the
+         * way to it leaves holding none, so the closure is never applied.
+         *
+         * <p>About the closure and not about the place: nothing inside the closure is refused, and
+         * the place is no different from the rest of its body. What leaves the containers empty is
+         * the rules of the input, with the conditions taken in on the way to the closure where
+         * there are any.
+         *
+         * @param containers how each container the closure is applied over is spelled, in the order
+         *                   it is handed them
+         * @param decisions  the conditions taken in on the way to the closure, in the order they
+         *                   were assumed; none where the rules alone leave the containers empty
+         */
+        T itsClosureIsAppliedToNothing(List<String> containers, List<PathDecision> decisions);
     }
 
     /** What this proof comes to, in {@code words}. */
@@ -168,6 +184,30 @@ public sealed interface Proof
      *  One way is that way's own proof. */
     static Proof everyAlternativeRuledOut(List<Proof> each) {
         return each.size() == 1 ? each.getFirst() : new EveryWayInIsRuledOut(each);
+    }
+
+    /** The closure the place is in is applied over containers holding none; see
+     *  {@link Words#itsClosureIsAppliedToNothing}. */
+    static Proof itsClosureIsAppliedToNothing(List<String> containers,
+                                              List<PathDecision> decisions) {
+        return new ItsClosureIsAppliedToNothing(containers, decisions);
+    }
+}
+
+record ItsClosureIsAppliedToNothing(List<String> containers, List<PathDecision> decisions)
+        implements Proof {
+
+    ItsClosureIsAppliedToNothing {
+        containers = List.copyOf(containers);
+        decisions = List.copyOf(decisions);
+        if (containers.isEmpty()) {
+            throw new IllegalArgumentException("a closure applied to nothing, over no container");
+        }
+    }
+
+    @Override
+    public <T> T said(Words<T> words) {
+        return words.itsClosureIsAppliedToNothing(containers, decisions);
     }
 }
 

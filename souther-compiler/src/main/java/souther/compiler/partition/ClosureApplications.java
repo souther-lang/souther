@@ -11,7 +11,6 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.semantics.HowAClosureIsApplied;
@@ -207,21 +206,13 @@ sealed interface ClosureApplications {
                             around.reads().containersAppliedOver(block);
                     List<Denotation> containers = appliedOver.stream()
                             .map(InputReads.AppliedOver::container).toList();
-                    List<TermPath> positions = positionsAppliedOver(containers, read);
-                    // An option is applied over where it holds its one value, and a container
-                    // where it holds anything.
-                    List<DecisionSubject> holding = new ArrayList<>();
-                    List<DecisionSubject> present = new ArrayList<>();
-                    for (int at = 0; at < positions.size(); at++) {
-                        (appliedOver.get(at).anOption() ? present : holding)
-                                .add(new DecisionSubject.AnInput(positions.get(at)));
-                    }
-                    asked |= !positions.isEmpty();
+                    Optional<WhereAClosureIsApplied> where =
+                            WhereAClosureIsApplied.of(appliedOver, read);
+                    asked |= where.isPresent();
                     InputReads entered = around.reads().entering(step, symbols, newtypes);
                     out.add(new Application(entered,
-                            positions.isEmpty() ? around.reached()
-                                    : WhereAnApplicationIsMade.whereOneOfTheContainersHoldsSomething(
-                                            around.reached(), holding, present),
+                            where.map(some -> WhereAnApplicationIsMade.past(around.reached(),
+                                    some.holdingSomething())).orElse(around.reached()),
                             around.carriedIntoTheFirst(),
                             metOn(block, containers, around, entered, read)));
                 }
@@ -328,27 +319,6 @@ sealed interface ClosureApplications {
                     Optional.empty()).proposition();
             return kept.holds() ? stated : stated.denied();
         }).toList();
-    }
-
-    /**
-     * The positions of the input {@code containers}, those a closure is applied over, stand at, or
-     * none where there are none or one of them stands at no position.
-     *
-     * <p>Every one or nothing: a run may be inside the closure by the operation over the container
-     * that stands at no position with every other empty, so saying one of the rest holds something
-     * would be saying more than is known.
-     */
-    private static List<TermPath> positionsAppliedOver(List<Denotation> containers,
-                                                       InputReading read) {
-        List<TermPath> out = new ArrayList<>();
-        for (Denotation container : containers) {
-            Optional<TermPath> at = Pullback.positionHoldingWhatItHolds(container, read);
-            if (at.isEmpty()) {
-                return List.of();
-            }
-            out.add(at.get());
-        }
-        return List.copyOf(out);
     }
 
     /**

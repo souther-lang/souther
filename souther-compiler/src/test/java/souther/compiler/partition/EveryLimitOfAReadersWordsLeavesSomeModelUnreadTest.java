@@ -155,7 +155,7 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
         // the closure it was written with.
         out.put(WhyNotTaken.DomainLimit.A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN, "everyItem");
         // A helper whose answer is which case a value is.
-        out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_CASES, "aCase");
+        out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT, "aCase");
         // A helper whose answer is two texts being one.
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_SAMENESS_OF_VALUES, "oneValue");
         // A text against a written place on its order.

@@ -1,12 +1,14 @@
 // A `match` on what a closure was handed out of a map's keys tells the keys apart, and not the
 // values the map files under them.
 //
-// `Map.keys` answers the keys of `m`, so `k` stands for a key and the `match` turns on its case.
-// What the map files under a key is never looked at, and is left as every position is beside a
-// decision no position is named for.
+// `Map.keys` answers the keys of `m`, so `k` stands for a key and the `match` turns on its case: a
+// run down an arm is one application, handed one key, and the arm takes that key's case. What the
+// map files under a key is never looked at. The guard on what `List.all` answers reads what
+// `Map.keys` answers, which no position is, so what it may turn on is not bounded and the values
+// are left as every position is beside it.
 //
 // told apart at n: 2 groups of 2
-// told apart at m[key]: unread here
+// told apart at m[key]: 2 groups of 2
 // told apart at m[*]: unread somewhere
 module example.keymatched
 

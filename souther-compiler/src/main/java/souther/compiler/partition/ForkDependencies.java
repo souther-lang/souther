@@ -1,0 +1,124 @@
+package souther.compiler.partition;
+
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.PositionsAStatementReads;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.types.ModelOccurrence;
+
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+
+/**
+ * Which positions of the input a fork may turn on, as the tree the language's own operations stand
+ * in reads what decides it.
+ *
+ * <p>For the forks the reading of the runs could name no subject for: an {@code if} on what an
+ * operation over a container answers, and a fork inside an operation's own body whose condition is
+ * a closure the model handed it. Neither stands on a position, and each turns on what a statement
+ * the second reading makes reads.
+ *
+ * <p>An upper bound and not a reading of classes. A fork said to turn on these positions may tell
+ * apart any of them and nothing else; which classes go which way is not said, and a reader that
+ * puts a fork here puts nothing it says to classes. A statement only part of which was read, or
+ * one that reads an answer or a value the body bound, may turn on anything: that is
+ * {@link Dependency.Unknown}, never the part that was read.
+ *
+ * <p>Two questions keyed on constructs of the model ({@link ModelOccurrence}), and held apart
+ * because one construct can be asked both: what the condition of a fork the model wrote reads, and
+ * what the answer of a closure's body reads where an operation's fork is decided by it. A closure
+ * whose body is an {@code if} is both, and its condition reads less than the whole body. One
+ * construct read in more than one place is read the same way in each, and the positions of all of
+ * them are what it may turn on.
+ *
+ * @param byFork   what the condition of each fork the model wrote reads
+ * @param byAnswer what the answer of each closure body, by the construct it answers with, reads
+ */
+public record ForkDependencies(Map<ModelOccurrence, Dependency> byFork,
+                               Map<ModelOccurrence, Dependency> byAnswer) {
+
+    public static final ForkDependencies NONE = new ForkDependencies(Map.of(), Map.of());
+
+    public ForkDependencies {
+        byFork = Map.copyOf(byFork);
+        byAnswer = Map.copyOf(byAnswer);
+    }
+
+    /** What a construct that decides a fork may turn on. */
+    public sealed interface Dependency {
+
+        /** These positions and no other: none where it turns on nothing of the input. */
+        record Known(List<TermPath> positions) implements Dependency {
+
+            public Known {
+                positions = List.copyOf(positions);
+            }
+        }
+
+        /** Positions nothing here could bound. */
+        record Unknown() implements Dependency {}
+    }
+
+    /** What the condition of {@code fork} may turn on, or empty where nothing read it. */
+    public Optional<Dependency> ofTheFork(ModelOccurrence fork) {
+        return Optional.ofNullable(byFork.get(fork));
+    }
+
+    /** What the answer {@code answers} gives may turn on, or empty where nothing read it. */
+    public Optional<Dependency> ofTheAnswer(ModelOccurrence answers) {
+        return Optional.ofNullable(byAnswer.get(answers));
+    }
+
+    /** What a walk reads as it meets the constructs that decide forks. */
+    static final class Gathered {
+
+        private final Bounds forks = new Bounds();
+        private final Bounds answers = new Bounds();
+
+        /** That the condition of {@code fork} states {@code stated}, wherever else it was read. */
+        void forkReads(ModelOccurrence fork, Proposition stated) {
+            forks.reads(fork, stated);
+        }
+
+        /** That the answer {@code answers} gives states {@code stated} on one application. */
+        void answerReads(ModelOccurrence answers, Proposition stated) {
+            this.answers.reads(answers, stated);
+        }
+
+        /** That nothing bounds what the answer {@code answers} gives may turn on. */
+        void answerUnbounded(ModelOccurrence answers) {
+            this.answers.unknown.add(answers);
+        }
+
+        ForkDependencies read() {
+            return new ForkDependencies(forks.read(), answers.read());
+        }
+    }
+
+    /** One question's positions, by construct, with the constructs nothing bounds. */
+    private static final class Bounds {
+
+        private final Map<ModelOccurrence, Set<TermPath>> known = new LinkedHashMap<>();
+        private final Set<ModelOccurrence> unknown = new LinkedHashSet<>();
+
+        void reads(ModelOccurrence decides, Proposition stated) {
+            Optional<List<TermPath>> positions = PositionsAStatementReads.of(stated);
+            if (positions.isEmpty()) {
+                unknown.add(decides);
+                return;
+            }
+            known.computeIfAbsent(decides, _ -> new LinkedHashSet<>()).addAll(positions.get());
+        }
+
+        Map<ModelOccurrence, Dependency> read() {
+            Map<ModelOccurrence, Dependency> out = new LinkedHashMap<>();
+            known.forEach((decides, positions) ->
+                    out.put(decides, new Dependency.Known(List.copyOf(positions))));
+            unknown.forEach(decides -> out.put(decides, new Dependency.Unknown()));
+            return out;
+        }
+    }
+}

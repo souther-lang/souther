@@ -173,8 +173,43 @@ public sealed interface Condition {
      *            a plan handed its arms: an operation that applies the block it was handed twice
      *            settles the fork inside it twice, on values of its own, so the two are two
      *            decisions — and the number that told them apart was the walk's and not theirs
+     * @param decidedBy the construct whose answer decides the fork, where what decides it is one
+     *                  ({@link #decidingConstructOf}): what a reading that could name no subject
+     *                  for the fork can still ask another reading about
      */
-    record Arm(ArmOccurrence arm) implements Condition {
+    record Arm(ArmOccurrence arm, Optional<ConstructOccurrence> decidedBy) implements Condition {
+
+        public Arm {
+            Objects.requireNonNull(arm, "an arm of some fork");
+            Objects.requireNonNull(decidedBy, "decided by some construct, or by none said");
+        }
+
+        /**
+         * The construct whose answer {@code decides} comes to, past the names bound on the way to
+         * it: a comparison, a call, a fork. Empty where it ends at anything else.
+         *
+         * <p>Past the names because that is what an expansion leaves of a closure applied in an
+         * operation's body: its parameter bound to what the operation handed it, around the body
+         * the model wrote. The same answer for the closure as written, so the two readings of a
+         * body meet at the construct the model wrote.
+         */
+        public static Optional<ConstructOccurrence> decidingConstructOf(Core decides) {
+            Core at = Core.withoutStanding(decides);
+            while (at instanceof Core.LetIn let) {
+                at = Core.withoutStanding(let.body());
+            }
+            ConstructOccurrence construct = switch (at) {
+                case Core.Binary binary -> binary.occurrence();
+                case Core.Call call -> call.occurrence();
+                case Core.PreservedCall call -> call.occurrence();
+                case Core.If iff -> iff.occurrence();
+                case Core.Match match -> match.occurrence();
+                default -> null;
+            };
+            // A construct no author wrote is one place for every such construct, and so names none.
+            return construct == null || !construct.isWritten() ? Optional.empty()
+                    : Optional.of(construct);
+        }
 
         /** Another arm of the same fork. */
         @Override

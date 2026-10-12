@@ -68,6 +68,12 @@ final class WhatAnAnswerSays {
             public List<PathDecision> everyWayInIsRuledOut(List<Proof> each) {
                 return List.of();
             }
+
+            @Override
+            public List<PathDecision> itsClosureIsAppliedToNothing(List<String> containers,
+                                                                   List<PathDecision> decisions) {
+                return decisions;
+            }
         });
     }
 
@@ -114,6 +120,12 @@ final class WhatAnAnswerSays {
 
             @Override
             public List<TypeSymbol> everyWayInIsRuledOut(List<Proof> each) {
+                return List.of();
+            }
+
+            @Override
+            public List<TypeSymbol> itsClosureIsAppliedToNothing(List<String> containers,
+                                                                 List<PathDecision> decisions) {
                 return List.of();
             }
         });
@@ -164,6 +176,67 @@ final class WhatAnAnswerSays {
             @Override
             public String everyWayInIsRuledOut(List<Proof> each) {
                 return null;
+            }
+
+            @Override
+            public String itsClosureIsAppliedToNothing(List<String> containers,
+                                                       List<PathDecision> decisions) {
+                return null;
+            }
+        });
+    }
+
+    /** The containers a proof says the closure the place is in is applied over and no rule leaves
+     *  an element, or none where the proof says something else. */
+    static List<String> containersAppliedToNothingIn(Proof proof) {
+        return proof.said(new Proof.Words<List<String>>() {
+
+            @Override
+            public List<String> conditionsThatCannotAllHold(List<PathDecision> decisions) {
+                return List.of();
+            }
+
+            @Override
+            public List<String> outsideInputDomain(TermPath position,
+                                                   NumericDomain.Bounds admits,
+                                                   PathDecision departure) {
+                return List.of();
+            }
+
+            @Override
+            public List<String> everyCaseRefused(String position, List<TypeSymbol> cases) {
+                return List.of();
+            }
+
+            @Override
+            public List<String> noCaseTheValueCanBeIsTaken(List<TypeSymbol> canBe,
+                                                           List<TypeSymbol> cases) {
+                return List.of();
+            }
+
+            @Override
+            public List<String> theDeclarationHoldsNoneOf(String position,
+                                                          List<TypeSymbol> declared,
+                                                          List<TypeSymbol> cases) {
+                return List.of();
+            }
+
+            @Override
+            public List<String> theDeclarationHoldsNothingElse(String position,
+                                                               List<TypeSymbol> declared,
+                                                               List<TypeSymbol> cases) {
+                return List.of();
+            }
+
+            @Override
+            public List<String> everyWayInIsRuledOut(List<Proof> each) {
+                return List.of();
+            }
+
+            @Override
+            public List<String> itsClosureIsAppliedToNothing(List<String> containers,
+                                                             List<PathDecision> decisions) {
+                return containers;
             }
         });
     }

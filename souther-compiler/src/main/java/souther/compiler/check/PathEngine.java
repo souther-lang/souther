@@ -7,6 +7,7 @@ import souther.compiler.semantics.NumericResult;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Contract.Guard;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
@@ -246,6 +247,13 @@ final class PathEngine {
         return predicates.assumeMeaning(stated, cond, k, at, positive, places);
     }
 
+    /** {@code k} past what has to hold to stand somewhere no condition of the body leads, such as
+     *  inside a closure: {@code stated}, taken in as far as a path can hold it. */
+    Predicates.Assumed holding(Proposition stated, Known k, Denotations at,
+                               MeaningAssumptions.InputPlaces places) {
+        return predicates.assumeHolding(stated, k, at, places);
+    }
+
     /**
      * What a {@code match} arm's body is read under.
      *
@@ -262,9 +270,27 @@ final class PathEngine {
         Entered in = arm.binder() == null
                 ? new Entered(k, at)
                 : opening(arm, scrutinee, k, at);
-        return whatTakingThisCaseSays(arm, scrutinee,
+        Entered taken = whatTakingThisCaseSays(arm, scrutinee,
                 assuming(answeredBy(scrutinee, in.at()), answered(arm, scrutinee),
                         guard -> impliedBy(guard, arm.pattern()), in));
+        return new Entered(takingItsCases(arm, scrutinee, taken.known(), at), taken.at());
+    }
+
+    /**
+     * {@code k} with the value {@code arm} matched one of the cases it selects, which is what being
+     * inside the arm settles of it, so a fork further in on the same value is read under it.
+     *
+     * <p>Only what the arm selects. An arm left the cases the arms before it did not take is what
+     * the value's type divides into less those, which this does not read, so it settles nothing; an
+     * arm that binds the whole value selects nothing.
+     *
+     * <p>Asked on its own as well, by a reader that wants to know whether the cases are what leave
+     * the arm nothing, apart from what opening the value says.
+     */
+    Known takingItsCases(Core.Case arm, Core scrutinee, Known k, Denotations at) {
+        CasesLeft selected = arm.pattern() == null ? null : CasesLeft.selectedBy(arm.pattern());
+        FactSubject value = selected == null ? null : terms.subjectOf(scrutinee, at);
+        return value == null ? k : k.inCases(value, selected);
     }
 
     /**

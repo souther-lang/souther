@@ -22,8 +22,10 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.reading.CoverageRead;
+import souther.compiler.reading.Decision;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.TheRestOfTheBlock;
+import souther.compiler.reading.WayIn;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
@@ -1484,6 +1486,9 @@ public final class Generator {
         // for one, so a walk per arm builds every cell of it again for an answer that does not
         // depend on which arm is asking.
         List<WhereToLook>cells = placesFor(new LinkedHashSet<>(armsOwed), offered);
+        // And the ways into the arms inside closures, read off the ways once for every arm asked.
+        Map<ArmProbe, List<WayIn>> namedWays =
+                waysNamedInto(read, axes.subject().partitioning().armsNamed());
         Set<ArmProbe> notOffered = new LinkedHashSet<>();
         // Which arms each held-back group could have been searched at, kept per group so that the
         // summary at the end can be counted off the entries rather than worked out a second way.
@@ -1504,7 +1509,7 @@ public final class Generator {
                 // says so. Nothing is composed a second time for what a run was seen doing.
                 continue;
             }
-            for (WhereToLook place : whereToLookFor(probe, read, cells, axes)) {
+            for (WhereToLook place : whereToLookFor(probe, read, cells, namedWays, axes)) {
                 if (composed.size() >= budget.rowLimit()) {
                     cutOff.add(probe);
                     break;
@@ -1853,7 +1858,8 @@ public final class Generator {
                             placesFor(new LinkedHashSet<>(arm.occurrences()), offered);
                     GeneratedRow seen = null;
                     for (ArmProbe probe : arm.occurrences()) {
-                        for (WhereToLook place : whereToLookFor(probe, read, here, axes)) {
+                        for (WhereToLook place : whereToLookFor(probe, read, here, namedWays,
+                                axes)) {
                             int stopsBefore = looking.stops();
                             switch (witnessFor(axes, place.at, check, trial, ran,
                                     List.of(new Purpose.ForAReplacement(asked)), looking::of,
@@ -2096,11 +2102,19 @@ public final class Generator {
     private static List<WhereToLook>whereToLookFor(
             ArmProbe probe, souther.compiler.reading.CoverageRead.Read read,
             List<WhereToLook>cells,
+            Map<ArmProbe, List<WayIn>> namedWays,
             MeasuredInput.MeasuredAxes axes) {
         List<WhereToLook>out = new ArrayList<>();
         for (WhereToLook place : cells) {
             if (place.claims.contains(probe)) {
                 out.add(place);
+            }
+        }
+        for (WayIn way : namedWays.getOrDefault(probe, List.of())) {
+            CellSelection at =
+                    InteractionCells.at(way, way.decisions().getLast().claims(), axes);
+            if (at != null && out.stream().noneMatch(already -> already.at.sameAs(at))) {
+                out.add(new WhereToLook(at, List.of(probe)));
             }
         }
         if (read.armAt(probe) instanceof PathAccess.Ways ways) {
@@ -2118,6 +2132,45 @@ public final class Generator {
                     out.add(new WhereToLook(at, List.of(probe)));
                 }
             }
+        }
+        return out;
+    }
+
+    /**
+     * The ways into each arm of a {@code match} on what a closure was handed, which the reading of
+     * the runs names no way into and the tree the operations stand in names the case of
+     * ({@link ArmsNamed}): each way a run was read taking to the arm, with every such arm on it
+     * read as the case it is. Read off the ways once, by the arm each ends at.
+     *
+     * <p>A run down the arm is one application, handed one element of that case, so a row holding
+     * such an element is where to look. Only where to look: what a run through the row does is
+     * what watching it says, and the operation may stop before the element. Two applications on
+     * the way about one position are looked for in one element, which a row of one element of
+     * the case both ask meets, and which two cases leave no cell for — nowhere to look, and
+     * nothing said about the arm.
+     */
+    private static Map<ArmProbe, List<WayIn>> waysNamedInto(CoverageRead.Read read,
+                                                            ArmsNamed named) {
+        Map<ArmProbe, List<WayIn>> out = new HashMap<>();
+        for (WayIn way : read.taken()) {
+            if (way.decisions().isEmpty()
+                    || !(way.decisions().getLast().claims().at() instanceof ControlPlace.Arm arm)
+                    || arm.probe().isEmpty()
+                    || !(read.arms().get(arm.probe().get())
+                            instanceof PathAccess.Unsupported(var why))
+                    || why != PathAccess.Unsupported.Why.RUNS_WHERE_SOMETHING_CALLS_IT) {
+                continue;
+            }
+            List<Decision> asCases = new ArrayList<>();
+            for (Decision decision : way.decisions()) {
+                asCases.add(decision.constrains()
+                        instanceof souther.compiler.reading.Condition.Arm at
+                        && named.of(at).orElse(null)
+                                instanceof souther.compiler.reading.Condition.Case taken
+                        ? new Decision(taken, decision.claims())
+                        : decision);
+            }
+            out.computeIfAbsent(arm.probe().get(), _ -> new ArrayList<>()).add(new WayIn(asCases));
         }
         return out;
     }

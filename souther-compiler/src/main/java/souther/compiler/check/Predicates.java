@@ -1011,6 +1011,13 @@ final class Predicates {
                         meant.shapeRead(), meant.notTaken());
     }
 
+    /** {@code k} with what {@code stated} states taken as holding, where it is what has to hold to
+     *  stand somewhere and no condition of the body states it. */
+    Assumed assumeHolding(Proposition stated, Known k, Denotations at,
+                          MeaningAssumptions.InputPlaces places) {
+        return MeaningAssumptions.assumed(stated, true, k, terms, places, at);
+    }
+
     /**
      * What taking a clause as holding does to what is known, before it is given a state to do it to.
      *

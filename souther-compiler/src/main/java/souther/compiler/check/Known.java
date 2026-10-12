@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.collect.AppendOnly;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
@@ -9,12 +10,14 @@ import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * What holds where the walk stands: numeric relations, predicates known to hold or to fail, relations
- * known of every element of a container, and the terms an assumption named — which is what makes a
+ * known of every element of a container, which cases a value an arm or a condition on the way
+ * settled may still be, and the terms an assumption named — which is what makes a
  * computed value one a clause may be read against. Threaded functionally through the walk, as the
  * domain alone once was.
  *
@@ -31,7 +34,12 @@ import java.util.Map;
  * nothing asks it whether two paths know alike — a reader with that question asks what each knows.
  */
 record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantified,
-                     AppendOnly<FactSubject, Boolean> spoken, Unguarded unguarded) {
+                     AppendOnly<FactSubject, Boolean> spoken, Unguarded unguarded,
+                     Map<FactSubject, CasesLeft> cases) {
+
+    Known {
+        cases = Map.copyOf(cases);
+    }
 
     /** What holds of the values here whatever the path did — what a type guarantees of a value and
      * what a name was given. It carries no quantifiers and no spoken terms: those decide which
@@ -106,20 +114,53 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
     static Known top(ClosedStates closures) {
         return new Known(ConstraintState.top(FactSubject.inOneOrder(), closures), List.of(),
                 AppendOnly.empty(),
-                new Unguarded(ConstraintState.top(FactSubject.inOneOrder(), closures)));
+                new Unguarded(ConstraintState.top(FactSubject.inOneOrder(), closures)), Map.of());
     }
 
     /** This, with {@code f rel 0} taken as holding as far as {@code held} reaches. */
     Known taking(LinearForm<FactSubject> f, Rel rel, Held held, Map<FactSubject, Granularity> kinds) {
         return new Known(constraints.taking(f, rel, kinds), quantified, spoken,
-                held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, kinds) : unguarded);
+                held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, kinds) : unguarded, cases);
     }
 
     /** This, with the predicate {@code key} taken as holding — or as failing, where {@code positive}
      * is false — as far as {@code held} reaches. */
     Known taking(FactSubject key, boolean positive, Held held) {
         return new Known(constraints.taking(key, positive), quantified, spoken,
-                held == Held.OF_THE_VALUE ? unguarded.taking(key, positive) : unguarded);
+                held == Held.OF_THE_VALUE ? unguarded.taking(key, positive) : unguarded, cases);
+    }
+
+    /**
+     * This, with the value {@code value} one of {@code left} on this path, or reaching nothing where
+     * what the path already left it holds none of them.
+     *
+     * <p>On the path only. Which case a value is, is what an arm or a condition on the way settled,
+     * and a value's type says nothing of it.
+     *
+     * <p>What was left before and {@code left} are met ({@link CasesLeft#meet}). Two answers of
+     * unlike kinds — an optional's carriers beside a sum's cases — are about two values that were
+     * named alike, and they say nothing of each other, so the first is kept.
+     */
+    Known inCases(FactSubject value, CasesLeft left) {
+        CasesLeft was = cases.get(value);
+        if (was == null) {
+            Map<FactSubject, CasesLeft> more = new HashMap<>(cases);
+            more.put(value, left);
+            return new Known(constraints, quantified, spoken, unguarded, more);
+        }
+        if (!was.atoms().getFirst().getClass().equals(left.atoms().getFirst().getClass())) {
+            return this;
+        }
+        CasesLeft both = was.meet(left);
+        if (both == null) {
+            return reachingNothing();
+        }
+        if (both.equals(was)) {
+            return this;
+        }
+        Map<FactSubject, CasesLeft> narrowed = new HashMap<>(cases);
+        narrowed.put(value, both);
+        return new Known(constraints, quantified, spoken, unguarded, narrowed);
     }
 
     /**
@@ -132,7 +173,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * the program never builds rather than one it builds wrongly.
      */
     Known reachingNothing() {
-        return new Known(constraints.shownToHoldNothing(), quantified, spoken, unguarded);
+        return new Known(constraints.shownToHoldNothing(), quantified, spoken, unguarded, cases);
     }
 
     /**
@@ -152,7 +193,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
                 all = all.with(term, true);
             }
         }
-        return all == spoken ? this : new Known(constraints, quantified, all, unguarded);
+        return all == spoken ? this : new Known(constraints, quantified, all, unguarded, cases);
     }
 
     /** Whether an assumption on this path named {@code term}. */
@@ -166,6 +207,6 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
         }
         List<Quantified> all = new ArrayList<>(quantified);
         all.addAll(more);
-        return new Known(constraints, List.copyOf(all), spoken, unguarded);
+        return new Known(constraints, List.copyOf(all), spoken, unguarded, cases);
     }
 }
