@@ -120,6 +120,9 @@ public final class Partitions {
      *                language's operations stand in names it. Beside the lines and not a line: an
      *                arm is a case, which the type divides already, and what this adds is which
      *                position an arm the reading of the runs could not name is about
+     * @param dependencies which positions each construct deciding a fork may turn on, read by the
+     *                same walk: what a fork the reading of the runs could name no subject for may
+     *                tell apart, and nothing about how
      */
     public record Partitioning(List<PositionMeasurements> measurements,
                                List<StandingQuestion> unanswered,
@@ -132,7 +135,8 @@ public final class Partitions {
                                MeasureClosure.OfThePartition partitionClosure,
                                MeasureClosure.OfTheBorder borderClosure,
                                souther.compiler.inputs.EmptyInput inputIsEmpty,
-                               ArmsNamed armsNamed) {
+                               ArmsNamed armsNamed,
+                               ForkDependencies dependencies) {
         public Partitioning {
             measurements = List.copyOf(measurements);
             unanswered = List.copyOf(unanswered);
@@ -465,7 +469,7 @@ public final class Partitions {
                 // asking per position or per rule would be asking what neither of them decides.
                 quantities.emptiness().orElse(null),
                 // No body is read here.
-                ArmsNamed.NONE);
+                ArmsNamed.NONE, ForkDependencies.NONE);
     }
 
     /**
@@ -957,7 +961,8 @@ public final class Partitions {
                                             List<LineDrawn> between,
                                             ReachingCuts reaching,
                                             MeasureClosure.Drawing drawing,
-                                            ArmsNamed armsNamed) {
+                                            ArmsNamed armsNamed,
+                                            ForkDependencies dependencies) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
@@ -1057,7 +1062,7 @@ public final class Partitions {
                 // Carried across. Whether the rules leave the input a value is the declarations'
                 // answer, and a body drawing lines on what they left does not change it.
                 base.inputIsEmpty(),
-                armsNamed);
+                armsNamed, dependencies);
     }
 
     /**

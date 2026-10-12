@@ -127,7 +127,8 @@ public sealed interface BodyDistinction {
      *
      * <p>And with the case each arm of a {@code match} is where the tree that runs could not name
      * it ({@link ArmsNamed}): such an arm is about a position, and which class went which way
-     * through it is not read.
+     * through it is not read. And with which positions a fork it could name no subject for may turn
+     * on ({@link ForkDependencies}), which is what such a fork leaves unread and all it does.
      *
      * <p>A way through a place {@code arrives} proves nothing reaches is a way no run takes. The
      * reading of the runs keeps every way it could not rule out itself, and what the model's rules
@@ -138,6 +139,7 @@ public sealed interface BodyDistinction {
                                            PathReachability.Answers arrives) {
         return WhatABodyTellsApart.of(read, subject.axes(),
                 subject.partitioning().rulesWithoutALine(),
-                subject.partitioning().armsNamed(), arrives);
+                subject.partitioning().armsNamed(), subject.partitioning().dependencies(),
+                arrives);
     }
 }

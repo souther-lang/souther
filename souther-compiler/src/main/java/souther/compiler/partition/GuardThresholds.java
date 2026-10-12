@@ -92,7 +92,9 @@ public final class GuardThresholds {
      * {@code c} on the low side and are two different rules about it — so it is read where the
      * operator is still in hand, and which values arrive is asked of the reading of the whole body.
      *
-     * @param armsNamed the case each arm of a {@code match} is, which the same walk names
+     * @param armsNamed    the case each arm of a {@code match} is, which the same walk names
+     * @param dependencies which positions each construct deciding a fork may turn on, which the
+     *                     same walk reads
      */
     public record Guards(List<LineEvidence> evidence,
                          RulesWithNoLine noLine,
@@ -100,11 +102,12 @@ public final class GuardThresholds {
                          ReachingCuts reaching,
                          List<ComparisonReadings.ForkMet> forks,
                          Map<ConditionOccurrence, Citation> conditionsMet,
-                         ArmsNamed armsNamed) {
+                         ArmsNamed armsNamed,
+                         ForkDependencies dependencies) {
 
         public static final Guards NONE =
                 new Guards(List.of(), RulesWithNoLine.NONE, List.of(), ReachingCuts.NONE,
-                        List.of(), Map.of(), ArmsNamed.NONE);
+                        List.of(), Map.of(), ArmsNamed.NONE, ForkDependencies.NONE);
 
         public Guards {
             evidence = List.copyOf(evidence);
@@ -322,7 +325,7 @@ public final class GuardThresholds {
         }
         return new Guards(found, withoutALine.found(), between, cuts.made(),
                 comparisons.forks(), comparisons.conditionsMet(),
-                comparisons.armsNamed());
+                comparisons.armsNamed(), comparisons.dependencies());
     }
 
     /**

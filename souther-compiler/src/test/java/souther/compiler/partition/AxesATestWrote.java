@@ -36,7 +36,8 @@ public final class AxesATestWrote {
         Partitions.Partitioning over = asAMeasurement(behavior, axes);
         return new Partitions.Partitioning(over.measurements(), List.of(), Set.of(), List.of(),
                 List.of(), List.of(), Map.of(along, List.copyOf(lines)), ReachingCuts.NONE,
-                over.partitionClosure(), over.borderClosure(), null, ArmsNamed.NONE);
+                over.partitionClosure(), over.borderClosure(), null, ArmsNamed.NONE,
+                ForkDependencies.NONE);
     }
 
     /** A measurement of {@code behavior} that divides its positions by exactly {@code axes}. */
@@ -55,6 +56,7 @@ public final class AxesATestWrote {
                 List.of(), new LinesRead());
         return new Partitions.Partitioning(measurements, List.of(), Set.of(), List.of(), List.of(),
                 List.of(), Map.of(), ReachingCuts.NONE,
-                closed.partition(), closed.border(), null, ArmsNamed.NONE);
+                closed.partition(), closed.border(), null, ArmsNamed.NONE,
+                ForkDependencies.NONE);
     }
 }

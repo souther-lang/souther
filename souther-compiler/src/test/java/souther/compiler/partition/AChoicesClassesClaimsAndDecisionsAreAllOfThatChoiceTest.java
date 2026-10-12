@@ -12,6 +12,7 @@ import souther.compiler.coverage.SiteNumbering;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -56,7 +57,7 @@ class AChoicesClassesClaimsAndDecisionsAreAllOfThatChoiceTest {
      *  {@link #at}, so that a fixture naming one number names one decision both ways. */
     private static List<souther.compiler.reading.Condition> settling(int probe) {
         return List.of(new souther.compiler.reading.Condition.Arm(
-                Numberings.armOfForkAt(probe)));
+                Numberings.armOfForkAt(probe), Optional.empty()));
     }
 
     /** The numbering this fixture's places are of. One of them, so that two places written here as
@@ -160,9 +161,11 @@ class AChoicesClassesClaimsAndDecisionsAreAllOfThatChoiceTest {
         assertNull(group.at(1), "the two ways agree on nothing");
         assertNull(group.settledAt(1), "so there is nothing there to ask a row for");
         assertEquals(Set.of(new souther.compiler.reading.Condition.Arm(
-                        Numberings.armOfForkAt(9)),
-                        new souther.compiler.reading.Condition.Arm(Numberings.armOfForkAt(10)),
-                        new souther.compiler.reading.Condition.Arm(Numberings.armOfForkAt(20))),
+                        Numberings.armOfForkAt(9), Optional.empty()),
+                        new souther.compiler.reading.Condition.Arm(Numberings.armOfForkAt(10),
+                                Optional.empty()),
+                        new souther.compiler.reading.Condition.Arm(Numberings.armOfForkAt(20),
+                                Optional.empty())),
                 group.settledAt(0),
                 "while the choice they do agree on is one");
     }

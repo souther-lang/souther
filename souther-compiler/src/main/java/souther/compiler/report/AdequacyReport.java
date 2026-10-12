@@ -4697,7 +4697,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // A fork the reading could not name a position for. There is nothing to name it by but
             // where it is, which is what the reading already decided rather than a second answer
             // here.
-            case Condition.Arm(var arm) -> {
+            case Condition.Arm(var arm, var _) -> {
                 out.put("kind", "arm");
                 constructId(out.putObject("construct"), arm.fork());
                 out.put("part", arm.part());

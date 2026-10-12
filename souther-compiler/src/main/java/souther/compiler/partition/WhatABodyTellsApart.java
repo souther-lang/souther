@@ -18,6 +18,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.Decision;
 import souther.compiler.reading.WayIn;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
 
@@ -68,6 +69,8 @@ final class WhatABodyTellsApart {
     private final List<RuleWithoutALine> noLine;
     /** The case each arm of a {@code match} is, where the tree the operations stand in names it. */
     private final ArmsNamed armsNamed;
+    /** Which positions what decides a fork may turn on, where the same tree reads it. */
+    private final ForkDependencies dependencies;
     /** What the model's rules prove arrives at each place a way passes. */
     private final PathReachability.Answers arrives;
     /** Which classes of two positions can be in one value, asked of the positions a way stands
@@ -78,11 +81,13 @@ final class WhatABodyTellsApart {
 
     private WhatABodyTellsApart(MeasuredInput.MeasuredAxes measured,
                                 List<RuleWithoutALine> noLine, ArmsNamed armsNamed,
+                                ForkDependencies dependencies,
                                 PathReachability.Answers arrives) {
         this.measured = measured;
         this.axes = measured.axes();
         this.noLine = noLine;
         this.armsNamed = armsNamed;
+        this.dependencies = dependencies;
         this.arrives = arrives;
         this.coexistence = ClassCoexistence.among(axes);
         this.unread = new boolean[axes.size()];
@@ -95,16 +100,18 @@ final class WhatABodyTellsApart {
     /**
      * What the body read as {@code read} tells apart at each position {@code measured}, where
      * {@code noLine} is what the reading of the input found about the rules it drew no line for and
-     * {@code armsNamed} the case each arm of a {@code match} is, read where the operations stand,
-     * and {@code arrives} what the model's rules prove arrives at each place a way passes.
+     * {@code armsNamed} the case each arm of a {@code match} is and {@code dependencies} which
+     * positions what decides a fork may turn on, both read where the operations stand, and
+     * {@code arrives} what the model's rules prove arrives at each place a way passes.
      */
     static Map<AxisId, BodyDistinction> of(CoverageRead.Read read,
                                            MeasuredInput.MeasuredAxes measured,
                                            List<RuleWithoutALine> noLine,
                                            ArmsNamed armsNamed,
+                                           ForkDependencies dependencies,
                                            PathReachability.Answers arrives) {
         WhatABodyTellsApart reading =
-                new WhatABodyTellsApart(measured, noLine, armsNamed, arrives);
+                new WhatABodyTellsApart(measured, noLine, armsNamed, dependencies, arrives);
         List<Axis> axes = measured.axes();
         for (WayIn way : read.taken()) {
             reading.take(way);
@@ -136,8 +143,8 @@ final class WhatABodyTellsApart {
 
         /**
          * About the positions {@code ats}, and putting nothing it says there to classes: an arm of
-         * a fork on what an operation over a container answers, which reads those positions and
-         * no other.
+         * a fork whose deciding statement may turn on those positions and no other
+         * ({@link ForkDependencies}).
          */
         record AboutThese(List<Integer> ats) implements Placed {}
 
@@ -190,13 +197,14 @@ final class WhatABodyTellsApart {
             if (named.isPresent()) {
                 return withheld(placing(named.get()));
             }
-            // An arm of a fork on what an operation over a container answers — `List.all(...)` —
-            // is about the positions what the operation states reads, and which class went which
-            // way is the statement's to say and not this arm's. About those and no other, so a
-            // position it never reads is told apart by the ways that do read it.
-            Optional<List<TermPath>> reads = armsNamed.reads(arm);
-            if (reads.isPresent()) {
-                List<Integer> ats = axesReading(reads.get());
+            // A fork on what an operation over a container answers — `List.all(...)` — or a fork of
+            // the operation's own body on what a closure the model handed it answers may turn on
+            // the positions what decides it reads, and on no other. Which class went which way is
+            // not this arm's to say, so it puts nothing to classes there; a position it cannot
+            // turn on is told apart by the ways that do read it.
+            Optional<ForkDependencies.Dependency> turnsOn = dependencyOf(arm);
+            if (turnsOn.orElse(null) instanceof ForkDependencies.Dependency.Known(var positions)) {
+                List<Integer> ats = axesReading(positions);
                 return ats.isEmpty() ? new Placed.AboutNoPosition() : new Placed.AboutThese(ats);
             }
         }
@@ -219,6 +227,34 @@ final class WhatABodyTellsApart {
                 yield new Placed.UnderTheCases(List.copyOf(out));
             }
         };
+    }
+
+    /**
+     * What decides {@code arm}'s fork may turn on: the fork's own, where the model wrote it, and
+     * otherwise the construct whose answer decides it — the body of a closure the model handed the
+     * operation the fork stands in, or a call of another operation that construct stands for. Empty
+     * where none of them was read.
+     *
+     * <p>A construct of an operation's body stands for that operation's call only where the fork
+     * stands outside the operation: inside it, the construct is a part of what the operation
+     * computes, and what the call answers is nothing the fork is asked.
+     */
+    private Optional<ForkDependencies.Dependency> dependencyOf(
+            souther.compiler.reading.Condition.Arm arm) {
+        Optional<ForkDependencies.Dependency> asWritten =
+                ModelOccurrence.statedAt(arm.arm().fork()).flatMap(dependencies::of);
+        if (asWritten.isPresent() || arm.decidedBy().isEmpty()) {
+            return asWritten;
+        }
+        ConstructOccurrence decides = arm.decidedBy().get();
+        Optional<ModelOccurrence> stated = ModelOccurrence.statedAt(decides);
+        if (stated.isPresent()) {
+            return dependencies.of(stated.get());
+        }
+        Optional<ModelOccurrence> called = ModelOccurrence.operationCalledAround(decides);
+        return called.isEmpty()
+                || called.equals(ModelOccurrence.operationCalledAround(arm.arm().fork()))
+                ? Optional.empty() : dependencies.of(called.get());
     }
 
     /**

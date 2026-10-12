@@ -203,9 +203,10 @@ final class Coverages {
                             new souther.compiler.partition.MeasureClosure
                                     .Drawing.NoneWasMade(behavior.name());
                 },
-                // And the case each arm of a `match` is, which the walk of the comparisons names
-                // where the reading of the runs may not.
-                guards.armsNamed()), quantities,
+                // And the case each arm of a `match` is, and which positions what decides a fork
+                // may turn on, which the walk of the comparisons reads where the reading of the
+                // runs may not.
+                guards.armsNamed(), guards.dependencies()), quantities,
                 // Where this reading met each condition it places itself, beside the geometry and
                 // not inside it. A report points at a condition and an answer says which condition
                 // it is, and the two are kept apart so that moving one leaves the other alone.

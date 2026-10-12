@@ -170,7 +170,8 @@ final class CoverageNaming implements Naming<Outcome> {
             return null;
         }
         Condition.Case taken = caseOf(match, part);
-        return one(new Decision(taken == null ? new Condition.Arm(place.arm()) : taken, claim));
+        return one(new Decision(taken == null ? new Condition.Arm(place.arm(),
+                Condition.Arm.decidingConstructOf(match.scrutinee())) : taken, claim));
     }
 
     /**
@@ -221,10 +222,12 @@ final class CoverageNaming implements Naming<Outcome> {
         Condition what = switch (Choice.decidingArm(fork, part)) {
             case Choice.Decides.ACondition(Core.If iff, boolean holding) -> {
                 Condition.Case truth = truthOf(iff.cond(), holding);
-                yield truth == null ? new Condition.Arm(place.arm()) : truth;
+                yield truth == null ? new Condition.Arm(place.arm(),
+                        Condition.Arm.decidingConstructOf(iff.cond())) : truth;
             }
-            case Choice.Decides.ItWasBuilt _ -> new Condition.Arm(place.arm());
-            case Choice.Decides.ItDeparted _ -> new Condition.Arm(place.arm());
+            // Whether the invariant held is decided by nothing written in the body.
+            case Choice.Decides.ItWasBuilt _ -> new Condition.Arm(place.arm(), Optional.empty());
+            case Choice.Decides.ItDeparted _ -> new Condition.Arm(place.arm(), Optional.empty());
             // Named by matchCase, which is asked of the match and not of a fork in general.
             case Choice.Decides.ACase _ -> throw new IllegalStateException(
                     "a case of a match at " + fork.pos() + " was asked of as an arm of a fork");
