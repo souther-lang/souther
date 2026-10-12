@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -277,10 +278,13 @@ class WhatAnOptionMadeByAClosureHoldsIsWhatTheClosureMadeTest {
      */
     @Test
     void aRowOfferedForTheComparisonInsideTheClosureFilesItUnderTheKey() {
+        // The comparison inside the closure and the one over what it made draw the same lines, and
+        // each is offered its rows.
         List<Row> rows = offered(INSIDE_THE_CLOSURE).stream()
                 .filter(row -> row.label().contains("m[*]")).toList();
 
-        assertEquals(4, rows.size(), rows::toString);
+        assertEquals(Set.of("m[*] = 1", "m[*] = 0", "1 < m[*]", "m[*] < 0"),
+                rows.stream().map(Row::label).collect(Collectors.toSet()), rows::toString);
         for (Row row : rows) {
             assertTrue(row.entries().containsKey(row.key()), row::toString);
             long value = row.entries().get(row.key());
