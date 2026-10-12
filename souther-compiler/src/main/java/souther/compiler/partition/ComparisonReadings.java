@@ -631,6 +631,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             case Core.Match match -> {
                 if (live && reads.pathOf(match.scrutinee(), in.newtypes())
                         instanceof PathResolution.At(TermPath at) && at.insideAContainer()
+                        && !in.casesMatched().contains(at)
                         && Reachability.of(new WayToTheBorder(assumed),
                                 in.read().quantities().region())
                                 instanceof Reachability.Reaching) {

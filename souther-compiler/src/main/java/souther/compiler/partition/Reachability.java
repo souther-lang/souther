@@ -47,9 +47,9 @@ public sealed interface Reachability {
      * @param declarations what the declarations leave, which the way narrows
      */
     static Reachability of(WayToTheBorder way, SearchRegion declarations) {
-        Reachability whole = taking(way, declarations, Ways.ONE);
-        if (!(whole instanceof Reaching)) {
-            return whole;
+        Reachability taken = taking(way, declarations, Ways.ONE);
+        if (!(taken instanceof Reaching whole)) {
+            return taken;
         }
         // Where a condition on the way came out one of several ways, a row is past it along one
         // of them: the way is each of them as well, and a search looks along each. Every row is
@@ -76,9 +76,9 @@ public sealed interface Reachability {
             // first, each narrower than the way, and past them the way is looked along whole —
             // which every row past it is on, so none of them being closed proves nothing — and the
             // conditions it was not split at say so.
-            return taking(way, declarations, new Ways.Whole(way.severalWays(), figure, along));
+            return whole.splitAs(new Ways.Whole(way.severalWays(), figure, along));
         }
-        return along.isEmpty() ? closed : taking(way, declarations, new Ways.Each(along));
+        return along.isEmpty() ? closed : whole.splitAs(new Ways.Each(along));
     }
 
     /** {@code way} read in its own vocabularies, split as {@code ways} says. */
@@ -221,6 +221,12 @@ public sealed interface Reachability {
          *  split. */
         public List<Reaching> along() {
             return ways.along();
+        }
+
+        /** The same way, split as {@code split} says. What the way asks of a row is the same
+         *  however it is split, so it is not worked out again. */
+        Reaching splitAs(Ways split) {
+            return new Reaching(region, requirements, truths, boundedOnTheWay, split, declined);
         }
     }
 
