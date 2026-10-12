@@ -199,9 +199,15 @@ final class ConstructionPlan {
      * @param holds    from how few to how many the rules let it hold
      * @param handed   whether the caller hands over values to write into it or keep out of it,
      *                 which is asked of the caller when it is composed and of nobody otherwise
+     * @param eachOf   whether {@code under} is what each element is, rather than an element it is
+     *                 to hold: a container inside the element handed values by a demand on every
+     *                 element of this one, which holding none meets. It holds as few as the rules
+     *                 ask, each of them that, and none where they ask for none — and then nothing
+     *                 of the element is composed or searched for ({@link #composesItsElement})
      */
     record Held(TermPath at, Type type, List<TypeSymbol> worn, Optional<Node> under,
-                Optional<Node> key, DeclaredBounds.CountRange holds, boolean handed)
+                Optional<Node> key, DeclaredBounds.CountRange holds, boolean handed,
+                boolean eachOf)
             implements Node {
 
         Held {
@@ -210,6 +216,20 @@ final class ConstructionPlan {
                 throw new IllegalArgumentException("a container built rather than chosen is built"
                         + " to hold something asked of it: " + at);
             }
+            if (eachOf && (under.isEmpty() || key.isPresent() || handed)) {
+                throw new IllegalArgumentException("what each element of a container is, where it"
+                        + " holds any, is its element and nothing beside: " + at);
+            }
+        }
+
+        /**
+         * Whether the element is composed: an element it is to hold always, and what each element
+         * is only where the rules ask it to hold some. The one answer what composes the container
+         * and what searches the positions inside it both read, so that an element neither composed
+         * nor held is never searched for.
+         */
+        boolean composesItsElement() {
+            return under.isPresent() && (!eachOf || holds.least() > 0);
         }
     }
 
@@ -437,13 +457,21 @@ final class ConstructionPlan {
      *                   asked, so that every container they are inside holds an element. The rest
      *                   are read only where such a row has something there: a container asked
      *                   about every element it holds meets that holding none
+     * @param aroundOne  the containers with a container handed values inside their element, by a
+     *                   demand asked of some element of them in every row meeting it — so each
+     *                   holds one, and is built around it
+     * @param aroundEach the containers with a container handed values inside their element, by a
+     *                   demand asked of every element of them — built around their element, which
+     *                   writes the inner container alike in each, and not made to hold one: one
+     *                   holding none meets the demand
      */
     record ContentsComposed(Set<TermPath> holdingOne, Set<TermPath> keepingOut,
-                            Set<TermPath> read, Set<TermPath> standing) {
+                            Set<TermPath> read, Set<TermPath> standing, Set<TermPath> aroundOne,
+                            Set<TermPath> aroundEach) {
 
         /** Nothing handed over, which is what a plan with no container asked of is made with. */
-        static final ContentsComposed NONE =
-                new ContentsComposed(Set.of(), Set.of(), Set.of(), Set.of());
+        static final ContentsComposed NONE = new ContentsComposed(Set.of(), Set.of(), Set.of(),
+                Set.of(), Set.of(), Set.of());
 
         // In the order they were handed over: the requirements of these positions are put
         // together in it, and which of two disagreeing ones a refusal names follows from it.
@@ -452,6 +480,8 @@ final class ConstructionPlan {
             keepingOut = Collections.unmodifiableSet(new LinkedHashSet<>(keepingOut));
             read = Collections.unmodifiableSet(new LinkedHashSet<>(read));
             standing = Collections.unmodifiableSet(new LinkedHashSet<>(standing));
+            aroundOne = Collections.unmodifiableSet(new LinkedHashSet<>(aroundOne));
+            aroundEach = Collections.unmodifiableSet(new LinkedHashSet<>(aroundEach));
             if (!read.containsAll(standing)) {
                 throw new IllegalArgumentException("a position a value stands at is one read: "
                         + standing + " beside " + read);
@@ -667,10 +697,19 @@ final class ConstructionPlan {
         if (node.at().equals(at)) {
             return node;
         }
-        if (!(node instanceof Built built)) {
-            return null;
-        }
-        for (Node each : built.under().values()) {
+        List<Node> under = switch (node) {
+            case Built built -> List.copyOf(built.under().values());
+            // The element and the key a container is built around, which every element it holds
+            // is written as: a position inside the element is that position of each.
+            case Held held -> {
+                List<Node> inside = new ArrayList<>();
+                held.under().ifPresent(inside::add);
+                held.key().ifPresent(inside::add);
+                yield inside;
+            }
+            case Slot _, Exact _ -> List.of();
+        };
+        for (Node each : under) {
             if (at.isAtOrUnder(each.at())) {
                 return found(each, at);
             }
@@ -690,9 +729,12 @@ final class ConstructionPlan {
             case Slot slot -> out.add(slot);
             case Built built -> built.under().values().forEach(each -> collect(each, out));
             // The key before the value, the order an entry is written in.
+            // An element not composed is not searched for.
             case Held held -> {
                 held.key().ifPresent(key -> collect(key, out));
-                held.under().ifPresent(element -> collect(element, out));
+                if (held.composesItsElement()) {
+                    collect(held.under().get(), out);
+                }
             }
             // Not a position a value is chosen at: the requirement settled it, so there is nothing
             // here for the search to offer and nothing for it to be refused at.
@@ -760,14 +802,19 @@ final class ConstructionPlan {
             // a row holding none meets nothing. Read off every element instead, it is not asked —
             // a row holding none meets that too, and making this hold one for it would refuse as
             // the model's a container the rules keep empty.
+            //
+            // And a container inside its element handed values is built where the element is: by
+            // a demand on some element of this one it holds one, and by one on every element it is
+            // built around the element and made to hold nothing for it.
             boolean valueAsked = anythingIsAskedAtOrUnder(here.element(), decided, required)
-                    || contents.standsAtOrUnder(here.element());
+                    || contents.standsAtOrUnder(here.element())
+                    || contents.aroundOne().contains(here);
             boolean keyAsked = container instanceof Shape.Mapping
                     && (anythingIsAskedAtOrUnder(here.key(), decided, required)
                             || contents.standsAtOrUnder(here.key()));
             boolean elementAsked = valueAsked || keyAsked;
             boolean handed = contents.handedTo(here);
-            boolean demanded = elementAsked || handed;
+            boolean demanded = elementAsked || handed || contents.aroundEach().contains(here);
             // How many it may hold, off one reading, and whether something has to be placed in it.
             // The floor is how many the rules ask the whole collection to hold and the value being
             // placed is one of them, so what a collection holding it comes to is the floor, or one
@@ -791,8 +838,11 @@ final class ConstructionPlan {
             }
             if (!elementAsked && handed) {
                 return new NodeResult.Made(new Held(here, building, worn, Optional.empty(),
-                        Optional.empty(), holds, true));
+                        Optional.empty(), holds, true, false));
             }
+            // Built around its element for nothing but a container inside it, by a demand on
+            // every element.
+            boolean eachOf = !elementAsked && !handed && contents.aroundEach().contains(here);
             // What stands at its element, where something is asked there — and where nothing is
             // asked anywhere inside it, so that a walk giving up part-way below is told from one
             // that found nothing to place. Not where only a map's key is asked: the value under it
@@ -819,9 +869,11 @@ final class ConstructionPlan {
                 }
                 key = Optional.of(filedUnder);
             }
+            // Built around its element for nothing but a container inside it, the element is what
+            // each element is and not one it holds.
             if (demanded) {
                 return new NodeResult.Made(new Held(here, building, worn, element, key, holds,
-                        handed));
+                        handed, eachOf));
             }
             // Nothing was asked for inside it, so the list is chosen whole — but where the walk
             // that would have found something gave up part-way, that is not the same answer. Read

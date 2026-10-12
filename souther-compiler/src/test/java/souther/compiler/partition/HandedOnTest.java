@@ -89,16 +89,18 @@ class HandedOnTest {
 
     private static HandedOn.Came handedOn(Generator.CandidateCheck.Built built,
                                           Map<TermPath, FixtureTemplate> written) {
-        return HandedOn.of(built, () -> written, Set.of(LEVEL), BehaviorInputs.of(READ),
+        return HandedOn.of(built, () -> written,
+                new ContentsAsked.ToHandOn(Set.of(LEVEL), Set.of(), Set.of()),
+                BehaviorInputs.of(READ),
                 RuleReadingContext.unshared(READ.rules(), ReadAs.THE_COMPILATION_DOES));
     }
 
     private static Map<TermPath, String> texts(HandedOn.Came came) {
-        Map<TermPath, FixtureTemplate> at =
+        ValuesHandedOn at =
                 assertInstanceOf(HandedOn.Came.Values.class, came, () -> "handed on: " + came)
                         .at();
         Map<TermPath, String> out = new LinkedHashMap<>();
-        at.forEach((path, value) -> out.put(path, value.text()));
+        at.chosen().forEach((path, value) -> out.put(path, value.value().text()));
         return out;
     }
 

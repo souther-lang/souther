@@ -146,7 +146,7 @@ class AContainerComposedForItsCountsIsLookedForWithinItsBudgetTest {
                 ExactRatio.ZERO, Map.of(new DecisionAtom.OfTheInput(element), ExactRatio.ONE)),
                 Rel.GT), true);
         return CountedElements.of("counted", new Quantity.HowManyMeet(new DecisionSubject.AnInput(read.xs()), meets),
-                read.measuring(), anElementMeeting);
+                read.measuring(), new AnElementMeeting(anElementMeeting, Optional.empty()));
     }
 
     /**
@@ -165,7 +165,7 @@ class AContainerComposedForItsCountsIsLookedForWithinItsBudgetTest {
                     ExactRatio.of(-above[i]),
                     Map.of(new DecisionAtom.OfTheInput(element), ExactRatio.ONE)), Rel.GT), true);
             RealizationTarget.ACount count = new RealizationTarget.ACount(CountedElements.of(
-                    "counted", new Quantity.HowManyMeet(new DecisionSubject.AnInput(xs), meets), measuring, Optional.empty()));
+                    "counted", new Quantity.HowManyMeet(new DecisionSubject.AnInput(xs), meets), measuring, AnElementMeeting.UNREAD));
             counts.add(count);
             demands.put(count, AskedAt.oneNumberOf(NumbersAskedFor.of(LevelRegion.point(
                     new Level.OfTheQuantity(ExactRatio.of(asked[i])))), Count.of(asked[i])));

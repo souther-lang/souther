@@ -81,14 +81,26 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
         return new RowDemand.WithinIt(SHELF, true, new RowDemand.KeyedAs(value));
     }
 
+    /** What the plan of {@code head} is to hold, where nothing composed before handed anything on. */
+    private static ConstructionPlan.ContentsComposed composedUnder(ContentsAsked asked,
+                                                                   String head) {
+        ContentsAsked.Resolution resolution = asked.resolvedFor(head, ValuesHandedOn.NONE);
+        ContentsAsked.Resolution.Resolved resolved = assertInstanceOf(
+                ContentsAsked.Resolution.Resolved.class, resolution,
+                () -> "nothing is handed to a container of `" + head + "`: " + resolution);
+        return asked.composedUnder(head, resolved.here());
+    }
+
     private static ConstructionPlan.ContentsComposed someItemFiled() {
-        return asked(new RowDemand.Exists(ITEMS, List.of(keyedInTheShelf(SKU)), HOLDING))
-                .composedUnder("items");
+        return composedUnder(
+                asked(new RowDemand.Exists(ITEMS, List.of(keyedInTheShelf(SKU)), HOLDING)),
+                "items");
     }
 
     private static ConstructionPlan.ContentsComposed everyItemFiled() {
-        return asked(new RowDemand.ForAll(ITEMS, List.of(keyedInTheShelf(SKU)), HOLDING))
-                .composedUnder("items");
+        return composedUnder(
+                asked(new RowDemand.ForAll(ITEMS, List.of(keyedInTheShelf(SKU)), HOLDING)),
+                "items");
     }
 
     @Test
@@ -99,13 +111,17 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
         assertEquals(Set.of(SKU), contents.standing());
     }
 
+    /**
+     * Read off every element, the value is read off what was built, element by element, and is no
+     * position of the plan: a list holding none meets the demand, and a position chosen inside it
+     * would make it hold one.
+     */
     @Test
-    void aValueReadOffEveryElementIsReadAndDoesNotStand() {
+    void aValueReadOffEveryElementIsNoPositionOfThePlan() {
         ConstructionPlan.ContentsComposed contents = everyItemFiled();
 
-        assertEquals(Set.of(SKU), contents.read());
-        assertEquals(Set.of(), contents.standing(),
-                "a list holding none meets it, so nothing has to stand there");
+        assertEquals(Set.of(), contents.read());
+        assertEquals(Set.of(), contents.standing());
     }
 
     /**
@@ -116,9 +132,8 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
     void aValueUnderAContainerNoDemandQuantifiesDoesNotStand() {
         TermPath deeper = ITEMS.element().then("tags").element();
 
-        assertEquals(Set.of(), asked(new RowDemand.Exists(ITEMS,
-                        List.of(keyedInTheShelf(deeper)), HOLDING))
-                        .composedUnder("items").standing());
+        assertEquals(Set.of(), composedUnder(asked(new RowDemand.Exists(ITEMS,
+                        List.of(keyedInTheShelf(deeper)), HOLDING)), "items").standing());
     }
 
     /**
@@ -212,8 +227,9 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
     }
 
     private static ConstructionPlan.ContentsComposed someEntryFiled(TermPath value) {
-        return asked(new RowDemand.Exists(FILED, List.of(keyedInTheShelf(value)), HOLDING))
-                .composedUnder("filed");
+        return composedUnder(
+                asked(new RowDemand.Exists(FILED, List.of(keyedInTheShelf(value)), HOLDING)),
+                "filed");
     }
 
     private static ConstructionPlan planned(int parameter,

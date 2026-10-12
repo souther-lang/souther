@@ -40,14 +40,18 @@ import java.util.Set;
  * @param anElementMeeting what an element meeting {@code meeting} is held to, as relations a
  *                         region is narrowed by, where it is that
  *                         ({@link DemandReading#anElementMeeting})
+ * @param handedOn         what another container is asked about an element meeting
+ *                         {@code meeting}, where that is all it is: the one demand an element
+ *                         meets by what that container holds ({@link ACountHandedOn})
  */
 record CountedElements(String behavior, TermPath container, Proposition meeting,
                        AStatementAtARow perElement, Map<NumericTerm, Carrier> on,
-                       Optional<List<TakenConstraint>> anElementMeeting) {
+                       Optional<List<TakenConstraint>> anElementMeeting,
+                       Optional<RowDemand.WithinIt> handedOn) {
 
     CountedElements {
         if (behavior == null || container == null || meeting == null || perElement == null
-                || anElementMeeting == null) {
+                || anElementMeeting == null || handedOn == null) {
             throw new IllegalArgumentException("a count is a behavior's count of the elements of"
                     + " some container meeting something");
         }
@@ -62,11 +66,11 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
      * <p>The one way one of these is made, wherever the count is met: a line drawn on it and a
      * condition on the way to another are the same count where they count the same thing.
      *
-     * @param anElementMeeting what an element meeting the statement is held to, as the reading of
-     *                         a condition that some element meets it comes to
+     * @param anElementMeeting what an element meeting the statement asks, as the reading of a
+     *                         condition that some element meets it comes to
      */
     static CountedElements of(String behavior, Quantity.HowManyMeet count, Quantities quantities,
-                              Optional<List<TakenConstraint>> anElementMeeting) {
+                              AnElementMeeting anElementMeeting) {
         AStatementAtARow perElement =
                 AStatementAtARow.of(count.ofTheElement(), behavior, quantities);
         Map<NumericTerm, Carrier> on = new LinkedHashMap<>();
@@ -78,7 +82,7 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
         }
         Identity identity = identityOf(behavior, count);
         return new CountedElements(behavior, identity.container(), identity.meeting(), perElement,
-                on, anElementMeeting);
+                on, anElementMeeting.heldTo(), anElementMeeting.handedOn());
     }
 
     /** Every number of a row the statement reads, the element's own among them. */
@@ -133,7 +137,10 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
             union.addAll(other.anElementMeeting.get());
             both = Optional.of(List.copyOf(union));
         }
-        return new CountedElements(behavior, container, meeting, perElement, on, both);
+        // One statement handed on is one demand however it was read; a reading that found it is
+        // the one kept.
+        return new CountedElements(behavior, container, meeting, perElement, on, both,
+                handedOn.isPresent() ? handedOn : other.handedOn);
     }
 
     /**

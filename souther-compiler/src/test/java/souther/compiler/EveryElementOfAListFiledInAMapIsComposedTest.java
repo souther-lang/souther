@@ -1,0 +1,239 @@
+package souther.compiler;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.FixtureTemplate;
+import souther.compiler.partition.GenerationOutcome;
+import souther.compiler.query.About;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A row where every element of a list is filed in a map is composed, and the map is made to hold
+ * a key for each element the list holds — none where it holds none.
+ *
+ * <p>Said as the statement it is: for every element of {@code ks}, some entry of {@code shelf}
+ * keyed by it. A list holding nothing meets it whatever the map holds, so nothing makes the map
+ * hold an entry for the list's sake; a list the rules make hold several meets it only with an
+ * entry for each, and the map is built holding them.
+ */
+class EveryElementOfAListFiledInAMapIsComposedTest {
+
+    private static final String EVERY = """
+            module p
+            behavior pick : (ks: List<String>, shelf: Map<String, String>) -> Int
+            let pick (ks, shelf) =
+                if List.all(k -> match Map.get(k, shelf) with
+                        | Some v -> true
+                        | None -> false, ks) then 1 else 0
+            example pick
+                | "a" : (["a"], []) -> 0
+            """;
+
+    /** A list the rules make hold several, so the statement is met only with each filed. */
+    private static final String SEVERAL = """
+            module p
+            data Keys = List<String>
+                invariant several = List.length(value) >= 2
+            behavior pick : (ks: Keys, shelf: Map<String, String>) -> Int
+            let pick (ks, shelf) =
+                if List.all(k -> match Map.get(k, shelf) with
+                        | Some v -> true
+                        | None -> false, ks.value) then 1 else 0
+            example pick
+                | "a" : (Keys(["a", "b"]), []) -> 0
+            """;
+
+    /**
+     * A map the rules keep empty. The statement is met by a list holding nothing, so the map's
+     * holding none is no refusal of the model's.
+     */
+    private static final String SHELF_EMPTY = """
+            module p
+            data Shelf = Map<String, String>
+                invariant none = Map.size(value) <= 0
+            behavior pick : (ks: List<String>, shelf: Shelf) -> Int
+            let pick (ks, shelf) =
+                if List.all(k -> match Map.get(k, shelf.value) with
+                        | Some v -> true
+                        | None -> false, ks) then 1 else 0
+            example pick
+                | "a" : (["a"], Shelf([])) -> 0
+            """;
+
+    /**
+     * Every element of a list the rules make hold one holding a value of another parameter in a
+     * list inside it: the inner list is written in each element the plan builds, so it is asked
+     * of the plan as it is, and each element's tags hold the value.
+     */
+    private static final String INSIDE_EACH = """
+            module p
+            data Item = { tags: List<String> }
+            data Items = List<Item>
+                invariant some = List.length(value) >= 1
+            behavior pick : (items: Items, k: String) -> Int
+            let pick (items, k) =
+                if List.all(i -> List.contains(k, i.tags), items.value) then 1 else 0
+            example pick
+                | "a" : (Items([Item { tags = [] }]), "a") -> 0
+            """;
+
+    /** The same with some element holding the value, which the list then holds one for. */
+    private static final String INSIDE_SOME = INSIDE_EACH.replace("List.all(", "List.any(");
+
+    /**
+     * Some element of a list the rules make hold several filed in a map: the map is handed the key
+     * of the element the list was composed around, and not one for each.
+     */
+    private static final String SOME_OF_SEVERAL = SEVERAL.replace("List.all(", "List.any(");
+
+    /**
+     * Some element of a list made to hold several filed in one map, and every element in another:
+     * the one value some element is asked of and each value every element is are read off the one
+     * list built, and both are handed on.
+     */
+    private static final String SOME_AND_EVERY = """
+            module p
+            data Keys = List<String>
+                invariant several = List.length(value) >= 2
+            behavior pick : (ks: Keys, one: Map<String, String>, every: Map<String, String>) -> Int
+            let pick (ks, one, every) =
+                if List.any(k -> match Map.get(k, one) with
+                        | Some v -> true
+                        | None -> false, ks.value)
+                    && List.all(k -> match Map.get(k, every) with
+                        | Some v -> true
+                        | None -> false, ks.value) then 1 else 0
+            example pick
+                | "a" : (Keys(["a", "b"]), [], []) -> 0
+                | "a in one" : (Keys(["a", "b"]), [("a", "x")], []) -> 0
+            """;
+
+    /**
+     * Every element of a list the rules keep empty holding a value in a list inside it: holding
+     * none meets it, and what each element would be is not made an element the list holds.
+     */
+    private static final String INSIDE_EACH_OF_NONE = """
+            module p
+            data Item = { tags: List<String> }
+            data Items = List<Item>
+                invariant none = List.length(value) <= 0
+            behavior pick : (items: Items, k: String, first: Bool) -> Int
+            let pick (items, k, first) =
+                if first then 2
+                else if List.all(i -> List.contains(k, i.tags), items.value) then 1 else 0
+            example pick
+                | "first" : (Items([]), "a", true) -> 2
+            """;
+
+    /** Each form, with the row composed for the rule where every element is filed. */
+    private static final Map<String, List<String>> COMPOSED = Map.of(
+            EVERY, List.of("[]", "[]"),
+            SEVERAL, List.of("Keys([\"x\", \"x\"])", "[(\"x\", \"x\")]"),
+            SHELF_EMPTY, List.of("[]", "Shelf([])"),
+            INSIDE_EACH, List.of("Items([Item { tags = [\"x\"] }])", "\"x\""),
+            INSIDE_SOME, List.of("Items([Item { tags = [\"x\"] }])", "\"x\""),
+            SOME_OF_SEVERAL, List.of("Keys([\"x\", \"x\"])", "[(\"x\", \"x\")]"),
+            SOME_AND_EVERY, List.of("Keys([\"x\", \"x\"])", "[(\"x\", \"x\")]",
+                    "[(\"x\", \"x\")]"));
+
+    private static Compilation measured(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation;
+    }
+
+    private static String report(Compilation compilation) {
+        return AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    private static List<String> errors(Compilation compilation) {
+        return compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
+                .toList();
+    }
+
+    /** The rows composed for the rules no row takes, each as the texts of its inputs. */
+    private static List<List<String>> composedForTheRules(Compilation compilation) {
+        Adequacy.Filling filling = Adequacy.generatedOf(compilation.db(),
+                compilation.modules().get(0)).get("pick");
+        List<List<String>> out = new ArrayList<>();
+        filling.generation().stream()
+                .filter(each -> each.finding().about() instanceof About.ARuleNoRowTakes)
+                .forEach(each -> {
+                    GenerationOutcome.Generated made = assertInstanceOf(
+                            GenerationOutcome.Generated.class, each.outcome(),
+                            () -> "a row is composed for the rule: " + each.outcome());
+                    made.candidates().forEach(row -> out.add(
+                            row.inputs().stream().map(FixtureTemplate::text).toList()));
+                });
+        return out;
+    }
+
+    @Test
+    void eachFormIsComposedWithAKeyForEachElementTheListHolds() {
+        COMPOSED.forEach((model, expected) -> assertEquals(List.of(expected),
+                composedForTheRules(measured(model)), model));
+    }
+
+    /**
+     * The rows composed, put back as examples, take the rule they were composed for: the model
+     * answers each as every element filed, and no rule is left that no row takes.
+     */
+    @Test
+    void theRowsComposedTakeTheRuleTheyWereComposedFor() {
+        COMPOSED.forEach((model, expected) -> {
+            Compilation answered = measured(model + "    | \"filed\" : ("
+                    + String.join(", ", expected) + ") -> 1\n");
+
+            assertEquals(List.of(), errors(answered), model);
+            assertFalse(report(answered).contains("no row takes a decision rule"),
+                    () -> report(answered));
+        });
+    }
+
+    /** The control: the same rows answered as not every element filed are refused. */
+    @Test
+    void theSameRowsAnsweredAsNotEveryElementFiledAreRefused() {
+        COMPOSED.forEach((model, expected) -> assertFalse(errors(measured(model
+                + "    | \"filed\" : (" + String.join(", ", expected) + ") -> 0\n")).isEmpty(),
+                model));
+    }
+
+    /**
+     * A list the rules keep empty, with every element asked to hold a value in a list inside it:
+     * the row for it holds none, and nothing of an element is composed. Some element holding none
+     * of it is the model's to refuse — the list has no room for one — and is said as that.
+     */
+    @Test
+    void everyElementOfAListKeptEmptyIsComposedHoldingNone() {
+        Compilation measured = measured(INSIDE_EACH_OF_NONE);
+        List<List<String>> rows = new ArrayList<>();
+        Adequacy.generatedOf(measured.db(), measured.modules().get(0)).get("pick").generation()
+                .stream()
+                .filter(each -> each.finding().about() instanceof About.ARuleNoRowTakes)
+                .forEach(each -> {
+                    if (each.outcome() instanceof GenerationOutcome.Generated made) {
+                        made.candidates().forEach(row -> rows.add(
+                                row.inputs().stream().map(FixtureTemplate::text).toList()));
+                    }
+                });
+
+        assertEquals(List.of(List.of("Items([])", "\"x\"", "false")), rows);
+        assertTrue(report(measured).contains("`items` would have to hold 1"),
+                () -> report(measured));
+    }
+}

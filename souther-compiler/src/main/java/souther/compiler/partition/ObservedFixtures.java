@@ -5,6 +5,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.ElementsTaken;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeReachName;
@@ -17,7 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
-import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * A value the boundary built, written as a fixture that builds it again.
@@ -56,38 +57,137 @@ final class ObservedFixtures {
 
     /**
      * What stands at each of {@code paths} in {@code built}, the value the boundary built for the
-     * parameter they are under, written as fixtures.
+     * parameter they are under, written as fixtures — and the elements each of {@code containers}
+     * holds in it.
      *
-     * <p>One value at each. A path read at no value of the one built, or at as many values as a
-     * container holds, is a position that has no one value to hand over, and is said as that.
+     * <p>At a position read in each element, every value there, with the element it was read in,
+     * and none where the value built has nothing there: a list holding no element has nothing at
+     * its element, and that is an answer. How many of them a container is handed is the demand's
+     * to say ({@link ContentsAsked#resolvedFor}). At a position read as one value, one value: the
+     * only one there, or where it stands in each of several elements, the one equal to what the
+     * value was composed with there ({@code planned}) — the element some element was asked of is
+     * the one the value was composed around, and the others are whatever stands beside it. A
+     * position at no value of the one built, or at several none of which is that, has no one value
+     * and is said as that. A path the value built has no such position at, and a value there that
+     * cannot be written, are said as why.
+     *
+     * @param planned what the value was composed with at each position it was, asked for only
+     *                where a position read as one value stands in several elements
      */
-    static Writing<Map<TermPath, FixtureTemplate>> at(BehaviorInputs inputs,
-                                                     ObservedValue built, Set<TermPath> paths,
-                                                     RuleReadingContext reading) {
-        Map<TermPath, FixtureTemplate> out = new LinkedHashMap<>();
-        for (TermPath path : paths) {
+    static Writing<ValuesHandedOn> handedOn(BehaviorInputs inputs, ObservedValue built,
+                                            ContentsAsked.ToHandOn read,
+                                            Supplier<Map<TermPath, FixtureTemplate>> planned,
+                                            RuleReadingContext reading) {
+        Map<TermPath, List<ValuesHandedOn.Standing>> values = new LinkedHashMap<>();
+        Map<TermPath, ValuesHandedOn.Standing> chosen = new LinkedHashMap<>();
+        Map<TermPath, FixtureTemplate> composedWith = null;
+        for (TermPath path : read.positions()) {
             if (!(inputs.observedAt(built, path)
                     instanceof WalkResult.Reached<List<BehaviorInputs.ObservedAt>>(var found))) {
                 return new Writing.NotWritable<>(
                         "`" + path + "` is not a position the value built has");
             }
-            if (found.size() != 1) {
-                return new Writing.NotWritable<>(found.isEmpty()
-                        ? "nothing stands at `" + path + "` in the value built"
-                        : "`" + path + "` is at each of " + found.size()
-                                + " elements of the value built, which is no one value");
+            // Every value there, where a demand asks each element; and the one value, where a
+            // demand asks one — both where both do, since the two are asked of one value built.
+            if (read.each().contains(path)) {
+                switch (written(path, found, reading)) {
+                    case Writing.Written<List<ValuesHandedOn.Standing>>(var all) ->
+                            values.put(path, all);
+                    case Writing.NotWritable<List<ValuesHandedOn.Standing>>(String why) -> {
+                        return new Writing.NotWritable<>(why);
+                    }
+                }
             }
-            BehaviorInputs.ObservedAt one = found.getFirst();
+            if (!read.one().contains(path)) {
+                continue;
+            }
+            Writing<ValuesHandedOn.Standing> one;
+            if (found.size() == 1 && values.containsKey(path)) {
+                one = new Writing.Written<>(values.get(path).getFirst());
+            } else if (found.size() == 1) {
+                one = switch (written(path, found, reading)) {
+                    case Writing.Written<List<ValuesHandedOn.Standing>>(var all) ->
+                            new Writing.Written<>(all.getFirst());
+                    case Writing.NotWritable<List<ValuesHandedOn.Standing>>(String why) ->
+                            new Writing.NotWritable<>(why);
+                };
+            } else if (found.isEmpty()) {
+                one = new Writing.NotWritable<>(
+                        "nothing stands at `" + path + "` in the value built");
+            } else {
+                if (composedWith == null) {
+                    composedWith = planned.get();
+                }
+                one = theOneComposed(found, composedWith.get(path), reading) instanceof
+                        Writing.Written<ValuesHandedOn.Standing> written ? written
+                        : new Writing.NotWritable<>("`" + path + "` is at each of "
+                                + found.size() + " elements of the value built, which is no one"
+                                + " value");
+            }
+            switch (one) {
+                case Writing.Written<ValuesHandedOn.Standing>(var value) -> chosen.put(path, value);
+                case Writing.NotWritable<ValuesHandedOn.Standing>(String why) -> {
+                    return new Writing.NotWritable<>(why);
+                }
+            }
+        }
+        Map<TermPath, List<ElementsTaken>> elements = new LinkedHashMap<>();
+        for (TermPath container : read.containers()) {
+            if (!(inputs.observedAt(built, container.element())
+                    instanceof WalkResult.Reached<List<BehaviorInputs.ObservedAt>>(var found))) {
+                return new Writing.NotWritable<>(
+                        "`" + container + "` is not a container the value built has");
+            }
+            List<ElementsTaken> held = new ArrayList<>();
+            for (BehaviorInputs.ObservedAt one : found) {
+                // A value the observation could not read back is carried down whole, and says
+                // nothing about which elements the container holds.
+                if (one.value().unread() != null) {
+                    return unread(one.value());
+                }
+                held.add(one.at());
+            }
+            elements.put(container, held);
+        }
+        return new Writing.Written<>(new ValuesHandedOn(values, chosen, elements));
+    }
+
+    /** Each of {@code found}, standing at {@code path}, written — or why one cannot be. */
+    private static Writing<List<ValuesHandedOn.Standing>> written(
+            TermPath path, List<BehaviorInputs.ObservedAt> found, RuleReadingContext reading) {
+        List<ValuesHandedOn.Standing> standing = new ArrayList<>();
+        for (BehaviorInputs.ObservedAt one : found) {
             switch (of(one.value(), one.type(), reading)) {
                 case Writing.Written<FixtureTemplate>(FixtureTemplate written) ->
-                        out.put(path, written);
+                        standing.add(new ValuesHandedOn.Standing(one.at(), written));
                 case Writing.NotWritable<FixtureTemplate>(String why) -> {
                     return new Writing.NotWritable<>(
                             "the value built at `" + path + "` cannot be written: " + why);
                 }
             }
         }
-        return new Writing.Written<>(out);
+        return new Writing.Written<>(standing);
+    }
+
+    /**
+     * The one of {@code found} written as {@code composedWith}, or why there is none: nothing was
+     * composed there, or none of them is it. Compared by the text, as two values written alike are
+     * compared wherever a row is put together ({@link Witnesses#holding}).
+     */
+    private static Writing<ValuesHandedOn.Standing> theOneComposed(
+            List<BehaviorInputs.ObservedAt> found, FixtureTemplate composedWith,
+            RuleReadingContext reading) {
+        if (composedWith == null) {
+            return new Writing.NotWritable<>("nothing was composed there");
+        }
+        for (BehaviorInputs.ObservedAt one : found) {
+            if (of(one.value(), one.type(), reading)
+                    instanceof Writing.Written<FixtureTemplate>(FixtureTemplate written)
+                    && written.text().equals(composedWith.text())) {
+                return new Writing.Written<>(new ValuesHandedOn.Standing(one.at(), written));
+            }
+        }
+        return new Writing.NotWritable<>("none of them is what was composed there");
     }
 
     /** {@code value}, standing at a position the reading exposes as {@code type}, written as a

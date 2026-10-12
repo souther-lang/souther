@@ -230,6 +230,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "ValuesCarryingANumber", "at",
                     "(L" + PARTITION + "ConstructionPlan$Slot;)L" + PARTITION + "FixtureTemplate;",
                     THE_POSITION),
+            row(PARTITION + "Witnesses", "holdingAt",
+                    "(" + TYPE + "Ljava/util/Map;" + CONTEXT + ")L" + PARTITION
+                            + "FixtureTemplate;",
+                    THE_POSITION),
             row(PARTITION + "Witnesses", "varied",
                     "(" + TYPE + "I" + CONTEXT + ")L" + PARTITION + "FixtureTemplate;",
                     THE_POSITION));
