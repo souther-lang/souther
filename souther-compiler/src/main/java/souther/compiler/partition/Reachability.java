@@ -64,8 +64,19 @@ public sealed interface Reachability {
                     when way.severalWays().isEmpty() -> whole;
             case OneOfEach.Walked.Open<OnTheWay, Reachability>(var ways, var stoppedBy) -> {
                 List<Reaching> along = new ArrayList<>();
-                for (List<OnTheWay> one : ways) {
-                    along.add(reaching(new WayToTheBorder(one), declarations));
+                for (OneOfEach.Way<OnTheWay> one : ways) {
+                    along.add(switch (one) {
+                        case OneOfEach.Way.Chosen<OnTheWay>(var entries) ->
+                                reaching(new WayToTheBorder(entries), declarations);
+                        // A condition the walk left as it stands is one this way was not split
+                        // at past the figure, and is said as one, so that a row composed along
+                        // it is not taken to have met it.
+                        case OneOfEach.Way.LeftUnchosen<OnTheWay>(var chosen, var unchosen) ->
+                                reaching(new WayToTheBorder(chosen), declarations).splitAs(
+                                        new Ways.Whole(unchosen.stream()
+                                                .map(OnTheWay.OneOf.class::cast).toList(),
+                                                stoppedBy, List.of()));
+                    });
                 }
                 // Every way a row takes is among them, so a search looking along each looks
                 // along every row past the way, and what all of them state the way states.

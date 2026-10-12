@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * A value for one answer a rule asks something of.
@@ -206,11 +207,33 @@ public final class AnAnswerComposed {
         for (Pending each : pending) {
             each.reads().forEach(read -> entries.add(new Asked(each.statement(), read)));
         }
-        List<List<Asked>> ways;
+        Requirements cases = required;
+        return composedAlongTheWays(OneOfEach.walk(entries, new WrittenTogether(asked),
+                        CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+                        CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG),
+                way -> composedAlong(subject, at, cases, asked, unaccounted, way, demands),
+                unaccounted, pending);
+    }
+
+    /**
+     * The first value {@code composing} makes along one of {@code walked}'s ways that meets every
+     * statement — or, where none does, what the first way came to, with each statement a figure
+     * left some of its ways unlooked at said to be one it stopped the looking for.
+     *
+     * <p>A way that left a choice unchosen is composed along what it chose, and each statement it
+     * left a choice of is said to be one the figure stopped the looking for: nothing composed
+     * along it was put to what the choice asks, so the value is not one that meets it.
+     *
+     * @param unaccounted what no way of the statements accounts for, said beside a way that came
+     *                    to nothing
+     * @param pending     the statements the ways are of
+     */
+    static Attempt composedAlongTheWays(OneOfEach.Walked<Asked, Asked> walked,
+                                        Function<List<Asked>, Attempt> composing,
+                                        List<DemandGap> unaccounted, List<Pending> pending) {
+        List<OneOfEach.Way<Asked>> ways;
         CompositionBudget jointly;
-        switch (OneOfEach.walk(entries, new WrittenTogether(asked),
-                CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
-                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG)) {
+        switch (walked) {
             case OneOfEach.Walked.Closed<Asked, Asked> _ -> {
                 ways = List.of();
                 jointly = null;
@@ -225,8 +248,12 @@ public final class AnAnswerComposed {
             }
         }
         Attempt first = null;
-        for (List<Asked> way : ways) {
-            Attempt here = composedAlong(subject, at, required, asked, unaccounted, way, demands);
+        for (OneOfEach.Way<Asked> way : ways) {
+            Attempt here = switch (way) {
+                case OneOfEach.Way.Chosen<Asked>(var entries) -> composing.apply(entries);
+                case OneOfEach.Way.LeftUnchosen<Asked>(var chosen, var unchosen) ->
+                        leavingWhatWasNotChosen(composing.apply(chosen), unchosen, jointly);
+            };
             if (here.outcome() instanceof Outcome.Composed && here.unaccounted().isEmpty()) {
                 return here;
             }
@@ -239,8 +266,29 @@ public final class AnAnswerComposed {
         return sayingWhatStoppedTheLooking(first, pending, jointly);
     }
 
+    /** {@code composed}, with each statement {@code unchosen} is of said to be one {@code figure}
+     *  stopped the looking for. */
+    private static Attempt leavingWhatWasNotChosen(Attempt composed, List<Asked> unchosen,
+                                                   CompositionBudget figure) {
+        Set<AnswerDemand> said = new HashSet<>();
+        for (DemandGap each : composed.unaccounted()) {
+            if (each instanceof DemandGap.Uncomposed(AnswerDemand demand, var _)) {
+                said.add(demand);
+            }
+        }
+        List<DemandGap> out = new ArrayList<>(composed.unaccounted());
+        for (Asked each : unchosen) {
+            if (said.add(each.statement())) {
+                out.add(new DemandGap.Uncomposed(each.statement(),
+                        DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(
+                                Set.of(figure))));
+            }
+        }
+        return new Attempt(composed.outcome(), out);
+    }
+
     /** One thing a statement asks, and the statement. */
-    private record Asked(AnswerDemand.AStatement statement, DemandReading.Read read) {}
+    record Asked(AnswerDemand.AStatement statement, DemandReading.Read read) {}
 
     /**
      * What the statements ask as far as whether one way of them holds together: the truths it
@@ -360,7 +408,7 @@ public final class AnAnswerComposed {
      *
      * @param stoppedBy the figures that left some of its ways unlooked at, empty where none did
      */
-    private record Pending(AnswerDemand.AStatement statement, List<DemandReading.Read> reads,
+    record Pending(AnswerDemand.AStatement statement, List<DemandReading.Read> reads,
                            Set<CompositionBudget> stoppedBy) {}
 
     /** Whether the reads of a statement come to some way a value is composed toward, or why they

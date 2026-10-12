@@ -4697,9 +4697,9 @@ public final class Generator {
             }
         }
         ElementsWrittenAlike.Choices alike = ElementsWrittenAlike.of(reaching);
-        for (Reachability.Reaching one : alike.ways()) {
-            BoundaryAttempt along = probeFixingAlong(subject, label, fixing, asking, one, check,
-                    stood, false, null);
+        for (ElementsWrittenAlike.Alike one : alike.ways()) {
+            BoundaryAttempt along = probeFixingAlong(subject, label, fixing, asking,
+                    one.reaching(), check, stood, false, one.leftBy());
             if (along instanceof BoundaryAttempt.Built) {
                 return along;
             }
@@ -4761,8 +4761,11 @@ public final class Generator {
      * @param byCounts whether every container a quantifier that is the whole of a statement is
      *                 over is composed for its counts, and not only one whose elements a quantifier
      *                 asks several things of
-     * @param alikeStoppedBy the figure the ways of writing the elements alike were looked along
-     *                       to, where one stopped them ({@link ElementsWrittenAlike.Choices})
+     * @param alikeStoppedBy the figure that left a demand of several ways on {@code reaching}
+     *                       unchosen, where one did: the one a way written alike was handed on
+     *                       with ({@link ElementsWrittenAlike.Alike}), or the one the ways of
+     *                       writing the elements alike were looked along to
+     *                       ({@link ElementsWrittenAlike.Choices})
      */
     private static BoundaryAttempt probeFixingAlong(MeasuredInput subject, String label,
                                                     Map<RealizationTarget, Place> fixing,

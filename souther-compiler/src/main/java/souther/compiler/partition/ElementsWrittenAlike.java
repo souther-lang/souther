@@ -35,11 +35,10 @@ final class ElementsWrittenAlike {
      * stopped the looking where one did — which the way composed as it stands past them says,
      * since along a way left out its elements would have been written against more.
      *
-     * @param ways      each way that one element may meet, as the way with every demand of several
-     *                  ways rewritten to one of them
+     * @param ways      each way that one element may meet
      * @param stoppedBy the figure the looking stopped at, or null where every way was looked at
      */
-    record Choices(List<Reachability.Reaching> ways, CompositionBudget stoppedBy) {
+    record Choices(List<Alike> ways, CompositionBudget stoppedBy) {
 
         static final Choices NONE = new Choices(List.of(), null);
 
@@ -47,6 +46,17 @@ final class ElementsWrittenAlike {
             ways = List.copyOf(ways);
         }
     }
+
+    /**
+     * One way of writing the elements alike.
+     *
+     * @param reaching the way with every demand of several ways rewritten to one of them — but
+     *                 those the looking stopped before choosing, which stand as they were asked
+     * @param leftBy   the figure that left those, or null where every one was chosen: a demand of
+     *                 several ways standing on a way written alike is one nothing was chosen for,
+     *                 and this says why
+     */
+    record Alike(Reachability.Reaching reaching, CompositionBudget leftBy) {}
 
     /**
      * Each way of writing {@code reaching}'s elements alike that one element may meet; none where
@@ -65,10 +75,24 @@ final class ElementsWrittenAlike {
                     new Choices(List.of(), figure);
             case OneOfEach.Walked.Open<OnTheWay.TakenIn, OnTheWay.TakenIn>(
                     var ways, var stoppedBy) -> {
-                List<Reachability.Reaching> out = new ArrayList<>();
-                for (List<OnTheWay.TakenIn> way : ways) {
-                    out.add(new Reachability.Reaching(reaching.region(), reaching.requirements(),
-                            reaching.truths(), way, reaching.ways(), reaching.declined()));
+                List<Alike> out = new ArrayList<>();
+                for (OneOfEach.Way<OnTheWay.TakenIn> way : ways) {
+                    List<OnTheWay.TakenIn> asked = new ArrayList<>();
+                    CompositionBudget leftBy = switch (way) {
+                        case OneOfEach.Way.Chosen<OnTheWay.TakenIn>(var entries) -> {
+                            asked.addAll(entries);
+                            yield null;
+                        }
+                        case OneOfEach.Way.LeftUnchosen<OnTheWay.TakenIn>(
+                                var chosen, var unchosen) -> {
+                            asked.addAll(chosen);
+                            asked.addAll(unchosen);
+                            yield stoppedBy;
+                        }
+                    };
+                    out.add(new Alike(new Reachability.Reaching(reaching.region(),
+                            reaching.requirements(), reaching.truths(), asked, reaching.ways(),
+                            reaching.declined()), leftBy));
                 }
                 yield new Choices(out, stoppedBy);
             }

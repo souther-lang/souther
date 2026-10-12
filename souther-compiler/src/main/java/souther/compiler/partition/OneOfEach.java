@@ -81,6 +81,43 @@ final class OneOfEach {
         record Closed<S, R>(R why) implements Step<S, R> {}
     }
 
+    /**
+     * One way some row may take: the entries it asks, with each choice the walk chose replaced by
+     * the entries of the alternative taken.
+     *
+     * <p>Two kinds, and no list of entries common to both, so that a reader composing along a way
+     * says which it has. A way that left a choice is not what the entries whole ask: a row along
+     * the entries it chose has been asked none of what the choice asks.
+     */
+    sealed interface Way<E> {
+
+        /** Every choice on it chosen. */
+        record Chosen<E>(List<E> entries) implements Way<E> {
+
+            public Chosen {
+                entries = List.copyOf(entries);
+            }
+        }
+
+        /**
+         * Some choices on it left as they stand: the figure stopped the walk before their group
+         * found a way open, so nothing about them was looked at.
+         *
+         * @param chosen   what the way asks of the choices that were chosen and beside them
+         * @param unchosen the choices left, in the order they were written; one or more
+         */
+        record LeftUnchosen<E>(List<E> chosen, List<E> unchosen) implements Way<E> {
+
+            public LeftUnchosen {
+                chosen = List.copyOf(chosen);
+                unchosen = List.copyOf(unchosen);
+                if (unchosen.isEmpty()) {
+                    throw new IllegalArgumentException("a way that left a choice left one");
+                }
+            }
+        }
+    }
+
     /** What the walk came to. */
     sealed interface Walked<E, R> {
 
@@ -100,22 +137,27 @@ final class OneOfEach {
         }
 
         /**
-         * Ways some row may take, each as the entries it asks with every choice in it replaced by
-         * the entries of the alternative taken.
+         * Ways some row may take.
          *
          * @param ways      one or more
          * @param stoppedBy null where every way a row takes is among {@code ways} — every
          *                  combination of the open alternatives — so that every row past the
          *                  entries is along one of them; otherwise the figure that left the rest
-         *                  unlooked at or not handed on, and {@code ways} are only some of them
+         *                  unlooked at or not handed on, and {@code ways} are only some of them.
+         *                  Never null where some way left a choice unchosen
          */
-        record Open<E, R>(List<List<E>> ways, CompositionBudget stoppedBy)
+        record Open<E, R>(List<Way<E>> ways, CompositionBudget stoppedBy)
                 implements Walked<E, R> {
 
             public Open {
-                ways = ways.stream().map(List::copyOf).toList();
+                ways = List.copyOf(ways);
                 if (ways.isEmpty()) {
                     throw new IllegalArgumentException("ways left open are one or more");
+                }
+                if (stoppedBy == null
+                        && ways.stream().anyMatch(Way.LeftUnchosen.class::isInstance)) {
+                    throw new IllegalArgumentException(
+                            "a choice is left unchosen only where a figure stopped the walk");
                 }
             }
 
@@ -158,12 +200,13 @@ final class OneOfEach {
             switch (vocabulary.with(base, each)) {
                 case Step.Held<S, R>(S so) -> base = so;
                 case Step.Closed<S, R>(R why) -> {
-                    return new Walked.Closed<>(rebuilt(entries, vocabulary, Map.of()), why);
+                    return new Walked.Closed<>(rebuilt(entries, vocabulary, Map.of(), null),
+                            why);
                 }
             }
         }
         if (choices.isEmpty()) {
-            return new Walked.Open<>(List.of(entries), null);
+            return new Walked.Open<>(List.of(new Way.Chosen<>(entries)), null);
         }
         int[] left = {looking.maximum()};
         CompositionBudget stoppedBy = null;
@@ -172,15 +215,15 @@ final class OneOfEach {
             Group<E, S, R> walked = new Group<>(vocabulary, looking, handing, left);
             walked.from(new ArrayDeque<>(group), new IdentityHashMap<>(), base);
             if (walked.open.isEmpty() && walked.stoppedBy == null) {
-                return new Walked.Closed<>(rebuilt(entries, vocabulary, walked.firstClosed),
+                return new Walked.Closed<>(rebuilt(entries, vocabulary, walked.firstClosed, null),
                         walked.firstWhy);
             }
             if (walked.stoppedBy != null && stoppedBy == null) {
                 stoppedBy = walked.stoppedBy;
             }
             // A group the figure stopped before it found a way open is one whose choices go
-            // unchosen: the ways the groups before it found are handed on without them, and the
-            // figure says so.
+            // unchosen: the ways the groups before it found are handed on with them left as they
+            // stand, and the figure says so.
             if (!walked.open.isEmpty()) {
                 open.add(walked.open);
             }
@@ -195,12 +238,15 @@ final class OneOfEach {
             handedOn = eachOnce(open);
             stoppedBy = stoppedBy == null ? handing : stoppedBy;
         }
-        List<List<E>> ways = new ArrayList<>();
+        List<Way<E>> ways = new ArrayList<>();
         for (Map<E, Integer> chosen : handedOn) {
             if (ways.size() == handing.maximum()) {
                 break;
             }
-            ways.add(rebuilt(entries, vocabulary, chosen));
+            List<E> unchosen = new ArrayList<>();
+            List<E> taken = rebuilt(entries, vocabulary, chosen, unchosen);
+            ways.add(unchosen.isEmpty() ? new Way.Chosen<>(taken)
+                    : new Way.LeftUnchosen<>(taken, unchosen));
         }
         return new Walked.Open<>(ways, stoppedBy);
     }
@@ -262,10 +308,13 @@ final class OneOfEach {
         return out;
     }
 
-    /** {@code entries} with each choice {@code chosen} names replaced where it stands by the
-     *  entries of its alternative, and each it does not name left out. */
+    /**
+     * {@code entries} with each choice {@code chosen} names replaced where it stands by the
+     * entries of its alternative, and each it does not name left out — and added to
+     * {@code unchosen}, where that is given.
+     */
     private static <E, S, R> List<E> rebuilt(List<E> entries, Vocabulary<E, S, R> vocabulary,
-                                             Map<E, Integer> chosen) {
+                                             Map<E, Integer> chosen, List<E> unchosen) {
         List<E> out = new ArrayList<>();
         for (E each : entries) {
             List<List<E>> alternatives = vocabulary.alternatives(each);
@@ -275,7 +324,9 @@ final class OneOfEach {
             }
             Integer taken = chosen.get(each);
             if (taken != null) {
-                out.addAll(rebuilt(alternatives.get(taken), vocabulary, chosen));
+                out.addAll(rebuilt(alternatives.get(taken), vocabulary, chosen, unchosen));
+            } else if (unchosen != null) {
+                unchosen.add(each);
             }
         }
         return out;
