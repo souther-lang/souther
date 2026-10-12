@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.ScopeStep;
+import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.flow.ComparisonWays;
 import souther.compiler.inputs.InputReading;
@@ -54,9 +55,15 @@ final class AnOperationsTruthComesOutAsItCan implements ComparisonWays {
         if (ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy)) {
             return true;
         }
-        return AnOperationApplied.of(e) != null
+        return (AnOperationApplied.of(e) != null || answersAnApplication(e))
                 && Core.withoutStanding(e).type() == Type.Prim.BOOL
                 && outcomes.allows(want);
+    }
+
+    /** Whether {@code e} is code of a copy of an application of one of the language's operations,
+     *  which the reading of the ways asks of where the copy is entered, and only there. */
+    private static boolean answersAnApplication(Core e) {
+        return ACopyOfAnApplication.of(Core.withoutStanding(e)) != null;
     }
 
     @Override

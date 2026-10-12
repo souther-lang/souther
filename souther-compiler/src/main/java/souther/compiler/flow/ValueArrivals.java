@@ -2,9 +2,12 @@ package souther.compiler.flow;
 
 import souther.compiler.check.Choice;
 import souther.compiler.check.ScopeStep;
+import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.OccurrenceLineage;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -139,6 +142,17 @@ public final class ValueArrivals<P> {
 
     /** Whether a call kept standing is a defect here or an operation the model names. */
     private final WhereTheOperationsAre operations;
+
+    /**
+     * The copy of an application the model states that the node being read is code of, or null
+     * where it is the model's own code — where the operations stand, and never where they are
+     * expanded.
+     *
+     * <p>A node that says where it is written says which copy it belongs to; one that does not —
+     * a name, a literal, a value built from parts — belongs where its parent does. What the model
+     * handed the application is the model's code even where the copy holds it, and says so.
+     */
+    private OccurrenceLineage.Expansion standingIn;
 
     /**
      * What a value built in the tree means, for a tree that builds values it does not hold the
@@ -495,9 +509,60 @@ public final class ValueArrivals<P> {
         if (already != null) {
             return already;
         }
-        Paths<P> answer = normalised(e, reading(e, naming, comparisons, bound));
+        OccurrenceLineage.Expansion outer = standingIn;
+        ACopyOfAnApplication copy = copyStatedAt(e);
+        if (ACopyOfAnApplication.occurrenceOf(e) != null) {
+            standingIn = copy == null ? null : copy.copy();
+        }
+        Paths<P> answer;
+        try {
+            answer = reading(e, naming, comparisons, bound);
+            if (copy != null && !copy.copy().equals(outer)) {
+                answer = answering(e, answer, naming, comparisons, bound);
+            }
+        } finally {
+            standingIn = outer;
+        }
+        answer = normalised(e, answer);
         settled.put(e, answer);
         return answer;
+    }
+
+    /**
+     * The copy of an application the model states that {@code e} is code of, where the operations
+     * stand — or null.
+     *
+     * <p>Where they stand, an application the model writes is one value of the model's, as a call
+     * of one the language keeps standing is, and the walk the operation's code does is the
+     * operation's: no way through it is a way of the body. Where they are expanded, that walk is
+     * part of the tree that runs, and its ways are ways of it.
+     */
+    private ACopyOfAnApplication copyStatedAt(Core e) {
+        if (operations != WhereTheOperationsAre.STAND_IN_IT) {
+            return null;
+        }
+        ACopyOfAnApplication copy = ACopyOfAnApplication.of(e);
+        return copy == null || ModelOccurrence.statedAt(copy.application()).isEmpty()
+                ? null : copy;
+    }
+
+    /**
+     * The ways to {@code e}, the node a copy of an application is entered at, which is what the
+     * application answers: the ways of what the model handed it as {@code read} has them, split
+     * by the truth the application answers where it answers one, as a call of an operation standing
+     * is ({@link #built}).
+     */
+    private Paths<P> answering(Core e, Paths<P> read, Naming<P> naming,
+                               ComparisonWays comparisons, Map<BindingId, Bound<P>> bound) {
+        if (!Type.BOOL.equals(e.type()) || read.orNone().size() != 1) {
+            return read;
+        }
+        Paths<P> settledTwoWays = comparedOut(e, read.orNone().get(0), naming, comparisons,
+                named -> {
+                    Bound<P> was = bound.get(named.binding());
+                    return was == null ? null : was.settledBy();
+                });
+        return settledTwoWays != null ? settledTwoWays : read;
     }
 
     /**
@@ -591,7 +656,9 @@ public final class ValueArrivals<P> {
                 return out;
             }
         }
-        if (out.orNone().size() == 1) {
+        // A value of an application's code is the application's, and comes out the way the
+        // application answers ({@link #answering}).
+        if (out.orNone().size() == 1 && standingIn == null) {
             Paths<P> settledTwoWays = comparedOut(e, out.orNone().get(0), naming, comparisons,
                     read -> {
                         Bound<P> named = bound.get(read.binding());
