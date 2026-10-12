@@ -586,17 +586,27 @@ public final class StandingAtAPoint {
         }
 
         /**
-         * The elements of {@code container} the row wrote under what this reading chose of every
-         * other container, each read with it chosen, and which of them this reading chose.
-         *
-         * <p>Under what it chose of the others because that is which occurrence of the container
-         * this is: the items of the order a reading chose, and no other order's.
+         * The occurrence of {@code container} this reading is in — what it chose of every other
+         * container, the items of the order a reading chose and no other order's — and which of
+         * its elements it chose.
          */
         @Override
         public final WalkResult<BorderQuantity.Among> among(TermPath container) {
-            if (at(container) instanceof WalkResult.CouldNotWalk<ObservationAtPoint>) {
+            if (at(container) instanceof WalkResult.CouldNotWalk<ObservationAtPoint>
+                    || occurrencesAt(container.element())
+                            instanceof WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>>) {
                 return WalkResult.couldNotWalk();
             }
+            Map<TermPath, Integer> beside = new LinkedHashMap<>(chosen());
+            beside.remove(container);
+            return WalkResult.reached(new BorderQuantity.Among(occurrences, beside,
+                    chosen().get(container)));
+        }
+
+        /** The elements of {@code container} the row wrote under what this reading chose of
+         *  every other container, each read with it chosen. */
+        @Override
+        public final WalkResult<List<BorderQuantity.AnElement>> elementsOf(TermPath container) {
             return switch (occurrencesAt(container.element())) {
                 case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
                         WalkResult.couldNotWalk();
@@ -610,15 +620,14 @@ public final class StandingAtAPoint {
                     }
                     Map<TermPath, Integer> beside = new LinkedHashMap<>(chosen());
                     beside.remove(container);
-                    List<BorderQuantity.Observation> each = new ArrayList<>();
+                    List<BorderQuantity.AnElement> out = new ArrayList<>();
                     for (int element : elements) {
                         Map<TermPath, Integer> choosing = new LinkedHashMap<>(beside);
                         choosing.put(container, element);
-                        each.add(new OneReadingOfARow(where, observedInputs, choosing,
-                                occurrences));
+                        out.add(new BorderQuantity.AnElement(element, new OneReadingOfARow(where,
+                                observedInputs, choosing, occurrences)));
                     }
-                    yield WalkResult.reached(new BorderQuantity.Among(occurrences, beside,
-                            chosen().get(container), List.copyOf(elements), each));
+                    yield WalkResult.reached(List.copyOf(out));
                 }
             };
         }

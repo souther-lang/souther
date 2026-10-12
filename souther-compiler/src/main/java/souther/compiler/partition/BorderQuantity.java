@@ -1556,44 +1556,55 @@ public sealed interface BorderQuantity
         }
 
         /**
-         * Where the element of the container at {@code container} this row is read with chosen
-         * stands among the elements of it the row wrote, each of them read as this row with that
-         * element chosen instead.
+         * Which occurrence of the container at {@code container} this row is read in, and which
+         * of its elements this reading chose.
          *
          * <p>Of the reading and not of the row, as {@link #lastToHold} is; a walk that cannot
-         * tell the elements of the container apart could not walk to an answer.
+         * tell the elements of the container apart could not walk to an answer. Nothing is read
+         * of the elements here: every reading of a row asks this, and a reader keeps what the
+         * elements of one occurrence came to by what this answers ({@link #elementsOf}).
          */
         default WalkResult<Among> among(TermPath container) {
+            return WalkResult.couldNotWalk();
+        }
+
+        /**
+         * The elements of the occurrence of the container at {@code container} this row is read
+         * in, in the order it wrote them, each read as this reading with that element chosen.
+         */
+        default WalkResult<List<AnElement>> elementsOf(TermPath container) {
             return WalkResult.couldNotWalk();
         }
     }
 
     /**
-     * The elements of one container a row wrote, in the order it wrote them, and which of them a
+     * Which occurrence of one container a reading of a row is read in, and which element of it the
      * reading chose.
      *
-     * @param walk     what every reading of the row shares, by identity: what tells two readings of
-     *                 one row from readings of two rows that wrote the same values, which a reader
-     *                 keeping what it worked out of a row's elements keys on
-     * @param beside   what the reading chose of every other container, which says which occurrence
-     *                 of the container this is — the items of the second order and not of the first
-     * @param chosen   the element the reading chose, or null where it chose none
-     * @param elements the elements the row wrote, in order
-     * @param each     each of them, read as the reading with it chosen in place of {@code chosen}
+     * @param walk   what every reading of the row shares, by identity: what tells two readings of
+     *               one row from readings of two rows that wrote the same values, which a reader
+     *               keeping what it worked out of a row's elements keys on
+     * @param beside what the reading chose of every other container, which says which occurrence
+     *               of the container this is — the items of the second order and not of the first
+     * @param chosen the element the reading chose, or null where it chose none
      */
-    record Among(Object walk, Map<TermPath, Integer> beside, Integer chosen,
-                 List<Integer> elements, List<Observation> each) {
+    record Among(Object walk, Map<TermPath, Integer> beside, Integer chosen) {
 
         public Among {
             beside = Map.copyOf(beside);
-            elements = List.copyOf(elements);
-            each = List.copyOf(each);
-            if (walk == null || elements.size() != each.size()) {
-                throw new IllegalArgumentException(
-                        "the elements of a row's container are each read once");
+            if (walk == null) {
+                throw new IllegalArgumentException("an occurrence is of some row's walk");
             }
         }
     }
+
+    /**
+     * One element of a container a row wrote, and the row read with it chosen.
+     *
+     * @param element where it stands among the container's elements
+     * @param reading the row, read with it chosen
+     */
+    record AnElement(int element, Observation reading) {}
 
     /**
      * Whether an element is the last of those holding the value it holds at a place.

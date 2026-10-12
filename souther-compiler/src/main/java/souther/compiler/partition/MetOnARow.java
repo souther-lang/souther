@@ -72,6 +72,11 @@ final class MetOnARow {
         if (notSaid != null) {
             return new AStatementAtARow.Answer.CouldNotTell(Set.of(notSaid));
         }
+        // What every comparison inside no such closure comes to, asked of every reading standing
+        // at one of its points.
+        if (made == null && levels.isEmpty()) {
+            return AStatementAtARow.Answer.HOLDS;
+        }
         Set<ReadingGap> unknown = new LinkedHashSet<>();
         if (made != null) {
             switch (made.at(reading)) {
@@ -122,8 +127,12 @@ final class MetOnARow {
                     if (among.chosen() == null) {
                         yield AStatementAtARow.Answer.HOLDS;
                     }
+                    // The elements are read once for each occurrence and not for each reading of
+                    // one: there is a reading per element, and each reading them all is the
+                    // square of the container's length.
                     yield read.computeIfAbsent(among.walk(), _ -> new HashMap<>())
-                            .computeIfAbsent(among.beside(), _ -> Prefix.of(stops, among))
+                            .computeIfAbsent(among.beside(), _ -> Prefix.of(stops,
+                                    reading.elementsOf(container)))
                             .before(among.chosen());
                 }
             };
@@ -140,17 +149,24 @@ final class MetOnARow {
      */
     private record Prefix(Integer stopsAt, List<Map.Entry<Integer, Set<ReadingGap>>> unknown) {
 
-        static Prefix of(AStatementAtARow stops, BorderQuantity.Among among) {
+        static Prefix of(AStatementAtARow stops,
+                         WalkResult<List<BorderQuantity.AnElement>> elements) {
+            if (!(elements instanceof WalkResult.Reached<List<BorderQuantity.AnElement>>(
+                    List<BorderQuantity.AnElement> each))) {
+                // No element could be walked to, so whether any before one stopped the operation
+                // is not known of any of them.
+                return new Prefix(null, List.of(Map.entry(Integer.MIN_VALUE,
+                        Set.of(ReadingGap.COULD_NOT_WALK))));
+            }
             List<Map.Entry<Integer, Set<ReadingGap>>> unknown = new ArrayList<>();
-            for (int at = 0; at < among.elements().size(); at++) {
-                int element = among.elements().get(at);
-                switch (stops.at(among.each().get(at))) {
+            for (BorderQuantity.AnElement one : each) {
+                switch (stops.at(one.reading())) {
                     case AStatementAtARow.Answer.Holds _ -> {
-                        return new Prefix(element, List.copyOf(unknown));
+                        return new Prefix(one.element(), List.copyOf(unknown));
                     }
                     case AStatementAtARow.Answer.Fails _ -> { }
                     case AStatementAtARow.Answer.CouldNotTell(var why) ->
-                            unknown.add(Map.entry(element, why));
+                            unknown.add(Map.entry(one.element(), why));
                 }
             }
             return new Prefix(null, List.copyOf(unknown));

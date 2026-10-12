@@ -99,11 +99,8 @@ public final class ComparisonEmissionIndex {
         Map<ModelOccurrence, Map<ConstructOccurrence, EmittedComparison>> emitted =
                 new LinkedHashMap<>();
         walk(body, plan, emitted);
-        for (Core method : plan.methods().calledFrom(body)) {
+        for (Core method : plan.methods().runFrom(body)) {
             walk(method, plan, emitted);
-        }
-        for (Core passage : plan.methods().passedThroughFrom(body)) {
-            walk(passage, plan, emitted);
         }
         return new ComparisonEmissionIndex(copy(emitted));
     }

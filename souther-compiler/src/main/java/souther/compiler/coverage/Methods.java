@@ -119,15 +119,13 @@ record Methods(Map<String, Core> entries, Map<String, Core> bodies, Map<String, 
         return count[0];
     }
 
-    /** The helpers' methods {@code emitted} reaches, directly or through another method. */
-    List<Core> passedThroughFrom(Core emitted) {
+    /** Every method {@code emitted} reaches, directly or through another, values' and helpers'
+     *  alike: every body a run of it goes through but its own. */
+    List<Core> runFrom(Core emitted) {
         Map<String, Core> all = all();
-        Set<String> reached = closure(callsOf(emitted, all), name -> callsOf(all.get(name), all));
         List<Core> out = new ArrayList<>();
-        for (String name : reached) {
-            if (passages.containsKey(name)) {
-                out.add(passages.get(name));
-            }
+        for (String name : closure(callsOf(emitted, all), each -> callsOf(all.get(each), all))) {
+            out.add(all.get(name));
         }
         return out;
     }

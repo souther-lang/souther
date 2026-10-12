@@ -46,10 +46,12 @@ import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.function.Function;
 
 /**
  * The values a behavior's body compares its inputs against.
@@ -211,6 +213,10 @@ public final class GuardThresholds {
                 ComparisonEmissionIndex.ofBody(emitted, plan);
         AnswerEmissionIndex answers = AnswerEmissionIndex.ofBody(emitted, plan);
         ReachingCuts.Collected cuts = new ReachingCuts.Collected();
+        // How many calls of each helper a run of this behavior can make, asked once per helper:
+        // every comparison read in its body asks it, and it is a walk of every body the run goes
+        // through.
+        Map<ValueName.Helper, Integer> callsOf = new HashMap<>();
         for (ComparisonReadings.Reading each : comparisons.comparisons()) {
             // Which comparison of the model this is. Total over what this walk reads, and read off
             // what makes the tree rather than off what the models here happen to hold: the table
@@ -250,7 +256,10 @@ public final class GuardThresholds {
                                 // the rule. A line of a statement of several is asked again with
                                 // where it decides taken in.
                                 lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
-                                        whereMet(each, plan, emitted), reaches,
+                                        whereMet(each, helper ->
+                                                callsOf.computeIfAbsent(helper,
+                                                        called -> plan.callsOf(called, emitted))),
+                                        reaches,
                                         ComparisonAssessment.narrowedByWhatArrives(admitted.read(),
                                                 Reachability.of(
                                                         new WayToTheBorder(each.assumed()),
@@ -321,9 +330,9 @@ public final class GuardThresholds {
      * off the row.
      */
     private static ElementsMetOn whereMet(ComparisonReadings.Reading each,
-                                          CoverageSites.Plan plan, Core emitted) {
+                                          Function<ValueName.Helper, Integer> callsOf) {
         ValueName.Helper helper = each.context().helper();
-        return helper != null && plan.callsOf(helper, emitted) == 1
+        return helper != null && callsOf.apply(helper) == 1
                 ? each.metOn().madeWhereverRecorded() : each.metOn();
     }
 
