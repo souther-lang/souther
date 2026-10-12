@@ -187,6 +187,12 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == InputReads.ContainerOf.class) {
             return new InputReads.ContainerOf.AtAPosition(TermPath.of("x"));
         }
+        if (type == InputReads.EntryLookedUp.class) {
+            return new InputReads.EntryLookedUp(TermPath.of("x"), SOMETHING);
+        }
+        if (type == InputReads.WhatItHolds.class) {
+            return new InputReads.WhatItHolds.Unsaid();
+        }
         if (type.isEnum()) {
             return type.getEnumConstants()[0];
         }

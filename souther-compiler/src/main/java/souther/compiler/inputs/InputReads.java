@@ -1206,12 +1206,19 @@ public final class InputReads {
 
         /**
          * What a closure answered on the value another option holds: its body, read where its
-         * parameter stands for that value, and the entry that value was made of, if any.
+         * parameter stands for that value, and what that value is — which says the entry it was
+         * made of, where it was made of one.
          */
-        record MadeByAClosure(Denotation answered, EntryLookedUp madeOf) implements WhatItHolds {
+        record MadeByAClosure(Denotation answered, WhatItHolds handed) implements WhatItHolds {
 
             public MadeByAClosure {
                 Objects.requireNonNull(answered, "what the closure answered is read somewhere");
+                Objects.requireNonNull(handed, "and it was handed some value, said or not");
+            }
+
+            @Override
+            public EntryLookedUp madeOf() {
+                return handed.madeOf();
             }
         }
 
@@ -1264,7 +1271,7 @@ public final class InputReads {
             WhatItHolds handed = at.whatItHolds(args.get(held), symbols, newtypes);
             return new WhatItHolds.MadeByAClosure(new Denotation(block.body(),
                     step.at().holding(block.params().getFirst().binding(), handed, newtypes)),
-                    handed.madeOf());
+                    handed);
         }
         // An optional at a position holds what stands there narrowed to its present case.
         if (!(at.forkedOn(looked.value(), newtypes) instanceof PathResolution.At(TermPath path))) {
