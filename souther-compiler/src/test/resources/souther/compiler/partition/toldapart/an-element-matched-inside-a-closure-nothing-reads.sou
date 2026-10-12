@@ -1,0 +1,26 @@
+// A `match` on an element inside a closure whose answer nothing reads tells the element apart
+// nowhere.
+//
+// What `List.all` answers here is bound and never used, so no answer of the behavior turns on it,
+// and the element is left as every position is beside a decision no position is named for.
+//
+// told apart at n: 2 groups of 2
+// told apart at xs[*]: unread somewhere
+module example.elementmatchedunread
+
+data North
+data South
+data Region = North | South
+
+data Ok = { n: Int }
+
+behavior judge : (n: Int, xs: List<Region>) -> Ok
+    constructs Ok
+
+let judge (n, xs) = {
+    guard n > 0 else Ok { n = 0 }
+    let unused = List.all(r -> match r with
+        | North -> true
+        | South -> false, xs)
+    Ok { n = 2 }
+}

@@ -51,6 +51,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -91,23 +92,28 @@ public final class GuardThresholds {
      * is not recoverable from a {@link Threshold} — {@code x <= c} and {@code x > c} both put
      * {@code c} on the low side and are two different rules about it — so it is read where the
      * operator is still in hand, and which values arrive is asked of the reading of the whole body.
+     *
+     * @param casesMatchedInside the positions inside a container whose case a {@code match} turns
+     *                           on, which the same walk names ({@link ComparisonReadings})
      */
     public record Guards(List<LineEvidence> evidence,
                          RulesWithNoLine noLine,
                          List<LineDrawn> between,
                          ReachingCuts reaching,
                          List<ComparisonReadings.ForkMet> forks,
-                         Map<ConditionOccurrence, Citation> conditionsMet) {
+                         Map<ConditionOccurrence, Citation> conditionsMet,
+                         Set<TermPath> casesMatchedInside) {
 
         public static final Guards NONE =
                 new Guards(List.of(), RulesWithNoLine.NONE, List.of(), ReachingCuts.NONE,
-                        List.of(), Map.of());
+                        List.of(), Map.of(), Set.of());
 
         public Guards {
             evidence = List.copyOf(evidence);
             between = List.copyOf(between);
             forks = List.copyOf(forks);
             conditionsMet = Map.copyOf(conditionsMet);
+            casesMatchedInside = Set.copyOf(casesMatchedInside);
         }
 
         /** The lines, read off what the walk said. Not a list of their own: the walk met these and
@@ -318,7 +324,8 @@ public final class GuardThresholds {
                             each.failing())));
         }
         return new Guards(found, withoutALine.found(), between, cuts.made(),
-                comparisons.forks(), comparisons.conditionsMet());
+                comparisons.forks(), comparisons.conditionsMet(),
+                comparisons.casesMatchedInside());
     }
 
     /**

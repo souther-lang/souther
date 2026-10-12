@@ -202,7 +202,10 @@ final class Coverages {
                     case souther.compiler.partition.BodyReading.NotInElaboration _ ->
                             new souther.compiler.partition.MeasureClosure
                                     .Drawing.NoneWasMade(behavior.name());
-                }), quantities,
+                },
+                // And the elements whose case the body matches, which the walk of the comparisons
+                // names and the reading of the runs cannot.
+                guards.casesMatchedInside()), quantities,
                 // Where this reading met each condition it places itself, beside the geometry and
                 // not inside it. A report points at a condition and an answer says which condition
                 // it is, and the two are kept apart so that moving one leaves the other alone.

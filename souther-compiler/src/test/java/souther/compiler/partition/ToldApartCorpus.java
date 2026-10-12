@@ -98,13 +98,19 @@ final class ToldApartCorpus {
      * <p>The groups beside the classes, so that a fixture says what the position is divided into as
      * well as how the body divides it: a fixture whose model moved under it is then a failure and
      * not an answer that happens to stay the same.
+     *
+     * <p>And which of the two things left a position unread, since only one of them makes
+     * combinations ({@link BodyDistinction#makesCombinations}): "unread here" where something the
+     * body says about the position itself was not read into classes, "unread somewhere" where a
+     * decision with no subject anyone could name may be about it.
      */
     static String spelled(BodyDistinction told, int classes) {
         return switch (told) {
             case BodyDistinction.Untouched _ -> "untouched";
             case BodyDistinction.Drawn it -> it.groups().size()
                     + (it.groups().size() == 1 ? " group of " : " groups of ") + classes;
-            case BodyDistinction.Unread _ -> "unread";
+            case BodyDistinction.Unread it ->
+                    it.unplacedHere() ? "unread here" : "unread somewhere";
             case BodyDistinction.NoBody _ -> "no body";
         };
     }

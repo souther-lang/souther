@@ -64,14 +64,17 @@ final class WhatABodyTellsApart {
     private final List<Axis> axes;
     /** The rules the reading of the input read to the end and found no line in, with why. */
     private final List<RuleWithoutALine> noLine;
+    /** The elements whose case a {@code match} in the body turns on, which no way names. */
+    private final Set<TermPath> casesMatchedInside;
     /** Which position each condition is about and what it admits there, asked once of each. */
     private final Map<souther.compiler.reading.Condition, Placed> placed = new HashMap<>();
 
     private WhatABodyTellsApart(MeasuredInput.MeasuredAxes measured,
-                                List<RuleWithoutALine> noLine) {
+                                List<RuleWithoutALine> noLine, Set<TermPath> casesMatchedInside) {
         this.measured = measured;
         this.axes = measured.axes();
         this.noLine = noLine;
+        this.casesMatchedInside = casesMatchedInside;
         this.unread = new boolean[axes.size()];
         for (int at = 0; at < axes.size(); at++) {
             splits.add(new ArrayList<>());
@@ -81,12 +84,15 @@ final class WhatABodyTellsApart {
 
     /**
      * What the body read as {@code read} tells apart at each position {@code measured}, where
-     * {@code noLine} is what the reading of the input found about the rules it drew no line for.
+     * {@code noLine} is what the reading of the input found about the rules it drew no line for and
+     * {@code casesMatchedInside} the elements whose case the body matches.
      */
     static Map<AxisId, BodyDistinction> of(CoverageRead.Read read,
                                            MeasuredInput.MeasuredAxes measured,
-                                           List<RuleWithoutALine> noLine) {
-        WhatABodyTellsApart reading = new WhatABodyTellsApart(measured, noLine);
+                                           List<RuleWithoutALine> noLine,
+                                           Set<TermPath> casesMatchedInside) {
+        WhatABodyTellsApart reading =
+                new WhatABodyTellsApart(measured, noLine, casesMatchedInside);
         List<Axis> axes = measured.axes();
         for (WayIn way : read.taken()) {
             reading.take(way);
@@ -615,9 +621,13 @@ final class WhatABodyTellsApart {
                                 && written.contains(comparison.origin()));
             }
         }
+        // And a `match` on the case of an element, which tells the element apart where no way
+        // places it: the closure it is in is applied to each element, to a different case each
+        // time.
+        boolean matchedNoWayPlaces = casesMatchedInside.contains(axis.path());
         // Unread over anything read. What was read at the position is part of what the body tells
         // apart there, and a part is never said as the whole.
-        boolean unplacedHere = unread[at] || ruleNoDecisionRead;
+        boolean unplacedHere = unread[at] || ruleNoDecisionRead || matchedNoWayPlaces;
         List<List<String>> groups = groupsOf(axis.classes(), splits.get(at));
         // Unless what was read already tells every class apart, which nothing further can refine:
         // whatever went unread, the partition is the finest there is.

@@ -1,0 +1,35 @@
+// Nor does a `match` on an element inside a closure no run reaches.
+//
+// The closure is made under the inner arm for Yes, which is under the outer arm for No, so no run
+// makes it and the `match` on the element there is no decision the body makes.
+//
+// told apart at f: 2 groups of 2
+// told apart at n: 2 groups of 2
+// told apart at xs[*]: untouched
+module example.elementmatchedunreached
+
+data Yes
+data No
+data Flag = Yes | No
+
+data North
+data South
+data Region = North | South
+
+data Ok = { n: Int }
+
+behavior judge : (f: Flag, n: Int, xs: List<Region>) -> Ok
+    constructs Ok
+
+let judge (f, n, xs) = {
+    guard n > 10 else Ok { n = 0 }
+    match f with
+        | Yes -> Ok { n = 1 }
+        | No ->
+            match f with
+                | Yes -> Ok { n = List.length(List.filter(r ->
+                    match r with
+                        | North -> true
+                        | South -> false, xs)) }
+                | No -> Ok { n = 4 }
+}

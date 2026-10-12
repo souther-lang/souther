@@ -36,9 +36,11 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -86,10 +88,20 @@ import java.util.function.Supplier;
  * {@code ||} settle as soon as they can, so the right operand runs under what the left one coming
  * out its way established — which is the whole of what makes this per comparison rather than per
  * fork. Everything else evaluates its parts under what stood at it.
+ *
+ * <p><b>And the elements whose case a {@code match} turns on, which only this tree can name.</b> A
+ * name a closure is handed stands for an element of a container where the operation handing it over
+ * still stands; in the tree that runs that operation is expanded, and a reading of it names no
+ * position for a {@code match} on the name. Which class went which way is not read here: a closure
+ * is applied once per element, to a different case each time, and to none of an empty container.
+ *
+ * @param casesMatchedInside the positions inside a container whose case a {@code match} on the way
+ *                           to an answer turns on
  */
 record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                           Map<ConditionOccurrence, Citation> conditionsMet,
-                          List<TruthMet> truths, List<ForkDecided> decided) {
+                          List<TruthMet> truths, List<ForkDecided> decided,
+                          Set<TermPath> casesMatchedInside) {
 
     ComparisonReadings {
         comparisons = List.copyOf(comparisons);
@@ -97,6 +109,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         conditionsMet = Map.copyOf(conditionsMet);
         truths = List.copyOf(truths);
         decided = List.copyOf(decided);
+        casesMatchedInside = Set.copyOf(casesMatchedInside);
     }
 
     /**
@@ -305,13 +318,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         Arrivals answering, Templates templates,
                         List<TruthMet> truths, List<ForkDecided> decided, StatedHere stated,
                         WhatConditionsState conditions, CallContext context, Core root,
-                        InputReads atTheRoot) {
+                        InputReads atTheRoot, Set<TermPath> casesMatched) {
 
         /** The same reading, in the body of a recursive helper read at a call of it: its own
          *  tree, and the copy that call makes of each construct in it. */
         Body inside(Core helperBody, CallContext called, InputReads reads) {
             return new Body(behavior, read, Arrivals.inTheTree(helperBody), templates, truths,
-                    decided, stated, conditions, called, helperBody, reads);
+                    decided, stated, conditions, called, helperBody, reads, casesMatched);
         }
 
         Symbols symbols() {
@@ -361,9 +374,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         trees.add(body);
         trees.addAll(analysis.templatesAfterTheirBuilders());
         Arrivals answering = Arrivals.inTheTrees(trees, analysis.templates()::bodyOf);
+        Set<TermPath> casesMatched = new LinkedHashSet<>();
         walk(body, new Body(behavior, read, answering,
                         templates, truths, decided, stated, conditions,
-                        CallContext.OF_THE_BODY, body, reads),
+                        CallContext.OF_THE_BODY, body, reads, casesMatched),
                 reads, ClosureApplications.OUTSIDE,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
@@ -379,13 +393,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 // way joined, which no walk down the template says.
                 walk(template, new Body(behavior, read, answering,
                         templates, truths, decided, stated, conditions,
-                        CallContext.OF_THE_BODY, null, null),
+                        CallContext.OF_THE_BODY, null, null, casesMatched),
                         defined, ClosureApplications.OUTSIDE, LiveFlow.of(template),
                         entry.assumed(), entry.live(),
                         readings, forks, numbering);
             }
         }
-        return new ComparisonReadings(readings, forks, numbering.metAt(), truths, decided);
+        return new ComparisonReadings(readings, forks, numbering.metAt(), truths, decided,
+                casesMatched);
     }
 
     /** How one build of a value was reached: what stood on the way to it, and whether what it
@@ -607,7 +622,20 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // goes onto the account beside the conditions a guard states. Walked without it, a line
             // inside an arm was owed a row by a walk that had been told nothing stood on the way to
             // it, and the row composed for it was written in whichever arm the values fell in.
+            //
+            // A `match` on an element is one the tree that runs names no position for, so the
+            // position is kept here. Only where the name is that element: a name that may stand at
+            // any of several positions names none of them, and a value made from an element is no
+            // element of the input. And only where some run makes it, which is what makes it a
+            // decision of the body.
             case Core.Match match -> {
+                if (live && reads.pathOf(match.scrutinee(), in.newtypes())
+                        instanceof PathResolution.At(TermPath at) && at.insideAContainer()
+                        && Reachability.of(new WayToTheBorder(assumed),
+                                in.read().quantities().region())
+                                instanceof Reachability.Reaching) {
+                    in.casesMatched().add(at);
+                }
                 walk(match.scrutinee(), in, reads, applying, flow, assumed, live, out, forks,
                         numbering);
                 for (int part = 0; part < match.cases().size(); part++) {
