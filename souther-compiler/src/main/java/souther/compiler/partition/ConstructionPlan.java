@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Where a value has to be built under one parameter, and out of what.
@@ -432,12 +433,17 @@ final class ConstructionPlan {
      * @param holdingOne the containers a value is written into
      * @param keepingOut the containers a value is kept out of
      * @param read       the positions of this value a value handed over is read at
+     * @param standing   those of {@code read} a value stands at in every row meeting what was
+     *                   asked, so that every container they are inside holds an element. The rest
+     *                   are read only where such a row has something there: a container asked
+     *                   about every element it holds meets that holding none
      */
     record ContentsComposed(Set<TermPath> holdingOne, Set<TermPath> keepingOut,
-                            Set<TermPath> read) {
+                            Set<TermPath> read, Set<TermPath> standing) {
 
         /** Nothing handed over, which is what a plan with no container asked of is made with. */
-        static final ContentsComposed NONE = new ContentsComposed(Set.of(), Set.of(), Set.of());
+        static final ContentsComposed NONE =
+                new ContentsComposed(Set.of(), Set.of(), Set.of(), Set.of());
 
         // In the order they were handed over: the requirements of these positions are put
         // together in it, and which of two disagreeing ones a refusal names follows from it.
@@ -445,6 +451,19 @@ final class ConstructionPlan {
             holdingOne = Collections.unmodifiableSet(new LinkedHashSet<>(holdingOne));
             keepingOut = Collections.unmodifiableSet(new LinkedHashSet<>(keepingOut));
             read = Collections.unmodifiableSet(new LinkedHashSet<>(read));
+            standing = Collections.unmodifiableSet(new LinkedHashSet<>(standing));
+            if (!read.containsAll(standing)) {
+                throw new IllegalArgumentException("a position a value stands at is one read: "
+                        + standing + " beside " + read);
+            }
+        }
+
+        /**
+         * Whether a value handed over stands at {@code here} or below it in every row meeting what
+         * was asked — so that a container {@code here} is the element or key of holds one.
+         */
+        boolean standsAtOrUnder(TermPath here) {
+            return standing.stream().anyMatch(each -> each.isAtOrUnder(here));
         }
 
         /** Whether values are handed to the container at {@code container}. */
@@ -467,7 +486,19 @@ final class ConstructionPlan {
 
         /** Whether one of them stands strictly under {@code here}. */
         boolean reachesUnder(TermPath here) {
-            return paths().stream().anyMatch(each -> !each.equals(here) && each.isAtOrUnder(here));
+            return strictlyUnder(holdingOne, here) || strictlyUnder(keepingOut, here)
+                    || strictlyUnder(read, here);
+        }
+
+        // Asked of each set where it stands: a plan asks it at every position chosen whole, and
+        // the union would be made again each time.
+        private static boolean strictlyUnder(Set<TermPath> paths, TermPath here) {
+            for (TermPath each : paths) {
+                if (!each.equals(here) && each.isAtOrUnder(here)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
@@ -575,8 +606,8 @@ final class ConstructionPlan {
     }
 
     /**
-     * Every position the caller asked something of: the ones it stated a narrowing at, and the ones
-     * it fixed a value at.
+     * The first position the caller asked something of that {@code where} holds of, or null where
+     * there is none: among the ones it stated a narrowing at, and the ones it fixed a value at.
      *
      * <p><b>One reading, because the two halves are one demand.</b> A value fixed at {@code x.a.b}
      * adds no requirement that a field step was taken, so a reading of the requirements alone lets
@@ -587,11 +618,23 @@ final class ConstructionPlan {
      * <p>The narrowings first, which is the order the answers below are given in. A path is in one
      * of the two and never both: a caller that fixed a value at a position and also required a
      * narrowing there is refused where the requirements are put together.
+     *
+     * <p>Walked where it stands rather than gathered into a list: every position of a plan asks it,
+     * some of them more than once, and what is asked never changes while one plan is made.
      */
-    private static List<TermPath> whatTheCallerAsked(Set<TermPath> decided, Requirements required) {
-        List<TermPath> out = new ArrayList<>(required.refinements().keySet());
-        out.addAll(decided);
-        return out;
+    private static TermPath firstTheCallerAsked(Set<TermPath> decided, Requirements required,
+                                                Predicate<TermPath> where) {
+        for (TermPath each : required.refinements().keySet()) {
+            if (where.test(each)) {
+                return each;
+            }
+        }
+        for (TermPath each : decided) {
+            if (where.test(each)) {
+                return each;
+            }
+        }
+        return null;
     }
 
     /**
@@ -602,15 +645,14 @@ final class ConstructionPlan {
      */
     private static boolean anythingIsAskedUnder(TermPath here, Set<TermPath> decided,
                                                 Requirements required) {
-        return whatTheCallerAsked(decided, required).stream()
-                .anyMatch(each -> !each.equals(here) && each.isAtOrUnder(here));
+        return firstTheCallerAsked(decided, required,
+                each -> !each.equals(here) && each.isAtOrUnder(here)) != null;
     }
 
     /** Whether the caller asked anything at {@code here} itself or below it. */
     private static boolean anythingIsAskedAtOrUnder(TermPath here, Set<TermPath> decided,
                                                     Requirements required) {
-        return whatTheCallerAsked(decided, required).stream()
-                .anyMatch(each -> each.isAtOrUnder(here));
+        return firstTheCallerAsked(decided, required, each -> each.isAtOrUnder(here)) != null;
     }
 
     /**
@@ -712,9 +754,17 @@ final class ConstructionPlan {
             // And what is placed in it is asked part by part. A map holds a value under a key, and
             // a class at one is no demand on the other: a key asked for is filed over whatever
             // value the rules admit, and nothing about the value's own structure is planned for it.
-            boolean valueAsked = anythingIsAskedAtOrUnder(here.element(), decided, required);
+            //
+            // A value handed over from inside its element is asked there the same way, where the
+            // row has to have it: what was asked of some element of this container reads it, and
+            // a row holding none meets nothing. Read off every element instead, it is not asked —
+            // a row holding none meets that too, and making this hold one for it would refuse as
+            // the model's a container the rules keep empty.
+            boolean valueAsked = anythingIsAskedAtOrUnder(here.element(), decided, required)
+                    || contents.standsAtOrUnder(here.element());
             boolean keyAsked = container instanceof Shape.Mapping
-                    && anythingIsAskedAtOrUnder(here.key(), decided, required);
+                    && (anythingIsAskedAtOrUnder(here.key(), decided, required)
+                            || contents.standsAtOrUnder(here.key()));
             boolean elementAsked = valueAsked || keyAsked;
             boolean handed = contents.handedTo(here);
             boolean demanded = elementAsked || handed;
@@ -1028,10 +1078,8 @@ final class ConstructionPlan {
      */
     private static void refuseWhatWouldStandUnder(TermPath absent, Set<TermPath> decided,
                                                   Requirements required) {
-        for (TermPath each : whatTheCallerAsked(decided, required)) {
-            if (!each.isAtOrUnder(absent)) {
-                continue;
-            }
+        TermPath each = firstTheCallerAsked(decided, required, asked -> asked.isAtOrUnder(absent));
+        if (each != null) {
             CasesLeft stated = required.at(each);
             throw new IllegalStateException(stated != null
                     ? "`" + each + "` is required to be " + stated.spelled() + " at or under `"
