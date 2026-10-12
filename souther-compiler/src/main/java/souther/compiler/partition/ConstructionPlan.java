@@ -432,12 +432,17 @@ final class ConstructionPlan {
      * @param holdingOne the containers a value is written into
      * @param keepingOut the containers a value is kept out of
      * @param read       the positions of this value a value handed over is read at
+     * @param standing   those of {@code read} a value stands at in every row meeting what was
+     *                   asked, so that every container they are inside holds an element. The rest
+     *                   are read only where such a row has something there: a container asked
+     *                   about every element it holds meets that holding none
      */
     record ContentsComposed(Set<TermPath> holdingOne, Set<TermPath> keepingOut,
-                            Set<TermPath> read) {
+                            Set<TermPath> read, Set<TermPath> standing) {
 
         /** Nothing handed over, which is what a plan with no container asked of is made with. */
-        static final ContentsComposed NONE = new ContentsComposed(Set.of(), Set.of(), Set.of());
+        static final ContentsComposed NONE =
+                new ContentsComposed(Set.of(), Set.of(), Set.of(), Set.of());
 
         // In the order they were handed over: the requirements of these positions are put
         // together in it, and which of two disagreeing ones a refusal names follows from it.
@@ -445,6 +450,19 @@ final class ConstructionPlan {
             holdingOne = Collections.unmodifiableSet(new LinkedHashSet<>(holdingOne));
             keepingOut = Collections.unmodifiableSet(new LinkedHashSet<>(keepingOut));
             read = Collections.unmodifiableSet(new LinkedHashSet<>(read));
+            standing = Collections.unmodifiableSet(new LinkedHashSet<>(standing));
+            if (!read.containsAll(standing)) {
+                throw new IllegalArgumentException("a position a value stands at is one read: "
+                        + standing + " beside " + read);
+            }
+        }
+
+        /**
+         * Whether a value handed over stands at {@code here} or below it in every row meeting what
+         * was asked — so that a container {@code here} is the element or key of holds one.
+         */
+        boolean standsAtOrUnder(TermPath here) {
+            return standing.stream().anyMatch(each -> each.isAtOrUnder(here));
         }
 
         /** Whether values are handed to the container at {@code container}. */
@@ -712,9 +730,17 @@ final class ConstructionPlan {
             // And what is placed in it is asked part by part. A map holds a value under a key, and
             // a class at one is no demand on the other: a key asked for is filed over whatever
             // value the rules admit, and nothing about the value's own structure is planned for it.
-            boolean valueAsked = anythingIsAskedAtOrUnder(here.element(), decided, required);
+            //
+            // A value handed over from inside its element is asked there the same way, where the
+            // row has to have it: what was asked of some element of this container reads it, and
+            // a row holding none meets nothing. Read off every element instead, it is not asked —
+            // a row holding none meets that too, and making this hold one for it would refuse as
+            // the model's a container the rules keep empty.
+            boolean valueAsked = anythingIsAskedAtOrUnder(here.element(), decided, required)
+                    || contents.standsAtOrUnder(here.element());
             boolean keyAsked = container instanceof Shape.Mapping
-                    && anythingIsAskedAtOrUnder(here.key(), decided, required);
+                    && (anythingIsAskedAtOrUnder(here.key(), decided, required)
+                            || contents.standsAtOrUnder(here.key()));
             boolean elementAsked = valueAsked || keyAsked;
             boolean handed = contents.handedTo(here);
             boolean demanded = elementAsked || handed;

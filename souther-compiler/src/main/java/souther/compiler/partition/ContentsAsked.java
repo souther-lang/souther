@@ -43,8 +43,17 @@ record ContentsAsked(List<Asked> asked) {
     /**
      * That the container at {@code container} holds the value at {@code value}, or holds nothing
      * equal to it — as an element, or as a key where {@code ofTheKey}.
+     *
+     * @param standsWhereMet whether a row composed this way has to have a value at {@code value} to
+     *                       hand over: every container it is inside is one the demand asks some
+     *                       element of, so each of them holds one in any row meeting it. False
+     *                       says nothing about whether those containers hold anything — only that
+     *                       one of them is asked about every element, so a row holding none there
+     *                       meets the demand too, and none of them is to be made to hold one for
+     *                       the value's sake
      */
-    record Asked(TermPath container, TermPath value, boolean holding, boolean ofTheKey) {
+    record Asked(TermPath container, TermPath value, boolean holding, boolean ofTheKey,
+                 boolean standsWhereMet) {
 
         Asked {
             Objects.requireNonNull(container, "what is asked is asked of some container");
@@ -62,9 +71,9 @@ record ContentsAsked(List<Asked> asked) {
                 case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
                      RowDemand.ForTheRun _ -> { }
                 case RowDemand.Exists exists ->
-                        asked(exists.container(), true, exists.ofAnElement(), out);
+                        asked(exists.container(), true, exists.ofAnElement(), Set.of(), out);
                 case RowDemand.ForAll every ->
-                        asked(every.container(), false, every.ofEachElement(), out);
+                        asked(every.container(), false, every.ofEachElement(), Set.of(), out);
             }
         }
         return new ContentsAsked(out);
@@ -74,26 +83,45 @@ record ContentsAsked(List<Asked> asked) {
      * What some element of {@code container} — or every one, not {@code some} — being asked
      * {@code ofTheElement} asks of the contents of containers: of this one, and of a container
      * inside its element, which a row writes alike in every element.
+     *
+     * @param someOf the containers around this one the demand asks some element of
      */
     private static void asked(TermPath container, boolean some,
-                              List<RowDemand.OfAnElement> ofTheElement, List<Asked> into) {
+                              List<RowDemand.OfAnElement> ofTheElement, Set<TermPath> someOf,
+                              List<Asked> into) {
+        Set<TermPath> withThis = new LinkedHashSet<>(someOf);
+        if (some) {
+            withThis.add(container);
+        }
         for (RowDemand.OfAnElement one : ofTheElement) {
             switch (one) {
                 case RowDemand.SameAs(TermPath value) when some ->
-                        into.add(new Asked(container, value, true, false));
+                        into.add(new Asked(container, value, true, false,
+                                standsWhereMet(value, withThis)));
                 case RowDemand.DifferentFrom(TermPath value) when !some ->
-                        into.add(new Asked(container, value, false, false));
+                        into.add(new Asked(container, value, false, false,
+                                standsWhereMet(value, withThis)));
                 case RowDemand.KeyedAs(TermPath value) when some ->
-                        into.add(new Asked(container, value, true, true));
+                        into.add(new Asked(container, value, true, true,
+                                standsWhereMet(value, withThis)));
                 case RowDemand.NotKeyedAs(TermPath value) when !some ->
-                        into.add(new Asked(container, value, false, true));
+                        into.add(new Asked(container, value, false, true,
+                                standsWhereMet(value, withThis)));
                 case RowDemand.WithinIt(TermPath inner, boolean innerSome, var asked) ->
-                        asked(inner, innerSome, List.of(asked), into);
+                        asked(inner, innerSome, List.of(asked), withThis, into);
                 case RowDemand.SameAs _, RowDemand.DifferentFrom _, RowDemand.KeyedAs _,
                      RowDemand.NotKeyedAs _, RowDemand.Relational _, RowDemand.ATruth _,
                      RowDemand.InCases _ -> { }
             }
         }
+    }
+
+    /**
+     * Whether every container {@code value} is inside is one of {@code someOf}, so that each of
+     * them holds an element in any row meeting the demand and a value stands at {@code value}.
+     */
+    private static boolean standsWhereMet(TermPath value, Set<TermPath> someOf) {
+        return someOf.containsAll(value.containersHoldingIt());
     }
 
     /**
@@ -210,7 +238,7 @@ record ContentsAsked(List<Asked> asked) {
                 List<Asked> under = new ArrayList<>();
                 for (Asked each : asked.asked()) {
                     under.add(new Asked(at.get(each.container()), at.get(each.value()),
-                            each.holding(), each.ofTheKey()));
+                            each.holding(), each.ofTheKey(), each.standsWhereMet()));
                 }
                 return composes.test(new Way(new ContentsAsked(under), taken, at))
                         ? Walked.COMPOSED : Walked.EVERY_WAY_TRIED;
@@ -256,15 +284,19 @@ record ContentsAsked(List<Asked> asked) {
         Set<TermPath> holdingOne = new LinkedHashSet<>();
         Set<TermPath> keepingOut = new LinkedHashSet<>();
         Set<TermPath> read = new LinkedHashSet<>();
+        Set<TermPath> standing = new LinkedHashSet<>();
         for (Asked each : asked) {
             if (each.container().head().equals(head)) {
                 (each.holding() ? holdingOne : keepingOut).add(each.container());
             }
             if (each.value().head().equals(head)) {
                 read.add(each.value());
+                if (each.standsWhereMet()) {
+                    standing.add(each.value());
+                }
             }
         }
-        return new ConstructionPlan.ContentsComposed(holdingOne, keepingOut, read);
+        return new ConstructionPlan.ContentsComposed(holdingOne, keepingOut, read, standing);
     }
 
     /**
