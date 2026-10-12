@@ -225,7 +225,7 @@ public final class GuardThresholds {
                             + " comparison at " + each.at() + " that states no construct of the"
                             + " model, in a tree where the language's operations stand"));
             List<EmittedComparisonState.Observation> watched =
-                    watchedAt(behavior, each, stated, index, answers, arrives);
+                    watchedAt(behavior, each, index, answers, arrives);
             EmittedComparisonState placed = watched.isEmpty()
                     ? new EmittedComparisonState.NotInstrumented()
                     : new EmittedComparisonState.Instrumented(watched);
@@ -351,7 +351,7 @@ public final class GuardThresholds {
      * — both are a construct nothing watches, which is what an empty list says.
      */
     private static List<EmittedComparisonState.Observation> watchedAt(
-            String behavior, ComparisonReadings.Reading each, ModelOccurrence stated,
+            String behavior, ComparisonReadings.Reading each,
             ComparisonEmissionIndex comparisons, AnswerEmissionIndex answers,
             PathReachability.Answers arrives) {
         List<EmittedComparisonState.Observation> out = new ArrayList<>();
