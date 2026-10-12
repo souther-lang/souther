@@ -125,8 +125,11 @@ class WhatAConditionStatesIsDrawnWhereNothingElseDrawsItTest {
                 && line.toString().contains("TermOrders[o.floor"), read::toString);
     }
 
-    /** A value no position holds is still a value related to another: a lookup in a map built
-     *  from a list of another's. */
+    /**
+     * A value no position holds is still a value related to another: a lookup in a map built from
+     * a list of another's. What values it reaches is nothing this works out, so the relation is not
+     * shown to leave the floor undivided.
+     */
     @Test
     void aRelationToAValueNoPositionHoldsRelatesTwoValues() {
         Walked walked = walked("""
@@ -138,7 +141,8 @@ class WhatAConditionStatesIsDrawnWhereNothingElseDrawsItTest {
                 BoundaryPolicy.Standing.Admitted.class, compared.standing()).read();
         assertInstanceOf(ComparisonAssessment.AgainstAnotherValue.class, read, read::toString);
         assertTrue(read.whatEachPlaceIsLeftWith().stream().allMatch(each ->
-                each.why() instanceof BlockReason.ComparisonRelatingTwoValues), read::toString);
+                each.why() instanceof BlockReason.RelationNotShownToReachEveryValue),
+                read::toString);
     }
 
     /**

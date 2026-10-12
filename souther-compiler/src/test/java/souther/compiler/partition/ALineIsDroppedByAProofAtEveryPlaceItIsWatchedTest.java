@@ -10,6 +10,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.SearchRegion;
@@ -98,7 +99,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         assertEquals(read, ComparisonAssessment.narrowedByWhatArrives(read, untouched(), _ -> untouched(),
                         List.of(new ComparisonArrival.NothingArrives(),
                                 new ComparisonArrival.NoProjection()),
-                        false),
+                        false, reading()),
                 "one place nobody could look at is not a place nothing arrives at");
     }
 
@@ -106,7 +107,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     void everyPlaceProvingItTakesTheLineAway() {
         assertInstanceOf(ComparisonAssessment.NothingArrivesAtItsLine.class,
                 ComparisonAssessment.narrowedByWhatArrives(line(), untouched(), _ -> untouched(),
-                        List.of(new ComparisonArrival.NothingArrives(), misses()), false),
+                        List.of(new ComparisonArrival.NothingArrives(), misses()), false,
+                        reading()),
                 "no run answers through the rule at any place it is watched");
     }
 
@@ -117,8 +119,12 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         assertEquals(read, ComparisonAssessment.narrowedByWhatArrives(read, untouched(), _ -> untouched(),
                         List.of(new ComparisonArrival.NothingArrives(),
                                 new ComparisonArrival.Values(N, NumericDomain.Bounds.OPEN)),
-                        false),
+                        false, reading()),
                 "a run reaches the line at one of the places the rule is watched at");
+    }
+
+    private static InputReading reading() {
+        return READ.input().reading(READ.rules());
     }
 
     private static SearchRegion region() {

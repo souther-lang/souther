@@ -1,12 +1,82 @@
 {
   "schemaVersion" : 24,
   "compilerVersion" : "<version>",
-  "status" : "complete",
-  "adequacy" : "satisfied",
-  "keptOpenBy" : [ ],
+  "status" : "partial",
+  "weakening" : [ "rule_unread" ],
+  "adequacy" : "undetermined",
+  "keptOpenBy" : [ {
+    "kind" : "rule_unread",
+    "about" : {
+      "kind" : "rule",
+      "at" : "bars",
+      "ruleId" : {
+        "kind" : "comparison",
+        "declaredIn" : "conformance.packing",
+        "definition" : "packBox",
+        "behavior" : "packBox",
+        "ordinal" : 7,
+        "lowered" : 0
+      },
+      "rule" : "comparison@0:34:49",
+      "stopped" : [ "relation_not_shown_to_reach_every_value" ]
+    },
+    "runSensitivity" : "unaffected"
+  }, {
+    "kind" : "rule_unread",
+    "about" : {
+      "kind" : "rule",
+      "at" : "from",
+      "ruleId" : {
+        "kind" : "comparison",
+        "declaredIn" : "conformance.packing",
+        "definition" : "bookSlot",
+        "behavior" : "bookSlot",
+        "ordinal" : 2,
+        "lowered" : 0
+      },
+      "rule" : "comparison@0:47:36",
+      "stopped" : [ "relation_not_shown_to_reach_every_value" ]
+    },
+    "runSensitivity" : "unaffected"
+  }, {
+    "kind" : "rule_unread",
+    "about" : {
+      "kind" : "rule",
+      "at" : "straws",
+      "ruleId" : {
+        "kind" : "comparison",
+        "declaredIn" : "conformance.packing",
+        "definition" : "packBox",
+        "behavior" : "packBox",
+        "ordinal" : 7,
+        "lowered" : 0
+      },
+      "rule" : "comparison@0:34:49",
+      "stopped" : [ "relation_not_shown_to_reach_every_value" ]
+    },
+    "runSensitivity" : "unaffected"
+  }, {
+    "kind" : "rule_unread",
+    "about" : {
+      "kind" : "rule",
+      "at" : "until",
+      "ruleId" : {
+        "kind" : "comparison",
+        "declaredIn" : "conformance.packing",
+        "definition" : "bookSlot",
+        "behavior" : "bookSlot",
+        "ordinal" : 2,
+        "lowered" : 0
+      },
+      "rule" : "comparison@0:47:36",
+      "stopped" : [ "relation_not_shown_to_reach_every_value" ]
+    },
+    "runSensitivity" : "unaffected"
+  } ],
   "modules" : [ {
     "module" : "conformance.packing",
-    "status" : "complete",
+    "status" : "partial",
+    "weakening" : [ "rule_unread" ],
     "incompleteness" : [ ],
     "declarations" : [ {
       "owners" : [ {
@@ -988,7 +1058,8 @@
         },
         "disposition" : "met"
       } ],
-      "status" : "complete",
+      "status" : "partial",
+      "weakening" : [ "rule_unread" ],
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -1027,12 +1098,55 @@
       "partition" : {
         "axesMeasure" : {
           "status" : "unavailable",
-          "reason" : "nothing_is_divided"
+          "reason" : "the_reading_did_not_run_out",
+          "weakening" : [ "rule_unread" ]
         },
         "boundariesMeasure" : {
-          "status" : "complete"
+          "status" : "partial",
+          "weakening" : [ "rule_unread" ]
         },
         "axes" : [ ],
+        "unanswered" : [ {
+          "at" : "bars",
+          "rule" : "comparison@0:34:49",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "packBox",
+            "behavior" : "packBox",
+            "ordinal" : 7,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "bars",
+            "measure" : "bars"
+          },
+          "stopped" : [ {
+            "reason" : "relation_not_shown_to_reach_every_value"
+          } ]
+        }, {
+          "at" : "straws",
+          "rule" : "comparison@0:34:49",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "packBox",
+            "behavior" : "packBox",
+            "ordinal" : 7,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "straws",
+            "measure" : "straws"
+          },
+          "stopped" : [ {
+            "reason" : "relation_not_shown_to_reach_every_value"
+          } ]
+        } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
           "obligationId" : {
@@ -1921,7 +2035,7 @@
         "notDerivable" : [ ],
         "notRead" : [ {
           "position" : "bars",
-          "reason" : "rule_relating_two_values",
+          "reason" : "relation_not_shown_to_reach_every_value",
           "rule" : "comparison@0:34:49",
           "ruleId" : {
             "kind" : "comparison",
@@ -1933,7 +2047,7 @@
           }
         }, {
           "position" : "straws",
-          "reason" : "rule_relating_two_values",
+          "reason" : "relation_not_shown_to_reach_every_value",
           "rule" : "comparison@0:34:49",
           "ruleId" : {
             "kind" : "comparison",
@@ -2058,7 +2172,7 @@
           "ordinal" : 7,
           "lowered" : 0
         },
-        "reason" : "rule_relating_two_values"
+        "reason" : "relation_not_shown_to_reach_every_value"
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
@@ -2071,7 +2185,31 @@
           "ordinal" : 7,
           "lowered" : 0
         },
-        "reason" : "rule_relating_two_values"
+        "reason" : "relation_not_shown_to_reach_every_value"
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@0:34:49 — what this rule states about bars",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.packing",
+          "definition" : "packBox",
+          "behavior" : "packBox",
+          "ordinal" : 7,
+          "lowered" : 0
+        }
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@0:34:49 — what this rule states about straws",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.packing",
+          "definition" : "packBox",
+          "behavior" : "packBox",
+          "ordinal" : 7,
+          "lowered" : 0
+        }
       } ]
     }, {
       "name" : "bookSlot",
@@ -2199,7 +2337,8 @@
         },
         "disposition" : "met"
       } ],
-      "status" : "complete",
+      "status" : "partial",
+      "weakening" : [ "rule_unread" ],
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -2238,12 +2377,55 @@
       "partition" : {
         "axesMeasure" : {
           "status" : "unavailable",
-          "reason" : "nothing_is_divided"
+          "reason" : "the_reading_did_not_run_out",
+          "weakening" : [ "rule_unread" ]
         },
         "boundariesMeasure" : {
-          "status" : "complete"
+          "status" : "partial",
+          "weakening" : [ "rule_unread" ]
         },
         "axes" : [ ],
+        "unanswered" : [ {
+          "at" : "from",
+          "rule" : "comparison@0:47:36",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "bookSlot",
+            "behavior" : "bookSlot",
+            "ordinal" : 2,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "from",
+            "measure" : "from"
+          },
+          "stopped" : [ {
+            "reason" : "relation_not_shown_to_reach_every_value"
+          } ]
+        }, {
+          "at" : "until",
+          "rule" : "comparison@0:47:36",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "bookSlot",
+            "behavior" : "bookSlot",
+            "ordinal" : 2,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "until",
+            "measure" : "until"
+          },
+          "stopped" : [ {
+            "reason" : "relation_not_shown_to_reach_every_value"
+          } ]
+        } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
           "obligationId" : {
@@ -3132,7 +3314,7 @@
         "notDerivable" : [ ],
         "notRead" : [ {
           "position" : "from",
-          "reason" : "rule_relating_two_values",
+          "reason" : "relation_not_shown_to_reach_every_value",
           "rule" : "comparison@0:47:36",
           "ruleId" : {
             "kind" : "comparison",
@@ -3144,7 +3326,7 @@
           }
         }, {
           "position" : "until",
-          "reason" : "rule_relating_two_values",
+          "reason" : "relation_not_shown_to_reach_every_value",
           "rule" : "comparison@0:47:36",
           "ruleId" : {
             "kind" : "comparison",
@@ -3269,7 +3451,7 @@
           "ordinal" : 2,
           "lowered" : 0
         },
-        "reason" : "rule_relating_two_values"
+        "reason" : "relation_not_shown_to_reach_every_value"
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
@@ -3282,12 +3464,36 @@
           "ordinal" : 2,
           "lowered" : 0
         },
-        "reason" : "rule_relating_two_values"
+        "reason" : "relation_not_shown_to_reach_every_value"
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@0:47:36 — what this rule states about from",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.packing",
+          "definition" : "bookSlot",
+          "behavior" : "bookSlot",
+          "ordinal" : 2,
+          "lowered" : 0
+        }
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@0:47:36 — what this rule states about until",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.packing",
+          "definition" : "bookSlot",
+          "behavior" : "bookSlot",
+          "ordinal" : 2,
+          "lowered" : 0
+        }
       } ]
     } ]
   } ],
   "sources" : {
-    "1" : "packing.examples.sou",
-    "0" : "packing.sou"
+    "0" : "packing.sou",
+    "1" : "packing.examples.sou"
   }
 }

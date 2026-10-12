@@ -1060,6 +1060,7 @@ final class DemandReading {
         boolean counted = false;
         boolean overElements = false;
         boolean remainder = false;
+        boolean answered = false;
         List<WhyUnread> past = new ArrayList<>();
         for (Quantity atom : form.coefs().keySet()) {
             switch (atom) {
@@ -1071,8 +1072,12 @@ final class DemandReading {
                      Quantity.CodePointsOfAPiece _ -> overElements = true;
                 case Quantity.RemainderOfADividend _ -> remainder = true;
                 case Quantity.OfABinding bound -> bound.madeOf().ifPresent(past::add);
+                case Quantity.WhatAnOperationAnswers _ -> answered = true;
                 case DecisionAtom.OfTheInput _ -> { }
             }
+        }
+        if (answered) {
+            return forTheRun(compared, RowDemand.NoComposer.A_VALUE_AN_OPERATION_ANSWERS);
         }
         if (overElements) {
             return forTheRun(compared, RowDemand.NoComposer.A_NUMBER_OVER_ELEMENTS);

@@ -46,6 +46,16 @@ class HowManyAListMadeFromOthersHoldsIsWrittenByThoseListsTest {
                 """.formatted(guard);
     }
 
+    /**
+     * Whether everything {@code report} says went unread is that a relation is not shown to reach
+     * every value of a place: a sum of two sizes held against a number is one whose sizes each
+     * settle it on their own past it, and no size of a list is declared to be had at every number.
+     */
+    private static boolean readSaveForWhatTheOtherValueReaches(String report) {
+        return report.lines().filter(line -> line.strip().startsWith("· not read"))
+                .allMatch(line -> line.contains("not shown to reach every value here"));
+    }
+
     /** A list each element of which a closure answered one string for, beside another list. */
     @Test
     void whatAFlatMapAnsweredOneOfForEachElementIsReadBesideAnotherList() {
@@ -56,7 +66,7 @@ class HowManyAListMadeFromOthersHoldsIsWrittenByThoseListsTest {
             Compilation compilation =
                     compiled(model("List.length(" + made + ") + List.length(cs) >= 1"));
             String report = report(compilation);
-            assertFalse(report.contains("not read"), () -> made + ": " + report);
+            assertTrue(readSaveForWhatTheOtherValueReaches(report), () -> made + ": " + report);
             assertFalse(report.contains("made from this one"), () -> made + ": " + report);
             List<Integer> held = heldByEachRow(rowsOf(compilation));
             assertTrue(held.contains(1), () -> made + ": the point on the line: " + held);
@@ -84,7 +94,7 @@ class HowManyAListMadeFromOthersHoldsIsWrittenByThoseListsTest {
                 }
                 """);
         String report = report(compilation);
-        assertFalse(report.contains("not read"), report);
+        assertTrue(readSaveForWhatTheOtherValueReaches(report), report);
         assertFalse(report.contains("made from this one"), report);
         List<Integer> held = heldByEachRow(rowsOf(compilation));
         assertTrue(held.contains(1), () -> "the point on the line: " + held);
@@ -99,7 +109,8 @@ class HowManyAListMadeFromOthersHoldsIsWrittenByThoseListsTest {
             Compilation compilation = compiled(model(
                     "List.length(List.map(" + closure + ", ds)) + List.length(cs) >= 2"));
             String report = report(compilation);
-            assertFalse(report.contains("not read"), () -> closure + ": " + report);
+            assertTrue(readSaveForWhatTheOtherValueReaches(report),
+                    () -> closure + ": " + report);
             List<Integer> held = heldByEachRow(rowsOf(compilation));
             assertTrue(held.contains(2), () -> closure + ": the point on the line: " + held);
             assertTrue(held.contains(1), () -> closure + ": the point just off it: " + held);

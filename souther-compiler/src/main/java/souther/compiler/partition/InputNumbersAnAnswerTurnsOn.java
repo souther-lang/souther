@@ -202,7 +202,8 @@ public final class InputNumbersAnAnswerTurnsOn {
         List<OnTheWay.TakenIn> cuts = new ArrayList<>(reaching.boundedOnTheWay());
         cuts.addAll(held);
         return new InputNumbersAnAnswerTurnsOn(values, new Reachability.Reaching(region,
-                reaching.requirements(), reaching.truths(), cuts, reaching.ways()));
+                reaching.requirements(), reaching.truths(), cuts, reaching.ways(),
+                reaching.declined()));
     }
 
     /**

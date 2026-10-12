@@ -224,6 +224,23 @@ public interface SearchRegion {
     }
 
     /**
+     * A run of {@code term} every value of which some row in this region takes, at the term's own
+     * spacing — or null where that is not shown.
+     *
+     * <p>Not {@link #projectionOf}, which is where the values lie: a run can be known without being
+     * filled, its ends can be rounded past the rules', and a value can be taken out of it
+     * ({@link #apartAt}) or the values held to a class of whole numbers ({@link #valueClassAt}).
+     * This is shown of all of that at once and answered as the run itself, so a reader is never
+     * left to put a range from one answer together with a proof from another.
+     *
+     * <p>Null where nothing showed it, which is not that the run has gaps — and so for a region
+     * that has no proof to give, which is what the default is.
+     */
+    default NumericDomain.Bounds wholeRunOf(NumericTerm.FromOnePosition term) {
+        return null;
+    }
+
+    /**
      * Why nothing is left here, or empty where nothing proved it.
      *
      * <p>Empty is not "there is a value", the same as everywhere else. A search reading it that way

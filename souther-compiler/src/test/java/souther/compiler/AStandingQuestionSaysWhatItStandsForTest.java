@@ -114,7 +114,8 @@ class AStandingQuestionSaysWhatItStandsForTest {
      * Two parts of one clause stopped in two ways, and the line says both.
      *
      * <p>{@code a < b} relates the position to another, which this reading recognised and has no
-     * set of one position's values for; the other is a form it does not take apart.
+     * set of one position's values for, and shows nothing of what the other reaches; the other is
+     * a form it does not take apart.
      * The two are lifted by different work, so an author told only one of them lifts it and finds
      * the question still standing.
      *
@@ -125,7 +126,9 @@ class AStandingQuestionSaysWhatItStandsForTest {
     void aQuestionWithTwoCausesSaysBothOfThemInTheOrderTheyAreWritten() {
         assertEquals("      · not accounted for: invariant Pair (both)"
                         + " — which values may stand at p.a:"
-                        + " it relates the value here to another value rather than dividing the values here;"
+                        + " what it states was read, and it relates the value here to another value"
+                        + " not shown to reach every value here, so which values here settle it on"
+                        + " their own is not worked out;"
                         + " written in a form this compiler does not read",
                 about(reportOf("""
                         module probe.two
@@ -139,7 +142,9 @@ class AStandingQuestionSaysWhatItStandsForTest {
         assertEquals("      · not accounted for: invariant Pair (both)"
                         + " — which values may stand at p.a:"
                         + " written in a form this compiler does not read;"
-                        + " it relates the value here to another value rather than dividing the values here",
+                        + " what it states was read, and it relates the value here to another value"
+                        + " not shown to reach every value here, so which values here settle it on"
+                        + " their own is not worked out",
                 about(reportOf("""
                         module probe.two
 
@@ -251,7 +256,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                 behavior read : (h: Held) -> Ok
                 """));
 
-        assertEquals(List.of("rule_relating_two_values", "unsupported_syntax"),
+        assertEquals(List.of("relation_not_shown_to_reach_every_value", "unsupported_syntax"),
                 stoppedInDocument("""
                         module probe.two
 
@@ -261,7 +266,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                         behavior read : (p: Pair) -> Ok
                         """));
 
-        assertEquals(List.of("unsupported_syntax", "rule_relating_two_values"),
+        assertEquals(List.of("unsupported_syntax", "relation_not_shown_to_reach_every_value"),
                 stoppedInDocument("""
                         module probe.two
 

@@ -173,7 +173,7 @@ class AConditionOnAContainersElementsIsComposedAsWhatItSaysTest {
                         domain("decide").quantities(rules()).ordersOf(gate.term()).answered(),
                         Count.of(1)))),
                 new Reachability.Reaching(region, Requirements.NONE, TruthsAsked.NONE,
-                        List.copyOf(way), Reachability.Ways.ONE),
+                        List.copyOf(way), Reachability.Ways.ONE, List.of()),
                 Generator.CandidateCheck.ANY);
     }
 

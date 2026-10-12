@@ -287,6 +287,14 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                     if Int.max(p, c) > 5 then Yes else No
                 }
                 """.formatted(ANSWER)));
+        // A relation whose other side never reaches some values here: the length of a string is
+        // never below nought, so n below nought settles the rule whatever s holds.
+        out.put(UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE, of("""
+                module m
+                %s
+                behavior f : (n: Int, s: String) -> Answer
+                let f (n, s) = if n == String.length(s) then Yes else No
+                """.formatted(ANSWER)));
         // The same operation over the input's own numbers draws a line for each relation, and the
         // line on a decides nothing any row reaches: wherever a passes five, a + n is past it too.
         out.put(UndividedPosition.Reason.RULE_NEVER_TURNS_ON_THIS_LINE, of("""

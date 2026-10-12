@@ -72,37 +72,39 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
      * separates the two is one {@code invariant value >= 0} on the fields' own type, which is not a
      * fact about this clause.
      *
-     * <p>What it is named as is that it relates the two rather than dividing either. A form over two
-     * fields says nothing about where either of them stops on its own, which is the same thing
-     * {@code length < width} says and is said in the same words — counted a side at a time, a rule
-     * naming both of its positions on one side came back as a form nobody could read.
+     * <p>What it is named as is a relation of the two, with neither shown to reach every value of
+     * the other: a sum held against a number has a length at the least {@code Int} that needs a
+     * width past the greatest. A form over two fields says nothing about where either of them stops
+     * on its own — counted a side at a time, a rule naming both of its positions on one side came
+     * back as a form nobody could read.
      */
     @Test
     void aClauseNoEndCameOutOfIsNamedAtEveryFieldItCompares() {
         FieldDomains read = readingOf(BARE, "Parcel");
 
-        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
                 reasonsAt(read, "length"));
-        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
                 reasonsAt(read, "width"));
     }
 
     /**
-     * And says so where the fields' own type has already drawn a line through them.
+     * And says something where the fields' own type has already drawn a line through them — that
+     * the other field is not shown to reach every value here.
      *
-     * <p>Issue #868. {@code Cm}'s own bound places an end at each field, and the record's clause
-     * about the pair is a second statement about the same positions — so the report owed both, and
-     * said only the first while the {@code guard} of the same shape two declarations away named
-     * both of the positions it compared.
+     * <p>{@code Cm}'s own bound places an end at each field, and the record's clause about the pair
+     * is a second statement about the same positions, so the report owes both. And the bound is
+     * what keeps the clause from dividing nothing: no width is below nought, so a length above
+     * 150 is refused whatever the width is — some values here settle the clause on their own.
      */
     @Test
     void andSaysSoWhereTheFieldsOwnTypeAlreadyDrewALine() {
         FieldDomains read = readingOf(MEASURED, "Parcel");
 
         assertFalse(read.placedAt(RuleKey.of("length")).isEmpty(), "`Cm` places an end here");
-        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
                 reasonsAt(read, "length"));
-        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
                 reasonsAt(read, "width"));
     }
 
@@ -312,7 +314,8 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     }
 
     /**
-     * A clause relating two fields says that it relates them, at both.
+     * A clause relating two fields that take every value their type holds says that it relates
+     * them, at both.
      *
      * <p>Which is a different thing for a reader to do about it: nothing is missing from the
      * carrier — a line drawn on either field against a number would be read — and what a partition
@@ -323,10 +326,7 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
         FieldDomains read = readingOf("""
                 module example.spans
 
-                data Bound = Int
-                    invariant value >= 0
-
-                data Span = { low: Bound, high: Bound }
+                data Span = { low: Int, high: Int }
                     invariant low < high
                 """, "Span");
 
@@ -335,14 +335,42 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     }
 
     /**
+     * And where a field's own type holds it to some of those values, the clause is not said to
+     * divide the other field by nothing.
+     *
+     * <p>{@code high} is never below nought, so it is never below a {@code low} at nought either:
+     * {@code high} at nought is refused whatever {@code low} is. And a rule beside the clause naming
+     * a field — here the one on its type — is what keeps the field from being shown to take every
+     * value, so neither field is said to be left undivided.
+     */
+    @Test
+    void aClauseRelatingTwoFieldsAFieldsTypeHoldsSaysTheOtherIsNotShownToReachIt() {
+        FieldDomains read = readingOf("""
+                module example.spans
+
+                data Bound = Int
+                    invariant value >= 0
+
+                data Span = { low: Bound, high: Bound }
+                    invariant low < high
+                """, "Span");
+
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+                reasonsAt(read, "low"));
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+                reasonsAt(read, "high"));
+    }
+
+    /**
      * And a clause naming one coordinate on each side is one of those, however the sides are
      * written.
      *
      * <p>The form between the two above: {@code x} against {@code y + 1} is a rule about the pair
-     * exactly as {@code x < y} is, and the arithmetic is on the far side of the relation rather
-     * than in place of it. Read off whether a side <em>is</em> a coordinate, {@code y + 1} named
-     * nothing and this came back as a form nobody could read — which is not what a {@code guard}
-     * writing the same comparison is told.
+     * as {@code x < y} is, and the arithmetic is on the far side of the relation rather than in
+     * place of it. Read off whether a side <em>is</em> a coordinate, {@code y + 1} named nothing and
+     * this came back as a form nobody could read — which is not what a {@code guard} writing the
+     * same comparison is told. Moved by one, neither reaches the other at its end: the least
+     * {@code x} is below every {@code y + 1}.
      */
     @Test
     void andSoDoesOneWhereTheSecondPositionIsInsideAnExpression() {
@@ -353,17 +381,20 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant x < y + 1
                 """, "Pair");
 
-        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "x"));
-        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "y"));
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+                reasonsAt(read, "x"));
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+                reasonsAt(read, "y"));
     }
 
     /**
      * One rule gets one sentence, with or without arithmetic round the call that writes it.
      *
      * <p>What a clause counting two dates apart relates is the two dates: the operation states what
-     * it answers in the counts of its arguments, so the quantity it cuts is over both positions and
-     * neither is divided by it. Arithmetic written outside the call moves the threshold and not the
-     * quantity, so each spelling is the same rule and is said the same way.
+     * it answers in the counts of its arguments, so the quantity it cuts is over both positions.
+     * Held within thirty days, neither date is shown to reach the other at the ends: no date is
+     * thirty days before the first. Arithmetic written outside the call moves the threshold and
+     * not the quantity, so each spelling is the same rule and is said the same way.
      *
      * <p>Read off the shape of the whole side rather than off the quantity, one token of arithmetic
      * outside the call is the difference between two sentences for one rule.
@@ -380,9 +411,9 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                         invariant within = %s
                     """.formatted(clause), "Span");
 
-            assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
+            assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
                     reasonsAt(read, "from"), clause);
-            assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
+            assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
                     reasonsAt(read, "to"), clause);
         }
     }

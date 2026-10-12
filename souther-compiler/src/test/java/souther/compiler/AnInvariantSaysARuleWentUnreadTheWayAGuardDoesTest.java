@@ -151,14 +151,17 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
      * one verdict would have taken the boundary with it.
      *
      * <p>Three lines: one at each field's own end, and one on what the record's clause relates. That
-     * last divides neither field — which is what the partition above says of it — and it is still a
-     * line, drawn on the form the clause cuts rather than on either position.
+     * last is still a line, drawn on the form the clause cuts rather than on either position. Which
+     * values of each field settle it on their own is not worked out — neither field is shown to
+     * reach every value of the other, since neither is below nought — so the question it raises at
+     * each stands, and the border says so.
      */
     @Test
     void andTheBoundTheFieldsOwnTypeStatesIsStillALine() {
         String block = blockOf("quote");
 
-        assertTrue(block.contains("border      borders 3   obligations 0/0\n"), block);
+        assertTrue(block.contains(
+                "border      borders 3   obligations 0/0   (not all of it was measured)\n"), block);
     }
 
     /** One clause and one sentence: what a reader has to lift is one thing. */

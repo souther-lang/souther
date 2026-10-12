@@ -699,6 +699,10 @@ public sealed interface RowDemand {
         /** A relation over a number the body works out, which no position of a row holds. */
         A_VALUE_THE_BODY_WORKS_OUT,
 
+        /** A relation over what an operation of the library answers of values of the input,
+         *  which no position of a row holds and nothing here works back from. */
+        A_VALUE_AN_OPERATION_ANSWERS,
+
         /** How many elements of a container meet something, where no container is composed to the
          *  count: held against more than one number, or counted for what no element is composed
          *  to meet. */

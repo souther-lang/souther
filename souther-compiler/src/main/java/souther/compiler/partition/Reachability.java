@@ -96,7 +96,8 @@ public sealed interface Reachability {
         }
         return switch (way.truths()) {
             case TruthsAsked.Merge.Merged(var truths) -> new Reaching(
-                    way.narrowing(declarations), required, truths, way.takenIn(), ways);
+                    way.narrowing(declarations), required, truths, way.takenIn(), ways,
+                    way.declined());
             case TruthsAsked.Merge.Conflict(var at) -> new NothingReaches(new TwoAtOnce.Truths(at));
         };
     }
@@ -110,7 +111,7 @@ public sealed interface Reachability {
      */
     static Reaching untouched(SearchRegion declarations) {
         return new Reaching(declarations, Requirements.NONE, TruthsAsked.NONE, List.of(),
-                Ways.ONE);
+                Ways.ONE, List.of());
     }
 
     /**
@@ -197,17 +198,23 @@ public sealed interface Reachability {
      *                        from the others
      * @param ways            where a condition on the way came out one of several ways, whether it
      *                        is split into each way some row may take ({@link Ways})
+     * @param declined        what the way states that none of the above holds: a row past it is
+     *                        held to more than {@code region} says, and where the values of two
+     *                        positions lie against one another is not all it says
      */
     record Reaching(SearchRegion region, Requirements requirements, TruthsAsked truths,
-                    List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways)
+                    List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
+                    List<OnTheWay.Declined> declined)
             implements Reachability {
 
         public Reaching {
-            if (region == null || requirements == null || truths == null || ways == null) {
+            if (region == null || requirements == null || truths == null || ways == null
+                    || declined == null) {
                 throw new IllegalArgumentException(
                         "a way a row reaches leaves it somewhere and asks something of it");
             }
             boundedOnTheWay = List.copyOf(boundedOnTheWay);
+            declined = List.copyOf(declined);
         }
 
         /** The ways this is split into, each narrower than this one; none where it is not
