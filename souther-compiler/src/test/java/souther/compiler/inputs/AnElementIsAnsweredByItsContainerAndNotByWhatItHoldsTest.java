@@ -156,7 +156,7 @@ class AnElementIsAnsweredByItsContainerAndNotByWhatItHoldsTest {
     private static ElementBindings handedAnElementOf(Core container) {
         return new ElementBindings(
                 Map.of(ELEMENT, List.of(new HeldIn(container, HeldIn.Part.ELEMENT,
-                        HowAClosureIsApplied.TO_EVERY_ELEMENT))), Map.of(),
+                        HowAClosureIsApplied.TO_EVERY_ELEMENT, false))), Map.of(),
                 ElementProvenance.NONE, Map.of());
     }
 }

@@ -868,8 +868,8 @@ final class Pullback {
                     read.rules().symbols(), read.rules().newtypes());
             arms.add(new Derivation.MatchArms.Arm(selections.get(i),
                     states.apply(arm.body(), inside),
-                    reads.valueOfTheEntryLookedUp(match.scrutinee(), arm,
-                            read.rules().symbols(), read.rules().newtypes()) != null));
+                    reads.opensAnEntryLookedUp(match.scrutinee(), arm,
+                            read.rules().symbols(), read.rules().newtypes())));
         }
         return new Derivation.MatchArms(arms);
     }

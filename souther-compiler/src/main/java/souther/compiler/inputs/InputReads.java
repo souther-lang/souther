@@ -2,11 +2,13 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.AnIndexedMap;
 import souther.compiler.check.AnOperationApplied;
+import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.CallArguments;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Location;
@@ -93,6 +95,9 @@ import java.util.Set;
 public final class InputReads {
 
     private static final ValueName.Stdlib.Operation GET = ValueName.Stdlib.operation("Map", "get");
+
+    /** What an option is left where it holds a value. */
+    private static final CasesLeft PRESENT = CasesLeft.of(Refinement.of(new Case.Presence(true)));
 
     private final BindingEnvironment names;
     private final Map<BindingId, List<ReadMeaning.Occurrence>> alternatives;
@@ -1075,11 +1080,11 @@ public final class InputReads {
         if (arm.binder() == null || arm.binder().binding() == null) {
             return this;
         }
-        EntryLookedUp entry = entryLookedUp(scrutinee, arm, symbols, newtypes);
-        if (entry != null) {
-            return new InputReads(names.naming(arm.binder().binding(), entry.element())
-                    .selecting(arm.binder().binding(), entry), alternatives, declared,
-                    dependencies, applied);
+        if (arm.binding() instanceof Core.ArmBinding.Payload) {
+            InputReads holding = holdingWhatItHolds(scrutinee, arm.binder(), symbols, newtypes);
+            if (holding != null) {
+                return holding;
+            }
         }
         // An arm over an optional's two carriers at once leaves a position nothing to narrow it to.
         CasesLeft selected = CasesLeft.selectedBy(arm.pattern());
@@ -1128,17 +1133,164 @@ public final class InputReads {
     }
 
     /**
-     * The value of an entry of the input's map, where {@code arm} opens what a lookup in that map
-     * answered — or null where it opens anything else.
+     * Whether {@code arm} opens a value made of an entry of the input's map that a lookup
+     * answered: the lookup's own answer, or an option made of it by an operation answering its
+     * closure on what an option holds.
      *
-     * <p>The name under the arm stands at the map's elements. Which entry is the one whose key was
-     * asked for, and that the arm's condition is about that entry, is what the proposition over the
-     * arm says; the position is only where the value is read.
+     * <p>Which entry the arm is about, and not what the name under it is. A name opening the
+     * lookup itself stands at the map's elements; one opening what a closure made of the entry's
+     * value stands for what the closure made, and the entry is only what it was made of. Either
+     * way what the arm states is about the entry whose key was asked for, which is what the
+     * proposition over the arm says.
      */
-    public TermPath valueOfTheEntryLookedUp(Core scrutinee, Core.Case arm, Symbols symbols,
-                                            DeclarationNewtypes newtypes) {
-        EntryLookedUp entry = entryLookedUp(scrutinee, arm, symbols, newtypes);
-        return entry == null ? null : entry.element();
+    public boolean opensAnEntryLookedUp(Core scrutinee, Core.Case arm, Symbols symbols,
+                                        DeclarationNewtypes newtypes) {
+        return arm.binding() instanceof Core.ArmBinding.Payload
+                && entryHeldBy(scrutinee, symbols, newtypes) != null;
+    }
+
+    /**
+     * The entry of the input's map that what {@code option} holds was made of, where it was: a
+     * lookup's answer, or an option an operation made of one by answering its closure on what it
+     * holds — or null where it is neither.
+     *
+     * <p>Each step goes into an argument of the call before it, and each call is found through the
+     * names it was bound to ({@link #standing}), which stops where a name comes round again, so
+     * the descent ends where the tree does.
+     */
+    private EntryLookedUp entryHeldBy(Core option, Symbols symbols, DeclarationNewtypes newtypes) {
+        Denotation looked = standing(option, symbols, newtypes);
+        if (!(AnOperationApplied.of(Core.withoutStanding(looked.value()))
+                instanceof AnOperationApplied(ValueName operation, List<Core> args))) {
+            return null;
+        }
+        if (GET.equals(operation)) {
+            return args.size() == 2 ? entryLookedUp(looked, args, symbols, newtypes) : null;
+        }
+        BoundOperationFacts.ClosureOnWhatItHolds made =
+                DefaultBoundOperationFacts.get().answersTheClosureOnWhatItHolds(operation);
+        int at = made == null ? -1 : CallArguments.positionOf(made.option(), operation);
+        return at < 0 || at >= args.size() ? null
+                : looked.at().entryHeldBy(args.get(at), symbols, newtypes);
+    }
+
+    /**
+     * The same, with {@code name} standing for what {@code option} holds where it holds a value —
+     * or null where neither of the two things said here says what that is, and what the arm
+     * narrows a position to is left to say it.
+     *
+     * <p>What a lookup in the input's map answered is the value of the entry under the key: the
+     * name stands at the map's elements, and is read of that entry and no other.
+     *
+     * <p>What an operation answering its closure on what another option holds holds is the
+     * closure's answer on that one's value. The name is bound to the closure's body, as a
+     * {@code let} binds one, and the closure's parameter stands for what the other option holds
+     * ({@link #handingWhatItHolds}). So the value is never the entry's own: under
+     * {@code Option.map(x -> x + 1, Map.get(k, m))} the name is the entry's value and one more,
+     * and which entry it was made of is said apart from it ({@link #opensAnEntryLookedUp}).
+     */
+    private InputReads holdingWhatItHolds(Core option, Core.Binder name, Symbols symbols,
+                                          DeclarationNewtypes newtypes) {
+        Denotation looked = standing(option, symbols, newtypes);
+        if (!(AnOperationApplied.of(Core.withoutStanding(looked.value()))
+                instanceof AnOperationApplied(ValueName operation, List<Core> args))) {
+            return null;
+        }
+        if (GET.equals(operation)) {
+            EntryLookedUp entry = args.size() == 2
+                    ? entryLookedUp(looked, args, symbols, newtypes) : null;
+            return entry == null ? null
+                    : new InputReads(names.naming(name.binding(), entry.element())
+                            .selecting(name.binding(), entry), alternatives, declared,
+                            dependencies, applied);
+        }
+        MadeOfWhatItHolds made = madeOfWhatItHolds(looked, operation, args, symbols, newtypes);
+        return made == null ? null : made.handed().and(name, made.closure().body());
+    }
+
+    /**
+     * What an option an operation made by answering its closure on what another holds is made
+     * of: the closure, and this reading with its parameter standing for what the other holds.
+     */
+    private record MadeOfWhatItHolds(Core.Block closure, InputReads handed) {}
+
+    /**
+     * What the call {@code looked} is made of, where its operation answers its closure on what an
+     * option holds — or null where it does not, or where the call or the closure is a value of
+     * another reading than this one, whose names are not these.
+     */
+    private MadeOfWhatItHolds madeOfWhatItHolds(Denotation looked, ValueName operation,
+                                                List<Core> args, Symbols symbols,
+                                                DeclarationNewtypes newtypes) {
+        BoundOperationFacts.ClosureOnWhatItHolds made =
+                DefaultBoundOperationFacts.get().answersTheClosureOnWhatItHolds(operation);
+        if (made == null || looked.at() != this) {
+            return null;
+        }
+        int option = CallArguments.positionOf(made.option(), operation);
+        int closure = CallArguments.positionOf(made.closure(), operation);
+        if (option < 0 || option >= args.size() || closure < 0 || closure >= args.size()) {
+            return null;
+        }
+        Denotation step = standing(args.get(closure), symbols, newtypes);
+        if (step.at() != this || !(Core.withoutStanding(step.value()) instanceof Core.Block block)
+                || block.params().size() != 1 || block.params().getFirst() == null
+                || block.params().getFirst().binding() == null) {
+            return null;
+        }
+        return new MadeOfWhatItHolds(block, handingWhatItHolds(args.get(option),
+                block.params().getFirst().binding(), symbols, newtypes));
+    }
+
+    /**
+     * This reading, with {@code parameter} — a closure's, handed what {@code option} holds —
+     * standing for that value where something says what it is, and as it was where nothing does.
+     *
+     * <p>The entry's value where a lookup answered the option, an option's position narrowed to
+     * its present case where one stands there, and the body of the closure that made it where an
+     * operation answering its closure on what another option holds did — that one's parameter
+     * standing for what the other holds, the same way down. Where none of these says, the
+     * parameter is left the element the operation hands it, which is a value nothing more is known
+     * of: what the closure's body makes of it is still read, and what it says of the value is not.
+     *
+     * <p>Handed as an application hands a parameter its value, and not bound to it as a
+     * {@code let} binds a name. The parameter is the element its operation hands it, and an
+     * element is what it stands for before anything a name is bound to ({@link BindingRole}).
+     */
+    private InputReads handingWhatItHolds(Core option, BindingId parameter, Symbols symbols,
+                                          DeclarationNewtypes newtypes) {
+        Denotation looked = standing(option, symbols, newtypes);
+        if (AnOperationApplied.of(Core.withoutStanding(looked.value()))
+                instanceof AnOperationApplied(ValueName operation, List<Core> args)) {
+            if (GET.equals(operation)) {
+                EntryLookedUp entry = args.size() == 2
+                        ? entryLookedUp(looked, args, symbols, newtypes) : null;
+                return entry == null ? this
+                        : new InputReads(names.naming(parameter, entry.element())
+                                .selecting(parameter, entry), alternatives, declared,
+                                dependencies, applied);
+            }
+            MadeOfWhatItHolds made = madeOfWhatItHolds(looked, operation, args, symbols,
+                    newtypes);
+            if (made == null) {
+                return this;
+            }
+            InputReads handed = made.handed();
+            return new InputReads(handed.names.handing(parameter, made.closure().body()),
+                    handed.alternatives, handed.declared, handed.dependencies, handed.applied);
+        }
+        TermPath at = forkedOn(option, newtypes) instanceof PathResolution.At(TermPath path)
+                ? path : null;
+        if (at == null) {
+            return this;
+        }
+        TermPath narrowed = switch (declared.taking(at, option.type(), PRESENT)) {
+            case DeclaredInput.Taking.Narrows(TermPath to) -> to;
+            case DeclaredInput.Taking.Implied _ -> at;
+            case DeclaredInput.Taking.Excluded _ -> null;
+        };
+        return narrowed == null ? this : new InputReads(names.naming(parameter, narrowed),
+                alternatives, declared, dependencies, applied);
     }
 
     /**
@@ -1156,17 +1308,10 @@ public final class InputReads {
         }
     }
 
-    private EntryLookedUp entryLookedUp(Core scrutinee, Core.Case arm, Symbols symbols,
+    /** The entry the lookup {@code looked}, handed {@code args}, picks out of a map of the input —
+     *  or null where the map is none. */
+    private EntryLookedUp entryLookedUp(Denotation looked, List<Core> args, Symbols symbols,
                                         DeclarationNewtypes newtypes) {
-        if (!(arm.binding() instanceof Core.ArmBinding.Payload)) {
-            return null;
-        }
-        Denotation looked = standing(scrutinee, symbols, newtypes);
-        if (!(AnOperationApplied.of(Core.withoutStanding(looked.value()))
-                instanceof AnOperationApplied(ValueName operation, List<Core> args))
-                || !GET.equals(operation) || args.size() != 2) {
-            return null;
-        }
         if (looked.at().forkedOn(args.get(1), newtypes) instanceof PathResolution.At(
                 TermPath map)) {
             return new EntryLookedUp(map.element(), looked.value());
@@ -1555,8 +1700,31 @@ public final class InputReads {
             case ScopeStep.Let(Core.LetIn binding) -> and(binding.binder(), binding.value());
             case ScopeStep.Chosen(Choice.Decides decidedBy) ->
                     choosing(decidedBy, symbols, newtypes);
-            case ScopeStep.Block _ -> this;
+            case ScopeStep.Block(Core.Block block) -> handedWhatOptionsHold(block, symbols,
+                    newtypes);
         };
+    }
+
+    /**
+     * The same, inside {@code block}, with each parameter an operation hands what an option holds
+     * standing for that value ({@link #handingWhatItHolds}).
+     *
+     * <p>An option holds one value or none, and an operation applying its closure to every element
+     * of one hands the parameter that value, so a statement inside the closure is about it — the
+     * same value the name under an arm opening the option stands for, and read the same way.
+     */
+    private InputReads handedWhatOptionsHold(Core.Block block, Symbols symbols,
+                                             DeclarationNewtypes newtypes) {
+        InputReads out = this;
+        for (Core.Binder param : block.params()) {
+            if (param != null && param.binding() != null
+                    && names.roleOf(param.binding()) instanceof BindingRole.Element(var held)
+                    && held.ofAnOption()) {
+                out = out.handingWhatItHolds(held.container(), param.binding(), symbols,
+                        newtypes);
+            }
+        }
+        return out;
     }
 
     /** The same, inside what {@code binder} binds. */

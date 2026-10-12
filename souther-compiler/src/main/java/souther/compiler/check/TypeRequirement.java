@@ -12,8 +12,9 @@ import souther.compiler.types.Type;
  * <p><b>A requirement names a condition; it does not own the answer to one.</b> Each constant below
  * delegates to whatever owns the classification it names, and a constant added is a constant whose
  * owner has been decided. A requirement may read a {@link Type} constructor itself only where the
- * constructor is the whole of the condition, which is why {@link #CLOSURE} stands out: there is no
- * table behind {@code FnOf} to disagree with, and a second answer to what one is cannot be written.
+ * constructor is the whole of the condition, which is why {@link #CLOSURE} and {@link #OPTIONAL}
+ * stand out: there is no table behind {@code FnOf} or {@code OptionOf} to disagree with, and a
+ * second answer to what one is cannot be written.
  * The day a requirement wants a condition assembled here out of several, what it wants is an owner.
  *
  * <p>What is asked of a type, and not what is asked of a signature. That two positions stand at one
@@ -49,6 +50,10 @@ enum TypeRequirement {
     /** A function, which is what a rule about a projection or a step is written over. */
     CLOSURE("a closure"),
 
+    /** A value that holds one value or none. The constructor is the whole of the condition, as
+     *  it is of {@link #CLOSURE}. */
+    OPTIONAL("an option"),
+
     /**
      * Nothing about what stands there.
      *
@@ -76,6 +81,7 @@ enum TypeRequirement {
             case SIZED -> Type.STRING.equals(type) || Type.elementOfAContainer(type) != null;
             case KEYED -> Type.keyOf(type) != null;
             case CLOSURE -> type instanceof Type.FnOf;
+            case OPTIONAL -> type instanceof Type.OptionOf;
             case ANY -> true;
         };
     }

@@ -18,11 +18,17 @@ import java.util.Objects;
  * the one {@code List.any} stopped at is stated on no run, so which applications there are is a
  * fact about the handing and not about the container.
  *
+ * <p>And whether what was handed is the one value an option holds, which is what an operation said
+ * to answer its closure on what an option holds hands it. The closure's parameter is then that
+ * value, and what it is is whatever the option holding it says.
+ *
  * @param container the expression the container was handed as
  * @param part      which of the things it holds the closure was handed
  * @param applied   how far the operation goes applying the closure
+ * @param ofAnOption whether the container is an option and the closure is handed its value
  */
-public record HeldIn(Core container, Part part, HowAClosureIsApplied applied) {
+public record HeldIn(Core container, Part part, HowAClosureIsApplied applied,
+                     boolean ofAnOption) {
 
     /** Which part of what a container holds. */
     public enum Part {

@@ -360,6 +360,20 @@ public final class BoundOperationFacts {
     public record Pieces(DeclaredArgument separator, DeclaredArgument string) {}
 
     /**
+     * The option whose value {@code operation} hands its closure, and the closure, where what it
+     * answers holds the closure's answer on that value exactly where the option holds one — or
+     * null where it says no such thing ({@link BoundOperationFact.AnswersTheClosureOnWhatItHolds}).
+     */
+    public ClosureOnWhatItHolds answersTheClosureOnWhatItHolds(ValueName operation) {
+        BoundOperationFact.AnswersTheClosureOnWhatItHolds held =
+                one(BoundOperationFact.AnswersTheClosureOnWhatItHolds.class, operation);
+        return held == null ? null : new ClosureOnWhatItHolds(held.option(), held.closure());
+    }
+
+    /** The option whose value a closure is handed, and the closure. */
+    public record ClosureOnWhatItHolds(DeclaredArgument option, DeclaredArgument closure) {}
+
+    /**
      * The side every element of what {@code operation} answers comes out on, or null where it says
      * no such thing.
      */

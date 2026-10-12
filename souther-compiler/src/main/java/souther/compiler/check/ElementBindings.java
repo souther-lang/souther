@@ -419,14 +419,16 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         // the element.
         if (handed.key() != null && handed.key().binding() != null) {
             takes(found, handed.key().binding(),
-                    new HeldIn(handed.container(), HeldIn.Part.KEY, handed.applied()));
+                    new HeldIn(handed.container(), HeldIn.Part.KEY, handed.applied(), false));
         }
         if (handed.element().binding() == null) {
             return;
         }
         BindingId element = handed.element().binding();
-        takes(found, element,
-                new HeldIn(handed.container(), HeldIn.Part.ELEMENT, handed.applied()));
+        boolean ofAnOption =
+                DefaultBoundOperationFacts.get().answersTheClosureOnWhatItHolds(operation) != null;
+        takes(found, element, new HeldIn(handed.container(), HeldIn.Part.ELEMENT,
+                handed.applied(), ofAnOption));
         if (standing != null && answersOnePerElementOf(operation, handed.container(), args)) {
             standing.putIfAbsent(element, handed.step().body());
         }
