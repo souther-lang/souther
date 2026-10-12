@@ -343,7 +343,11 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         assertFalse(report.contains("measurement: complete"), report);
     }
 
-    /** A count another input supplies is no shift of one position: it is a number of two. */
+    /**
+     * A count another input supplies is no shift of one position: it is a number of two, and the
+     * comparison relates them. A count at either end of {@code Int} moves every date past the ones
+     * that can be written, so it settles the comparison whatever the date is.
+     */
     @Test
     void aShiftByACountAnotherInputSuppliesIsNotAShiftOfOnePosition() {
         Compilation compilation = compiled("""
@@ -355,6 +359,9 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         String report = report(compilation);
 
         assertFalse(report.contains("Date.year((birthday"), report);
-        assertTrue(report.contains("measurement: complete"), report);
+        assertTrue(report.contains("read as f/birthday + days"), report);
+        assertTrue(report.contains("relates the value here to another value not shown to reach"
+                + " every value here, so which values here settle it on their own is not worked"
+                + " out, about `days`"), report);
     }
 }

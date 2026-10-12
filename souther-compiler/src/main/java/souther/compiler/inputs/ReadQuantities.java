@@ -1254,10 +1254,14 @@ final class ReadQuantities implements Quantities {
      * ends and not only where the values lie ({@link NumericDomain#projectionCertification}).
      *
      * <p>About the run and nothing else. A value taken out of it, or a class of whole numbers it is
-     * held to, are asked of the region beside this.
+     * held to, are asked of the region beside this. Where no one value has the term together with
+     * what was taken in, no row gives it a value, so it runs nowhere and no run is shown whole.
      */
     boolean projectionCertifiedFor(NumericTerm term) {
-        StructuralContext under = asked(List.of(term));
+        if (!(asking(List.of(term))
+                instanceof StructuralContext.Merge.Together(StructuralContext under))) {
+            return false;
+        }
         ConstraintState<InputAtom> rules = holding(effectiveConstraints(under), term, under);
         return rules.numbers().projectionCertification()
                 instanceof ProjectionCertification.Certified;

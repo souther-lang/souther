@@ -175,7 +175,8 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
     }
 
     /**
-     * A rule relating two positions raises nothing, and says what settled that.
+     * A rule relating two positions, each of which reaches every value of the other, raises
+     * nothing, and says what settled that.
      *
      * <p>The conclusion, not an empty result. Both sides were recognised, and a partition is of one
      * position while a line is on one number — so there is no question left standing at either of
@@ -183,6 +184,28 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
      */
     @Test
     void aRelationBetweenTwoPositionsRaisesNothing() {
+        Required.Irrelevant ordered = assertInstanceOf(Required.Irrelevant.class,
+                only(raisedBy("""
+                        module example.booking
+
+                        data Span = { startsAt: Int, endsAt: Int }
+                            invariant ordered = startsAt < endsAt
+                        """, "Span"), "ordered"),
+                "a rule about a pair raises no question about one position");
+        assertEquals(Set.of(Required.Because.IT_RELATES_TWO_POSITIONS), ordered.because());
+        assertEquals(Set.of(), ordered.obligations());
+    }
+
+    /**
+     * A rule beside it that holds one of the two leaves the other a question.
+     *
+     * <p>{@code endsAt} is never past 1440, so a {@code startsAt} from 1440 on makes
+     * {@code ordered} false whatever {@code endsAt} is: which values of {@code startsAt} settle it
+     * on their own is a question the relation raises, and what stopped it being answered is said
+     * with it. {@code endsAt} is still reached by {@code startsAt}, which nothing else names.
+     */
+    @Test
+    void aRuleBesideItThatHoldsOneOfThemLeavesTheOtherAQuestion() {
         Map<RuleRef.Invariant, Required> raised = raisedBy("""
                 module example.booking
 
@@ -191,11 +214,7 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
                     invariant capped = endsAt <= 1440
                 """, "Span");
 
-        Required.Irrelevant ordered = assertInstanceOf(Required.Irrelevant.class,
-                only(raised, "ordered"), "a rule about a pair raises no question about one position");
-        assertEquals(Set.of(Required.Because.IT_RELATES_TWO_POSITIONS), ordered.because());
-        assertEquals(Set.of(), ordered.obligations());
-
+        assertEquals(Set.of("ADMITTED_VALUES at startsAt"), said(only(raised, "ordered")));
         assertEquals(Set.of("ADMITTED_VALUES at endsAt", "BOUNDARY at endsAt"),
                 said(only(raised, "capped")),
                 "and the clause beside it is unaffected");
@@ -230,8 +249,10 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
     /**
      * A conjunction is one rule, and raises what its parts raise together.
      *
-     * <p>The relational half takes nothing away. Written as a first-wins answer, whichever conjunct
-     * the walk reached first would decide whether the line the author drew is owed a row.
+     * <p>The relational half takes nothing away, and adds what it raises: with {@code endsAt} held
+     * to 1440, which values of {@code startsAt} settle the relation is a question. Written as a
+     * first-wins answer, whichever conjunct the walk reached first would decide whether the line
+     * the author drew is owed a row.
      */
     @Test
     void aConjunctionRaisesWhatItsPartsRaiseTogether() {
@@ -242,7 +263,8 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
                     invariant both = startsAt < endsAt && endsAt <= 1440
                 """, "Span");
 
-        assertEquals(List.of(Set.of("ADMITTED_VALUES at endsAt", "BOUNDARY at endsAt")),
+        assertEquals(List.of(Set.of("ADMITTED_VALUES at startsAt", "ADMITTED_VALUES at endsAt",
+                        "BOUNDARY at endsAt")),
                 raised.values().stream()
                         .map(WhatARuleRaisesIsAskedOfTheRuleTest::said).toList(),
                 "one clause, and the end in it is still owed a row");

@@ -27,14 +27,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class WhatStoppedAComparisonIsReadOffWhatItIsTest {
 
     /**
-     * The language's own arithmetic over two positions. It divides neither of them, which is what
-     * it says and not something missing here.
+     * The language's own arithmetic over two positions, read as the relation of the two it is and
+     * not as a value made of them. What the other reaches is asked of it as of any relation: at
+     * the least {@code Int}, {@code a} needs a {@code b} past the greatest.
      */
     @Test
     void arithmeticOverTwoPositionsRelatesThem() {
-        assertEquals(List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
+        assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
                 whyAt(guard("a: Int, b: Int", "Int.add(a, b) > 10"), "a"));
-        assertEquals(List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
+        assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
                 whyAt(guard("a: Int, b: Int", "Int.subtract(b, a) > 10"), "b"));
     }
 

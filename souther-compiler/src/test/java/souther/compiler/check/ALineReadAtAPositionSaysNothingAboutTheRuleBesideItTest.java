@@ -72,18 +72,19 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
      * separates the two is one {@code invariant value >= 0} on the fields' own type, which is not a
      * fact about this clause.
      *
-     * <p>What it is named as is that it relates the two rather than dividing either. A form over two
-     * fields says nothing about where either of them stops on its own, which is the same thing
-     * {@code length < width} says and is said in the same words — counted a side at a time, a rule
-     * naming both of its positions on one side came back as a form nobody could read.
+     * <p>What it is named as is a relation of the two, with neither shown to reach every value of
+     * the other: a sum held against a number has a length at the least {@code Int} that needs a
+     * width past the greatest. A form over two fields says nothing about where either of them stops
+     * on its own — counted a side at a time, a rule naming both of its positions on one side came
+     * back as a form nobody could read.
      */
     @Test
     void aClauseNoEndCameOutOfIsNamedAtEveryFieldItCompares() {
         FieldDomains read = readingOf(BARE, "Parcel");
 
-        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
                 reasonsAt(read, "length"));
-        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
                 reasonsAt(read, "width"));
     }
 
@@ -365,10 +366,11 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
      * written.
      *
      * <p>The form between the two above: {@code x} against {@code y + 1} is a rule about the pair
-     * exactly as {@code x < y} is, and the arithmetic is on the far side of the relation rather
-     * than in place of it. Read off whether a side <em>is</em> a coordinate, {@code y + 1} named
-     * nothing and this came back as a form nobody could read — which is not what a {@code guard}
-     * writing the same comparison is told.
+     * as {@code x < y} is, and the arithmetic is on the far side of the relation rather than in
+     * place of it. Read off whether a side <em>is</em> a coordinate, {@code y + 1} named nothing and
+     * this came back as a form nobody could read — which is not what a {@code guard} writing the
+     * same comparison is told. Moved by one, neither reaches the other at its end: the least
+     * {@code x} is below every {@code y + 1}.
      */
     @Test
     void andSoDoesOneWhereTheSecondPositionIsInsideAnExpression() {
@@ -379,17 +381,20 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant x < y + 1
                 """, "Pair");
 
-        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "x"));
-        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "y"));
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+                reasonsAt(read, "x"));
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+                reasonsAt(read, "y"));
     }
 
     /**
      * One rule gets one sentence, with or without arithmetic round the call that writes it.
      *
      * <p>What a clause counting two dates apart relates is the two dates: the operation states what
-     * it answers in the counts of its arguments, so the quantity it cuts is over both positions and
-     * neither is divided by it. Arithmetic written outside the call moves the threshold and not the
-     * quantity, so each spelling is the same rule and is said the same way.
+     * it answers in the counts of its arguments, so the quantity it cuts is over both positions.
+     * Held within thirty days, neither date is shown to reach the other at the ends: no date is
+     * thirty days before the first. Arithmetic written outside the call moves the threshold and
+     * not the quantity, so each spelling is the same rule and is said the same way.
      *
      * <p>Read off the shape of the whole side rather than off the quantity, one token of arithmetic
      * outside the call is the difference between two sentences for one rule.
@@ -406,9 +411,9 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                         invariant within = %s
                     """.formatted(clause), "Span");
 
-            assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
+            assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
                     reasonsAt(read, "from"), clause);
-            assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
+            assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
                     reasonsAt(read, "to"), clause);
         }
     }
