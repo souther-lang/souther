@@ -302,6 +302,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "types/ValueName$Helper;Ljava/util/List;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/Clauses", "readsOf", "(" + core + "Ljava/util/function/Consumer;)V",
                 Reading.STRUCTURE, BINDINGS);
+        row(out, c + "check/Clauses", "readsForTheirValues",
+                "(" + core + "Ljava/util/function/Consumer;)V", Reading.STRUCTURE, BINDINGS);
         row(out, c + "inputs/InputReads", "walkNames", "(" + core + "Ljava/util/Set;Ljava/util/Set;)V",
                 Reading.STRUCTURE, BINDINGS);
         row(out, c + "flow/ValueArrivals", "readCopies", "(" + core + "L" + c

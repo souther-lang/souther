@@ -48,13 +48,20 @@ public sealed interface ClauseMeaning permits ClauseMeaning.Stated, ClauseMeanin
      * the same field through two of them and a set of bindings would mean something only to the
      * reading that built it. The names are the same names in every reading there will ever be.
      *
+     * <p>Which of them it reads only for how many a list, a set or a map there holds is said beside
+     * them. A rule about those says nothing of which values the elements take, and a reader asking
+     * whether a rule of a value holds back what stands inside one of its fields asks that.
+     *
      * @param ref which clause of which declaration this is
      * @param states what its form says
      * @param fieldsRead the fields of the declaration's value that its form reads, including the
      *     ones reached through what the declaration spreads
+     * @param fieldsReadOnlyForHowManyTheyHold the ones of {@code fieldsRead} its form reads for
+     *     nothing but how many the container there holds
      * @param parts the rules its author wrote it as, and how they are joined
      */
-    record Stated(Clause.Ref ref, TermMeaning states, Set<String> fieldsRead, Parts parts)
+    record Stated(Clause.Ref ref, TermMeaning states, Set<String> fieldsRead,
+                  Set<String> fieldsReadOnlyForHowManyTheyHold, Parts parts)
             implements ClauseMeaning {
 
         public Stated {
@@ -62,6 +69,11 @@ public sealed interface ClauseMeaning permits ClauseMeaning.Stated, ClauseMeanin
             Objects.requireNonNull(states, "a clause that has a form states what the form says");
             Objects.requireNonNull(parts, "a clause is written as some rules");
             fieldsRead = Set.copyOf(fieldsRead);
+            fieldsReadOnlyForHowManyTheyHold = Set.copyOf(fieldsReadOnlyForHowManyTheyHold);
+            if (!fieldsRead.containsAll(fieldsReadOnlyForHowManyTheyHold)) {
+                throw new IllegalArgumentException("a field read only for how many it holds is a"
+                        + " field the clause reads");
+            }
         }
     }
 

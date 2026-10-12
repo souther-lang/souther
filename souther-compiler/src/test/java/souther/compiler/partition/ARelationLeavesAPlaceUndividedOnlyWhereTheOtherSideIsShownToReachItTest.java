@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A relation between two values is said to leave a place undivided only where the other side is
@@ -206,5 +207,95 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 "if Date.month(d) == 2 && Date.day(d) == 29 then y == Date.year(d) else false",
                 "4:66").entrySet().stream()
                 .filter(each -> each.getKey().equals("y")).map(Map.Entry::getValue).toList()));
+    }
+
+    private static final String EMPLOYEE = "data EmpId = String invariant String.length(value) >= 1";
+
+    /** A rule of the record over two of its other fields holds back neither the field compared
+     *  nor anything beside it, however many such rules there are and however they are written. */
+    @Test
+    void aRuleOfTheRecordOverItsOtherFieldsTiesTheFieldComparedToNothing() {
+        Map<String, String> reached = Map.of("approver", RELATES, "p.boss", RELATES);
+        for (String rules : List.of("", "invariant low <= high",
+                "invariant low <= high && high >= low", "invariant ordered(low, high)")) {
+            assertEquals(reached, left("p: Pending, approver: EmpId", EMPLOYEE
+                    + "\nlet ordered (a: Int, b: Int): Bool = a <= b"
+                    + "\ndata Pending = { me: EmpId, boss: EmpId, low: Int, high: Int } " + rules,
+                    "approver == p.boss", "6:32"), rules);
+        }
+    }
+
+    /** Rows that cover the comparison still satisfy the model once the record carries a rule over
+     *  two of its other fields. */
+    @Test
+    void rowsCoveringTheComparisonSatisfyAModelWhoseRecordRulesOverItsOtherFields() {
+        Compilation compilation = Compilation.ofSource("""
+                module eqrepro
+
+                data EmpId = String
+                    invariant String.length(value) >= 1
+
+                data Pending = { me: EmpId, boss: EmpId, low: Int, high: Int }
+                    invariant low <= high
+                data Granted
+                data Denied
+
+                behavior approve : (p: Pending, approver: EmpId) -> Granted | Denied
+
+                let approve (p, approver) = {
+                    guard approver == p.boss else Denied
+                    Granted
+                }
+
+                example approve
+                    | "boss" : (Pending { me = EmpId("a"), boss = EmpId("b"), low = 1, high = 2 }, EmpId("b")) -> Granted
+                    | "other" : (Pending { me = EmpId("a"), boss = EmpId("b"), low = 1, high = 2 }, EmpId("c")) -> Denied
+                    | "equal bounds" : (Pending { me = EmpId("xx"), boss = EmpId("x"), low = 0, high = 0 }, EmpId("x")) -> Granted
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+
+        assertEquals(List.of(), compilation.errors(), "the rows hold");
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertTrue(report.contains("adequacy: satisfied"), report);
+    }
+
+    /** A rule of the record that names the field compared may hold it back, whether it ties it to
+     *  another field or bounds it alone. */
+    @Test
+    void aRuleOfTheRecordNamingTheFieldComparedIsNotShownToLeaveItReachingEveryValue() {
+        for (String rule : List.of("invariant boss == me",
+                "invariant String.length(boss.value) >= 2")) {
+            assertEquals(Map.of("approver", NOT_SHOWN, "p.boss", NOT_SHOWN),
+                    left("p: Pending, approver: EmpId", EMPLOYEE
+                            + "\ndata Pending = { me: EmpId, boss: EmpId } " + rule,
+                            "approver == p.boss", "5:32"), rule);
+        }
+    }
+
+    /** A rule of a record a field sits in, two records out, over another of its fields. */
+    @Test
+    void aRuleOfARecordFurtherOutOverAnotherOfItsFieldsTiesTheFieldComparedToNothing() {
+        assertEquals(Map.of("approver", RELATES, "o.p.boss", RELATES),
+                left("o: Outer, approver: EmpId", EMPLOYEE
+                        + "\ndata Pending = { me: EmpId, boss: EmpId }"
+                        + "\ndata Outer = { p: Pending, n: Int } invariant n >= 0",
+                        "approver == o.p.boss", "6:32"));
+    }
+
+    /** How many a set holds says nothing of which values its elements take, so long as it may
+     *  hold one; held to none, its elements are values it never holds. */
+    @Test
+    void aRuleOverHowManyASetHoldsHoldsBackNoElementUnlessItHoldsNone() {
+        assertEquals(Map.of("champ", RELATES, "ds[*]", RELATES), left("champ: EmpId, ds: Ds",
+                EMPLOYEE + "\ndata Ds = Set<EmpId> invariant Set.size(value) >= 1",
+                "Set.contains(champ, ds.value)", "5:21"));
+        assertEquals(Map.of("champ", RELATES, "ds.members[*]", RELATES), left("champ: EmpId, ds: Ds",
+                EMPLOYEE + "\ndata Ds = { members: Set<EmpId> } invariant Set.size(members) >= 1",
+                "Set.contains(champ, ds.members)", "5:21"));
+        assertEquals(NOT_SHOWN, left("champ: EmpId, ds: Ds",
+                EMPLOYEE + "\ndata Ds = Set<EmpId> invariant Set.size(value) <= 0",
+                "Set.contains(champ, ds.value)", "5:21").get("champ"));
     }
 }

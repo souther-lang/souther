@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -110,14 +111,41 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                 "the clause reads the field this declaration wrote and the one it spread in");
     }
 
+    /**
+     * And which of them it reads for nothing but how many a container there holds: every read of
+     * the field is what a count is taken of, and the field holds a list, a set or a map. A
+     * string's length is not one of those, and a clause that reads a container's elements as well
+     * reads more than how many there are.
+     */
+    @Test
+    void andWhichOfThemItReadsOnlyForHowManyTheyHold() {
+        Compilation c = started("""
+                module shop.prices exposing ( Range )
+
+                data Range = { tags: Set<String>, items: List<Int>, name: String }
+                    invariant Set.size(tags) >= 1
+                    invariant String.length(name) >= 1
+                    invariant Set.size(tags) <= 3 && Set.contains("a", tags)
+                    invariant List.length(items) <= Set.size(tags)
+                """);
+        assertEquals(List.of(Set.of("tags"), Set.of(), Set.of(), Set.of("items", "tags")),
+                clausesSay(c, ClauseMeaning.Stated::fieldsReadOnlyForHowManyTheyHold));
+    }
+
     /** What each clause of {@code Range} says it reads, in the order the declaration writes them. */
     private static List<Set<String>> fieldsRead(Compilation c) {
+        return clausesSay(c, ClauseMeaning.Stated::fieldsRead);
+    }
+
+    /** What each clause of {@code Range} says, in the order the declaration writes them. */
+    private static List<Set<String>> clausesSay(Compilation c,
+                                                Function<ClauseMeaning.Stated, Set<String>> says) {
         PublishedDeclarationResult said = c.db().ask(new Shapes.MeaningOf(RANGE)).value();
         DeclarationMeaning meaning = assertInstanceOf(PublishedDeclarationResult.Found.class, said,
                 "the declaration under test is published").said();
         return ((DeclarationMeaning.Product) meaning).clauses().stream()
                 .map(ClauseMeaning.Stated.class::cast)
-                .map(ClauseMeaning.Stated::fieldsRead)
+                .map(says)
                 .toList();
     }
 

@@ -1,7 +1,8 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.DeclaredClauses;
+import souther.compiler.check.ClauseMeaning;
 import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.PublishedRules;
 import souther.compiler.check.Shape;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
@@ -13,10 +14,13 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
@@ -54,7 +58,8 @@ import java.util.Set;
  * nothing of that — the runs of each, and of every sum and difference of the two, can be what they
  * would be untied — so what is asked is whether anything could tie the term at all. Nothing ties it
  * where nothing names it but ends on itself and which case a value around it is: no rule of a value
- * it sits in, which is where a rule over two of its positions is written; nothing a way took in
+ * it sits in reading the field it lies under, other than for how many a container holds, which is
+ * where a rule over two of its positions is written; nothing a way took in
  * that turns on another number with it, or on another number of the place it is taken of — a date
  * on the twenty-ninth of February is in a leap year; and nothing a way stated and none of this took
  * in. Where one does, nothing is shown of the term, whether or not the rule ties it.
@@ -79,6 +84,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /** A relation that shows no place undivided: one nothing here takes apart. */
     static final UndividedByARelation SHOWING_NOTHING =
             new UndividedByARelation(List.of(), ExactRatio.ZERO, Rel.EQ, List.of());
+
+    /** The field a newtype's value is bound under, which is what a rule on the newtype names. */
+    private static final String THE_VALUE = "value";
 
     UndividedByARelation {
         sides = List.copyOf(sides);
@@ -408,31 +416,99 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether a rule of some value {@code path} sits in may name it beside another position: some
-     * value around it — the parameter itself, and every value between — wears a name, or is a
-     * declaration, that writes a rule.
+     * Whether a rule of some value {@code path} sits in may hold it back: some value around it —
+     * the parameter itself, and every value between — wears a name, or is a declaration, with a
+     * rule that reads the field {@code path} goes on through.
      *
      * <p>A rule on the position's own type is about it alone and ties it to nothing; one on a
-     * value around it is where a rule over two of its positions is written. A value around it the
-     * reading holds no position for is one nothing can be said of, and may.
+     * value around it is where a rule over two of its positions is written. A rule there that reads
+     * none of the field the path goes on through leaves every value of that field standing beside
+     * some value of the rest — what it holds back is which of the rest stand together — and one
+     * reading the field for nothing but how many a container there holds leaves its elements every
+     * value, wherever it may hold one. Both rest on some value of the rest being there, so a value
+     * around it the rules leave none of may. And a value around it the reading holds no position
+     * for is one nothing can be said of, and may.
      */
     private static boolean mayBeTiedByTheDeclarations(TermPath path, InputReading read) {
-        for (int length = 0; length < path.steps().size(); length++) {
-            Position around = read.domain().at(
-                    new TermPath(path.head(), path.steps().subList(0, length)).position());
-            if (around == null) {
+        List<TermPath.Step> steps = path.steps();
+        for (int length = 0; length < steps.size(); length++) {
+            TermPath here = new TermPath(path.head(), steps.subList(0, length));
+            Position around = read.domain().at(here.position());
+            // Where the rules leave no value of it, nothing stands beside the rest of it either.
+            if (around == null || around.nothingExists()) {
                 return true;
             }
-            List<TypeSymbol> worn = new ArrayList<>(around.view().wrappers());
-            switch (around.view().shape()) {
-                case Shape.Product product -> worn.add(product.name());
-                case Shape.Sum sum -> worn.add(sum.name());
-                default -> { }
-            }
-            for (DeclaredClauses.OnAName each : DeclaredClauses.of(worn, read.rules())) {
-                if (!each.conjuncts().isEmpty()) {
+            // A name the value wears binds the whole of it as its one field.
+            for (TypeSymbol wears : around.view().wrappers()) {
+                if (mayHoldBack(wears, THE_VALUE, here, read)) {
                     return true;
                 }
+            }
+            TypeSymbol declared = switch (around.view().shape()) {
+                case Shape.Product product -> product.name();
+                case Shape.Sum sum -> sum.name();
+                default -> null;
+            };
+            if (declared != null) {
+                String field = steps.get(length) instanceof TermPath.Step.Field(String name)
+                        ? name : null;
+                TermPath into = new TermPath(path.head(), steps.subList(0, length + 1));
+                if (mayHoldBack(declared, field, length + 1 < steps.size() ? into : null,
+                        read)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a rule of {@code worn} may hold back what stands at or under its field
+     * {@code field}: one reads it, or one was not reached or has no form to say what it reads.
+     *
+     * @param field     the field, or null where the path goes on by no field, which every rule
+     *                  that reads anything may hold back
+     * @param container where the field's value is, where what is asked about lies under it; null
+     *                  where it is the field's value itself
+     */
+    private static boolean mayHoldBack(TypeSymbol worn, String field, TermPath container,
+                                       InputReading read) {
+        if (!(worn instanceof TypeSymbol.AtModule named)) {
+            return false;
+        }
+        PublishedRules rules = PublishedRules.governing(named, read.rules().published());
+        if (!rules.everyRuleReached()) {
+            return true;
+        }
+        for (ClauseMeaning each : rules.reached()) {
+            if (!(each instanceof ClauseMeaning.Stated stated)) {
+                return true;
+            }
+            if (field == null ? !stated.fieldsRead().isEmpty()
+                    : stated.fieldsRead().contains(field)
+                            && !(container != null
+                                    && stated.fieldsReadOnlyForHowManyTheyHold().contains(field)
+                                    && mayHoldOne(container, read))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether the container at {@code at} may hold an element once every rule reaching it is
+     *  taken in: some value of it exists, and how many it holds may be one or more. */
+    private static boolean mayHoldOne(TermPath at, InputReading read) {
+        Position container = read.domain().at(at.position());
+        if (container == null || container.nothingExists()) {
+            return false;
+        }
+        NumericDomain.Bounds oneOrMore =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)), null);
+        for (PositionBounds each : container.bounds()) {
+            if (each.term() instanceof NumericTerm.TakenOf taken
+                    && taken.takenAs() instanceof TakenAs.HowManyItHolds) {
+                return each.rangeLeft() != null
+                        && each.rangeLeft().meet(oneOrMore).holdsAValue();
             }
         }
         return false;

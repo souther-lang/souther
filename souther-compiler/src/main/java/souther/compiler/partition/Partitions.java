@@ -1060,13 +1060,16 @@ public final class Partitions {
      * the model's.
      *
      * <p>Only the positions there is anything to measure at. A position with no classes and no cuts
-     * has no line to draw, and an entry saying so would be a list of nothings per behavior.
+     * has no line to draw, and an entry saying so would be a list of nothings per behavior. Nor
+     * does one no value can stand at, though the input has values: the elements of a container
+     * the rules hold to none. A row puts nothing there, so nothing there is owed one.
      */
     private static java.util.Map<AxisId, List<Border>> linesAlong(
             List<Axis> axes, Quantities reading, LinesRead read) {
         Map<AxisId, List<Border>> out = new LinkedHashMap<>();
         for (Axis axis : axes) {
-            if (axis.asksForARow()) {
+            if (axis.asksForARow() && !(reading.region().projectionOf(axis.term())
+                    instanceof NumericDomain.FormProjection.NothingIsLeft)) {
                 out.put(axis.id(),
                         bordersOf(axis, reading, reading.runsBetween(axis.term()), read));
             }

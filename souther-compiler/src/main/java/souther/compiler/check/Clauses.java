@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -13,6 +14,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -49,8 +51,8 @@ final class Clauses {
      * reached under it: a type spread by two of them is walked once. */
     private final Map<TypeSymbol.AtModule, PublishedRules> effective = new HashMap<>();
     /** Which of a declaration's own fields each typed clause reads — what a construction has to have
-     * filled for the clause to be read at all. */
-    private final Map<Core, Set<String>> readsFields = new IdentityHashMap<>();
+     * filled for the clause to be read at all, and which of them only for how many they hold. */
+    private final Map<Core, FieldsRead> readsFields = new IdentityHashMap<>();
 
     /**
      * @param source where this reads: the scope its names mean something in, where a declaration's
@@ -375,19 +377,47 @@ final class Clauses {
      * that produced it, which is the reading that already had the tree.
      */
     Set<String> fieldsRead(Core clause, TypeSymbol.AtModule named) {
+        return fieldsReadBy(clause, named).all();
+    }
+
+    /**
+     * Which of the fields {@code clause} reads ({@link #fieldsRead}) it reads only for how many
+     * the container there holds: every read of it is the value a count is taken of
+     * ({@link TakenAs.HowManyItHolds}), and what it reads there is a list, a set or a map.
+     *
+     * <p>A rule about such a field says how many elements stand there and nothing of which values
+     * they take. A string's length is not one of them: which strings there are of a length is
+     * which strings there are.
+     */
+    Set<String> fieldsReadOnlyForHowManyTheyHold(Core clause, TypeSymbol.AtModule named) {
+        return fieldsReadBy(clause, named).onlyCounted();
+    }
+
+    /** Both answers about which fields {@code clause} reads, remembered together. */
+    private FieldsRead fieldsReadBy(Core clause, TypeSymbol.AtModule named) {
         return readsFields.computeIfAbsent(clause, read -> {
             Map<BindingId, String> declared = new HashMap<>();
             bindingsOf(named).forEach((name, binding) -> declared.put(binding, name));
-            Set<String> found = new HashSet<>();
+            Set<String> all = new HashSet<>();
             readsOf(read, binding -> {
                 String name = declared.get(binding);
                 if (name != null) {
-                    found.add(name);
+                    all.add(name);
                 }
             });
-            return Set.copyOf(found);
+            Set<String> onlyCounted = new HashSet<>(all);
+            readsForTheirValues(read, binding -> onlyCounted.remove(declared.get(binding)));
+            return new FieldsRead(Set.copyOf(all), Set.copyOf(onlyCounted));
         });
     }
+
+    /**
+     * The fields a clause reads, and those of them it reads only for how many they hold.
+     *
+     * @param all         every field it reads
+     * @param onlyCounted the ones of {@code all} it reads for nothing but how many they hold
+     */
+    private record FieldsRead(Set<String> all, Set<String> onlyCounted) {}
 
     /** {@code e} with each binding {@code given} names replaced by the value it was given. */
     static Core substituted(Core e, Map<BindingId, Core> given) {
@@ -405,10 +435,39 @@ final class Clauses {
     }
 
     /** Every binding {@code e} reads, at any depth. */
-    private static void readsOf(Core e, java.util.function.Consumer<BindingId> f) {
+    private static void readsOf(Core e, Consumer<BindingId> f) {
         if (e instanceof Core.Read r) {
             f.accept(r.binding());
         }
         Core.forEachChild(e, child -> readsOf(child, f));
+    }
+
+    /** Every binding {@code e} reads other than as the container a count is taken of. */
+    private static void readsForTheirValues(Core e, Consumer<BindingId> f) {
+        if (e instanceof Core.Read r) {
+            f.accept(r.binding());
+            return;
+        }
+        if (e instanceof Core.PreservedCall call) {
+            BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven taken =
+                    DefaultBoundOperationFacts.get().numberTakenOf(call.declared().operation());
+            if (taken != null && taken.how() instanceof TakenAs.HowManyItHolds) {
+                int counted = taken.of().position();
+                for (int i = 0; i < call.args().size(); i++) {
+                    if (i != counted || !isAContainerRead(call.args().get(i))) {
+                        readsForTheirValues(call.args().get(i), f);
+                    }
+                }
+                return;
+            }
+        }
+        Core.forEachChild(e, child -> readsForTheirValues(child, f));
+    }
+
+    /** Whether {@code e} is a binding read, holding a list, a set or a map. */
+    private static boolean isAContainerRead(Core e) {
+        return Core.withoutStanding(e) instanceof Core.Read r
+                && (r.type() instanceof Type.ListOf || r.type() instanceof Type.SetOf
+                        || r.type() instanceof Type.MapOf);
     }
 }

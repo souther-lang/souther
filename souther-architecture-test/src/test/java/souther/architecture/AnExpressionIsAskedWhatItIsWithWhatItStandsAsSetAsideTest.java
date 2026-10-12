@@ -493,6 +493,10 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + " choice find it one step down and replace it there, under the Widen");
         row(out, c + "check/Clauses", "readsOf", "(" + core + "Ljava/util/function/Consumer;)V", 1,
                 COUNTS_THROUGH_IT);
+        row(out, c + "check/Clauses", "readsForTheirValues",
+                "(" + core + "Ljava/util/function/Consumer;)V", 2,
+                "a read and a count taken of a container, each asked of a node: a Widen is neither,"
+                        + " and the walk goes on into it and meets the one under it");
         row(out, c + "check/RecursionOverAList", "callsOf", "(" + core + "L" + c
                         + "types/ValueName$Helper;Ljava/util/List;)V", 1, GOES_ON_INTO_IT);
         row(out, c + "inputs/InputReads", "walkNames",
