@@ -53,8 +53,7 @@ final class HandedOn {
         return switch (built) {
             case Generator.CandidateCheck.Built.Refused(String why) -> new Came.Refused(why);
             case Generator.CandidateCheck.Built.Value(var observed) ->
-                    switch (ObservedFixtures.handedOn(inputs, observed, read.values(),
-                            read.containers(), reading)) {
+                    switch (ObservedFixtures.handedOn(inputs, observed, read, reading)) {
                         case ObservedFixtures.Writing.Written<ValuesHandedOn>(var at) ->
                                 new Came.Values(at);
                         case ObservedFixtures.Writing.NotWritable<ValuesHandedOn>(String why) ->
@@ -70,7 +69,7 @@ final class HandedOn {
                 }
                 Map<TermPath, FixtureTemplate> writes = written.get();
                 Map<TermPath, List<ValuesHandedOn.Standing>> out = new LinkedHashMap<>();
-                for (TermPath each : read.values()) {
+                for (TermPath each : read.positions()) {
                     FixtureTemplate value = writes.get(each);
                     if (value == null) {
                         yield new Came.NotWritable("a container is handed the value at `" + each

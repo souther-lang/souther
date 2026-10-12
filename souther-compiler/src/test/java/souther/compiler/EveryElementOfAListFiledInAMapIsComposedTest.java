@@ -89,13 +89,35 @@ class EveryElementOfAListFiledInAMapIsComposedTest {
                 | "a" : (["a"], Shelf([])) -> 0
             """;
 
+    /**
+     * Every element of a list the rules make hold one holding a value of another parameter in a
+     * list inside it: the inner list is written in each element the plan builds, so it is asked
+     * of the plan as it is, and each element's tags hold the value.
+     */
+    private static final String INSIDE_EACH = """
+            module p
+            data Item = { tags: List<String> }
+            data Items = List<Item>
+                invariant some = List.length(value) >= 1
+            behavior pick : (items: Items, k: String) -> Int
+            let pick (items, k) =
+                if List.all(i -> List.contains(k, i.tags), items.value) then 1 else 0
+            example pick
+                | "a" : (Items([Item { tags = [] }]), "a") -> 0
+            """;
+
+    /** The same with some element holding the value, which the list then holds one for. */
+    private static final String INSIDE_SOME = INSIDE_EACH.replace("List.all(", "List.any(");
+
     /** Each form, with the row composed for the rule where every element is filed. */
     private static final Map<String, List<String>> COMPOSED = Map.of(
             EVERY, List.of("[]", "[]"),
             SEVERAL, List.of("Keys([\"x\", \"x\"])", "[(\"x\", \"x\")]"),
             SEVERAL_APART, List.of("Keys([\"x\", \"xx\"])",
                     "[(\"x\", \"x\"), (\"xx\", \"x\")]"),
-            SHELF_EMPTY, List.of("[]", "Shelf([])"));
+            SHELF_EMPTY, List.of("[]", "Shelf([])"),
+            INSIDE_EACH, List.of("Items([Item { tags = [\"x\"] }])", "\"x\""),
+            INSIDE_SOME, List.of("Items([Item { tags = [\"x\"] }])", "\"x\""));
 
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");

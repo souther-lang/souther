@@ -7,6 +7,7 @@ import souther.compiler.observe.ElementsTaken;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -69,6 +70,17 @@ record ContentsAsked(List<Asked> asked) {
          */
         boolean inEveryRow() {
             return around.map(Around::some).orElse(true);
+        }
+
+        /**
+         * Whether the plan of the container's parameter asks it as it is: every row meeting it asks
+         * it, or the container is inside the element of the one the quantifier around it ranges
+         * over. A plan writes such a container in every element it builds, so the demand is met in
+         * each element there is and asked of nothing where there is none — and how many there are
+         * is the plan's, not something to put in beforehand.
+         */
+        boolean askedOfThePlan() {
+            return inEveryRow() || container.isAtOrUnder(around.orElseThrow().container().element());
         }
 
         /**
@@ -334,11 +346,13 @@ record ContentsAsked(List<Asked> asked) {
      * and the container asked is handed exactly those. So a container is made to hold a value only
      * where some row meeting the demand needs one there, and to hold each one such a row does.
      *
-     * <p>A demand whose values are read off this parameter's own value is asked of the positions
-     * the plan composes. One asked over every element of a container of this
-     * parameter, or with its value read off this parameter, under such a quantifier, has nothing
-     * built yet to say how many times it is asked; it is not handed to the container at all, and
-     * whether a row composed without it meets the rule is the row's to say.
+     * <p>A demand the plan asks as it is ({@link Asked#askedOfThePlan}) is handed to it whole: its
+     * value is read off the positions the plan composes where it is this parameter's, and is the
+     * one value handed on where it is another's. Any other demand under such a quantifier — over a
+     * container of this parameter that the container asked is not inside an element of, or with
+     * its value read off this parameter — has nothing built yet to say how many times it is asked;
+     * it is not handed to the container at all, and whether a row composed without it meets the
+     * rule is the row's to say.
      */
     Resolution resolvedFor(String head, ValuesHandedOn handed) {
         List<Asked> within = new ArrayList<>();
@@ -347,7 +361,7 @@ record ContentsAsked(List<Asked> asked) {
             if (!each.container().head().equals(head)) {
                 continue;
             }
-            if (each.inEveryRow()) {
+            if (each.askedOfThePlan()) {
                 if (each.value().head().equals(head)) {
                     within.add(each);
                     continue;
@@ -378,9 +392,27 @@ record ContentsAsked(List<Asked> asked) {
             }
             // Each element, and the one value read in it: two read in one element are no one
             // value for it, as one read outside every element is the same for each.
+            //
+            // A value read inside an element took an element of every container the element did,
+            // so it is filed under those once and looked up for each element, rather than every
+            // value asked of every element. Only one read outside them is asked of each.
+            List<TermPath> through = held.isEmpty() ? List.of()
+                    : held.getFirst().outermostFirst().stream()
+                            .map(ElementsTaken.Taken::container).toList();
+            Map<List<Integer>, List<FixtureTemplate>> inside = new HashMap<>();
+            List<ValuesHandedOn.Standing> outside = new ArrayList<>();
+            for (ValuesHandedOn.Standing one : standing) {
+                if (one.at().elementAt(over) == null) {
+                    outside.add(one);
+                } else {
+                    inside.computeIfAbsent(elementsOf(one.at(), through),
+                            _ -> new ArrayList<>()).add(one.value());
+                }
+            }
             for (ElementsTaken element : held) {
-                List<FixtureTemplate> in = new ArrayList<>();
-                for (ValuesHandedOn.Standing one : standing) {
+                List<FixtureTemplate> in = new ArrayList<>(
+                        inside.getOrDefault(elementsOf(element, through), List.of()));
+                for (ValuesHandedOn.Standing one : outside) {
                     if (one.at().agreesWith(element)) {
                         in.add(one.value());
                     }
@@ -392,6 +424,15 @@ record ContentsAsked(List<Asked> asked) {
             }
         }
         return new Resolution.Resolved(new Here(within, given));
+    }
+
+    /** The element {@code taken} took from each of {@code through}, in that order. */
+    private static List<Integer> elementsOf(ElementsTaken taken, List<TermPath> through) {
+        List<Integer> out = new ArrayList<>();
+        for (TermPath each : through) {
+            out.add(taken.elementAt(each));
+        }
+        return out;
     }
 
     private static String nothingHandedOn(TermPath value) {
@@ -479,7 +520,7 @@ record ContentsAsked(List<Asked> asked) {
                 }
                 List<FixtureTemplate> into = asked.ofTheKey()
                         ? (!asked.holding() ? keysKeptOut
-                                : asked.inEveryRow() ? keysHeld : keysEachFiled)
+                                : asked.askedOfThePlan() ? keysHeld : keysEachFiled)
                         : (asked.holding() ? holding : keptOut);
                 into.add(each.value());
             }
@@ -492,30 +533,37 @@ record ContentsAsked(List<Asked> asked) {
      * containers under it that are handed values, and the positions under it a value is read at —
      * for a container of its own or of another parameter's.
      *
-     * <p>A value read under a quantifier over every element is read off what was built, element by
-     * element, and is no position the plan holds: a container holding none meets the demand, and a
-     * position chosen inside it would make it hold one.
+     * <p>A value read for a demand the plan does not ask as it is is read off what was built,
+     * element by element, and is no position the plan holds: a container holding none meets the
+     * demand, and a position chosen inside it would make it hold one.
      */
     ConstructionPlan.ContentsComposed composedUnder(String head, Here here) {
         Set<TermPath> holdingOne = new LinkedHashSet<>();
         Set<TermPath> keepingOut = new LinkedHashSet<>();
         Set<TermPath> read = new LinkedHashSet<>();
         Set<TermPath> standing = new LinkedHashSet<>();
-        for (Asked each : here.within()) {
+        Set<TermPath> aroundOne = new LinkedHashSet<>();
+        Set<TermPath> aroundEach = new LinkedHashSet<>();
+        List<Asked> handedHere = new ArrayList<>(here.within());
+        here.given().forEach(each -> handedHere.add(each.asked()));
+        for (Asked each : handedHere) {
             (each.holding() ? holdingOne : keepingOut).add(each.container());
-        }
-        for (Given each : here.given()) {
-            (each.asked().holding() ? holdingOne : keepingOut).add(each.asked().container());
+            each.around().ifPresent(outer -> {
+                if (each.container().isAtOrUnder(outer.container().element())) {
+                    (outer.some() ? aroundOne : aroundEach).add(outer.container());
+                }
+            });
         }
         for (Asked each : asked) {
-            if (each.inEveryRow() && each.value().head().equals(head)) {
+            if (each.askedOfThePlan() && each.value().head().equals(head)) {
                 read.add(each.value());
                 if (each.standsWhereMet()) {
                     standing.add(each.value());
                 }
             }
         }
-        return new ConstructionPlan.ContentsComposed(holdingOne, keepingOut, read, standing);
+        return new ConstructionPlan.ContentsComposed(holdingOne, keepingOut, read, standing,
+                aroundOne, aroundEach);
     }
 
     /**
@@ -523,16 +571,28 @@ record ContentsAsked(List<Asked> asked) {
      * value is read at for a container of another parameter, and the containers under it a demand
      * on such a container is asked over every element of.
      *
-     * @param values     the positions read
+     * @param one        the positions read as one value, by a demand every row meeting it asks
+     * @param each       the positions read in each element of a container, by a demand asked
+     *                   under every element of it, where it holds as many values as elements
      * @param containers the containers whose elements are counted
      */
-    record ToHandOn(Set<TermPath> values, Set<TermPath> containers) {
+    record ToHandOn(Set<TermPath> one, Set<TermPath> each, Set<TermPath> containers) {
 
         // In the order the way asked them: which of them a value built has nothing to hand on at
         // is said of the first, and that follows from it.
         ToHandOn {
-            values = Collections.unmodifiableSet(new LinkedHashSet<>(values));
+            each = Collections.unmodifiableSet(new LinkedHashSet<>(each));
+            Set<TermPath> once = new LinkedHashSet<>(one);
+            once.removeAll(each);
+            one = Collections.unmodifiableSet(once);
             containers = Collections.unmodifiableSet(new LinkedHashSet<>(containers));
+        }
+
+        /** Every position read, either way. */
+        Set<TermPath> positions() {
+            Set<TermPath> out = new LinkedHashSet<>(one);
+            out.addAll(each);
+            return out;
         }
     }
 
@@ -545,23 +605,24 @@ record ContentsAsked(List<Asked> asked) {
      * being composed from, and nothing after it is handed them.
      */
     ToHandOn handedOnFrom(String head) {
-        Set<TermPath> values = new LinkedHashSet<>();
+        Set<TermPath> one = new LinkedHashSet<>();
+        Set<TermPath> inEach = new LinkedHashSet<>();
         Set<TermPath> containers = new LinkedHashSet<>();
         for (Asked each : asked) {
             if (each.container().head().equals(head)) {
                 continue;
             }
             if (each.value().head().equals(head)) {
-                values.add(each.value());
+                (each.askedOfThePlan() ? one : inEach).add(each.value());
             }
-            if (!each.inEveryRow()) {
+            if (!each.askedOfThePlan()) {
                 TermPath over = each.around().orElseThrow().container();
                 if (over.head().equals(head)) {
                     containers.add(over);
                 }
             }
         }
-        return new ToHandOn(values, containers);
+        return new ToHandOn(one, inEach, containers);
     }
 
     /**
@@ -572,7 +633,7 @@ record ContentsAsked(List<Asked> asked) {
     Set<TermPath> readWithin(String head) {
         Set<TermPath> out = new LinkedHashSet<>();
         for (Asked each : asked) {
-            if (each.inEveryRow() && each.value().head().equals(head)
+            if (each.askedOfThePlan() && each.value().head().equals(head)
                     && each.container().head().equals(head)) {
                 out.add(each.value());
             }
@@ -592,7 +653,7 @@ record ContentsAsked(List<Asked> asked) {
             String container = each.container().head();
             Set<String> from = new LinkedHashSet<>();
             from.add(each.value().head());
-            if (!each.inEveryRow()) {
+            if (!each.askedOfThePlan()) {
                 from.add(each.around().orElseThrow().container().head());
             }
             from.remove(container);

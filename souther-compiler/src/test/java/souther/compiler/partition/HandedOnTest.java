@@ -90,7 +90,8 @@ class HandedOnTest {
     private static HandedOn.Came handedOn(Generator.CandidateCheck.Built built,
                                           Map<TermPath, FixtureTemplate> written) {
         return HandedOn.of(built, () -> written,
-                new ContentsAsked.ToHandOn(Set.of(LEVEL), Set.of()), BehaviorInputs.of(READ),
+                new ContentsAsked.ToHandOn(Set.of(LEVEL), Set.of(), Set.of()),
+                BehaviorInputs.of(READ),
                 RuleReadingContext.unshared(READ.rules(), ReadAs.THE_COMPILATION_DOES));
     }
 

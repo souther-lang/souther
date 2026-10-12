@@ -290,7 +290,8 @@ final class Witnesses {
      * says its element again. Both are lists of that many, and which of them the rules admit is
      * not always something they say where this can read it: a rule that every element is apart
      * from the others refuses each list saying one again, and nothing else here would offer one
-     * that does not.
+     * that does not. One such list, from the first proposal that has that many values beside it:
+     * every list is built here, and the rest would be the same values in another order.
      */
     private static Built ofSequence(Shape.Sequence carrier, int least, RuleReadingContext reading,
                                     Set<TypeSymbol> expanding) {
@@ -316,6 +317,7 @@ final class Witnesses {
                 // element again is already offered.
                 if (apart.size() == least) {
                     out.add(new Made(FixtureTemplate.collection(apart), least));
+                    break;
                 }
             }
         }

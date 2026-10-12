@@ -18,7 +18,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
-import java.util.Set;
 
 /**
  * A value the boundary built, written as a fixture that builds it again.
@@ -60,21 +59,30 @@ final class ObservedFixtures {
      * parameter they are under, written as fixtures — and the elements each of {@code containers}
      * holds in it.
      *
-     * <p>Every value at each, with the element it was read in, and none where the value built has
-     * nothing there: a list holding no element has nothing at its element, and that is an answer.
-     * How many of them a container is handed is the demand's to say ({@link
-     * ContentsAsked#resolvedFor}). A path the value built has no such position at, and a value there
-     * that cannot be written, are said as why.
+     * <p>At a position read in each element, every value there, with the element it was read in,
+     * and none where the value built has nothing there: a list holding no element has nothing at
+     * its element, and that is an answer. How many of them a container is handed is the demand's
+     * to say ({@link ContentsAsked#resolvedFor}). At a position read as one value, one value, and
+     * a position at no value of the one built or at as many as a container holds is said as
+     * having no one value — before anything is written, since nothing would be handed. A path the
+     * value built has no such position at, and a value there that cannot be written, are said as
+     * why.
      */
     static Writing<ValuesHandedOn> handedOn(BehaviorInputs inputs, ObservedValue built,
-                                            Set<TermPath> paths, Set<TermPath> containers,
+                                            ContentsAsked.ToHandOn read,
                                             RuleReadingContext reading) {
         Map<TermPath, List<ValuesHandedOn.Standing>> values = new LinkedHashMap<>();
-        for (TermPath path : paths) {
+        for (TermPath path : read.positions()) {
             if (!(inputs.observedAt(built, path)
                     instanceof WalkResult.Reached<List<BehaviorInputs.ObservedAt>>(var found))) {
                 return new Writing.NotWritable<>(
                         "`" + path + "` is not a position the value built has");
+            }
+            if (read.one().contains(path) && found.size() != 1) {
+                return new Writing.NotWritable<>(found.isEmpty()
+                        ? "nothing stands at `" + path + "` in the value built"
+                        : "`" + path + "` is at each of " + found.size()
+                                + " elements of the value built, which is no one value");
             }
             List<ValuesHandedOn.Standing> standing = new ArrayList<>();
             for (BehaviorInputs.ObservedAt one : found) {
@@ -90,7 +98,7 @@ final class ObservedFixtures {
             values.put(path, standing);
         }
         Map<TermPath, List<ElementsTaken>> elements = new LinkedHashMap<>();
-        for (TermPath container : containers) {
+        for (TermPath container : read.containers()) {
             if (!(inputs.observedAt(built, container.element())
                     instanceof WalkResult.Reached<List<BehaviorInputs.ObservedAt>>(var found))) {
                 return new Writing.NotWritable<>(

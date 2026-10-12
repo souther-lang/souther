@@ -9119,7 +9119,7 @@ public final class Generator {
                 return new Tried.Refused();
             }
             return switch (HandedOn.of(check.build(parameter, composed),
-                    () -> values.read(handedOn.values(), reading), handedOn, inputs, reading)) {
+                    () -> values.read(handedOn.positions(), reading), handedOn, inputs, reading)) {
                 case HandedOn.Came.Values(var read) ->
                         new Tried.Built(new ComposedValue(composed, read));
                 case HandedOn.Came.Refused _ -> {

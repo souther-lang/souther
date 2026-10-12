@@ -118,7 +118,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
     void theListIsAskedNothingForTheValueReadOffIt() {
         ContentsAsked asked = everyKeyFiled();
 
-        assertEquals(new ContentsAsked.ToHandOn(Set.of(KS.element()), Set.of(KS)),
+        assertEquals(new ContentsAsked.ToHandOn(Set.of(), Set.of(KS.element()), Set.of(KS)),
                 asked.handedOnFrom("ks"));
         assertEquals(Set.of(), asked.composedUnder("ks", resolved(asked, "ks", ksBuiltAs()))
                 .read());
@@ -141,6 +141,30 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
         assertEquals(List.of("\"x\"", "\"x\""),
                 keysEachFiled(resolved(asked, "shelf", ksBuiltAs("a", "b").and(nBuilt))));
         assertEquals(Map.of("shelf", Set.of("n", "ks")), asked.composedAfter());
+    }
+
+    /**
+     * Every element of a list inside the elements of another: each value is the one read in the
+     * element it stands in, and two elements standing at the same place in the lines of two
+     * orders are two elements.
+     */
+    @Test
+    void aValueIsReadInTheElementOfEveryContainerAroundIt() {
+        TermPath os = TermPath.of("os");
+        TermPath lines = os.element().then("ls");
+        ContentsAsked asked = asked(new RowDemand.ForAll(lines, List.of(new RowDemand.WithinIt(
+                SHELF, true, new RowDemand.KeyedAs(lines.element()))), HOLDING));
+        ElementsTaken first = ElementsTaken.NONE.and(os, 0).and(lines, 0);
+        ElementsTaken second = ElementsTaken.NONE.and(os, 1).and(lines, 0);
+        ElementsTaken third = ElementsTaken.NONE.and(os, 1).and(lines, 1);
+        ValuesHandedOn handed = new ValuesHandedOn(Map.of(lines.element(), List.of(
+                new ValuesHandedOn.Standing(first, FixtureTemplate.string("a")),
+                new ValuesHandedOn.Standing(second, FixtureTemplate.string("b")),
+                new ValuesHandedOn.Standing(third, FixtureTemplate.string("c")))),
+                Map.of(lines, List.of(first, second, third)));
+
+        assertEquals(List.of("\"a\"", "\"b\"", "\"c\""),
+                keysEachFiled(resolved(asked, "shelf", handed)));
     }
 
     /** Two values read in one element are no one value for it, and are said as that. */

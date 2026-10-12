@@ -437,13 +437,21 @@ final class ConstructionPlan {
      *                   asked, so that every container they are inside holds an element. The rest
      *                   are read only where such a row has something there: a container asked
      *                   about every element it holds meets that holding none
+     * @param aroundOne  the containers with a container handed values inside their element, by a
+     *                   demand asked of some element of them in every row meeting it — so each
+     *                   holds one, and is built around it
+     * @param aroundEach the containers with a container handed values inside their element, by a
+     *                   demand asked of every element of them — built around their element, which
+     *                   writes the inner container alike in each, and not made to hold one: one
+     *                   holding none meets the demand
      */
     record ContentsComposed(Set<TermPath> holdingOne, Set<TermPath> keepingOut,
-                            Set<TermPath> read, Set<TermPath> standing) {
+                            Set<TermPath> read, Set<TermPath> standing, Set<TermPath> aroundOne,
+                            Set<TermPath> aroundEach) {
 
         /** Nothing handed over, which is what a plan with no container asked of is made with. */
-        static final ContentsComposed NONE =
-                new ContentsComposed(Set.of(), Set.of(), Set.of(), Set.of());
+        static final ContentsComposed NONE = new ContentsComposed(Set.of(), Set.of(), Set.of(),
+                Set.of(), Set.of(), Set.of());
 
         // In the order they were handed over: the requirements of these positions are put
         // together in it, and which of two disagreeing ones a refusal names follows from it.
@@ -452,6 +460,8 @@ final class ConstructionPlan {
             keepingOut = Collections.unmodifiableSet(new LinkedHashSet<>(keepingOut));
             read = Collections.unmodifiableSet(new LinkedHashSet<>(read));
             standing = Collections.unmodifiableSet(new LinkedHashSet<>(standing));
+            aroundOne = Collections.unmodifiableSet(new LinkedHashSet<>(aroundOne));
+            aroundEach = Collections.unmodifiableSet(new LinkedHashSet<>(aroundEach));
             if (!read.containsAll(standing)) {
                 throw new IllegalArgumentException("a position a value stands at is one read: "
                         + standing + " beside " + read);
@@ -667,10 +677,19 @@ final class ConstructionPlan {
         if (node.at().equals(at)) {
             return node;
         }
-        if (!(node instanceof Built built)) {
-            return null;
-        }
-        for (Node each : built.under().values()) {
+        List<Node> under = switch (node) {
+            case Built built -> List.copyOf(built.under().values());
+            // The element and the key a container is built around, which every element it holds
+            // is written as: a position inside the element is that position of each.
+            case Held held -> {
+                List<Node> inside = new ArrayList<>();
+                held.under().ifPresent(inside::add);
+                held.key().ifPresent(inside::add);
+                yield inside;
+            }
+            case Slot _, Exact _ -> List.of();
+        };
+        for (Node each : under) {
             if (at.isAtOrUnder(each.at())) {
                 return found(each, at);
             }
@@ -760,14 +779,19 @@ final class ConstructionPlan {
             // a row holding none meets nothing. Read off every element instead, it is not asked —
             // a row holding none meets that too, and making this hold one for it would refuse as
             // the model's a container the rules keep empty.
+            //
+            // And a container inside its element handed values is built where the element is: by
+            // a demand on some element of this one it holds one, and by one on every element it is
+            // built around the element and made to hold nothing for it.
             boolean valueAsked = anythingIsAskedAtOrUnder(here.element(), decided, required)
-                    || contents.standsAtOrUnder(here.element());
+                    || contents.standsAtOrUnder(here.element())
+                    || contents.aroundOne().contains(here);
             boolean keyAsked = container instanceof Shape.Mapping
                     && (anythingIsAskedAtOrUnder(here.key(), decided, required)
                             || contents.standsAtOrUnder(here.key()));
             boolean elementAsked = valueAsked || keyAsked;
             boolean handed = contents.handedTo(here);
-            boolean demanded = elementAsked || handed;
+            boolean demanded = elementAsked || handed || contents.aroundEach().contains(here);
             // How many it may hold, off one reading, and whether something has to be placed in it.
             // The floor is how many the rules ask the whole collection to hold and the value being
             // placed is one of them, so what a collection holding it comes to is the floor, or one

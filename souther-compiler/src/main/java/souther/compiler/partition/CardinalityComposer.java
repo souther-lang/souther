@@ -253,7 +253,8 @@ final class CardinalityComposer {
                                                           RuleReadingContext reading) {
         List<FixtureTemplate> built = new ArrayList<>();
         Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
-        for (int elements = 0; built.size() < MOST_OFFERED; elements++) {
+        offering:
+        for (int elements = 0; ; elements++) {
             if (elements > MOST_ELEMENTS) {
                 refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
                 break;
@@ -272,9 +273,15 @@ final class CardinalityComposer {
             for (FixtureTemplate bare
                     : Witnesses.ofSize(view, elements, reading, Set.of()).values()) {
                 FixtureTemplate one = WornNames.under(view.wrappers(), bare, reading.source());
-                if (one != null && built.size() < MOST_OFFERED) {
-                    built.add(one);
+                if (one == null) {
+                    continue;
                 }
+                // One more to offer than the figure lets through: what stopped it is said.
+                if (built.size() == MOST_OFFERED) {
+                    refused.add(CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED);
+                    break offering;
+                }
+                built.add(one);
             }
         }
         CompositionShortfall rest = CompositionShortfall.of(refused,
