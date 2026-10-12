@@ -87,6 +87,40 @@ class WhatALibraryOperationAnswersIsOneDecisionOfTheModelTest {
         assertEquals(decisionLine(written), decisionLine(through), through);
     }
 
+    /** The reading of what runs is the operation's own walk, and is measured as the match written
+     *  out is: the arms a row goes through are the same arms. */
+    @Test
+    void theArmsARowGoesThroughAreTheMatchWrittenOutsArms() {
+        String through = report(measured(THROUGH_THE_OPERATION + ROWS));
+        String written = report(measured(WRITTEN_OUT + ROWS));
+
+        assertEquals(lineAbout(written, "branch "), lineAbout(through, "branch "), through);
+        assertTrue(lineAbout(through, "branch ").contains("2/2"), through);
+    }
+
+    /**
+     * What the model wrote and handed the operation is the model's, and the decisions in it stay
+     * the model's: a comparison inside the closure an option is made with draws its lines though
+     * the option is read through the operation's code.
+     */
+    @Test
+    void aComparisonTheModelHandedTheOperationKeepsItsLines() {
+        String report = report(measured("""
+                module p
+                data H = { n: Option<Int> }
+                behavior f : (h: H) -> Bool
+                let f (h) = Option.withDefault(false, Option.map((v) -> v > 0, h.n))
+                """));
+
+        assertTrue(report.contains("read as f/h.n@Some: = 1"), report);
+        assertTrue(report.contains("read as f/h.n@Some: = 0"), report);
+        assertTrue(decisionLine(report).contains("rules 2"), report);
+    }
+
+    private static String lineAbout(String report, String word) {
+        return report.lines().filter(line -> line.contains(word)).findFirst().orElse("");
+    }
+
     /** The rules are what the application answers, and nothing the operation bound. */
     @Test
     void theRulesAreWhatTheApplicationAnswers() {

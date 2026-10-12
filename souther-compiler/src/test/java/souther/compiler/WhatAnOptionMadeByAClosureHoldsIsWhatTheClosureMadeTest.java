@@ -253,6 +253,124 @@ class WhatAnOptionMadeByAClosureHoldsIsWhatTheClosureMadeTest {
         }
     }
 
+    /**
+     * The closure and the option are read where they stand, which is not where the arm is
+     * wherever they were reached through a name, a binding or a helper's body: a function named
+     * at the call, an option bound before it is matched, and the application written inside a
+     * helper the body calls all draw the lines the closure written at the call draws.
+     */
+    @Test
+    void whatTheClosureMadeIsReadWhereverTheClosureAndTheOptionStand() {
+        List<String> written = linesAbout(report(ONE_MORE), "read as");
+        for (String model : List.of("""
+                module p
+                behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
+                let inc (x: Int): Int = x + 1
+                let f (k, m, q) = (Map.get(k, m) |> Option.map(inc) |> Option.withDefault(0)) >= q
+                """, """
+                module p
+                behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
+                let f (k, m, q) = {
+                    let r = Option.map(x -> x + 1, Map.get(k, m))
+                    match r with
+                        | Some v -> v >= q
+                        | None -> 0 >= q
+                }
+                """, """
+                module p
+                behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
+                let plusOne (o: Option<Int>): Option<Int> = Option.map(x -> x + 1, o)
+                let f (k, m, q) = (plusOne(Map.get(k, m)) |> Option.withDefault(0)) >= q
+                """)) {
+            String report = report(model);
+
+            assertTrue(readSaveForWhatTheOtherValueReaches(report), report);
+            assertEquals(written, linesAbout(report, "read as"), report);
+        }
+    }
+
+    /**
+     * A closure applied to the value an optional of the input holds is applied where it holds one,
+     * and to that value: a comparison in it is a line on the optional's value, and is reached
+     * where the optional holds one. An option is no container whose elements are counted, and
+     * read as one there is no position for the element it was taken to have.
+     */
+    @Test
+    void aClosureIsAppliedToTheValueAnOptionalOfTheInputHolds() {
+        for (String body : List.of(
+                "Option.withDefault(false, Option.map((v) -> v > 0, h.n))",
+                "match Option.map((v) -> v > 0, h.n) with\n"
+                        + "        | Some b -> b\n        | None -> false",
+                "Option.withDefault(0, Option.map((v) -> if v > 0 then 1 else 0, h.n)) >= h.q")) {
+            String report = report("""
+                    module p
+                    data H = { n: Option<Int>, q: Int }
+                    behavior f : (h: H) -> Bool
+                    let f (h) = %s
+                    """.formatted(body));
+
+            assertTrue(readSaveForWhatTheOtherValueReaches(report), report);
+            assertTrue(report.contains("read as f/h.n@Some: = 1"), report);
+            assertTrue(report.contains("read as f/h.n@Some: = 0"), report);
+            assertFalse(report.contains("h.n[*]"), report);
+        }
+    }
+
+    private static final String A_FIELD_AGAINST_A_STRING = """
+            module p
+            data Node = { holder: String }
+            behavior f : (k: String, m: Map<String, Node>) -> Bool
+            let f (k, m) = (Map.get(k, m) |> Option.map(n -> n.holder) |> Option.withDefault(""))
+                == "x"
+            """;
+
+    /**
+     * A field of the entry's value, compared with a string: the closure's answer is the field, and
+     * the default is a string written out that the comparison settles alone. The line is on the
+     * field of the entry under the key.
+     */
+    @Test
+    void aFieldOfTheEntryComparedWithAStringIsALineOnTheField() {
+        String report = report(A_FIELD_AGAINST_A_STRING);
+
+        assertFalse(report.contains("not read"), report);
+        assertTrue(report.contains("measurement: complete"), report);
+        assertTrue(report.contains("read as f/m[*].holder: = x"), report);
+        assertTrue(report.contains("decision    rules 1"), report);
+        assertFalse(report.contains("nothing could show a row can be written"), report);
+    }
+
+    /** A row offered for the line on the field files the entry under the key. */
+    @Test
+    void aRowOfferedForTheFieldFilesTheEntryUnderTheKey() {
+        Compilation compilation = measured(A_FIELD_AGAINST_A_STRING);
+        Generator.GenerationResult result =
+                OfferedAtTheLines.of(compilation, compilation.modules().get(0), "f");
+        Pattern entry = Pattern.compile("\\(\"([^\"]*)\", Node \\{ holder = \"([^\"]*)\" \\}\\)");
+
+        assertEquals(List.of(), result.unresolved());
+        assertFalse(result.rows().isEmpty());
+        for (Generator.GeneratedRow row : result.rows()) {
+            List<String> texts = row.inputs().stream().map(FixtureTemplate::text).toList();
+            String key = texts.get(0).substring(1, texts.get(0).length() - 1);
+            Map<String, String> holders = new LinkedHashMap<>();
+            Matcher each = entry.matcher(texts.get(1));
+            while (each.find()) {
+                holders.put(each.group(1), each.group(2));
+            }
+            String label = row.purposes().stream()
+                    .filter(Generator.Purpose.ForAPoint.class::isInstance)
+                    .map(point -> ((Generator.Purpose.ForAPoint) point).label())
+                    .findFirst().orElseThrow();
+            if (label.equals("m[*].holder = x")) {
+                assertEquals("x", holders.get(key), texts::toString);
+            } else {
+                assertTrue(holders.containsKey(key), texts::toString);
+                assertFalse("x".equals(holders.get(key)), texts::toString);
+            }
+        }
+    }
+
     /** Two closures applied one after the other are both read: what the second made of what the
      *  first made of the entry. */
     @Test

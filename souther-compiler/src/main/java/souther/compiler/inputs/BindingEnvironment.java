@@ -56,8 +56,7 @@ final class BindingEnvironment {
 
     private final Map<BindingId, TermPath> roots;
     /** What one application of a closure handed a parameter: one of the values written out, which
-     *  names nothing, so it is read the same wherever it is read; or what another closure answered
-     *  on what an option held, whose names are bound here beside it. */
+     *  names nothing, so it is read the same wherever it is read. */
     private final Map<BindingId, Core> handed;
     private final Map<BindingId, Core> table;
     private final Layer newest;
@@ -200,6 +199,12 @@ final class BindingEnvironment {
         return value == null ? new BindingRole.Unknown() : new BindingRole.Alias(value);
     }
 
+    /** What the operations applying the closure {@code binding} is a parameter of hand it, each
+     *  container and how, whatever else the name has come to stand for on the way here. */
+    List<HeldIn> handedFrom(BindingId binding) {
+        return elements.containersOf(binding);
+    }
+
     /** The containers the closure {@code binding} is a parameter of is applied over, where every
      *  application of it is an operation's ({@link ElementBindings#enteredOver}). */
     List<Core> enteredOver(BindingId binding) {
@@ -318,9 +323,7 @@ final class BindingEnvironment {
 
     /**
      * The same, on the application of a closure that hands {@code binding} {@code value}: one of
-     * the values a container was written with, naming no binding of its own — or what another
-     * closure answered on the value an option held, read in this environment, which names that
-     * closure's parameter as this one does.
+     * the values a container was written with, naming no binding of its own.
      */
     BindingEnvironment handing(BindingId binding, Core value) {
         Map<BindingId, Core> wider = new LinkedHashMap<>(handed);
