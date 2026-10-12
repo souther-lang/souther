@@ -135,6 +135,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "stops at a size or at the containers offered, and hands the figure over in"
                             + " the shortfall it comes back with"),
+            Map.entry("souther.compiler.partition.CardinalityComposer#handingOn("
+                            + "Ljava/util/List;Lsouther/compiler/partition/NumericSet;"
+                            + "Lsouther/compiler/check/TypeView;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "stops at a size or at the containers offered, and hands the figure over in"
+                            + " the shortfall it comes back with"),
             Map.entry("souther.compiler.partition.CardinalityComposer#composeAlike("
                             + "Lsouther/compiler/types/Type;"
                             + "Lsouther/compiler/partition/RealizationTarget$OfANumber;"
@@ -166,7 +173,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.Generator#inputsFrom("
                             + "Lsouther/compiler/partition/Generator$RowBeingComposed;I"
                             + "[Lsouther/compiler/partition/FixtureTemplate;"
-                            + "Ljava/util/Map;)"
+                            + "Lsouther/compiler/partition/ValuesHandedOn;)"
                             + "Lsouther/compiler/partition/Generator$RowComposed;",
                     "says a baseline whose every written way was refused was written fewer ways"
                             + " than it had, under the figure the ways were cut at"),

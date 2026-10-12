@@ -120,6 +120,10 @@ final class CardinalityComposer {
                 || !container.element().outermostContainer().equals(container)) {
             return notChosen("`" + container + "` is no list or set written where it stands");
         }
+        if (standingAt.isEmpty() && counts.stream().allMatch(each -> ACountHandedOn.of(
+                container, each.count().meeting()).isPresent())) {
+            return handingOn(asked, size, view, reading);
+        }
         Element element = Element.of(counts, container);
         if (element == null) {
             return notChosen("an element of `" + container + "` is not one number the statements"
@@ -231,6 +235,58 @@ final class CardinalityComposer {
             return new TermRealizations.Realization.Unexhausted(rest, groups.unreadSaid());
         }
         return none("no container of `" + container + "` this composed meets every count asked");
+    }
+
+    /**
+     * Containers counted only for statements that hold of other containers, at sizes where every
+     * element meeting each of them — or none, where none is a count asked of it — is a count
+     * asked.
+     *
+     * <p>Which elements it holds is nothing the statements turn on: each holds of an element by what
+     * another container is made to hold for it ({@link ACountHandedOn}). So a container of each size
+     * that meets the counts this way is offered, holding whatever the element's own rules admit, and
+     * what it comes to beside is said as written some of: a count met by some elements and not by
+     * others is not written here, so composing nothing is no answer about the model.
+     */
+    private static TermRealizations.Realization handingOn(List<Asked> asked, NumericSet size,
+                                                          TypeView view,
+                                                          RuleReadingContext reading) {
+        List<FixtureTemplate> built = new ArrayList<>();
+        Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
+        for (int elements = 0; built.size() < MOST_OFFERED; elements++) {
+            if (elements > MOST_ELEMENTS) {
+                refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
+                break;
+            }
+            if (size != null && !size.holds(Count.of(elements), Carrier.WHOLE)) {
+                continue;
+            }
+            boolean meets = true;
+            for (Asked one : asked) {
+                meets &= one instanceof Asked.SoManyMeeting count
+                        && count.asMany(ACountHandedOn.metByNone(count.wanted()) ? 0 : elements);
+            }
+            if (!meets) {
+                continue;
+            }
+            for (FixtureTemplate bare
+                    : Witnesses.ofSize(view, elements, reading, Set.of()).values()) {
+                FixtureTemplate one = WornNames.under(view.wrappers(), bare, reading.source());
+                if (one != null && built.size() < MOST_OFFERED) {
+                    built.add(one);
+                }
+            }
+        }
+        CompositionShortfall rest = CompositionShortfall.of(refused,
+                Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT), Set.of());
+        if (!built.isEmpty()) {
+            return new TermRealizations.Realization.Built(built, rest);
+        }
+        if (!rest.figures().isEmpty()) {
+            return new TermRealizations.Realization.Stopped(rest);
+        }
+        return new TermRealizations.Realization.Unexhausted(rest, "no size of the container has"
+                + " every element meeting what is counted, or none of them, at a count asked");
     }
 
     /**

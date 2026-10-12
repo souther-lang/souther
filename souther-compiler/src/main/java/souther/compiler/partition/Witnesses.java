@@ -285,12 +285,18 @@ final class Witnesses {
      *
      * <p>A list may hold the same element as many times as it needs to. A set of three is three
      * elements no two of which are equal, which the element's own values have to supply.
+     *
+     * <p>A list is also offered holding that many no two of which are equal, after every one that
+     * says its element again. Both are lists of that many, and which of them the rules admit is
+     * not always something they say where this can read it: a rule that every element is apart
+     * from the others refuses each list saying one again, and nothing else here would offer one
+     * that does not.
      */
     private static Built ofSequence(Shape.Sequence carrier, int least, RuleReadingContext reading,
                                     Set<TypeSymbol> expanding) {
         List<Made> out = new ArrayList<>();
-        for (FixtureTemplate seed
-                : proposalsFor(carrier.element(), reading, expanding)) {
+        List<FixtureTemplate> seeds = proposalsFor(carrier.element(), reading, expanding);
+        for (FixtureTemplate seed : seeds) {
             List<FixtureTemplate> elements = new ArrayList<>();
             if (carrier.kind() == Shape.Sequence.Kind.LIST) {
                 for (int i = 0; i < least; i++) {
@@ -301,6 +307,17 @@ final class Witnesses {
                         distinctFrom(seed, carrier.element(), least, reading, expanding));
             }
             out.add(new Made(FixtureTemplate.collection(elements), elements.size()));
+        }
+        if (carrier.kind() == Shape.Sequence.Kind.LIST && least > 1) {
+            for (FixtureTemplate seed : seeds) {
+                List<FixtureTemplate> apart =
+                        distinctFrom(seed, carrier.element(), least, reading, expanding);
+                // A type with fewer values than that has no such list, and the one saying its
+                // element again is already offered.
+                if (apart.size() == least) {
+                    out.add(new Made(FixtureTemplate.collection(apart), least));
+                }
+            }
         }
         return Built.of(out);
     }
@@ -410,20 +427,39 @@ final class Witnesses {
      * <p>{@code filed}, where there is one, is a key a class was put at and the value of
      * {@code holding} it is filed under — the entry holding the element is the entry the key is
      * about. Every other entry is keyed apart from it, since a map holds one entry under a key.
+     *
+     * <p>{@code eachFiled} are keys each asked of an entry of its own, over whatever value the
+     * rules admit. A key among them that is {@code filed}'s, or another of them, is one entry.
      */
     static FixtureTemplate holding(Shape.Mapping map,
                                    List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
-                                   Filed filed, List<FixtureTemplate> keysKeptOut,
+                                   Filed filed, List<FixtureTemplate> eachFiled,
+                                   List<FixtureTemplate> keysKeptOut,
                                    DeclaredBounds.CountRange holds,
                                    RuleReadingContext reading) {
-        if (filed != null && keysKeptOut.stream()
-                .anyMatch(each -> each.text().equals(filed.key().text()))) {
+        Set<String> out = new LinkedHashSet<>();
+        keysKeptOut.forEach(each -> out.add(each.text()));
+        if (filed != null && out.contains(filed.key().text())) {
             return null;
         }
+        Set<String> filedKeys = new LinkedHashSet<>();
+        if (filed != null) {
+            filedKeys.add(filed.key().text());
+        }
+        List<FixtureTemplate> apart = new ArrayList<>();
+        for (FixtureTemplate each : eachFiled) {
+            if (out.contains(each.text())) {
+                return null;
+            }
+            if (filedKeys.add(each.text())) {
+                apart.add(each);
+            }
+        }
         // A key chosen over no value in particular needs an entry to be the key of, so the map holds
-        // at least one value whatever else is asked of it.
-        DeclaredBounds.CountRange room = filed != null && filed.value() == null
-                ? new DeclaredBounds.CountRange(Math.max(1, holds.least()), holds.most())
+        // at least one value for each such key whatever else is asked of it.
+        int keyed = filedKeys.size();
+        DeclaredBounds.CountRange room = keyed > 0
+                ? new DeclaredBounds.CountRange(Math.max(keyed, holds.least()), holds.most())
                 : holds;
         List<FixtureTemplate> values =
                 elementsHolding(map.value(), true, holding, keptOut, room, reading);
@@ -446,18 +482,15 @@ final class Witnesses {
                                 + filed.value().text());
             }
         }
-        Set<String> written = new LinkedHashSet<>();
-        if (filed != null) {
-            written.add(filed.key().text());
-        }
         // A key no entry may have is one no other entry is filed under either.
-        keysKeptOut.forEach(each -> written.add(each.text()));
-        // One more than is needed, so that the key already chosen being one of them still leaves
-        // enough beside it, and as many more as are kept out.
+        Set<String> written = new LinkedHashSet<>(filedKeys);
+        written.addAll(out);
+        // One more than is needed for each key already chosen, so that those being among them
+        // still leaves enough beside them, and as many more as are kept out.
         List<FixtureTemplate> others = new ArrayList<>();
-        int needed = filed == null ? values.size() : values.size() - 1;
+        int needed = values.size() - keyed;
         for (FixtureTemplate each : distinctValuesOf(map.key(),
-                values.size() + 1 + keysKeptOut.size(), reading, Set.of())) {
+                values.size() + keyed + keysKeptOut.size(), reading, Set.of())) {
             if (others.size() == needed) {
                 break;
             }
@@ -469,9 +502,11 @@ final class Witnesses {
             return null;
         }
         List<FixtureTemplate> entries = new ArrayList<>();
+        int nextApart = 0;
         int next = 0;
         for (int i = 0; i < values.size(); i++) {
-            FixtureTemplate key = i == under ? filed.key() : others.get(next++);
+            FixtureTemplate key = i == under ? filed.key()
+                    : nextApart < apart.size() ? apart.get(nextApart++) : others.get(next++);
             entries.add(FixtureTemplate.entry(key, values.get(i)));
         }
         return FixtureTemplate.collection(entries);

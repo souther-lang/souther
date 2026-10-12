@@ -2,10 +2,11 @@ package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.ElementsTaken;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -31,13 +32,8 @@ final class HandedOn {
         /** The model refused the value. */
         record Refused(String why) implements Came {}
 
-        /** What stands at each position handed on. */
-        record Values(Map<TermPath, FixtureTemplate> at) implements Came {
-
-            public Values {
-                at = Map.copyOf(at);
-            }
-        }
+        /** What stands at each position handed on, and what each container read holds. */
+        record Values(ValuesHandedOn at) implements Came {}
 
         /** The value stands, and what is to be handed on out of it is nothing this can write. */
         record NotWritable(String why) implements Came {}
@@ -52,29 +48,38 @@ final class HandedOn {
      */
     static Came of(Generator.CandidateCheck.Built built,
                    Supplier<Map<TermPath, FixtureTemplate>> written,
-                   Set<TermPath> read, BehaviorInputs inputs, RuleReadingContext reading) {
+                   ContentsAsked.ToHandOn read, BehaviorInputs inputs,
+                   RuleReadingContext reading) {
         return switch (built) {
             case Generator.CandidateCheck.Built.Refused(String why) -> new Came.Refused(why);
             case Generator.CandidateCheck.Built.Value(var observed) ->
-                    switch (ObservedFixtures.at(inputs, observed, read, reading)) {
-                        case ObservedFixtures.Writing.Written<Map<TermPath, FixtureTemplate>>(
-                                var at) -> new Came.Values(at);
-                        case ObservedFixtures.Writing.NotWritable<Map<TermPath, FixtureTemplate>>(
-                                String why) -> new Came.NotWritable(why);
+                    switch (ObservedFixtures.handedOn(inputs, observed, read.values(),
+                            read.containers(), reading)) {
+                        case ObservedFixtures.Writing.Written<ValuesHandedOn>(var at) ->
+                                new Came.Values(at);
+                        case ObservedFixtures.Writing.NotWritable<ValuesHandedOn>(String why) ->
+                                new Came.NotWritable(why);
                     };
             case Generator.CandidateCheck.Built.NothingBuiltIt _ -> {
+                // What the row writes is one value at a position, and nothing about how many
+                // elements a container it writes whole holds.
+                if (!read.containers().isEmpty()) {
+                    yield new Came.NotWritable("a demand is asked over each element of `"
+                            + read.containers().iterator().next() + "`, and nothing built the"
+                            + " value to say which elements it holds");
+                }
                 Map<TermPath, FixtureTemplate> writes = written.get();
-                Map<TermPath, FixtureTemplate> out = new LinkedHashMap<>();
-                for (TermPath each : read) {
+                Map<TermPath, List<ValuesHandedOn.Standing>> out = new LinkedHashMap<>();
+                for (TermPath each : read.values()) {
                     FixtureTemplate value = writes.get(each);
                     if (value == null) {
                         yield new Came.NotWritable("a container is handed the value at `" + each
                                 + "`, which the row does not write, and nothing built the value"
                                 + " to say what stands there");
                     }
-                    out.put(each, value);
+                    out.put(each, List.of(new ValuesHandedOn.Standing(ElementsTaken.NONE, value)));
                 }
-                yield new Came.Values(out);
+                yield new Came.Values(new ValuesHandedOn(out, Map.of()));
             }
         };
     }

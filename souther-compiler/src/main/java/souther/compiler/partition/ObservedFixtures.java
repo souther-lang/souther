@@ -5,6 +5,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.ElementsTaken;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeReachName;
@@ -56,38 +57,57 @@ final class ObservedFixtures {
 
     /**
      * What stands at each of {@code paths} in {@code built}, the value the boundary built for the
-     * parameter they are under, written as fixtures.
+     * parameter they are under, written as fixtures — and the elements each of {@code containers}
+     * holds in it.
      *
-     * <p>One value at each. A path read at no value of the one built, or at as many values as a
-     * container holds, is a position that has no one value to hand over, and is said as that.
+     * <p>Every value at each, with the element it was read in, and none where the value built has
+     * nothing there: a list holding no element has nothing at its element, and that is an answer.
+     * How many of them a container is handed is the demand's to say ({@link
+     * ContentsAsked#resolvedFor}). A path the value built has no such position at, and a value there
+     * that cannot be written, are said as why.
      */
-    static Writing<Map<TermPath, FixtureTemplate>> at(BehaviorInputs inputs,
-                                                     ObservedValue built, Set<TermPath> paths,
-                                                     RuleReadingContext reading) {
-        Map<TermPath, FixtureTemplate> out = new LinkedHashMap<>();
+    static Writing<ValuesHandedOn> handedOn(BehaviorInputs inputs, ObservedValue built,
+                                            Set<TermPath> paths, Set<TermPath> containers,
+                                            RuleReadingContext reading) {
+        Map<TermPath, List<ValuesHandedOn.Standing>> values = new LinkedHashMap<>();
         for (TermPath path : paths) {
             if (!(inputs.observedAt(built, path)
                     instanceof WalkResult.Reached<List<BehaviorInputs.ObservedAt>>(var found))) {
                 return new Writing.NotWritable<>(
                         "`" + path + "` is not a position the value built has");
             }
-            if (found.size() != 1) {
-                return new Writing.NotWritable<>(found.isEmpty()
-                        ? "nothing stands at `" + path + "` in the value built"
-                        : "`" + path + "` is at each of " + found.size()
-                                + " elements of the value built, which is no one value");
-            }
-            BehaviorInputs.ObservedAt one = found.getFirst();
-            switch (of(one.value(), one.type(), reading)) {
-                case Writing.Written<FixtureTemplate>(FixtureTemplate written) ->
-                        out.put(path, written);
-                case Writing.NotWritable<FixtureTemplate>(String why) -> {
-                    return new Writing.NotWritable<>(
-                            "the value built at `" + path + "` cannot be written: " + why);
+            List<ValuesHandedOn.Standing> standing = new ArrayList<>();
+            for (BehaviorInputs.ObservedAt one : found) {
+                switch (of(one.value(), one.type(), reading)) {
+                    case Writing.Written<FixtureTemplate>(FixtureTemplate written) ->
+                            standing.add(new ValuesHandedOn.Standing(one.at(), written));
+                    case Writing.NotWritable<FixtureTemplate>(String why) -> {
+                        return new Writing.NotWritable<>(
+                                "the value built at `" + path + "` cannot be written: " + why);
+                    }
                 }
             }
+            values.put(path, standing);
         }
-        return new Writing.Written<>(out);
+        Map<TermPath, List<ElementsTaken>> elements = new LinkedHashMap<>();
+        for (TermPath container : containers) {
+            if (!(inputs.observedAt(built, container.element())
+                    instanceof WalkResult.Reached<List<BehaviorInputs.ObservedAt>>(var found))) {
+                return new Writing.NotWritable<>(
+                        "`" + container + "` is not a container the value built has");
+            }
+            List<ElementsTaken> held = new ArrayList<>();
+            for (BehaviorInputs.ObservedAt one : found) {
+                // A value the observation could not read back is carried down whole, and says
+                // nothing about which elements the container holds.
+                if (one.value().unread() != null) {
+                    return unread(one.value());
+                }
+                held.add(one.at());
+            }
+            elements.put(container, held);
+        }
+        return new Writing.Written<>(new ValuesHandedOn(values, elements));
     }
 
     /** {@code value}, standing at a position the reading exposes as {@code type}, written as a

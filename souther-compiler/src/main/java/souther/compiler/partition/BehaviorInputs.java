@@ -198,8 +198,10 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      *
      * @param value the value as the position wears it, names and all
      * @param type  what the reading exposes at the position
+     * @param at    which element was taken at each container on the way to it, so that two values
+     *              read off one parameter are known to stand in one element or in two
      */
-    record ObservedAt(ObservedValue value, Type type) {}
+    record ObservedAt(ObservedValue value, Type type, ElementsTaken at) {}
 
     /**
      * The values at {@code path} in {@code value}, the value of the parameter the path starts at,
@@ -215,7 +217,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
         }
         return switch (standingAt(value, at, path, new HashMap<>())) {
             case WalkResult.Reached(List<Standing> found) -> WalkResult.reached(found.stream()
-                    .map(each -> new ObservedAt(each.value(), each.type())).toList());
+                    .map(each -> new ObservedAt(each.value(), each.type(), each.at())).toList());
             case WalkResult.CouldNotWalk<List<Standing>> _ -> WalkResult.couldNotWalk();
         };
     }

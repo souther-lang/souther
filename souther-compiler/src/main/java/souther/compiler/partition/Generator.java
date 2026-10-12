@@ -4688,14 +4688,14 @@ public final class Generator {
             }
         }
         Map<RealizationTarget, Place> standing = where.at();
+        Map<RealizationTarget, AskedAt> numbers = atThoseNumbers(standing,
+                whatEachOfThemIsANumberOf(subject, fixing, where.routed(), where.counted(), asking,
+                        reaching));
         // One edge per location and not one per number. A location asked for two numbers is one
         // value to write, so the two are composed together and written once; walked one number at a
         // time, the second was a value built for a place the first had already written.
         for (Map.Entry<TermPath, SequencedMap<RealizationTarget, AskedAt>> group
-                : byTheLocationTheyWrite(atThoseNumbers(standing,
-                        whatEachOfThemIsANumberOf(subject, fixing, where.routed(),
-                                where.counted(), asking, reaching)), where.someElement())
-                .entrySet()) {
+                : byTheLocationTheyWrite(numbers, where.someElement()).entrySet()) {
             Edge edge = edgeAt(subject, group.getKey(), group.getValue(),
                     composedIn(group.getValue(), reaching.region(), standing));
             if (edge.values().isEmpty()) {
@@ -4733,8 +4733,9 @@ public final class Generator {
         // What the way asks containers to hold that no region placed, and the order that lets every
         // container be composed after the parameters it is handed a value of.
         // The order is one for every way of writing them under the cases, since which parameter a
-        // container is handed a value of does not turn on the case it is written under.
-        ContentsAsked asked = ContentsAsked.of(reaching.boundedOnTheWay());
+        // container is handed a value of does not turn on the case it is written under. And what a
+        // count composed above hands on for each element it counts, at the counts it was asked.
+        ContentsAsked asked = ContentsAsked.of(reaching.boundedOnTheWay(), numbers);
         CompositionOrder order;
         switch (CompositionOrder.of(parametersOf(subject), asked)) {
             case CompositionOrder.Result.Ordered(CompositionOrder ordered) -> order = ordered;
@@ -4807,7 +4808,7 @@ public final class Generator {
                             ? new Reachability.Ways.Whole(unsplit, figure, List.of())
                             : Reachability.Ways.ONE, reaching.declined());
             ParameterCameToNothing one = new InOrder(subject, order, composed, standing, writes,
-                    settled, thisWay, check, way.contents()).from(0, Map.of());
+                    settled, thisWay, check, way.contents()).from(0, ValuesHandedOn.NONE);
             if (one == null) {
                 return true;
             }
@@ -5030,7 +5031,7 @@ public final class Generator {
          * @param elsewhere what stands at the positions of the parameters composed so far that a
          *                  container is handed
          */
-        ParameterCameToNothing from(int next, Map<TermPath, FixtureTemplate> elsewhere) {
+        ParameterCameToNothing from(int next, ValuesHandedOn elsewhere) {
             if (next == order.order().size()) {
                 return null;
             }
@@ -5067,7 +5068,7 @@ public final class Generator {
             List<ParameterCameToNothing> cameToNothing = new ArrayList<>();
             ValueTaking taking = !awaited ? ValueTaking.FIRST : value -> {
                 composed[p] = value.value();
-                after[0] = from(next + 1, with(elsewhere, value.read()));
+                after[0] = from(next + 1, elsewhere.and(value.read()));
                 if (after[0] == null) {
                     return Acceptance.TAKEN;
                 }
@@ -5087,7 +5088,7 @@ public final class Generator {
                         yield null;
                     }
                     composed[p] = value.value();
-                    yield from(next + 1, with(elsewhere, value.read()));
+                    yield from(next + 1, elsewhere.and(value.read()));
                 }
                 // Passed over for what a parameter after it came to under each value, which is
                 // what nothing being composed is about — said over all of them.
@@ -7548,8 +7549,9 @@ public final class Generator {
                     reaching)
                     .forEach((target, of) -> asking.merge(target, of, NumbersAskedFor::meet));
         }
-        return new HeldTogether.Asked(new LinkedHashMap<>(atThoseNumbers(where.at(), asking)),
-                where.at(), required, reaching, ContentsAsked.of(reaching.boundedOnTheWay()));
+        Map<RealizationTarget, AskedAt> numbers = atThoseNumbers(where.at(), asking);
+        return new HeldTogether.Asked(new LinkedHashMap<>(numbers), where.at(), required, reaching,
+                ContentsAsked.of(reaching.boundedOnTheWay(), numbers));
     }
 
     /**
@@ -8184,7 +8186,7 @@ public final class Generator {
             writtenAt.addAll(truths.at().keySet());
             RowComposed came = inputsFrom(new RowBeingComposed(axes, given, check, holding,
                     way.contents(), writtenAt, writes, way.taken(), taking, order), 0,
-                    new FixtureTemplate[order.parameters().size()], Map.of());
+                    new FixtureTemplate[order.parameters().size()], ValuesHandedOn.NONE);
             return switch (came) {
                 case RowComposed.Taken _, RowComposed.Halted _ -> {
                     stoppedWith[0] = came;
@@ -8242,7 +8244,7 @@ public final class Generator {
      */
     private static RowComposed inputsFrom(RowBeingComposed row, int next,
                                           FixtureTemplate[] composed,
-                                          Map<TermPath, FixtureTemplate> elsewhere) {
+                                          ValuesHandedOn elsewhere) {
         MeasuredInput subject = row.axes().subject();
         CandidateCheck check = row.check();
         CompositionOrder order = row.order();
@@ -8274,7 +8276,7 @@ public final class Generator {
             // way it is for a composed value ({@link HandedOn}): a way written against a value the
             // model states names that value, and what stands at a field it does not move is the
             // boundary's to say. The row goes on naming the value.
-            Set<TermPath> read = row.contents().handedOnFrom(head);
+            ContentsAsked.ToHandOn read = row.contents().handedOnFrom(head);
             boolean stood = false;
             List<RowComposed.Failed> cameToNothing = new ArrayList<>();
             Optional<String> refused = Optional.empty();
@@ -8283,7 +8285,7 @@ public final class Generator {
             // the ways that stood being every way there was.
             FoundOut found = new FoundOut();
             for (WrittenWay way : written.ways()) {
-                Map<TermPath, FixtureTemplate> handedOn;
+                ValuesHandedOn handedOn;
                 switch (HandedOn.of(check.build(p, way.value()), way::at, read, subject.inputs(),
                         subject.ruleReading())) {
                     case HandedOn.Came.Values(var at) -> handedOn = at;
@@ -8298,7 +8300,7 @@ public final class Generator {
                 }
                 stood = true;
                 composed[p] = way.value();
-                RowComposed rest = inputsFrom(row, next + 1, composed, with(elsewhere, handedOn));
+                RowComposed rest = inputsFrom(row, next + 1, composed, elsewhere.and(handedOn));
                 if (awaited && rest instanceof RowComposed.Failed failed
                         && failed.at().isPresent()
                         && order.mayTurnOn(failed.at().getAsInt(), p)) {
@@ -8352,7 +8354,7 @@ public final class Generator {
                 row.decided(), row.required(), new Handed(row.contents(), elsewhere),
                 checking, found, value -> {
                     composed[p] = value.value();
-                    after[0] = inputsFrom(row, next + 1, composed, with(elsewhere, value.read()));
+                    after[0] = inputsFrom(row, next + 1, composed, elsewhere.and(value.read()));
                     return switch (after[0]) {
                         case RowComposed.Taken _ -> Acceptance.TAKEN;
                         case RowComposed.PassedOver(SearchShortfall thoseFound) -> {
@@ -8465,13 +8467,6 @@ public final class Generator {
         return alone ? why.localTo(p) : why;
     }
 
-    private static Map<TermPath, FixtureTemplate> with(Map<TermPath, FixtureTemplate> before,
-                                                       Map<TermPath, FixtureTemplate> read) {
-        Map<TermPath, FixtureTemplate> out = new LinkedHashMap<>(before);
-        out.putAll(read);
-        return out;
-    }
-
     /**
      * One parameter's value, searched for on its own.
      *
@@ -8562,7 +8557,22 @@ public final class Generator {
         // class of one is a run of sizes — so it is built to a size among the ones fixed, and the
         // values that were fixed are not what the row writes. Where a value fixed there is one
         // this cannot count, it stays fixed and is said below as nothing composed.
-        ConstructionPlan.ContentsComposed handedHere = handed.asked().composedUnder(root.head());
+        //
+        // What the containers are handed is worked out first, out of what the parameters before
+        // this one were built as: a demand asked over every element of one of them is asked once
+        // for each element it holds, and not at all where it holds none. A value handed on that
+        // says no one value is this compiler's to say, and another value of the parameter it was
+        // read off may say one.
+        ContentsAsked.Here here;
+        switch (handed.asked().resolvedFor(root.head(), handed.elsewhere())) {
+            case ContentsAsked.Resolution.Resolved(ContentsAsked.Here resolved) -> here = resolved;
+            case ContentsAsked.Resolution.Unresolved(String why) -> {
+                return new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                        why);
+            }
+        }
+        ConstructionPlan.ContentsComposed handedHere =
+                handed.asked().composedUnder(root.head(), here);
         Map<TermPath, List<FixtureTemplate>> fixed = new LinkedHashMap<>(decided);
         Map<TermPath, DeclaredBounds.CountRange> sized = new LinkedHashMap<>();
         for (Map.Entry<TermPath, List<FixtureTemplate>> each : decided.entrySet()) {
@@ -8669,8 +8679,8 @@ public final class Generator {
         }
         // One for every pass below, so what one of them found refused is known to the others.
         Composing composing =
-                new Composing(p, plan, subject.inputs(), subject.ruleReading(), check, handed,
-                        found);
+                new Composing(p, plan, subject.inputs(), subject.ruleReading(), check,
+                        handed.asked(), here, found);
         Outcome product = walk(choices, composing, taking, subject.ruleReading());
         // A value taken is the answer, and so is every value composed being passed over or the
         // caller stopping: what the pass below is for is values the walk could not compose, and
@@ -9049,8 +9059,8 @@ public final class Generator {
         private final BehaviorInputs inputs;
         private final RuleReadingContext reading;
         private final CandidateCheck check;
-        private final Handed handed;
-        private final Set<TermPath> handedOn;
+        private final ContentsAsked.Here here;
+        private final ContentsAsked.ToHandOn handedOn;
         private final Map<TermPath, Type> typeAt = new HashMap<>();
         private final Set<Map<TermPath, String>> refused = new HashSet<>();
 
@@ -9062,16 +9072,16 @@ public final class Generator {
         private final FoundOut found;
 
         Composing(int parameter, ConstructionPlan plan, BehaviorInputs inputs,
-                  RuleReadingContext reading, CandidateCheck check, Handed handed,
-                  FoundOut found) {
+                  RuleReadingContext reading, CandidateCheck check, ContentsAsked asked,
+                  ContentsAsked.Here here, FoundOut found) {
             this.parameter = parameter;
             this.plan = plan;
             this.inputs = inputs;
             this.reading = reading;
             this.check = check;
-            this.handed = handed;
+            this.here = here;
             this.found = found;
-            this.handedOn = handed.asked().handedOnFrom(plan.root().at().head());
+            this.handedOn = asked.handedOnFrom(plan.root().at().head());
             for (ConstructionPlan.Slot each : plan.slots()) {
                 typeAt.put(each.at(), each.type());
             }
@@ -9102,14 +9112,14 @@ public final class Generator {
             if (!budget.spend()) {
                 return new Tried.OutOfBudget();
             }
-            FromTheAssignment values = new FromTheAssignment(chosen, plan, handed);
+            FromTheAssignment values = new FromTheAssignment(chosen, plan, here);
             FixtureTemplate composed = compose(plan.root(), values, reading);
             if (composed == null) {
                 refused.add(written);
                 return new Tried.Refused();
             }
             return switch (HandedOn.of(check.build(parameter, composed),
-                    () -> values.read(handedOn, reading), handedOn, inputs, reading)) {
+                    () -> values.read(handedOn.values(), reading), handedOn, inputs, reading)) {
                 case HandedOn.Came.Values(var read) ->
                         new Tried.Built(new ComposedValue(composed, read));
                 case HandedOn.Came.Refused _ -> {
@@ -9552,12 +9562,7 @@ public final class Generator {
      * @param value the parameter's value
      * @param read  what stands at each position of it another parameter's container is handed
      */
-    private record ComposedValue(FixtureTemplate value, Map<TermPath, FixtureTemplate> read) {
-
-        ComposedValue {
-            read = Map.copyOf(read);
-        }
-    }
+    private record ComposedValue(FixtureTemplate value, ValuesHandedOn read) {}
 
     /**
      * What came of trying the assignments for one parameter: its value, or why there is none.
@@ -9945,12 +9950,7 @@ public final class Generator {
      * @param elsewhere what stands at a position of another parameter, where that one was composed
      *                  before this
      */
-    private record Handed(ContentsAsked asked, Map<TermPath, FixtureTemplate> elsewhere) {
-
-        Handed {
-            elsewhere = Map.copyOf(elsewhere);
-        }
-    }
+    private record Handed(ContentsAsked asked, ValuesHandedOn elsewhere) {}
 
     /**
      * The values of a plan as the search's assignment settled them.
@@ -9964,7 +9964,7 @@ public final class Generator {
      * as where it is of another.
      */
     private record FromTheAssignment(Map<TermPath, FixtureTemplate> chosen,
-                                     ConstructionPlan plan, Handed handed)
+                                     ConstructionPlan plan, ContentsAsked.Here here)
             implements PlanComposer.Values {
 
         @Override
@@ -9974,10 +9974,7 @@ public final class Generator {
 
         @Override
         public ContainerContents contentsOf(TermPath container, PlanComposer.Under under) {
-            return handed.asked().contentsOf(container, value -> {
-                if (!value.head().equals(plan.root().at().head())) {
-                    return handed.elsewhere().get(value);
-                }
+            return here.contentsOf(container, value -> {
                 ConstructionPlan.Node node = plan.at(value);
                 return node == null ? null : under.of(node);
             });

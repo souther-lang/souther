@@ -116,6 +116,7 @@ final class PlanComposer {
         List<FixtureTemplate> holding = new ArrayList<>();
         List<FixtureTemplate> keptOut = List.of();
         List<FixtureTemplate> keysHeld = List.of();
+        List<FixtureTemplate> keysEachFiled = List.of();
         List<FixtureTemplate> keysKeptOut = List.of();
         FixtureTemplate element = null;
         if (plan.under().isPresent()) {
@@ -134,6 +135,7 @@ final class PlanComposer {
             holding.addAll(contents.holding());
             keptOut = contents.keptOut();
             keysHeld = contents.keysHeld();
+            keysEachFiled = contents.keysEachFiled();
             keysKeptOut = contents.keysKeptOut();
         }
         RuleReadingSource ruleSource = reading.source();
@@ -164,15 +166,15 @@ final class PlanComposer {
         }
         FixtureTemplate collection = switch (container) {
             case Shape.Sequence carrier -> {
-                if (key != null) {
+                if (key != null || !keysEachFiled.isEmpty()) {
                     throw new IllegalStateException("a plan put a key on what a list or a set"
                             + " holds, which files nothing under one: " + plan.at());
                 }
                 yield Witnesses.holding(carrier, holding, keptOut, plan.holds(), reading);
             }
             case Shape.Mapping carrier -> Witnesses.holding(carrier, holding, keptOut,
-                    key == null ? null : new Witnesses.Filed(key, element), keysKeptOut,
-                    plan.holds(), reading);
+                    key == null ? null : new Witnesses.Filed(key, element), keysEachFiled,
+                    keysKeptOut, plan.holds(), reading);
         };
         if (collection == null) {
             return null;

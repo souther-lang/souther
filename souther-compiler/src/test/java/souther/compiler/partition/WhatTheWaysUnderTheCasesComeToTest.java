@@ -12,6 +12,7 @@ import souther.compiler.inputs.TermPath;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -57,7 +58,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
 
     private static ContentsAsked holding(String container, String value) {
         return new ContentsAsked(List.of(new ContentsAsked.Asked(
-                LEAD.then(container), LEAD.then(value), true, false, true)));
+                LEAD.then(container), LEAD.then(value), true, false, Optional.empty())));
     }
 
     @Test
@@ -192,7 +193,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
     private static ContentsAsked holdingUnder(Refinement branch) {
         return new ContentsAsked(List.of(new ContentsAsked.Asked(
                 LEAD.refine(branch).then("campaigns"), LEAD.refine(branch).then("campaign"),
-                true, false, true)));
+                true, false, Optional.empty())));
     }
 
     @Test
@@ -245,7 +246,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
             crossings.add(new NameReach.Crossing(at, "held", OTHER,
                     at.refine(OTHER).then("held")));
             asked.add(new ContentsAsked.Asked(at.then("held"), TermPath.of("value"), true,
-                    false, true));
+                    false, Optional.empty()));
         }
         return new ContentsAsked(asked).underTheCases(
                 new NameReach(crossings, List.of(), List.of()), Requirements.NONE, Set.of());
