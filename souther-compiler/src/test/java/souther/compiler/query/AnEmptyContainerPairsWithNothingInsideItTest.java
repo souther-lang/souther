@@ -63,7 +63,7 @@ class AnEmptyContainerPairsWithNothingInsideItTest {
      */
     @Test
     void anEmptyListPairsWithNoClassOfItsElements() {
-        Measured quote = measured(QUOTE, "example.quote", "quote");
+        Measured quote = quote();
 
         assertEquals(2, quote.sizeOf("List.length(c.items)", "c.items[*].quantity"),
                 () -> "the list with an element meets both classes of what it holds, and the empty"
@@ -81,17 +81,20 @@ class AnEmptyContainerPairsWithNothingInsideItTest {
      */
     @Test
     void theAnswerDoesNotTurnOnWhichPositionIsNamedFirst() {
-        Measured quote = measured(QUOTE, "example.quote", "quote");
+        Measured quote = quote();
         Axis length = quote.axis("List.length(c.items)");
         Axis quantity = quote.axis("c.items[*].quantity");
 
-        for (PartitionClass count : length.classes()) {
-            for (PartitionClass held : quantity.classes()) {
-                boolean empty = count.id().equals("List.length(c.items)/0 <= x <= 0");
-                assertEquals(!empty, ClassCoexistence.canHoldTogether(length, count, quantity, held),
-                        () -> count.id() + " with " + held.id());
-                assertEquals(!empty, ClassCoexistence.canHoldTogether(quantity, held, length, count),
-                        () -> held.id() + " with " + count.id());
+        ClassCoexistence countFirst = ClassCoexistence.between(length, quantity);
+        ClassCoexistence countSecond = ClassCoexistence.between(quantity, length);
+        for (int count = 0; count < length.classes().size(); count++) {
+            for (int held = 0; held < quantity.classes().size(); held++) {
+                String named = length.classes().get(count).id() + " with "
+                        + quantity.classes().get(held).id();
+                boolean empty = length.classes().get(count).id()
+                        .equals("List.length(c.items)/0 <= x <= 0");
+                assertEquals(!empty, countFirst.canHoldTogether(count, held), named);
+                assertEquals(!empty, countSecond.canHoldTogether(held, count), named);
             }
         }
     }
@@ -227,7 +230,7 @@ class AnEmptyContainerPairsWithNothingInsideItTest {
             for (PartitionEvidence.PairSpace.AxisPair pair : evidence.pairs().space()) {
                 String a = pair.between().one().term();
                 String b = pair.between().other().term();
-                if (a.equals(one) && b.equals(other) || a.equals(other) && b.equals(one)) {
+                if ((a.equals(one) && b.equals(other)) || (a.equals(other) && b.equals(one))) {
                     return pair.total();
                 }
             }
@@ -262,6 +265,16 @@ class AnEmptyContainerPairsWithNothingInsideItTest {
             return out.toString();
         }
     }
+
+    /** One compilation of {@link #QUOTE} for every question here asked of it. */
+    private static Measured quote() {
+        if (QUOTE_ANSWERED == null) {
+            QUOTE_ANSWERED = measured(QUOTE, "example.quote", "quote");
+        }
+        return QUOTE_ANSWERED;
+    }
+
+    private static Measured QUOTE_ANSWERED;
 
     private static Measured measured(String model, String module, String behavior) {
         Compilation compilation = Compilation.ofSource(model, "Main");

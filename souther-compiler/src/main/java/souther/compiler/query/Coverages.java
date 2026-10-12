@@ -614,10 +614,11 @@ final class Coverages {
      * asked for come from one reading rather than from two that agree until a case is added.
      */
     private static long combinationsOf(Axis one, Axis other) {
+        ClassCoexistence between = ClassCoexistence.between(one, other);
         long count = 0;
-        for (PartitionClass here : one.classes()) {
-            for (PartitionClass there : other.classes()) {
-                if (ClassCoexistence.canHoldTogether(one, here, other, there)) {
+        for (int here = 0; here < one.classes().size(); here++) {
+            for (int there = 0; there < other.classes().size(); there++) {
+                if (between.canHoldTogether(here, there)) {
                     count++;
                 }
             }
@@ -671,15 +672,18 @@ final class Coverages {
                     continue;
                 }
                 Set<PartitionEvidence.PairSpace.Cell> reached = made.reached(between);
-                for (PartitionClass here : ordered.get(i).classes()) {
-                    for (PartitionClass there : ordered.get(j).classes()) {
-                        if (!ClassCoexistence.canHoldTogether(
-                                ordered.get(i), here, ordered.get(j), there)) {
+                List<PartitionClass> ones = ordered.get(i).classes();
+                List<PartitionClass> others = ordered.get(j).classes();
+                ClassCoexistence together =
+                        ClassCoexistence.between(ordered.get(i), ordered.get(j));
+                for (int here = 0; here < ones.size(); here++) {
+                    for (int there = 0; there < others.size(); there++) {
+                        if (!together.canHoldTogether(here, there)) {
                             continue;
                         }
                         PartitionEvidence.PairSpace.Cell cell =
-                                new PartitionEvidence.PairSpace.Cell(
-                                        between, here.id(), there.id());
+                                new PartitionEvidence.PairSpace.Cell(between,
+                                        ones.get(here).id(), others.get(there).id());
                         if (!reached.contains(cell)) {
                             out.add(cell.owedBy(behavior));
                         }
