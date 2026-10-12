@@ -1,10 +1,9 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.FieldDomains;
-import souther.compiler.check.RuleKey;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 
 import java.util.HashMap;
 import java.util.List;
@@ -13,10 +12,10 @@ import java.util.Map;
 /**
  * What one position can take, for a search choosing them one at a time.
  *
- * <p>The rules of the value being composed are read once and handed each settling as it arrives
- * ({@link FieldDomains#composing}), which is what a settling is: an equality taken onto everything
- * the clauses came to. A search that read the declaration at each position would be arriving at the
- * same state by reading every clause over again.
+ * <p>The rules of every value whose clauses reach a position are read once and handed each settling
+ * as it arrives ({@link ConstructionRules#limitsAt}), which is what a settling is: an equality taken
+ * onto everything the clauses came to. A search that read the declarations at each position would be
+ * arriving at the same state by reading every clause over again.
  *
  * <p><b>What a position can take is kept, and this is where keeping it belongs.</b> A depth-first
  * search reaches one settling by many routes and asks the same position about it at each of them,
@@ -30,14 +29,13 @@ import java.util.Map;
 final class ConditionedCandidates {
 
     private final RuleReadingContext reading;
-    private final FieldDomains rules;
-    private final Map<Settling, FieldDomains.Composing> states = new HashMap<>();
+    private final ConstructionRules rules;
     private final Map<Asked, List<FixtureTemplate>> found = new HashMap<>();
 
     /**
-     * @param rules the value's rules with nothing settled, read once for the whole search
+     * @param rules the rules of the value being composed, read once for the whole search
      */
-    ConditionedCandidates(RuleReadingContext reading, FieldDomains rules) {
+    ConditionedCandidates(RuleReadingContext reading, ConstructionRules rules) {
         this.reading = reading;
         this.rules = rules;
     }
@@ -45,65 +43,22 @@ final class ConditionedCandidates {
     /**
      * What can stand at {@code position} once {@code settled} is taken on.
      *
-     * @param settled the numbers the positions before this one took, named as the rules of the value
-     *                being composed name them. Never held on to: what is kept is a copy taken here
+     * @param settled the numbers the positions before this one took, where they were written. Never
+     *                held on to: what is kept is the part of it the rules naming the position name
      */
-    List<FixtureTemplate> at(ConstructionPlan.Slot position, Map<RuleKey, Count> settled) {
-        Asked asked = new Asked(position.at(), new Settling(settled));
+    List<FixtureTemplate> at(ConstructionPlan.Slot position, Map<TermPath, Place> settled) {
+        Asked asked = new Asked(position.at(), rules.settlingAt(position.at(), settled));
         List<FixtureTemplate> known = found.get(asked);
         if (known != null) {
             return known;
         }
-        RuleKey field = position.at().ruleKey();
-        FieldDomains.ConstructionLimits limits = field == null
-                ? FieldDomains.ConstructionLimits.NONE
-                : state(asked.settled()).at(field);
+        FieldDomains.ConstructionLimits limits = rules.limitsAt(asked.at(), asked.settled());
         List<FixtureTemplate> stands = Partitions.displacedRepresentativesOf(position.type(),
                 reading, limits.values(), limits.held());
         found.put(asked, stands);
         return stands;
     }
 
-    /** The rules with these coordinates settled, worked out once however many positions ask under
-     *  it. */
-    private FieldDomains.Composing state(Settling settled) {
-        return states.computeIfAbsent(settled, at -> at.under(rules));
-    }
-
     /** One position under one settling, which is what the same answer is the answer to. */
-    private record Asked(TermPath at, Settling settled) {}
-
-    /**
-     * The numbers the positions before one took, and the one thing done with them: taking them on
-     * to the rules of the value being composed ({@link #under}).
-     *
-     * <p>Two of these are one settling where they name the same numbers, whichever order they were
-     * written in — which is what makes it a key for what a position can take. What they name is not
-     * handed out: taking equalities onto a set of constraints comes to the same constraints in any
-     * order, so the one traversal there is is inside {@link #under} and nobody else has a map of
-     * them to walk in whatever order it comes.
-     */
-    private static final class Settling {
-
-        private final Map<RuleKey, Count> named;
-
-        Settling(Map<RuleKey, Count> named) {
-            this.named = Map.copyOf(named);
-        }
-
-        /** The rules with these coordinates settled. */
-        FieldDomains.Composing under(FieldDomains rules) {
-            return rules.composing(FieldDomains.atValues(named));
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            return other instanceof Settling settling && named.equals(settling.named);
-        }
-
-        @Override
-        public int hashCode() {
-            return named.hashCode();
-        }
-    }
+    private record Asked(TermPath at, ConstructionRules.Settling settled) {}
 }

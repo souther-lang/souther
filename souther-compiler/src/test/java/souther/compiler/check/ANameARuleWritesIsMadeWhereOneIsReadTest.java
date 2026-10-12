@@ -78,8 +78,7 @@ class ANameARuleWritesIsMadeWhereOneIsReadTest {
                         + " calls");
         assertEquals(List.of("souther.compiler.inputs.PlacedRules",
                         "souther.compiler.inputs.ReadQuantities$Roots",
-                        "souther.compiler.inputs.RuleAddress",
-                        "souther.compiler.partition.Generator"),
+                        "souther.compiler.inputs.RuleAddress"),
                 callersOf(souther.compiler.inputs.TermPath.class, "ruleKeyUnder"),
                 "a position becomes what a rule calls it here, and is handed on as that");
     }

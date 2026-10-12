@@ -801,24 +801,24 @@ class EveryFindingHasAGenerationDispositionTest {
     }
 
     /**
-     * A case an axis divides and nothing composed a value for is answered by the attempt.
+     * A case whose own rule refuses the end of a range is composed under that rule.
      *
-     * <p>Not {@code NotSupported}: the strategy took this class and came back with a reason, which is
-     * news of a different kind. Reading it as "no strategy for this" would say the generator will
-     * never offer a row at a class it took and searched.
-     *
-     * <p>A card has values — any amount above none is one — and the search proposes the end of the
-     * range, which is the one amount the rule refuses. So this is what the search could not reach and
-     * not what has no value: a type with none is refused before any of this, and a fixture that had
-     * none would be asking the generator about a model that does not compile. Should the search learn
-     * to step off an end it was refused at, this becomes a row, which is the answer changing for the
-     * reason it should.
+     * <p>A card has values — any amount above none is one — and the end of the range the amount's
+     * type leaves, none, is the one the card's rule refuses. The rule is the case's, so the value is
+     * composed under the case's rules and the row offered holds an amount the card admits: a
+     * composer reading the sum's rules alone proposes the end and has every row refused.
      */
     @Test
-    void aCaseNothingComposedAValueForIsAnsweredByTheAttempt() {
+    void aCaseWhoseOwnRuleRefusesAnEndIsComposedUnderThatRule() {
         GenerationOutcome answer = forCase(compiled(CARRIED), "example.pay", "feeFor", "Card", 1);
 
-        assertInstanceOf(GenerationOutcome.CannotGenerate.class, answer);
+        assertInstanceOf(GenerationOutcome.Generated.class, answer);
+        List<String> offered = ((GenerationOutcome.Generated) answer).candidates().stream()
+                .map(row -> row.inputs().get(0).text()).toList();
+        assertFalse(offered.isEmpty(), "a row is offered for the card");
+        assertTrue(offered.stream().allMatch(each -> each.startsWith("Card")
+                        && !each.contains("Amount(0.0m)") && !each.contains("Amount(0m)")),
+                "every card offered holds an amount the card admits: " + offered);
     }
 
     /**

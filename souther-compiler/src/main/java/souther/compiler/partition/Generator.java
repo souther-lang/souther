@@ -7,8 +7,6 @@ import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.flow.Ways;
 import souther.compiler.check.RuleReadingContext;
-import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.RuleKey;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.FieldDomains;
@@ -8551,8 +8549,7 @@ public final class Generator {
         // reading of the parameter the values are chosen against. A list built around an element
         // has to meet that too: a row holding an element in the class and breaking the rule about
         // how many the list holds is not a row.
-        FieldDomains under = rulesOf(subject.types().get(p), subject.ruleReading(),
-                under(root, settled));
+        ConstructionRules rules = ConstructionRules.of(subject, settled);
         // A container handed values is built to hold them, and not chosen whole. What a class or a
         // number fixed there is how many it holds — a container's own number is its size, and a
         // class of one is a run of sizes — so it is built to a size among the ones fixed, and the
@@ -8591,7 +8588,7 @@ public final class Generator {
                 subject.rules().inners(), subject.symbols(), subject.rules().kinds(),
                 subject.rules().sums(),
                 fixed.keySet(), additional, handedHere,
-                (at, building) -> within(heldRange(under, at, building, subject.ruleReading()),
+                (at, building) -> within(heldRange(rules, at, building, subject.ruleReading()),
                         sized.get(at)));
         ConstructionPlan plan;
         switch (planned) {
@@ -8669,7 +8666,7 @@ public final class Generator {
                                 + " whole value this does not build");
             }
         }
-        Choices choices = choicesOf(subject, plan, fixed, under);
+        Choices choices = choicesOf(subject, plan, fixed, rules);
         if (choices.missingAt() != null) {
             // A position nothing stands at is the declarations' answer where the plan reached
             // everything, and this compiler's where it did not: what the search would have been
@@ -8699,7 +8696,7 @@ public final class Generator {
         // are asserted, which is the only way `a < b` is met in general.
         // Handed to the caller as every value the walk composes is: the caller is what composes the
         // parameters after this one, so a value it was never handed is a row with nothing after it.
-        Outcome conditioned = conditioned(subject, p, plan, fixed, settled, composing);
+        Outcome conditioned = conditioned(subject, plan, fixed, settled, composing, rules);
         if (conditioned instanceof Outcome.Built(ComposedValue value)) {
             return switch (taking.take(value)) {
                 case TAKEN -> conditioned;
@@ -8744,7 +8741,7 @@ public final class Generator {
         // Nothing of a population is short here. What a proposal holds back is a figure of this
         // compiler's over what it builds, and every value of the kind it does build is one it would
         // offer.
-        HeldBack held = heldBack(subject, plan, under);
+        HeldBack held = heldBack(subject, plan, rules);
         return whatTheSearchCameTo(CompositionShortfall.of(held.offer()), held.offered(),
                 held.plan(), product);
     }
@@ -8861,12 +8858,10 @@ public final class Generator {
      * holds in all, and the cap says whether that many fit — and taken
      * as two readings the two answered about different states of the row.
      */
-    private static DeclaredBounds.CountRange heldRange(FieldDomains rules, TermPath path,
+    private static DeclaredBounds.CountRange heldRange(ConstructionRules rules, TermPath path,
                                                        Type building,
                                                        RuleReadingContext reading) {
-        RuleKey field = fieldUnder(path);
-        return Partitions.heldRange(building, reading,
-                field == null ? null : rules.heldAt(field));
+        return Partitions.heldRange(building, reading, rules.heldAt(path));
     }
 
     /**
@@ -8880,7 +8875,7 @@ public final class Generator {
      * either is given something the other is not.
      */
     private static HeldBack heldBack(MeasuredInput subject, ConstructionPlan plan,
-                                     FieldDomains rules) {
+                                     ConstructionRules rules) {
         // Every budget that held a position back, and not the first or the strongest. Two positions
         // stopped by two budgets are two things this compiler declined to do, and a reader asking
         // what would let the search go further is owed both — read as one, whichever the walk met
@@ -8892,9 +8887,8 @@ public final class Generator {
         // two different things are two things this compiler did not offer, and a reader asking why
         // nothing was taken is owed both.
         for (ConstructionPlan.Slot each : plan.slots()) {
-            RuleKey field = fieldUnder(each.at());
             budgets.addAll(Partitions.notBuilt(each.type(), subject.ruleReading(),
-                    field == null ? null : rules.heldAt(field)));
+                    rules.heldAt(each.at())));
         }
         return new HeldBack(budgets, offeredShortOf(subject, plan), plan.cutBy());
     }
@@ -8969,17 +8963,17 @@ public final class Generator {
      *
      * <p>Depth first, so that a position is chosen against a projection that already has the ones
      * before it in it. The projection is the same one the whole search started from — what the
-     * record's rules leave each of its fields — asked again with the assignment so far settled into
-     * it, which is what {@link FieldDomains#of} is for.
+     * rules of every value reaching a position leave it — asked again with the assignment so far
+     * settled into them ({@link ConstructionRules#limitsAt}).
      *
      * <p>Second, and not instead. What it costs is a reading of the record's rules per position per
      * branch, and the search in front of it answers most rows without any of that; running this one
      * first would spend it on every row to change none of them.
      */
-    private static Outcome conditioned(MeasuredInput subject, int p, ConstructionPlan plan,
+    private static Outcome conditioned(MeasuredInput subject, ConstructionPlan plan,
                                        Map<TermPath, List<FixtureTemplate>> decided,
                                        Map<TermPath, Place> settled,
-                                       Composing composing) {
+                                       Composing composing, ConstructionRules rules) {
         List<ConstructionPlan.Slot> found = plan.slots();
         // What the caller fixed goes first, so that everything chosen after it is chosen beside it.
         // A class stands for one value and a boundary is one value, and neither is worth deciding
@@ -8992,9 +8986,8 @@ public final class Generator {
         // The rules of the value being composed, read once for the whole search. Every position's
         // turn is answered by taking what the positions before it took onto this, which is the
         // reading a settling states and not a second one of the declaration.
-        ConditionedCandidates candidates = new ConditionedCandidates(subject.ruleReading(),
-                rulesOf(subject.types().get(p), subject.ruleReading(), Map.of()));
-        ComposedValue built = descend(subject, p, positions, 0, new LinkedHashMap<>(),
+        ConditionedCandidates candidates = new ConditionedCandidates(subject.ruleReading(), rules);
+        ComposedValue built = descend(positions, 0, new LinkedHashMap<>(),
                 new LinkedHashMap<>(settled), decided, composing, budget, candidates);
         if (built != null) {
             return new Outcome.Built(built);
@@ -9169,8 +9162,7 @@ public final class Generator {
      * @param budget  assignments left to compose, shared down the whole search
      * @param candidates what a position can take under a settling, shared down the whole search
      */
-    private static ComposedValue descend(MeasuredInput subject, int p,
-                                           List<ConstructionPlan.Slot> positions, int index,
+    private static ComposedValue descend(List<ConstructionPlan.Slot> positions, int index,
                                            Map<TermPath, FixtureTemplate> chosen,
                                            Map<TermPath, Place> settled,
                                            Map<TermPath, List<FixtureTemplate>> decided,
@@ -9183,7 +9175,7 @@ public final class Generator {
         ConstructionPlan.Slot position = positions.get(index);
         TermPath where = position.at();
         for (FixtureTemplate candidate
-                : candidatesAt(subject, p, position, settled, decided, candidates)) {
+                : candidatesAt(position, settled, decided, candidates)) {
             // Refused by its own type, so refused in every assignment under this branch: the branch
             // is not walked ({@link Composing} says why).
             if (composing.refusedAlone(where, candidate)) {
@@ -9194,7 +9186,7 @@ public final class Generator {
             if (number != null) {
                 settled.put(where, number);
             }
-            ComposedValue found = descend(subject, p, positions, index + 1, chosen, settled,
+            ComposedValue found = descend(positions, index + 1, chosen, settled,
                     decided, composing, budget, candidates);
             if (found != null) {
                 return found;
@@ -9209,8 +9201,7 @@ public final class Generator {
     }
 
     /** What one position can take, given what the positions before it took. */
-    private static List<FixtureTemplate> candidatesAt(MeasuredInput subject, int p,
-                                                      ConstructionPlan.Slot position,
+    private static List<FixtureTemplate> candidatesAt(ConstructionPlan.Slot position,
                                                       Map<TermPath, Place> settled,
                                                       Map<TermPath, List<FixtureTemplate>> decided,
                                                       ConditionedCandidates candidates) {
@@ -9218,8 +9209,7 @@ public final class Generator {
         if (fixed != null) {
             return fixed;
         }
-        TermPath at = TermPath.of(subject.parameters().get(p));
-        return candidates.at(position, under(at, settled));
+        return candidates.at(position, settled);
     }
 
     /**
@@ -9309,14 +9299,14 @@ public final class Generator {
      *
      * @param decided what the caller fixed: the classes of an axis, or the single value a boundary is
      *                to be reached at
-     * @param left    the parameter's rules with what the caller settled taken in — the reading the
-     *                plan was made against, handed over rather than read again, since the two are
-     *                one reading and a second one would be the same declarations worked out twice
-     *                for every point
+     * @param left    the rules of every value reaching a position, with what the caller settled
+     *                taken in — the reading the plan was made against, handed over rather than read
+     *                again, since the two are one reading and a second one would be the same
+     *                declarations worked out twice for every point
      */
     private static Choices choicesOf(MeasuredInput subject, ConstructionPlan plan,
                                      Map<TermPath, List<FixtureTemplate>> decided,
-                                     FieldDomains left) {
+                                     ConstructionRules left) {
         RuleReadingContext reading = subject.ruleReading();
         List<TermPath> paths = new ArrayList<>(decided.keySet());
         List<List<FixtureTemplate>> values = new ArrayList<>(decided.values());
@@ -9330,11 +9320,9 @@ public final class Generator {
             if (paths.contains(slot.at())) {
                 continue;   // an axis decides here
             }
-            RuleKey field = fieldUnder(slot.at());
-            NumericDomain.Bounds here =
-                    field == null ? null : left.at(field).bounds();
-            List<FixtureTemplate> stands = subject.representativesHolding(slot.type(), here,
-                    field == null ? null : left.heldAt(field));
+            NumericDomain.Bounds here = left.valuesAt(slot.at());
+            FieldDomains.Held held = left.heldAt(slot.at());
+            List<FixtureTemplate> stands = subject.representativesHolding(slot.type(), here, held);
             if (stands.isEmpty()) {
                 // Nothing could be written at all: a position of a type nothing stands for. Which is
                 // not the same as a value that was written and refused, and reporting it as one sends
@@ -9352,8 +9340,7 @@ public final class Generator {
             paths.add(slot.at());
             values.add(stands);
             reserves.add(Partitions.inReserve(slot.type(), reading, here));
-            displacing.add(new Displacing(slot.type(), here,
-                    field == null ? null : left.heldAt(field)));
+            displacing.add(new Displacing(slot.type(), here, held));
         }
         return new Choices(plan, paths, values, reserves, null, Set.of(), displacing);
     }
@@ -9469,72 +9456,6 @@ public final class Generator {
             }
         }
         return where;
-    }
-
-    /**
-     * The rules of the record a parameter is, or nothing where it is not one.
-     *
-     * <p>One reading of the parameter, not one per record inside it. A clause on the outer record
-     * says what is left for a position two levels down, and a reading rebuilt at the inner record
-     * has never seen it.
-     *
-     * <p>Written once because two readers want it: what a position is offered, and why a position
-     * offered less than its rules allow. Those are the two halves of one floor and they were the two
-     * halves this was already asymmetric about.
-     *
-     * <p>Read with what the walk that read the inputs has already made of these declarations.
-     * Settling a coordinate is what makes each of these a reading of its own — a probe fixes a
-     * different value every time and none of the readings is the declaration's own — but what the
-     * declaration's string rules come to is settled by the rules and not by what is fixed beside
-     * them, so a reading here that borrowed nothing would build every one of those machines again
-     * for each value probed.
-     */
-    private static FieldDomains rulesOf(Type type, RuleReadingContext reading,
-                                        Map<RuleKey, Count> settled) {
-        RuleReadingSource source = reading.source();
-        // Whether the position is a record, and which record, are one answer and it is the
-        // reading's. The rules are then read on the declaration the fields came off — a position
-        // written under a name takes its fields from what that name wraps, and reading the rules on
-        // the name instead would be asking a declaration that has no such field.
-        return TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
-                source.sums())
-                        instanceof Shape.Product(TypeSymbol.AtModule declared, Map<String, Type> _)
-                ? FieldDomains.of(declared, reading, settled) : FieldDomains.NONE;
-    }
-
-    /**
-     * What the parameter's own rules call {@code path}, or null where none of them can name it
-     * ({@link TermPath#ruleKey}).
-     *
-     * <p>Null for that and for nothing else. The parameter itself is a name those rules do write —
-     * the one of no steps — and the readings asked by it answer about it like any other, so folding
-     * it in here would be this deciding that a value has nothing to say about itself.
-     */
-    private static RuleKey fieldUnder(TermPath path) {
-        return path.ruleKey();
-    }
-
-    /** The settled positions of one parameter, named the way the reading of that parameter names
-     * them: from the value itself, with the parameter dropped. */
-    private static Map<RuleKey, Count> under(TermPath root,
-                                                                    Map<TermPath, Place> settled) {
-        if (settled.isEmpty()) {
-            return Map.of();
-        }
-        Map<RuleKey, Count> out = new LinkedHashMap<>();
-        settled.forEach((path, at) -> {
-            if (!path.isAtOrUnder(root) || !(at instanceof Count number)) {
-                return;
-            }
-            RuleKey field = path.ruleKeyUnder(root);
-            // Where no clause of the parameter can name the position, nothing of this parameter's
-            // rules is about it and there is nothing to settle. A position inside a container is one,
-            // and so is one under a narrowing: the rules that name it are the narrowed value's.
-            if (field != null && !field.isTheValueItself()) {
-                out.put(field, number);
-            }
-        });
-        return out;
     }
 
     /**
