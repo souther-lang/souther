@@ -168,20 +168,8 @@ public record KeyedAccumulation(Core walked, Core.Binder element, Core key, Exac
     private static List<Core> insertedInto(Core body, Core key, BindingId accumulator) {
         return AnOperationApplied.of(body) instanceof AnOperationApplied filing
                 && filing.operation().equals(INSERT) && filing.args().size() == 3
-                && sameValue(filing.args().get(0), key)
+                && Core.sameValue(filing.args().get(0), key)
                 && isThe(filing.args().get(2), accumulator) ? filing.args() : null;
-    }
-
-    /** Whether two expressions are one value: a name, or a field read of one. */
-    private static boolean sameValue(Core one, Core other) {
-        Core left = Core.withoutStanding(one);
-        Core right = Core.withoutStanding(other);
-        if (left instanceof Core.Read read && right instanceof Core.Read there) {
-            return read.binding().equals(there.binding());
-        }
-        return left instanceof Core.FieldAccess access && right instanceof Core.FieldAccess there
-                && access.field().equals(there.field())
-                && sameValue(access.target(), there.target());
     }
 
     /** The whole number {@code e} is written as, or null where it is no such constant. */

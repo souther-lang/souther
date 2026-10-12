@@ -4,6 +4,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.inputs.BlockReason;
 import net.unit8.notation199x.pattern.PatternMeaning;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -258,8 +259,11 @@ public enum StringPredicates {
      * give before the text of a predicate is folded, so a rule reached through a helper says what
      * the same rule written out says.
      *
-     * <p>Only a part stated outright is a predicate here. A denial and a choice each state
-     * something about the strings, and neither is one set of strings to take a value out of.
+     * <p>A part stated outright is a predicate here, and so is a choice between two of them about
+     * one value: the strings either admits are one set of strings again, and a value taken out of
+     * it meets the rule. A denial is not — what it states is the strings outside a set, which is no
+     * set to take a value out of — and neither is a choice one side of which says nothing of this
+     * kind, since what the other side admits is then not all the rule admits.
      */
     public static StatedOn statedOn(TypeSymbol.AtModule named, RuleReadingSource source) {
         Clauses clauses = new Clauses(source);
@@ -272,7 +276,7 @@ public enum StringPredicates {
                 continue;
             }
             for (Clauses.StatedPart part : clauses.partsOf(stated)) {
-                Stated said = statedIn(part.of(), source.symbols(), Map.of());
+                Said said = saidIn(part.of(), source.symbols(), Map.of());
                 if (said != null) {
                     read.put(part.id(), said.reading());
                 }
@@ -384,21 +388,53 @@ public enum StringPredicates {
      * null where it states none.
      *
      * <p>A binding is crossed by putting what it gives in place of the name, each value read under
-     * the bindings above it.
+     * the bindings above it. A choice is read on both sides and is a predicate only where both are
+     * ({@link #eitherOf}).
      */
-    private static Stated statedIn(ClauseExpr shape, Symbols symbols, Map<BindingId, Core> given) {
+    private static Said saidIn(ClauseExpr shape, Symbols symbols, Map<BindingId, Core> given) {
         return switch (shape) {
             case ClauseExpr.Scoped scoped -> {
                 Map<BindingId, Core> inside = new HashMap<>(given);
                 inside.put(scoped.binding().binder().binding(),
                         Clauses.substituted(scoped.binding().value(), given));
-                yield statedIn(scoped.body(), symbols, inside);
+                yield saidIn(scoped.body(), symbols, inside);
             }
-            case ClauseExpr.Leaf leaf when leaf.positive() -> statedBy(leaf.of(), symbols,
-                    e -> Terms.folded(Clauses.substituted(e, given), symbols, Denotations.none())
-                            instanceof String written ? written : null);
+            case ClauseExpr.Leaf leaf when leaf.positive() -> {
+                Stated stated = statedBy(leaf.of(), symbols,
+                        e -> Terms.folded(Clauses.substituted(e, given), symbols,
+                                Denotations.none()) instanceof String written ? written : null);
+                yield stated == null ? null : new Said(stated.subject(), stated.reading());
+            }
+            case ClauseExpr.Joined choice when choice.how() == ConditionJoin.EITHER ->
+                    eitherOf(saidIn(choice.left(), symbols, given),
+                            saidIn(choice.right(), symbols, given));
             case ClauseExpr.Leaf _, ClauseExpr.Joined _ -> null;
         };
+    }
+
+    /** What a part says about the strings at one value: which value, and what was read there. */
+    private record Said(Core subject, Reading reading) {}
+
+    /**
+     * A choice between two predicates of this kind, as the strings either side admits, or null
+     * where it is no such choice.
+     *
+     * <p>About one value or no choice of this kind at all. The strings either side admits are a set
+     * of strings at the value both sides are about; two sides about two values admit a pair of
+     * strings that no single set says. And where either side was read with its text not worked out,
+     * so was the choice: what the other side admits is some of what the rule admits and not all of
+     * it.
+     */
+    private static Said eitherOf(Said one, Said other) {
+        if (one == null || other == null || !Core.sameValue(one.subject(), other.subject())) {
+            return null;
+        }
+        if (one.reading() instanceof Reading.Accepting(PatternMeaning left)
+                && other.reading() instanceof Reading.Accepting(PatternMeaning right)) {
+            return new Said(one.subject(),
+                    new Reading.Accepting(new PatternMeaning.EitherOf(List.of(left, right))));
+        }
+        return new Said(one.subject(), new Reading.WrittenArgumentNotKnown());
     }
 
     /**
