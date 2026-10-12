@@ -121,7 +121,7 @@ final class CardinalityComposer {
             return notChosen("`" + container + "` is no list or set written where it stands");
         }
         if (standingAt.isEmpty() && counts.stream().allMatch(each -> ACountHandedOn.of(
-                container, each.count().meeting()).isPresent())) {
+                each.count()).isPresent())) {
             List<OptionalInt> meeting = new ArrayList<>();
             for (RealizationTarget.ACount each : counts) {
                 meeting.add(ACountHandedOn.counted(demands.get(each)));
@@ -248,10 +248,10 @@ final class CardinalityComposer {
      * <p>Which elements meet a statement is nothing the elements themselves turn on: each meets it
      * by what another container is made to hold for it, and that container is handed what makes the
      * first so many meet it and the rest not ({@link ACountHandedOn}). So a container of each size
-     * from the most counted up is offered, holding whatever the element's own rules admit, and
-     * what it comes to beside is said as written some of: elements this offers that one value
-     * repeats cannot be counted for some and not others, and which elements a row could hold
-     * instead is not walked here, so composing nothing is no answer about the model.
+     * from the most counted up is offered, holding whatever the element's own rules admit — no two
+     * equal where some are counted and others not — and what it comes to beside is said as written
+     * some of: which elements a row could hold instead is not walked here, so composing nothing is
+     * no answer about the model.
      *
      * @param meeting how many elements meet each count's statement, in the order of {@code asked}:
      *                what {@link ACountHandedOn#counted} says of the number each is asked at, and
@@ -290,8 +290,24 @@ final class CardinalityComposer {
             if (size != null && !size.holds(Count.of(elements), Carrier.WHOLE)) {
                 continue;
             }
-            for (FixtureTemplate bare
-                    : Witnesses.ofSize(view, elements, reading, Set.of()).values()) {
+            // Where some of the elements meet a statement and the rest do not, the other container
+            // holds the value of each that does and none equal to that of each that does not, so
+            // no two of them may be equal: a container of that many apart is what is asked for.
+            // Elsewhere any container of that size is.
+            boolean splitByOne = false;
+            for (OptionalInt each : meeting) {
+                splitByOne |= each.getAsInt() > 0 && each.getAsInt() < elements;
+            }
+            List<FixtureTemplate> ofThatSize = new ArrayList<>();
+            if (splitByOne) {
+                FixtureTemplate apart = Witnesses.apart(view, elements, reading);
+                if (apart != null) {
+                    ofThatSize.add(apart);
+                }
+            } else {
+                ofThatSize.addAll(Witnesses.ofSize(view, elements, reading, Set.of()).values());
+            }
+            for (FixtureTemplate bare : ofThatSize) {
                 FixtureTemplate one = WornNames.under(view.wrappers(), bare, reading.source());
                 if (one == null) {
                     continue;

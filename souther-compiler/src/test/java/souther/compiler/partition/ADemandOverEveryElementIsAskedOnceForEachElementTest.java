@@ -12,8 +12,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.meaning.DecisionSubject;
-import souther.compiler.meaning.Proposition;
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
@@ -82,7 +80,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
             values.add(new ValuesHandedOn.Standing(at, FixtureTemplate.string(keys[i])));
             elements.add(at);
         }
-        return new ValuesHandedOn(Map.of(KS.element(), values), Map.of(KS, elements));
+        return new ValuesHandedOn(Map.of(KS.element(), values), Map.of(), Map.of(KS, elements));
     }
 
     private static ContentsAsked.Here resolved(ContentsAsked asked, String head,
@@ -139,7 +137,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
         ContentsAsked asked = asked(new RowDemand.ForAll(KS, List.of(new RowDemand.WithinIt(SHELF,
                 true, new RowDemand.KeyedAs(n))), HOLDING));
         ValuesHandedOn nBuilt = new ValuesHandedOn(Map.of(n, List.of(new ValuesHandedOn.Standing(
-                ElementsTaken.NONE, FixtureTemplate.string("x")))), Map.of());
+                ElementsTaken.NONE, FixtureTemplate.string("x")))), Map.of(), Map.of());
 
         assertEquals(List.of(), keysEachFiled(resolved(asked, "shelf", ksBuiltAs().and(nBuilt))));
         assertEquals(List.of("\"x\"", "\"x\""),
@@ -164,7 +162,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
         ValuesHandedOn handed = new ValuesHandedOn(Map.of(lines.element(), List.of(
                 new ValuesHandedOn.Standing(first, FixtureTemplate.string("a")),
                 new ValuesHandedOn.Standing(second, FixtureTemplate.string("b")),
-                new ValuesHandedOn.Standing(third, FixtureTemplate.string("c")))),
+                new ValuesHandedOn.Standing(third, FixtureTemplate.string("c")))), Map.of(),
                 Map.of(lines, List.of(first, second, third)));
 
         assertEquals(List.of("\"a\"", "\"b\"", "\"c\""),
@@ -198,18 +196,11 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
         ElementsTaken only = ElementsTaken.NONE.and(KS, 0);
         ValuesHandedOn handed = new ValuesHandedOn(Map.of(KS.element(), List.of(
                 new ValuesHandedOn.Standing(only, FixtureTemplate.string("a")),
-                new ValuesHandedOn.Standing(only, FixtureTemplate.string("b")))),
+                new ValuesHandedOn.Standing(only, FixtureTemplate.string("b")))), Map.of(),
                 Map.of(KS, List.of(only)));
 
         assertInstanceOf(ContentsAsked.Resolution.Unresolved.class,
                 everyKeyFiled().resolvedFor("shelf", handed));
-    }
-
-    private static Proposition.Some some(TermPath other, TermPath inOther, TermPath value,
-                                         boolean same, boolean holds) {
-        return new Proposition.Some(new DecisionSubject.AnInput(other),
-                new Proposition.SameValue(new DecisionSubject.AnInput(inOther),
-                        new DecisionSubject.AnInput(value), same), holds);
     }
 
     /**
@@ -219,8 +210,8 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
      */
     @Test
     void aCountOfElementsFiledElsewhereHandsTheOtherContainerTheFirstSoMany() {
-        ACountHandedOn keyed = ACountHandedOn.of(KS, some(SHELF, SHELF.key(), KS.element(),
-                true, true)).orElseThrow();
+        ACountHandedOn keyed = new ACountHandedOn(KS,
+                new RowDemand.WithinIt(SHELF, true, new RowDemand.KeyedAs(KS.element())));
         assertEquals(List.of(
                 new ContentsAsked.Asked(SHELF, KS.element(), true, true,
                         Optional.of(new ContentsAsked.Around(KS, false, 0, 2))),
@@ -232,11 +223,13 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
                 keyed.asked(0), "none counted, so every key is kept out");
 
         TermPath others = TermPath.of("others");
-        ACountHandedOn held = ACountHandedOn.of(KS, some(others, others.element(), KS.element(),
-                true, false)).orElseThrow();
+        ACountHandedOn held = new ACountHandedOn(KS,
+                new RowDemand.WithinIt(others, false, new RowDemand.DifferentFrom(KS.element())));
         assertEquals(new ContentsAsked.Asked(others, KS.element(), false, false,
                 Optional.of(new ContentsAsked.Around(KS, false, 0, 1))), held.asked(1).getFirst(),
                 "counted where no element of it is the value, so it holds none equal to it");
+        assertEquals(new RowDemand.WithinIt(others, true, new RowDemand.SameAs(KS.element())),
+                held.denied(), "and not counted where some element of it is");
     }
 
     /**
@@ -245,8 +238,9 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
      */
     @Test
     void aCountOfOneOfTwoHandsTheFirstAndKeepsTheSecondOut() {
-        ContentsAsked asked = new ContentsAsked(ACountHandedOn.of(KS, some(SHELF, SHELF.key(),
-                KS.element(), true, true)).orElseThrow().asked(1));
+        ContentsAsked asked = new ContentsAsked(new ACountHandedOn(KS,
+                new RowDemand.WithinIt(SHELF, true, new RowDemand.KeyedAs(KS.element())))
+                .asked(1));
         ContainerContents contents = resolved(asked, "shelf", ksBuiltAs("a", "b"))
                 .contentsOf(SHELF, _ -> null);
 
@@ -268,18 +262,6 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
                 AskedAt.aNumberOutOf(notTwo, Count.of(1), Carrier.WHOLE)));
         assertEquals(OptionalInt.of(0), ACountHandedOn.counted(
                 AskedAt.theClass(notTwo, Carrier.WHOLE)));
-    }
-
-    /** A statement that is no entry or element of another container being the value hands on
-     *  nothing. */
-    @Test
-    void aStatementThatIsNoMembershipHandsOnNothing() {
-        assertEquals(Optional.empty(), ACountHandedOn.of(KS, some(SHELF, SHELF.key(),
-                KS.element(), false, true)), "an entry keyed by something else");
-        assertEquals(Optional.empty(), ACountHandedOn.of(KS, some(SHELF, SHELF.key(),
-                SHELF.element(), true, true)), "a value of the map itself");
-        assertEquals(Optional.empty(), ACountHandedOn.of(KS, some(SHELF, SHELF.key(),
-                TermPath.of("n"), true, true)), "a value outside the counted element");
     }
 
     private static Shape.Mapping map() {

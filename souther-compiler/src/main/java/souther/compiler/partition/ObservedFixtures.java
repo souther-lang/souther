@@ -79,6 +79,7 @@ final class ObservedFixtures {
                                             Supplier<Map<TermPath, FixtureTemplate>> planned,
                                             RuleReadingContext reading) {
         Map<TermPath, List<ValuesHandedOn.Standing>> values = new LinkedHashMap<>();
+        Map<TermPath, ValuesHandedOn.Standing> chosen = new LinkedHashMap<>();
         Map<TermPath, FixtureTemplate> composedWith = null;
         for (TermPath path : read.positions()) {
             if (!(inputs.observedAt(built, path)
@@ -86,36 +87,49 @@ final class ObservedFixtures {
                 return new Writing.NotWritable<>(
                         "`" + path + "` is not a position the value built has");
             }
-            if (read.one().contains(path) && found.size() != 1) {
-                if (found.size() > 1) {
-                    if (composedWith == null) {
-                        composedWith = planned.get();
-                    }
-                    switch (theOneComposed(found, composedWith.get(path), reading)) {
-                        case Writing.Written<ValuesHandedOn.Standing>(var one) -> {
-                            values.put(path, List.of(one));
-                            continue;
-                        }
-                        case Writing.NotWritable<ValuesHandedOn.Standing> _ -> { }
-                    }
-                }
-                return new Writing.NotWritable<>(found.isEmpty()
-                        ? "nothing stands at `" + path + "` in the value built"
-                        : "`" + path + "` is at each of " + found.size()
-                                + " elements of the value built, which is no one value");
-            }
-            List<ValuesHandedOn.Standing> standing = new ArrayList<>();
-            for (BehaviorInputs.ObservedAt one : found) {
-                switch (of(one.value(), one.type(), reading)) {
-                    case Writing.Written<FixtureTemplate>(FixtureTemplate written) ->
-                            standing.add(new ValuesHandedOn.Standing(one.at(), written));
-                    case Writing.NotWritable<FixtureTemplate>(String why) -> {
-                        return new Writing.NotWritable<>(
-                                "the value built at `" + path + "` cannot be written: " + why);
+            // Every value there, where a demand asks each element; and the one value, where a
+            // demand asks one — both where both do, since the two are asked of one value built.
+            if (read.each().contains(path)) {
+                switch (written(path, found, reading)) {
+                    case Writing.Written<List<ValuesHandedOn.Standing>>(var all) ->
+                            values.put(path, all);
+                    case Writing.NotWritable<List<ValuesHandedOn.Standing>>(String why) -> {
+                        return new Writing.NotWritable<>(why);
                     }
                 }
             }
-            values.put(path, standing);
+            if (!read.one().contains(path)) {
+                continue;
+            }
+            Writing<ValuesHandedOn.Standing> one;
+            if (found.size() == 1 && values.containsKey(path)) {
+                one = new Writing.Written<>(values.get(path).getFirst());
+            } else if (found.size() == 1) {
+                one = switch (written(path, found, reading)) {
+                    case Writing.Written<List<ValuesHandedOn.Standing>>(var all) ->
+                            new Writing.Written<>(all.getFirst());
+                    case Writing.NotWritable<List<ValuesHandedOn.Standing>>(String why) ->
+                            new Writing.NotWritable<>(why);
+                };
+            } else if (found.isEmpty()) {
+                one = new Writing.NotWritable<>(
+                        "nothing stands at `" + path + "` in the value built");
+            } else {
+                if (composedWith == null) {
+                    composedWith = planned.get();
+                }
+                one = theOneComposed(found, composedWith.get(path), reading) instanceof
+                        Writing.Written<ValuesHandedOn.Standing> written ? written
+                        : new Writing.NotWritable<>("`" + path + "` is at each of "
+                                + found.size() + " elements of the value built, which is no one"
+                                + " value");
+            }
+            switch (one) {
+                case Writing.Written<ValuesHandedOn.Standing>(var value) -> chosen.put(path, value);
+                case Writing.NotWritable<ValuesHandedOn.Standing>(String why) -> {
+                    return new Writing.NotWritable<>(why);
+                }
+            }
         }
         Map<TermPath, List<ElementsTaken>> elements = new LinkedHashMap<>();
         for (TermPath container : read.containers()) {
@@ -135,7 +149,24 @@ final class ObservedFixtures {
             }
             elements.put(container, held);
         }
-        return new Writing.Written<>(new ValuesHandedOn(values, elements));
+        return new Writing.Written<>(new ValuesHandedOn(values, chosen, elements));
+    }
+
+    /** Each of {@code found}, standing at {@code path}, written — or why one cannot be. */
+    private static Writing<List<ValuesHandedOn.Standing>> written(
+            TermPath path, List<BehaviorInputs.ObservedAt> found, RuleReadingContext reading) {
+        List<ValuesHandedOn.Standing> standing = new ArrayList<>();
+        for (BehaviorInputs.ObservedAt one : found) {
+            switch (of(one.value(), one.type(), reading)) {
+                case Writing.Written<FixtureTemplate>(FixtureTemplate written) ->
+                        standing.add(new ValuesHandedOn.Standing(one.at(), written));
+                case Writing.NotWritable<FixtureTemplate>(String why) -> {
+                    return new Writing.NotWritable<>(
+                            "the value built at `" + path + "` cannot be written: " + why);
+                }
+            }
+        }
+        return new Writing.Written<>(standing);
     }
 
     /**

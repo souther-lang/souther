@@ -6028,7 +6028,8 @@ public final class Generator {
 
     /**
      * What one parameter's search found out about its own candidates while it ran: one turned away
-     * for reading back elsewhere, one that built and had nothing to hand on.
+     * for reading back elsewhere, one that built and had nothing to hand on, and a demand on its
+     * containers it composed without.
      *
      * <p>Told by whatever met it — the check a candidate is built through, the walk that reads
      * what a built value hands on — and read by the place that says what the search came to, as

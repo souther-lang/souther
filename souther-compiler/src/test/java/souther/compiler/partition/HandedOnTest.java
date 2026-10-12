@@ -100,10 +100,7 @@ class HandedOnTest {
                 assertInstanceOf(HandedOn.Came.Values.class, came, () -> "handed on: " + came)
                         .at();
         Map<TermPath, String> out = new LinkedHashMap<>();
-        at.values().forEach((path, values) -> {
-            assertEquals(1, values.size(), () -> "one value at " + path + ": " + values);
-            out.put(path, values.getFirst().value().text());
-        });
+        at.chosen().forEach((path, value) -> out.put(path, value.value().text()));
         return out;
     }
 

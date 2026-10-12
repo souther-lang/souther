@@ -32,7 +32,6 @@ import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -287,7 +286,7 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
                 new DecisionSubject.AnInput(xs),
                 new Proposition.Compared(new Relation.Affine(
                         new LinearForm<>(ExactRatio.ZERO, atMost), Rel.GE), false)), measuring,
-                Optional.empty());
+                AnElementMeeting.UNREAD);
         assertTrue(holdingNothing.emptiness().isEmpty(),
                 () -> "the region admits rows: " + holdingNothing.emptiness());
         assertInstanceOf(NumericDomain.FormProjection.NothingIsLeft.class,
@@ -317,7 +316,7 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
                 new DecisionSubject.AnInput(xs),
                 new Proposition.Compared(new Relation.Affine(
                         new LinearForm<>(ExactRatio.ZERO, atMost), Rel.GE), false)), measuring,
-                Optional.empty());
+                AnElementMeeting.UNREAD);
         Map<NumericTerm, ExactRatio> added = new LinkedHashMap<>();
         added.put(limit, ExactRatio.ONE.negated());
         Standing none = new Standing.OfACountAndAForm(counted,

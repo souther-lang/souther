@@ -76,11 +76,31 @@ class SoManyElementsOfAListFiledInAMapAreComposedTest {
 
     private static final List<String> NONE_FILED = List.of("Keys([\"x\", \"x\"])", "[]");
 
+    /**
+     * A list the rules make hold several, and exactly one of them filed: the first is counted and
+     * the other is not, so the two are composed apart and the map holds the key of the first and
+     * not of the second.
+     */
+    private static final String ONE_OF_SEVERAL = """
+            module p
+            import List ( filterMap, length )
+            data Keys = List<String>
+                invariant several = List.length(value) >= 2
+            behavior pick : (ks: Keys, shelf: Map<String, String>) -> Int
+            let pick (ks, shelf) = {
+                let pickable = filterMap(k -> Map.get(k, shelf), ks.value)
+                if length(pickable) == 1 then 1 else 0
+            }
+            example pick
+                | "nothing filed" : (Keys(["a", "b"]), []) -> 0
+            """;
+
     /** Each form, with the row composed for the rule where at least two are filed. */
     private static final Map<String, List<String>> COMPOSED = Map.of(
             ITSELF, List.of("[\"x\", \"x\"]", "[(\"x\", \"x\")]"),
             FIELD, List.of("[Item { sku = \"x\", q = 0 }, Item { sku = \"x\", q = 0 }]",
-                    "[(\"x\", \"x\")]"));
+                    "[(\"x\", \"x\")]"),
+            ONE_OF_SEVERAL, List.of("Keys([\"x\", \"xx\"])", "[(\"x\", \"x\")]"));
 
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");

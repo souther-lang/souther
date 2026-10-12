@@ -20,7 +20,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -553,11 +552,11 @@ public sealed interface RowDemand {
      *                          before it is held against {@code level}; no coefficient where the
      *                          count is held against a number alone
      * @param anElementMeeting  what an element meeting what is counted is held to, as relations,
-     *                          where it is that ({@link DemandReading#anElementMeeting})
+     *                          and what it hands on to another container, where it is either
+     *                          ({@link DemandReading#anElementMeeting})
      */
     record SoMany(Quantity.HowManyMeet count, Rel met, ExactRatio level,
-                  LinearForm<NumericTerm> against,
-                  Optional<List<TakenConstraint>> anElementMeeting)
+                  LinearForm<NumericTerm> against, AnElementMeeting anElementMeeting)
             implements OfACondition {
 
         public SoMany {

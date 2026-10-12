@@ -285,19 +285,12 @@ final class Witnesses {
      *
      * <p>A list may hold the same element as many times as it needs to. A set of three is three
      * elements no two of which are equal, which the element's own values have to supply.
-     *
-     * <p>A list is also offered holding that many no two of which are equal, after every one that
-     * says its element again. Both are lists of that many, and which of them the rules admit is
-     * not always something they say where this can read it: a rule that every element is apart
-     * from the others refuses each list saying one again, and nothing else here would offer one
-     * that does not. One such list, from the first proposal that has that many values beside it:
-     * every list is built here, and the rest would be the same values in another order.
      */
     private static Built ofSequence(Shape.Sequence carrier, int least, RuleReadingContext reading,
                                     Set<TypeSymbol> expanding) {
         List<Made> out = new ArrayList<>();
-        List<FixtureTemplate> seeds = proposalsFor(carrier.element(), reading, expanding);
-        for (FixtureTemplate seed : seeds) {
+        for (FixtureTemplate seed
+                : proposalsFor(carrier.element(), reading, expanding)) {
             List<FixtureTemplate> elements = new ArrayList<>();
             if (carrier.kind() == Shape.Sequence.Kind.LIST) {
                 for (int i = 0; i < least; i++) {
@@ -309,19 +302,32 @@ final class Witnesses {
             }
             out.add(new Made(FixtureTemplate.collection(elements), elements.size()));
         }
-        if (carrier.kind() == Shape.Sequence.Kind.LIST && least > 1) {
-            for (FixtureTemplate seed : seeds) {
-                List<FixtureTemplate> apart =
-                        distinctFrom(seed, carrier.element(), least, reading, expanding);
-                // A type with fewer values than that has no such list, and the one saying its
-                // element again is already offered.
-                if (apart.size() == least) {
-                    out.add(new Made(FixtureTemplate.collection(apart), least));
-                    break;
-                }
+        return Built.of(out);
+    }
+
+    /**
+     * A list or a set of {@code position} holding exactly {@code size} values no two of which are
+     * equal, or null where the element's values have too few, or it is no list or set.
+     *
+     * <p>For a caller that needs its elements told apart by their values — a container whose
+     * elements are to be on two sides of a statement another container decides — and not a
+     * proposal for any container of that size, which may say one value again.
+     */
+    static FixtureTemplate apart(TypeView position, int size, RuleReadingContext reading) {
+        if (!(position.shape() instanceof Shape.Sequence carrier)) {
+            return null;
+        }
+        if (size == 0) {
+            return FixtureTemplate.collection(List.of());
+        }
+        for (FixtureTemplate seed : proposalsFor(carrier.element(), reading, Set.of())) {
+            List<FixtureTemplate> elements =
+                    distinctFrom(seed, carrier.element(), size, reading, Set.of());
+            if (elements.size() == size) {
+                return FixtureTemplate.collection(elements);
             }
         }
-        return Built.of(out);
+        return null;
     }
 
     /** A map of that many entries, no two of which share a key. The values under the keys are free

@@ -2,8 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.meaning.DecisionSubject;
-import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 
@@ -16,12 +14,15 @@ import java.util.OptionalInt;
 
 /**
  * A count of the elements of a container meeting a statement that holds of another container: that
- * some entry of it is keyed by the element, or that some element of it is the element's value.
+ * some entry of it is keyed by the element, or that some element of it is the element's value —
+ * or, the other way round, that none is.
  *
  * <p>Whether an element meets such a statement is not the element's to say. It is what the other
  * container holds, and that is composed after the counted one, out of what the counted one was
  * built as — so how many elements meet it is chosen, and handed on as what the other container is
- * to hold for each of them ({@link ContentsAsked}).
+ * to hold for each of them ({@link ContentsAsked}). What the other container is asked is what the
+ * reading of the statement said an element meeting it asks ({@link CountedElements#handedOn}),
+ * written the way every demand on a container inside an element is ({@link ContentsAsked#within}).
  *
  * <p><b>Chosen once, off what the count is asked at.</b> Which count a container is composed at is
  * the number the search is walking ({@link AskedAt#walked}) — the one a caller named where it named
@@ -33,51 +34,57 @@ import java.util.OptionalInt;
  * <p><b>The first so many meet it and the rest do not.</b> A container of more elements than are
  * counted holds the statement for its first elements, in the order it holds them, and its denial for
  * the others. Elements equal at what the other container is asked about cannot be on both sides, so
- * a container saying one value again is a container nothing builds the other one for, and the next
- * is tried.
+ * the composer asks for elements no two of which are equal where both sides hold some
+ * ({@link Witnesses#apart}).
  *
- * @param counted    the container whose elements are counted
- * @param other      the container the statement holds of
- * @param value      the position inside the counted element the other container is asked about
- * @param ofTheKey   whether the other container is asked about its keys rather than its elements
- * @param holdsWhere whether the statement holds where the other container holds the value, rather
- *                   than where it holds none equal to it
+ * @param counted the container whose elements are counted
+ * @param meeting what the other container is asked about an element meeting the statement
  */
-record ACountHandedOn(TermPath counted, TermPath other, TermPath value, boolean ofTheKey,
-                      boolean holdsWhere) {
+record ACountHandedOn(TermPath counted, RowDemand.WithinIt meeting) {
 
     private static final int MOST_ELEMENTS =
             CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH.maximum();
 
     ACountHandedOn {
         Objects.requireNonNull(counted, "a count is of the elements of some container");
-        Objects.requireNonNull(other, "the statement holds of some container");
-        Objects.requireNonNull(value, "the other container is asked about some position");
+        Objects.requireNonNull(meeting, "an element meeting it asks something of a container");
     }
 
     /**
-     * What {@code meeting}, counted over the elements of {@code counted}, hands on — or nothing
-     * where it is not a statement that some entry or element of another container is a value
-     * inside the counted element.
+     * What {@code count} hands on, where what an element meeting it asks is one demand on another
+     * container that a container is written for — holding the value, or holding none equal to it —
+     * so that its denial is one too. Nothing otherwise.
      */
-    static Optional<ACountHandedOn> of(TermPath counted, Proposition meeting) {
-        if (!(meeting instanceof Proposition.Some(DecisionSubject.AnInput(TermPath other),
-                Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
-                        DecisionSubject.AnInput(TermPath another), boolean same, var _),
-                boolean holds, var _))
-                || !same || other.isAtOrUnder(counted.element())
-                || counted.isAtOrUnder(other.element())) {
-            return Optional.empty();
-        }
-        for (boolean keyed : new boolean[] {true, false}) {
-            TermPath inOther = keyed ? other.key() : other.element();
-            TermPath value = one.equals(inOther) ? another : another.equals(inOther) ? one : null;
-            if (value != null && value.isAtOrUnder(counted.element())
-                    && !value.isAtOrUnder(other.element()) && !value.isAtOrUnder(other.key())) {
-                return Optional.of(new ACountHandedOn(counted, other, value, keyed, holds));
-            }
-        }
-        return Optional.empty();
+    static Optional<ACountHandedOn> of(CountedElements count) {
+        return count.handedOn().filter(ACountHandedOn::composed)
+                .map(meeting -> new ACountHandedOn(count.container(), meeting));
+    }
+
+    /**
+     * Whether {@code within} is a demand a container is written for: some element of it the value,
+     * or every element of it apart from the value.
+     */
+    private static boolean composed(RowDemand.WithinIt within) {
+        return switch (within.asked()) {
+            case RowDemand.SameAs _, RowDemand.KeyedAs _ -> within.some();
+            case RowDemand.DifferentFrom _, RowDemand.NotKeyedAs _ -> !within.some();
+            case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.InCases _,
+                 RowDemand.WithinIt _ -> false;
+        };
+    }
+
+    /** What the other container is asked about an element not meeting the statement. */
+    RowDemand.WithinIt denied() {
+        RowDemand.OfAnElement asked = switch (meeting.asked()) {
+            case RowDemand.SameAs(TermPath value) -> new RowDemand.DifferentFrom(value);
+            case RowDemand.DifferentFrom(TermPath value) -> new RowDemand.SameAs(value);
+            case RowDemand.KeyedAs(TermPath value) -> new RowDemand.NotKeyedAs(value);
+            case RowDemand.NotKeyedAs(TermPath value) -> new RowDemand.KeyedAs(value);
+            case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.InCases _,
+                 RowDemand.WithinIt _ -> throw new IllegalStateException(
+                    "a demand handed on is one a container is written for: " + meeting);
+        };
+        return new RowDemand.WithinIt(meeting.container(), !meeting.some(), asked);
     }
 
     /**
@@ -106,14 +113,12 @@ record ACountHandedOn(TermPath counted, TermPath other, TermPath value, boolean 
      */
     List<ContentsAsked.Asked> asked(int count) {
         List<ContentsAsked.Asked> out = new ArrayList<>();
-        // Holding the value meets the statement where it holds there; holding none equal to it
-        // meets its denial.
         if (count > 0) {
-            out.add(new ContentsAsked.Asked(other, value, holdsWhere, ofTheKey, Optional.of(
-                    new ContentsAsked.Around(counted, false, 0, count))));
+            out.addAll(ContentsAsked.within(meeting,
+                    new ContentsAsked.Around(counted, false, 0, count)));
         }
-        out.add(new ContentsAsked.Asked(other, value, !holdsWhere, ofTheKey, Optional.of(
-                new ContentsAsked.Around(counted, false, count, Integer.MAX_VALUE))));
+        out.addAll(ContentsAsked.within(denied(),
+                new ContentsAsked.Around(counted, false, count, Integer.MAX_VALUE)));
         return out;
     }
 
@@ -125,7 +130,7 @@ record ACountHandedOn(TermPath counted, TermPath other, TermPath value, boolean 
         List<ContentsAsked.Asked> out = new ArrayList<>();
         asked.forEach((target, at) -> {
             if (target instanceof RealizationTarget.ACount count) {
-                of(count.count().container(), count.count().meeting()).ifPresent(handed ->
+                of(count.count()).ifPresent(handed ->
                         counted(at).ifPresent(meeting -> out.addAll(handed.asked(meeting))));
             }
         });

@@ -17,6 +17,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A row where every element of a list is filed in a map is composed, and the map is made to hold
@@ -45,24 +46,6 @@ class EveryElementOfAListFiledInAMapIsComposedTest {
             module p
             data Keys = List<String>
                 invariant several = List.length(value) >= 2
-            behavior pick : (ks: Keys, shelf: Map<String, String>) -> Int
-            let pick (ks, shelf) =
-                if List.all(k -> match Map.get(k, shelf) with
-                        | Some v -> true
-                        | None -> false, ks.value) then 1 else 0
-            example pick
-                | "a" : (Keys(["a", "b"]), []) -> 0
-            """;
-
-    /**
-     * A list the rules make hold several no two of which are equal, so the map is made to hold an
-     * entry under each.
-     */
-    private static final String SEVERAL_APART = """
-            module p
-            data Keys = List<String>
-                invariant several = List.length(value) >= 2
-                invariant apart = List.allDistinctBy(k -> k, value)
             behavior pick : (ks: Keys, shelf: Map<String, String>) -> Int
             let pick (ks, shelf) =
                 if List.all(k -> match Map.get(k, shelf) with
@@ -115,16 +98,55 @@ class EveryElementOfAListFiledInAMapIsComposedTest {
      */
     private static final String SOME_OF_SEVERAL = SEVERAL.replace("List.all(", "List.any(");
 
+    /**
+     * Some element of a list made to hold several filed in one map, and every element in another:
+     * the one value some element is asked of and each value every element is are read off the one
+     * list built, and both are handed on.
+     */
+    private static final String SOME_AND_EVERY = """
+            module p
+            data Keys = List<String>
+                invariant several = List.length(value) >= 2
+            behavior pick : (ks: Keys, one: Map<String, String>, every: Map<String, String>) -> Int
+            let pick (ks, one, every) =
+                if List.any(k -> match Map.get(k, one) with
+                        | Some v -> true
+                        | None -> false, ks.value)
+                    && List.all(k -> match Map.get(k, every) with
+                        | Some v -> true
+                        | None -> false, ks.value) then 1 else 0
+            example pick
+                | "a" : (Keys(["a", "b"]), [], []) -> 0
+                | "a in one" : (Keys(["a", "b"]), [("a", "x")], []) -> 0
+            """;
+
+    /**
+     * Every element of a list the rules keep empty holding a value in a list inside it: holding
+     * none meets it, and what each element would be is not made an element the list holds.
+     */
+    private static final String INSIDE_EACH_OF_NONE = """
+            module p
+            data Item = { tags: List<String> }
+            data Items = List<Item>
+                invariant none = List.length(value) <= 0
+            behavior pick : (items: Items, k: String, first: Bool) -> Int
+            let pick (items, k, first) =
+                if first then 2
+                else if List.all(i -> List.contains(k, i.tags), items.value) then 1 else 0
+            example pick
+                | "first" : (Items([]), "a", true) -> 2
+            """;
+
     /** Each form, with the row composed for the rule where every element is filed. */
     private static final Map<String, List<String>> COMPOSED = Map.of(
             EVERY, List.of("[]", "[]"),
             SEVERAL, List.of("Keys([\"x\", \"x\"])", "[(\"x\", \"x\")]"),
-            SEVERAL_APART, List.of("Keys([\"x\", \"xx\"])",
-                    "[(\"x\", \"x\"), (\"xx\", \"x\")]"),
             SHELF_EMPTY, List.of("[]", "Shelf([])"),
             INSIDE_EACH, List.of("Items([Item { tags = [\"x\"] }])", "\"x\""),
             INSIDE_SOME, List.of("Items([Item { tags = [\"x\"] }])", "\"x\""),
-            SOME_OF_SEVERAL, List.of("Keys([\"x\", \"x\"])", "[(\"x\", \"x\")]"));
+            SOME_OF_SEVERAL, List.of("Keys([\"x\", \"x\"])", "[(\"x\", \"x\")]"),
+            SOME_AND_EVERY, List.of("Keys([\"x\", \"x\"])", "[(\"x\", \"x\")]",
+                    "[(\"x\", \"x\")]"));
 
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -189,5 +211,29 @@ class EveryElementOfAListFiledInAMapIsComposedTest {
         COMPOSED.forEach((model, expected) -> assertFalse(errors(measured(model
                 + "    | \"filed\" : (" + String.join(", ", expected) + ") -> 0\n")).isEmpty(),
                 model));
+    }
+
+    /**
+     * A list the rules keep empty, with every element asked to hold a value in a list inside it:
+     * the row for it holds none, and nothing of an element is composed. Some element holding none
+     * of it is the model's to refuse — the list has no room for one — and is said as that.
+     */
+    @Test
+    void everyElementOfAListKeptEmptyIsComposedHoldingNone() {
+        Compilation measured = measured(INSIDE_EACH_OF_NONE);
+        List<List<String>> rows = new ArrayList<>();
+        Adequacy.generatedOf(measured.db(), measured.modules().get(0)).get("pick").generation()
+                .stream()
+                .filter(each -> each.finding().about() instanceof About.ARuleNoRowTakes)
+                .forEach(each -> {
+                    if (each.outcome() instanceof GenerationOutcome.Generated made) {
+                        made.candidates().forEach(row -> rows.add(
+                                row.inputs().stream().map(FixtureTemplate::text).toList()));
+                    }
+                });
+
+        assertEquals(List.of(List.of("Items([])", "\"x\"", "false")), rows);
+        assertTrue(report(measured).contains("`items` would have to hold 1"),
+                () -> report(measured));
     }
 }

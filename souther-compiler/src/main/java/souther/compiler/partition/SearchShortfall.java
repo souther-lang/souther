@@ -40,9 +40,12 @@ import java.util.SequencedMap;
  *                    where it was built for
  * @param unread      whether a way the search had stands under a case of a sum the row can be
  *                    whose reading stopped, so that the ways it tried are not every way there is
- * @param notHandedOn why a candidate that built had nothing this can write to hand on to a
- *                    container of another parameter, where one had: a value the model took and
- *                    this compiler could not go on with, which is not the model refusing it
+ * @param notHandedOn why a container was not handed what it was asked, where one was not: a
+ *                    candidate that built and had nothing this can write to hand on to a container
+ *                    of another parameter — a value the model took and this compiler could not go
+ *                    on with — or a demand on a container this composed without, since nothing
+ *                    built yet said what it asks ({@link ContentsAsked.Here#leftOpen}). Either is
+ *                    this compiler's, and not the model refusing anything
  */
 record SearchShortfall(CompositionShortfall met,
                        SequencedMap<TermPath, StringOfferShortfall> offered,

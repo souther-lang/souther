@@ -119,7 +119,7 @@ final class PlanComposer {
         List<FixtureTemplate> keysEachFiled = List.of();
         List<FixtureTemplate> keysKeptOut = List.of();
         FixtureTemplate element = null;
-        if (plan.under().isPresent()) {
+        if (plan.composesItsElement()) {
             element = compose(plan.under().get(), values, reading);
             if (element == null) {
                 return null;
@@ -166,6 +166,12 @@ final class PlanComposer {
         }
         FixtureTemplate collection = switch (container) {
             case Shape.Sequence carrier -> {
+                // Every element is the one composed, and a set holds it once: one the rules ask
+                // to hold more has no room for them all to be it.
+                if (plan.eachOf() && carrier.kind() == Shape.Sequence.Kind.SET
+                        && plan.holds().least() > 1) {
+                    yield null;
+                }
                 if (key != null || !keysEachFiled.isEmpty()) {
                     throw new IllegalStateException("a plan put a key on what a list or a set"
                             + " holds, which files nothing under one: " + plan.at());

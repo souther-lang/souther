@@ -125,7 +125,8 @@ record ContentsAsked(List<Asked> asked) {
 
         Around {
             Objects.requireNonNull(container, "a quantifier ranges over a container");
-            if (from < 0 || below < from || some && (from != 0 || below != Integer.MAX_VALUE)) {
+            if (from < 0 || below < from
+                    || (some && (from != 0 || below != Integer.MAX_VALUE))) {
                 throw new IllegalArgumentException("a quantifier asks every element of a run, or"
                         + " some element of all of them: " + from + ".." + below);
             }
@@ -168,6 +169,17 @@ record ContentsAsked(List<Asked> asked) {
         List<Asked> out = new ArrayList<>(of(way).asked());
         out.addAll(ACountHandedOn.askedOf(counts));
         return new ContentsAsked(out);
+    }
+
+    /**
+     * What {@code within}, asked of the elements {@code around} ranges over, asks of the container
+     * it names — written the one way every demand on a container inside an element is.
+     */
+    static List<Asked> within(RowDemand.WithinIt within, Around around) {
+        List<Asked> out = new ArrayList<>();
+        asked(within.container(), within.some(), List.of(within.asked()), Optional.of(around),
+                out);
+        return out;
     }
 
     /**
@@ -392,14 +404,11 @@ record ContentsAsked(List<Asked> asked) {
                     within.add(each);
                     continue;
                 }
-                List<ValuesHandedOn.Standing> standing = handed.values().get(each.value());
-                if (standing == null) {
+                ValuesHandedOn.Standing one = handed.chosen().get(each.value());
+                if (one == null) {
                     return new Resolution.Unresolved(nothingHandedOn(each.value()));
                 }
-                if (standing.size() != 1) {
-                    return new Resolution.Unresolved(noOneValue(each.value(), standing.size()));
-                }
-                given.add(new Given(each, standing.getFirst().value()));
+                given.add(new Given(each, one.value()));
                 continue;
             }
             // Asked under every element of a container: the one around it is over every element.
@@ -623,12 +632,11 @@ record ContentsAsked(List<Asked> asked) {
     record ToHandOn(Set<TermPath> one, Set<TermPath> each, Set<TermPath> containers) {
 
         // In the order the way asked them: which of them a value built has nothing to hand on at
-        // is said of the first, and that follows from it.
+        // is said of the first, and that follows from it. A position may be in both, read as one
+        // value by one demand and in each element by another.
         ToHandOn {
+            one = Collections.unmodifiableSet(new LinkedHashSet<>(one));
             each = Collections.unmodifiableSet(new LinkedHashSet<>(each));
-            Set<TermPath> once = new LinkedHashSet<>(one);
-            once.removeAll(each);
-            one = Collections.unmodifiableSet(once);
             containers = Collections.unmodifiableSet(new LinkedHashSet<>(containers));
         }
 

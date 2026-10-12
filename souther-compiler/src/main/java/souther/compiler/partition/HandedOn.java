@@ -69,6 +69,7 @@ final class HandedOn {
                 }
                 Map<TermPath, FixtureTemplate> writes = written.get();
                 Map<TermPath, List<ValuesHandedOn.Standing>> out = new LinkedHashMap<>();
+                Map<TermPath, ValuesHandedOn.Standing> chosen = new LinkedHashMap<>();
                 for (TermPath each : read.positions()) {
                     FixtureTemplate value = writes.get(each);
                     if (value == null) {
@@ -76,9 +77,16 @@ final class HandedOn {
                                 + "`, which the row does not write, and nothing built the value"
                                 + " to say what stands there");
                     }
-                    out.put(each, List.of(new ValuesHandedOn.Standing(ElementsTaken.NONE, value)));
+                    ValuesHandedOn.Standing standing =
+                            new ValuesHandedOn.Standing(ElementsTaken.NONE, value);
+                    if (read.each().contains(each)) {
+                        out.put(each, List.of(standing));
+                    }
+                    if (read.one().contains(each)) {
+                        chosen.put(each, standing);
+                    }
                 }
-                yield new Came.Values(new ValuesHandedOn(out, Map.of()));
+                yield new Came.Values(new ValuesHandedOn(out, chosen, Map.of()));
             }
         };
     }

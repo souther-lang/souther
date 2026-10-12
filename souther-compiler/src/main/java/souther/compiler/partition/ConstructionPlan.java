@@ -199,9 +199,15 @@ final class ConstructionPlan {
      * @param holds    from how few to how many the rules let it hold
      * @param handed   whether the caller hands over values to write into it or keep out of it,
      *                 which is asked of the caller when it is composed and of nobody otherwise
+     * @param eachOf   whether {@code under} is what each element is, rather than an element it is
+     *                 to hold: a container inside the element handed values by a demand on every
+     *                 element of this one, which holding none meets. It holds as few as the rules
+     *                 ask, each of them that, and none where they ask for none — and then nothing
+     *                 of the element is composed or searched for ({@link #composesItsElement})
      */
     record Held(TermPath at, Type type, List<TypeSymbol> worn, Optional<Node> under,
-                Optional<Node> key, DeclaredBounds.CountRange holds, boolean handed)
+                Optional<Node> key, DeclaredBounds.CountRange holds, boolean handed,
+                boolean eachOf)
             implements Node {
 
         Held {
@@ -210,6 +216,20 @@ final class ConstructionPlan {
                 throw new IllegalArgumentException("a container built rather than chosen is built"
                         + " to hold something asked of it: " + at);
             }
+            if (eachOf && (under.isEmpty() || key.isPresent() || handed)) {
+                throw new IllegalArgumentException("what each element of a container is, where it"
+                        + " holds any, is its element and nothing beside: " + at);
+            }
+        }
+
+        /**
+         * Whether the element is composed: an element it is to hold always, and what each element
+         * is only where the rules ask it to hold some. The one answer what composes the container
+         * and what searches the positions inside it both read, so that an element neither composed
+         * nor held is never searched for.
+         */
+        boolean composesItsElement() {
+            return under.isPresent() && (!eachOf || holds.least() > 0);
         }
     }
 
@@ -709,9 +729,12 @@ final class ConstructionPlan {
             case Slot slot -> out.add(slot);
             case Built built -> built.under().values().forEach(each -> collect(each, out));
             // The key before the value, the order an entry is written in.
+            // An element not composed is not searched for.
             case Held held -> {
                 held.key().ifPresent(key -> collect(key, out));
-                held.under().ifPresent(element -> collect(element, out));
+                if (held.composesItsElement()) {
+                    collect(held.under().get(), out);
+                }
             }
             // Not a position a value is chosen at: the requirement settled it, so there is nothing
             // here for the search to offer and nothing for it to be refused at.
@@ -815,8 +838,11 @@ final class ConstructionPlan {
             }
             if (!elementAsked && handed) {
                 return new NodeResult.Made(new Held(here, building, worn, Optional.empty(),
-                        Optional.empty(), holds, true));
+                        Optional.empty(), holds, true, false));
             }
+            // Built around its element for nothing but a container inside it, by a demand on
+            // every element.
+            boolean eachOf = !elementAsked && !handed && contents.aroundEach().contains(here);
             // What stands at its element, where something is asked there — and where nothing is
             // asked anywhere inside it, so that a walk giving up part-way below is told from one
             // that found nothing to place. Not where only a map's key is asked: the value under it
@@ -843,9 +869,11 @@ final class ConstructionPlan {
                 }
                 key = Optional.of(filedUnder);
             }
+            // Built around its element for nothing but a container inside it, the element is what
+            // each element is and not one it holds.
             if (demanded) {
                 return new NodeResult.Made(new Held(here, building, worn, element, key, holds,
-                        handed));
+                        handed, eachOf));
             }
             // Nothing was asked for inside it, so the list is chosen whole — but where the walk
             // that would have found something gave up part-way, that is not the same answer. Read
