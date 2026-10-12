@@ -95,12 +95,35 @@ class SoManyElementsOfAListFiledInAMapAreComposedTest {
                 | "nothing filed" : (Keys(["a", "b"]), []) -> 0
             """;
 
+    /**
+     * The same over a field of a record: the two elements are apart at the field the map is keyed
+     * by, and not merely as records.
+     */
+    private static final String ONE_OF_SEVERAL_BY_FIELD = """
+            module p
+            import List ( filterMap, length )
+            data Item = { q: Int, sku: String }
+            data Items = List<Item>
+                invariant several = List.length(value) >= 2
+            behavior pick : (items: Items, shelf: Map<String, String>) -> Int
+            let pick (items, shelf) = {
+                let pickable = filterMap(i -> Map.get(i.sku, shelf), items.value)
+                if length(pickable) == 1 then 1 else 0
+            }
+            example pick
+                | "nothing filed" : (Items([Item { q = 0, sku = "a" }, Item { q = 0, sku = "b" }]),
+                    []) -> 0
+            """;
+
     /** Each form, with the row composed for the rule where at least two are filed. */
     private static final Map<String, List<String>> COMPOSED = Map.of(
             ITSELF, List.of("[\"x\", \"x\"]", "[(\"x\", \"x\")]"),
             FIELD, List.of("[Item { sku = \"x\", q = 0 }, Item { sku = \"x\", q = 0 }]",
                     "[(\"x\", \"x\")]"),
-            ONE_OF_SEVERAL, List.of("Keys([\"x\", \"xx\"])", "[(\"x\", \"x\")]"));
+            ONE_OF_SEVERAL, List.of("Keys([\"x\", \"xx\"])", "[(\"x\", \"x\")]"),
+            ONE_OF_SEVERAL_BY_FIELD, List.of(
+                    "Items([Item { q = 0, sku = \"x\" }, Item { q = 0, sku = \"xx\" }])",
+                    "[(\"x\", \"x\")]"));
 
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -218,6 +241,30 @@ class SoManyElementsOfAListFiledInAMapAreComposedTest {
                 () -> report(answered));
         assertFalse(errors(measured(FEWER_OF_SEVERAL + "    | \"none\" : ("
                 + String.join(", ", NONE_FILED) + ") -> 1\n")).isEmpty());
+    }
+
+    /**
+     * Exactly one element of a list whose own map is keyed by a value: the map is inside each
+     * element, and the first keyed and the rest not is no element written alike, so this composes
+     * no row for it — and says so as its own, not as there being no such row.
+     */
+    @Test
+    void aCountOverAMapInsideEachElementIsNotTakenForTheModels() {
+        String report = report(measured("""
+                module p
+                import List ( filterMap, length )
+                data Item = { tags: Map<String, String> }
+                behavior pick : (items: List<Item>, k: String) -> Int
+                let pick (items, k) = {
+                    let tagged = filterMap(i -> Map.get(k, i.tags), items)
+                    if length(tagged) == 1 then 1 else 0
+                }
+                example pick
+                    | "none" : ([], "a") -> 0
+                """));
+
+        assertTrue(report.contains("? nothing could show a row can be written at 1 decision rule"),
+                () -> report);
     }
 
     /** The control: the same rows answered as fewer than two filed are refused. */

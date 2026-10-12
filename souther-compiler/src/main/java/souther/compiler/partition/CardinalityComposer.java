@@ -122,11 +122,13 @@ final class CardinalityComposer {
         }
         if (standingAt.isEmpty() && counts.stream().allMatch(each -> ACountHandedOn.of(
                 each.count()).isPresent())) {
+            List<ACountHandedOn> handed = new ArrayList<>();
             List<OptionalInt> meeting = new ArrayList<>();
             for (RealizationTarget.ACount each : counts) {
+                handed.add(ACountHandedOn.of(each.count()).orElseThrow());
                 meeting.add(ACountHandedOn.counted(demands.get(each)));
             }
-            return handingOn(asked, meeting, size, view, reading);
+            return handingOn(asked, handed, meeting, size, view, reading);
         }
         Element element = Element.of(counts, container);
         if (element == null) {
@@ -253,11 +255,13 @@ final class CardinalityComposer {
      * some of: which elements a row could hold instead is not walked here, so composing nothing is
      * no answer about the model.
      *
+     * @param handed  what each count hands on, in the order of {@code asked}
      * @param meeting how many elements meet each count's statement, in the order of {@code asked}:
      *                what {@link ACountHandedOn#counted} says of the number each is asked at, and
      *                nothing where it says nothing
      */
     private static TermRealizations.Realization handingOn(List<Asked> asked,
+                                                          List<ACountHandedOn> handed,
                                                           List<OptionalInt> meeting,
                                                           NumericSet size, TypeView view,
                                                           RuleReadingContext reading) {
@@ -294,13 +298,26 @@ final class CardinalityComposer {
             // holds the value of each that does and none equal to that of each that does not, so
             // no two of them may be equal: a container of that many apart is what is asked for.
             // Elsewhere any container of that size is.
-            boolean splitByOne = false;
-            for (OptionalInt each : meeting) {
-                splitByOne |= each.getAsInt() > 0 && each.getAsInt() < elements;
+            // Apart at what each such statement's other container is asked about, which is what
+            // tells the elements on its two sides apart.
+            List<List<String>> splitAt = new ArrayList<>();
+            boolean cannotSplit = false;
+            for (int i = 0; i < meeting.size(); i++) {
+                int counted = meeting.get(i).getAsInt();
+                if (counted > 0 && counted < elements) {
+                    List<String> fields = handed.get(i).fieldsToTheValue();
+                    cannotSplit |= fields == null;
+                    if (fields != null && !splitAt.contains(fields)) {
+                        splitAt.add(fields);
+                    }
+                }
             }
             List<FixtureTemplate> ofThatSize = new ArrayList<>();
-            if (splitByOne) {
-                FixtureTemplate apart = Witnesses.apart(view, elements, reading);
+            if (cannotSplit) {
+                continue;
+            }
+            if (!splitAt.isEmpty()) {
+                FixtureTemplate apart = Witnesses.apart(view, elements, splitAt, reading);
                 if (apart != null) {
                     ofThatSize.add(apart);
                 }

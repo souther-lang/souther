@@ -54,10 +54,24 @@ record ACountHandedOn(TermPath counted, RowDemand.WithinIt meeting) {
      * What {@code count} hands on, where what an element meeting it asks is one demand on another
      * container that a container is written for — holding the value, or holding none equal to it —
      * so that its denial is one too. Nothing otherwise.
+     *
+     * <p>Another container and not one inside the counted element. One inside it is written where
+     * the counted container is, alike in every element, and the first so many holding the value
+     * and the rest none equal to it is no element written alike; nor is one around the counted
+     * container, which is composed out of its elements and not after them.
      */
     static Optional<ACountHandedOn> of(CountedElements count) {
-        return count.handedOn().filter(ACountHandedOn::composed)
-                .map(meeting -> new ACountHandedOn(count.container(), meeting));
+        return count.handedOn().flatMap(meeting -> of(count.container(), meeting));
+    }
+
+    /** What a count of the elements of {@code counted}, an element meeting which asks
+     *  {@code meeting}, hands on ({@link #of(CountedElements)}). */
+    static Optional<ACountHandedOn> of(TermPath counted, RowDemand.WithinIt meeting) {
+        if (!composed(meeting) || meeting.container().isAtOrUnder(counted.element())
+                || counted.isAtOrUnder(meeting.container().element())) {
+            return Optional.empty();
+        }
+        return Optional.of(new ACountHandedOn(counted, meeting));
     }
 
     /**
@@ -71,6 +85,36 @@ record ACountHandedOn(TermPath counted, RowDemand.WithinIt meeting) {
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.InCases _,
                  RowDemand.WithinIt _ -> false;
         };
+    }
+
+    /**
+     * The fields from the counted element to the value the other container is asked about, in the
+     * order they are taken — none where it is the element itself — or null where the way there
+     * takes a step that is no field.
+     */
+    List<String> fieldsToTheValue() {
+        TermPath value = switch (meeting.asked()) {
+            case RowDemand.SameAs(TermPath at) -> at;
+            case RowDemand.DifferentFrom(TermPath at) -> at;
+            case RowDemand.KeyedAs(TermPath at) -> at;
+            case RowDemand.NotKeyedAs(TermPath at) -> at;
+            case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.InCases _,
+                 RowDemand.WithinIt _ -> throw new IllegalStateException(
+                    "a demand handed on is one a container is written for: " + meeting);
+        };
+        TermPath element = counted.element();
+        if (!value.isAtOrUnder(element)) {
+            return null;
+        }
+        List<String> out = new ArrayList<>();
+        for (TermPath.Step step : value.steps().subList(element.steps().size(),
+                value.steps().size())) {
+            if (!(step instanceof TermPath.Step.Field(String name))) {
+                return null;
+            }
+            out.add(name);
+        }
+        return out;
     }
 
     /** What the other container is asked about an element not meeting the statement. */

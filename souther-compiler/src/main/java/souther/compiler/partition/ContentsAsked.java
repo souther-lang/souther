@@ -75,12 +75,22 @@ record ContentsAsked(List<Asked> asked) {
         /**
          * Whether the plan of the container's parameter asks it as it is: every row meeting it asks
          * it, or the container is inside the element of the one the quantifier around it ranges
-         * over. A plan writes such a container in every element it builds, so the demand is met in
-         * each element there is and asked of nothing where there is none — and how many there are
-         * is the plan's, not something to put in beforehand.
+         * over and it is asked of every element of that. A plan writes such a container alike in
+         * every element it builds, so the demand is met in each element there is and asked of
+         * nothing where there is none — and how many there are is the plan's, not something to put
+         * in beforehand.
+         *
+         * <p>Not one asked of a run of the elements only: the plan writes every element alike, and
+         * what is asked of some and not the rest is told apart only by the place each holds in
+         * what was built ({@link #resolvedFor}).
          */
         boolean askedOfThePlan() {
-            return inEveryRow() || container.isAtOrUnder(around.orElseThrow().container().element());
+            if (inEveryRow()) {
+                return true;
+            }
+            Around outer = around.orElseThrow();
+            return outer.from() == 0 && outer.below() == Integer.MAX_VALUE
+                    && container.isAtOrUnder(outer.container().element());
         }
 
         /**

@@ -139,7 +139,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops at a size or at the containers offered, and hands the figure over in"
                             + " the shortfall it comes back with"),
             Map.entry("souther.compiler.partition.CardinalityComposer#handingOn("
-                            + "Ljava/util/List;Ljava/util/List;"
+                            + "Ljava/util/List;Ljava/util/List;Ljava/util/List;"
                             + "Lsouther/compiler/partition/NumericSet;"
                             + "Lsouther/compiler/check/TypeView;"
                             + "Lsouther/compiler/check/RuleReadingContext;)"

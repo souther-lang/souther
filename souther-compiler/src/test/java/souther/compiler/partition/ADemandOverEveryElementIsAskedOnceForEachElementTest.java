@@ -28,6 +28,7 @@ import java.util.OptionalInt;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -230,6 +231,43 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
                 "counted where no element of it is the value, so it holds none equal to it");
         assertEquals(new RowDemand.WithinIt(others, true, new RowDemand.SameAs(KS.element())),
                 held.denied(), "and not counted where some element of it is");
+    }
+
+    /**
+     * A count of the elements of {@code items} whose own map is keyed by {@code k}: the map is
+     * inside each element, written alike in every one, so the first holding the key and the rest
+     * none is no element written alike — and the count hands nothing on.
+     */
+    @Test
+    void aCountOverAContainerInsideTheElementHandsNothingOn() {
+        TermPath items = TermPath.of("items");
+        TermPath tags = items.element().then("tags");
+        RowDemand.WithinIt keyed = new RowDemand.WithinIt(tags, true,
+                new RowDemand.KeyedAs(TermPath.of("k")));
+
+        assertEquals(Optional.empty(), ACountHandedOn.of(items, keyed));
+        assertTrue(ACountHandedOn.of(KS, new RowDemand.WithinIt(SHELF, true,
+                new RowDemand.KeyedAs(KS.element()))).isPresent(), "another container is handed on");
+    }
+
+    /**
+     * Asked of a run of the elements only, a demand on a container inside the element is not the
+     * plan's: the plan writes every element alike. Nothing built says which elements the run is,
+     * so it is left open.
+     */
+    @Test
+    void aDemandOnARunOfTheElementsIsNotThePlans() {
+        TermPath items = TermPath.of("items");
+        TermPath tags = items.element().then("tags");
+        ContentsAsked.Asked first = new ContentsAsked.Asked(tags, TermPath.of("k"), true, true,
+                Optional.of(new ContentsAsked.Around(items, false, 0, 1)));
+        ContentsAsked.Asked every = new ContentsAsked.Asked(tags, TermPath.of("k"), true, true,
+                Optional.of(ContentsAsked.Around.over(items, false)));
+
+        assertFalse(first.askedOfThePlan());
+        assertTrue(every.askedOfThePlan());
+        assertEquals(List.of(first), resolved(new ContentsAsked(List.of(first)), "items",
+                ValuesHandedOn.NONE).leftOpen());
     }
 
     /**

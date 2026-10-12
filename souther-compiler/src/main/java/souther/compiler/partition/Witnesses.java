@@ -12,8 +12,10 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -306,28 +308,105 @@ final class Witnesses {
     }
 
     /**
-     * A list or a set of {@code position} holding exactly {@code size} values no two of which are
-     * equal, or null where the element's values have too few, or it is no list or set.
+     * A list or a set of {@code position} holding exactly {@code size} elements no two of which
+     * are equal at the end of {@code fields} — each a run of fields taken from the element, empty
+     * for the element itself — or null where that cannot be built: the values there have too few,
+     * a field on the way is no field of a record this writes, or it is no list or set.
      *
-     * <p>For a caller that needs its elements told apart by their values — a container whose
-     * elements are to be on two sides of a statement another container decides — and not a
-     * proposal for any container of that size, which may say one value again.
+     * <p>For a caller that needs its elements told apart at what another container is asked about
+     * — a container whose elements are to be on two sides of a statement that container decides —
+     * and not a proposal for any container of that size, which may say one value again. Apart at
+     * those positions and not merely as whole values: two records equal at the one field the
+     * statement reads are one element to it however the rest of them differ.
      */
-    static FixtureTemplate apart(TypeView position, int size, RuleReadingContext reading) {
+    static FixtureTemplate apart(TypeView position, int size, List<List<String>> fields,
+                                 RuleReadingContext reading) {
         if (!(position.shape() instanceof Shape.Sequence carrier)) {
             return null;
         }
         if (size == 0) {
             return FixtureTemplate.collection(List.of());
         }
-        for (FixtureTemplate seed : proposalsFor(carrier.element(), reading, Set.of())) {
-            List<FixtureTemplate> elements =
-                    distinctFrom(seed, carrier.element(), size, reading, Set.of());
-            if (elements.size() == size) {
-                return FixtureTemplate.collection(elements);
+        // The values each position is apart at, one for each element.
+        List<List<FixtureTemplate>> atEach = new ArrayList<>();
+        for (List<String> each : fields) {
+            Type at = typeAt(carrier.element(), each, reading);
+            if (at == null) {
+                return null;
+            }
+            List<FixtureTemplate> values = distinctValuesOf(at, size, reading, Set.of());
+            if (values.size() < size) {
+                return null;
+            }
+            atEach.add(values);
+        }
+        List<FixtureTemplate> elements = new ArrayList<>();
+        for (int i = 0; i < size; i++) {
+            Map<List<String>, FixtureTemplate> placed = new LinkedHashMap<>();
+            for (int f = 0; f < fields.size(); f++) {
+                placed.put(fields.get(f), atEach.get(f).get(i));
+            }
+            FixtureTemplate element = holdingAt(carrier.element(), placed, reading);
+            if (element == null) {
+                return null;
+            }
+            elements.add(element);
+        }
+        return FixtureTemplate.collection(elements);
+    }
+
+    /** The type at the end of {@code fields} taken from a value of {@code type}, or null where one
+     *  of them is no field of a record. */
+    private static Type typeAt(Type type, List<String> fields, RuleReadingContext reading) {
+        RuleReadingSource source = reading.source();
+        Type at = type;
+        for (String field : fields) {
+            if (!(TypeView.shapeOf(at, source.inners(), source.symbols(), source.kinds(),
+                    source.sums()) instanceof Shape.Product record)) {
+                return null;
+            }
+            at = record.fields().get(field);
+            if (at == null) {
+                return null;
             }
         }
-        return null;
+        return at;
+    }
+
+    /**
+     * A value of {@code type} holding each of {@code placed} at the run of fields it is placed at,
+     * and whatever the rules admit everywhere else — or null where one of them cannot be.
+     */
+    private static FixtureTemplate holdingAt(Type type, Map<List<String>, FixtureTemplate> placed,
+                                             RuleReadingContext reading) {
+        if (placed.containsKey(List.of())) {
+            // The value itself, which two runs cannot both be.
+            return placed.size() == 1 ? placed.get(List.of()) : null;
+        }
+        // Read whole, since the record composed is written under every name the position wears.
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (!(view.shape() instanceof Shape.Product record)
+                || !(record.name() instanceof TypeSymbol.AtModule named)) {
+            return null;
+        }
+        Map<String, Map<List<String>, FixtureTemplate>> byField = new LinkedHashMap<>();
+        placed.forEach((at, value) -> byField.computeIfAbsent(at.getFirst(),
+                _ -> new LinkedHashMap<>()).put(at.subList(1, at.size()), value));
+        Map<String, FixtureTemplate> given = new LinkedHashMap<>();
+        for (Map.Entry<String, Map<List<String>, FixtureTemplate>> each : byField.entrySet()) {
+            Type field = record.fields().get(each.getKey());
+            FixtureTemplate inner = field == null ? null
+                    : holdingAt(field, each.getValue(), reading);
+            if (inner == null) {
+                return null;
+            }
+            given.put(each.getKey(), inner);
+        }
+        List<FixtureTemplate> composed = Partitions.composed(named, reading, Set.of(), given);
+        return composed.isEmpty() ? null
+                : WornNames.under(view.wrappers(), composed.getFirst(), source);
     }
 
     /** A map of that many entries, no two of which share a key. The values under the keys are free
