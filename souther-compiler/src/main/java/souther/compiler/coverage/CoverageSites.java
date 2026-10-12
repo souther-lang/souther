@@ -759,9 +759,13 @@ public final class CoverageSites {
          * has arms, and control points for them, and no site at all — so a reader asking this to
          * find out whether there is anything to be about would skip exactly the bodies a claim is
          * made in.
+         *
+         * <p>A place an application's answer is recorded at is one such site, beside the arms and
+         * comparisons: a body whose only condition is what {@code List.any(x -> x, xs)} answers has
+         * no arm and no comparison of its own, and its answer is still recorded.
          */
         public boolean hasNoProbes() {
-            return sites.isEmpty();
+            return sites.isEmpty() && answersByNode.isEmpty();
         }
 
         /** The probe numbers of {@code node}'s arms, in the order the emitter emits them, or null

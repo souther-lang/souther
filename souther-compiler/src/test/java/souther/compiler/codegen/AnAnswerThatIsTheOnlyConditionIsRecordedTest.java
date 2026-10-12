@@ -1,0 +1,52 @@
+package souther.compiler.codegen;
+
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import souther.compiler.diag.SourceRendering;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A body whose only condition is what an application of the language's operations answers — no
+ * comparison and no arm of its own — is measured, and the answer each run gets is recorded.
+ *
+ * <p>The place the answer is recorded at is the one place the plan numbers in such a body. A build
+ * that took the body for one with nothing to record would leave that place out of the code and be
+ * refused for it.
+ */
+class AnAnswerThatIsTheOnlyConditionIsRecordedTest {
+
+    @ParameterizedTest
+    @ValueSource(strings = {"List.any(x -> x, xs)", "List.all(x -> x, xs)",
+            "List.any(x -> Bool.not(Bool.not(x)), xs)"})
+    void eachWayTheAnswerComesOutIsTakenByTheRowThatGetsIt(String condition) {
+        Compilation compilation = Compilation.ofSource("""
+                module p
+                behavior f : (xs: List<Bool>) -> Bool
+                let f (xs) = %s
+
+                example f
+                    | "one of each" : ([true, false]) -> %s
+                    | "none" : ([]) -> %s
+                    | "only false" : ([false]) -> false
+                    | "only true" : ([true]) -> true
+                """.formatted(condition, !condition.startsWith("List.all"),
+                condition.startsWith("List.all")), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
+                report);
+        assertTrue(report.contains("decision    rules 2   taken 2"), report);
+    }
+}
