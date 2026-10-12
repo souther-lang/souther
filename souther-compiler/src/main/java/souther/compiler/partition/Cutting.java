@@ -1072,12 +1072,28 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * apart and are still one above the other, which is how {@link #readOnce} reads the same pair.
      *
      * @return null where some order has no numbers under it and the form is not two positions held
-     *         against each other, which is a form nothing here can read a row at
+     *         against each other: a form no quantity reads a row at, which a reader of rows says it
+     *         could not read rather than answering for
      */
     static LinearQuantity readAt(String behavior, LinearForm<NumericTerm> form,
                                  Quantities quantities) {
         Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
         form.coefs().keySet().forEach(term -> on.put(term, quantities.ordersOf(term)));
+        return readAt(behavior, form, on);
+    }
+
+    /**
+     * The same, with each of the form's terms already on the orders the reading gave it — held to
+     * the form here, since which quantity it is turns on those orders and a map about other terms
+     * would decide it for them.
+     */
+    static LinearQuantity readAt(String behavior, LinearForm<NumericTerm> form,
+                                 Map<NumericTerm, TermOrders> on) {
+        if (!on.keySet().equals(form.coefs().keySet())) {
+            throw new IllegalArgumentException("a form is read on the orders of its own terms: "
+                    + form + " against " + on.keySet());
+        }
+        on.forEach((term, orders) -> orders.areOf(term));
         if (on.values().stream().allMatch(orders -> orders.answered().counts())) {
             return new BorderQuantity.OverAForm(behavior,
                     new LinearForm<>(ExactRatio.ZERO, form.coefs()), on);
@@ -1086,28 +1102,21 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
-     * The two positions {@code form} holds against each other, the one weighed by one and the other
-     * by minus one, on orders a value of one stands somewhere on — or null where it is no such pair.
+     * The two positions {@code form} holds against each other ({@link AffineReading#twoCoordinates})
+     * on orders a value of one stands somewhere on — or null where it is no such pair.
      */
     private static BorderQuantity.Apart heldAgainstEachOther(String behavior,
                                                              LinearForm<NumericTerm> form,
                                                              Map<NumericTerm, TermOrders> on) {
-        if (form.coefs().size() != 2) {
+        NumericTerm[] pair = AffineReading.twoCoordinates(form);
+        if (pair == null) {
             return null;
         }
-        TermOrders here = null;
-        TermOrders there = null;
-        for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
-            TermOrders orders = on.get(each.getKey());
-            orders.areOf(each.getKey());
-            if (each.getValue().equals(ExactRatio.ONE)) {
-                here = orders;
-            } else if (each.getValue().equals(ExactRatio.ONE.negated())) {
-                there = orders;
-            }
-        }
-        if (here == null || there == null
-                || here.term().atOnePosition() == null || there.term().atOnePosition() == null
+        TermOrders here = on.get(pair[0]);
+        TermOrders there = on.get(pair[1]);
+        here.areOf(pair[0]);
+        there.areOf(pair[1]);
+        if (here.term().atOnePosition() == null || there.term().atOnePosition() == null
                 || !here.answered().standsAgainst(there.answered())) {
             return null;
         }

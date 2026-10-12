@@ -530,7 +530,11 @@ public sealed interface BorderQuantity
         @Override
         public LinearQuantity movedTo(NumericTerm from, TermOrders to) {
             NumericTerm landed = to.term();
-            if (!form.coefs().containsKey(from) || form.coefs().containsKey(landed)) {
+            // A sum adds what is under each order, so a term landing on an order with nothing
+            // under it leaves no sum; that is said by answering none, and not by refusing to make
+            // the one this would be.
+            if (!form.coefs().containsKey(from) || form.coefs().containsKey(landed)
+                    || !to.answered().counts()) {
                 return null;
             }
             Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
