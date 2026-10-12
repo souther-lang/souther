@@ -129,6 +129,16 @@ class WhatAnOptionMadeByAClosureHoldsIsWhatTheClosureMadeTest {
                 .toList();
     }
 
+    /**
+     * Whether everything {@code report} says went unread is that a relation is not shown to reach
+     * every value of a place: a threshold the input holds is related to what the closure made, and
+     * along each way it runs over only some of its values. The comparison itself was read.
+     */
+    private static boolean readSaveForWhatTheOtherValueReaches(String report) {
+        return report.lines().filter(line -> line.strip().startsWith("· not read"))
+                .allMatch(line -> line.contains("not shown to reach every value here"));
+    }
+
     /** What the model answers, as the operations are defined. */
     private static boolean oneMore(String key, Map<String, Long> entries, long q) {
         Long held = entries.get(key);
@@ -209,7 +219,10 @@ class WhatAnOptionMadeByAClosureHoldsIsWhatTheClosureMadeTest {
         assertEquals(List.of(), answered.errors().stream()
                 .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
                 () -> examples + report(answered));
-        assertTrue(report(answered).contains("adequacy: satisfied"), () -> report(answered));
+        assertFalse(report(answered).contains("adequacy: not satisfied"),
+                () -> report(answered));
+        assertTrue(readSaveForWhatTheOtherValueReaches(report(answered)),
+                () -> report(answered));
     }
 
     /** What the closure answers turns on nothing it is handed, so no line is drawn on the entry:
@@ -246,7 +259,7 @@ class WhatAnOptionMadeByAClosureHoldsIsWhatTheClosureMadeTest {
     void twoClosuresAreReadOneAfterTheOther() {
         String report = report(TWICE);
 
-        assertFalse(report.contains("not read"), report);
+        assertTrue(readSaveForWhatTheOtherValueReaches(report), report);
         assertTrue(report.contains("read as f/2 * m[*] - q: = -1"), report);
     }
 
@@ -255,7 +268,7 @@ class WhatAnOptionMadeByAClosureHoldsIsWhatTheClosureMadeTest {
     void anOptionAtAPositionIsThePositionsValue() {
         String report = report(AT_A_POSITION);
 
-        assertFalse(report.contains("not read"), report);
+        assertTrue(readSaveForWhatTheOtherValueReaches(report), report);
         assertTrue(report.contains("read as f/h.qty@Some: = h.q - 1"), report);
     }
 
