@@ -114,11 +114,31 @@ record ContentsAsked(List<Asked> asked) {
      *
      * @param container the container it ranges over
      * @param some      whether it asks some element of it, rather than every one
+     * @param from      the first element, in the order the container holds them, the demand is
+     *                  asked of
+     * @param below     the element after the last it is asked of, or {@link Integer#MAX_VALUE}
+     *                  where it is asked of every element from {@code from} on. A count composed
+     *                  with so many elements meeting a statement asks the statement of the first
+     *                  so many and its denial of the rest ({@link ACountHandedOn})
      */
-    record Around(TermPath container, boolean some) {
+    record Around(TermPath container, boolean some, int from, int below) {
 
         Around {
             Objects.requireNonNull(container, "a quantifier ranges over a container");
+            if (from < 0 || below < from || some && (from != 0 || below != Integer.MAX_VALUE)) {
+                throw new IllegalArgumentException("a quantifier asks every element of a run, or"
+                        + " some element of all of them: " + from + ".." + below);
+            }
+        }
+
+        /** Asked of every element of {@code container}, or of some element where {@code some}. */
+        static Around over(TermPath container, boolean some) {
+            return new Around(container, some, 0, Integer.MAX_VALUE);
+        }
+
+        /** Whether the {@code element}-th element is one this asks the demand of. */
+        boolean asksOf(int element) {
+            return element >= from && element < below;
         }
     }
 
@@ -160,7 +180,7 @@ record ContentsAsked(List<Asked> asked) {
     private static void asked(TermPath container, boolean some,
                               List<RowDemand.OfAnElement> ofTheElement, Optional<Around> around,
                               List<Asked> into) {
-        Optional<Around> withThis = Optional.of(new Around(container, some));
+        Optional<Around> withThis = Optional.of(Around.over(container, some));
         for (RowDemand.OfAnElement one : ofTheElement) {
             switch (one) {
                 case RowDemand.SameAs(TermPath value) when some ->
@@ -299,7 +319,8 @@ record ContentsAsked(List<Asked> asked) {
                 for (Asked each : asked.asked()) {
                     under.add(new Asked(at.get(each.container()), at.get(each.value()),
                             each.holding(), each.ofTheKey(), each.around().map(around ->
-                                    new Around(at.get(around.container()), around.some()))));
+                                    new Around(at.get(around.container()), around.some(),
+                                            around.from(), around.below()))));
                 }
                 return composes.test(new Way(new ContentsAsked(under), taken, at))
                         ? Walked.COMPOSED : Walked.EVERY_WAY_TRIED;
@@ -350,13 +371,18 @@ record ContentsAsked(List<Asked> asked) {
      * value is read off the positions the plan composes where it is this parameter's, and is the
      * one value handed on where it is another's. Any other demand under such a quantifier — over a
      * container of this parameter that the container asked is not inside an element of, or with
-     * its value read off this parameter — has nothing built yet to say how many times it is asked;
-     * it is not handed to the container at all, and whether a row composed without it meets the
-     * rule is the row's to say.
+     * its value read off this parameter — has nothing built yet to say how many times it is asked.
+     * It is not handed to the container, and it is kept as left open ({@link Here#leftOpen}): a
+     * row composed without it is still the row's to take, and none being composed is no answer
+     * about the model.
+     *
+     * <p>A quantifier asking a run of the elements ({@link Around#from}, {@link Around#below})
+     * asks those, by their place in what was built.
      */
     Resolution resolvedFor(String head, ValuesHandedOn handed) {
         List<Asked> within = new ArrayList<>();
         List<Given> given = new ArrayList<>();
+        List<Asked> leftOpen = new ArrayList<>();
         for (Asked each : asked) {
             if (!each.container().head().equals(head)) {
                 continue;
@@ -377,8 +403,10 @@ record ContentsAsked(List<Asked> asked) {
                 continue;
             }
             // Asked under every element of a container: the one around it is over every element.
-            TermPath over = each.around().orElseThrow().container();
+            Around around = each.around().orElseThrow();
+            TermPath over = around.container();
             if (each.value().head().equals(head) || over.head().equals(head)) {
+                leftOpen.add(each);
                 continue;
             }
             List<ValuesHandedOn.Standing> standing = handed.values().get(each.value());
@@ -410,6 +438,9 @@ record ContentsAsked(List<Asked> asked) {
                 }
             }
             for (ElementsTaken element : held) {
+                if (!around.asksOf(element.elementAt(over))) {
+                    continue;
+                }
                 List<FixtureTemplate> in = new ArrayList<>(
                         inside.getOrDefault(elementsOf(element, through), List.of()));
                 for (ValuesHandedOn.Standing one : outside) {
@@ -423,7 +454,7 @@ record ContentsAsked(List<Asked> asked) {
                 given.add(new Given(each, in.getFirst()));
             }
         }
-        return new Resolution.Resolved(new Here(within, given));
+        return new Resolution.Resolved(new Here(within, given, leftOpen));
     }
 
     /** The element {@code taken} took from each of {@code through}, in that order. */
@@ -476,13 +507,26 @@ record ContentsAsked(List<Asked> asked) {
      *
      * @param within the demands whose values are read off this parameter's own value, which the
      *               plan composes
-     * @param given  the values handed on, each with the demand it was handed for
+     * @param given    the values handed on, each with the demand it was handed for
+     * @param leftOpen the demands on its containers that nothing built yet says how many times
+     *                 they are asked, and that are handed to nothing: a row composed without them
+     *                 meets them or not as it comes, so what composing came to is not every row
+     *                 there is
      */
-    record Here(List<Asked> within, List<Given> given) {
+    record Here(List<Asked> within, List<Given> given, List<Asked> leftOpen) {
 
         Here {
             within = List.copyOf(within);
             given = List.copyOf(given);
+            leftOpen = List.copyOf(leftOpen);
+        }
+
+        /** Why what composing came to is not every row there is, or nothing where it is. */
+        Optional<String> notComposed() {
+            return leftOpen.stream().findFirst().map(each -> "`" + each.container() + "` is"
+                    + " asked about `" + each.value() + "` for each element of `"
+                    + each.around().orElseThrow().container() + "`, and nothing is built yet"
+                    + " to say which elements that is, so it is not handed the value");
         }
 
         /**

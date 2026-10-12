@@ -1,15 +1,18 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
-import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * A count of the elements of a container meeting a statement that holds of another container: that
@@ -20,11 +23,18 @@ import java.util.Optional;
  * built as — so how many elements meet it is chosen, and handed on as what the other container is
  * to hold for each of them ({@link ContentsAsked}).
  *
- * <p>Chosen two ways and no others: every element meeting it, where the count asked is not none, and
- * none of them meeting it, where none is a count asked. A count met by some elements and not by
- * others is a container whose elements the other one holds for some and not the rest, which this
- * does not write; so a container this composes nothing for is said as written some of, and never as
- * the model leaving nothing ({@link CompositionRepertoire#ELEMENTS_CHOSEN_FOR_A_COUNT}).
+ * <p><b>Chosen once, off what the count is asked at.</b> Which count a container is composed at is
+ * the number the search is walking ({@link AskedAt#walked}) — the one a caller named where it named
+ * one — and not the numbers a search is about, which a walk of one number out of them says nothing
+ * of the rest of. The counted container is composed with that many elements meeting the statement
+ * and the other container is handed exactly that, both by {@link #counted} on the one value, so the
+ * two compose one row.
+ *
+ * <p><b>The first so many meet it and the rest do not.</b> A container of more elements than are
+ * counted holds the statement for its first elements, in the order it holds them, and its denial for
+ * the others. Elements equal at what the other container is asked about cannot be on both sides, so
+ * a container saying one value again is a container nothing builds the other one for, and the next
+ * is tried.
  *
  * @param counted    the container whose elements are counted
  * @param other      the container the statement holds of
@@ -35,6 +45,9 @@ import java.util.Optional;
  */
 record ACountHandedOn(TermPath counted, TermPath other, TermPath value, boolean ofTheKey,
                       boolean holdsWhere) {
+
+    private static final int MOST_ELEMENTS =
+            CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH.maximum();
 
     ACountHandedOn {
         Objects.requireNonNull(counted, "a count is of the elements of some container");
@@ -68,38 +81,52 @@ record ACountHandedOn(TermPath counted, TermPath other, TermPath value, boolean 
     }
 
     /**
-     * Whether the elements of a container composed at one of {@code counts} are to meet none of
-     * the statements counted, rather than every one: where none is one of the counts.
-     *
-     * <p>The one place this is decided, for what composes the counted container and for what
-     * hands the other one its contents, so that the two compose one row.
+     * How many elements meet the statement in a container composed for {@code at}: the number a
+     * caller named, where it named one, and otherwise the fewest the search walks — which is the
+     * one every size of container the walk allows can be composed at. Nothing where the walk holds
+     * no count up to the most elements a container for a count is composed with, which is that
+     * figure stopping it: the composer says so ({@link CardinalityComposer}), and nothing is
+     * handed on for a container it does not compose.
      */
-    static boolean metByNone(LevelRegion counts) {
-        return counts.contains(new Level.OfTheQuantity(ExactRatio.ZERO));
+    static OptionalInt counted(AskedAt at) {
+        Place named = at.named();
+        for (int count = 0; count <= MOST_ELEMENTS; count++) {
+            Count place = Count.of(count);
+            if (at.walking().holds(place, Carrier.WHOLE)
+                    && (named == null || named.sameAs(place))) {
+                return OptionalInt.of(count);
+            }
+        }
+        return OptionalInt.empty();
     }
 
     /**
-     * What the other container is asked for each element of the counted one, where the elements
-     * are to meet the statement — or are to meet none of it, {@code byNone}.
+     * What the other container is asked for each element of the counted one, where the first
+     * {@code count} elements meet the statement and the rest do not.
      */
-    ContentsAsked.Asked asked(boolean byNone) {
-        // Holding the value meets the statement where it holds there, and so does holding none
-        // equal to it where it holds there; meeting none of it is the other of the two.
-        boolean holding = holdsWhere != byNone;
-        return new ContentsAsked.Asked(other, value, holding, ofTheKey,
-                Optional.of(new ContentsAsked.Around(counted, false)));
+    List<ContentsAsked.Asked> asked(int count) {
+        List<ContentsAsked.Asked> out = new ArrayList<>();
+        // Holding the value meets the statement where it holds there; holding none equal to it
+        // meets its denial.
+        if (count > 0) {
+            out.add(new ContentsAsked.Asked(other, value, holdsWhere, ofTheKey, Optional.of(
+                    new ContentsAsked.Around(counted, false, 0, count))));
+        }
+        out.add(new ContentsAsked.Asked(other, value, !holdsWhere, ofTheKey, Optional.of(
+                new ContentsAsked.Around(counted, false, count, Integer.MAX_VALUE))));
+        return out;
     }
 
     /**
      * What every count among {@code asked} that hands its statement on asks of the other
-     * container, at the counts each is asked for.
+     * container, at the count each is composed at.
      */
     static List<ContentsAsked.Asked> askedOf(Map<RealizationTarget, AskedAt> asked) {
         List<ContentsAsked.Asked> out = new ArrayList<>();
         asked.forEach((target, at) -> {
             if (target instanceof RealizationTarget.ACount count) {
                 of(count.count().container(), count.count().meeting()).ifPresent(handed ->
-                        out.add(handed.asked(metByNone(at.about().values()))));
+                        counted(at).ifPresent(meeting -> out.addAll(handed.asked(meeting))));
             }
         });
         return out;

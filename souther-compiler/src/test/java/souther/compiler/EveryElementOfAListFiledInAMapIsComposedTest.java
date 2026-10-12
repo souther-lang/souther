@@ -109,6 +109,12 @@ class EveryElementOfAListFiledInAMapIsComposedTest {
     /** The same with some element holding the value, which the list then holds one for. */
     private static final String INSIDE_SOME = INSIDE_EACH.replace("List.all(", "List.any(");
 
+    /**
+     * Some element of a list the rules make hold several filed in a map: the map is handed the key
+     * of the element the list was composed around, and not one for each.
+     */
+    private static final String SOME_OF_SEVERAL = SEVERAL.replace("List.all(", "List.any(");
+
     /** Each form, with the row composed for the rule where every element is filed. */
     private static final Map<String, List<String>> COMPOSED = Map.of(
             EVERY, List.of("[]", "[]"),
@@ -117,7 +123,8 @@ class EveryElementOfAListFiledInAMapIsComposedTest {
                     "[(\"x\", \"x\"), (\"xx\", \"x\")]"),
             SHELF_EMPTY, List.of("[]", "Shelf([])"),
             INSIDE_EACH, List.of("Items([Item { tags = [\"x\"] }])", "\"x\""),
-            INSIDE_SOME, List.of("Items([Item { tags = [\"x\"] }])", "\"x\""));
+            INSIDE_SOME, List.of("Items([Item { tags = [\"x\"] }])", "\"x\""),
+            SOME_OF_SEVERAL, List.of("Keys([\"x\", \"x\"])", "[(\"x\", \"x\")]"));
 
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");

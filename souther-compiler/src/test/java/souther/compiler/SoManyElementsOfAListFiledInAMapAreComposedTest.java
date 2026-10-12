@@ -17,6 +17,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A row where so many elements of a list are filed in a map is composed, and the map is made to
@@ -125,15 +126,45 @@ class SoManyElementsOfAListFiledInAMapAreComposedTest {
     /**
      * And the points of the line the count is held against: a row at the count, one below it, and
      * one inside the region above, each with as many filed as the point asks.
+     *
+     * <p>Asked of the model and not of the report of the generation: every row composed is put
+     * back as an example answered the way the model answers it, and the measurement then finds a
+     * row at every point — which it does only where each row's count, as the model reads it, is
+     * the one its point is at.
      */
     @Test
-    void everyPointOfTheLineOnTheCountIsComposed() {
+    void everyPointOfTheLineOnTheCountIsComposedAtItsCount() {
         COMPOSED.keySet().forEach(model -> {
-            String report = report(measured(model));
+            StringBuilder rows = new StringBuilder();
+            int written = 0;
+            for (List<String> row : everyRowComposed(measured(model))) {
+                String inputs = String.join(", ", row);
+                String filed = "    | \"row " + written + "\" : (" + inputs + ") -> ";
+                boolean answersOne = errors(measured(model + filed + "1\n")).isEmpty();
+                assertTrue(answersOne || errors(measured(model + filed + "0\n")).isEmpty(),
+                        () -> "the model answers " + inputs + " one way or the other");
+                rows.append(filed).append(answersOne ? "1" : "0").append('\n');
+                written++;
+            }
+            String report = report(measured(model + rows));
 
+            assertFalse(report.contains("no row is at"), () -> report);
             assertFalse(report.contains("nothing could show a row can be written"),
                     () -> report);
         });
+    }
+
+    /** Every row composed for anything, each as the texts of its inputs. */
+    private static List<List<String>> everyRowComposed(Compilation compilation) {
+        List<List<String>> out = new ArrayList<>();
+        Adequacy.generatedOf(compilation.db(), compilation.modules().get(0)).get("pick")
+                .generation().forEach(each -> {
+                    if (each.outcome() instanceof GenerationOutcome.Generated made) {
+                        made.candidates().forEach(row -> out.add(
+                                row.inputs().stream().map(FixtureTemplate::text).toList()));
+                    }
+                });
+        return out;
     }
 
     /**

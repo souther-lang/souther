@@ -14,6 +14,8 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.check.Carrier;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.observe.ElementsTaken;
@@ -24,12 +26,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A demand asked under a quantifier over every element of a container is asked once for each
@@ -167,6 +171,27 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
                 keysEachFiled(resolved(asked, "shelf", handed)));
     }
 
+    /**
+     * The list and the map under one parameter: nothing built yet says how many keys the map is
+     * to hold, so it is handed none — and that is kept, so that composing nothing is not taken for
+     * there being nothing to compose.
+     */
+    @Test
+    void aDemandOverAContainerOfTheSameParameterIsKeptAsLeftOpen() {
+        TermPath input = TermPath.of("input");
+        TermPath ks = input.then("ks");
+        TermPath shelf = input.then("shelf");
+        ContentsAsked asked = asked(new RowDemand.ForAll(ks, List.of(new RowDemand.WithinIt(shelf,
+                true, new RowDemand.KeyedAs(ks.element()))), HOLDING));
+        ContentsAsked.Here here = resolved(asked, "input", ValuesHandedOn.NONE);
+
+        assertEquals(List.of(), here.given());
+        assertEquals(asked.asked(), here.leftOpen());
+        assertTrue(here.notComposed().isPresent());
+        assertEquals(Optional.empty(), resolved(everyKeyFiled(), "shelf", ksBuiltAs("a"))
+                .notComposed(), "a demand handed on leaves nothing open");
+    }
+
     /** Two values read in one element are no one value for it, and are said as that. */
     @Test
     void twoValuesInOneElementAreNoOneValue() {
@@ -189,24 +214,60 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
 
     /**
      * A count of the elements of {@code ks} some entry of {@code shelf} is keyed by, or some
-     * element of it is, hands the map its key or the list its element for each element counted —
-     * and none of them where none is counted.
+     * element of it is, hands the map its key or the list its element for each of the first so
+     * many elements, and keeps out those of the rest.
      */
     @Test
-    void aCountOfElementsFiledElsewhereHandsTheOtherContainerEachOne() {
+    void aCountOfElementsFiledElsewhereHandsTheOtherContainerTheFirstSoMany() {
         ACountHandedOn keyed = ACountHandedOn.of(KS, some(SHELF, SHELF.key(), KS.element(),
                 true, true)).orElseThrow();
-        assertEquals(new ContentsAsked.Asked(SHELF, KS.element(), true, true,
-                Optional.of(new ContentsAsked.Around(KS, false))), keyed.asked(false));
-        assertEquals(new ContentsAsked.Asked(SHELF, KS.element(), false, true,
-                Optional.of(new ContentsAsked.Around(KS, false))), keyed.asked(true));
+        assertEquals(List.of(
+                new ContentsAsked.Asked(SHELF, KS.element(), true, true,
+                        Optional.of(new ContentsAsked.Around(KS, false, 0, 2))),
+                new ContentsAsked.Asked(SHELF, KS.element(), false, true,
+                        Optional.of(new ContentsAsked.Around(KS, false, 2, Integer.MAX_VALUE)))),
+                keyed.asked(2));
+        assertEquals(List.of(new ContentsAsked.Asked(SHELF, KS.element(), false, true,
+                        Optional.of(ContentsAsked.Around.over(KS, false)))),
+                keyed.asked(0), "none counted, so every key is kept out");
 
         TermPath others = TermPath.of("others");
         ACountHandedOn held = ACountHandedOn.of(KS, some(others, others.element(), KS.element(),
                 true, false)).orElseThrow();
         assertEquals(new ContentsAsked.Asked(others, KS.element(), false, false,
-                Optional.of(new ContentsAsked.Around(KS, false))), held.asked(false),
+                Optional.of(new ContentsAsked.Around(KS, false, 0, 1))), held.asked(1).getFirst(),
                 "counted where no element of it is the value, so it holds none equal to it");
+    }
+
+    /**
+     * Handed the first element counted of two the list was built with: the map is to hold the key
+     * of the first and none equal to the second's.
+     */
+    @Test
+    void aCountOfOneOfTwoHandsTheFirstAndKeepsTheSecondOut() {
+        ContentsAsked asked = new ContentsAsked(ACountHandedOn.of(KS, some(SHELF, SHELF.key(),
+                KS.element(), true, true)).orElseThrow().asked(1));
+        ContainerContents contents = resolved(asked, "shelf", ksBuiltAs("a", "b"))
+                .contentsOf(SHELF, _ -> null);
+
+        assertNotNull(contents);
+        assertEquals(List.of("\"a\""), contents.keysEachFiled().stream()
+                .map(FixtureTemplate::text).toList());
+        assertEquals(List.of("\"b\""), contents.keysKeptOut().stream()
+                .map(FixtureTemplate::text).toList());
+    }
+
+    /**
+     * The count a container is composed at is the one walked — the one a caller named, where it
+     * named one out of several — and not the fewest the search is about.
+     */
+    @Test
+    void theCountComposedIsTheOneWalked() {
+        NumericSet notTwo = new NumericSet.AwayFrom(List.of(Count.of(2)));
+        assertEquals(OptionalInt.of(1), ACountHandedOn.counted(
+                AskedAt.aNumberOutOf(notTwo, Count.of(1), Carrier.WHOLE)));
+        assertEquals(OptionalInt.of(0), ACountHandedOn.counted(
+                AskedAt.theClass(notTwo, Carrier.WHOLE)));
     }
 
     /** A statement that is no entry or element of another container being the value hands on

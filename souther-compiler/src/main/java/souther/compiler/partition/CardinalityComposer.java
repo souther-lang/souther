@@ -122,7 +122,11 @@ final class CardinalityComposer {
         }
         if (standingAt.isEmpty() && counts.stream().allMatch(each -> ACountHandedOn.of(
                 container, each.count().meeting()).isPresent())) {
-            return handingOn(asked, size, view, reading);
+            List<OptionalInt> meeting = new ArrayList<>();
+            for (RealizationTarget.ACount each : counts) {
+                meeting.add(ACountHandedOn.counted(demands.get(each)));
+            }
+            return handingOn(asked, meeting, size, view, reading);
         }
         Element element = Element.of(counts, container);
         if (element == null) {
@@ -238,36 +242,52 @@ final class CardinalityComposer {
     }
 
     /**
-     * Containers counted only for statements that hold of other containers, at sizes where every
-     * element meeting each of them — or none, where none is a count asked of it — is a count
-     * asked.
+     * Containers counted only for statements that hold of other containers, with as many elements
+     * meeting each as {@code meeting} says, and at every size that leaves room for them.
      *
-     * <p>Which elements it holds is nothing the statements turn on: each holds of an element by what
-     * another container is made to hold for it ({@link ACountHandedOn}). So a container of each size
-     * that meets the counts this way is offered, holding whatever the element's own rules admit, and
-     * what it comes to beside is said as written some of: a count met by some elements and not by
-     * others is not written here, so composing nothing is no answer about the model.
+     * <p>Which elements meet a statement is nothing the elements themselves turn on: each meets it
+     * by what another container is made to hold for it, and that container is handed what makes the
+     * first so many meet it and the rest not ({@link ACountHandedOn}). So a container of each size
+     * from the most counted up is offered, holding whatever the element's own rules admit, and
+     * what it comes to beside is said as written some of: elements this offers that one value
+     * repeats cannot be counted for some and not others, and which elements a row could hold
+     * instead is not walked here, so composing nothing is no answer about the model.
+     *
+     * @param meeting how many elements meet each count's statement, in the order of {@code asked}:
+     *                what {@link ACountHandedOn#counted} says of the number each is asked at, and
+     *                nothing where it says nothing
      */
-    private static TermRealizations.Realization handingOn(List<Asked> asked, NumericSet size,
-                                                          TypeView view,
+    private static TermRealizations.Realization handingOn(List<Asked> asked,
+                                                          List<OptionalInt> meeting,
+                                                          NumericSet size, TypeView view,
                                                           RuleReadingContext reading) {
         List<FixtureTemplate> built = new ArrayList<>();
         Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
+        int least = 0;
+        for (int i = 0; i < meeting.size(); i++) {
+            // No count up to the most elements a container for one is composed with: the figure
+            // stopped it, and is said.
+            if (meeting.get(i).isEmpty()) {
+                return new TermRealizations.Realization.Stopped(CompositionShortfall.of(
+                        Set.of(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH),
+                        Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT), Set.of()));
+            }
+            if (!(asked.get(i) instanceof Asked.SoManyMeeting count)
+                    || !count.asMany(meeting.get(i).getAsInt())) {
+                return new TermRealizations.Realization.Unexhausted(CompositionShortfall.of(
+                        Set.of(), Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT),
+                        Set.of()), "no count walked of what is counted is one a container"
+                        + " composed with that many meeting it is asked for");
+            }
+            least = Math.max(least, meeting.get(i).getAsInt());
+        }
         offering:
-        for (int elements = 0; ; elements++) {
+        for (int elements = least; ; elements++) {
             if (elements > MOST_ELEMENTS) {
                 refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
                 break;
             }
             if (size != null && !size.holds(Count.of(elements), Carrier.WHOLE)) {
-                continue;
-            }
-            boolean meets = true;
-            for (Asked one : asked) {
-                meets &= one instanceof Asked.SoManyMeeting count
-                        && count.asMany(ACountHandedOn.metByNone(count.wanted()) ? 0 : elements);
-            }
-            if (!meets) {
                 continue;
             }
             for (FixtureTemplate bare
@@ -292,8 +312,8 @@ final class CardinalityComposer {
         if (!rest.figures().isEmpty()) {
             return new TermRealizations.Realization.Stopped(rest);
         }
-        return new TermRealizations.Realization.Unexhausted(rest, "no size of the container has"
-                + " every element meeting what is counted, or none of them, at a count asked");
+        return new TermRealizations.Realization.Unexhausted(rest, "no size of the container the"
+                + " rules leave has room for as many elements as are counted");
     }
 
     /**

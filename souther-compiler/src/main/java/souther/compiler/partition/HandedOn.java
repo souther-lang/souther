@@ -53,7 +53,7 @@ final class HandedOn {
         return switch (built) {
             case Generator.CandidateCheck.Built.Refused(String why) -> new Came.Refused(why);
             case Generator.CandidateCheck.Built.Value(var observed) ->
-                    switch (ObservedFixtures.handedOn(inputs, observed, read, reading)) {
+                    switch (ObservedFixtures.handedOn(inputs, observed, read, written, reading)) {
                         case ObservedFixtures.Writing.Written<ValuesHandedOn>(var at) ->
                                 new Came.Values(at);
                         case ObservedFixtures.Writing.NotWritable<ValuesHandedOn>(String why) ->

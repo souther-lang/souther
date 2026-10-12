@@ -8571,6 +8571,9 @@ public final class Generator {
                         why);
             }
         }
+        // A demand left open is composed without, so whatever this search comes to is said with
+        // it: a row the search did not find may be one meeting it.
+        here.notComposed().ifPresent(found::notHandedOn);
         ConstructionPlan.ContentsComposed handedHere =
                 handed.asked().composedUnder(root.head(), here);
         Map<TermPath, List<FixtureTemplate>> fixed = new LinkedHashMap<>(decided);

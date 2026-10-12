@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
+import java.util.function.Supplier;
 
 /**
  * A value the boundary built, written as a fixture that builds it again.
@@ -62,16 +63,23 @@ final class ObservedFixtures {
      * <p>At a position read in each element, every value there, with the element it was read in,
      * and none where the value built has nothing there: a list holding no element has nothing at
      * its element, and that is an answer. How many of them a container is handed is the demand's
-     * to say ({@link ContentsAsked#resolvedFor}). At a position read as one value, one value, and
-     * a position at no value of the one built or at as many as a container holds is said as
-     * having no one value — before anything is written, since nothing would be handed. A path the
-     * value built has no such position at, and a value there that cannot be written, are said as
-     * why.
+     * to say ({@link ContentsAsked#resolvedFor}). At a position read as one value, one value: the
+     * only one there, or where it stands in each of several elements, the one equal to what the
+     * value was composed with there ({@code planned}) — the element some element was asked of is
+     * the one the value was composed around, and the others are whatever stands beside it. A
+     * position at no value of the one built, or at several none of which is that, has no one value
+     * and is said as that. A path the value built has no such position at, and a value there that
+     * cannot be written, are said as why.
+     *
+     * @param planned what the value was composed with at each position it was, asked for only
+     *                where a position read as one value stands in several elements
      */
     static Writing<ValuesHandedOn> handedOn(BehaviorInputs inputs, ObservedValue built,
                                             ContentsAsked.ToHandOn read,
+                                            Supplier<Map<TermPath, FixtureTemplate>> planned,
                                             RuleReadingContext reading) {
         Map<TermPath, List<ValuesHandedOn.Standing>> values = new LinkedHashMap<>();
+        Map<TermPath, FixtureTemplate> composedWith = null;
         for (TermPath path : read.positions()) {
             if (!(inputs.observedAt(built, path)
                     instanceof WalkResult.Reached<List<BehaviorInputs.ObservedAt>>(var found))) {
@@ -79,6 +87,18 @@ final class ObservedFixtures {
                         "`" + path + "` is not a position the value built has");
             }
             if (read.one().contains(path) && found.size() != 1) {
+                if (found.size() > 1) {
+                    if (composedWith == null) {
+                        composedWith = planned.get();
+                    }
+                    switch (theOneComposed(found, composedWith.get(path), reading)) {
+                        case Writing.Written<ValuesHandedOn.Standing>(var one) -> {
+                            values.put(path, List.of(one));
+                            continue;
+                        }
+                        case Writing.NotWritable<ValuesHandedOn.Standing> _ -> { }
+                    }
+                }
                 return new Writing.NotWritable<>(found.isEmpty()
                         ? "nothing stands at `" + path + "` in the value built"
                         : "`" + path + "` is at each of " + found.size()
@@ -116,6 +136,27 @@ final class ObservedFixtures {
             elements.put(container, held);
         }
         return new Writing.Written<>(new ValuesHandedOn(values, elements));
+    }
+
+    /**
+     * The one of {@code found} written as {@code composedWith}, or why there is none: nothing was
+     * composed there, or none of them is it. Compared by the text, as two values written alike are
+     * compared wherever a row is put together ({@link Witnesses#holding}).
+     */
+    private static Writing<ValuesHandedOn.Standing> theOneComposed(
+            List<BehaviorInputs.ObservedAt> found, FixtureTemplate composedWith,
+            RuleReadingContext reading) {
+        if (composedWith == null) {
+            return new Writing.NotWritable<>("nothing was composed there");
+        }
+        for (BehaviorInputs.ObservedAt one : found) {
+            if (of(one.value(), one.type(), reading)
+                    instanceof Writing.Written<FixtureTemplate>(FixtureTemplate written)
+                    && written.text().equals(composedWith.text())) {
+                return new Writing.Written<>(new ValuesHandedOn.Standing(one.at(), written));
+            }
+        }
+        return new Writing.NotWritable<>("none of them is what was composed there");
     }
 
     /** {@code value}, standing at a position the reading exposes as {@code type}, written as a
