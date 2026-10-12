@@ -299,9 +299,10 @@ public final class PublicationOrders {
                     CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
                     CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED,
                     CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT,
+                    CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                     CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED,
                     CompositionBudget.WAYS_UNDER_THE_CASES_TRIED,
-                    CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO,
+                    CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG,
                     CompositionBudget.PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
                     CompositionBudget.CHOICES_OF_INPUT_NUMBERS_LOOKED_AT,
                     CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
@@ -313,6 +314,7 @@ public final class PublicationOrders {
                     // stopped the search. Each sits by the trying figure it was split from.
                     CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT,
                     CompositionBudget.PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT,
+                    CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
                     // Beside the one above it, and for the same reason: both bound how many times
                     // the thing a reader asked about is tried, where the ones before them bound
                     // what building one value is worth.

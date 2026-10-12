@@ -20,6 +20,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -363,6 +364,128 @@ public sealed interface RowDemand {
         return Collections.unmodifiableSet(out);
     }
 
+    /**
+     * What an element is to meet: everything one of {@code ways} asks, whichever of them it is.
+     *
+     * <p>A disjunction kept inside the quantifier, because a quantifier does not distribute over
+     * one. Some element meeting one of two things is some element meeting the first or some
+     * element meeting the second, but every element meeting one of two things is not every element
+     * meeting the same one of them: a container holding an element of each kind meets the first
+     * and neither of the second. Taken apart into one demand per way, a row whose elements differ
+     * would be past the whole and along none of its ways — so the ways stay here, and which of them
+     * each element meets is the composing's to choose.
+     *
+     * <p>Each way is a conjunction in the words an element is written in. A way that asks nothing
+     * is every element, and a demand with none is no element; neither is one of these, since the
+     * reading settles both before a demand is made ({@link DemandReading}).
+     *
+     * <p>A value, compared by its ways, and hashed once: what a reading of a statement asks is
+     * gathered into sets at every level a disjunction nests at, and hashed afresh each time, the
+     * ways inside were walked once per level.
+     */
+    static final class AnElementMeets {
+
+        /** Each way an element may meet it, each once and in the order the reading kept them; one
+         *  or more, and none of them empty. */
+        private final List<List<OfAnElement>> ways;
+        private final int hash;
+        /** What {@link #positions} came to last, or null before it is asked. */
+        private volatile PositionsOf positions;
+
+        AnElementMeets(List<List<OfAnElement>> ways) {
+            this.ways = ways.stream().map(List::copyOf).distinct().toList();
+            if (this.ways.isEmpty() || this.ways.stream().anyMatch(List::isEmpty)) {
+                throw new IllegalArgumentException("what an element meets is one or more ways,"
+                        + " each asking something: " + this.ways);
+            }
+            this.hash = this.ways.hashCode();
+        }
+
+        /** Each way an element may meet it. */
+        public List<List<OfAnElement>> ways() {
+            return ways;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof AnElementMeets that && hash == that.hash
+                    && ways.equals(that.ways));
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public String toString() {
+            return "AnElementMeets[ways=" + ways + "]";
+        }
+
+        /** What an element asked only {@code asked} meets. */
+        static AnElementMeets only(List<OfAnElement> asked) {
+            return new AnElementMeets(List.of(asked));
+        }
+
+        /** Whether an element meets this one way only, which is a way a row written alike
+         *  writes into every element without choosing. */
+        public boolean oneWay() {
+            return ways.size() == 1;
+        }
+
+        /**
+         * The one way an element meets this.
+         *
+         * <p>Asked of a demand an element meets one way, which is every demand a row written with
+         * its elements alike is composed against: one with several ways is written by choosing one
+         * of them for every element ({@link ElementsWrittenAlike}), and a reader composing alike
+         * passes over one that was not chosen.
+         */
+        public List<OfAnElement> theWay() {
+            if (!oneWay()) {
+                throw new IllegalStateException("an element meets this " + ways.size()
+                        + " ways, and which of them a row's elements meet is chosen before this is"
+                        + " asked: " + ways);
+            }
+            return ways.getFirst();
+        }
+
+        /**
+         * Every position an element meeting this turns on, along whichever way.
+         *
+         * <p>Kept for the element last asked about, which is the element of the one container the
+         * demand is over every time but where a caller names another: a walk of the ways a way is
+         * looked along asks it of every demand at every level a disjunction nests at.
+         */
+        public Set<TermPath> positions(TermPath element) {
+            PositionsOf had = positions;
+            if (had != null && had.element().equals(element)) {
+                return had.at();
+            }
+            Set<TermPath> out = new LinkedHashSet<>();
+            ways.forEach(way -> way.forEach(each -> out.addAll(each.positions(element))));
+            Set<TermPath> at = Collections.unmodifiableSet(out);
+            positions = new PositionsOf(element, at);
+            return at;
+        }
+
+        /** The positions an element meeting this turns on, as the element at {@code element}. */
+        private record PositionsOf(TermPath element, Set<TermPath> at) {}
+    }
+
+    /**
+     * Whether a row whose elements are written alike writes {@code demand} as it stands: every
+     * demand but one an element meets several ways, which is written once one of them is chosen
+     * for every element ({@link ElementsWrittenAlike}).
+     */
+    static boolean writtenAlikeAsItStands(OfACondition demand) {
+        return switch (demand) {
+            case Exists exists -> exists.ofAnElement().oneWay();
+            case ForAll every -> every.ofEachElement().oneWay();
+            case Relational _, ATruth _, SoMany _, ForTheRun _ -> true;
+        };
+    }
+
     /** The relations among {@code asked}, which are what a region places. */
     static List<Relational> relationsAmong(List<OfAnElement> asked) {
         List<Relational> out = new ArrayList<>();
@@ -374,10 +497,10 @@ public sealed interface RowDemand {
         return List.copyOf(out);
     }
 
-    /** The numbers {@code asked} is written with. */
-    private static Set<NumericTerm> termsOf(List<OfAnElement> asked) {
+    /** The numbers {@code asked} is written with, along every way. */
+    private static Set<NumericTerm> termsOf(AnElementMeets asked) {
         Set<NumericTerm> out = new LinkedHashSet<>();
-        relationsAmong(asked).forEach(each -> out.addAll(each.terms()));
+        asked.ways().forEach(way -> relationsAmong(way).forEach(each -> out.addAll(each.terms())));
         return out;
     }
 
@@ -389,17 +512,17 @@ public sealed interface RowDemand {
      * so a step that moves how many it holds may take away the element that met what was asked,
      * or bring in one that does not — whatever it did to the element's own numbers.
      */
-    private static Set<TermPath> positionsOf(TermPath container, List<OfAnElement> asked) {
+    private static Set<TermPath> positionsOf(TermPath container, AnElementMeets asked) {
         Set<TermPath> out = new LinkedHashSet<>();
         out.add(container);
-        asked.forEach(each -> out.addAll(each.positions(container.element())));
+        out.addAll(asked.positions(container.element()));
         return out;
     }
 
-    /** The positions {@code asked} only reads the value at. */
-    private static Set<TermPath> valuesReadOf(List<OfAnElement> asked) {
+    /** The positions {@code asked} only reads the value at, along every way. */
+    private static Set<TermPath> valuesReadOf(AnElementMeets asked) {
         Set<TermPath> out = new LinkedHashSet<>();
-        asked.forEach(each -> out.addAll(each.valuesRead()));
+        asked.ways().forEach(way -> way.forEach(each -> out.addAll(each.valuesRead())));
         return Collections.unmodifiableSet(out);
     }
 
@@ -427,35 +550,40 @@ public sealed interface RowDemand {
      *
      * @param container   the container an element of which is to meet them
      * @param ofAnElement what the element is to meet, every one of it about the element and what
-     *                    is inside it, and the numbers beside it a relation reads
+     *                    is inside it, and the numbers beside it a relation reads — along one of
+     *                    several ways where the element may meet it more than one way
      * @param holdingOne  the container's size at least one, which is a number of this input: a
      *                    container an element of which is asked something is a position, and
      *                    every type a container can be measures how many it holds
+     * @param counted     how many elements meet the statement this is, where this is the whole
+     *                    of what the quantifier asks: some element meeting it is that count being
+     *                    one or more, which is how a container whose elements differ is composed
+     *                    for it ({@link CardinalityComposer}). Empty where this is part of what
+     *                    the quantifier asks, or no count of the statement is read
      */
-    record Exists(TermPath container, List<OfAnElement> ofAnElement, Relational holdingOne)
+    record Exists(TermPath container, AnElementMeets ofAnElement, Relational holdingOne,
+                  Optional<Quantity.HowManyMeet> counted)
             implements OfACondition {
 
         public Exists {
             Objects.requireNonNull(container, "a container an element of which meets them");
+            Objects.requireNonNull(ofAnElement, "what the element meets");
             Objects.requireNonNull(holdingOne, "the container holding one, which it does");
-            ofAnElement = List.copyOf(ofAnElement);
-            if (ofAnElement.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "an element meeting nothing in particular is the container holding one");
-            }
+            Objects.requireNonNull(counted, "the count it is, or that it is none");
             // The value is written into the container as an element of its own, so what else is
             // asked of the element would be asked of another one: some element being `v` and
             // meeting `p` is not `v` written beside an element meeting `p`.
-            if (ofAnElement.size() > 1
-                    && ofAnElement.stream().anyMatch(each -> each instanceof SameAs)) {
-                throw new IllegalArgumentException("an element that is another position's value"
-                        + " is asked nothing beside it: " + ofAnElement);
+            for (List<OfAnElement> way : ofAnElement.ways()) {
+                if (way.size() > 1 && way.stream().anyMatch(each -> each instanceof SameAs)) {
+                    throw new IllegalArgumentException("an element that is another position's"
+                            + " value is asked nothing beside it: " + way);
+                }
             }
         }
 
-        /** The relations among what the element is to meet. */
+        /** The relations among what the element is to meet, along its one way. */
         public List<Relational> relations() {
-            return relationsAmong(ofAnElement);
+            return relationsAmong(ofAnElement.theWay());
         }
 
         /** The numbers the element is written with, which are what a row composed for this
@@ -492,26 +620,30 @@ public sealed interface RowDemand {
      * @param container     the container every element of which is to meet them
      * @param ofEachElement what every element is to meet, which may be about what stands beside
      *                      the element as much as about the element: a container holding none
-     *                      meets all of it whatever that says
+     *                      meets all of it whatever that says. Along one of several ways where an
+     *                      element may meet it more than one way, each element along its own
      * @param holdingNone   the container's size at most nought — the way to meet this with no
      *                      element at all, which is a number of this input as {@link Exists}'s is
+     * @param counted       how many elements meet the statement whose denial every element is
+     *                      to meet, where this is the whole of what the quantifier asks: every
+     *                      element meeting the denial is that count being nought. Empty where
+     *                      this is part of what the quantifier asks, or no count of the statement
+     *                      is read
      */
-    record ForAll(TermPath container, List<OfAnElement> ofEachElement, Relational holdingNone)
+    record ForAll(TermPath container, AnElementMeets ofEachElement, Relational holdingNone,
+                  Optional<Quantity.HowManyMeet> counted)
             implements OfACondition {
 
         public ForAll {
             Objects.requireNonNull(container, "a container every element of which meets them");
+            Objects.requireNonNull(ofEachElement, "what every element meets");
             Objects.requireNonNull(holdingNone, "the container holding none, which it may");
-            ofEachElement = List.copyOf(ofEachElement);
-            if (ofEachElement.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "every element meeting nothing in particular is no demand on a row");
-            }
+            Objects.requireNonNull(counted, "the count it is, or that it is none");
         }
 
-        /** The relations among what every element is to meet. */
+        /** The relations among what every element is to meet, along its one way. */
         public List<Relational> relations() {
-            return relationsAmong(ofEachElement);
+            return relationsAmong(ofEachElement.theWay());
         }
 
         /** The numbers the element is written with and the container's size, which are what a

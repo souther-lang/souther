@@ -82,6 +82,11 @@ public enum CompositionBudget {
      *  built. */
     SHARES_A_COUNT_IS_TRIED_AT(4096),
 
+    /** How many values of an element of a type that has only so many are read for the counts its
+     *  container is composed for, each read for every statement the counts are of. Past it the
+     *  values left are not offered, and the container is composed of the ones read. */
+    VALUES_AN_ELEMENT_IS_CHOSEN_AMONG(256),
+
     /** How many ways down to the number a total is read from are tried. Its own figure and not
      *  {@link #SHAPES_OF_A_TOTAL_OFFERED}: a way that plans is not a container that was offered, and
      *  charging one to the other leaves a case never tried because an earlier one planned and built
@@ -94,11 +99,18 @@ public enum CompositionBudget {
      *  further and is carried out with the figure. */
     WAYS_UNDER_THE_CASES_TRIED(8),
 
-    /** How many ways one way to a border is split into where conditions on it came out one of
-     *  several ways, each a search looks along. What multiplies here is the alternatives of every
-     *  such condition on the way; past it the way is looked along whole, which narrows by none of
-     *  them, and nothing is proved of it from its alternatives. */
-    WAYS_A_WAY_IS_SPLIT_INTO(16),
+    /** How many ways a search looks along where conditions on the way to a border came out one of
+     *  several ways, each a row is composed along whole. Every way of taking their open
+     *  alternatives together where they are no more than this; past it, each open alternative
+     *  once beside the others' first ({@link OneOfEach}), and the way looked along whole after
+     *  them, which narrows by none of them and is said to have been. */
+    WAYS_A_WAY_IS_LOOKED_ALONG(16),
+
+    /** How many alternatives of those conditions are taken in, one beside another, to find the
+     *  ways that are open. The walking beside the looking: an alternative that closes against what
+     *  was taken before it is looked at and is no way to compose along, and costs a putting
+     *  together of what is asked and not a row. A walk this stopped proves nothing closed. */
+    CHOICES_ON_A_WAY_LOOKED_AT(4096),
 
     /**
      * How many values of the numbers of the input a statement about an answer names are tried, each
@@ -388,10 +400,11 @@ public enum CompositionBudget {
             case PLACES_A_PAIR_IS_LOOKED_AT -> PLACES_A_PAIR_IS_TRIED_AT;
             case PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT ->
                     VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT;
+            case CHOICES_ON_A_WAY_LOOKED_AT -> WAYS_A_WAY_IS_LOOKED_ALONG;
             case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
                  ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,
                  ELEMENTS_A_COUNT_IS_COMPOSED_WITH, CONTAINERS_A_COUNT_IS_OFFERED,
-                 SHARES_A_COUNT_IS_TRIED_AT,
+                 SHARES_A_COUNT_IS_TRIED_AT, VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                  WAYS_DOWN_TO_A_TOTAL_TRIED, WAYS_UNDER_THE_CASES_TRIED,
                  PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
                  PLACES_A_PAIR_IS_TRIED_AT, STEPS_A_SEARCH_MAY_TAKE,
@@ -399,7 +412,7 @@ public enum CompositionBudget {
                  LEVELS_A_SIDE_IS_ASKED_AT, TIMES_THE_RULES_ARE_ASKED_AGAIN,
                  VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,
                  PATHS_OF_A_DECISION_READ, READINGS_OF_ONE_CONDITION,
-                 WAYS_A_WAY_IS_SPLIT_INTO,
+                 WAYS_A_WAY_IS_LOOKED_ALONG,
                  DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,
                  CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
                  CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,

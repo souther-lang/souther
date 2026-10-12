@@ -22,7 +22,9 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -300,9 +302,13 @@ final class AStatementAtARow {
      *
      * <p>A relation over a position the row wrote nothing at holds of no value there, so the
      * statement fails there.
+     *
+     * <p>Each part once at the row, by its spelling: a statement where a line decides holds the
+     * same quantifier and the same relation in many places, and each comes to one answer at one
+     * row wherever it stands.
      */
     Answer at(BorderQuantity.Observation row) {
-        return at(stated, row);
+        return at(stated, row, new HashMap<>());
     }
 
     /**
@@ -375,7 +381,19 @@ final class AStatementAtARow {
         }
     }
 
-    private Answer at(Proposition part, BorderQuantity.Observation row) {
+    private Answer at(Proposition part, BorderQuantity.Observation row,
+                      Map<String, Answer> answered) {
+        Answer known = answered.get(part.key());
+        if (known != null) {
+            return known;
+        }
+        Answer answer = atOnce(part, row, answered);
+        answered.put(part.key(), answer);
+        return answer;
+    }
+
+    private Answer atOnce(Proposition part, BorderQuantity.Observation row,
+                          Map<String, Answer> answered) {
         return switch (part) {
             case Proposition.Always(boolean holds) -> holds ? Answer.HOLDS : Answer.FAILS;
             // Of the element this row is read with chosen: the last of those holding the value it
@@ -401,9 +419,9 @@ final class AStatementAtARow {
                                        DecisionSubject.AnInput(TermPath other), boolean holds,
                                        String _) -> heldAs(holds, theSame(one, other, row));
             case Proposition.All all -> joined(all.parts().stream()
-                    .map(each -> at(each, row)).toList(), true);
+                    .map(each -> at(each, row, answered)).toList(), true);
             case Proposition.Any any -> joined(any.parts().stream()
-                    .map(each -> at(each, row)).toList(), false);
+                    .map(each -> at(each, row, answered)).toList(), false);
             case Proposition.Some some -> {
                 OverTheElements over = elements.get(keyOf(some));
                 HowManyAtARow counted = over.ofTheElement().howManyMeetIn(over.container(), row);
@@ -420,12 +438,7 @@ final class AStatementAtARow {
                 if (counted == null) {
                     yield new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
                 }
-                ExactRatio weight = affine.form().coefs().values().iterator().next();
-                Rel rel = compared.holds() ? affine.proposition()
-                        : affine.proposition().denied();
-                yield counted.whether(n -> weight.times(ExactRatio.of(n))
-                        .flatMap(weighed -> weighed.plus(affine.form().constant()))
-                        .map(sum -> rel.holds(sum.signum())));
+                yield countedAgainst(compared, affine, counted);
             }
             case Proposition.Compared compared when askable(compared) -> {
                 Answer held = switch (relations.get(compared.relation())) {
@@ -440,6 +453,330 @@ final class AStatementAtARow {
                  Proposition.OnAnApplication _, Proposition.SomeReachable _ -> notAsked(part);
             case Proposition.Carried carried -> throw carried.handedToAReader();
         };
+    }
+
+    /** A count of elements, held against the number {@code compared} holds it against. */
+    private static Answer countedAgainst(Proposition.Compared compared, Relation.Affine affine,
+                                         HowManyAtARow counted) {
+        ExactRatio weight = affine.form().coefs().values().iterator().next();
+        Rel rel = compared.holds() ? affine.proposition() : affine.proposition().denied();
+        return counted.whether(n -> weight.times(ExactRatio.of(n))
+                .flatMap(weighed -> weighed.plus(affine.form().constant()))
+                .map(sum -> rel.holds(sum.signum())));
+    }
+
+    /**
+     * The one container {@code stated} reads nothing beside, or null where it reads anything else
+     * or none: what some of its elements meet, how many do, and what the element a reading of a
+     * row stands at holds — every position it reads inside that container.
+     *
+     * <p>Read off the statement as written, and not off the statement put to rows: which
+     * container it is about is all that is asked, and putting it to rows is the walk of every
+     * relation it holds.
+     */
+    static TermPath containerItIsAbout(Proposition stated) {
+        Set<TermPath> about = new LinkedHashSet<>();
+        Set<TermPath> read = new LinkedHashSet<>();
+        if (!readsOf(stated, about, read)) {
+            return null;
+        }
+        numbersOf(stated).forEach(term -> read.add(term.subjectPath()));
+        for (TermPath each : read) {
+            if (!each.insideAContainer()) {
+                return null;
+            }
+            about.add(each.outermostContainer());
+        }
+        return about.size() == 1 ? about.iterator().next() : null;
+    }
+
+    /**
+     * Adds what {@code stated} reads of the input other than its numbers: the containers its
+     * quantifiers and counts are over, to {@code about} where the container is a parameter's own
+     * and to {@code read} where it is inside another, and every position it asks of its own value
+     * to {@code read}. False where it reads something no position of the input is.
+     */
+    private static boolean readsOf(Proposition stated, Set<TermPath> about, Set<TermPath> read) {
+        return switch (stated) {
+            case Proposition.All all ->
+                    all.parts().stream().allMatch(part -> readsOf(part, about, read));
+            case Proposition.Any any ->
+                    any.parts().stream().allMatch(part -> readsOf(part, about, read));
+            case Proposition.Some some -> overElementsOf(some.container().inputPosition(), about,
+                    read) && readsOf(some.ofTheElement(), about, read);
+            case Proposition.Compared compared
+                    when compared.relation() instanceof Relation.Affine affine
+                    && countIn(affine) instanceof Quantity.HowManyMeet count ->
+                    overElementsOf(count.container().inputPosition(), about, read)
+                            && readsOf(count.ofTheElement(), about, read);
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, String _) -> {
+                read.add(at);
+                yield true;
+            }
+            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _,
+                                     String _) -> {
+                read.add(at);
+                yield true;
+            }
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft _,
+                                     boolean _, String _) -> {
+                read.add(at);
+                yield true;
+            }
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
+                                       DecisionSubject.AnInput(TermPath other), boolean _,
+                                       String _) -> {
+                read.add(one);
+                read.add(other);
+                yield true;
+            }
+            case Proposition.Compared _, Proposition.Always _, Proposition.LastToHold _ -> true;
+            case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
+                 Proposition.SameValue _, Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _ -> false;
+            case Proposition.Carried carried -> throw carried.handedToAReader();
+        };
+    }
+
+    /** {@code container}, which a quantifier or a count is over, filed as {@link #readsOf}
+     *  says. */
+    private static boolean overElementsOf(TermPath container, Set<TermPath> about,
+                                          Set<TermPath> read) {
+        if (container == null) {
+            return false;
+        }
+        if (container.insideAContainer()) {
+            read.add(container);
+        } else {
+            about.add(container);
+        }
+        return true;
+    }
+
+    /**
+     * What this says of each element of {@code container}, by what it is read as: what some element
+     * meets, or what the elements a count counts meet.
+     */
+    Map<String, AStatementAtARow> ofEachElementOf(TermPath container) {
+        Map<String, AStatementAtARow> out = new LinkedHashMap<>();
+        elements.forEach((key, over) -> {
+            if (over.container().equals(container)) {
+                out.put(key, over.ofTheElement());
+            }
+        });
+        return out;
+    }
+
+    /**
+     * This statement read as what it comes to from how many elements of {@code container} meet
+     * each of {@link #ofEachElementOf} — the {@code i}-th of them where {@code index} files it at
+     * {@code i} — for containers of up to {@code most} elements.
+     *
+     * <p>For choosing elements before any row holds them, so it is read once and put to every
+     * choice: a part about anything but how many elements meet something is not known, and a part
+     * standing in many places is one part.
+     */
+    Counting counting(TermPath container, Map<String, Integer> index, int most) {
+        Counting.Built built = new Counting.Built(most);
+        int root = built.node(stated, this, container, index);
+        return built.done(root);
+    }
+
+    /**
+     * A statement as what it comes to from how many elements meet each thing it says of one
+     * element: holding, failing, or not known — the last where a part is about anything else, or
+     * where the counts leave room for it to come out both ways.
+     *
+     * <p>Each part once, by its spelling, so a statement holding one quantifier in many places
+     * reads it once per choice.
+     */
+    static final class Counting {
+
+        /** It holds whatever else the elements meet. */
+        static final byte HOLDS = 1;
+        /** It fails whatever else the elements meet. */
+        static final byte FAILS = 0;
+        /** It may come out either way. */
+        static final byte EITHER = 2;
+
+        /** What a part is, as this reads it. */
+        private enum Kind {
+            /** Every one of its parts. */
+            ALL,
+            /** Some one of its parts. */
+            ANY,
+            /** Some element meeting a thing said of one, or none. */
+            SOME,
+            /** How many elements meet a thing said of one, held against a number. */
+            COUNTED,
+            /** Its answer, whatever the elements are. */
+            SETTLED
+        }
+
+        private final Kind[] kind;
+        private final int[][] parts;
+        /** The thing said of an element a part counts, for a quantifier or a count. */
+        private final int[] counts;
+        /** For a quantifier, whether it is some element; for a settled part, its answer. */
+        private final byte[] answer;
+        /** For a count, what it comes to at each number of elements, {@link #EITHER} where that
+         *  number could not be held against it. */
+        private final byte[][] byNumber;
+        private final int root;
+        /** What each part came to in the asking under way, cleared before each: one of these is
+         *  asked by one walk at a time, and asked at every step of it. */
+        private final byte[] known;
+
+        private Counting(Built built, int root) {
+            int size = built.kind.size();
+            this.kind = new Kind[size];
+            this.parts = new int[size][];
+            this.counts = new int[size];
+            this.answer = new byte[size];
+            this.byNumber = new byte[size][];
+            for (int i = 0; i < size; i++) {
+                kind[i] = built.kind.get(i);
+                parts[i] = built.parts.get(i);
+                counts[i] = built.counts.get(i);
+                answer[i] = built.answer.get(i);
+                byNumber[i] = built.byNumber.get(i);
+            }
+            this.root = root;
+            this.known = new byte[size];
+        }
+
+        /**
+         * What the statement comes to where {@code meeting} elements meet each thing it says of
+         * one element and up to {@code more} besides.
+         */
+        byte at(int[] meeting, int[] more) {
+            Arrays.fill(known, (byte) -1);
+            return at(root, meeting, more, known);
+        }
+
+        private byte at(int node, int[] meeting, int[] more, byte[] known) {
+            if (known[node] >= 0) {
+                return known[node];
+            }
+            byte out = switch (kind[node]) {
+                case ALL, ANY -> {
+                    byte settling = kind[node] == Kind.ALL ? FAILS : HOLDS;
+                    byte either = kind[node] == Kind.ALL ? HOLDS : FAILS;
+                    for (int part : parts[node]) {
+                        byte one = at(part, meeting, more, known);
+                        if (one == settling) {
+                            either = settling;
+                            break;
+                        }
+                        if (one == EITHER) {
+                            either = EITHER;
+                        }
+                    }
+                    yield either;
+                }
+                case SOME -> {
+                    int i = counts[node];
+                    boolean held = answer[node] == HOLDS;
+                    yield meeting[i] > 0 ? (held ? HOLDS : FAILS)
+                            : more[i] == 0 ? (held ? FAILS : HOLDS) : EITHER;
+                }
+                case COUNTED -> {
+                    int i = counts[node];
+                    byte[] table = byNumber[node];
+                    byte first = EITHER;
+                    for (int n = meeting[i]; n <= meeting[i] + more[i]; n++) {
+                        byte here = n < table.length ? table[n] : EITHER;
+                        if (here == EITHER || (n > meeting[i] && here != first)) {
+                            first = EITHER;
+                            break;
+                        }
+                        first = here;
+                    }
+                    yield first;
+                }
+                case SETTLED -> answer[node];
+            };
+            known[node] = out;
+            return out;
+        }
+
+        /** The parts as they are read, each once. */
+        private static final class Built {
+
+            private final int most;
+            private final List<Kind> kind = new ArrayList<>();
+            private final List<int[]> parts = new ArrayList<>();
+            private final List<Integer> counts = new ArrayList<>();
+            private final List<Byte> answer = new ArrayList<>();
+            private final List<byte[]> byNumber = new ArrayList<>();
+            private final Map<String, Integer> read = new HashMap<>();
+
+            Built(int most) {
+                this.most = most;
+            }
+
+            Counting done(int root) {
+                return new Counting(this, root);
+            }
+
+            int node(Proposition part, AStatementAtARow of, TermPath container,
+                     Map<String, Integer> index) {
+                Integer had = read.get(part.key());
+                if (had != null) {
+                    return had;
+                }
+                int out = switch (part) {
+                    case Proposition.Always(boolean holds) ->
+                            add(Kind.SETTLED, null, 0, holds ? HOLDS : FAILS, null);
+                    case Proposition.All all -> add(Kind.ALL, all.parts().stream()
+                            .mapToInt(each -> node(each, of, container, index)).toArray(), 0,
+                            EITHER, null);
+                    case Proposition.Any any -> add(Kind.ANY, any.parts().stream()
+                            .mapToInt(each -> node(each, of, container, index)).toArray(), 0,
+                            EITHER, null);
+                    case Proposition.Some some
+                            when of.elements.get(keyOf(some)) instanceof OverTheElements over
+                            && over.container().equals(container)
+                            && index.containsKey(keyOf(some)) ->
+                            add(Kind.SOME, null, index.get(keyOf(some)),
+                                    some.holds() ? HOLDS : FAILS, null);
+                    case Proposition.Compared compared
+                            when compared.relation() instanceof Relation.Affine affine
+                            && countIn(affine) instanceof Quantity.HowManyMeet count
+                            && of.elements.get(keyOf(count)) instanceof OverTheElements over
+                            && over.container().equals(container)
+                            && index.containsKey(keyOf(count)) ->
+                            add(Kind.COUNTED, null, index.get(keyOf(count)), EITHER,
+                                    byNumber(compared, affine));
+                    default -> add(Kind.SETTLED, null, 0, EITHER, null);
+                };
+                read.put(part.key(), out);
+                return out;
+            }
+
+            /** What a count held against a number comes to at each number of elements. */
+            private byte[] byNumber(Proposition.Compared compared, Relation.Affine affine) {
+                byte[] out = new byte[most + 1];
+                for (int n = 0; n <= most; n++) {
+                    out[n] = switch (countedAgainst(compared, affine,
+                            new HowManyAtARow(n, 0, Set.of()))) {
+                        case Answer.Holds _ -> HOLDS;
+                        case Answer.Fails _ -> FAILS;
+                        case Answer.CouldNotTell _ -> EITHER;
+                    };
+                }
+                return out;
+            }
+
+            private int add(Kind what, int[] of, int count, byte said, byte[] table) {
+                kind.add(what);
+                parts.add(of);
+                counts.add(count);
+                answer.add(said);
+                byNumber.add(table);
+                return kind.size() - 1;
+            }
+        }
     }
 
     /**
@@ -485,10 +822,10 @@ final class AStatementAtARow {
                     }
                     yield answer ? Answer.HOLDS : Answer.FAILS;
                 }
-                // The row put nothing here, as a relation over a position a row left empty fails.
-                case ObservationAtPoint.WroteNothing _ -> Answer.FAILS;
-                case ObservationAtPoint.BelongsToAnotherReading _ ->
-                        new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));
+                // The row put nothing here under this reading, as a relation over a position a row
+                // left empty fails: another reading of the row is where its values here are.
+                case ObservationAtPoint.WroteNothing _,
+                     ObservationAtPoint.BelongsToAnotherReading _ -> Answer.FAILS;
             };
         };
     }
@@ -511,22 +848,25 @@ final class AStatementAtARow {
         if (!(there instanceof Answer.Holds)) {
             return there;
         }
+        // The value this reading holds at the position is there, so nothing of it standing under
+        // the cases is that value being another case — whether the row wrote nothing there at
+        // all, or only the other elements of a container this reading did not choose did.
         return switch (row.at(DeclaredInput.narrowedTo(at, cases))) {
             case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
                     new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
             case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
                 case ObservationAtPoint.Value _ -> Answer.HOLDS;
-                case ObservationAtPoint.WroteNothing _ -> Answer.FAILS;
-                case ObservationAtPoint.BelongsToAnotherReading _ ->
-                        new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));
+                case ObservationAtPoint.WroteNothing _,
+                     ObservationAtPoint.BelongsToAnotherReading _ -> Answer.FAILS;
             };
         };
     }
 
     /**
      * Whether a row put one value at both {@code one} and {@code other}: holding where it is the
-     * same value, failing where it is two or where the row put nothing at either, and not read
-     * where the walk did not get to one of them or what stands there is no value to compare.
+     * same value, failing where it is two or where the row put nothing at either under this
+     * reading, and not read where the walk did not get to one of them or what stands there is no
+     * value to compare.
      */
     private static Answer theSame(TermPath one, TermPath other, BorderQuantity.Observation row) {
         if (!(row.at(one) instanceof WalkResult.Reached<ObservationAtPoint>(
@@ -535,13 +875,9 @@ final class AStatementAtARow {
                 ObservationAtPoint second))) {
             return new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
         }
-        if (first instanceof ObservationAtPoint.WroteNothing
-                || second instanceof ObservationAtPoint.WroteNothing) {
-            return Answer.FAILS;
-        }
         if (!(first instanceof ObservationAtPoint.Value(ObservedValue left))
                 || !(second instanceof ObservationAtPoint.Value(ObservedValue right))) {
-            return new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));
+            return Answer.FAILS;
         }
         // A value any part of which could not be read is no value to be equal or unequal to
         // another.

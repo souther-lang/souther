@@ -164,10 +164,57 @@ public final class StandingAtAPoint {
     public static Met met(MeasuredInput.BorderReading line,
                           List<ObservedInputs> observed, Criterion criterion,
                           List<ConditionOutcomeSite> watched) {
+        return putToRows(line, watched).met(observed, criterion);
+    }
+
+    /**
+     * {@code line} put to rows, for as many rows and points as a caller asks of it: where it
+     * decides and which elements a run meets its rule on are read once, and not once for every
+     * point a row is tried against.
+     *
+     * @param watched as {@link #met} takes it
+     */
+    public static AtALine putToRows(MeasuredInput.BorderReading line,
+                                    List<ConditionOutcomeSite> watched) {
+        return new AtALine(line, watched, whereItDecides(line), metOn(line));
+    }
+
+    /** One line put to rows ({@link #putToRows}). */
+    public static final class AtALine {
+
+        private final MeasuredInput.BorderReading line;
+        private final List<ConditionOutcomeSite> watched;
+        /** Where the line decides, put to rows, or empty where it is a whole comparison's or no
+         *  comparison's. */
+        private final Optional<WhereAPartDecides.AskedOfRows> decides;
+        /** Which elements of the input a run gets an answer out of the line's rule on. */
+        private final MetOnARow reached;
+
+        private AtALine(MeasuredInput.BorderReading line, List<ConditionOutcomeSite> watched,
+                        Optional<WhereAPartDecides.AskedOfRows> decides, MetOnARow reached) {
+            this.line = line;
+            this.watched = List.copyOf(watched);
+            this.decides = decides;
+            this.reached = reached;
+        }
+
+        /** {@link StandingAtAPoint#met}, of this line. */
+        public Met met(List<ObservedInputs> observed, Criterion criterion) {
+            return StandingAtAPoint.met(line, decides, reached, observed, criterion, watched);
+        }
+
+        /** {@link StandingAtAPoint#valuesOf}, of this line. */
+        public RowsRead valuesOf(List<ObservedInputs> observed) {
+            return StandingAtAPoint.valuesOf(line, decides, reached, observed, watched);
+        }
+    }
+
+    private static Met met(MeasuredInput.BorderReading line,
+                           Optional<WhereAPartDecides.AskedOfRows> decides, MetOnARow reached,
+                           List<ObservedInputs> observed, Criterion criterion,
+                           List<ConditionOutcomeSite> watched) {
         BorderQuantity quantity = line.quantity();
         BehaviorInputs where = line.subject().inputs();
-        Optional<WhereAPartDecides.AskedOfRows> decides = whereItDecides(line);
-        MetOnARow reached = metOn(line);
         Set<ReadingGap> unreadable = new LinkedHashSet<>();
         boolean unwatched = false;
         boolean stoppedShort = false;
@@ -286,6 +333,13 @@ public final class StandingAtAPoint {
     public static RowsRead valuesOf(MeasuredInput.BorderReading line,
                                     List<ObservedInputs> observed,
                                     List<ConditionOutcomeSite> watched) {
+        return putToRows(line, watched).valuesOf(observed);
+    }
+
+    private static RowsRead valuesOf(MeasuredInput.BorderReading line,
+                                     Optional<WhereAPartDecides.AskedOfRows> decides,
+                                     MetOnARow reached, List<ObservedInputs> observed,
+                                     List<ConditionOutcomeSite> watched) {
         // A row's numbers are read position by position, and only a form has positions to read
         // them at. A line on any other quantity is not one another line is written beside, and
         // the reader that would hold one against the rows asks that first.
@@ -294,8 +348,6 @@ public final class StandingAtAPoint {
                     + " and this line is on " + line.quantity());
         }
         BehaviorInputs where = line.subject().inputs();
-        Optional<WhereAPartDecides.AskedOfRows> decides = whereItDecides(line);
-        MetOnARow reached = metOn(line);
         List<Map<souther.compiler.inputs.NumericTerm, souther.compiler.numeric.Place>> read =
                 new ArrayList<>();
         Set<ReadingGap> unreadable = new LinkedHashSet<>();
@@ -498,6 +550,9 @@ public final class StandingAtAPoint {
          * <p>The container is asked first the way any position is, so a walk finding the readings
          * learns from it which containers the container itself stands inside — and not the
          * container counted, whose elements are read together and never one reading apiece.
+         *
+         * <p>Every element, whichever of them this walk chose: a statement about the elements is
+         * about all of them, and the one a reading stands at is one of those.
          */
         @Override
         public final WalkResult<List<BorderQuantity.Observation>> eachElementOf(
@@ -512,7 +567,7 @@ public final class StandingAtAPoint {
                     Set<Integer> elements = new TreeSet<>();
                     for (BehaviorInputs.Occurrence each : values) {
                         Integer taken = each.at().elementAt(container);
-                        if (taken != null && agrees(each)) {
+                        if (taken != null && agreesBeside(container, each)) {
                             elements.add(taken);
                         }
                     }

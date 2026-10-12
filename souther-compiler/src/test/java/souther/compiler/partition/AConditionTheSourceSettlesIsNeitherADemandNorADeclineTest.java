@@ -142,7 +142,8 @@ class AConditionTheSourceSettlesIsNeitherADemandNorADeclineTest {
     void aPartOfAPredicateTheSourceSettlesLeavesWhatTheRestAsks() {
         RowDemand.Exists and = assertInstanceOf(RowDemand.Exists.class,
                 demandOf("somePositiveAndTrue", true));
-        assertEquals(1, and.ofAnElement().size(), () -> "only what the element is asked: " + and);
+        assertEquals(1, and.ofAnElement().theWay().size(),
+                () -> "only what the element is asked: " + and);
         assertEquals(and, demandOf("somePositiveOrFalse", true),
                 "and one of two things, one of which never holds, is the other");
     }

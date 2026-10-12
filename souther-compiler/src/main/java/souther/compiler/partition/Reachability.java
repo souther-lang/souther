@@ -51,34 +51,52 @@ public sealed interface Reachability {
         if (!(taken instanceof Reaching whole)) {
             return taken;
         }
-        // Where a condition on the way came out one of several ways, a row is past it along one
-        // of them: the way is each of them as well, and a search looks along each. Every row is
-        // along one, so where none of them reaches, nothing does.
-        CompositionBudget figure = CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO;
-        WayToTheBorder.Split each = way.eachWay(figure.maximum());
-        if (each.everyWay() && each.ways().size() == 1) {
-            return whole;
-        }
-        List<Reaching> along = new ArrayList<>();
-        Reachability closed = null;
-        for (WayToTheBorder one : each.ways()) {
-            switch (taking(one, declarations, Ways.ONE)) {
-                case Reaching open -> along.add(open);
-                case Reachability shut -> {
-                    if (closed == null) {
-                        closed = shut;
-                    }
+        // Whether the conditions on the way hold together is the walk's to say, on a way with
+        // nothing of several ways on it as much as on one with: a count asked twice, or a case a
+        // relation's term needs, closes a way as a case asked twice does. Where a condition came
+        // out one of several ways, a row is past it along one of them, and where every way of
+        // some of them closes, nothing reaches.
+        return switch (way.along()) {
+            case OneOfEach.Walked.Closed<OnTheWay, Reachability>(var _, var why) -> why;
+            case OneOfEach.Walked.Stopped<OnTheWay, Reachability>(var figure) ->
+                    whole.splitAs(new Ways.Whole(way.severalWays(), figure, List.of()));
+            case OneOfEach.Walked.Open<OnTheWay, Reachability> _
+                    when way.severalWays().isEmpty() -> whole;
+            case OneOfEach.Walked.Open<OnTheWay, Reachability>(var ways, var stoppedBy) -> {
+                List<Reaching> along = new ArrayList<>();
+                for (OneOfEach.Way<OnTheWay> one : ways) {
+                    along.add(switch (one) {
+                        case OneOfEach.Way.Chosen<OnTheWay>(var entries) ->
+                                reaching(new WayToTheBorder(entries), declarations);
+                        // A condition the walk left as it stands is one this way was not split
+                        // at past the figure, and is said as one, so that a row composed along
+                        // it is not taken to have met it.
+                        case OneOfEach.Way.LeftUnchosen<OnTheWay>(var chosen, var unchosen) ->
+                                reaching(new WayToTheBorder(chosen), declarations).splitAs(
+                                        new Ways.Whole(unchosen.stream()
+                                                .map(OnTheWay.OneOf.class::cast).toList(),
+                                                stoppedBy, List.of()));
+                    });
                 }
+                // Every way a row takes is among them, so a search looking along each looks
+                // along every row past the way, and what all of them state the way states.
+                // Otherwise they are looked along first, each narrower than the way, and past
+                // them the way is looked along whole — which every row past it is on, so none of
+                // them being closed proves nothing — and the conditions it was not looked along
+                // each way of say so.
+                yield whole.splitAs(stoppedBy == null ? new Ways.Each(along)
+                        : new Ways.Whole(way.severalWays(), stoppedBy, along));
             }
+        };
+    }
+
+    /** {@code way}, one the walk found holds together, as a composer reads it. */
+    private static Reaching reaching(WayToTheBorder way, SearchRegion declarations) {
+        if (taking(way, declarations, Ways.ONE) instanceof Reaching open) {
+            return open;
         }
-        if (!each.everyWay()) {
-            // More ways than are looked along: the ones the figure let through are looked along
-            // first, each narrower than the way, and past them the way is looked along whole —
-            // which every row past it is on, so none of them being closed proves nothing — and the
-            // conditions it was not split at say so.
-            return whole.splitAs(new Ways.Whole(way.severalWays(), figure, along));
-        }
-        return along.isEmpty() ? closed : whole.splitAs(new Ways.Each(along));
+        throw new IllegalStateException("a way the walk found open asks nothing twice, since the"
+                + " walk asks of it all that is asked here");
     }
 
     /** {@code way} read in its own vocabularies, split as {@code ways} says. */
@@ -138,9 +156,14 @@ public sealed interface Reachability {
         record One() implements Ways {}
 
         /**
-         * Split into each way some row may take, every one narrower than the way whole. A way the
-         * rules leave nothing along is not among them, so one alone is left where the rules close
-         * every other.
+         * Split into every way some row may take, each narrower than the way whole: every
+         * combination of one open alternative of each condition of several ways
+         * ({@link OneOfEach}). A way the rules leave nothing along is not among them, so one alone
+         * is left where the rules close every other.
+         *
+         * <p>Every row past the way is along one of them, so what every one of them states is what
+         * the way states, and what one states is no more than one way's. Where the figure left
+         * some combination out, the way is not this but {@link Whole}.
          *
          * @param along one or more
          */
@@ -157,8 +180,8 @@ public sealed interface Reachability {
 
         /**
          * Not split whole, though {@code unsplit} came out one of several ways: the ways they split
-         * it into are more than {@code figure} lets this look along, so the first of them are
-         * looked along and past them it is looked along whole.
+         * it into are more than {@code figure} lets this look along or look for, so the first of
+         * them are looked along and past them it is looked along whole.
          *
          * <p>The ones looked along are each enough for a row, and any of them may be the one an
          * author wrote the condition for, so they are not given up for the rest. The way whole is
@@ -179,6 +202,19 @@ public sealed interface Reachability {
                     throw new IllegalArgumentException("a way looked along whole past a figure has"
                             + " a condition of several ways on it, and a figure it met");
                 }
+            }
+
+            /**
+             * Whether some condition it was not split at is one a row is composed against whole
+             * along it — a statement the elements of one container meet together
+             * ({@link RealizationTarget.ElementsMeetingTogether}) — so that along the way whole a
+             * row meets more of it than along any one way the figure let through.
+             *
+             * @param behavior the behavior whose input the way reads
+             */
+            public boolean composedAgainstWhole(String behavior) {
+                return unsplit.stream().anyMatch(each ->
+                        RealizationTarget.ElementsMeetingTogether.of(behavior, each).isPresent());
             }
         }
     }
@@ -280,6 +316,21 @@ public sealed interface Reachability {
             public Truths {
                 if (at == null) {
                     throw new IllegalArgumentException("both values of some position");
+                }
+            }
+        }
+
+        /**
+         * How many elements of the container at {@code at} meet a statement, asked to be in two
+         * regions that leave it no count in common: some element meeting it and none, or two
+         * counts apart.
+         */
+        record Counts(TermPath at) implements TwoAtOnce {
+
+            public Counts {
+                if (at == null) {
+                    throw new IllegalArgumentException("two counts of the elements of some"
+                            + " container");
                 }
             }
         }

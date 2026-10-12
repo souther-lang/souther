@@ -177,7 +177,8 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
         assertEquals(Rel.GE, assertInstanceOf(TakenConstraint.Affine.class,
                         element.holdingOne().constraint()).rel(),
                 "and the container holding at least one");
-        assertNotEquals(each.ofEachElement().getFirst(), element.ofAnElement().getFirst(),
+        assertNotEquals(each.ofEachElement().theWay().getFirst(),
+                element.ofAnElement().theWay().getFirst(),
                 "what some element meets is the predicate, and what every element meets when it"
                         + " fails is its denial");
     }

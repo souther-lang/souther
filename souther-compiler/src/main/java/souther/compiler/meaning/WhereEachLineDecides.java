@@ -1,6 +1,11 @@
 package souther.compiler.meaning;
 
+import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.TermPath;
+
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -90,55 +95,343 @@ public final class WhereEachLineDecides {
      * Every relation {@code stated} holds together, once each and in the order of their spellings,
      * with where each decides.
      *
-     * <p>Only the relations that a conjunction or a disjunction joins. What a quantifier says of
-     * each element, and what a closure says on each application, are one part each here: a relation
-     * inside one is about an element or an application and not about the row.
+     * <p>Only the relations that a conjunction or a disjunction joins, and the ones a quantifier
+     * says of the element it chose. What a closure says on each application is one part here.
+     *
+     * <p>A relation inside a quantifier is a line where the row's element the quantifier chose
+     * crosses it, and it decides where two things hold at once: the quantifier coming out one way
+     * or the other turns the statement, and the relation turns what the quantifier says of that
+     * element ({@link #read}). Each is asked of what it stands in, with every other quantifier one
+     * part there. Two quantifiers over one container are about two elements, which may be
+     * different ones; read as one statement about one element, what each asks would be asked of
+     * that one, and two things no element is at once but two elements are would read as a
+     * statement no row turns. So a relation that stands inside several quantifiers is a line in
+     * each of them, and decides wherever it decides in any.
      */
     public static List<Decides> in(Proposition writtenAs) {
-        Proposition stated = openedUp(writtenAs);
-        Map<String, Proposition> parts = new TreeMap<>();
-        Map<String, Literal> leaves = new TreeMap<>();
-        gather(stated, parts, leaves);
-        List<Proposition> named = List.copyOf(parts.values());
-        Map<String, Integer> index = new TreeMap<>();
-        for (int i = 0; i < named.size(); i++) {
-            index.put(named.get(i).key(), i);
-        }
-        boolean[] table = named.size() <= MOST_PARTS_READ_TOGETHER
-                && (1L << named.size()) * placesIn(stated) <= MOST_PLACES_READ
-                ? tabulated(stated, leaves, index, named.size()) : null;
+        Map<String, Proposition.Compared> lines = new TreeMap<>();
+        Map<String, List<List<List<Proposition>>>> standings = new TreeMap<>();
+        read(writtenAs, writtenAs, null, List.of(), lines, standings);
         List<Decides> out = new ArrayList<>();
-        for (int at = 0; at < named.size(); at++) {
-            if (!(named.get(at) instanceof Proposition.Compared line)) {
-                continue;
-            }
-            List<Proposition> cases = table == null ? null : casesOf(table, at, named);
-            out.add(new Decides(line, cases != null ? cases
-                    : List.of(heldAgainstItsDenial(stated, line))));
-        }
+        lines.forEach((key, line) -> out.add(new Decides(line,
+                whereItStands(line, casesOf(standings.get(key))))));
         return List.copyOf(out);
     }
 
     /**
-     * {@code stated} with each element some container is quantified over that states a relation
-     * put in the statement's own place.
+     * {@code cases}, each said of a value that is the case {@code line}'s positions are written
+     * under: a line at a field of one case of a value decides where the value is that case.
      *
-     * <p>A row stands at a line of such a relation through an element it chose, and the parts that
-     * element is asked beside the relation are asked of that same element. Said as the quantifier,
-     * the relation and those parts would be read of different elements, since the quantifier is
-     * one part and counts every element. A quantifier that holds no relation, and one denied, is
-     * about the elements together and stays one part.
+     * <p>Nothing reading the parts of a case knows that one value is one case, so a case can ask
+     * of the value what only another case of it holds — a field of that other case at some number,
+     * or the value being that other case. Asked of the value the line is at, the first is about a
+     * field the value does not have, and is no part of where the line decides; the second asks the
+     * value to be two cases, and is no place the line is. So the one is left out and the other
+     * case with it, and every case is said with the case the line is at.
      */
-    private static Proposition openedUp(Proposition stated) {
+    private static List<Proposition> whereItStands(Proposition.Compared line,
+                                                   List<Proposition> cases) {
+        Map<TermPath, CasesLeft> at = casesItIsOver(line);
+        if (at.isEmpty()) {
+            return cases;
+        }
+        List<Proposition> stands = new ArrayList<>();
+        at.forEach((position, narrowed) -> {
+            Proposition standing = standing(position, narrowed);
+            if (standing != null) {
+                stands.add(standing);
+            }
+        });
+        List<Proposition> out = new ArrayList<>();
+        cases:
+        for (Proposition each : cases) {
+            List<Proposition> parts = new ArrayList<>();
+            for (Proposition part : each instanceof Proposition.All all ? all.parts()
+                    : List.of(each)) {
+                switch (asked(part, at)) {
+                    case OF_ANOTHER_CASE -> { }
+                    case NOT_THERE -> {
+                        continue cases;
+                    }
+                    case THERE -> parts.add(part);
+                }
+            }
+            parts.addAll(stands);
+            out.add(Proposition.all(parts));
+        }
+        return out;
+    }
+
+    /**
+     * That the value at {@code position} is {@code narrowed}, in the words a row is asked it in:
+     * one of some cases of a sum, or holding a value or none — or null where it is neither, which
+     * leaves the case unsaid and the line no narrower.
+     */
+    private static Proposition standing(TermPath position, CasesLeft narrowed) {
+        DecisionSubject.AnInput value = new DecisionSubject.AnInput(position);
+        List<Refinement> atoms = narrowed.atoms();
+        if (atoms.stream().allMatch(Refinement.SumCase.class::isInstance)) {
+            return new Proposition.InCases(value, narrowed, true);
+        }
+        if (atoms.size() == 1 && atoms.getFirst() instanceof Refinement.Presence presence) {
+            return new Proposition.Present(value, presence.present());
+        }
+        return null;
+    }
+
+    /** What a part of a case comes to, asked of the value a line stands at. */
+    private enum AskedOfTheValue {
+        /** Something of the value as it is, which the case asks. */
+        THERE,
+        /** Something only another case of it has, which the value does not. */
+        OF_ANOTHER_CASE,
+        /** That the value is a case it is not, which leaves the line nowhere. */
+        NOT_THERE
+    }
+
+    /** What {@code part} comes to of a value that is the cases {@code at} says, position by
+     *  position. */
+    private static AskedOfTheValue asked(Proposition part, Map<TermPath, CasesLeft> at) {
+        if (part instanceof Proposition.InCases(DecisionSubject.AnInput(TermPath of),
+                CasesLeft cases, boolean holds, var _) && at.containsKey(of)) {
+            CasesLeft stands = at.get(of);
+            boolean meets = stands.meet(cases) != null;
+            if ((holds && !meets) || (!holds && stands.within(cases))) {
+                return AskedOfTheValue.NOT_THERE;
+            }
+            return holds ? AskedOfTheValue.THERE : AskedOfTheValue.OF_ANOTHER_CASE;
+        }
+        // Whether an optional holds a value, asked of one the line stands under holding one or
+        // none.
+        if (part instanceof Proposition.Present(DecisionSubject.AnInput(TermPath of),
+                boolean holds, var _) && at.containsKey(of)
+                && at.get(of).atoms().size() == 1
+                && at.get(of).atoms().getFirst() instanceof Refinement.Presence presence) {
+            return presence.present() == holds ? AskedOfTheValue.THERE : AskedOfTheValue.NOT_THERE;
+        }
+        for (TermPath position : positionsOf(part)) {
+            List<TermPath.Step> steps = position.steps();
+            for (int step = 0; step < steps.size(); step++) {
+                CasesLeft stands = at.get(new TermPath(position.head(), steps.subList(0, step)));
+                if (stands != null && steps.get(step) instanceof TermPath.Step.Refine(
+                        CasesLeft cases) && stands.meet(cases) == null) {
+                    return AskedOfTheValue.OF_ANOTHER_CASE;
+                }
+            }
+        }
+        return AskedOfTheValue.THERE;
+    }
+
+    /** The positions of the input a part of a case is about, where it is one thing of one value;
+     *  none for a part that is more than that. */
+    private static List<TermPath> positionsOf(Proposition part) {
+        List<TermPath> out = new ArrayList<>();
+        switch (part) {
+            case Proposition.Compared compared -> {
+                switch (compared.relation()) {
+                    case Relation.Affine affine -> affine.form().coefs().keySet()
+                            .forEach(quantity -> {
+                                if (quantity instanceof DecisionAtom.OfTheInput(var term)) {
+                                    out.add(term.subjectPath());
+                                }
+                            });
+                    case Relation.Ordered ordered -> {
+                        if (ordered.term() instanceof DecisionAtom.OfTheInput(var term)) {
+                            out.add(term.subjectPath());
+                        }
+                    }
+                }
+            }
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath of), var _, var _) ->
+                    out.add(of);
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath of), var _, var _, var _) ->
+                    out.add(of);
+            case Proposition.Present(DecisionSubject.AnInput(TermPath of), var _, var _) ->
+                    out.add(of);
+            default -> { }
+        }
+        return out;
+    }
+
+    /** Each position a position {@code line} is over narrows, with the cases it narrows it to. */
+    private static Map<TermPath, CasesLeft> casesItIsOver(Proposition.Compared line) {
+        Map<TermPath, CasesLeft> out = new LinkedHashMap<>();
+        for (TermPath position : positionsOf(line)) {
+            List<TermPath.Step> steps = position.steps();
+            for (int at = 0; at < steps.size(); at++) {
+                if (steps.get(at) instanceof TermPath.Step.Refine(CasesLeft cases)) {
+                    out.merge(new TermPath(position.head(), steps.subList(0, at)), cases,
+                            (one, other) -> one.meet(other) == null ? one : one.meet(other));
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Adds every relation {@code stated} joins to {@code lines}, and the relations inside each
+     * quantifier it joins held that says a relation of the element it chose, each with how it
+     * stands: where each thing around it turns what holds it, outermost first, and where it turns
+     * what it stands in.
+     *
+     * <p>A relation inside a quantifier and not about the element it chose is about the row, and
+     * stands wherever it is written — so it is asked of the statement whole, every quantifier it
+     * stands in moved with it.
+     *
+     * @param whole   the statement as written
+     * @param element the container whose element {@code stated} is said of, or null where
+     *                {@code stated} is the statement itself
+     * @param around  where each quantifier {@code stated} is inside turns what holds it
+     */
+    private static void read(Proposition stated, Proposition whole, DecisionSubject element,
+                             List<List<Proposition>> around,
+                             Map<String, Proposition.Compared> lines,
+                             Map<String, List<List<List<Proposition>>>> standings) {
+        Reading reading = Reading.of(stated);
+        for (Proposition part : reading.named()) {
+            if (part instanceof Proposition.Compared line) {
+                List<List<Proposition>> factors = new ArrayList<>(around);
+                if (element == null || line.mayTurnOnAnElementOf(element)) {
+                    factors.add(reading.turnsOn(line));
+                } else {
+                    factors = List.of(List.of(heldAgainstItsDenial(whole, line)));
+                }
+                lines.putIfAbsent(line.key(), line);
+                standings.computeIfAbsent(line.key(), k -> new ArrayList<>()).add(factors);
+            } else if (part instanceof Proposition.Some some && reading.standsHeld(some)
+                    && statesARelation(some.ofTheElement())) {
+                List<List<Proposition>> inside = new ArrayList<>(around);
+                inside.add(reading.turnsOn(some));
+                read(some.ofTheElement(), whole, some.container(), inside, lines, standings);
+            }
+        }
+    }
+
+    /**
+     * One statement read part against part: the parts it joins, each place one stands, and what
+     * it comes to every way they can come out — or no table where that is more than is read.
+     */
+    private static final class Reading {
+
+        private final Proposition stated;
+        private final List<Proposition> named;
+        private final Map<String, Integer> index;
+        private final Map<String, Literal> leaves;
+        private final boolean[] table;
+
+        private Reading(Proposition stated, List<Proposition> named, Map<String, Integer> index,
+                        Map<String, Literal> leaves, boolean[] table) {
+            this.stated = stated;
+            this.named = named;
+            this.index = index;
+            this.leaves = leaves;
+            this.table = table;
+        }
+
+        /** The parts the statement joins, held, in the order of their spellings. */
+        List<Proposition> named() {
+            return named;
+        }
+
+        static Reading of(Proposition stated) {
+            Map<String, Proposition> parts = new TreeMap<>();
+            Map<String, Literal> leaves = new TreeMap<>();
+            gather(stated, parts, leaves);
+            List<Proposition> named = List.copyOf(parts.values());
+            Map<String, Integer> index = new TreeMap<>();
+            for (int i = 0; i < named.size(); i++) {
+                index.put(named.get(i).key(), i);
+            }
+            boolean[] table = named.size() <= MOST_PARTS_READ_TOGETHER
+                    && (1L << named.size()) * placesIn(stated) <= MOST_PLACES_READ
+                    ? tabulated(stated, leaves, index, named.size()) : null;
+            return new Reading(stated, named, index, leaves, table);
+        }
+
+        /**
+         * Where {@code part} turns the statement, as cases.
+         *
+         * <p>The table holds each part as one thing that comes out one way, which a part standing
+         * as well inside a quantifier it is not about is not: there it is the same thing of the
+         * same row, and comes out the way the part does. Said as one case then, which moves it
+         * everywhere it stands.
+         */
+        List<Proposition> turnsOn(Proposition part) {
+            List<Proposition> cases = table == null || insideAWholeQuantifier(stated, part)
+                    ? null : casesOf(table, index.get(part.key()), named);
+            return cases != null ? cases : List.of(heldAgainstItsDenial(stated, part));
+        }
+
+        /** Whether {@code quantifier} stands held somewhere in the statement. */
+        boolean standsHeld(Proposition.Some quantifier) {
+            return leaves.values().stream().anyMatch(leaf ->
+                    leaf.held() && leaf.part().equals(quantifier.key()));
+        }
+    }
+
+    /**
+     * Where a line decides, off each way it stands: a case of what each thing around it is turned
+     * under, taken together — or, where those are more than {@link #MOST_CASES}, each way said as
+     * one case.
+     */
+    private static List<Proposition> casesOf(List<List<List<Proposition>>> standings) {
+        List<Proposition> cases = new ArrayList<>();
+        for (List<List<Proposition>> factors : standings) {
+            List<Proposition> here = takenTogether(factors);
+            if (here == null) {
+                cases = null;
+                break;
+            }
+            cases.addAll(here);
+        }
+        List<Proposition> each = cases == null ? null : cases.stream().distinct().toList();
+        if (each != null && each.size() <= MOST_CASES) {
+            return each;
+        }
+        return List.of(Proposition.any(standings.stream()
+                .map(factors -> Proposition.all(factors.stream().map(Proposition::any).toList()))
+                .toList()));
+    }
+
+    /** Every way of taking one case of each of {@code factors} together, or null as soon as
+     *  there are more than {@link #MOST_CASES}. */
+    private static List<Proposition> takenTogether(List<List<Proposition>> factors) {
+        List<List<Proposition>> ways = List.of(List.of());
+        for (List<Proposition> factor : factors) {
+            if ((long) ways.size() * factor.size() > MOST_CASES) {
+                return null;
+            }
+            List<List<Proposition>> wider = new ArrayList<>();
+            for (List<Proposition> way : ways) {
+                for (Proposition one : factor) {
+                    List<Proposition> both = new ArrayList<>(way);
+                    both.add(one);
+                    wider.add(both);
+                }
+            }
+            ways = wider;
+        }
+        return ways.stream().map(Proposition::all).toList();
+    }
+
+    /** Whether {@code part} stands inside a quantifier {@code stated} joins that it is not about
+     *  the element of. */
+    private static boolean insideAWholeQuantifier(Proposition stated, Proposition part) {
         return switch (stated) {
-            case Proposition.All all -> Proposition.all(all.parts().stream()
-                    .map(WhereEachLineDecides::openedUp).toList());
-            case Proposition.Any any -> Proposition.any(any.parts().stream()
-                    .map(WhereEachLineDecides::openedUp).toList());
-            case Proposition.Some some when some.holds() && statesARelation(some.ofTheElement()) ->
-                    openedUp(some.ofTheElement());
-            default -> stated;
+            case Proposition.All all -> all.parts().stream()
+                    .anyMatch(each -> insideAWholeQuantifier(each, part));
+            case Proposition.Any any -> any.parts().stream()
+                    .anyMatch(each -> insideAWholeQuantifier(each, part));
+            case Proposition.Some some when !standsAs(some, part) ->
+                    !part.mayTurnOnAnElementOf(some.container())
+                            && !with(some.ofTheElement(), part, true).equals(some.ofTheElement());
+            default -> false;
         };
+    }
+
+    /** Whether {@code leaf} is {@code part}, held or denied. */
+    private static boolean standsAs(Proposition leaf, Proposition part) {
+        return leaf.getClass() == part.getClass() && held(leaf).key().equals(part.key());
     }
 
     private static boolean statesARelation(Proposition stated) {
@@ -307,28 +600,35 @@ public final class WhereEachLineDecides {
     }
 
     /**
-     * Where {@code line} decides, said as the statement with it held against the statement with it
+     * Where {@code part} decides, said as the statement with it held against the statement with it
      * failing: one of them holding and the other not.
      */
-    private static Proposition heldAgainstItsDenial(Proposition stated,
-                                                    Proposition.Compared line) {
-        Proposition held = with(stated, line, true);
-        Proposition failing = with(stated, line, false);
+    private static Proposition heldAgainstItsDenial(Proposition stated, Proposition part) {
+        Proposition held = with(stated, part, true);
+        Proposition failing = with(stated, part, false);
         return Proposition.any(List.of(
                 Proposition.all(List.of(held, failing.denied())),
                 Proposition.all(List.of(held.denied(), failing))));
     }
 
-    /** {@code stated} with every place {@code line} stands come out {@code holds}. */
-    private static Proposition with(Proposition stated, Proposition.Compared line,
-                                    boolean holds) {
+    /**
+     * {@code stated} with every place {@code part} stands come out {@code holds}.
+     *
+     * <p>Inside a quantifier too, where the part is not about the element it chose: there it is
+     * the same thing of the same row. Where it may be about that element it is said of another
+     * element, which the part does not move.
+     */
+    private static Proposition with(Proposition stated, Proposition part, boolean holds) {
         return switch (stated) {
             case Proposition.All all -> Proposition.all(all.parts().stream()
-                    .map(part -> with(part, line, holds)).toList());
+                    .map(each -> with(each, part, holds)).toList());
             case Proposition.Any any -> Proposition.any(any.parts().stream()
-                    .map(part -> with(part, line, holds)).toList());
-            case Proposition.Compared compared when compared.relation().equals(line.relation()) ->
-                    new Proposition.Always(compared.holds() == holds);
+                    .map(each -> with(each, part, holds)).toList());
+            case Proposition leaf when standsAs(leaf, part) ->
+                    new Proposition.Always(leaf.key().equals(part.key()) == holds);
+            case Proposition.Some some when !part.mayTurnOnAnElementOf(some.container()) ->
+                    new Proposition.Some(some.container(), with(some.ofTheElement(), part, holds),
+                            some.holds());
             default -> stated;
         };
     }

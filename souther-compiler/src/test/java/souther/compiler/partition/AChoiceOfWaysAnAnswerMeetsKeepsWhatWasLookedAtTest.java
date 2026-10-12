@@ -9,8 +9,8 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -41,9 +41,10 @@ class AChoiceOfWaysAnAnswerMeetsKeepsWhatWasLookedAtTest {
         for (List<List<DemandReading.Read>> alternatives : List.of(
                 List.of(List.of(STOPPED), List.of(written)),
                 List.of(List.of(written), List.of(STOPPED)))) {
-            assertEquals(new AnAnswerComposed.Ways.Each(List.of(List.of(written)),
+            assertEquals(new AnAnswerComposed.Ways.Written(
                             Set.of(CompositionBudget.READINGS_OF_ONE_CONDITION)),
-                    AnAnswerComposed.eachWay(List.of(new DemandReading.Read.OneOf(alternatives))),
+                    AnAnswerComposed.written(List.of(new DemandReading.Read.OneOf(alternatives,
+                            Optional.empty()))),
                     "the other alternative, and the figure that left the first");
         }
     }
@@ -51,9 +52,9 @@ class AChoiceOfWaysAnAnswerMeetsKeepsWhatWasLookedAtTest {
     @Test
     void anAlternativeNoValueIsWrittenTowardLeavesTheOther() {
         DemandReading.Read written = atLeast(3);
-        assertEquals(new AnAnswerComposed.Ways.Each(List.of(List.of(written)), Set.of()),
-                AnAnswerComposed.eachWay(List.of(new DemandReading.Read.OneOf(
-                        List.of(List.of(NO_WORDS), List.of(written))))),
+        assertEquals(new AnAnswerComposed.Ways.Written(Set.of()),
+                AnAnswerComposed.written(List.of(new DemandReading.Read.OneOf(
+                        List.of(List.of(NO_WORDS), List.of(written)), Optional.empty()))),
                 "the other alternative, and no figure: nothing more looking would read");
     }
 
@@ -61,24 +62,11 @@ class AChoiceOfWaysAnAnswerMeetsKeepsWhatWasLookedAtTest {
     void whereNothingIsLeftAFigureThatStoppedSomeIsWhatTheChoiceSays() {
         assertEquals(new AnAnswerComposed.Ways.Stopped(
                         Set.of(CompositionBudget.READINGS_OF_ONE_CONDITION)),
-                AnAnswerComposed.eachWay(List.of(new DemandReading.Read.OneOf(
-                        List.of(List.of(NO_WORDS), List.of(STOPPED))))));
+                AnAnswerComposed.written(List.of(new DemandReading.Read.OneOf(
+                        List.of(List.of(NO_WORDS), List.of(STOPPED)), Optional.empty()))));
         assertEquals(new AnAnswerComposed.Ways.Unwritable(),
-                AnAnswerComposed.eachWay(List.of(new DemandReading.Read.OneOf(
-                        List.of(List.of(NO_WORDS), List.of(NO_OTHER_WORDS))))));
-    }
-
-    @Test
-    void moreAlternativesThanAWayIsSplitIntoKeepTheFirstOnes() {
-        int most = CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO.maximum();
-        List<List<DemandReading.Read>> alternatives = new ArrayList<>();
-        for (int each = 0; each <= most; each++) {
-            alternatives.add(List.of(atLeast(each)));
-        }
-
-        assertEquals(new AnAnswerComposed.Ways.Each(alternatives.subList(0, most),
-                        Set.of(CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO)),
-                AnAnswerComposed.eachWay(List.of(new DemandReading.Read.OneOf(alternatives))));
+                AnAnswerComposed.written(List.of(new DemandReading.Read.OneOf(
+                        List.of(List.of(NO_WORDS), List.of(NO_OTHER_WORDS)), Optional.empty()))));
     }
 
     /** That the number at {@code $answer.n} is at least {@code level}. */

@@ -107,7 +107,10 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
         }
         NumbersAskedFor asked = leaving(term, within, on);
         for (OnTheWay.TakenIn cut : cuts) {
-            if (!cut.demand().terms().contains(term)) {
+            // One an element meets several ways leaves the term whatever the way chosen leaves
+            // it, which is nothing said until one is.
+            if (!cut.demand().terms().contains(term)
+                    || !RowDemand.writtenAlikeAsItStands(cut.demand())) {
                 continue;
             }
             asked = asked.meet(switch (cut.demand()) {

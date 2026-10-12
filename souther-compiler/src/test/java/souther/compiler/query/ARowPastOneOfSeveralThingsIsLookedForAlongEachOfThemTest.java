@@ -24,10 +24,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the other branch. Along one alternative the row is composed with {@code x} above nought, and the
  * run is what says it reached the line behind the fork.
  *
- * <p>And where the ways the conditions of several ways split it into are more than are looked
- * along, the ones the figure lets through are looked along first and the way whole past them; a row
- * of the way whole says which conditions it was not split at, and at which figure — since along one
- * of them a row would have been composed against more.
+ * <p>Conditions of several ways that turn on no position in common are looked along each of their
+ * alternatives once, and not along every way of taking them together: a rule closing one
+ * alternative of the first leaves the second alternative of it looked along, however many
+ * conditions stand beside it.
+ *
+ * <p>And where the ways are more than are looked along, the ones the figure lets through are
+ * looked along first and the way whole past them; a row of the way whole says which conditions it
+ * was not split at, and at which figure — since along one of them a row would have been composed
+ * against more.
  */
 class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
 
@@ -48,7 +53,7 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
                 else No
             """;
 
-    /** Five conditions of two ways each, which split the way into more ways than are looked
+    /** Five conditions of two ways each, which taken together are more ways than are looked
      *  along. */
     private static final String TOO_MANY = """
             module example.either
@@ -72,8 +77,8 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
             }
             """;
 
-    /** The same, with the first alternative of the first condition closed by a rule, so every way
-     *  the figure lets through takes it and none of them reaches. */
+    /** The same, with the first alternative of the first condition closed by a rule: taken
+     *  together with the others, the first sixteen ways would all take it. */
     private static final String TOO_MANY_FIRST_CLOSED = """
             module example.either
 
@@ -97,7 +102,37 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
             }
             """;
 
+    /** One condition of seventeen ways on one position, every way of which but the last a rule
+     *  closes: more ways than are looked along, and the one that reaches past them. */
+    private static final String PAST_THE_FIGURE = """
+            module example.either
+
+            data N = Int
+                invariant value >= 0 && value <= 100
+
+            data Yes
+            data No
+
+            behavior f : (a: N, n: N) -> Yes | No
+
+            let f (a, n) = {
+                guard a == 0 else No
+                guard ALTERNATIVES else No
+                if n > 5 then Yes else No
+            }
+            """.replace("ALTERNATIVES", alternatives());
+
     private static final Count BEHIND_THE_FORK = Count.of(5);
+
+    /** {@code a} at each of one up to as many ways as are looked along, and then at nought. */
+    private static String alternatives() {
+        List<String> out = new ArrayList<>();
+        for (int each = 1; each <= CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum(); each++) {
+            out.add("a == " + each);
+        }
+        out.add("a == 0");
+        return String.join(" || ", out);
+    }
 
     @Test
     void aRowAlongOneAlternativeIsOfferedForEveryPointBehindIt() {
@@ -111,44 +146,71 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
     }
 
     /**
-     * Past the figure the ways it lets through are still looked along first: any of them is enough
-     * for a row, and the way whole past them is no reason to give them up.
+     * Conditions on different positions are each looked along, and a row along one way of them is
+     * offered.
      */
     @Test
-    void pastTheFigureARowAlongOneOfTheWaysLookedAlongIsOffered() {
+    void independentConditionsAreLookedAlongAndARowIsOffered() {
         List<ItemAssessment.Owed> owed = pointsOfTheInnerLine(TOO_MANY);
         assertFalse(owed.isEmpty(), "the line behind the guards is owed rows");
         for (ItemAssessment.Owed item : owed) {
             assertTrue(item.searches().rowToOffer().isPresent(),
                     () -> "a row along one of the ways looked along is offered: "
                             + item.searches());
+            assertTrue(lookedAlongWhole(item).isEmpty(),
+                    () -> "and every alternative was looked along: " + item.searches());
         }
     }
 
     /**
-     * And where none of the ways the figure let through reaches, the way is looked along whole,
-     * and the account of what that came to says which conditions it was not split at.
+     * An alternative a rule closes is looked along beside the others, and the other alternative of
+     * the same condition is looked along as well — not left behind every way of taking the
+     * conditions beside it together.
      */
     @Test
-    void pastTheFigureTheAccountSaysWhichConditionsTheWayWasNotSplitAt() {
+    void anAlternativeARuleClosesLeavesTheOtherLookedAlong() {
         List<ItemAssessment.Owed> owed = pointsOfTheInnerLine(TOO_MANY_FIRST_CLOSED);
         assertFalse(owed.isEmpty(), "the line behind the guards is owed rows");
         for (ItemAssessment.Owed item : owed) {
-            List<ReachabilityGap.LookedAlongWhole> said = new ArrayList<>();
-            for (ItemAssessment.Attempt each : item.searches().each()) {
-                if (each instanceof ItemAssessment.Attempt.Searched searched) {
-                    searched.uncomposed().onTheWay().stream()
-                            .filter(ReachabilityGap.LookedAlongWhole.class::isInstance)
-                            .map(ReachabilityGap.LookedAlongWhole.class::cast)
-                            .forEach(said::add);
-                }
-            }
+            assertTrue(item.searches().rowToOffer().isPresent(),
+                    () -> "a row along the open alternative is offered: " + item.searches());
+            assertTrue(lookedAlongWhole(item).isEmpty(),
+                    () -> "and no way was looked along whole: " + item.searches());
+        }
+    }
+
+    /**
+     * Where the ways of one condition are more than are looked along, the way is looked along
+     * whole past them, and the account of what that came to says which conditions it was not
+     * split at.
+     */
+    @Test
+    void pastTheFigureTheAccountSaysWhichConditionsTheWayWasNotSplitAt() {
+        List<ItemAssessment.Owed> owed = pointsOfTheInnerLine(PAST_THE_FIGURE);
+        assertFalse(owed.isEmpty(), "the line behind the guards is owed rows");
+        for (ItemAssessment.Owed item : owed) {
+            List<ReachabilityGap.LookedAlongWhole> said = lookedAlongWhole(item);
             assertFalse(said.isEmpty(), () -> "the way was looked along whole and says so: "
                     + item.searches());
             assertTrue(said.stream().allMatch(gap ->
-                            gap.figure() == CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO),
-                    () -> "at the figure for how many ways a way is split into: " + said);
+                            gap.figure() == CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG),
+                    () -> "at the figure for how many ways are looked along: " + said);
         }
+    }
+
+    /** What the searches at {@code item} said of a way looked along whole. */
+    private static List<ReachabilityGap.LookedAlongWhole> lookedAlongWhole(
+            ItemAssessment.Owed item) {
+        List<ReachabilityGap.LookedAlongWhole> said = new ArrayList<>();
+        for (ItemAssessment.Attempt each : item.searches().each()) {
+            if (each instanceof ItemAssessment.Attempt.Searched searched) {
+                searched.uncomposed().onTheWay().stream()
+                        .filter(ReachabilityGap.LookedAlongWhole.class::isInstance)
+                        .map(ReachabilityGap.LookedAlongWhole.class::cast)
+                        .forEach(said::add);
+            }
+        }
+        return said;
     }
 
     /** What was searched for at each point of the line behind the conditions of several ways. */
