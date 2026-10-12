@@ -1,10 +1,10 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.meaning.Proposition;
 
 /**
  * Which of a body's conditions the decision table holds as distinctions over what a dependency
@@ -18,16 +18,16 @@ import souther.compiler.inputs.ReadMeaning;
  * decision table had already named and seen taken.
  *
  * <p><b>The decision table's own answer, asked rather than worked out again.</b> What a dependency's
- * answer is and when a comparison is a proposition over one are {@link DecisionSubjects} and
- * {@link DecisionComparison}; the decision reading is made from this value, so a condition the
- * reading of the input hands over is one that reading names. A reader that recognised calls to
- * dependencies for itself would hand over conditions the table holds no column for, and those
- * would leave the account as read by nobody.
+ * answer is, {@link DecisionSubjects} says; what a comparison states is the one statement every
+ * reader of the condition takes ({@link WhatConditionsState}). The decision reading makes its
+ * columns from the same two, so a condition the reading of the input hands over is one that
+ * reading names. A reader that recognised calls to dependencies for itself would hand over
+ * conditions the table holds no column for, and those would leave the account as read by nobody.
  *
  * <p>Only conditions over an answer. A truth of a position is a subject a row controls as well, and
  * it is the reading of the input's: a part of it that reading left unread is still unread.
  */
-record WhatAnAnswerTakesUp(DecisionSubjects subjects, DecisionComparison comparisons) {
+record WhatAnAnswerTakesUp(DecisionSubjects subjects) {
 
     /**
      * What the decision table over {@code read} takes up.
@@ -38,16 +38,24 @@ record WhatAnAnswerTakesUp(DecisionSubjects subjects, DecisionComparison compari
      */
     static WhatAnAnswerTakesUp of(InputReading read) {
         ReadMeaning.WhereKept kept = KeptTruths.readIn(read);
-        DecisionSubjects subjects =
-                new DecisionSubjects(read.domain(), read.rules().symbols(),
-                        read.rules().declarations(), read.rules().newtypes(), kept);
-        return new WhatAnAnswerTakesUp(subjects,
-                new DecisionComparison(read.domain(), read.rules(), subjects, kept));
+        return new WhatAnAnswerTakesUp(new DecisionSubjects(read.domain(), read.rules().symbols(),
+                read.rules().declarations(), read.rules().newtypes(), kept));
     }
 
-    /** Whether {@code comparison}, read under {@code reads}, is a column over an answer. */
-    boolean comparison(StatedComparison comparison, InputReads reads) {
-        return comparisons.readsOverAnAnswer(comparison, reads);
+    /**
+     * Whether a comparison stating {@code stated} is a column over an answer: read to the end, and
+     * about what a dependency answered somewhere in it.
+     *
+     * <p>Asked of what the comparison states and not of how it is spelled, so
+     * {@code Decimal.compare(got, quota.value) >= 0} is taken up where {@code got >= quota.value}
+     * is, and a comparison inside a lookup is taken up with what the lookup selects.
+     *
+     * <p>Read to the end, because the column is the statement. One part of which is over an answer
+     * and another part of which nothing read is a condition nobody read; taken up for the part that
+     * names an answer, the part nothing read would leave the account as read.
+     */
+    static boolean comparison(Proposition stated) {
+        return !Proposition.leavesSomethingUnread(stated) && Proposition.aboutAnAnswer(stated);
     }
 
     /**

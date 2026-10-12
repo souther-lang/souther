@@ -481,8 +481,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                 case Stated.AComparison(var comparison) ->
                                         ComparisonAssessment.of(in.behavior(), comparison, where,
                                                 in.read(), reads, applying, null,
-                                                in.dependencies(), in.answering(), false,
-                                                in.conditions());
+                                                in.answering(), false, in.conditions());
                                 case Stated.AnApplication(var _, var answered) ->
                                         ComparisonAssessment.ofAnApplication(answered, where,
                                                 in.read());

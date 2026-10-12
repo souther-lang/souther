@@ -480,8 +480,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + c + "check/Symbols;L" + c + "check/DeclarationNewtypes;L" + c
                 + "inputs/ReadMeaning$WhereKept;L" + c + "coverage/Arrivals;Ljava/util/List;)V",
                 Reading.STRUCTURE, BINDINGS);
-        row(out, c + "partition/DecisionComparison$1", "readsThrough",
-                "(L" + CORE + "$FieldAccess;" + reads + ")Z", Reading.ONE_ACCESS, ONE);
         row(out, c + "inputs/InputReads", "answerAt", "(" + core + "L" + c + "check/Symbols;L"
                 + c + "check/DeclarationNewtypes;)L" + c + "inputs/InputReads$AnAnswerAt;",
                 Reading.NAMES, READS_THE_NAMES);
