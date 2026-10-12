@@ -12,8 +12,10 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -305,6 +307,108 @@ final class Witnesses {
         return Built.of(out);
     }
 
+    /**
+     * A list or a set of {@code position} holding exactly {@code size} elements no two of which
+     * are equal at the end of {@code fields} — each a run of fields taken from the element, empty
+     * for the element itself — or null where that cannot be built: the values there have too few,
+     * a field on the way is no field of a record this writes, or it is no list or set.
+     *
+     * <p>For a caller that needs its elements told apart at what another container is asked about
+     * — a container whose elements are to be on two sides of a statement that container decides —
+     * and not a proposal for any container of that size, which may say one value again. Apart at
+     * those positions and not merely as whole values: two records equal at the one field the
+     * statement reads are one element to it however the rest of them differ.
+     */
+    static FixtureTemplate apart(TypeView position, int size, List<List<String>> fields,
+                                 RuleReadingContext reading) {
+        if (!(position.shape() instanceof Shape.Sequence carrier)) {
+            return null;
+        }
+        if (size == 0) {
+            return FixtureTemplate.collection(List.of());
+        }
+        // The values each position is apart at, one for each element.
+        List<List<FixtureTemplate>> atEach = new ArrayList<>();
+        for (List<String> each : fields) {
+            Type at = typeAt(carrier.element(), each, reading);
+            if (at == null) {
+                return null;
+            }
+            List<FixtureTemplate> values = distinctValuesOf(at, size, reading, Set.of());
+            if (values.size() < size) {
+                return null;
+            }
+            atEach.add(values);
+        }
+        List<FixtureTemplate> elements = new ArrayList<>();
+        for (int i = 0; i < size; i++) {
+            Map<List<String>, FixtureTemplate> placed = new LinkedHashMap<>();
+            for (int f = 0; f < fields.size(); f++) {
+                placed.put(fields.get(f), atEach.get(f).get(i));
+            }
+            FixtureTemplate element = holdingAt(carrier.element(), placed, reading);
+            if (element == null) {
+                return null;
+            }
+            elements.add(element);
+        }
+        return FixtureTemplate.collection(elements);
+    }
+
+    /** The type at the end of {@code fields} taken from a value of {@code type}, or null where one
+     *  of them is no field of a record. */
+    private static Type typeAt(Type type, List<String> fields, RuleReadingContext reading) {
+        RuleReadingSource source = reading.source();
+        Type at = type;
+        for (String field : fields) {
+            if (!(TypeView.shapeOf(at, source.inners(), source.symbols(), source.kinds(),
+                    source.sums()) instanceof Shape.Product record)) {
+                return null;
+            }
+            at = record.fields().get(field);
+            if (at == null) {
+                return null;
+            }
+        }
+        return at;
+    }
+
+    /**
+     * A value of {@code type} holding each of {@code placed} at the run of fields it is placed at,
+     * and whatever the rules admit everywhere else — or null where one of them cannot be.
+     */
+    private static FixtureTemplate holdingAt(Type type, Map<List<String>, FixtureTemplate> placed,
+                                             RuleReadingContext reading) {
+        if (placed.containsKey(List.of())) {
+            // The value itself, which two runs cannot both be.
+            return placed.size() == 1 ? placed.get(List.of()) : null;
+        }
+        // Read whole, since the record composed is written under every name the position wears.
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (!(view.shape() instanceof Shape.Product record)
+                || !(record.name() instanceof TypeSymbol.AtModule named)) {
+            return null;
+        }
+        Map<String, Map<List<String>, FixtureTemplate>> byField = new LinkedHashMap<>();
+        placed.forEach((at, value) -> byField.computeIfAbsent(at.getFirst(),
+                _ -> new LinkedHashMap<>()).put(at.subList(1, at.size()), value));
+        Map<String, FixtureTemplate> given = new LinkedHashMap<>();
+        for (Map.Entry<String, Map<List<String>, FixtureTemplate>> each : byField.entrySet()) {
+            Type field = record.fields().get(each.getKey());
+            FixtureTemplate inner = field == null ? null
+                    : holdingAt(field, each.getValue(), reading);
+            if (inner == null) {
+                return null;
+            }
+            given.put(each.getKey(), inner);
+        }
+        List<FixtureTemplate> composed = Partitions.composed(named, reading, Set.of(), given);
+        return composed.isEmpty() ? null
+                : WornNames.under(view.wrappers(), composed.getFirst(), source);
+    }
+
     /** A map of that many entries, no two of which share a key. The values under the keys are free
      *  to repeat. */
     private static Built ofMapping(Shape.Mapping map, int least, RuleReadingContext reading,
@@ -410,20 +514,39 @@ final class Witnesses {
      * <p>{@code filed}, where there is one, is a key a class was put at and the value of
      * {@code holding} it is filed under — the entry holding the element is the entry the key is
      * about. Every other entry is keyed apart from it, since a map holds one entry under a key.
+     *
+     * <p>{@code eachFiled} are keys each asked of an entry of its own, over whatever value the
+     * rules admit. A key among them that is {@code filed}'s, or another of them, is one entry.
      */
     static FixtureTemplate holding(Shape.Mapping map,
                                    List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
-                                   Filed filed, List<FixtureTemplate> keysKeptOut,
+                                   Filed filed, List<FixtureTemplate> eachFiled,
+                                   List<FixtureTemplate> keysKeptOut,
                                    DeclaredBounds.CountRange holds,
                                    RuleReadingContext reading) {
-        if (filed != null && keysKeptOut.stream()
-                .anyMatch(each -> each.text().equals(filed.key().text()))) {
+        Set<String> out = new LinkedHashSet<>();
+        keysKeptOut.forEach(each -> out.add(each.text()));
+        if (filed != null && out.contains(filed.key().text())) {
             return null;
         }
+        Set<String> filedKeys = new LinkedHashSet<>();
+        if (filed != null) {
+            filedKeys.add(filed.key().text());
+        }
+        List<FixtureTemplate> apart = new ArrayList<>();
+        for (FixtureTemplate each : eachFiled) {
+            if (out.contains(each.text())) {
+                return null;
+            }
+            if (filedKeys.add(each.text())) {
+                apart.add(each);
+            }
+        }
         // A key chosen over no value in particular needs an entry to be the key of, so the map holds
-        // at least one value whatever else is asked of it.
-        DeclaredBounds.CountRange room = filed != null && filed.value() == null
-                ? new DeclaredBounds.CountRange(Math.max(1, holds.least()), holds.most())
+        // at least one value for each such key whatever else is asked of it.
+        int keyed = filedKeys.size();
+        DeclaredBounds.CountRange room = keyed > 0
+                ? new DeclaredBounds.CountRange(Math.max(keyed, holds.least()), holds.most())
                 : holds;
         List<FixtureTemplate> values =
                 elementsHolding(map.value(), true, holding, keptOut, room, reading);
@@ -446,18 +569,15 @@ final class Witnesses {
                                 + filed.value().text());
             }
         }
-        Set<String> written = new LinkedHashSet<>();
-        if (filed != null) {
-            written.add(filed.key().text());
-        }
         // A key no entry may have is one no other entry is filed under either.
-        keysKeptOut.forEach(each -> written.add(each.text()));
-        // One more than is needed, so that the key already chosen being one of them still leaves
-        // enough beside it, and as many more as are kept out.
+        Set<String> written = new LinkedHashSet<>(filedKeys);
+        written.addAll(out);
+        // One more than is needed for each key already chosen, so that those being among them
+        // still leaves enough beside them, and as many more as are kept out.
         List<FixtureTemplate> others = new ArrayList<>();
-        int needed = filed == null ? values.size() : values.size() - 1;
+        int needed = values.size() - keyed;
         for (FixtureTemplate each : distinctValuesOf(map.key(),
-                values.size() + 1 + keysKeptOut.size(), reading, Set.of())) {
+                values.size() + keyed + keysKeptOut.size(), reading, Set.of())) {
             if (others.size() == needed) {
                 break;
             }
@@ -469,9 +589,11 @@ final class Witnesses {
             return null;
         }
         List<FixtureTemplate> entries = new ArrayList<>();
+        int nextApart = 0;
         int next = 0;
         for (int i = 0; i < values.size(); i++) {
-            FixtureTemplate key = i == under ? filed.key() : others.get(next++);
+            FixtureTemplate key = i == under ? filed.key()
+                    : nextApart < apart.size() ? apart.get(nextApart++) : others.get(next++);
             entries.add(FixtureTemplate.entry(key, values.get(i)));
         }
         return FixtureTemplate.collection(entries);

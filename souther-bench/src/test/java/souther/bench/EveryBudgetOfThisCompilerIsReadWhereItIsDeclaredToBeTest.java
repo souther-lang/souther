@@ -126,11 +126,22 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "how many elements a container composed for a count holds, how many"
                             + " containers are offered for one, and how many ways of sharing its"
                             + " elements out are looked at"),
+            Map.entry("souther.compiler.partition.ACountHandedOn#<clinit>()V",
+                    "how far a count handed on is looked for, which the composer says as that"
+                            + " figure where none was found below it"),
             Map.entry("souther.compiler.partition.CardinalityComposer#compose("
                             + "Lsouther/compiler/types/Type;Ljava/util/List;"
                             + "Ljava/util/SequencedMap;"
                             + "Lsouther/compiler/partition/RealizationTarget$OfANumber;"
                             + "Ljava/util/List;Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "stops at a size or at the containers offered, and hands the figure over in"
+                            + " the shortfall it comes back with"),
+            Map.entry("souther.compiler.partition.CardinalityComposer#handingOn("
+                            + "Ljava/util/List;Ljava/util/List;Ljava/util/List;"
+                            + "Lsouther/compiler/partition/NumericSet;"
+                            + "Lsouther/compiler/check/TypeView;"
                             + "Lsouther/compiler/check/RuleReadingContext;)"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "stops at a size or at the containers offered, and hands the figure over in"
@@ -166,7 +177,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.Generator#inputsFrom("
                             + "Lsouther/compiler/partition/Generator$RowBeingComposed;I"
                             + "[Lsouther/compiler/partition/FixtureTemplate;"
-                            + "Ljava/util/Map;)"
+                            + "Lsouther/compiler/partition/ValuesHandedOn;)"
                             + "Lsouther/compiler/partition/Generator$RowComposed;",
                     "says a baseline whose every written way was refused was written fewer ways"
                             + " than it had, under the figure the ways were cut at"),

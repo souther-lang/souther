@@ -120,6 +120,16 @@ final class CardinalityComposer {
                 || !container.element().outermostContainer().equals(container)) {
             return notChosen("`" + container + "` is no list or set written where it stands");
         }
+        if (standingAt.isEmpty() && counts.stream().allMatch(each -> ACountHandedOn.of(
+                each.count()).isPresent())) {
+            List<ACountHandedOn> handed = new ArrayList<>();
+            List<OptionalInt> meeting = new ArrayList<>();
+            for (RealizationTarget.ACount each : counts) {
+                handed.add(ACountHandedOn.of(each.count()).orElseThrow());
+                meeting.add(ACountHandedOn.counted(demands.get(each)));
+            }
+            return handingOn(asked, handed, meeting, size, view, reading);
+        }
         Element element = Element.of(counts, container);
         if (element == null) {
             return notChosen("an element of `" + container + "` is not one number the statements"
@@ -231,6 +241,112 @@ final class CardinalityComposer {
             return new TermRealizations.Realization.Unexhausted(rest, groups.unreadSaid());
         }
         return none("no container of `" + container + "` this composed meets every count asked");
+    }
+
+    /**
+     * Containers counted only for statements that hold of other containers, with as many elements
+     * meeting each as {@code meeting} says, and at every size that leaves room for them.
+     *
+     * <p>Which elements meet a statement is nothing the elements themselves turn on: each meets it
+     * by what another container is made to hold for it, and that container is handed what makes the
+     * first so many meet it and the rest not ({@link ACountHandedOn}). So a container of each size
+     * from the most counted up is offered, holding whatever the element's own rules admit — no two
+     * equal where some are counted and others not — and what it comes to beside is said as written
+     * some of: which elements a row could hold instead is not walked here, so composing nothing is
+     * no answer about the model.
+     *
+     * @param handed  what each count hands on, in the order of {@code asked}
+     * @param meeting how many elements meet each count's statement, in the order of {@code asked}:
+     *                what {@link ACountHandedOn#counted} says of the number each is asked at, and
+     *                nothing where it says nothing
+     */
+    private static TermRealizations.Realization handingOn(List<Asked> asked,
+                                                          List<ACountHandedOn> handed,
+                                                          List<OptionalInt> meeting,
+                                                          NumericSet size, TypeView view,
+                                                          RuleReadingContext reading) {
+        List<FixtureTemplate> built = new ArrayList<>();
+        Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
+        int least = 0;
+        for (int i = 0; i < meeting.size(); i++) {
+            // No count up to the most elements a container for one is composed with: the figure
+            // stopped it, and is said.
+            if (meeting.get(i).isEmpty()) {
+                return new TermRealizations.Realization.Stopped(CompositionShortfall.of(
+                        Set.of(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH),
+                        Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT), Set.of()));
+            }
+            if (!(asked.get(i) instanceof Asked.SoManyMeeting count)
+                    || !count.asMany(meeting.get(i).getAsInt())) {
+                return new TermRealizations.Realization.Unexhausted(CompositionShortfall.of(
+                        Set.of(), Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT),
+                        Set.of()), "no count walked of what is counted is one a container"
+                        + " composed with that many meeting it is asked for");
+            }
+            least = Math.max(least, meeting.get(i).getAsInt());
+        }
+        offering:
+        for (int elements = least; ; elements++) {
+            if (elements > MOST_ELEMENTS) {
+                refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
+                break;
+            }
+            if (size != null && !size.holds(Count.of(elements), Carrier.WHOLE)) {
+                continue;
+            }
+            // Where some of the elements meet a statement and the rest do not, the other container
+            // holds the value of each that does and none equal to that of each that does not, so
+            // no two of them may be equal: a container of that many apart is what is asked for.
+            // Elsewhere any container of that size is.
+            // Apart at what each such statement's other container is asked about, which is what
+            // tells the elements on its two sides apart.
+            List<List<String>> splitAt = new ArrayList<>();
+            boolean cannotSplit = false;
+            for (int i = 0; i < meeting.size(); i++) {
+                int counted = meeting.get(i).getAsInt();
+                if (counted > 0 && counted < elements) {
+                    List<String> fields = handed.get(i).fieldsToTheValue();
+                    cannotSplit |= fields == null;
+                    if (fields != null && !splitAt.contains(fields)) {
+                        splitAt.add(fields);
+                    }
+                }
+            }
+            List<FixtureTemplate> ofThatSize = new ArrayList<>();
+            if (cannotSplit) {
+                continue;
+            }
+            if (!splitAt.isEmpty()) {
+                FixtureTemplate apart = Witnesses.apart(view, elements, splitAt, reading);
+                if (apart != null) {
+                    ofThatSize.add(apart);
+                }
+            } else {
+                ofThatSize.addAll(Witnesses.ofSize(view, elements, reading, Set.of()).values());
+            }
+            for (FixtureTemplate bare : ofThatSize) {
+                FixtureTemplate one = WornNames.under(view.wrappers(), bare, reading.source());
+                if (one == null) {
+                    continue;
+                }
+                // One more to offer than the figure lets through: what stopped it is said.
+                if (built.size() == MOST_OFFERED) {
+                    refused.add(CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED);
+                    break offering;
+                }
+                built.add(one);
+            }
+        }
+        CompositionShortfall rest = CompositionShortfall.of(refused,
+                Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT), Set.of());
+        if (!built.isEmpty()) {
+            return new TermRealizations.Realization.Built(built, rest);
+        }
+        if (!rest.figures().isEmpty()) {
+            return new TermRealizations.Realization.Stopped(rest);
+        }
+        return new TermRealizations.Realization.Unexhausted(rest, "no size of the container the"
+                + " rules leave has room for as many elements as are counted");
     }
 
     /**

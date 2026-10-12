@@ -287,24 +287,31 @@ final class DemandReading {
     }
 
     /**
-     * What an element of {@code count}'s container is held to where it meets what is counted, as
-     * the relations a region is narrowed by: the reading a condition that some element meets it
-     * comes to.
+     * What an element of {@code count}'s container meeting what is counted asks: the reading a
+     * condition that some element meets it comes to, read once.
      *
-     * @return empty where what is counted is no relations about the element and the numbers beside
-     *         it alone — a statement over another container's elements, or one an element meets
-     *         one of several ways
+     * <p>Held to relations, as a region is narrowed by, where what is counted is no more than
+     * relations about the element and the numbers beside it. Handed on, where it is no more than one
+     * demand on another container about the element — some entry of it keyed by the element, or
+     * some element of it the element's value. Neither, where it is a statement an element meets one
+     * of several ways or by both at once.
      */
-    static Optional<List<TakenConstraint>> anElementMeeting(Quantity.HowManyMeet count,
-                                                            InputReading read) {
+    static AnElementMeeting anElementMeeting(Quantity.HowManyMeet count, InputReading read) {
         List<Read> reads = asked(count.someMeets(), read);
         if (reads.size() != 1
-                || !(reads.getFirst() instanceof Read.Demands(RowDemand.Exists exists))
-                || exists.relations().size() != exists.ofAnElement().size()) {
-            return Optional.empty();
+                || !(reads.getFirst() instanceof Read.Demands(RowDemand.Exists exists))) {
+            return AnElementMeeting.UNREAD;
         }
-        return Optional.of(exists.relations().stream()
-                .map(RowDemand.Relational::constraint).toList());
+        Optional<List<TakenConstraint>> heldTo =
+                exists.relations().size() == exists.ofAnElement().size()
+                        ? Optional.of(exists.relations().stream()
+                                .map(RowDemand.Relational::constraint).toList())
+                        : Optional.empty();
+        Optional<RowDemand.WithinIt> handedOn =
+                exists.ofAnElement().size() == 1
+                        && exists.ofAnElement().getFirst() instanceof RowDemand.WithinIt within
+                        ? Optional.of(within) : Optional.empty();
+        return new AnElementMeeting(heldTo, handedOn);
     }
 
     /**
