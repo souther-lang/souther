@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
@@ -18,7 +19,6 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -386,11 +386,9 @@ final class AStatementAtARow {
             case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean holds,
                                      String _) -> heldAs(holds, ofItsValue(at, row,
                     value -> !(value instanceof ObservedValue.Absent)));
-            // A value no declaration names is no case the row could be said to be in or out of.
             case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
-                                     boolean holds, String _) -> heldAs(holds, ofItsValue(at, row,
-                    value -> value.declaredAs() instanceof TypeSymbol leaf
-                            ? cases.leaves(leaf) : null));
+                                     boolean holds, String _) ->
+                    heldAs(holds, amongCases(at, cases, row));
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
                                        DecisionSubject.AnInput(TermPath other), boolean holds,
                                        String _) -> heldAs(holds, theSame(one, other, row));
@@ -468,6 +466,36 @@ final class AStatementAtARow {
                     yield answer ? Answer.HOLDS : Answer.FAILS;
                 }
                 // The row put nothing here, as a relation over a position a row left empty fails.
+                case ObservationAtPoint.WroteNothing _ -> Answer.FAILS;
+                case ObservationAtPoint.BelongsToAnotherReading _ ->
+                        new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));
+            };
+        };
+    }
+
+    /**
+     * Whether the value a row put at {@code at} is one of {@code cases}: whether the walk reaches it
+     * at the position narrowed to them, as every narrowed position a reading names is reached.
+     *
+     * <p>Asked of the walk and not of the value. What a row wrote at a position arrives wearing the
+     * names the position is declared under, and the walk is what takes them off before it asks
+     * which case a value is ({@link Classifier#inside}): the value at a position declared
+     * {@code Open = Flag} is in the case it wraps, and a record whose own field is called
+     * {@code value} is the case it is. Holding where a value is there and the narrowed walk reaches
+     * it, failing where it does not or where the row put nothing there, and not read where the
+     * walk did not get there.
+     */
+    private static Answer amongCases(TermPath at, CasesLeft cases,
+                                     BorderQuantity.Observation row) {
+        Answer there = ofItsValue(at, row, _ -> true);
+        if (!(there instanceof Answer.Holds)) {
+            return there;
+        }
+        return switch (row.at(DeclaredInput.narrowedTo(at, cases))) {
+            case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
+                    new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
+            case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
+                case ObservationAtPoint.Value _ -> Answer.HOLDS;
                 case ObservationAtPoint.WroteNothing _ -> Answer.FAILS;
                 case ObservationAtPoint.BelongsToAnotherReading _ ->
                         new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));

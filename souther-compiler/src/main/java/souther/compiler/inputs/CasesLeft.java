@@ -129,13 +129,7 @@ public final class CasesLeft {
         return out.isEmpty() ? null : new CasesLeft(out);
     }
 
-    /** Whether this leaves a value the case {@code leaf} of a sum. */
-    public boolean leaves(TypeSymbol leaf) {
-        return atoms.stream().anyMatch(each -> each instanceof Refinement.SumCase sum
-                && sum.leaf().equals(leaf));
-    }
-
-    /** Every case of a sum this leaves a value, for a reader asking it of many cases at once. */
+    /** Every case of a sum this leaves a value. */
     public Set<TypeSymbol> leavesOfASum() {
         Set<TypeSymbol> out = new HashSet<>();
         for (Refinement each : atoms) {

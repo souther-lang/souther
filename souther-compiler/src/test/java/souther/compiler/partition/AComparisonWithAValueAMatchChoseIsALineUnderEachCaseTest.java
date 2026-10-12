@@ -118,6 +118,98 @@ class AComparisonWithAValueAMatchChoseIsALineUnderEachCaseTest {
                 "the run below the line for Warm, and not the same run above the line for Hot");
     }
 
+    /**
+     * A match of more arms than where each line decides can be read part against part is said as
+     * one case per line, and a row is still owed only to the line of its own case: a row at
+     * {@code C5} meets the line for {@code C5} and not the run below the line for {@code C6} that
+     * it stands in, and a row at {@code C6} meets that run.
+     */
+    @Test
+    void aRowMeetsOnlyTheLineOfItsOwnCaseHoweverManyArmsTheMatchHas() {
+        StringBuilder cases = new StringBuilder();
+        StringBuilder limits = new StringBuilder();
+        for (int i = 0; i < 8; i++) {
+            cases.append(i == 0 ? "" : " | ").append("C").append(i);
+            limits.append("        | C").append(i).append(" -> ").append(2 + 3 * i).append("\n");
+        }
+        String model = STAGES.replace("Hot | Warm | Cold", cases)
+                .replace("""
+                                | Hot -> 2
+                                | Warm -> 7
+                                | Cold -> 14
+                        """, limits);
+        JsonNode atC5 = reportOf(model, """
+                example chk
+                    | "c5 on" : (C5, 17) -> Ok { k = 1 }
+                    | "c5 past" : (C5, 18) -> Late { n = 0 }
+                """);
+        assertEquals(Set.of("17", "18"), pointsMetOn(atC5, "chk/days"),
+                "a C5 row meets the line at seventeen");
+        List<String> runsAtC5 = new ArrayList<>();
+        regions(atC5, runsAtC5);
+        assertEquals(List.of(), runsAtC5, "and not the run below the line for C6");
+        JsonNode atC6 = reportOf(model, """
+                example chk
+                    | "c6 at seventeen" : (C6, 17) -> Ok { k = 1 }
+                    | "c6 at eighteen" : (C6, 18) -> Ok { k = 1 }
+                """);
+        assertEquals(Set.of(), pointsMetOn(atC6, "chk/days"), "a C6 row meets no line at 17");
+        List<String> runsAtC6 = new ArrayList<>();
+        regions(atC6, runsAtC6);
+        assertEquals(List.of("20 below 17 < days < 20"), runsAtC6,
+                "and does meet the run below its own");
+    }
+
+    /**
+     * Which case a row wrote is read the way the walk into it reads every narrowed position, so the
+     * case is the same answer whatever it is written as: a case with fields, an arm over two cases,
+     * and a sum under a newtype the match takes the value of.
+     */
+    @Test
+    void aRowIsInTheCaseItWroteWhateverTheCaseIsWrittenAs() {
+        String withFields = STAGES.replace("data Stage = Hot | Warm | Cold", """
+                data Hot = { since: Int }
+                data Stage = Hot | Warm | Cold""")
+                .replace("| Hot -> 2", "| Hot { since } -> 2");
+        assertEquals(Set.of("2", "3"), pointsMetOn(reportOf(withFields, """
+                example chk
+                    | "hot on" : (Hot { since = 1 }, 2) -> Ok { k = 1 }
+                    | "hot past" : (Hot { since = 1 }, 3) -> Late { n = 0 }
+                """), "chk/days"), "a case with fields");
+
+        String twoInAnArm = STAGES.replace("""
+                        | Warm -> 7
+                        | Cold -> 14
+                """, """
+                        | Warm | Cold -> 7
+                """);
+        assertEquals(Set.of("7", "8"), pointsMetOn(reportOf(twoInAnArm, """
+                example chk
+                    | "cold on" : (Cold, 7) -> Ok { k = 1 }
+                    | "cold past" : (Cold, 8) -> Late { n = 0 }
+                """), "chk/days"), "one of two cases an arm is over");
+        assertEquals(Set.of(), pointsMetOn(reportOf(twoInAnArm, """
+                example chk
+                    | "hot at seven" : (Hot, 7) -> Late { n = 0 }
+                    | "hot at eight" : (Hot, 8) -> Late { n = 0 }
+                """), "chk/days"), "and not a case it is not over");
+
+        String underANewtype = STAGES.replace("data Late", "data Kept = Stage\ndata Late")
+                .replace("(s: Stage): Int", "(s: Kept): Int")
+                .replace("match s with", "match s.value with")
+                .replace("(s: Stage, days: Int)", "(s: Kept, days: Int)");
+        assertEquals(Set.of("2", "3"), pointsMetOn(reportOf(underANewtype, """
+                example chk
+                    | "hot on" : (Kept(Hot), 2) -> Ok { k = 1 }
+                    | "hot past" : (Kept(Hot), 3) -> Late { n = 0 }
+                """), "chk/days"), "the case a newtype wraps");
+        assertEquals(Set.of(), pointsMetOn(reportOf(underANewtype, """
+                example chk
+                    | "warm at two" : (Kept(Warm), 2) -> Ok { k = 1 }
+                    | "warm at three" : (Kept(Warm), 3) -> Ok { k = 1 }
+                """), "chk/days"), "and not one it does not");
+    }
+
     /** Each run a row of the examples is in, as the line it is owed to, the side and the run. */
     private static void regions(JsonNode node, List<String> out) {
         if (node.isObject() && node.has("point") && node.has("readings")

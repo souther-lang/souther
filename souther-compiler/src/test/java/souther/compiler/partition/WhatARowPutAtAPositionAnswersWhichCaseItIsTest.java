@@ -13,6 +13,7 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -22,12 +23,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Whether a position is one of some cases of a sum is read off the case a row wrote there.
+ * Whether a position is one of some cases of a sum is whether the walk into a row reaches the value
+ * there at the position narrowed to them.
  *
- * <p>A row names the case it put at a position, a case carrying nothing and a case with fields
- * alike, so a statement joining a relation with the case of a position is one a row can be asked,
- * and a line it draws decides where the row is in that case. A value no declaration names is no
- * case the row is in or out of, and is not read.
+ * <p>A statement joining a relation with the case of a position is one a row can be asked, and a
+ * line it draws decides where the row is in that case. Which case a value is, under whatever names
+ * the position wears, is the walk's to say, as it is for every narrowed position; this reads the
+ * walk's answer. What the walk did not reach is not read.
  */
 class WhatARowPutAtAPositionAnswersWhichCaseItIsTest {
 
@@ -35,15 +37,18 @@ class WhatARowPutAtAPositionAnswersWhichCaseItIsTest {
 
     private static final TypeSymbol HOT = TypeSymbols.declared(new TypeKey("probe", "Hot"));
     private static final TypeSymbol WARM = TypeSymbols.declared(new TypeKey("probe", "Warm"));
-    private static final TypeSymbol COLD = TypeSymbols.declared(new TypeKey("probe", "Cold"));
 
-    private static final Proposition HOT_HOLDS = inCases(List.of(HOT));
-    private static final Proposition WARM_OR_COLD = inCases(List.of(WARM, COLD));
+    private static final CasesLeft ONLY_HOT = casesOf(HOT);
+    private static final Proposition HOT_HOLDS =
+            new Proposition.InCases(new DecisionSubject.AnInput(STAGE), ONLY_HOT, true);
+
+    private static final ObservedValue A_VALUE = new ObservedValue.Unit(HOT);
 
     @Test
     void aCaseOfThePositionIsAStatementARowAnswers() {
         assertTrue(AStatementAtARow.askable(HOT_HOLDS));
-        assertTrue(AStatementAtARow.askable(WARM_OR_COLD.denied()));
+        assertTrue(AStatementAtARow.askable(new Proposition.InCases(
+                new DecisionSubject.AnInput(STAGE), casesOf(HOT, WARM), false)));
         assertTrue(AStatementAtARow.askable(new Proposition.All(List.of(HOT_HOLDS,
                 new Proposition.Truth(new DecisionSubject.AnInput(STAGE.then("open")), true)))));
     }
@@ -56,65 +61,54 @@ class WhatARowPutAtAPositionAnswersWhichCaseItIsTest {
                 CasesLeft.of(Refinement.of(new Case.Presence(true))), true)));
     }
 
+    /** Holding where the narrowed walk reaches the value, and the other way round denied. */
     @Test
-    void aCaseHoldsWhereTheRowPutThatCaseThere() {
-        assertEquals(AStatementAtARow.Answer.HOLDS,
-                at(HOT_HOLDS, new ObservedValue.Unit(HOT)));
-        assertEquals(AStatementAtARow.Answer.FAILS,
-                at(HOT_HOLDS, new ObservedValue.Unit(WARM)));
-        assertEquals(AStatementAtARow.Answer.HOLDS,
-                at(HOT_HOLDS.denied(), new ObservedValue.Unit(WARM)));
+    void aCaseHoldsWhereTheNarrowedWalkReachesTheValue() {
+        Map<TermPath, ObservationAtPoint> reached = Map.of(
+                STAGE, new ObservationAtPoint.Value(A_VALUE),
+                STAGE.refine(ONLY_HOT), new ObservationAtPoint.Value(A_VALUE));
+        assertEquals(AStatementAtARow.Answer.HOLDS, at(HOT_HOLDS, reached));
+        assertEquals(AStatementAtARow.Answer.FAILS, at(HOT_HOLDS.denied(), reached));
     }
 
-    /** Several cases hold where the row put any one of them, and the rest fail. */
+    /** Failing where the value is there and the narrowed walk reaches nothing. */
     @Test
-    void severalCasesHoldWhereTheRowPutAnyOfThem() {
-        assertEquals(AStatementAtARow.Answer.HOLDS,
-                at(WARM_OR_COLD, new ObservedValue.Unit(WARM)));
-        assertEquals(AStatementAtARow.Answer.HOLDS,
-                at(WARM_OR_COLD, new ObservedValue.Unit(COLD)));
-        assertEquals(AStatementAtARow.Answer.FAILS,
-                at(WARM_OR_COLD, new ObservedValue.Unit(HOT)));
-    }
-
-    /** A case with fields is the case it was built as, read the same way. */
-    @Test
-    void aCaseWithFieldsIsTheCaseItWasBuiltAs() {
-        Map<String, ObservedValue> fields = ObservedValue.fields();
-        fields.put("since", new ObservedValue.Integer(3));
-        assertEquals(AStatementAtARow.Answer.HOLDS,
-                at(HOT_HOLDS, new ObservedValue.Constructed(HOT, fields)));
-        assertEquals(AStatementAtARow.Answer.FAILS,
-                at(HOT_HOLDS, new ObservedValue.Constructed(WARM, fields)));
+    void aCaseFailsWhereTheNarrowedWalkReachesNothing() {
+        Map<TermPath, ObservationAtPoint> elsewhere = Map.of(
+                STAGE, new ObservationAtPoint.Value(A_VALUE),
+                STAGE.refine(ONLY_HOT), ObservationAtPoint.WROTE_NOTHING);
+        assertEquals(AStatementAtARow.Answer.FAILS, at(HOT_HOLDS, elsewhere));
+        assertEquals(AStatementAtARow.Answer.HOLDS, at(HOT_HOLDS.denied(), elsewhere));
     }
 
     /**
-     * A value no declaration names is not read, whichever way the case is asked: it is not out of
-     * the case, and denying the case does not make it in.
+     * What the walk did not reach is not read, either way the case is asked, whether at the
+     * position or at the position narrowed.
      */
     @Test
-    void aValueOfNoDeclarationIsNotRead() {
-        AStatementAtARow.Answer notRead =
-                new AStatementAtARow.Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));
-        assertEquals(notRead, at(HOT_HOLDS, new ObservedValue.Integer(1)));
-        assertEquals(notRead, at(HOT_HOLDS.denied(), new ObservedValue.Integer(1)));
+    void whatTheWalkDoesNotReachIsNotRead() {
+        AStatementAtARow.Answer notWalked =
+                new AStatementAtARow.Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
+        assertEquals(notWalked, at(HOT_HOLDS, Map.of()));
+        Map<TermPath, ObservationAtPoint> notNarrowed =
+                Map.of(STAGE, new ObservationAtPoint.Value(A_VALUE));
+        assertEquals(notWalked, at(HOT_HOLDS, notNarrowed));
+        assertEquals(notWalked, at(HOT_HOLDS.denied(), notNarrowed));
     }
 
-    private static Proposition inCases(List<TypeSymbol> leaves) {
-        return new Proposition.InCases(new DecisionSubject.AnInput(STAGE),
-                CasesLeft.ofEach(leaves.stream()
-                        .map(leaf -> Refinement.of(new Case.SumCase(leaf, true))).toList()),
-                true);
+    private static CasesLeft casesOf(TypeSymbol... leaves) {
+        return CasesLeft.ofEach(Arrays.stream(leaves)
+                .map(leaf -> Refinement.of(new Case.SumCase(leaf, true))).toList());
     }
 
-    private static AStatementAtARow.Answer at(Proposition stated, ObservedValue wrote) {
+    private static AStatementAtARow.Answer at(Proposition stated,
+                                              Map<TermPath, ObservationAtPoint> walked) {
         return AStatementAtARow.of(stated, "f", null).at(new AnObservationOfAForm() {
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {
-                return path.equals(STAGE)
-                        ? WalkResult.reached(new ObservationAtPoint.Value(wrote))
-                        : WalkResult.couldNotWalk();
+                ObservationAtPoint there = walked.get(path);
+                return there == null ? WalkResult.couldNotWalk() : WalkResult.reached(there);
             }
 
             @Override

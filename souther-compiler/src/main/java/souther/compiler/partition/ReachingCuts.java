@@ -542,8 +542,9 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      */
     static DeclaredInput.Taking taking(TermPath position, CasesLeft cases, InputReading read) {
         InputDomain inputs = read.domain();
-        DeclaredInput.Taking taking = taking(inputs, inputs.declared(read.rules()), position,
-                inputs.typeAt(position, read.rules()), cases);
+        DeclaredInput declared = inputs.declared(read.rules());
+        DeclaredInput.Taking taking = taking(inputs, declared, position,
+                declared.matchedAs(inputs.typeAt(position, read.rules()), cases), cases);
         if (taking == null) {
             throw new IllegalStateException("a statement of which case the value at `" + position
                     + "` is was read, and the reading of the input holds no place there");
