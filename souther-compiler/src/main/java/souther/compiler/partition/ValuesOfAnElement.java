@@ -78,11 +78,17 @@ final class ValuesOfAnElement {
     /**
      * Up to {@code most} values of {@code type} standing at {@code at}, or null where some part of
      * it is one nothing here chooses values of, or a type written in terms of itself.
+     *
+     * <p>None where there is no room for one: what holds this part has used its room up, and the
+     * listing above it is the one that says it stopped.
      */
     private static List<ObservedValue> valuesOf(Type type, TermPath at, RuleReadingSource source,
                                                 int most,
                                                 Function<TermPath, List<ObservedValue>> numbersAt,
                                                 Set<TypeSymbol> expanding) {
+        if (most <= 0) {
+            return List.of();
+        }
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
         List<ObservedValue> bare = switch (view.shape()) {

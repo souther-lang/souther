@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -141,6 +142,89 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
                         List.of(ask(X, 1, 2), ask(X, 2), ask(Y, 0)),
                         List.of(ask(X, 3), ask(Y, 0))),
                 walked.ways());
+    }
+
+    /**
+     * A choice nested in an alternative is chosen where it stands however the vocabulary hands
+     * the alternatives over — a vocabulary making them afresh each time it is asked included,
+     * which hands back an entry equal to the one chosen and never the same one.
+     */
+    @Test
+    void aNestedChoiceIsKeptWhereTheAlternativesAreMadeAfresh() {
+        Choice inner = oneOf(ask(X, 1), ask(X, 2));
+        Choice outer = new Choice(List.of(List.of(ask(X, 1, 2), inner), List.of(ask(X, 3))));
+        OneOfEach.Walked<Entry> walked = OneOfEach.walk(List.of(outer, ask(Y, 0)), AFRESH,
+                CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
+
+        assertEquals(List.of(
+                        List.of(ask(X, 1, 2), ask(X, 1), ask(Y, 0)),
+                        List.of(ask(X, 1, 2), ask(X, 2), ask(Y, 0)),
+                        List.of(ask(X, 3), ask(Y, 0))),
+                walked.ways(), "the nested choice's alternative is in each way past it");
+    }
+
+    /**
+     * Where the looking one group did leaves none for the next, the ways the first found are
+     * handed on, without the choices of the one not looked at and with the figure that left
+     * them unlooked at — and not no way at all.
+     */
+    @Test
+    void aGroupLeftNothingToLookWithLeavesTheWaysBeforeIt() {
+        List<Entry> entries = new ArrayList<>();
+        int most = CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT.maximum();
+        // Every alternative of the first is looked at, and only the last of them is open.
+        entries.add(ask(X, most - 1));
+        List<Entry> alternatives = new ArrayList<>();
+        for (int each = 0; each < most; each++) {
+            alternatives.add(ask(X, each));
+        }
+        entries.add(oneOf(alternatives.toArray(Entry[]::new)));
+        entries.add(oneOf(ask(Y, 1), ask(Y, 2)));
+        OneOfEach.Walked<Entry> walked = walked(entries.toArray(Entry[]::new));
+
+        assertFalse(walked.ways().isEmpty(), () -> "the first group's ways: " + walked);
+        assertTrue(walked.ways().stream().allMatch(way -> way.stream().noneMatch(each ->
+                        each instanceof Ask(TermPath at, var _) && at.equals(Y))),
+                "the group not looked at is chosen in none of them");
+        assertEquals(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT, walked.stoppedBy());
+    }
+
+    /** {@link #VALUES}, handing the alternatives of a choice over as new entries each time. */
+    private static final OneOfEach.Vocabulary<Entry, Map<TermPath, Set<Integer>>> AFRESH =
+            new OneOfEach.Vocabulary<>() {
+
+                @Override
+                public List<List<Entry>> alternatives(Entry entry) {
+                    List<List<Entry>> asked = VALUES.alternatives(entry);
+                    return asked == null ? null : asked.stream()
+                            .map(way -> way.stream().map(each -> afresh(each)).toList())
+                            .toList();
+                }
+
+                @Override
+                public Set<TermPath> positions(Entry entry) {
+                    return VALUES.positions(entry);
+                }
+
+                @Override
+                public Map<TermPath, Set<Integer>> nothing() {
+                    return VALUES.nothing();
+                }
+
+                @Override
+                public Map<TermPath, Set<Integer>> with(Map<TermPath, Set<Integer>> so,
+                                                        Entry entry) {
+                    return VALUES.with(so, entry);
+                }
+            };
+
+    /** An entry equal to {@code entry} and not the same one. */
+    private static Entry afresh(Entry entry) {
+        return switch (entry) {
+            case Ask(TermPath at, Set<Integer> values) -> new Ask(at, values);
+            case Choice(List<List<Entry>> alternatives) -> new Choice(alternatives);
+        };
     }
 
     /** More open ways than are looked along: the first of them, and the figure that cut them. */

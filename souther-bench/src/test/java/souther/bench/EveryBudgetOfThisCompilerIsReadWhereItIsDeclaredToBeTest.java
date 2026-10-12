@@ -162,6 +162,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/OneOfEach$Walked;",
                     "stops at the choices looked at or at the ways looked along, and says which"
                             + " in what it comes back with"),
+            Map.entry("souther.compiler.partition.OneOfEach$Group#from("
+                            + "Ljava/util/Deque;Ljava/util/Map;Ljava/lang/Object;)Z",
+                    "stops a group's walk at the choices looked at or at the ways handed on, and"
+                            + " records which, which the walk says in what it comes back with"),
             Map.entry("souther.compiler.partition.WayToTheBorder#along()"
                             + "Lsouther/compiler/partition/OneOfEach$Walked;",
                     "hands both figures to the walk, whose answer says which it stopped at"),

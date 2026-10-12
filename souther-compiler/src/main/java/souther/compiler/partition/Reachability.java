@@ -55,8 +55,12 @@ public sealed interface Reachability {
         // of them: the way is each of them as well, and a search looks along each. Every row is
         // along one, so where every way of some of them closes, nothing reaches.
         OneOfEach.Walked<OnTheWay> walked = way.along();
-        if (walked.closedBy() != null) {
-            return taking(new WayToTheBorder(walked.closedBy()), declarations, Ways.ONE);
+        // Every way of some of them closes, which is said in the words of what closed the first:
+        // a count asked twice as much as a case or a truth, none of which leaves the way a row.
+        Reachability closed = walked.closedBy() == null ? null
+                : WayToTheBorder.closing(walked.closedBy());
+        if (closed != null) {
+            return closed;
         }
         List<Reaching> along = new ArrayList<>();
         for (List<OnTheWay> one : walked.ways()) {
@@ -179,6 +183,19 @@ public sealed interface Reachability {
                             + " a condition of several ways on it, and a figure it met");
                 }
             }
+
+            /**
+             * Whether some condition it was not split at is one a row is composed against whole
+             * along it — a statement the elements of one container meet together
+             * ({@link RealizationTarget.ElementsMeetingTogether}) — so that along the way whole a
+             * row meets more of it than along any one way the figure let through.
+             *
+             * @param behavior the behavior whose input the way reads
+             */
+            public boolean composedAgainstWhole(String behavior) {
+                return unsplit.stream().anyMatch(each ->
+                        RealizationTarget.ElementsMeetingTogether.of(behavior, each).isPresent());
+            }
         }
     }
 
@@ -279,6 +296,21 @@ public sealed interface Reachability {
             public Truths {
                 if (at == null) {
                     throw new IllegalArgumentException("both values of some position");
+                }
+            }
+        }
+
+        /**
+         * How many elements of the container at {@code at} meet a statement, asked to be in two
+         * regions that leave it no count in common: some element meeting it and none, or two
+         * counts apart.
+         */
+        record Counts(TermPath at) implements TwoAtOnce {
+
+            public Counts {
+                if (at == null) {
+                    throw new IllegalArgumentException("two counts of the elements of some"
+                            + " container");
                 }
             }
         }

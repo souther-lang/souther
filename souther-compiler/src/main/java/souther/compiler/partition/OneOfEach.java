@@ -91,8 +91,9 @@ final class OneOfEach {
      * The ways {@code entries} comes to, looking at as many alternatives as {@code looking} lets
      * and handing on as many ways as {@code handing} does.
      */
-    static <E, S> Walked<E> walk(List<E> entries, Vocabulary<E, S> vocabulary,
+    static <E, S> Walked<E> walk(List<E> entries, Vocabulary<E, S> asked,
                                  CompositionBudget looking, CompositionBudget handing) {
+        Vocabulary<E, S> vocabulary = new Once<>(asked);
         S base = vocabulary.nothing();
         List<E> choices = new ArrayList<>();
         for (E each : entries) {
@@ -112,19 +113,24 @@ final class OneOfEach {
         CompositionBudget stoppedBy = null;
         List<List<Map<E, Integer>>> open = new ArrayList<>();
         for (List<E> group : groups(choices, vocabulary)) {
-            Group<E, S> walked = new Group<>(vocabulary, handing.maximum(), left);
+            Group<E, S> walked = new Group<>(vocabulary, looking, handing, left);
             walked.from(new ArrayDeque<>(group), new IdentityHashMap<>(), base);
-            if (walked.open.isEmpty() && walked.whole) {
+            if (walked.open.isEmpty() && walked.stoppedBy == null) {
                 return new Walked<>(List.of(),
                         rebuilt(entries, vocabulary, walked.firstClosed), null);
             }
-            if (!walked.whole) {
-                stoppedBy = left[0] == 0 ? looking : handing;
+            if (walked.stoppedBy != null) {
+                stoppedBy = stoppedBy == null ? walked.stoppedBy : stoppedBy;
             }
-            if (walked.open.isEmpty()) {
-                return new Walked<>(List.of(), null, stoppedBy);
+            // A group the figure stopped before it found a way open is one whose choices go
+            // unchosen: the ways the groups before it found are handed on without them, and the
+            // figure says so.
+            if (!walked.open.isEmpty()) {
+                open.add(walked.open);
             }
-            open.add(walked.open);
+        }
+        if (open.isEmpty()) {
+            return new Walked<>(List.of(), null, stoppedBy);
         }
         List<List<E>> ways = new ArrayList<>();
         for (Map<E, Integer> chosen : handedOn(open)) {
@@ -251,21 +257,68 @@ final class OneOfEach {
     }
 
     /**
+     * {@code asked}, answering each entry's alternatives once.
+     *
+     * <p>A choice is filed under the entry it is, by identity, from the walk to the ways handed
+     * on: a choice nested in an alternative is an entry of that alternative, and a vocabulary
+     * making the alternatives afresh each time it is asked hands back another entry equal to it,
+     * under which nothing was filed — so the nested choice would be left out of the way.
+     */
+    private static final class Once<E, S> implements Vocabulary<E, S> {
+
+        private final Vocabulary<E, S> asked;
+        private final Map<E, List<List<E>>> alternatives = new IdentityHashMap<>();
+
+        Once(Vocabulary<E, S> asked) {
+            this.asked = asked;
+        }
+
+        @Override
+        public List<List<E>> alternatives(E entry) {
+            if (alternatives.containsKey(entry)) {
+                return alternatives.get(entry);
+            }
+            List<List<E>> out = asked.alternatives(entry);
+            alternatives.put(entry, out);
+            return out;
+        }
+
+        @Override
+        public Set<TermPath> positions(E entry) {
+            return asked.positions(entry);
+        }
+
+        @Override
+        public S nothing() {
+            return asked.nothing();
+        }
+
+        @Override
+        public S with(S so, E entry) {
+            return asked.with(so, entry);
+        }
+    }
+
+    /**
      * The walk over one group: each choice in turn, each of its alternatives taken in beside what
      * was taken before it, a nested choice chosen where it stands.
      */
     private static final class Group<E, S> {
 
         private final Vocabulary<E, S> vocabulary;
-        private final int most;
+        private final CompositionBudget looking;
+        private final CompositionBudget handing;
         private final int[] left;
         private final List<Map<E, Integer>> open = new ArrayList<>();
         private Map<E, Integer> firstClosed;
-        private boolean whole = true;
+        /** The figure that stopped this group's walk, or null where it was walked to the end. */
+        private CompositionBudget stoppedBy;
 
-        Group(Vocabulary<E, S> vocabulary, int most, int[] left) {
+        Group(Vocabulary<E, S> vocabulary, CompositionBudget looking, CompositionBudget handing,
+              int[] left) {
             this.vocabulary = vocabulary;
-            this.most = most;
+            this.looking = looking;
+            this.handing = handing;
             this.left = left;
         }
 
@@ -276,8 +329,8 @@ final class OneOfEach {
                 next = pending.pollFirst();
             }
             if (next == null) {
-                if (open.size() == most) {
-                    whole = false;
+                if (open.size() == handing.maximum()) {
+                    stoppedBy = handing;
                     return false;
                 }
                 open.add(new IdentityHashMap<>(chosen));
@@ -286,7 +339,7 @@ final class OneOfEach {
             List<List<E>> alternatives = vocabulary.alternatives(next);
             for (int which = 0; which < alternatives.size(); which++) {
                 if (left[0] == 0) {
-                    whole = false;
+                    stoppedBy = looking;
                     return false;
                 }
                 left[0]--;

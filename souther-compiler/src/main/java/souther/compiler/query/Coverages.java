@@ -1379,12 +1379,14 @@ final class Coverages {
                 if (able.along().isEmpty()) {
                     return lookedAlong(criterion, label, narrowing, able);
                 }
-                // Past the figure the way whole is looked along first. A condition it was not split
-                // at that states something of the elements of one container is composed against
-                // whole there, every way of it at once, and the ways the figure let through are
-                // each one of those ways — so they are looked along only where it came to nothing.
+                // Past the figure the way whole is looked along first where a condition it was not
+                // split at is composed against whole there — a statement the elements of one
+                // container meet, every way of it at once — since the ways the figure let through
+                // are each one of those ways. Anywhere else the way whole is composed against less
+                // than they are, and is looked along after them.
                 Looked whole = null;
-                if (able.ways() instanceof Reachability.Ways.Whole) {
+                if (able.ways() instanceof Reachability.Ways.Whole past
+                        && past.composedAgainstWhole(line.quantity().behavior())) {
                     whole = lookedAlong(criterion, label, narrowing, able);
                     if (whole.witness().isPresent()) {
                         return whole;

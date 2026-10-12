@@ -527,7 +527,7 @@ final class CardinalityComposer {
                         return true;
                     }
                 }
-                if (!sharing.holdsTogether(share) && !heldTogether(together, container, whole)) {
+                if (!sharing.holdsTogether() && !heldTogether(together, container, whole)) {
                     return true;
                 }
                 if (ObservedFixtures.of(new ObservedValue.Sequence(values), sourceType, reading)
@@ -1380,6 +1380,20 @@ final class CardinalityComposer {
         /** Whether a sharing was in front of the walk when there was no room left for it. */
         private boolean stopped;
 
+        /** Whether some group from the {@code g}-th on meets the {@code i}-th thing asked, at
+         *  {@code [g][i]}: worked out once, from the last group back. */
+        private final boolean[][] meetableFrom;
+
+        /** How many more elements may yet meet each thing asked, filled in where a sharing is
+         *  asked whether it can still come to what is asked. */
+        private final int[] more;
+
+        /** No more elements, which is what a sharing whose every element is shared out has. */
+        private final int[] none;
+
+        /** How many of the elements of the sharing handed over last meet each thing asked. */
+        private int[] handedOver;
+
         /**
          * Sharings of the elements among {@code groups} that meet everything {@code asked}, and
          * that leave each of {@code together} a way of holding.
@@ -1394,6 +1408,16 @@ final class CardinalityComposer {
             this.size = size;
             this.distinct = distinct;
             this.left = most;
+            int count = groups.answers().size();
+            this.meetableFrom = new boolean[count + 1][asked.size()];
+            for (int g = count - 1; g >= 0; g--) {
+                boolean[] answers = groups.answers().get(g);
+                for (int i = 0; i < asked.size(); i++) {
+                    meetableFrom[g][i] = answers[i] || meetableFrom[g + 1][i];
+                }
+            }
+            this.more = new int[asked.size()];
+            this.none = new int[asked.size()];
         }
 
         /**
@@ -1431,7 +1455,11 @@ final class CardinalityComposer {
                     return false;
                 }
                 left--;
-                return !meetsEveryCount(share) || take.test(share.clone());
+                if (!meetsEveryCount(meeting)) {
+                    return true;
+                }
+                handedOver = meeting;
+                return take.test(share.clone());
             }
             // A sharing whose counts the elements left cannot bring to what is asked, or have
             // already taken past it, is none whatever the rest of it is, and is not walked.
@@ -1469,13 +1497,8 @@ final class CardinalityComposer {
          * element left one meeting it.
          */
         private boolean stillMeetable(int[] meeting, int from, int remaining) {
-            int[] more = new int[asked.size()];
             for (int i = 0; i < asked.size(); i++) {
-                boolean canGrow = false;
-                for (int g = from; g < groups.answers().size() && !canGrow; g++) {
-                    canGrow = groups.answers().get(g)[i];
-                }
-                more[i] = canGrow ? remaining : 0;
+                more[i] = meetableFrom[from][i] ? remaining : 0;
                 int most = meeting[i] + more[i];
                 boolean some = false;
                 for (int count = meeting[i]; count <= most && !some; count++) {
@@ -1501,43 +1524,29 @@ final class CardinalityComposer {
             return true;
         }
 
-        private boolean meetsEveryCount(int[] share) {
-            int[] meeting = meeting(share);
+        /** Whether a sharing every element of which is shared out, {@code meeting} of them
+         *  meeting each thing asked, meets every count and leaves every statement a way. */
+        private boolean meetsEveryCount(int[] meeting) {
             for (int i = 0; i < asked.size(); i++) {
                 if (!asked.get(i).asMany(meeting[i])) {
                     return false;
                 }
             }
-            return leavesAWay(meeting, new int[asked.size()]);
+            return leavesAWay(meeting, none);
         }
 
         /**
-         * Whether every statement of the elements together holds of {@code share} by how many of
-         * its elements meet each thing asked, whatever else the elements are — so a container of
-         * it need not be read for them.
+         * Whether every statement of the elements together holds of the sharing handed over last,
+         * by how many of its elements meet each thing asked, whatever else the elements are — so
+         * a container of it need not be read for them. Asked while the sharing is in hand.
          */
-        boolean holdsTogether(int[] share) {
-            int[] meeting = meeting(share);
-            int[] none = new int[asked.size()];
+        boolean holdsTogether() {
             for (Together each : together) {
-                if (each.counting().at(meeting, none) != AStatementAtARow.Counting.HOLDS) {
+                if (each.counting().at(handedOver, none) != AStatementAtARow.Counting.HOLDS) {
                     return false;
                 }
             }
             return true;
-        }
-
-        /** How many of the elements {@code share} draws meet each thing asked. */
-        private int[] meeting(int[] share) {
-            int[] meeting = new int[asked.size()];
-            for (int i = 0; i < asked.size(); i++) {
-                for (int g = 0; g < share.length; g++) {
-                    if (groups.answers().get(g)[i]) {
-                        meeting[i] += share[g];
-                    }
-                }
-            }
-            return meeting;
         }
     }
 

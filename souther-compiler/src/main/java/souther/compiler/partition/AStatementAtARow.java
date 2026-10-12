@@ -466,22 +466,21 @@ final class AStatementAtARow {
     }
 
     /**
-     * The one container this statement reads nothing beside, or null where it reads anything else
+     * The one container {@code stated} reads nothing beside, or null where it reads anything else
      * or none: what some of its elements meet, how many do, and what the element a reading of a
-     * row stands at holds — every one of them about a parameter that is itself the container.
+     * row stands at holds — every position it reads inside that container.
+     *
+     * <p>Read off the statement as written, and not off the statement put to rows: which
+     * container it is about is all that is asked, and putting it to rows is the walk of every
+     * relation it holds.
      */
-    TermPath containerItIsAbout() {
+    static TermPath containerItIsAbout(Proposition stated) {
         Set<TermPath> about = new LinkedHashSet<>();
-        for (OverTheElements each : elements.values()) {
-            if (each.container().insideAContainer()
-                    || !each.ofTheElement().readsOnlyUnder(each.container().element())) {
-                return null;
-            }
-            about.add(each.container());
+        Set<TermPath> read = new LinkedHashSet<>();
+        if (!readsOf(stated, about, read)) {
+            return null;
         }
-        List<TermPath> read = new ArrayList<>(positions);
-        relations.values().forEach(each ->
-                each.terms().forEach(term -> read.add(term.subjectPath())));
+        numbersOf(stated).forEach(term -> read.add(term.subjectPath()));
         for (TermPath each : read) {
             if (!each.insideAContainer()) {
                 return null;
@@ -491,25 +490,65 @@ final class AStatementAtARow {
         return about.size() == 1 ? about.iterator().next() : null;
     }
 
-    /** Whether everything this statement reads is at or under {@code root}. */
-    private boolean readsOnlyUnder(TermPath root) {
-        for (TermPath each : positions) {
-            if (!each.isAtOrUnder(root)) {
-                return false;
+    /**
+     * Adds what {@code stated} reads of the input other than its numbers: the containers its
+     * quantifiers and counts are over, to {@code about} where the container is a parameter's own
+     * and to {@code read} where it is inside another, and every position it asks of its own value
+     * to {@code read}. False where it reads something no position of the input is.
+     */
+    private static boolean readsOf(Proposition stated, Set<TermPath> about, Set<TermPath> read) {
+        return switch (stated) {
+            case Proposition.All all ->
+                    all.parts().stream().allMatch(part -> readsOf(part, about, read));
+            case Proposition.Any any ->
+                    any.parts().stream().allMatch(part -> readsOf(part, about, read));
+            case Proposition.Some some -> overElementsOf(some.container().inputPosition(), about,
+                    read) && readsOf(some.ofTheElement(), about, read);
+            case Proposition.Compared compared
+                    when compared.relation() instanceof Relation.Affine affine
+                    && countIn(affine) instanceof Quantity.HowManyMeet count ->
+                    overElementsOf(count.container().inputPosition(), about, read)
+                            && readsOf(count.ofTheElement(), about, read);
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, String _) -> {
+                read.add(at);
+                yield true;
             }
+            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _,
+                                     String _) -> {
+                read.add(at);
+                yield true;
+            }
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft _,
+                                     boolean _, String _) -> {
+                read.add(at);
+                yield true;
+            }
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
+                                       DecisionSubject.AnInput(TermPath other), boolean _,
+                                       String _) -> {
+                read.add(one);
+                read.add(other);
+                yield true;
+            }
+            case Proposition.Compared _, Proposition.Always _, Proposition.LastToHold _ -> true;
+            case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
+                 Proposition.SameValue _, Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _ -> false;
+            case Proposition.Carried carried -> throw carried.handedToAReader();
+        };
+    }
+
+    /** {@code container}, which a quantifier or a count is over, filed as {@link #readsOf}
+     *  says. */
+    private static boolean overElementsOf(TermPath container, Set<TermPath> about,
+                                          Set<TermPath> read) {
+        if (container == null) {
+            return false;
         }
-        for (OneRelation each : relations.values()) {
-            for (NumericTerm term : each.terms()) {
-                if (!term.subjectPath().isAtOrUnder(root)) {
-                    return false;
-                }
-            }
-        }
-        for (OverTheElements each : elements.values()) {
-            if (!each.container().isAtOrUnder(root)
-                    || !each.ofTheElement().readsOnlyUnder(root)) {
-                return false;
-            }
+        if (container.insideAContainer()) {
+            read.add(container);
+        } else {
+            about.add(container);
         }
         return true;
     }
@@ -584,6 +623,9 @@ final class AStatementAtARow {
          *  number could not be held against it. */
         private final byte[][] byNumber;
         private final int root;
+        /** What each part came to in the asking under way, cleared before each: one of these is
+         *  asked by one walk at a time, and asked at every step of it. */
+        private final byte[] known;
 
         private Counting(Built built, int root) {
             int size = built.kind.size();
@@ -600,6 +642,7 @@ final class AStatementAtARow {
                 byNumber[i] = built.byNumber.get(i);
             }
             this.root = root;
+            this.known = new byte[size];
         }
 
         /**
@@ -607,7 +650,6 @@ final class AStatementAtARow {
          * one element and up to {@code more} besides.
          */
         byte at(int[] meeting, int[] more) {
-            byte[] known = new byte[kind.length];
             Arrays.fill(known, (byte) -1);
             return at(root, meeting, more, known);
         }

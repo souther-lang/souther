@@ -4,6 +4,8 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 
+import java.util.Optional;
+
 /**
  * The value a row rebuilds to put a number where a search asked for it.
  *
@@ -246,6 +248,24 @@ public sealed interface RealizationTarget {
                 throw new IllegalArgumentException(
                         "a statement about a container's elements is some statement about one");
             }
+        }
+
+        /**
+         * What {@code oneOf} states, as a statement the elements of one container meet together —
+         * or empty where no one proposition states it, where a row cannot be asked it, or where
+         * it reads anything but the elements of one container a parameter is.
+         *
+         * @param behavior the behavior whose input the statement reads
+         */
+        public static Optional<ElementsMeetingTogether> of(String behavior,
+                                                           OnTheWay.OneOf oneOf) {
+            if (oneOf.stated().isEmpty() || !AStatementAtARow.askable(oneOf.stated().get())) {
+                return Optional.empty();
+            }
+            Proposition stated = oneOf.stated().get();
+            TermPath container = AStatementAtARow.containerItIsAbout(stated);
+            return container == null || !container.steps().isEmpty() ? Optional.empty()
+                    : Optional.of(new ElementsMeetingTogether(behavior, container, stated));
         }
 
         @Override

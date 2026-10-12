@@ -6,7 +6,6 @@ import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.flow.Ways;
-import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.ast.Hir;
@@ -4737,13 +4736,23 @@ public final class Generator {
             }
         }
         for (RealizationTarget each : fixing.keySet()) {
-            if (each instanceof RealizationTarget.AtOnePosition(NumericTerm.FromOnePosition term)
-                    && quantified.stream().anyMatch(container ->
-                            term.subjectPath().isAtOrUnder(container.element()))) {
+            if (insideAnElementOf(each, quantified)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Whether {@code target} is a value placed inside an element of one of {@code containers}:
+     * the element itself or a number of it, which some element of a container composed for its
+     * counts is chosen holding ({@link TermRealizations}) — and nothing else is.
+     */
+    private static boolean insideAnElementOf(RealizationTarget target, Set<TermPath> containers) {
+        return target instanceof RealizationTarget.AtOnePosition(NumericTerm.FromOnePosition term)
+                && term instanceof NumericTerm.ValueOf value
+                && containers.stream().anyMatch(container ->
+                        value.position().isAtOrUnder(container.element()));
     }
 
     /**
@@ -5429,11 +5438,13 @@ public final class Generator {
         // against more.
         if (reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure, var _)) {
             for (OnTheWay.OneOf each : unsplit) {
-                RealizationTarget.ElementsMeetingTogether together = togetherOf(subject, each);
-                if (together == null) {
+                Optional<RealizationTarget.ElementsMeetingTogether> stated =
+                        RealizationTarget.ElementsMeetingTogether.of(subject.behavior(), each);
+                if (stated.isEmpty()) {
                     gaps.add(new ReachabilityGap.LookedAlongWhole(each, figure));
                     continue;
                 }
+                RealizationTarget.ElementsMeetingTogether together = stated.get();
                 byCounts.add(together.container());
                 out.put(together, Count.of(1));
                 counted.put(together, NumbersAskedFor.of(LevelRegion.point(
@@ -5457,10 +5468,7 @@ public final class Generator {
         // stands, which the container is composed holding — its elements are not written alike,
         // so there is no every element for it to be the value of.
         for (RealizationTarget each : fixing.keySet()) {
-            if (each instanceof RealizationTarget.AtOnePosition(NumericTerm.FromOnePosition term)
-                    && term instanceof NumericTerm.ValueOf
-                    && byCounts.stream().anyMatch(container ->
-                            term.position().isAtOrUnder(container.element()))) {
+            if (insideAnElementOf(each, byCounts)) {
                 someElement.add(each);
             }
         }
@@ -5807,24 +5815,6 @@ public final class Generator {
 
     private static List<TakenConstraint> constraints(List<RowDemand.Relational> relations) {
         return relations.stream().map(RowDemand.Relational::constraint).toList();
-    }
-
-    /**
-     * What {@code oneOf} states, as a statement the elements of one container meet together — or
-     * null where no one proposition states it, where a row cannot be asked it, or where it reads
-     * anything but the elements of one container a parameter is.
-     */
-    private static RealizationTarget.ElementsMeetingTogether togetherOf(MeasuredInput subject,
-                                                                         OnTheWay.OneOf oneOf) {
-        if (oneOf.stated().isEmpty() || !AStatementAtARow.askable(oneOf.stated().get())) {
-            return null;
-        }
-        Proposition stated = oneOf.stated().get();
-        TermPath container = AStatementAtARow.of(stated, subject.behavior(),
-                subject.quantities()).containerItIsAbout();
-        return container == null || !container.steps().isEmpty() ? null
-                : new RealizationTarget.ElementsMeetingTogether(subject.behavior(), container,
-                        stated);
     }
 
     /** The count of elements meeting the statement {@code demand} is the whole of, where it is a
