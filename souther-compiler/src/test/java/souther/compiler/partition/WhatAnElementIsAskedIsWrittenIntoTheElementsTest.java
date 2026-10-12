@@ -237,7 +237,7 @@ class WhatAnElementIsAskedIsWrittenIntoTheElementsTest {
         Reachability.Reaching reaching = assertInstanceOf(Reachability.Reaching.class,
                 Reachability.of(new WayToTheBorder(stated(behavior)), declarations()));
         List<Generator.BoundaryAttempt> out = new ArrayList<>();
-        ElementsWrittenAlike.of(reaching).forEach(one -> out.add(probed(one)));
+        ElementsWrittenAlike.of(reaching).ways().forEach(one -> out.add(probed(one)));
         return out;
     }
 

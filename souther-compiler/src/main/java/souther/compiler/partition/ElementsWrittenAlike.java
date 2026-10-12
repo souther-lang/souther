@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -29,14 +30,31 @@ final class ElementsWrittenAlike {
     }
 
     /**
-     * Each way of writing {@code reaching}'s elements alike that one element may meet, as the way
-     * with every demand of several ways rewritten to one of them; none where it has no such
-     * demand, or where no way is one an element meets.
+     * The ways of writing a way's elements alike that were looked along, and the figure that
+     * stopped the looking where one did — which the way composed as it stands past them says,
+     * since along a way left out its elements would have been written against more.
+     *
+     * @param ways      each way that one element may meet, as the way with every demand of several
+     *                  ways rewritten to one of them
+     * @param stoppedBy the figure the looking stopped at, or null where every way was looked at
      */
-    static List<Reachability.Reaching> of(Reachability.Reaching reaching) {
+    record Choices(List<Reachability.Reaching> ways, CompositionBudget stoppedBy) {
+
+        static final Choices NONE = new Choices(List.of(), null);
+
+        Choices {
+            ways = List.copyOf(ways);
+        }
+    }
+
+    /**
+     * Each way of writing {@code reaching}'s elements alike that one element may meet; none where
+     * it has no such demand, or where no way is one an element meets.
+     */
+    static Choices of(Reachability.Reaching reaching) {
         if (reaching.boundedOnTheWay().stream()
                 .allMatch(cut -> RowDemand.writtenAlikeAsItStands(cut.demand()))) {
-            return List.of();
+            return Choices.NONE;
         }
         OneOfEach.Walked<OnTheWay.TakenIn> walked = OneOfEach.walk(reaching.boundedOnTheWay(),
                 new OneElement(reaching), CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
@@ -46,7 +64,7 @@ final class ElementsWrittenAlike {
             out.add(new Reachability.Reaching(reaching.region(), reaching.requirements(),
                     reaching.truths(), way, reaching.ways(), reaching.declined()));
         }
-        return List.copyOf(out);
+        return new Choices(out, walked.stoppedBy());
     }
 
     /**
@@ -69,18 +87,21 @@ final class ElementsWrittenAlike {
             }
             List<List<OnTheWay.TakenIn>> out = new ArrayList<>();
             switch (entry.demand()) {
-                case RowDemand.Exists(var container, var meets, var holdingOne) -> {
+                // One way of it is less than the statement, so it is no count of the statement.
+                case RowDemand.Exists(var container, var meets, var holdingOne, var _) -> {
                     for (List<RowDemand.OfAnElement> way : meets.ways()) {
                         out.add(List.of(new OnTheWay.TakenIn(entry.anchor(),
                                 new RowDemand.Exists(container,
-                                        RowDemand.AnElementMeets.only(way), holdingOne))));
+                                        RowDemand.AnElementMeets.only(way), holdingOne,
+                                        Optional.empty()))));
                     }
                 }
-                case RowDemand.ForAll(var container, var meets, var holdingNone) -> {
+                case RowDemand.ForAll(var container, var meets, var holdingNone, var _) -> {
                     for (List<RowDemand.OfAnElement> way : meets.ways()) {
                         out.add(List.of(new OnTheWay.TakenIn(entry.anchor(),
                                 new RowDemand.ForAll(container,
-                                        RowDemand.AnElementMeets.only(way), holdingNone))));
+                                        RowDemand.AnElementMeets.only(way), holdingNone,
+                                        Optional.empty()))));
                     }
                 }
                 case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,

@@ -20,6 +20,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -378,17 +379,47 @@ public sealed interface RowDemand {
      * is every element, and a demand with none is no element; neither is one of these, since the
      * reading settles both before a demand is made ({@link DemandReading}).
      *
-     * @param ways each way an element may meet it, each once and in the order the reading kept
-     *             them; one or more, and none of them empty
+     * <p>A value, compared by its ways, and hashed once: what a reading of a statement asks is
+     * gathered into sets at every level a disjunction nests at, and hashed afresh each time, the
+     * ways inside were walked once per level.
      */
-    record AnElementMeets(List<List<OfAnElement>> ways) {
+    static final class AnElementMeets {
 
-        public AnElementMeets {
-            ways = ways.stream().map(List::copyOf).distinct().toList();
-            if (ways.isEmpty() || ways.stream().anyMatch(List::isEmpty)) {
+        /** Each way an element may meet it, each once and in the order the reading kept them; one
+         *  or more, and none of them empty. */
+        private final List<List<OfAnElement>> ways;
+        private final int hash;
+        /** What {@link #positions} came to last, or null before it is asked. */
+        private volatile PositionsOf positions;
+
+        AnElementMeets(List<List<OfAnElement>> ways) {
+            this.ways = ways.stream().map(List::copyOf).distinct().toList();
+            if (this.ways.isEmpty() || this.ways.stream().anyMatch(List::isEmpty)) {
                 throw new IllegalArgumentException("what an element meets is one or more ways,"
-                        + " each asking something: " + ways);
+                        + " each asking something: " + this.ways);
             }
+            this.hash = this.ways.hashCode();
+        }
+
+        /** Each way an element may meet it. */
+        public List<List<OfAnElement>> ways() {
+            return ways;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof AnElementMeets that && hash == that.hash
+                    && ways.equals(that.ways));
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public String toString() {
+            return "AnElementMeets[ways=" + ways + "]";
         }
 
         /** What an element asked only {@code asked} meets. */
@@ -419,12 +450,27 @@ public sealed interface RowDemand {
             return ways.getFirst();
         }
 
-        /** Every position an element meeting this turns on, along whichever way. */
+        /**
+         * Every position an element meeting this turns on, along whichever way.
+         *
+         * <p>Kept for the element last asked about, which is the element of the one container the
+         * demand is over every time but where a caller names another: a walk of the ways a way is
+         * looked along asks it of every demand at every level a disjunction nests at.
+         */
         public Set<TermPath> positions(TermPath element) {
+            PositionsOf had = positions;
+            if (had != null && had.element().equals(element)) {
+                return had.at();
+            }
             Set<TermPath> out = new LinkedHashSet<>();
             ways.forEach(way -> way.forEach(each -> out.addAll(each.positions(element))));
-            return Collections.unmodifiableSet(out);
+            Set<TermPath> at = Collections.unmodifiableSet(out);
+            positions = new PositionsOf(element, at);
+            return at;
         }
+
+        /** The positions an element meeting this turns on, as the element at {@code element}. */
+        private record PositionsOf(TermPath element, Set<TermPath> at) {}
     }
 
     /**
@@ -509,14 +555,21 @@ public sealed interface RowDemand {
      * @param holdingOne  the container's size at least one, which is a number of this input: a
      *                    container an element of which is asked something is a position, and
      *                    every type a container can be measures how many it holds
+     * @param counted     how many elements meet the statement this is, where this is the whole
+     *                    of what the quantifier asks: some element meeting it is that count being
+     *                    one or more, which is how a container whose elements differ is composed
+     *                    for it ({@link CardinalityComposer}). Empty where this is part of what
+     *                    the quantifier asks, or no count of the statement is read
      */
-    record Exists(TermPath container, AnElementMeets ofAnElement, Relational holdingOne)
+    record Exists(TermPath container, AnElementMeets ofAnElement, Relational holdingOne,
+                  Optional<Quantity.HowManyMeet> counted)
             implements OfACondition {
 
         public Exists {
             Objects.requireNonNull(container, "a container an element of which meets them");
             Objects.requireNonNull(ofAnElement, "what the element meets");
             Objects.requireNonNull(holdingOne, "the container holding one, which it does");
+            Objects.requireNonNull(counted, "the count it is, or that it is none");
             // The value is written into the container as an element of its own, so what else is
             // asked of the element would be asked of another one: some element being `v` and
             // meeting `p` is not `v` written beside an element meeting `p`.
@@ -571,14 +624,21 @@ public sealed interface RowDemand {
      *                      element may meet it more than one way, each element along its own
      * @param holdingNone   the container's size at most nought — the way to meet this with no
      *                      element at all, which is a number of this input as {@link Exists}'s is
+     * @param counted       how many elements meet the statement whose denial every element is
+     *                      to meet, where this is the whole of what the quantifier asks: every
+     *                      element meeting the denial is that count being nought. Empty where
+     *                      this is part of what the quantifier asks, or no count of the statement
+     *                      is read
      */
-    record ForAll(TermPath container, AnElementMeets ofEachElement, Relational holdingNone)
+    record ForAll(TermPath container, AnElementMeets ofEachElement, Relational holdingNone,
+                  Optional<Quantity.HowManyMeet> counted)
             implements OfACondition {
 
         public ForAll {
             Objects.requireNonNull(container, "a container every element of which meets them");
             Objects.requireNonNull(ofEachElement, "what every element meets");
             Objects.requireNonNull(holdingNone, "the container holding none, which it may");
+            Objects.requireNonNull(counted, "the count it is, or that it is none");
         }
 
         /** The relations among what every element is to meet, along its one way. */

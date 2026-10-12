@@ -82,6 +82,11 @@ public enum CompositionBudget {
      *  built. */
     SHARES_A_COUNT_IS_TRIED_AT(4096),
 
+    /** How many values of an element of a type that has only so many are read for the counts its
+     *  container is composed for, each read for every statement the counts are of. Past it the
+     *  values left are not offered, and the container is composed of the ones read. */
+    VALUES_AN_ELEMENT_IS_CHOSEN_AMONG(256),
+
     /** How many ways down to the number a total is read from are tried. Its own figure and not
      *  {@link #SHAPES_OF_A_TOTAL_OFFERED}: a way that plans is not a container that was offered, and
      *  charging one to the other leaves a case never tried because an earlier one planned and built
@@ -399,7 +404,7 @@ public enum CompositionBudget {
             case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
                  ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,
                  ELEMENTS_A_COUNT_IS_COMPOSED_WITH, CONTAINERS_A_COUNT_IS_OFFERED,
-                 SHARES_A_COUNT_IS_TRIED_AT,
+                 SHARES_A_COUNT_IS_TRIED_AT, VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                  WAYS_DOWN_TO_A_TOTAL_TRIED, WAYS_UNDER_THE_CASES_TRIED,
                  PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
                  PLACES_A_PAIR_IS_TRIED_AT, STEPS_A_SEARCH_MAY_TAKE,

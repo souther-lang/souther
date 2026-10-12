@@ -144,12 +144,14 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
     }
 
     /**
-     * A walk that arrived and found no value says that, and not that an observation stopped.
+     * A walk that arrived and found the row's values only under elements another reading chose is
+     * a reading that is not at the point, and not an observation that stopped.
      *
      * <p>The two leave different work and only one of them names a budget. A reader that words a
      * code as what an observation did — and something downstream does, since that is what the code
      * is for — then says a limit did something where no limit fired: the value it would have
-     * stopped was never met.
+     * stopped was never met. And the values are where another reading of the row is, which is
+     * tried too, so nothing about the row is left open by this one.
      */
     @Test
     void aWalkThatReachedNoValueIsNotAnObservationThatStopped() {
@@ -167,9 +169,9 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
                     }
                 });
 
-        assertEquals(BorderQuantity.Stands.couldNotTell(ReadingGap.NO_VALUE), met,
-                "the walk arrived and no value of the row stands there, which is not a value an"
-                        + " observation could not keep");
+        assertEquals(BorderQuantity.Stands.NO, met,
+                "the walk arrived and no value of the row stands there under this reading, which"
+                        + " is not a value an observation could not keep");
     }
 
     /**

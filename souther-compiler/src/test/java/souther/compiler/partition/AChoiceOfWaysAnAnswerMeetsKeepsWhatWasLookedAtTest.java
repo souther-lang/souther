@@ -10,6 +10,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -42,7 +43,8 @@ class AChoiceOfWaysAnAnswerMeetsKeepsWhatWasLookedAtTest {
                 List.of(List.of(written), List.of(STOPPED)))) {
             assertEquals(new AnAnswerComposed.Ways.Written(
                             Set.of(CompositionBudget.READINGS_OF_ONE_CONDITION)),
-                    AnAnswerComposed.written(List.of(new DemandReading.Read.OneOf(alternatives))),
+                    AnAnswerComposed.written(List.of(new DemandReading.Read.OneOf(alternatives,
+                            Optional.empty()))),
                     "the other alternative, and the figure that left the first");
         }
     }
@@ -52,7 +54,7 @@ class AChoiceOfWaysAnAnswerMeetsKeepsWhatWasLookedAtTest {
         DemandReading.Read written = atLeast(3);
         assertEquals(new AnAnswerComposed.Ways.Written(Set.of()),
                 AnAnswerComposed.written(List.of(new DemandReading.Read.OneOf(
-                        List.of(List.of(NO_WORDS), List.of(written))))),
+                        List.of(List.of(NO_WORDS), List.of(written)), Optional.empty()))),
                 "the other alternative, and no figure: nothing more looking would read");
     }
 
@@ -61,10 +63,10 @@ class AChoiceOfWaysAnAnswerMeetsKeepsWhatWasLookedAtTest {
         assertEquals(new AnAnswerComposed.Ways.Stopped(
                         Set.of(CompositionBudget.READINGS_OF_ONE_CONDITION)),
                 AnAnswerComposed.written(List.of(new DemandReading.Read.OneOf(
-                        List.of(List.of(NO_WORDS), List.of(STOPPED))))));
+                        List.of(List.of(NO_WORDS), List.of(STOPPED)), Optional.empty()))));
         assertEquals(new AnAnswerComposed.Ways.Unwritable(),
                 AnAnswerComposed.written(List.of(new DemandReading.Read.OneOf(
-                        List.of(List.of(NO_WORDS), List.of(NO_OTHER_WORDS))))));
+                        List.of(List.of(NO_WORDS), List.of(NO_OTHER_WORDS)), Optional.empty()))));
     }
 
     /** That the number at {@code $answer.n} is at least {@code level}. */

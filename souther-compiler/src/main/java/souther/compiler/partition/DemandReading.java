@@ -33,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -107,17 +108,53 @@ final class DemandReading {
          * every demand of one alternative, and an alternative is no less a way for the others
          * beside it.
          *
-         * @param alternatives what each alternative asks, each once and in the order the parts are
-         *                     kept; two or more, since one is no choice
+         * <p>A value, compared by what it holds, and hashed once: a disjunction inside an
+         * alternative of another is gathered into a set at every level it nests at, and hashed
+         * afresh each time, what is inside was walked once per level.
          */
-        record OneOf(List<List<Read>> alternatives) implements Taken {
+        static final class OneOf implements Taken {
 
-            public OneOf {
-                alternatives = alternatives.stream().map(List::copyOf).distinct().toList();
-                if (alternatives.size() < 2) {
+            /** What each alternative asks, each once and in the order the parts are kept; two or
+             *  more, since one is no choice. */
+            private final List<List<Read>> alternatives;
+            /** The statement the alternatives are the ways of, where one proposition says it:
+             *  what a composer holding all of it at once composes against without taking any one
+             *  way. */
+            private final Optional<Proposition> stated;
+            private final int hash;
+
+            OneOf(List<List<Read>> alternatives, Optional<Proposition> stated) {
+                this.alternatives = alternatives.stream().map(List::copyOf).distinct().toList();
+                if (this.alternatives.size() < 2) {
                     throw new IllegalArgumentException("one of several things is two or more: "
-                            + alternatives);
+                            + this.alternatives);
                 }
+                this.stated = Objects.requireNonNull(stated, "a statement of the ways, or none");
+                this.hash = 31 * this.alternatives.hashCode() + stated.hashCode();
+            }
+
+            List<List<Read>> alternatives() {
+                return alternatives;
+            }
+
+            Optional<Proposition> stated() {
+                return stated;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return this == other || (other instanceof OneOf that && hash == that.hash
+                        && alternatives.equals(that.alternatives) && stated.equals(that.stated));
+            }
+
+            @Override
+            public int hashCode() {
+                return hash;
+            }
+
+            @Override
+            public String toString() {
+                return "OneOf[alternatives=" + alternatives + "]";
             }
         }
 
@@ -180,7 +217,8 @@ final class DemandReading {
                 if (joined.how().under(holding) == ConditionJoin.BOTH) {
                     yield List.copyOf(both(left, right));
                 }
-                yield oneOf(List.of(left, right), Stated::read, each -> new Stated(joined, each));
+                yield oneOf(List.of(left, right), Stated::read, each -> new Stated(joined, each),
+                        Optional.of(holdingAs(statedBy(joined, read, conditions), holding)));
             }
             // What a comparison states, read as what it states: a size held against a number that
             // parts nought from every size above it asks what the container holding something
@@ -232,9 +270,10 @@ final class DemandReading {
      *
      * @param readOf what an entry of a part is read as
      * @param asWhole an entry standing for what the whole asks
+     * @param stated  the statement the parts are the ways of, where one proposition says it
      */
     private static <T> List<T> oneOf(List<List<T>> parts, Function<T, Read> readOf,
-                                     Function<Read, T> asWhole) {
+                                     Function<Read, T> asWhole, Optional<Proposition> stated) {
         List<List<Read>> open = new ArrayList<>();
         List<T> lastOpen = parts.getLast();
         for (List<T> part : parts) {
@@ -250,8 +289,8 @@ final class DemandReading {
                 }
             }
         }
-        return open.stream().distinct().count() <= 1 ? lastOpen
-                : List.of(asWhole.apply(new Read.OneOf(open)));
+        List<List<Read>> each = open.stream().distinct().toList();
+        return each.size() <= 1 ? lastOpen : List.of(asWhole.apply(new Read.OneOf(each, stated)));
     }
 
     /**
@@ -417,7 +456,8 @@ final class DemandReading {
                 yield List.copyOf(out);
             }
             case Proposition.Any any -> oneOf(any.parts().stream()
-                    .map(part -> projected(part, read, met)).toList(), each -> each, each -> each);
+                    .map(part -> projected(part, read, met)).toList(), each -> each, each -> each,
+                    Optional.of(any));
             // One of several statements, which one turning on which application a run meets the
             // condition on: one alternative per statement that can hold, as a disjunction is. A
             // statement of an application no run makes is an alternative too many and never one
@@ -434,7 +474,7 @@ final class DemandReading {
                 yield switch ((int) open.stream().distinct().count()) {
                     case 0 -> List.of(new Read.Settled(false));
                     case 1 -> open.getFirst();
-                    default -> List.of(new Read.OneOf(open));
+                    default -> List.of(new Read.OneOf(open, Optional.of(applications)));
                 };
             }
             // The elements of a container a dependency answered are what a row stands the
@@ -456,7 +496,7 @@ final class DemandReading {
                     projected(reached.surely(true), read, met),
                     List.of(new Read.Unread(new WhyNotTaken.OutsideDomain(
                             WhyNotTaken.DomainLimit.A_NODE_BELOW_WHAT_A_ROW_WRITES)))),
-                    each -> each, each -> each);
+                    each -> each, each -> each, Optional.of(reached));
         };
     }
 
@@ -512,8 +552,22 @@ final class DemandReading {
                     : waysOf(projected(part, read, met), element, everyElement, some, read));
         }
         List<AnElementsWay> ways = AnElementsWay.eachWhole(choices, read);
-        return everyElement ? everyElementMeeting(held, ways, read)
-                : someElementMeeting(held, ways, read);
+        Optional<Quantity.HowManyMeet> counted = countOf(some);
+        return everyElement ? everyElementMeeting(held, ways, read, counted, Optional.of(some))
+                : someElementMeeting(held, ways, read, counted, Optional.of(some));
+    }
+
+    /**
+     * How many elements meet what {@code some} states of one, where that is a count a row can be
+     * composed for: a statement read through, about the element.
+     */
+    private static Optional<Quantity.HowManyMeet> countOf(Proposition.Some some) {
+        Proposition statement = some.ofTheElement();
+        return statement.mayTurnOnAnElementOf(some.container())
+                && !Proposition.leavesSomethingUnread(statement)
+                && AStatementAtARow.askable(statement)
+                ? Optional.of(new Quantity.HowManyMeet(some.container(), statement))
+                : Optional.empty();
     }
 
     /**
@@ -762,9 +816,9 @@ final class DemandReading {
                     List.of(AnElementsWay.ofTheRow(forTheRun(whole, why, past)));
             // Each way of each alternative: one alternative a figure stopped is said to be, and
             // the others are the ways they are.
-            case Read.OneOf(var alternatives) -> {
+            case Read.OneOf oneOf -> {
                 List<List<AnElementsWay>> ofEach = new ArrayList<>();
-                for (List<Read> alternative : alternatives) {
+                for (List<Read> alternative : oneOf.alternatives()) {
                     ofEach.add(waysOf(alternative, element, everyElement, whole, read));
                 }
                 yield AnElementsWay.oneOfEach(ofEach);
@@ -804,7 +858,7 @@ final class DemandReading {
         if (ways == null) {
             return List.of(forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
         }
-        return someElementMeeting(map, ways, read);
+        return someElementMeeting(map, ways, read, Optional.empty(), Optional.of(stated));
     }
 
     /**
@@ -862,9 +916,15 @@ final class DemandReading {
      * meeting the second, so the ways that ask the row the same beside the element are one demand
      * with those ways inside it, and ways asking the row different things are alternatives of the
      * row. One no element meets is none of them, and where every one is that, no row is past it.
+     *
+     * @param counted how many elements meet the statement, which the demand is where it is the
+     *                whole of it: one demand, asking nothing of the row beside the element
+     * @param stated  the statement read, where one proposition says it
      */
     private static List<Read> someElementMeeting(TermPath held, List<AnElementsWay> ways,
-                                                 InputReading read) {
+                                                 InputReading read,
+                                                 Optional<Quantity.HowManyMeet> counted,
+                                                 Optional<Proposition> stated) {
         RowDemand.Relational holdingOne = sizeAgainst(held, read, true);
         Map<List<Read>, List<List<RowDemand.OfAnElement>>> byTheRow = new LinkedHashMap<>();
         Set<List<Read>> anyElement = new LinkedHashSet<>();
@@ -885,15 +945,16 @@ final class DemandReading {
         if (byTheRow.isEmpty()) {
             return List.of(new Read.Settled(false));
         }
+        boolean whole = byTheRow.size() == 1 && byTheRow.containsKey(List.of());
         List<List<Read>> alternatives = new ArrayList<>();
         byTheRow.forEach((ofTheRow, ofTheElement) -> {
             List<Read> out = new ArrayList<>(ofTheRow);
             out.add(new Read.Demands(anyElement.contains(ofTheRow) ? holdingOne
                     : new RowDemand.Exists(held, new RowDemand.AnElementMeets(ofTheElement),
-                            holdingOne)));
+                            holdingOne, whole ? counted : Optional.empty())));
             alternatives.add(List.copyOf(out));
         });
-        return oneOf(alternatives, each -> each, each -> each);
+        return oneOf(alternatives, each -> each, each -> each, stated);
     }
 
     /**
@@ -905,9 +966,15 @@ final class DemandReading {
      * others is enough, so it is an alternative of the row, beside every element meeting one of
      * the rest. A way no element meets is none of them, and where every one is that, the container
      * holds none and nothing else is asked of an element that is not there.
+     *
+     * @param counted how many elements meet the statement whose denial every element is to meet,
+     *                which the demand is where it is the whole of it
+     * @param stated  the statement read, where one proposition says it
      */
     private static List<Read> everyElementMeeting(TermPath held, List<AnElementsWay> ways,
-                                                  InputReading read) {
+                                                  InputReading read,
+                                                  Optional<Quantity.HowManyMeet> counted,
+                                                  Optional<Proposition> stated) {
         RowDemand.Relational holdingNone = sizeAgainst(held, read, false);
         List<List<RowDemand.OfAnElement>> ofTheElement = new ArrayList<>();
         List<AnElementsWay> withTheRow = new ArrayList<>();
@@ -930,7 +997,8 @@ final class DemandReading {
         List<List<Read>> alternatives = new ArrayList<>();
         if (!ofTheElement.isEmpty()) {
             alternatives.add(List.of(new Read.Demands(new RowDemand.ForAll(held,
-                    new RowDemand.AnElementMeets(ofTheElement), holdingNone))));
+                    new RowDemand.AnElementMeets(ofTheElement), holdingNone,
+                    withTheRow.isEmpty() ? counted : Optional.empty()))));
         }
         for (AnElementsWay way : withTheRow) {
             List<Read> out = new ArrayList<>(way.ofTheRow());
@@ -938,12 +1006,12 @@ final class DemandReading {
                 List<List<RowDemand.OfAnElement>> these = new ArrayList<>(ofTheElement);
                 these.add(way.ofTheElement());
                 out.add(new Read.Demands(new RowDemand.ForAll(held,
-                        new RowDemand.AnElementMeets(these), holdingNone)));
+                        new RowDemand.AnElementMeets(these), holdingNone, Optional.empty())));
             }
             alternatives.add(List.copyOf(out));
         }
         return alternatives.size() == 1 ? alternatives.getFirst()
-                : oneOf(alternatives, each -> each, each -> each);
+                : oneOf(alternatives, each -> each, each -> each, stated);
     }
 
     /**

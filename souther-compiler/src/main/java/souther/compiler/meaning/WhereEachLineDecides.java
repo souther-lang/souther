@@ -1,6 +1,11 @@
 package souther.compiler.meaning;
 
+import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.TermPath;
+
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -108,8 +113,159 @@ public final class WhereEachLineDecides {
         Map<String, List<List<List<Proposition>>>> standings = new TreeMap<>();
         read(writtenAs, writtenAs, null, List.of(), lines, standings);
         List<Decides> out = new ArrayList<>();
-        lines.forEach((key, line) -> out.add(new Decides(line, casesOf(standings.get(key)))));
+        lines.forEach((key, line) -> out.add(new Decides(line,
+                whereItStands(line, casesOf(standings.get(key))))));
         return List.copyOf(out);
+    }
+
+    /**
+     * {@code cases}, each said of a value that is the case {@code line}'s positions are written
+     * under: a line at a field of one case of a value decides where the value is that case.
+     *
+     * <p>Nothing reading the parts of a case knows that one value is one case, so a case can ask
+     * of the value what only another case of it holds — a field of that other case at some number,
+     * or the value being that other case. Asked of the value the line is at, the first is about a
+     * field the value does not have, and is no part of where the line decides; the second asks the
+     * value to be two cases, and is no place the line is. So the one is left out and the other
+     * case with it, and every case is said with the case the line is at.
+     */
+    private static List<Proposition> whereItStands(Proposition.Compared line,
+                                                   List<Proposition> cases) {
+        Map<TermPath, CasesLeft> at = casesItIsOver(line);
+        if (at.isEmpty()) {
+            return cases;
+        }
+        List<Proposition> stands = new ArrayList<>();
+        at.forEach((position, narrowed) -> {
+            Proposition standing = standing(position, narrowed);
+            if (standing != null) {
+                stands.add(standing);
+            }
+        });
+        List<Proposition> out = new ArrayList<>();
+        cases:
+        for (Proposition each : cases) {
+            List<Proposition> parts = new ArrayList<>();
+            for (Proposition part : each instanceof Proposition.All all ? all.parts()
+                    : List.of(each)) {
+                switch (asked(part, at)) {
+                    case OF_ANOTHER_CASE -> { }
+                    case NOT_THERE -> {
+                        continue cases;
+                    }
+                    case THERE -> parts.add(part);
+                }
+            }
+            parts.addAll(stands);
+            out.add(Proposition.all(parts));
+        }
+        return out;
+    }
+
+    /**
+     * That the value at {@code position} is {@code narrowed}, in the words a row is asked it in:
+     * one of some cases of a sum, or holding a value or none — or null where it is neither, which
+     * leaves the case unsaid and the line no narrower.
+     */
+    private static Proposition standing(TermPath position, CasesLeft narrowed) {
+        DecisionSubject.AnInput value = new DecisionSubject.AnInput(position);
+        List<Refinement> atoms = narrowed.atoms();
+        if (atoms.stream().allMatch(Refinement.SumCase.class::isInstance)) {
+            return new Proposition.InCases(value, narrowed, true);
+        }
+        if (atoms.size() == 1 && atoms.getFirst() instanceof Refinement.Presence presence) {
+            return new Proposition.Present(value, presence.present());
+        }
+        return null;
+    }
+
+    /** What a part of a case comes to, asked of the value a line stands at. */
+    private enum AskedOfTheValue {
+        /** Something of the value as it is, which the case asks. */
+        THERE,
+        /** Something only another case of it has, which the value does not. */
+        OF_ANOTHER_CASE,
+        /** That the value is a case it is not, which leaves the line nowhere. */
+        NOT_THERE
+    }
+
+    /** What {@code part} comes to of a value that is the cases {@code at} says, position by
+     *  position. */
+    private static AskedOfTheValue asked(Proposition part, Map<TermPath, CasesLeft> at) {
+        if (part instanceof Proposition.InCases(DecisionSubject.AnInput(TermPath of),
+                CasesLeft cases, boolean holds, var _) && at.containsKey(of)) {
+            CasesLeft stands = at.get(of);
+            boolean meets = stands.meet(cases) != null;
+            if ((holds && !meets) || (!holds && stands.within(cases))) {
+                return AskedOfTheValue.NOT_THERE;
+            }
+            return holds ? AskedOfTheValue.THERE : AskedOfTheValue.OF_ANOTHER_CASE;
+        }
+        // Whether an optional holds a value, asked of one the line stands under holding one or
+        // none.
+        if (part instanceof Proposition.Present(DecisionSubject.AnInput(TermPath of),
+                boolean holds, var _) && at.containsKey(of)
+                && at.get(of).atoms().size() == 1
+                && at.get(of).atoms().getFirst() instanceof Refinement.Presence presence) {
+            return presence.present() == holds ? AskedOfTheValue.THERE : AskedOfTheValue.NOT_THERE;
+        }
+        for (TermPath position : positionsOf(part)) {
+            List<TermPath.Step> steps = position.steps();
+            for (int step = 0; step < steps.size(); step++) {
+                CasesLeft stands = at.get(new TermPath(position.head(), steps.subList(0, step)));
+                if (stands != null && steps.get(step) instanceof TermPath.Step.Refine(
+                        CasesLeft cases) && stands.meet(cases) == null) {
+                    return AskedOfTheValue.OF_ANOTHER_CASE;
+                }
+            }
+        }
+        return AskedOfTheValue.THERE;
+    }
+
+    /** The positions of the input a part of a case is about, where it is one thing of one value;
+     *  none for a part that is more than that. */
+    private static List<TermPath> positionsOf(Proposition part) {
+        List<TermPath> out = new ArrayList<>();
+        switch (part) {
+            case Proposition.Compared compared -> {
+                switch (compared.relation()) {
+                    case Relation.Affine affine -> affine.form().coefs().keySet()
+                            .forEach(quantity -> {
+                                if (quantity instanceof DecisionAtom.OfTheInput(var term)) {
+                                    out.add(term.subjectPath());
+                                }
+                            });
+                    case Relation.Ordered ordered -> {
+                        if (ordered.term() instanceof DecisionAtom.OfTheInput(var term)) {
+                            out.add(term.subjectPath());
+                        }
+                    }
+                }
+            }
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath of), var _, var _) ->
+                    out.add(of);
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath of), var _, var _, var _) ->
+                    out.add(of);
+            case Proposition.Present(DecisionSubject.AnInput(TermPath of), var _, var _) ->
+                    out.add(of);
+            default -> { }
+        }
+        return out;
+    }
+
+    /** Each position a position {@code line} is over narrows, with the cases it narrows it to. */
+    private static Map<TermPath, CasesLeft> casesItIsOver(Proposition.Compared line) {
+        Map<TermPath, CasesLeft> out = new LinkedHashMap<>();
+        for (TermPath position : positionsOf(line)) {
+            List<TermPath.Step> steps = position.steps();
+            for (int at = 0; at < steps.size(); at++) {
+                if (steps.get(at) instanceof TermPath.Step.Refine(CasesLeft cases)) {
+                    out.merge(new TermPath(position.head(), steps.subList(0, at)), cases,
+                            (one, other) -> one.meet(other) == null ? one : one.meet(other));
+                }
+            }
+        }
+        return out;
     }
 
     /**

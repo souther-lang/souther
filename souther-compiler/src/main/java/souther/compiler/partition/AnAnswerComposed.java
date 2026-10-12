@@ -238,11 +238,11 @@ public final class AnAnswerComposed {
 
         @Override
         public List<List<Asked>> alternatives(Asked entry) {
-            if (!(entry.read() instanceof DemandReading.Read.OneOf(var alternatives))) {
+            if (!(entry.read() instanceof DemandReading.Read.OneOf oneOf)) {
                 return null;
             }
             List<List<Asked>> out = new ArrayList<>();
-            for (List<DemandReading.Read> alternative : alternatives) {
+            for (List<DemandReading.Read> alternative : oneOf.alternatives()) {
                 out.add(alternative.stream()
                         .map(read -> new Asked(entry.statement(), read)).toList());
             }
@@ -387,9 +387,9 @@ public final class AnAnswerComposed {
     static Ways written(List<DemandReading.Read> reads) {
         Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
         for (DemandReading.Read each : reads) {
-            if (each instanceof DemandReading.Read.OneOf(var alternatives)) {
+            if (each instanceof DemandReading.Read.OneOf oneOf) {
                 boolean some = false;
-                for (List<DemandReading.Read> alternative : alternatives) {
+                for (List<DemandReading.Read> alternative : oneOf.alternatives()) {
                     switch (written(alternative)) {
                         case Ways.Written(var by) -> {
                             stoppedBy.addAll(by);

@@ -15,6 +15,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -44,7 +45,7 @@ class AWayWithOneAlternativeLeftOpenIsLookedAlongThatOneTest {
                         List.of(new OnTheWay.Narrowed(WHERE, KIND.refine(only("A")), List.of(),
                                 List.of())),
                         List.of(new OnTheWay.Narrowed(WHERE, KIND.refine(only("B")), List.of(),
-                                List.of()))))));
+                                List.of()))), Optional.empty())));
         Reachability.Reaching reaching = assertInstanceOf(Reachability.Reaching.class,
                 Reachability.of(way, reading().quantities().region()));
         Reachability.Ways.Each each = assertInstanceOf(Reachability.Ways.Each.class,

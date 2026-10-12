@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Proposition;
 
 /**
  * The value a row rebuilds to put a number where a search asked for it.
@@ -216,6 +217,45 @@ public sealed interface RealizationTarget {
         @Override
         public String toString() {
             return count.toString();
+        }
+    }
+
+    /**
+     * A statement about the elements of a container taken together, realized by writing the
+     * container so that its elements meet it — one of several ways, which ways are the statement's
+     * and which one the elements meet is the composing's choice ({@link CardinalityComposer}).
+     *
+     * <p>Where a condition on the way came out one of more ways than are looked along one at a
+     * time, and every way is something the elements of one container meet: a row meets one of them
+     * where the container meets the statement, so the container is composed against the statement
+     * whole and no way is chosen first.
+     *
+     * <p>The place a search fixes for this is one, the statement holding: nothing about it is a
+     * number of the row, and what it asks is the container's elements and nothing else.
+     *
+     * @param behavior  the behavior whose input the statement reads, which says which order each
+     *                  number it reads is on
+     * @param container the container whose elements the statement is about, a parameter's own
+     * @param stated    the statement, about nothing but that container and its elements
+     */
+    record ElementsMeetingTogether(String behavior, TermPath container, Proposition stated)
+            implements RealizationTarget {
+
+        public ElementsMeetingTogether {
+            if (behavior == null || container == null || stated == null) {
+                throw new IllegalArgumentException(
+                        "a statement about a container's elements is some statement about one");
+            }
+        }
+
+        @Override
+        public TermPath writeRoot() {
+            return container.element().outermostContainer();
+        }
+
+        @Override
+        public String toString() {
+            return container + " meeting " + stated.key();
         }
     }
 }

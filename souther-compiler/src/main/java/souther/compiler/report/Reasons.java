@@ -156,6 +156,8 @@ final class Reasons {
                         "how many containers are offered for one count";
                 case SHARES_A_COUNT_IS_TRIED_AT ->
                         "how many ways of sharing out a container's elements are tried for a count";
+                case VALUES_AN_ELEMENT_IS_CHOSEN_AMONG ->
+                        "how many values of an element are read for a count";
                 case WAYS_DOWN_TO_A_TOTAL_TRIED ->
                         "how many ways down to what a total adds up are tried";
                 case WAYS_UNDER_THE_CASES_TRIED ->

@@ -131,13 +131,48 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " figure where none was found below it"),
             Map.entry("souther.compiler.partition.CardinalityComposer#compose("
                             + "Lsouther/compiler/types/Type;Ljava/util/List;Ljava/util/List;"
-                            + "Ljava/util/SequencedMap;"
+                            + "Ljava/util/List;Ljava/util/SequencedMap;"
                             + "Lsouther/compiler/partition/RealizationTarget$OfANumber;"
-                            + "Ljava/util/List;Lsouther/compiler/inputs/SearchRegion;"
+                            + "Ljava/util/List;Lsouther/compiler/inputs/Quantities;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
                             + "Lsouther/compiler/check/RuleReadingContext;)"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "stops at a size or at the containers offered, and hands the figure over in"
                             + " the shortfall it comes back with"),
+            Map.entry("souther.compiler.partition.CardinalityComposer#amongItsValues("
+                            + "Ljava/util/List;Ljava/util/List;Ljava/util/List;"
+                            + "Ljava/util/SequencedMap;Lsouther/compiler/inputs/TermPath;"
+                            + "Lsouther/compiler/partition/NumericSet;"
+                            + "Lsouther/compiler/types/Type;Lsouther/compiler/check/TypeView;"
+                            + "Lsouther/compiler/check/Shape$Sequence;Ljava/util/List;"
+                            + "Lsouther/compiler/inputs/Quantities;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "stops at the values an element is chosen among, at a size, at the sharings"
+                            + " looked at or at the containers offered, and hands the figure over"
+                            + " in the shortfall it comes back with"),
+            // The ways a way is looked along where conditions on it came out one of several
+            // things: the walk stops at either figure and says which, and each caller carries it
+            // on with what was looked along.
+            Map.entry("souther.compiler.partition.OneOfEach#walk("
+                            + "Ljava/util/List;Lsouther/compiler/partition/OneOfEach$Vocabulary;"
+                            + "Lsouther/compiler/partition/CompositionBudget;"
+                            + "Lsouther/compiler/partition/CompositionBudget;)"
+                            + "Lsouther/compiler/partition/OneOfEach$Walked;",
+                    "stops at the choices looked at or at the ways looked along, and says which"
+                            + " in what it comes back with"),
+            Map.entry("souther.compiler.partition.WayToTheBorder#along()"
+                            + "Lsouther/compiler/partition/OneOfEach$Walked;",
+                    "hands both figures to the walk, whose answer says which it stopped at"),
+            Map.entry("souther.compiler.partition.ElementsWrittenAlike#of("
+                            + "Lsouther/compiler/partition/Reachability$Reaching;)"
+                            + "Lsouther/compiler/partition/ElementsWrittenAlike$Choices;",
+                    "says the figure the walk stopped at beside the ways it looked along, which"
+                            + " the way composed as it stands says of what it wrote alike"),
+            Map.entry("souther.compiler.partition.AnAnswerComposed#written(Ljava/util/List;)"
+                            + "Lsouther/compiler/partition/AnAnswerComposed$Ways;",
+                    "says the figures the walk stopped at in the ways it answers with"),
             Map.entry("souther.compiler.partition.CardinalityComposer#handingOn("
                             + "Ljava/util/List;Ljava/util/List;Ljava/util/List;"
                             + "Lsouther/compiler/partition/NumericSet;"
@@ -231,13 +266,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops asking a point for another value to stand a row on, along the whole way"
                             + " or one of the ways it is, and answers with what the values it did"
                             + " try came to"),
-            Map.entry("souther.compiler.partition.Reachability#of("
-                            + "Lsouther/compiler/partition/WayToTheBorder;"
-                            + "Lsouther/compiler/inputs/SearchRegion;)"
-                            + "Lsouther/compiler/partition/Reachability;",
-                    "past the figure looks along the way whole, which every row past it is on,"
-                            + " and keeps the conditions it did not split at, which the row's"
-                            + " account says"),
             // The pairs of a number of the input and the answer composed for it. The figure bounds
             // how many are offered, and what it hands over is whether some were left out, which the
             // search that composed for none of them answers with.
@@ -387,11 +415,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;)Ljava/util/List;",
                     "past the figure stops taking the ways of one of several things, keeps the"
                             + " ones taken and says the rest stopped, the same way"),
-            Map.entry("souther.compiler.partition.AnAnswerComposed#eachWay("
-                            + "Ljava/util/List;)"
-                            + "Lsouther/compiler/partition/AnAnswerComposed$Ways;",
-                    "past the figure keeps the ways it made and names the figure as what left the"
-                            + " rest, and names the reading's figure where a part was not read"),
             Map.entry("souther.compiler.partition.Pullback#applicationsOf("
                             + "Lsouther/compiler/core/Core$Block;"
                             + "Lsouther/compiler/inputs/InputReads;"

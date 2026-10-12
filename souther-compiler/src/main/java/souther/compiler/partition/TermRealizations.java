@@ -297,17 +297,20 @@ final class TermRealizations {
         assert !targets.isEmpty() : "a group is the numbers of one location and has one of them";
         // How many elements meet a statement, which is answered by choosing elements and not by a
         // number standing anywhere. Every count of one container is one question about which
-        // elements it holds, so they are composed together, with how many it holds beside them.
+        // elements it holds, so they are composed together, with how many it holds beside them —
+        // and so is a statement its elements meet together, which is answered the same way.
         List<RealizationTarget.ACount> counts = new ArrayList<>();
+        List<RealizationTarget.ElementsMeetingTogether> together = new ArrayList<>();
         List<RealizationTarget.OfANumber> numbers = new ArrayList<>();
         for (RealizationTarget target : targets) {
             switch (target) {
                 case RealizationTarget.ACount count -> counts.add(count);
+                case RealizationTarget.ElementsMeetingTogether stated -> together.add(stated);
                 case RealizationTarget.OfANumber number -> numbers.add(number);
             }
         }
-        if (!counts.isEmpty()) {
-            return countsOf(targets, counts, numbers);
+        if (!counts.isEmpty() || !together.isEmpty()) {
+            return countsOf(targets, counts, together, numbers);
         }
         if (numbers.stream().anyMatch(each -> each.term() instanceof NumericTerm.Multiplicity)) {
             return amongTheElements(targets, numbers);
@@ -532,14 +535,23 @@ final class TermRealizations {
      * containers written at one location are a value composed out of two collections at once,
      * which nothing here writes. Beside them, a value asked at the element itself is some element
      * standing there, which is one more thing the elements are chosen for; anything else asked
-     * inside an element is not, and the group is one nothing here writes.
+     * inside an element is not, and the group is one nothing here writes. A statement the
+     * elements meet together is about the same container or the group is one nothing writes.
      */
     private static JointRealization countsOf(Collection<RealizationTarget> group,
                                              List<RealizationTarget.ACount> counts,
+                                             List<RealizationTarget.ElementsMeetingTogether>
+                                                     together,
                                              List<RealizationTarget.OfANumber> numbers) {
-        TermPath container = counts.getFirst().count().container();
+        TermPath container = counts.isEmpty() ? together.getFirst().container()
+                : counts.getFirst().count().container();
         for (RealizationTarget.ACount each : counts) {
             if (!each.count().container().equals(container)) {
+                return nothingSolvesAGroup();
+            }
+        }
+        for (RealizationTarget.ElementsMeetingTogether each : together) {
+            if (!each.container().equals(container)) {
                 return nothingSolvesAGroup();
             }
         }
@@ -550,8 +562,10 @@ final class TermRealizations {
                 case NumericTerm.TakenOf taken
                         when taken.takenAs() instanceof TakenAs.HowManyItHolds
                         && taken.position().equals(container) -> holding.add(each);
+                // The element itself, or a number inside it: some element standing there.
                 case NumericTerm.ValueOf value
-                        when value.position().equals(container.element()) -> elements.add(each);
+                        when value.position().isAtOrUnder(container.element()) ->
+                        elements.add(each);
                 default -> {
                     return nothingSolvesAGroup();
                 }
@@ -562,8 +576,11 @@ final class TermRealizations {
             return nothingSolvesAGroup();
         }
         RealizationTarget.OfANumber many = holding.isEmpty() ? null : holding.getFirst();
-        return wholly(group, Stream.concat(counts.stream(), numbers.stream()).toList(),
-                () -> new JointBuilder.SoManyMeetingEach(counts, many, elements));
+        List<RealizationTarget> answered = new ArrayList<>(counts);
+        answered.addAll(together);
+        answered.addAll(numbers);
+        return wholly(group, answered,
+                () -> new JointBuilder.SoManyMeetingEach(counts, together, many, elements));
     }
 
     /**
@@ -1097,21 +1114,24 @@ final class TermRealizations {
          * is what every count of it turns on together, so they are one question and the container
          * is written once ({@link CardinalityComposer}).
          *
+         * @param together    statements the elements are to meet together, each one of several ways
          * @param manyItHolds how many elements the container holds, or null where nothing asks
          * @param standingAt  the element itself, each asked to stand in a set — which some element
          *                    of the container does
          */
         record SoManyMeetingEach(List<RealizationTarget.ACount> counts,
+                                 List<RealizationTarget.ElementsMeetingTogether> together,
                                  RealizationTarget.OfANumber manyItHolds,
                                  List<RealizationTarget.OfANumber> standingAt)
                 implements JointBuilder {
 
             public SoManyMeetingEach {
-                if (counts.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "a container composed for its counts is asked for at least one");
+                if (counts.isEmpty() && together.isEmpty()) {
+                    throw new IllegalArgumentException("a container composed for its counts is"
+                            + " asked for at least one, or for a statement its elements meet");
                 }
                 counts = List.copyOf(counts);
+                together = List.copyOf(together);
                 standingAt = List.copyOf(standingAt);
             }
 
@@ -1121,8 +1141,8 @@ final class TermRealizations {
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
                 nothingInside(inside);
-                return CardinalityComposer.compose(sourceType, keptApart, counts, demands,
-                        manyItHolds, standingAt, within, reading);
+                return CardinalityComposer.compose(sourceType, keptApart, counts, together,
+                        demands, manyItHolds, standingAt, measuring, within, reading);
             }
         }
 

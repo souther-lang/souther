@@ -230,8 +230,8 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
     private static void collect(DemandReading.Read read, List<WhyNotTaken> out) {
         switch (read) {
             case DemandReading.Read.Unread(var whys) -> out.addAll(whys);
-            case DemandReading.Read.OneOf(var alternatives) ->
-                    alternatives.forEach(each -> each.forEach(one -> collect(one, out)));
+            case DemandReading.Read.OneOf oneOf -> oneOf.alternatives()
+                    .forEach(each -> each.forEach(one -> collect(one, out)));
             case DemandReading.Read.Demands _, DemandReading.Read.Settled _,
                  DemandReading.Read.Narrows _ -> { }
         }

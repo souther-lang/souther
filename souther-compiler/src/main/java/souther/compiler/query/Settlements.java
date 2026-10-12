@@ -505,7 +505,7 @@ public record Settlements(List<ObligationIdentity> requested,
                 }
                 ObligationIdentity.OfALine item = new ObligationIdentity.OfALine(point.point());
                 point.met().forEach((_, at) -> reads.computeIfAbsent(item, _ -> new ArrayList<>())
-                        .add(new AtAPoint(subject.at(at.border()),
+                        .add(AtAPoint.of(subject.at(at.border()),
                                 at.owedAt(point.at()).criterion())));
             }
             // And this behavior's readings of the lines the declarations own, which its own rules
@@ -515,7 +515,7 @@ public record Settlements(List<ObligationIdentity> requested,
                     if (at.at(point.point()) instanceof ItemAssessment.Owed owed) {
                         reads.computeIfAbsent(new ObligationIdentity.OfALine(point),
                                 _ -> new ArrayList<>())
-                                .add(new AtAPoint(subject.at(at.border()), owed.criterion()));
+                                .add(AtAPoint.of(subject.at(at.border()), owed.criterion()));
                     }
                 }
             });
@@ -1075,8 +1075,7 @@ public record Settlements(List<ObligationIdentity> requested,
          * is over other positions.
          */
         private ToldApartAt tellsThemApartAt(RowAsRead asRead, ALineBesideOne one) {
-            StandingAtAPoint.RowsRead read = StandingAtAPoint.valuesOf(one.reading(),
-                    List.of(asRead.asInputs()), one.reading().border().origin().recordedAt());
+            StandingAtAPoint.RowsRead read = one.toRows().valuesOf(List.of(asRead.asInputs()));
             if (read.each().isEmpty()) {
                 // The row holds no value on this line at all, whether because nothing watched its
                 // run or because its positions could not be read there. Which of those it is is
@@ -1122,9 +1121,7 @@ public record Settlements(List<ObligationIdentity> requested,
             // met: a row standing on the line anywhere the behavior reads it is a row at the point.
             Settlement answer = new Settlement.DoesNotSettle();
             for (AtAPoint one : here) {
-                Settlement said = switch (StandingAtAPoint.met(one.line(),
-                        List.of(observed), one.criterion(),
-                        one.line().border().origin().recordedAt())) {
+                Settlement said = switch (one.line().met(List.of(observed), one.criterion())) {
                     case StandingAtAPoint.Met.Reached _ -> new Settlement.Settles();
                     case StandingAtAPoint.Met.NotAtPoint _ -> new Settlement.DoesNotSettle();
                     case StandingAtAPoint.Met.NotWatched _ ->
@@ -1152,9 +1149,16 @@ public record Settlements(List<ObligationIdentity> requested,
      *
      * <p>The reading and not the border. Which line of the measurement a border is does not turn
      * on the row, so it is looked up once where the points are gathered; looked up at every row,
-     * every row a search weighs paid for a walk over every line the behavior has.
+     * every row a search weighs paid for a walk over every line the behavior has. And put to rows
+     * there too, for the same reason: where the line decides is the line's and not the row's.
      */
-    private record AtAPoint(MeasuredInput.BorderReading line, Criterion criterion) {}
+    private record AtAPoint(StandingAtAPoint.AtALine line, Criterion criterion) {
+
+        static AtAPoint of(MeasuredInput.BorderReading line, Criterion criterion) {
+            return new AtAPoint(StandingAtAPoint.putToRows(line,
+                    line.border().origin().recordedAt()), criterion);
+        }
+    }
 
     /**
      * The row a search composed for one line, and the input it composed it at.
@@ -1201,11 +1205,19 @@ public record Settlements(List<ObligationIdentity> requested,
      * Both are settled by the border and by nothing a row says, and a row is put to this once per
      * row a run offers — derived where the question is asked, finding the reading walks every line
      * of the behavior and reading the inequality folds the quantity's own step, once per row for an
-     * answer that was the same every time.
+     * answer that was the same every time. And the line put to rows, for the same reason.
      */
     private record ALineBesideOne(MeasuredInput.BorderReading reading, OrderedAffineBoundary drawn,
                                   AnotherLineTheRowsAllow.OneDoes beside,
-                                  ARowTellingTheLinesApart.AtOneReading toldApart) {
+                                  ARowTellingTheLinesApart.AtOneReading toldApart,
+                                  StandingAtAPoint.AtALine toRows) {
+
+        ALineBesideOne(MeasuredInput.BorderReading reading, OrderedAffineBoundary drawn,
+                       AnotherLineTheRowsAllow.OneDoes beside,
+                       ARowTellingTheLinesApart.AtOneReading toldApart) {
+            this(reading, drawn, beside, toldApart, StandingAtAPoint.putToRows(reading,
+                    reading.border().origin().recordedAt()));
+        }
 
         ALineBesideOne {
             if (drawn == null) {

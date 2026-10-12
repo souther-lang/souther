@@ -504,9 +504,10 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                     new OnTheWay.Settled(condition, at, thisWay);
             case DemandReading.Read.Narrows(TermPath position, CasesLeft cases) ->
                     narrowing(condition, at, position, cases, input);
-            case DemandReading.Read.OneOf(var alternatives) -> new OnTheWay.OneOf(condition, at,
-                    alternatives.stream().map(each -> each.stream()
-                            .map(one -> onTheWay(condition, at, one, input)).toList()).toList());
+            case DemandReading.Read.OneOf oneOf -> new OnTheWay.OneOf(
+                    condition, at, oneOf.alternatives().stream().map(each -> each.stream()
+                            .map(one -> onTheWay(condition, at, one, input)).toList()).toList(),
+                    oneOf.stated());
             case DemandReading.Read.Unread(var why) -> new OnTheWay.Declined(condition, at, why);
         };
     }

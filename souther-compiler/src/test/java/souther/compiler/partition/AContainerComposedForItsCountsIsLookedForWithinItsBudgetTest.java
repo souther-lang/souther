@@ -48,7 +48,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The ways of sharing a size out grow with the size and with how many ways an element answers the
  * statements: five groups of elements and sixteen elements are tens of thousands of them. Counts no
  * container meets — more elements above one than above nought — leave none of them building
- * anything, so the walk goes on until something stops it, and what stops it is the figure.
+ * anything, so the walk goes on until something stops it, and what stops it is a figure: a sharing
+ * the counts already leave no way to is not walked on, so each size is walked out, and the sizes
+ * stop at the most elements a container is composed with.
  */
 class AContainerComposedForItsCountsIsLookedForWithinItsBudgetTest {
 
@@ -61,14 +63,16 @@ class AContainerComposedForItsCountsIsLookedForWithinItsBudgetTest {
             """;
 
     @Test
-    void countsNoContainerMeetsStopAtTheSharingsLookedAt() {
+    void countsNoContainerMeetsStopAtAFigure() {
         TermRealizations.Realization made = assertTimeoutPreemptively(Duration.ofSeconds(30),
                 () -> composed(new long[] {0, 1, 2, 3}, new long[] {3, 4, 5, 6}));
         TermRealizations.Realization.Stopped stopped =
                 assertInstanceOf(TermRealizations.Realization.Stopped.class, made,
                         "nothing is built, and the walk was stopped rather than walked out");
-        assertTrue(stopped.met().figures().contains(CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT),
-                () -> "the sharings looked at are what stopped it: " + stopped.met());
+        assertTrue(stopped.met().figures()
+                        .contains(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH),
+                () -> "the most elements a container is composed with is what stopped it: "
+                        + stopped.met());
     }
 
     /**
@@ -170,9 +174,10 @@ class AContainerComposedForItsCountsIsLookedForWithinItsBudgetTest {
             demands.put(count, AskedAt.oneNumberOf(NumbersAskedFor.of(LevelRegion.point(
                     new Level.OfTheQuantity(ExactRatio.of(asked[i])))), Count.of(asked[i])));
         }
-        return CardinalityComposer.compose(new Type.ListOf(Type.INT), List.of(), counts, demands,
+        return CardinalityComposer.compose(new Type.ListOf(Type.INT), List.of(), counts, List.of(),
+                demands,
                 null,
-                List.of(), measuring.region(), read.reading());
+                List.of(), measuring, measuring.region(), read.reading());
     }
 
     /** The input of {@link #SOURCE}, read: its numbers, its rules and its container. */

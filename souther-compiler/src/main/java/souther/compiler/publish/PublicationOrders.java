@@ -299,6 +299,7 @@ public final class PublicationOrders {
                     CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
                     CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED,
                     CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT,
+                    CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                     CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED,
                     CompositionBudget.WAYS_UNDER_THE_CASES_TRIED,
                     CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG,

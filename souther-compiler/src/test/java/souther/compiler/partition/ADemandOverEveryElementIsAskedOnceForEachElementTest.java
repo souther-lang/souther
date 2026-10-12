@@ -70,7 +70,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
     private static ContentsAsked everyKeyFiled() {
         return asked(new RowDemand.ForAll(KS, RowDemand.AnElementMeets.only(List.of(
                 new RowDemand.WithinIt(SHELF, true, new RowDemand.KeyedAs(KS.element())))),
-                HOLDING));
+                HOLDING, Optional.empty()));
     }
 
     /** What {@code ks} handed on, built holding {@code keys}. */
@@ -138,7 +138,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
         TermPath n = TermPath.of("n");
         ContentsAsked asked = asked(new RowDemand.ForAll(KS, RowDemand.AnElementMeets.only(
                 List.of(new RowDemand.WithinIt(SHELF, true, new RowDemand.KeyedAs(n)))),
-                HOLDING));
+                HOLDING, Optional.empty()));
         ValuesHandedOn nBuilt = new ValuesHandedOn(Map.of(n, List.of(new ValuesHandedOn.Standing(
                 ElementsTaken.NONE, FixtureTemplate.string("x")))), Map.of(), Map.of());
 
@@ -159,7 +159,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
         TermPath lines = os.element().then("ls");
         ContentsAsked asked = asked(new RowDemand.ForAll(lines, RowDemand.AnElementMeets.only(
                 List.of(new RowDemand.WithinIt(SHELF, true,
-                        new RowDemand.KeyedAs(lines.element())))), HOLDING));
+                        new RowDemand.KeyedAs(lines.element())))), HOLDING, Optional.empty()));
         ElementsTaken first = ElementsTaken.NONE.and(os, 0).and(lines, 0);
         ElementsTaken second = ElementsTaken.NONE.and(os, 1).and(lines, 0);
         ElementsTaken third = ElementsTaken.NONE.and(os, 1).and(lines, 1);
@@ -185,7 +185,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
         TermPath shelf = input.then("shelf");
         ContentsAsked asked = asked(new RowDemand.ForAll(ks, RowDemand.AnElementMeets.only(
                 List.of(new RowDemand.WithinIt(shelf, true, new RowDemand.KeyedAs(ks.element())))),
-                HOLDING));
+                HOLDING, Optional.empty()));
         ContentsAsked.Here here = resolved(asked, "input", ValuesHandedOn.NONE);
 
         assertEquals(List.of(), here.given());

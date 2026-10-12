@@ -1,13 +1,18 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NameReach;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.ExactRatio;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -109,7 +114,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                     // That some element meets these says nothing every row past it holds of each
                     // element, so the region is narrowed only by the container holding one. What
                     // the element meets is composed where the row is.
-                    case RowDemand.Exists(var _, var _, var holdingOne) ->
+                    case RowDemand.Exists(var _, var _, var holdingOne, var _) ->
                             holdingOne.constraint().narrowing(region);
                     // That every element meets these, which a container holding none does. A
                     // region reads a term inside the elements as the value of one that is there,
@@ -252,9 +257,36 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     /**
      * What a way asks of a row as far as whether its conditions hold together: the cases it
      * requires and the truths it asks, which are what two conditions on one way contradict each
-     * other in ({@link Reachability#of}), and a condition no row brings out the way taken.
+     * other in ({@link Reachability#of}), a condition no row brings out the way taken — and how
+     * many elements meet each statement it counts, which two conditions asking for counts that
+     * leave none in common contradict each other in as well.
+     *
+     * @param counts what is left of each count asked, by its spelling
      */
-    private record HeldTogether(Requirements requirements, List<RowDemand.ATruth> truths) {}
+    private record HeldTogether(Requirements requirements, List<RowDemand.ATruth> truths,
+                                Map<String, LevelRegion> counts) {
+
+        /** These with the count {@code counted} asked to be in {@code region}, or null where
+         *  that leaves it none. */
+        HeldTogether counting(Quantity.HowManyMeet counted, LevelRegion region) {
+            LevelRegion left = counts.containsKey(counted.spelled())
+                    ? counts.get(counted.spelled()).meet(region) : region;
+            if (left.parts().isEmpty()) {
+                return null;
+            }
+            Map<String, LevelRegion> out = new LinkedHashMap<>(counts);
+            out.put(counted.spelled(), left);
+            return new HeldTogether(requirements, truths, out);
+        }
+    }
+
+    /** One or more elements, which some element meeting a statement is the count of. */
+    private static final LevelRegion ONE_OR_MORE = LevelRegion.of(new LevelInterval(
+            Bound.at(new Level.OfTheQuantity(ExactRatio.ONE), true), null));
+
+    /** No element, which every element meeting the denial of a statement is the count of. */
+    private static final LevelRegion NONE = LevelRegion.point(new Level.OfTheQuantity(
+            ExactRatio.ZERO));
 
     private static final OneOfEach.Vocabulary<OnTheWay, HeldTogether> ASKED_OF_A_ROW =
             new OneOfEach.Vocabulary<>() {
@@ -285,7 +317,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
 
                 @Override
                 public HeldTogether nothing() {
-                    return new HeldTogether(Requirements.NONE, List.of());
+                    return new HeldTogether(Requirements.NONE, List.of(), Map.of());
                 }
 
                 @Override
@@ -295,12 +327,35 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                         case OnTheWay.Narrowed narrowed ->
                                 so.requirements().merge(narrowed.requirements())
                                         instanceof Requirements.Merge.Merged(Requirements both)
-                                        ? new HeldTogether(both, so.truths()) : null;
+                                        ? new HeldTogether(both, so.truths(), so.counts()) : null;
                         case OnTheWay.TakenIn(var _, RowDemand.ATruth truth) -> {
                             List<RowDemand.ATruth> truths = new ArrayList<>(so.truths());
                             truths.add(truth);
                             yield TruthsAsked.of(truths) instanceof TruthsAsked.Merge.Merged
-                                    ? new HeldTogether(so.requirements(), truths) : null;
+                                    ? new HeldTogether(so.requirements(), truths, so.counts())
+                                    : null;
+                        }
+                        case OnTheWay.TakenIn(var _, RowDemand.Exists exists)
+                                when exists.counted().isPresent() ->
+                                so.counting(exists.counted().get(), ONE_OR_MORE);
+                        case OnTheWay.TakenIn(var _, RowDemand.ForAll every)
+                                when every.counted().isPresent() ->
+                                so.counting(every.counted().get(), NONE);
+                        case OnTheWay.TakenIn(var _, RowDemand.SoMany many)
+                                when !many.againstNumbers() ->
+                                so.counting(many.count(), many.counts().values());
+                        // A relation over a number written under a case is a relation of a
+                        // value that is that case: the number is nowhere else.
+                        case OnTheWay.TakenIn(var _, RowDemand.Relational relation) -> {
+                            Requirements required = so.requirements();
+                            for (NumericTerm term : relation.terms()) {
+                                if (!(required.merge(term.subjectPath().requirements())
+                                        instanceof Requirements.Merge.Merged(Requirements both))) {
+                                    yield null;
+                                }
+                                required = both;
+                            }
+                            yield new HeldTogether(required, so.truths(), so.counts());
                         }
                         case OnTheWay.TakenIn _, OnTheWay.Declined _, OnTheWay.OneOf _ -> so;
                     };

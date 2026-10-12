@@ -112,9 +112,10 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
         composed.fixing().forEach((target, place) -> {
             switch (target) {
                 case RealizationTarget.OfANumber number -> byTerm.put(number.term(), place);
-                // How many elements meet a statement is no number of the row, so there is no term
-                // to say the row was composed at it; the row's elements say it.
-                case RealizationTarget.ACount _ -> { }
+                // How many elements meet a statement, or that they meet one together, is no number
+                // of the row, so there is no term to say the row was composed at it; the row's
+                // elements say it.
+                case RealizationTarget.ACount _, RealizationTarget.ElementsMeetingTogether _ -> { }
             }
         });
         // A linked map answers in the order it was filled, so it is filled in the terms' own order

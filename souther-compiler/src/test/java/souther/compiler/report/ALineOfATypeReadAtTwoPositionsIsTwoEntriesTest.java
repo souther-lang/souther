@@ -11,6 +11,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 
@@ -27,14 +28,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the line of the model alone, the two entries at one end were one identity under two labels, and
  * the order a document writes its entries in refused to choose between them.
  *
- * <p>The rows are what make the two readings come to nothing. A row holding a meeting and a call
- * has its values under one element for one reading and under the other for the other, and a row
- * listing them the other way round does the same from the other side — so at each place there is a
- * reading that met no value of its own.
+ * <p>The rows are what keep both open. A row holding more meetings and calls than a run's account
+ * of it keeps is cut short there, and at the meetings and at the calls alike what it held past the
+ * cut is not read — so whether it stands at an end is not known at either place.
  */
 class ALineOfATypeReadAtTwoPositionsIsTwoEntriesTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /** How many meetings, each beside a call, the long day holds: more than an account of a run
+     *  keeps of one list. */
+    private static final int PAIRS = 129;
 
     private static final String MODEL = """
             module probe.load
@@ -67,14 +71,12 @@ class ALineOfATypeReadAtTwoPositionsIsTwoEntriesTest {
 
             example tally
                 | "a meeting" : ([ Meeting { minutes = Minutes(30) } ]) -> Load { total = 30 }
-                | "both" : ([ Meeting { minutes = Minutes(30) },
-                              Call { outcome = Connected { minutes = Minutes(20) } } ])
-                    -> Load { total = 50 }
-                | "both, the call first" : ([ Call { outcome = Connected { minutes = Minutes(20) } },
-                                              Meeting { minutes = Minutes(30) } ])
-                    -> Load { total = 50 }
+                | "a long day" : ([ DAY ]) -> Load { total = TOTAL }
                 | "a voicemail" : ([ Call { outcome = Voicemail } ]) -> Load { total = 0 }
-            """;
+            """.replace("DAY", String.join(", ", Collections.nCopies(PAIRS,
+                    "Meeting { minutes = Minutes(30) },"
+                            + " Call { outcome = Connected { minutes = Minutes(20) } }")))
+            .replace("TOTAL", String.valueOf(PAIRS * 50));
 
     /**
      * Every line the clause draws holds the verdict open, each as an entry of its own, in the order
@@ -82,17 +84,15 @@ class ALineOfATypeReadAtTwoPositionsIsTwoEntriesTest {
      */
     @Test
     void eachPlaceTheLineIsReadAtIsAnEntry() {
-        JsonNode document = written();
-
         List<String> said = new ArrayList<>();
-        for (JsonNode each : document.get("keptOpenBy")) {
+        for (JsonNode each : aboutALine(written())) {
             said.add(each.get("kind").asString() + " " + each.get("about").get("label").asString());
         }
         assertEquals(List.of(
-                        "border_value_absent activities[*]@Call.outcome@Connected.minutes = 15",
-                        "border_value_absent activities[*]@Call.outcome@Connected.minutes = 480",
-                        "border_value_absent activities[*]@Meeting.minutes = 15",
-                        "border_value_absent activities[*]@Meeting.minutes = 480"),
+                        "border_value_unreadable activities[*]@Call.outcome@Connected.minutes = 15",
+                        "border_value_unreadable activities[*]@Call.outcome@Connected.minutes = 480",
+                        "border_value_unreadable activities[*]@Meeting.minutes = 15",
+                        "border_value_unreadable activities[*]@Meeting.minutes = 480"),
                 said);
     }
 
@@ -105,7 +105,7 @@ class ALineOfATypeReadAtTwoPositionsIsTwoEntriesTest {
     @Test
     void theTwoAtOneEndAreOneLineOfTheModelAtTwoPlaces() {
         List<JsonNode> atFifteen = new ArrayList<>();
-        for (JsonNode each : written().get("keptOpenBy")) {
+        for (JsonNode each : aboutALine(written())) {
             if (each.get("about").get("label").asString().endsWith("= 15")) {
                 atFifteen.add(each.get("about").get("lineId"));
             }
@@ -131,7 +131,9 @@ class ALineOfATypeReadAtTwoPositionsIsTwoEntriesTest {
         assertEquals(boundaries.size(), new LinkedHashSet<>(boundaries).size(),
                 () -> "a boundary per line: " + boundaries);
 
-        for (JsonNode each : document.get("keptOpenBy")) {
+        List<JsonNode> entries = aboutALine(document);
+        assertEquals(4, entries.size(), () -> "an entry for each end at each place: " + entries);
+        for (JsonNode each : entries) {
             JsonNode lineId = each.get("about").get("lineId");
             assertEquals(1, boundaries.stream().filter(lineId::equals).count(),
                     () -> each.get("about").get("label") + " names one boundary: " + lineId);
@@ -142,6 +144,17 @@ class ALineOfATypeReadAtTwoPositionsIsTwoEntriesTest {
     @Test
     void theDocumentIsShapedLikeTheSchema() {
         DocumentShape.assertShapedLikeTheSchema(written());
+    }
+
+    /** The entries holding the verdict open that are about a line, in the document's order. */
+    private static List<JsonNode> aboutALine(JsonNode document) {
+        List<JsonNode> out = new ArrayList<>();
+        for (JsonNode each : document.get("keptOpenBy")) {
+            if ("border".equals(each.get("about").get("kind").asString())) {
+                out.add(each);
+            }
+        }
+        return out;
     }
 
     private static JsonNode written() {

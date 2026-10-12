@@ -1210,18 +1210,20 @@ final class Coverages {
                 line.border().origin().recordedAt();
         Predicate<Map<NumericTerm, Place>> refusedByTheDeclarations =
                 new DeclarationsRefuse(way, declarations);
+        // Put to rows once for every point and row asked of it.
+        StandingAtAPoint.AtALine toRows = StandingAtAPoint.putToRows(line, site);
         return new OneShapeOfBorder() {
 
             @Override
             public StandingAtAPoint.Met met(Criterion criterion, List<ObservedInputs> rows) {
-                return StandingAtAPoint.met(line, rows, criterion, site);
+                return toRows.met(rows, criterion);
             }
 
             @Override
             public AnotherLineTheRowsAllow beside(boolean everyPointMet,
                                                   List<ObservedInputs> rows) {
                 return AnotherLineTheRowsAllow.of(line.border(), everyPointMet,
-                        () -> StandingAtAPoint.valuesOf(line, rows, site), elsewhere, way,
+                        () -> toRows.valuesOf(rows), elsewhere, way,
                         refusedByTheDeclarations);
             }
 
@@ -1311,6 +1313,8 @@ final class Coverages {
         BorderQuantity quantity = line.quantity();
         List<ConditionOutcomeSite> site =
                 border.origin().recordedAt();
+        // Put to rows once for every row a point is searched with.
+        StandingAtAPoint.AtALine toRows = StandingAtAPoint.putToRows(line, site);
         // Built here and gone when the search is. What a row has to be to arrive is a way of asking
         // about values rather than something that says what it is, so it is what the walk runs
         // against and never what the answer keeps; the account it was built from is what travels.
@@ -1375,13 +1379,24 @@ final class Coverages {
                 if (able.along().isEmpty()) {
                     return lookedAlong(criterion, label, narrowing, able);
                 }
+                // Past the figure the way whole is looked along first. A condition it was not split
+                // at that states something of the elements of one container is composed against
+                // whole there, every way of it at once, and the ways the figure let through are
+                // each one of those ways — so they are looked along only where it came to nothing.
+                Looked whole = null;
+                if (able.ways() instanceof Reachability.Ways.Whole) {
+                    whole = lookedAlong(criterion, label, narrowing, able);
+                    if (whole.witness().isPresent()) {
+                        return whole;
+                    }
+                }
                 for (Reachability.Reaching along : able.along()) {
                     Looked one = lookedAlong(criterion, label, narrowing, along);
                     if (one.witness().isPresent()) {
                         return one;
                     }
                 }
-                return lookedAlong(criterion, label, narrowing, able);
+                return whole != null ? whole : lookedAlong(criterion, label, narrowing, able);
             }
 
             /** What looking for a row at {@code criterion} along {@code able} came to. */
@@ -1591,7 +1606,7 @@ final class Coverages {
                         ItemAssessment.Attempt.Certified witness = null;
                         for (souther.compiler.partition.Generator.BoundaryAttempt each : made) {
                             ItemAssessment.Attempt came = whatCameOfIt(each, label, within,
-                                    () -> standingThere(probe, line, criterion, site,
+                                    () -> standingThere(probe, toRows, criterion,
                                             (souther.compiler.partition.Generator
                                                     .BoundaryAttempt.Built) each));
                             if (witness == null
@@ -1756,9 +1771,7 @@ final class Coverages {
      * owed the same row it was owed before, and nothing here says one cannot be written.
      */
     private static StandingAtAPoint.Met standingThere(
-            Probe probe, souther.compiler.partition.MeasuredInput.BorderReading line,
-            Criterion criterion,
-            List<ConditionOutcomeSite> site,
+            Probe probe, StandingAtAPoint.AtALine line, Criterion criterion,
             souther.compiler.partition.Generator.BoundaryAttempt.Built built) {
         souther.compiler.partition.ObservedInputs read =
                 probe.read(built.row().toRun()).asInputs();
@@ -1777,7 +1790,7 @@ final class Coverages {
                     Set.of(souther.compiler.partition.ReadingGap.COULD_NOT_READ_ROW),
                     StandingAtAPoint.ReadingsTried.EVERY_ONE);
         }
-        return StandingAtAPoint.met(line, List.of(read), criterion, site);
+        return line.met(List.of(read), criterion);
     }
 
     /** Whether an observation is among the reasons a reading came to nothing. */
