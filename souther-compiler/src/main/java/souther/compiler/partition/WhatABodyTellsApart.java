@@ -134,6 +134,13 @@ final class WhatABodyTellsApart {
          */
         record About(int at, List<Boolean> admitted) implements Placed {}
 
+        /**
+         * About the positions {@code ats}, and putting nothing it says there to classes: an arm of
+         * a fork on what an operation over a container answers, which reads those positions and
+         * no other.
+         */
+        record AboutThese(List<Integer> ats) implements Placed {}
+
         /** About nothing this run measures a position of. */
         record AboutNoPosition() implements Placed {}
 
@@ -183,6 +190,15 @@ final class WhatABodyTellsApart {
             if (named.isPresent()) {
                 return withheld(placing(named.get()));
             }
+            // An arm of a fork on what an operation over a container answers — `List.all(...)` —
+            // is about the positions what the operation states reads, and which class went which
+            // way is the statement's to say and not this arm's. About those and no other, so a
+            // position it never reads is told apart by the ways that do read it.
+            Optional<List<TermPath>> reads = armsNamed.reads(arm);
+            if (reads.isPresent()) {
+                List<Integer> ats = axesReading(reads.get());
+                return ats.isEmpty() ? new Placed.AboutNoPosition() : new Placed.AboutThese(ats);
+            }
         }
         return switch (ConditionPlacement.of(each, measured)) {
             // A fork the reading could not name a subject for: a value no position is, a name bound
@@ -221,9 +237,37 @@ final class WhatABodyTellsApart {
                 }
                 yield new Placed.UnderTheCases(List.copyOf(out));
             }
+            case Placed.AboutThese it -> it;
             case Placed.AboutNoPosition it -> it;
             case Placed.SubjectUnknown it -> it;
         };
+    }
+
+    /**
+     * The axes a statement reading {@code positions} may tell values apart at: for each position,
+     * the axes at the deepest path it stands at or under — its own, or those of a record measured
+     * whole around it.
+     *
+     * <p>Never an axis below a position. A statement reads what is under a position by naming it,
+     * an element as {@code xs[*]}, so a container it names alone is read for how many it holds.
+     */
+    private List<Integer> axesReading(List<TermPath> positions) {
+        Set<Integer> out = new LinkedHashSet<>();
+        for (TermPath position : positions) {
+            int deepest = -1;
+            for (Axis axis : axes) {
+                if (position.isAtOrUnder(axis.path())) {
+                    deepest = Math.max(deepest, axis.path().steps().size());
+                }
+            }
+            for (int at = 0; at < axes.size(); at++) {
+                TermPath measured = axes.get(at).path();
+                if (position.isAtOrUnder(measured) && measured.steps().size() == deepest) {
+                    out.add(at);
+                }
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -377,6 +421,13 @@ final class WhatABodyTellsApart {
                 case Placed.UnderTheCases it -> {
                     underTheCases.add(it);
                     saidUnderTheCases.add(each);
+                }
+                // What a statement reads of a position puts no row there: that no element of a
+                // list is `South` is read of the elements and holds of a list with none.
+                case Placed.AboutThese it -> {
+                    for (int at : it.ats()) {
+                        direct.admit(new Placed.About(at, null), each);
+                    }
                 }
                 case Placed.AboutNoPosition _ -> { }
                 case Placed.SubjectUnknown _ -> subjectUnknownHere = true;

@@ -26,6 +26,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.types.ValueName;
@@ -577,6 +578,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     forks.add(new ForkMet(in.context().of(iff.occurrence()), iff.cond(),
                             Citation.of(iff.pos()),
                             atoms));
+                }
+                // And which positions what it turns on reads, under the copy of the fork this
+                // reading is of: the one thing the reading of the runs is told of a fork on what an
+                // operation over a container answers ({@link ArmsNamed}).
+                if (iff.occurrence() != null) {
+                    ModelOccurrence.statedAt(in.context().of(iff.occurrence())).ifPresent(fork ->
+                            in.armsNamed().reads(fork, PositionsAStatementReads.of(in.conditions()
+                                    .truth(iff.cond(), reads, in.read()).proposition())));
                 }
                 Choice.Decides then = Choice.Decides.ofCondition(iff, true);
                 Choice.Decides els = Choice.Decides.ofCondition(iff, false);

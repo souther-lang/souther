@@ -57,6 +57,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
                 | "cheap and home" : (Trip { cost = 99, abroad = false }) -> 1
                 | "expensive" : (Trip { cost = 100, abroad = false }) -> 2
                 | "abroad" : (Trip { cost = 99, abroad = true }) -> 2
+                | "expensive abroad" : (Trip { cost = 100, abroad = true }) -> 2
                 | "well above" : (Trip { cost = 1000, abroad = false }) -> 2
                 | "free" : (Trip { cost = 0, abroad = false }) -> 1
             """;
@@ -72,7 +73,9 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
     /**
      * Every rule the closure states is read, each at the line it draws for the element written
      * there — the cost at a hundred for {@code High}, and whether the trip is abroad for
-     * {@code Abroad} — and the rows meet the measure.
+     * {@code Abroad} — and the rows meet the measure. The fork on whether anything was kept turns
+     * on both, as {@code t.cost >= 100 || t.abroad} written out does, so a trip both expensive and
+     * abroad is one of them.
      */
     @Test
     void theReasonsAHelperBuiltAreReadAsWhatTheyWereKeptFor() {
