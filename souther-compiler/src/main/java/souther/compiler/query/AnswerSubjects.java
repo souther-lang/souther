@@ -2,8 +2,8 @@ package souther.compiler.query;
 
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.partition.AnswerDemand;
-import souther.compiler.partition.AnswerStatements;
 import souther.compiler.partition.MeasuredInput;
+import souther.compiler.partition.StatementsOfAnInput;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
@@ -43,7 +43,7 @@ record AnswerSubjects(Standing whole, List<TypeSymbol> cases,
      * <p>The two beside each other and not one inside the other: a subject is held apart from the
      * reading it was made by, and a statement made over it is turned into demands by that reading.
      */
-    record Standing(MeasuredInput subject, AnswerStatements statements) {}
+    record Standing(MeasuredInput subject, StatementsOfAnInput statements) {}
 
     AnswerSubjects {
         cases = List.copyOf(cases);

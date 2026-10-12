@@ -119,6 +119,7 @@ import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.RewriteSearch;
 import souther.compiler.partition.InteractionCells;
 import souther.compiler.partition.RowRegion;
+import souther.compiler.partition.StatementsOfAnInput;
 import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
@@ -960,21 +961,41 @@ public final class Adequacy {
         souther.compiler.partition.Partitions.Partitioning divided =
                 db.ask(new Divided(module, spec.name())).value();
         Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
-        Answer<RuleReadingSource> reading = Shapes.ruleReading(db, module);
-        Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(module));
-        if (divided == null || !scope.present() || !sigs.present() || !reading.present()) {
+        if (divided == null || !scope.present()) {
             return null;
         }
         // The reading is the one the classification holds, not one looked up beside it. Both this
         // and what divides it are about the same behavior of the same module, so there is no pair
         // to get wrong.
+        InputReading read = inputReadingOf(db, module, spec);
+        return read == null ? null
+                : souther.compiler.partition.MeasuredInput.of(spec.name(), read, divided);
+    }
+
+    /**
+     * What a statement about {@code spec}'s own input asks of a row, read as the subject's input
+     * is ({@link #subjectOf}), or null where the behavior has no such reading.
+     */
+    private static StatementsOfAnInput statementsOf(Db db, String module,
+                                                    Hir.SpecBehavior spec) {
+        InputReading read = inputReadingOf(db, module, spec);
+        return read == null ? null : StatementsOfAnInput.of(read);
+    }
+
+    /** The reading of {@code spec}'s input every measure of it reads, or null where there is
+     *  none. */
+    private static InputReading inputReadingOf(Db db, String module, Hir.SpecBehavior spec) {
+        Answer<RuleReadingSource> reading = Shapes.ruleReading(db, module);
+        Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(module));
+        if (!sigs.present() || !reading.present()) {
+            return null;
+        }
         if (!(BoundaryForMeasurement.of(sigs.value(), db.ask(new Inputs(module)).value(), spec)
                 instanceof BoundaryForMeasurement.Derived(
                         Sig _, InputForMeasurement.Local(Hir.SpecBehavior _, InputDomain domain)))) {
             return null;
         }
-        return souther.compiler.partition.MeasuredInput.of(spec.name(),
-                readingOf(db, domain, reading.value()), divided);
+        return readingOf(db, domain, reading.value());
     }
 
     /**
@@ -2404,7 +2425,7 @@ public final class Adequacy {
             }
             souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, spec);
             Coverages.Probe probe = subject == null ? null
-                    : probing(sig, subject, constructing(db, name),
+                    : probing(sig, subject, statementsOf(db, name, spec), constructing(db, name),
                             runningRowsOf(trialling(db, name), behavior, sig,
                                     numberingOf(db, name),
                                     RequiredDependencies.of(db, name, behavior)),
@@ -2836,7 +2857,7 @@ public final class Adequacy {
                 return Answer.absent();
             }
             return Answer.of(Coverages.merged(Coverages.searched(measured, subject,
-                    probing(sig, subject, constructing(db, name),
+                    probing(sig, subject, statementsOf(db, name, spec), constructing(db, name),
                             runningRowsOf(trialling(db, name), behavior, sig,
                                     numberingOf(db, name),
                                     RequiredDependencies.of(db, name, behavior)),
@@ -2860,10 +2881,11 @@ public final class Adequacy {
      * candidate goes through.
      */
     static Coverages.Probe probing(Sig sig, souther.compiler.partition.MeasuredInput subject,
+                                   StatementsOfAnInput ofTheRow,
                                    FixturesAtTheBoundary building, Generator.Trial trial,
                                    AnswersForARule answers) {
-        return building == null || answers == null ? null
-                : new ARowBuiltAndRun(sig, subject, building, trial, answers);
+        return building == null || answers == null || ofTheRow == null ? null
+                : new ARowBuiltAndRun(sig, subject, ofTheRow, building, trial, answers);
     }
 
     /**
@@ -2896,12 +2918,19 @@ public final class Adequacy {
          * refused for the generic one that did not.
          */
         private final AnswersForARule answers;
+        /**
+         * What a statement about the behavior's own input asks of the row, which is how a row is
+         * held to the values a statement about an answer was composed for.
+         */
+        private final StatementsOfAnInput ofTheRow;
 
         private ARowBuiltAndRun(Sig sig, souther.compiler.partition.MeasuredInput subject,
+                                StatementsOfAnInput ofTheRow,
                                 FixturesAtTheBoundary building, Generator.Trial trial,
                                 AnswersForARule answers) {
             this.sig = sig;
             this.subject = subject;
+            this.ofTheRow = ofTheRow;
             this.building = building;
             this.trial = trial;
             this.answers = answers;
@@ -2929,7 +2958,8 @@ public final class Adequacy {
                 List<Generator.BoundaryAttempt> nearest = null;
                 long nearestBuilt = -1;
                 InputNumbersAnAnswerTurnsOn.Pairs pairs =
-                        InputNumbersAnAnswerTurnsOn.of(demands, reaching, answers::subjectOf);
+                        InputNumbersAnAnswerTurnsOn.of(demands, reaching, answers::subjectOf,
+                                ofTheRow);
                 for (InputNumbersAnAnswerTurnsOn pinned : pairs.tried()) {
                     List<Generator.BoundaryAttempt> out = new ArrayList<>();
                     for (souther.compiler.partition.StandInAttempt stood
@@ -3041,7 +3071,7 @@ public final class Adequacy {
                 Membership.none()).reading(reading);
         return new AnswerSubjects.Standing(souther.compiler.partition.MeasuredInput.of(ANSWER,
                 read, souther.compiler.partition.Partitions.of(ANSWER, read, policy)),
-                souther.compiler.partition.AnswerStatements.of(read));
+                souther.compiler.partition.StatementsOfAnInput.of(read));
     }
 
     /**

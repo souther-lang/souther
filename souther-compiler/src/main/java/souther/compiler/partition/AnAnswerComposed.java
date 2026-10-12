@@ -98,7 +98,7 @@ public final class AnAnswerComposed {
      * @param demands what the way asks of it, every one of them about this answer
      */
     public static Attempt of(MeasuredInput subject, List<AnswerDemand> demands) {
-        return of(subject, AnswerStatements.NONE, demands);
+        return of(subject, StatementsOfAnInput.NONE, demands);
     }
 
     /**
@@ -107,7 +107,7 @@ public final class AnAnswerComposed {
      * @param statements what a statement made over the subject asks of a row, which is the reading
      *                   of the type the subject stands for
      */
-    public static Attempt of(MeasuredInput subject, AnswerStatements statements,
+    public static Attempt of(MeasuredInput subject, StatementsOfAnInput statements,
                              List<AnswerDemand> demands) {
         return of(subject, statements, Map.of(), demands);
     }
@@ -119,7 +119,7 @@ public final class AnAnswerComposed {
      *               to stand in: what the answer has to be turns on them, and a number left out
      *               is a statement this does not compose against
      */
-    public static Attempt of(MeasuredInput subject, AnswerStatements statements,
+    public static Attempt of(MeasuredInput subject, StatementsOfAnInput statements,
                              Map<NumericTerm, ExactRatio> pinned, List<AnswerDemand> demands) {
         if (subject.parameters().size() != 1) {
             throw new IllegalArgumentException(

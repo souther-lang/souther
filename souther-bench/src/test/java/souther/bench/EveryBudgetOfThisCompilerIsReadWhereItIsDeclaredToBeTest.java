@@ -235,7 +235,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // demand no value was composed against.
             Map.entry("souther.compiler.partition.AnAnswerComposed#of("
                             + "Lsouther/compiler/partition/MeasuredInput;"
-                            + "Lsouther/compiler/partition/AnswerStatements;"
+                            + "Lsouther/compiler/partition/StatementsOfAnInput;"
                             + "Ljava/util/Map;Ljava/util/List;)"
                             + "Lsouther/compiler/partition/AnAnswerComposed$Attempt;",
                     "past the figure does not look along the ways of a statement, and says that"
@@ -252,7 +252,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.InputNumbersAnAnswerTurnsOn#of("
                             + "Lsouther/compiler/partition/AnswersDemanded;"
                             + "Lsouther/compiler/partition/Reachability$Reaching;"
-                            + "Lsouther/compiler/partition/InputNumbersAnAnswerTurnsOn$AnswerSubjectOf;)"
+                            + "Lsouther/compiler/partition/InputNumbersAnAnswerTurnsOn$AnswerSubjectOf;"
+                            + "Lsouther/compiler/partition/StatementsOfAnInput;)"
                             + "Lsouther/compiler/partition/InputNumbersAnAnswerTurnsOn$Pairs;",
                     "stops offering pairs at the figure and says whether some were left out"),
             Map.entry("souther.compiler.query.Coverages$2#endedBy("

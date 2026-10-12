@@ -4,6 +4,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.meaning.AnswerAsAnInput;
 import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -113,14 +114,17 @@ public final class InputNumbersAnAnswerTurnsOn {
      * way over an answer alone. And one where no value of the numbers the statements name is taken
      * in by the way: the way left as it was, and the statements for those numbers are ones no value
      * was composed against.
+     *
+     * @param ofTheRow what a statement about the behavior's own input asks of a row, which is how
+     *                 the row is held to the values a pair puts its numbers at
      */
     public static Pairs of(AnswersDemanded demands, Reachability.Reaching reaching,
-                           AnswerSubjectOf answers) {
+                           AnswerSubjectOf answers, StatementsOfAnInput ofTheRow) {
         InputNumbersAnAnswerTurnsOn unpinned =
                 new InputNumbersAnAnswerTurnsOn(Map.of(), reaching);
         Map<NumericTerm, List<ExactRatio>> offered = new LinkedHashMap<>();
         Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
-        ConditionReportAnchor anchor = null;
+        List<AnswerDemand.AStatement> naming = new ArrayList<>();
         for (AnswerDemand each : demands.stated()) {
             if (!(each instanceof AnswerDemand.AStatement statement)) {
                 continue;
@@ -129,7 +133,7 @@ public final class InputNumbersAnAnswerTurnsOn {
             if (named == null || named.isEmpty()) {
                 continue;
             }
-            anchor = anchor == null ? statement.anchor() : anchor;
+            naming.add(statement);
             MeasuredInput subject = answers.of(statement.of().dependency());
             for (NumericTerm term : named) {
                 offered.computeIfAbsent(term, _ -> new ArrayList<>())
@@ -153,7 +157,6 @@ public final class InputNumbersAnAnswerTurnsOn {
         int mostLooked = lookedFigure.maximum();
         List<InputNumbersAnAnswerTurnsOn> out = new ArrayList<>();
         int[] looked = {0};
-        ConditionReportAnchor at = anchor;
         eachChoice(candidates, 0, new ArrayList<>(), choice -> {
             // The walk is bounded before a choice is looked at: one counted past the figure is one
             // that was never put to the way.
@@ -162,7 +165,7 @@ public final class InputNumbersAnAnswerTurnsOn {
                 return false;
             }
             looked[0]++;
-            InputNumbersAnAnswerTurnsOn pair = pinned(reaching, terms, choice, at);
+            InputNumbersAnAnswerTurnsOn pair = pinned(reaching, terms, choice, naming, ofTheRow);
             if (pair == null) {
                 return true;
             }
@@ -178,15 +181,21 @@ public final class InputNumbersAnAnswerTurnsOn {
 
     /**
      * {@code reaching} with {@code terms} held at {@code choice}, or null where the way does not
-     * take that in.
+     * take that in or the row cannot be asked to hold them.
+     *
+     * <p>Held where each statement names them, as what the statement asks of the row with them at
+     * those values ({@link AnswerAsAnInput#ofTheRow}). A number of an element is held on the
+     * element the statement is about, with everything else the statement asks of that element:
+     * held alone, a row could write the value at an element the statement does not select, and the
+     * answer composed for it would be composed for a row nobody wrote.
      */
     private static InputNumbersAnAnswerTurnsOn pinned(Reachability.Reaching reaching,
                                                      List<NumericTerm> terms,
                                                      List<ExactRatio> choice,
-                                                     ConditionReportAnchor anchor) {
+                                                     List<AnswerDemand.AStatement> naming,
+                                                     StatementsOfAnInput ofTheRow) {
         SearchRegion region = reaching.region();
         Map<NumericTerm, ExactRatio> values = new LinkedHashMap<>();
-        List<OnTheWay.TakenIn> held = new ArrayList<>();
         for (int at = 0; at < terms.size(); at++) {
             LinearForm<NumericTerm> pin = new LinearForm<>(choice.get(at).negated(),
                     Map.of(terms.get(at), ExactRatio.ONE));
@@ -196,10 +205,45 @@ public final class InputNumbersAnAnswerTurnsOn {
             }
             region = narrowed;
             values.put(terms.get(at), choice.get(at));
-            held.add(new OnTheWay.TakenIn(anchor, new RowDemand.Relational(
-                    new TakenConstraint.Affine(pin, Rel.EQ))));
         }
-        List<OnTheWay.TakenIn> cuts = new ArrayList<>(reaching.boundedOnTheWay());
+        List<OnTheWay.TakenIn> held = new ArrayList<>();
+        for (AnswerDemand.AStatement statement : naming) {
+            Proposition asked = AnswerAsAnInput.ofTheRow(statement.statement(), values);
+            List<DemandReading.Read> reads = asked == null ? null : ofTheRow.asked(asked);            if (reads == null) {
+                return null;
+            }
+            for (DemandReading.Read read : reads) {
+                switch (read) {
+                    case DemandReading.Read.Demands(var demand) ->
+                            held.add(new OnTheWay.TakenIn(statement.anchor(), demand));
+                    case DemandReading.Read.Settled(var thisWay) -> {
+                        if (!thisWay) {
+                            return null;
+                        }
+                    }
+                    // A row holding the values one of several ways, or a part of it no row is
+                    // composed toward: nothing here carries either on the way, and a pair whose
+                    // row is not held to its values is no pair.
+                    case DemandReading.Read.Narrows _, DemandReading.Read.OneOf _,
+                         DemandReading.Read.Unread _ -> {
+                        return null;
+                    }
+                }
+            }
+        }
+        // What the way took of a statement here is what the row is asked of it with the answer
+        // left out, and what it is asked with the values in is that and more: the same statement,
+        // read by the same reading. Kept beside it, the part the way could read would be written
+        // first and on its own — the container holding one, say — and the element the values are
+        // for would have to be written beside it as a second value of that location.
+        Set<ConditionReportAnchor> restated = new LinkedHashSet<>();
+        naming.forEach(statement -> restated.add(statement.anchor()));
+        List<OnTheWay.TakenIn> cuts = new ArrayList<>();
+        for (OnTheWay.TakenIn each : reaching.boundedOnTheWay()) {
+            if (!restated.contains(each.anchor())) {
+                cuts.add(each);
+            }
+        }
         cuts.addAll(held);
         return new InputNumbersAnAnswerTurnsOn(values, new Reachability.Reaching(region,
                 reaching.requirements(), reaching.truths(), cuts, reaching.ways(),
