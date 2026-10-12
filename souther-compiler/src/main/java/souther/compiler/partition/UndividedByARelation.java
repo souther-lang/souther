@@ -7,6 +7,7 @@ import souther.compiler.check.PublishedRules;
 import souther.compiler.check.Shape;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -57,12 +59,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * {@code x + y <= 1} over nought and one, {@code x} at one is beside no {@code y} at one. Runs say
  * nothing of that — the runs of each, and of every sum and difference of the two, can be what they
  * would be untied — so what is asked is whether anything could tie the term at all. Nothing ties it
- * where nothing names it but ends on itself and which case a value around it is: no rule of a value
- * it sits in reading a place at, under or around it, other than for how many a container around it
- * holds, which is where a rule over two of its positions is written; nothing a way took in
- * that turns on another number with it, or on another number of the place it is taken of — a date
- * on the twenty-ninth of February is in a leap year; and nothing a way stated and none of this took
- * in. Where one does, nothing is shown of the term, whether or not the rule ties it.
+ * where nothing names it but ends on itself, which case a value around it is and how many a value
+ * around it holds: no rule of a value it sits in reading a place at, under or around it, other
+ * than for how many a container around it holds, which is where a rule over two of its positions
+ * is written; nothing a way took in that turns on another number with it, or on another number of
+ * the place it is taken of — a date on the twenty-ninth of February is in a leap year; and nothing
+ * a way stated and none of this took in. Where one does, nothing is shown of the term, whether or
+ * not the rule ties it.
  *
  * <p>Held as the relation and not as the answer, because the answer is asked twice: once of what
  * the declarations leave, and again of the rows a way lets through, where {@code n == x} under
@@ -244,11 +247,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static List<OnAWay> conditionsOf(Reachability.Reaching way) {
         List<OnAWay> out = new ArrayList<>();
-        way.boundedOnTheWay().forEach(taken -> out.add(new OnAWay(taken.demand().positions(),
-                taken.demand() instanceof RowDemand.Relational(TakenConstraint.Affine(
-                        LinearForm<NumericTerm> form, Rel rel)) && rel != Rel.NE
-                        && form.coefs().size() == 1 ? form.coefs().keySet().iterator().next()
-                        : null, false)));
+        way.boundedOnTheWay().forEach(taken -> {
+            NumericTerm runOf = taken.demand() instanceof RowDemand.Relational(
+                    TakenConstraint.Affine(LinearForm<NumericTerm> form, Rel rel))
+                    && rel != Rel.NE && form.coefs().size() == 1
+                    ? form.coefs().keySet().iterator().next() : null;
+            out.add(new OnAWay(taken.demand().positions(), runOf,
+                    runOf instanceof NumericTerm.TakenOf count
+                            && count.takenAs() instanceof TakenAs.HowManyItHolds));
+        });
         way.requirements().refinements().keySet()
                 .forEach(at -> out.add(new OnAWay(Set.of(at), null, true)));
         way.requirements().atANameTheCasesShare()
@@ -260,15 +267,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * One statement of a way.
      *
      * @param positions the positions it turns on
-     * @param runOf     the one number it places an end on, where it is an end on one number and
-     *                  nothing else; null where it is anything else
-     * @param aCase     whether it is which case a value is, which says what is there and nothing
-     *                  of the values that stand there beside another — a case of a value around a
-     *                  term says nothing of the term's values, and a case of the term's own value,
-     *                  as an enumeration's, is a value taken out of its order, which the region
-     *                  holds
+     * @param runOf      the one number it places an end on, where it is an end on one number and
+     *                   nothing else; null where it is anything else
+     * @param whatStands whether it says what stands at a value and nothing of the values that
+     *                   stand there beside another: which case the value is, or ends on how many
+     *                   it holds. Either of a value around a term says nothing of the term's
+     *                   values — an element is reached only where the container holds one, and
+     *                   holding one says nothing of what it is. Of the term's own value, a case,
+     *                   as an enumeration's, is a value taken out of its order, which the region
+     *                   holds, and an end on how many is an end on the term itself
      */
-    private record OnAWay(Set<TermPath> positions, NumericTerm runOf, boolean aCase) {}
+    private record OnAWay(Set<TermPath> positions, NumericTerm runOf, boolean whatStands) {}
 
     /**
      * The places shown undivided over the rows in {@code region}, a way stating
@@ -310,8 +319,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** Nothing it states turns on any place the term is read off. */
         UNTOUCHED,
 
-        /** What it states of those places is ends on the term itself, or which case a value
-         *  around it is, and nothing else: that narrows where it runs and ties it to nothing. */
+        /** What it states of those places is ends on the term itself, or what stands at a value
+         *  around it, and nothing else: that narrows where it runs and ties it to nothing. */
         NARROWED,
 
         /** Something it states of them is anything else: about another number with it, about a
@@ -322,14 +331,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static Way wayOf(NumericTerm.FromOnePosition term, List<OnAWay> conditions) {
         Way out = Way.UNTOUCHED;
         for (OnAWay each : conditions) {
-            // Which case a value around the term is says what stands there and nothing of the
-            // values the term takes; which case the term's own value is takes values out of its
-            // order, which narrows it.
+            // What stands at a value around the term says nothing of the values the term takes;
+            // which case the term's own value is takes values out of its order, which narrows it.
             if (!touches(term, each.positions())
-                    || (each.aCase() && onlyAround(term, each.positions()))) {
+                    || (each.whatStands() && onlyAround(term, each.positions()))) {
                 continue;
             }
-            if (!each.aCase() && !term.equals(each.runOf())) {
+            if (!each.whatStands() && !term.equals(each.runOf())) {
                 return Way.TIES;
             }
             out = Way.NARROWED;
@@ -397,12 +405,51 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private record Takes(Type type, AdmissibleSet admitted, NumericDomain.Bounds ends,
                          boolean every) {}
 
-    /** What the declarations leave {@code value}, or null where it is at no position read or a
-     *  rule of a value it sits in may tie it to another. */
+    /**
+     * What the declarations leave each position of one reading, kept with the reading.
+     *
+     * <p>A function of the position and the reading alone, asked again by every relation over the
+     * position and by each way a row arrives at one along, and each asking walks the rules of every
+     * value around the position. Empty where nothing is shown, since the map holds no null.
+     */
+    private static final class Left {
+
+        private final Map<TermPath, Optional<Takes>> byPosition = new ConcurrentHashMap<>();
+    }
+
+    /**
+     * What the declarations leave {@code value}, or null where it is at no position read or a rule
+     * of a value it sits in may tie it to another.
+     */
     private static Takes takes(NumericTerm.ValueOf value, InputReading read) {
+        Left left = read.derived(Left.class, _ -> new Left());
+        // Not computeIfAbsent: a name the cases of a sum share is worked out by asking this of the
+        // position under each case, which would update the map from inside its own update.
+        Optional<Takes> kept = left.byPosition.get(value.position());
+        if (kept == null) {
+            kept = Optional.ofNullable(worksOut(value, read));
+            left.byPosition.put(value.position(), kept);
+        }
+        return kept.orElse(null);
+    }
+
+    /**
+     * {@link #takes}, worked out.
+     *
+     * <p>A name the cases of a sum share stands at no position of its own but at one under each
+     * case ({@link NameReach#standingOf}), and a row holds one case. So it is left what every case
+     * leaves it where they leave it the same, and nothing is shown where they differ or where the
+     * reading of some case stopped before putting the name anywhere: what one case leaves it is
+     * not what it takes in a row of another.
+     */
+    private static Takes worksOut(NumericTerm.ValueOf value, InputReading read) {
         Position at = read.domain().at(value.position().position());
-        if (at == null || TiedByTheDeclarations.of(read).answered().computeIfAbsent(
-                value.position(), path -> mayBeTiedByTheDeclarations(path, read))) {
+        if (at == null) {
+            return read.domain().reach().standingOf(value.position())
+                    instanceof NameReach.Standing.UnderTheCases(var standings)
+                    ? takesUnderEvery(standings, read) : null;
+        }
+        if (mayBeTiedByTheDeclarations(value.position(), read)) {
             return null;
         }
         PositionBounds bounds = at.boundsFor(value);
@@ -413,18 +460,29 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return new Takes(at.type(), at.admitted(), ends, every);
     }
 
-    /**
-     * What {@link #mayBeTiedByTheDeclarations} answered of each path of one reading, and the rules
-     * of each name it read, kept with the reading: every relation over the input asks it of the
-     * places it relates, many relations relate one place, and many places sit in one value.
-     */
-    private record TiedByTheDeclarations(Map<TermPath, Boolean> answered,
-                                         Map<TypeSymbol.AtModule, PublishedRules> rules) {
+    /** What every one of {@code standings} leaves the value there, where that is one answer, or
+     *  null. */
+    private static Takes takesUnderEvery(List<NameReach.CaseStanding> standings,
+                                         InputReading read) {
+        Takes out = null;
+        for (NameReach.CaseStanding each : standings) {
+            Takes here = takes(new NumericTerm.ValueOf(each.position()), read);
+            if (here == null || (out != null && !out.equals(here))) {
+                return null;
+            }
+            out = here;
+        }
+        return out;
+    }
 
-        static TiedByTheDeclarations of(InputReading read) {
-            return read.derived(TiedByTheDeclarations.class,
-                    _ -> new TiedByTheDeclarations(new ConcurrentHashMap<>(),
-                            new ConcurrentHashMap<>()));
+    /**
+     * The rules of each name {@link #mayBeTiedByTheDeclarations} read, kept with the reading: what
+     * a position is left is kept per position ({@link Left}), and many positions sit in one value.
+     */
+    private record RulesRead(Map<TypeSymbol.AtModule, PublishedRules> byName) {
+
+        static RulesRead of(InputReading read) {
+            return read.derived(RulesRead.class, _ -> new RulesRead(new ConcurrentHashMap<>()));
         }
     }
 
@@ -480,7 +538,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (!(worn instanceof TypeSymbol.AtModule named)) {
             return false;
         }
-        PublishedRules rules = TiedByTheDeclarations.of(read).rules().computeIfAbsent(named,
+        PublishedRules rules = RulesRead.of(read).byName().computeIfAbsent(named,
                 name -> PublishedRules.governing(name, read.rules().published()));
         if (!rules.everyRuleReached()) {
             return true;

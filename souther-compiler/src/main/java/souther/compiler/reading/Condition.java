@@ -1,13 +1,16 @@
 package souther.compiler.reading;
 
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.core.Core;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.coverage.ArmOccurrence;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.types.ResolvedCase;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -51,6 +54,25 @@ public sealed interface Condition {
             if (names.isEmpty()) {
                 throw new IllegalArgumentException("an arm at " + at + " answers for no case");
             }
+        }
+
+        /**
+         * The case {@code arm} is of the value at {@code at}.
+         *
+         * <p>The leaves the arm reaches and not the names it is written with. A case that is itself
+         * a sum stands for the leaves under it, and those are what a value at the position is; read
+         * by the written name, an arm for such a case admitted none of them.
+         */
+        public static Case of(TermPath at, Core.Case arm) {
+            List<String> names = new ArrayList<>();
+            for (ResolvedCase each : arm.pattern().cases()) {
+                if (each.atoms().isEmpty()) {
+                    names.add(each.name().name());
+                } else {
+                    each.atoms().forEach(atom -> names.add(atom.name()));
+                }
+            }
+            return new Case(at, names);
         }
 
         /**

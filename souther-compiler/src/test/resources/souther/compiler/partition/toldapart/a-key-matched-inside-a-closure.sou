@@ -1,0 +1,32 @@
+// A `match` on what a closure was handed out of a map's keys tells the keys apart, and not the
+// values the map files under them.
+//
+// `Map.keys` answers the keys of `m`, so `k` stands for a key and the `match` turns on its case.
+// What the map files under a key is never looked at, and is left as every position is beside a
+// decision no position is named for.
+//
+// told apart at n: 2 groups of 2
+// told apart at m[key]: unread here
+// told apart at m[*]: unread somewhere
+module example.keymatched
+
+data North
+data South
+data Region = North | South
+
+data Low
+data High
+data Level = Low | High
+
+data Ok = { n: Int }
+
+behavior judge : (n: Int, m: Map<Region, Level>) -> Ok
+    constructs Ok
+
+let judge (n, m) = {
+    guard n > 0 else Ok { n = 0 }
+    guard List.all(k -> match k with
+        | North -> true
+        | South -> false, Map.keys(m)) else Ok { n = 1 }
+    Ok { n = 2 }
+}

@@ -1,0 +1,26 @@
+// A `match` past two guards no value meets together tells nothing apart.
+//
+// No `n` is above ten and below zero, which the model's rules prove of the way past the second
+// guard, so no run reaches the `match` and every case of `f` goes the one way every run goes.
+// The two guards each pass some value, so `n` is still told apart by the first.
+//
+// told apart at n: 2 groups of 2
+// told apart at f: untouched
+module example.pastnovalue
+
+data Yes
+data No
+data Flag = Yes | No
+
+data Ok = { n: Int }
+
+behavior judge : (n: Int, f: Flag) -> Ok
+    constructs Ok
+
+let judge (n, f) = {
+    guard n > 10 else Ok { n = 0 }
+    guard n < 0 else Ok { n = 1 }
+    match f with
+        | Yes -> Ok { n = 2 }
+        | No -> Ok { n = 3 }
+}

@@ -5,7 +5,7 @@
 // other two. Which values an attempt tells apart is nothing its arms name, and the `match` tells
 // apart less than every case, so the position is not said to be told apart by the `match` alone.
 //
-// told apart at f: unread
+// told apart at f: unread somewhere
 module example.attempting
 
 data On

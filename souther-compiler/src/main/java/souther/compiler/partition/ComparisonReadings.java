@@ -19,6 +19,7 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
@@ -86,10 +87,19 @@ import java.util.function.Supplier;
  * {@code ||} settle as soon as they can, so the right operand runs under what the left one coming
  * out its way established — which is the whole of what makes this per comparison rather than per
  * fork. Everything else evaluates its parts under what stood at it.
+ *
+ * <p><b>And the case each arm of a {@code match} is, which this tree can name where the tree that
+ * runs cannot.</b> A name a closure is handed stands for an element of a container where the
+ * operation handing it over still stands, and for no position where that operation is expanded
+ * ({@link ArmsNamed}).
+ *
+ * @param armsNamed the case each arm of each {@code match} is, where the value matched stands at a
+ *                  position
  */
 record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                           Map<ConditionOccurrence, Citation> conditionsMet,
-                          List<TruthMet> truths, List<ForkDecided> decided) {
+                          List<TruthMet> truths, List<ForkDecided> decided,
+                          ArmsNamed armsNamed) {
 
     ComparisonReadings {
         comparisons = List.copyOf(comparisons);
@@ -305,13 +315,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         Arrivals answering, Templates templates,
                         List<TruthMet> truths, List<ForkDecided> decided, StatedHere stated,
                         WhatConditionsState conditions, CallContext context, Core root,
-                        InputReads atTheRoot) {
+                        InputReads atTheRoot, ArmsNamed.Gathered armsNamed) {
 
         /** The same reading, in the body of a recursive helper read at a call of it: its own
          *  tree, and the copy that call makes of each construct in it. */
         Body inside(Core helperBody, CallContext called, InputReads reads) {
             return new Body(behavior, read, Arrivals.inTheTree(helperBody), templates, truths,
-                    decided, stated, conditions, called, helperBody, reads);
+                    decided, stated, conditions, called, helperBody, reads, armsNamed);
         }
 
         Symbols symbols() {
@@ -361,9 +371,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         trees.add(body);
         trees.addAll(analysis.templatesAfterTheirBuilders());
         Arrivals answering = Arrivals.inTheTrees(trees, analysis.templates()::bodyOf);
+        ArmsNamed.Gathered armsNamed = new ArmsNamed.Gathered();
         walk(body, new Body(behavior, read, answering,
                         templates, truths, decided, stated, conditions,
-                        CallContext.OF_THE_BODY, body, reads),
+                        CallContext.OF_THE_BODY, body, reads, armsNamed),
                 reads, ClosureApplications.OUTSIDE,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
@@ -379,13 +390,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 // way joined, which no walk down the template says.
                 walk(template, new Body(behavior, read, answering,
                         templates, truths, decided, stated, conditions,
-                        CallContext.OF_THE_BODY, null, null),
+                        CallContext.OF_THE_BODY, null, null, armsNamed),
                         defined, ClosureApplications.OUTSIDE, LiveFlow.of(template),
                         entry.assumed(), entry.live(),
                         readings, forks, numbering);
             }
         }
-        return new ComparisonReadings(readings, forks, numbering.metAt(), truths, decided);
+        return new ComparisonReadings(readings, forks, numbering.metAt(), truths, decided,
+                armsNamed.named());
     }
 
     /** How one build of a value was reached: what stood on the way to it, and whether what it
@@ -607,7 +619,21 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // goes onto the account beside the conditions a guard states. Walked without it, a line
             // inside an arm was owed a row by a walk that had been told nothing stood on the way to
             // it, and the row composed for it was written in whichever arm the values fell in.
+            //
+            //
+            // And the case each arm is, under the copy of the fork this reading is of. Whether a
+            // run takes the arm, and whether the reading of the runs named it already, are that
+            // reading's to say ({@link ArmsNamed}).
             case Core.Match match -> {
+                if (reads.pathOf(match.scrutinee(), in.newtypes())
+                        instanceof PathResolution.At(TermPath at)) {
+                    List<souther.compiler.reading.Condition.Case> cases = new ArrayList<>();
+                    for (Core.Case arm : match.cases()) {
+                        cases.add(souther.compiler.reading.Condition.Case.of(at, arm));
+                    }
+                    ModelOccurrence.statedAt(in.context().of(match.place().occurrence()))
+                            .ifPresent(fork -> in.armsNamed().name(fork, cases));
+                }
                 walk(match.scrutinee(), in, reads, applying, flow, assumed, live, out, forks,
                         numbering);
                 for (int part = 0; part < match.cases().size(); part++) {

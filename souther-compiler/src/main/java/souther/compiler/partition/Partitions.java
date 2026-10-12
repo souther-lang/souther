@@ -116,6 +116,10 @@ public final class Partitions {
      *                neither of them is the one at fault and there is no position for it to be
      *                about. Null is "not proved empty" and never "there is a value" — what a proof
      *                of emptiness has no proof of is not the opposite claim
+     * @param armsNamed the case each arm of a {@code match} in the body is, as the tree the
+     *                language's operations stand in names it. Beside the lines and not a line: an
+     *                arm is a case, which the type divides already, and what this adds is which
+     *                position an arm the reading of the runs could not name is about
      */
     public record Partitioning(List<PositionMeasurements> measurements,
                                List<StandingQuestion> unanswered,
@@ -127,7 +131,8 @@ public final class Partitions {
                                ReachingCuts reaching,
                                MeasureClosure.OfThePartition partitionClosure,
                                MeasureClosure.OfTheBorder borderClosure,
-                               souther.compiler.inputs.EmptyInput inputIsEmpty) {
+                               souther.compiler.inputs.EmptyInput inputIsEmpty,
+                               ArmsNamed armsNamed) {
         public Partitioning {
             measurements = List.copyOf(measurements);
             unanswered = List.copyOf(unanswered);
@@ -458,7 +463,9 @@ public final class Partitions {
                 // Asked once, of the one reading that holds every parameter's rules together. A
                 // contradiction between two declarations is visible nowhere else, and a reader
                 // asking per position or per rule would be asking what neither of them decides.
-                quantities.emptiness().orElse(null));
+                quantities.emptiness().orElse(null),
+                // No body is read here.
+                ArmsNamed.NONE);
     }
 
     /**
@@ -949,7 +956,8 @@ public final class Partitions {
                                             RulesWithNoLine rulesWithoutALine,
                                             List<LineDrawn> between,
                                             ReachingCuts reaching,
-                                            MeasureClosure.Drawing drawing) {
+                                            MeasureClosure.Drawing drawing,
+                                            ArmsNamed armsNamed) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
@@ -1048,7 +1056,8 @@ public final class Partitions {
                 reaching, closed.partition(), closed.border(),
                 // Carried across. Whether the rules leave the input a value is the declarations'
                 // answer, and a body drawing lines on what they left does not change it.
-                base.inputIsEmpty());
+                base.inputIsEmpty(),
+                armsNamed);
     }
 
     /**

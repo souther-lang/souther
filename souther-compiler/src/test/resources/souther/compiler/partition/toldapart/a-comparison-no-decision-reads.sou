@@ -8,7 +8,7 @@
 // reading could add would tell them apart further.
 //
 // told apart at f: 2 groups of 2
-// told apart at xs[*]: unread
+// told apart at xs[*]: unread here
 module example.filtered
 
 data Yes
