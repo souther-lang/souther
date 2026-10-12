@@ -186,6 +186,11 @@ final class MeaningAssumptions {
                     WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
                             WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), asked)
                             .forEach(this::notTaken);
+            // Some element, asked nothing of it, is the container holding one: a count, which a path
+            // holds.
+            case Proposition.Some(DecisionSubject.AnInput(TermPath container),
+                                  Proposition.Always(boolean anyElement), boolean holds, var _)
+                    when anyElement -> holdingOne(container, holds);
             // Some element is one of several; every element is a fact a path holds only as the
             // closure it was written with.
             case Proposition.Some some -> WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
@@ -422,6 +427,26 @@ final class MeaningAssumptions {
         RuleKey named = TermPath.ruleKeyOf(bound.steps());
         return value == null || named == null ? null
                 : terms.atomAt(terms.under(value, named), bound.type());
+    }
+
+    /**
+     * The container at {@code container} holding at least one element, or none where
+     * {@code holds} is false, taken in as what its count is: the same atom a clause or a guard
+     * stating the count names.
+     */
+    private void holdingOne(TermPath container, boolean holds) {
+        Type type = places.typeAt().apply(container);
+        ValueName size = type == null ? null : NumericMeasures.takenOf(type, terms.newtypeInners());
+        FactSubject count = size == null ? null : terms.sizeAtPlace(size, placeOf(container));
+        if (count == null) {
+            outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
+            return;
+        }
+        carrying(count, size);
+        known = known.taking(LinearForm.atomMinusConstant(count, ExactRatio.ONE),
+                holds ? Rel.GE : Rel.LT, Known.Held.ON_THE_PATH,
+                terms.kindsOf(LinearForm.atom(count)));
+        taken = true;
     }
 
     /** Whether {@code taken} is the count of what its position holds. */

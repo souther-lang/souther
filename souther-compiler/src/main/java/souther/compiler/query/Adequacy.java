@@ -1821,6 +1821,22 @@ public final class Adequacy {
             }
 
             @Override
+            public souther.compiler.diag.Diagnostic.Builder itsClosureIsAppliedToNothing(
+                    List<String> containers,
+                    List<souther.compiler.reach.PathDecision> decisions) {
+                souther.compiler.diag.Diagnostic.Builder out =
+                        said.hint(new DeadBranchMessage.ItsClosureIsAppliedToNothing(
+                                containers.stream().map(each -> "`" + each + "`")
+                                        .collect(java.util.stream.Collectors.joining(", "))));
+                for (souther.compiler.reach.PathDecision each : decisions) {
+                    out = out.secondary(souther.compiler.diag.Region.point(each.at()),
+                            each.held() ? new DeadBranchMessage.ThisOneHoldsOnTheWayHere()
+                                    : new DeadBranchMessage.ThisOneFailsOnTheWayHere());
+                }
+                return out;
+            }
+
+            @Override
             public souther.compiler.diag.Diagnostic.Builder everyWayInIsRuledOut(
                     List<souther.compiler.reach.Proof> each) {
                 souther.compiler.diag.Diagnostic.Builder out =

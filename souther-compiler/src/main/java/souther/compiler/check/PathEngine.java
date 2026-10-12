@@ -246,6 +246,13 @@ final class PathEngine {
         return predicates.assumeMeaning(stated, cond, k, at, positive, places);
     }
 
+    /** {@code k} past what has to hold to stand somewhere no condition of the body leads, such as
+     *  inside a closure: {@code stated}, taken in as far as a path can hold it. */
+    Predicates.Assumed holding(Proposition stated, Known k, Denotations at,
+                               MeaningAssumptions.InputPlaces places) {
+        return predicates.assumeHolding(stated, k, at, places);
+    }
+
     /**
      * What a {@code match} arm's body is read under.
      *

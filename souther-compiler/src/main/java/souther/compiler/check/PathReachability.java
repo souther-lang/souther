@@ -16,6 +16,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Unsettlement;
 import souther.compiler.partition.WhatTheRulesLeaveAnArm;
+import souther.compiler.partition.WhereAClosureIsApplied;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
@@ -653,10 +654,41 @@ public final class PathReachability {
                             decided, false);
                 }
             }
+            case Core.Block block -> {
+                // A closure operations apply over containers of the input runs only where one of
+                // them holds something, which is what every reader entering it takes in. Where what
+                // holds on the way here leaves that nothing, no run applies it and nothing in it is
+                // reached — each arm in it for that reason, since no condition between the closure
+                // and the arm is what shuts it. And something stands above what is in it, so no
+                // witness is read off the rules alone there.
+                Optional<WhereAClosureIsApplied> applied = WhereAClosureIsApplied.of(
+                        reads.containersAppliedOver(block), reading);
+                Known inside = applied.isEmpty() ? k
+                        : engine.holding(applied.get().holdingSomething(), k, at, places).known();
+                if (inside.reachesNothing()) {
+                    appliedToNothing(block.body(), Proof.itsClosureIsAppliedToNothing(
+                            applied.orElseThrow().containers().stream()
+                                    .map(TermPath::toString).toList(), decided));
+                }
+                walk(block.body(), inside, at,
+                        reads.entering(new ScopeStep.Block(block), symbols, newtypes), decided,
+                        nothingAbove && applied.isEmpty());
+            }
             default -> ScopeStep.forEachChild(e, (child, step) ->
                     walk(child, k, at, reads.entering(step, symbols, newtypes), decided,
                             nothingAbove));
         }
+    }
+
+    /** Every arm in {@code e}, as one nothing arrives at for {@code why}. */
+    private void appliedToNothing(Core e, Proof why) {
+        ControlPlace.Arm[] arms = plan.armsOf(e);
+        if (arms != null) {
+            for (ControlPlace.Arm arm : arms) {
+                out.put(arm, new Reachability.Unreachable(why));
+            }
+        }
+        Core.forEachChild(e, child -> appliedToNothing(child, why));
     }
 
     /**

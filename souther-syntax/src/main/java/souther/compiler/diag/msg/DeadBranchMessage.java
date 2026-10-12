@@ -60,6 +60,11 @@ public sealed interface DeadBranchMessage extends Message {
      *  this one say. */
     record EveryWayInIsRuledOut() implements DeadBranchMessage, Supporting {}
 
+    /** The branch is in a closure applied to the elements of containers nothing on the way here
+     *  leaves one. */
+    record ItsClosureIsAppliedToNothing(String containers) implements DeadBranchMessage,
+            Supporting {}
+
     /** What to do about it. */
     record TakeItOutOrLetSomethingReachIt() implements DeadBranchMessage, Supporting {}
 }
