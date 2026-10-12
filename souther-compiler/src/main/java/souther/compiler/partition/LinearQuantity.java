@@ -193,8 +193,7 @@ public sealed interface LinearQuantity extends BorderQuantity
      * quantity says what being above, below or level comes to without a sum.
      */
     default ExactAnswer<Integer> signAt(Map<NumericTerm, Place> values, ExactRatio constant) {
-        return OrderedAffineBoundary.at(new LinearForm<>(constant, direction().coefs()), values)
-                .map(ExactRatio::signum);
+        return OrderedAffineBoundary.at(this, constant, values).map(ExactRatio::signum);
     }
 
     /**

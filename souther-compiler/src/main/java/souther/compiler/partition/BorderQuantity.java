@@ -27,6 +27,7 @@ import souther.compiler.observe.ObservedValue;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -519,10 +520,11 @@ public sealed interface BorderQuantity
     record OverAForm(String behavior, LinearForm<NumericTerm> form, Map<NumericTerm, TermOrders> on)
             implements LinearQuantity {
 
-        /** Walked by what each term is called, which is what a form's own equality cannot see. */
+        /** Walked by what each term is called, which is what a form's own equality cannot see, and
+         *  which the form is held in. */
         @Override
         public List<NumericTerm> terms() {
-            return NumericTerms.inOrder(form.coefs().keySet());
+            return List.copyOf(form.coefs().keySet());
         }
 
         @Override
@@ -548,7 +550,6 @@ public sealed interface BorderQuantity
                 throw new IllegalArgumentException(
                         "a quantity carries no constant; it belongs to the threshold: " + form);
             }
-            on = Map.copyOf(on);
             // An order per position of the form, held here so no reader has to answer for a
             // position with none. A map beside a form is two structures, and two structures are
             // what come apart: written this way the pair that disagrees does not exist.
@@ -558,6 +559,16 @@ public sealed interface BorderQuantity
                         + NumericTerms.inOrder(form.coefs().keySet())
                         + " against " + NumericTerms.inOrder(on.keySet()));
             }
+            // Both held in the order the terms are walked in, worked out once. Every row a reader
+            // asks of this walks the terms, and the order is the form's and not the row's.
+            Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+            Map<NumericTerm, TermOrders> readOn = new LinkedHashMap<>();
+            for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
+                coefs.put(term, form.coefs().get(term));
+                readOn.put(term, on.get(term));
+            }
+            form = new LinearForm<>(form.constant(), Collections.unmodifiableMap(coefs));
+            on = Collections.unmodifiableMap(readOn);
             // And each entry's orders are that position's own. The key set agreeing says the map
             // is about the right positions and says nothing about which of them each answer came
             // from: a table with the two ends swapped has exactly the same keys.
@@ -607,8 +618,7 @@ public sealed interface BorderQuantity
          * apiece they were free to disagree about a pair of orders that step differently.
          */
         souther.compiler.numeric.Granularity spacing() {
-            return LevelSpace.addedUpOver(NumericTerms.inOrder(on.keySet()).stream()
-                    .map(term -> on.get(term).answered()).toList());
+            return LevelSpace.addedUpOver(on.values().stream().map(TermOrders::answered).toList());
         }
 
         /** The order that position is read and written on, and null for a position not in the
@@ -637,8 +647,7 @@ public sealed interface BorderQuantity
             Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
             boolean noNumber = false;
             boolean wroteNothing = false;
-            for (Map.Entry<NumericTerm, ExactRatio> each
-                    : NumericTerms.entriesInOrder(form.coefs())) {
+            for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
                 // Taken by the orders this form reads that term on. What the term read is the
                 // reading's to say and what it is worth to the number is the form's, and a
                 // coefficient put against a value read on another order weighs a position by a

@@ -168,18 +168,34 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
     private static ExactAnswer<ExactRatio> summed(Map<NumericTerm, ExactRatio> direction,
                                                   Map<NumericTerm, Place> values,
                                                   ExactRatio constant) {
-        List<ExactRatio> terms = new ArrayList<>();
-        terms.add(constant);
         // Walked by the terms: which position is named where a row holds no number at one of them
         // turns on the order, and a direction says which positions it weighs without saying which
         // was written first.
-        for (Map.Entry<NumericTerm, ExactRatio> each : NumericTerms.entriesInOrder(direction)) {
-            Place held = values.get(each.getKey());
+        return summed(NumericTerms.inOrder(direction.keySet()), direction, values, constant);
+    }
+
+    /**
+     * What {@code of} with {@code constant} added comes to at a row, walked in the order its terms
+     * are held in rather than put in order again for every row.
+     */
+    static ExactAnswer<ExactRatio> at(LinearQuantity of, ExactRatio constant,
+                                      Map<NumericTerm, Place> values) {
+        return summed(of.terms(), of.direction().coefs(), values, constant);
+    }
+
+    private static ExactAnswer<ExactRatio> summed(List<NumericTerm> walked,
+                                                  Map<NumericTerm, ExactRatio> direction,
+                                                  Map<NumericTerm, Place> values,
+                                                  ExactRatio constant) {
+        List<ExactRatio> terms = new ArrayList<>();
+        terms.add(constant);
+        for (NumericTerm term : walked) {
+            Place held = values.get(term);
             if (held == null) {
                 throw new IllegalArgumentException("a row read at a quantity holds a number at each"
-                        + " of its positions, and holds none at " + each.getKey());
+                        + " of its positions, and holds none at " + term);
             }
-            switch (Count.number(held).exactly().times(each.getValue())) {
+            switch (Count.number(held).exactly().times(direction.get(term))) {
                 case ExactAnswer.Held<ExactRatio> weighed -> terms.add(weighed.value());
                 case ExactAnswer.Unheld<ExactRatio> unheld -> {
                     return ExactAnswer.unheld(unheld.why());
