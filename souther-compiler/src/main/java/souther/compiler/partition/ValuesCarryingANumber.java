@@ -101,7 +101,9 @@ record ValuesCarryingANumber(TermPath fixed, FixtureTemplate value,
         if (composed.isEmpty()) {
             return null;
         }
-        return Partitions.fieldsOf(record, reading, Set.of(), composed);
+        return Partitions.fieldsOf(record,
+                Partitions.rulesOver(built.worn(), record, reading.source()), reading, Set.of(),
+                composed);
     }
 
     /**

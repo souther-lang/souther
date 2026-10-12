@@ -1404,8 +1404,7 @@ public final class Partitions {
         bare.addAll(whatAFormatAsksFor(stated.patterns(), reading));
         // What the rules say the value holds, before the value that would hold nothing.
         bare.addAll(Witnesses.holding(view, characters.least(), List.of(), reading, inside));
-        List<FixtureTemplate> ofTheShape =
-                whatTheShapeStandsFor(view.shape(), reading, within, inside);
+        List<FixtureTemplate> ofTheShape = whatTheShapeStandsFor(view, reading, within, inside);
         bare.addAll(ofTheShape);
 
         List<FixtureTemplate> candidates = new ArrayList<>();
@@ -1513,12 +1512,12 @@ public final class Partitions {
      * kind of position, and a shape added later is one this has to be told about rather than one
      * that falls to whichever arm it was not named in.
      */
-    private static List<FixtureTemplate> whatTheShapeStandsFor(Shape shape,
+    private static List<FixtureTemplate> whatTheShapeStandsFor(TypeView view,
                                                                RuleReadingContext reading,
                                                                NumericDomain.Bounds within,
                                                                java.util.Set<TypeSymbol> inside) {
         RuleReadingSource ruleSource = reading.source();
-        return switch (shape) {
+        return switch (view.shape()) {
             case Shape.Scalar scalar -> standsForA(scalar, within, ruleSource);
             // The empty one, for every collection nothing has said otherwise about. A row whose
             // collection is not what it is about should say so by carrying nothing, and where no rule
@@ -1534,9 +1533,12 @@ public final class Partitions {
                     ruleSource.symbols().scope().reach(unit.name())
                             instanceof TypeReachName.Written written
                             ? List.of(FixtureTemplate.unitCase(written)) : List.of();
-            // A record is written field by field, against the rules relating them.
+            // A record is written field by field, against the rules relating them — those of the
+            // names it is worn under as well as its own.
             case Shape.Product product -> product.name() instanceof TypeSymbol.AtModule named
-                    ? composed(named, reading, inside) : List.of();
+                    ? composed(named, rulesOver(view.wrappers(), named, ruleSource), reading,
+                            inside)
+                    : List.of();
             // What a sum or a union stands for is which of its cases it is, which is what the
             // position divides into rather than a value to name here.
             case Shape.Sum _, Shape.Cases _ -> List.of();
@@ -1591,8 +1593,10 @@ public final class Partitions {
                                              java.util.Set<TypeSymbol> expanding) {
         return switch (source) {
             case RepresentativeSource.Values values -> values.written();
+            // Against the case's own rules: the names the position wears are over the sum, and a
+            // rule of theirs reads no field of one of its cases.
             case RepresentativeSource.Compose compose ->
-                    composed(compose.through(), reading, expanding).stream()
+                    composed(compose.through(), compose.through(), reading, expanding).stream()
                             .map(compose::written).toList();
             case RepresentativeSource.NothingProducible _,
                  RepresentativeSource.NotArrivedAt _ -> List.of();
@@ -1621,8 +1625,11 @@ public final class Partitions {
      * <p>Composed once for the revision ({@link ARecordComposed}). A search asks what stands for a
      * record from every point and every settling it visits, and the answer is about the record and
      * the rules and nothing about where the search is.
+     *
+     * @param rulesOn the name whose rules the fields are chosen against ({@link #rulesOver})
      */
     private static List<FixtureTemplate> composed(TypeSymbol.AtModule record,
+                                                  TypeSymbol.AtModule rulesOn,
                                                   RuleReadingContext reading,
                                                   java.util.Set<TypeSymbol> expanding) {
         // Given up on before it is asked, so that a record reached from its own field is the work
@@ -1630,12 +1637,48 @@ public final class Partitions {
         if (expanding.contains(record)) {
             return List.of();
         }
-        return reading.revision().settled(new ARecordComposed(record, reading, expanding));
+        return reading.revision().settled(
+                new ARecordComposed(record, rulesOn, reading, expanding));
+    }
+
+    /**
+     * The name whose rules a record worn under {@code worn} is composed against: the outermost of
+     * them that wraps the record itself, or the record where none does.
+     *
+     * <p>The outermost, because a name's reading reaches every rule beneath it — those of each name
+     * it wraps and the record's own — and names a field of the record as the record does, a
+     * newtype's value being at no name of its own. Read on the record alone, a rule a name wrapping
+     * it writes about one of its fields is a rule the value is held to and nothing composing it was
+     * told of.
+     *
+     * <p>One that wraps the record and not a sum it is a case of: a position narrowed to a case
+     * wears the names over the sum as well, and a rule of theirs reads no field of a case.
+     */
+    static TypeSymbol.AtModule rulesOver(List<? extends TypeSymbol> worn,
+                                         TypeSymbol.AtModule record, RuleReadingSource source) {
+        for (TypeSymbol each : worn) {
+            if (each instanceof TypeSymbol.AtModule named
+                    && TypeView.shapeOf(Type.ref(named), source.inners(), source.symbols(),
+                            source.kinds(), source.sums()) instanceof Shape.Product product
+                    && record.equals(product.name())) {
+                return named;
+            }
+        }
+        return record;
+    }
+
+    /** The same, of a position of type {@code position} whose value is {@code record}: the name it
+     *  is written under, where it is written under one. */
+    static TypeSymbol.AtModule rulesOver(Type position, TypeSymbol.AtModule record,
+                                         RuleReadingSource source) {
+        return rulesOver(position instanceof Type.Ref ref ? List.of(ref.name()) : List.of(),
+                record, source);
     }
 
     /**
      * What stands for a record with none of its fields decided, as work settled by the record, the
-     * source its rules are read from, what the reading may spend and the names it is inside.
+     * name its rules are read on, the source they are read from, what the reading may spend and the
+     * names it is inside.
      *
      * <p>The source by its origin and not by the reading that is handed over to do the work. A
      * reading is a capability and compares as one, so two readings of one source are two objects;
@@ -1652,6 +1695,8 @@ public final class Partitions {
 
         private final TypeSymbol.AtModule record;
 
+        private final TypeSymbol.AtModule rulesOn;
+
         private final RuleReadingSource.Origin origin;
 
         private final ReadingPolicy policy;
@@ -1660,9 +1705,10 @@ public final class Partitions {
 
         private final RuleReadingContext reading;
 
-        ARecordComposed(TypeSymbol.AtModule record, RuleReadingContext reading,
-                        Set<TypeSymbol> expanding) {
+        ARecordComposed(TypeSymbol.AtModule record, TypeSymbol.AtModule rulesOn,
+                        RuleReadingContext reading, Set<TypeSymbol> expanding) {
             this.record = record;
+            this.rulesOn = rulesOn;
             this.origin = reading.source().origin();
             this.policy = reading.policy();
             this.expanding = Set.copyOf(expanding);
@@ -1671,24 +1717,25 @@ public final class Partitions {
 
         @Override
         public List<FixtureTemplate> workedOut(RevisionKnowledge revision) {
-            return composed(record, reading, expanding, Map.of());
+            return composed(record, rulesOn, reading, expanding, Map.of());
         }
 
         @Override
         public boolean equals(Object other) {
             return other instanceof ARecordComposed it && record.equals(it.record)
-                    && origin.equals(it.origin) && policy.equals(it.policy)
-                    && expanding.equals(it.expanding);
+                    && rulesOn.equals(it.rulesOn) && origin.equals(it.origin)
+                    && policy.equals(it.policy) && expanding.equals(it.expanding);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(record, origin, policy, expanding);
+            return Objects.hash(record, rulesOn, origin, policy, expanding);
         }
 
         @Override
         public String toString() {
-            return "ARecordComposed[" + record + " inside " + expanding + "]";
+            return "ARecordComposed[" + record + " under the rules of " + rulesOn + " inside "
+                    + expanding + "]";
         }
     }
 
@@ -1704,17 +1751,65 @@ public final class Partitions {
      * @param given what stands at some of the fields, by name. A name no field has is nothing this
      *              can build, and is the caller asking for a value of another type
      */
-    static List<FixtureTemplate> composed(TypeSymbol.AtModule record, RuleReadingContext reading,
+    static List<FixtureTemplate> composed(TypeSymbol.AtModule record, TypeSymbol.AtModule rulesOn,
+                                          RuleReadingContext reading,
                                           java.util.Set<TypeSymbol> expanding,
                                           Map<String, FixtureTemplate> given) {
         if (expanding.contains(record)) {
             return List.of();
         }
         RuleReadingSource ruleSource = reading.source();
-        SequencedMap<String, FixtureTemplate> chosen = fieldsOf(record, reading, expanding, given);
+        SequencedMap<String, FixtureTemplate> chosen =
+                fieldsOf(record, rulesOn, reading, expanding, given);
         return chosen == null || !(ruleSource.symbols().scope().reach(record)
                 instanceof TypeReachName.Written written)
                         ? List.of() : List.of(FixtureTemplate.record(written, chosen));
+    }
+
+    /**
+     * Values of {@code record} no two of which are alike, up to {@code many} of them, or none
+     * where no field of it has two values to differ at.
+     *
+     * <p>Alike everywhere but one field, which is the first whose values are more than one. A
+     * record is apart from another wherever one field is, so a field is all a list kept apart as
+     * records needs — and the values there are what the record's rules leave the field
+     * ({@link FieldDomains.Held}), each written in and the rest composed against the rules as they
+     * then stand ({@link #composed}).
+     *
+     * @param rulesOn the name whose rules the fields are chosen against ({@link #rulesOver})
+     */
+    static List<FixtureTemplate> differingAtAField(TypeSymbol.AtModule record,
+                                                   TypeSymbol.AtModule rulesOn, int many,
+                                                   RuleReadingContext reading,
+                                                   java.util.Set<TypeSymbol> expanding) {
+        RuleReadingSource ruleSource = reading.source();
+        if (expanding.contains(record)
+                || !(TypeView.shapeOf(Type.ref(record), ruleSource.inners(), ruleSource.symbols(),
+                        ruleSource.kinds(), ruleSource.sums())
+                        instanceof Shape.Product(TypeSymbol _,
+                        SequencedMap<String, Type> fields))) {
+            return List.of();
+        }
+        java.util.Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
+        inside.add(record);
+        FieldDomains.Composing left = FieldDomains.of(rulesOn, reading).composing(Map.of());
+        for (Map.Entry<String, Type> field : fields.entrySet()) {
+            FieldDomains.ConstructionLimits limits = left.at(RuleKey.of(field.getKey()));
+            List<FixtureTemplate> values = Witnesses.distinctValuesOf(field.getValue(), many,
+                    limits.held(), reading, inside);
+            if (values.size() < 2) {
+                continue;
+            }
+            List<FixtureTemplate> out = new ArrayList<>();
+            for (FixtureTemplate value : values) {
+                out.addAll(composed(record, rulesOn, reading, expanding,
+                        Map.of(field.getKey(), value)));
+            }
+            if (out.size() > 1) {
+                return out;
+            }
+        }
+        return List.of();
     }
 
     /**
@@ -1725,8 +1820,13 @@ public final class Partitions {
      * a caller then does with it. Asked on its own by the composing of a plan, which has the record
      * to write and needs what goes in it — a caller that took a written record apart again to get at
      * the fields would be reading one answer back out of another.
+     *
+     * @param rulesOn the name whose rules the fields are chosen against: {@code record} itself, or
+     *                a name worn over it ({@link #rulesOver}), whose reading names the record's
+     *                fields as the record does
      */
     static SequencedMap<String, FixtureTemplate> fieldsOf(TypeSymbol.AtModule record,
+                                                 TypeSymbol.AtModule rulesOn,
                                                  RuleReadingContext reading,
                                                  java.util.Set<TypeSymbol> expanding,
                                                  Map<String, FixtureTemplate> given) {
@@ -1735,10 +1835,10 @@ public final class Partitions {
         // declaration to its fields is that same reading taken a second time, and the two part
         // wherever one of them reaches through a name the other stops at.
         //
-        // And the name has to be the record's own, because the rules below are read on the name
-        // the caller gave. Read through a name to another declaration's fields, the fields would
-        // be one declaration's and the rules another's, and every field would be chosen against
-        // rules that name nothing it has.
+        // And the fields have to be the record's own, because the rules below name them. Read
+        // through a name to another declaration's fields, the fields would be one declaration's
+        // and the rules another's, and every field would be chosen against rules that name
+        // nothing it has.
         Type position = Type.ref(record);
         if (expanding.contains(record)
                 || TypeOps.outermost(position, ruleSource.inners()) != null
@@ -1757,7 +1857,7 @@ public final class Partitions {
         // The record's rules, read once. Each field is then chosen against this with the fields
         // before it settled into it, which is what a settling states — a reading per settled field
         // would be paying for every clause again to arrive where the first one already is.
-        FieldDomains rules = FieldDomains.of(record, reading);
+        FieldDomains rules = FieldDomains.of(rulesOn, reading);
         FieldDomains.Composing left = rules.composing(Map.of());
         SequencedMap<String, FixtureTemplate> chosen = new LinkedHashMap<>();
         if (!fields.keySet().containsAll(given.keySet())) {

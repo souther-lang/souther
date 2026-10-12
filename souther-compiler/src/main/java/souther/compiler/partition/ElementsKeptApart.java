@@ -65,23 +65,72 @@ final class ElementsKeptApart {
      * The same, of the value at {@code path} under a parameter of type {@code root}, for a caller
      * holding the path and not a reading of the parameter's rules.
      *
-     * <p>Read where that reading reads them — on the record the parameter's fields come off
-     * ({@link FieldDomains.Held#keptApart}) — so a value built from the path and one built from the
+     * <p>Read where that reading reads them — on the name the parameter is written under where it
+     * wraps the record its fields come off, on the record otherwise ({@link Partitions#rulesOver},
+     * {@link FieldDomains.Held#keptApart}) — so a value built from the path and one built from the
      * reading are kept apart at the same runs.
+     *
+     * <p>Kept for the revision ({@link HeldUnder}). A plan asks it of every position it builds,
+     * at every point a search visits, and the answer is about the type and the path alone.
      *
      * @param path where the value is under the parameter, as its rules name it; null where they
      *             cannot name it, which is a value they say nothing of
      */
     static List<List<String>> heldUnder(Type root, RuleKey path, RuleReadingContext reading) {
-        RuleReadingSource source = reading.source();
-        if (path == null || path.isTheValueItself()
-                || !(TypeView.shapeOf(root, source.inners(), source.symbols(), source.kinds(),
-                        source.sums())
-                        instanceof Shape.Product(TypeSymbol.AtModule declared, var _))) {
+        if (path == null || path.isTheValueItself()) {
             return List.of();
         }
-        return ElementsApart.heldAt(new Type.Ref(declared), path,
-                named -> reading.revision().settled(new WrittenOn(named, source)), source);
+        return reading.revision().settled(new HeldUnder(root, path, reading.source()));
+    }
+
+    /**
+     * What the rules over the value at a path under a parameter's type keep its elements apart at,
+     * as work settled by the type, the path and the source its rules are read from — by its origin,
+     * as {@link WrittenOn} is.
+     */
+    static final class HeldUnder implements RevisionWork<List<List<String>>> {
+
+        private final Type root;
+
+        private final RuleKey path;
+
+        private final RuleReadingSource.Origin origin;
+
+        private final RuleReadingSource source;
+
+        HeldUnder(Type root, RuleKey path, RuleReadingSource source) {
+            this.root = root;
+            this.path = path;
+            this.origin = source.origin();
+            this.source = source;
+        }
+
+        @Override
+        public List<List<String>> workedOut(RevisionKnowledge revision) {
+            if (!(TypeView.shapeOf(root, source.inners(), source.symbols(), source.kinds(),
+                    source.sums())
+                    instanceof Shape.Product(TypeSymbol.AtModule declared, var _))) {
+                return List.of();
+            }
+            return ElementsApart.heldAt(new Type.Ref(Partitions.rulesOver(root, declared, source)),
+                    path, named -> revision.settled(new WrittenOn(named, source)), source);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof HeldUnder it && root.equals(it.root) && path.equals(it.path)
+                    && origin.equals(it.origin);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(root, path, origin);
+        }
+
+        @Override
+        public String toString() {
+            return "HeldUnder[" + root + " at " + path + "]";
+        }
     }
 
     /**

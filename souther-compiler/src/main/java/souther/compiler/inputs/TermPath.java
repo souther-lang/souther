@@ -433,6 +433,24 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
+     * What the innermost container this position stands inside holds — the element or the entry
+     * this is at or under — or the root where it is inside none.
+     *
+     * <p>The value whose clauses can name this position. A clause of a record holding a list names
+     * the list and nothing inside it ({@link #ruleKey}); what an element's own record writes about
+     * its fields names them from the element, so a reader of the rules a position is under asks
+     * them of the value this answers and names the position under it ({@link #ruleKeyUnder}).
+     */
+    public TermPath insideTheInnermostContainer() {
+        for (int i = steps.size() - 1; i >= 0; i--) {
+            if (reachesInsideAContainer(steps.get(i))) {
+                return new TermPath(head, steps.subList(0, i + 1));
+            }
+        }
+        return TermPath.of(head);
+    }
+
+    /**
      * Every container this position stands inside, outermost first.
      *
      * <p>One per step inside a container. A position two containers deep stands inside both, and a

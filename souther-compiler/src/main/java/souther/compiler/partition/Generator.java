@@ -6436,17 +6436,26 @@ public final class Generator {
     }
 
     /**
-     * What the rules of the parameter {@code at} is under keep the elements of the value written
-     * there apart at, read where the plan's composing reads them ({@link #heldAt}) — nothing where
-     * they cannot name it.
+     * What the rules of the value whose clauses can name {@code at} keep the elements of the value
+     * written there apart at — the parameter's, or those of what the innermost container it is
+     * inside holds ({@link TermPath#insideTheInnermostContainer}) — nothing where they cannot name
+     * it.
+     *
+     * <p>Read where a record composed field by field reads them ({@link FieldDomains.Held}), so a
+     * list built as a field of an element of another list is kept apart as its own record says,
+     * whichever of the two builds it.
      */
     private static List<List<String>> keptApartUnder(MeasuredInput subject, TermPath at) {
+        TermPath named = at.insideTheInnermostContainer();
         for (int p = 0; p < subject.parameters().size(); p++) {
             TermPath root = TermPath.of(subject.parameters().get(p));
-            if (at.isAtOrUnder(root)) {
-                return ElementsKeptApart.heldUnder(subject.types().get(p), at.ruleKeyUnder(root),
-                        subject.ruleReading());
+            if (!at.isAtOrUnder(root)) {
+                continue;
             }
+            Type type = named.equals(root) ? subject.types().get(p)
+                    : subject.inputs().typeAtWrittenPath(named);
+            return type == null ? List.of() : ElementsKeptApart.heldUnder(type,
+                    at.ruleKeyUnder(named), subject.ruleReading());
         }
         return List.of();
     }
@@ -8610,7 +8619,7 @@ public final class Generator {
                 (at, building) -> new ConstructionPlan.ItMayHold(
                         within(heldRange(under, at, building, subject.ruleReading()),
                                 sized.get(at)),
-                        ElementsKeptApart.heldBy(heldAt(under, at))));
+                        keptApartUnder(subject, at)));
         ConstructionPlan plan;
         switch (planned) {
             case ConstructionPlan.Result.Planned made -> plan = made.plan();
@@ -9516,13 +9525,15 @@ public final class Generator {
                                         Map<RuleKey, Count> settled) {
         RuleReadingSource source = reading.source();
         // Whether the position is a record, and which record, are one answer and it is the
-        // reading's. The rules are then read on the declaration the fields came off — a position
-        // written under a name takes its fields from what that name wraps, and reading the rules on
-        // the name instead would be asking a declaration that has no such field.
-        return TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
+        // reading's. The rules are then read on the name the position is written under where it
+        // wraps that record, whose reading reaches the record's own rules and names its fields as
+        // the record does, and on the record where it is written bare.
+        if (!(TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums())
-                        instanceof Shape.Product(TypeSymbol.AtModule declared, Map<String, Type> _)
-                ? FieldDomains.of(declared, reading, settled) : FieldDomains.NONE;
+                instanceof Shape.Product(TypeSymbol.AtModule declared, Map<String, Type> _))) {
+            return FieldDomains.NONE;
+        }
+        return FieldDomains.of(Partitions.rulesOver(type, declared, source), reading, settled);
     }
 
     /**

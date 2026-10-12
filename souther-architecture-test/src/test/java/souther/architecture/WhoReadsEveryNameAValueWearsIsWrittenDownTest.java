@@ -157,14 +157,14 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "ConstructionPlan$NodeResult;",
                     THE_POSITION),
             row(PARTITION + "ContainersAddingUp", "to",
-                    "(Lsouther/compiler/numeric/Place;" + TYPE + "L" + INPUTS + "TermOrders;L"
-                            + INPUTS + "SearchRegion;" + CONTEXT + "L" + PARTITION
+                    "(Lsouther/compiler/numeric/Place;" + TYPE + "Ljava/util/List;L" + INPUTS
+                            + "TermOrders;L" + INPUTS + "SearchRegion;" + CONTEXT + "L" + PARTITION
                             + "ContainersAddingUp$HowManyIsAskedFor;L" + PARTITION
                             + "DemandsInside;)" + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "NestedContainersAddingUp", "to",
-                    "(Lsouther/compiler/numeric/Place;" + TYPE + "L" + INPUTS + "TermOrders;L"
-                            + INPUTS + "SearchRegion;" + CONTEXT + "L" + PARTITION
+                    "(Lsouther/compiler/numeric/Place;" + TYPE + "Ljava/util/List;L" + INPUTS
+                            + "TermOrders;L" + INPUTS + "SearchRegion;" + CONTEXT + "L" + PARTITION
                             + "ContainersAddingUp$HowManyIsAskedFor;L" + PARTITION
                             + "DemandsInside;)" + REALIZATION,
                     THE_POSITION),
@@ -235,6 +235,9 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(PARTITION + "ValuesCarryingANumber", "at",
                     "(L" + PARTITION + "ConstructionPlan$Slot;)L" + PARTITION + "FixtureTemplate;",
+                    THE_POSITION),
+            row(PARTITION + "Witnesses", "differing",
+                    "(" + TYPE + "I" + HELD + CONTEXT + "Ljava/util/Set;)Ljava/util/List;",
                     THE_POSITION),
             row(PARTITION + "Witnesses", "holdingAt",
                     "(" + TYPE + "Ljava/util/Map;" + CONTEXT + ")L" + PARTITION

@@ -5,6 +5,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.ElementsApart;
+import souther.compiler.check.FieldDomains;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
@@ -473,6 +474,40 @@ final class Witnesses {
     }
 
     /**
+     * Up to {@code many} values of what an element of type {@code element} holds at {@code run},
+     * no two alike, in the order a collection reaches for them — or null where the run is no run
+     * of fields of a record this writes.
+     *
+     * <p>The values a list built around one number per element puts at a run that does not hold
+     * the number, so that its elements are apart there as its rules ask: the same values, in the
+     * same order, that elements made apart without a number are given ({@link ElementsMadeApart}).
+     */
+    static List<FixtureTemplate> valuesApartAt(Type element, List<String> run, int many,
+                                               RuleReadingContext reading) {
+        Type type = typeAt(element, run, reading);
+        return type == null ? null : distinctValuesOf(type, many, reading, Set.of());
+    }
+
+    /**
+     * Whether no two of {@code elements} hold one value at any of {@code runs}.
+     *
+     * <p>A value whose run this cannot read — one written as a spread over a value the module
+     * states — is apart from nothing here, and the decoder answers for it.
+     */
+    static boolean holdApart(List<FixtureTemplate> elements, List<List<String>> runs) {
+        for (List<String> run : runs) {
+            Set<Hir.Expr> seen = new HashSet<>();
+            for (FixtureTemplate each : elements) {
+                Hir.Expr value = valueAt(each.value(), run);
+                if (value != null && !seen.add(value)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
      * What {@code value} holds at the end of {@code run}, under no name it wears, or null where it
      * is not written out field by field down to there.
      */
@@ -556,7 +591,8 @@ final class Witnesses {
             }
             given.put(each.getKey(), inner);
         }
-        List<FixtureTemplate> composed = Partitions.composed(named, reading, Set.of(), given);
+        List<FixtureTemplate> composed = Partitions.composed(named,
+                Partitions.rulesOver(view.wrappers(), named, source), reading, Set.of(), given);
         return composed.isEmpty() ? null
                 : WornNames.under(view.wrappers(), composed.getFirst(), source);
     }
@@ -876,10 +912,26 @@ final class Witnesses {
      * answers is how many characters, and a type whose rule says which of them gets a string it
      * refuses at every element after the first. The rules are what tell the values apart there, the
      * same as a range does for a number ({@link Partitions#numberInside}).
+     *
+     * <p>Then, for a type with no carrier to step, values that differ in what they hold: a record at
+     * one of its fields and a collection in how many it holds ({@link #differing}). A list kept
+     * apart as records, or as lists, has its elements from here — taken from the proposals alone it
+     * had one of them, and a list of two was a list saying one value twice.
      */
     private static List<FixtureTemplate> distinctValuesOf(Type type, int many,
                                                           RuleReadingContext reading,
                                                           Set<TypeSymbol> expanding) {
+        return distinctValuesOf(type, many, null, reading, expanding);
+    }
+
+    /**
+     * The same, of a value at a field whose record's rules say what it holds ({@code held}, null
+     * where nothing holds it): a collection differing in how many it holds holds as many as those
+     * rules leave, kept apart as they keep it.
+     */
+    static List<FixtureTemplate> distinctValuesOf(Type type, int many, FieldDomains.Held held,
+                                                  RuleReadingContext reading,
+                                                  Set<TypeSymbol> expanding) {
         Set<String> written = new LinkedHashSet<>();
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : dividesInto(type, reading, expanding)) {
@@ -910,6 +962,17 @@ final class Witnesses {
         if (out.size() >= many) {
             return List.copyOf(out);
         }
+        for (FixtureTemplate each : differing(type, many, held, reading, expanding)) {
+            if (out.size() >= many) {
+                return List.copyOf(out);
+            }
+            if (written.add(each.text())) {
+                out.add(each);
+            }
+        }
+        if (out.size() >= many) {
+            return List.copyOf(out);
+        }
         // Asked last and only where there is room for what it answers. What a position is offered
         // is a reading of every rule on it and costs what that reading costs, and a loop that asks
         // for the list and then leaves it alone pays for it at every count already filled.
@@ -922,6 +985,59 @@ final class Witnesses {
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * Values of {@code type} that differ in what they hold, up to {@code many} of them, under every
+     * name it wears: a record's at one of its fields ({@link Partitions#differingAtAField}) and a
+     * collection's in how many it holds, from the fewest its rules and {@code held} leave. Nothing
+     * for a type that holds nothing of its own, whose values were asked for above.
+     *
+     * <p>Each built as a value of its position is, under the rules there, so what differs is a
+     * value of the type and not a shape that carries a difference.
+     */
+    private static List<FixtureTemplate> differing(Type type, int many, FieldDomains.Held held,
+                                                   RuleReadingContext reading,
+                                                   Set<TypeSymbol> expanding) {
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
+        for (TypeSymbol wears : view.wrappers()) {
+            if (!inside.add(wears)) {
+                return List.of();
+            }
+        }
+        return switch (view.shape()) {
+            case Shape.Product record -> {
+                if (!(record.name() instanceof TypeSymbol.AtModule named)) {
+                    yield List.of();
+                }
+                List<FixtureTemplate> out = new ArrayList<>();
+                for (FixtureTemplate each : Partitions.differingAtAField(named,
+                        Partitions.rulesOver(view.wrappers(), named, source), many, reading,
+                        inside)) {
+                    out.add(WornNames.under(view.wrappers(), each, source));
+                }
+                yield out;
+            }
+            case Shape.Sequence _, Shape.Mapping _ -> {
+                DeclaredBounds.CountRange range = Partitions.heldRange(type, reading, held);
+                List<List<String>> apart = ElementsKeptApart.heldBy(held);
+                List<FixtureTemplate> out = new ArrayList<>();
+                for (int size = Math.max(range.least(), 0);
+                     size <= range.most() && out.size() < many; size++) {
+                    Sized one = ofSize(view, size, apart, reading, inside);
+                    if (!one.values().isEmpty()) {
+                        out.add(one.values().getFirst());
+                    }
+                }
+                yield out;
+            }
+            case Shape.Scalar _, Shape.Optional _, Shape.Unit _, Shape.Sum _, Shape.Cases _,
+                 Shape.Unresolved _, Shape.Tuple _, Shape.Function _, Shape.Uninhabited _,
+                 Shape.Bottom _, Shape.Erroneous _, Shape.Undecided _ -> List.of();
+        };
     }
 
     /**

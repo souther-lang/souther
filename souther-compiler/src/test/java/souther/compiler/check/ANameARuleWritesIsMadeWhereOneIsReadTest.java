@@ -75,6 +75,10 @@ class ANameARuleWritesIsMadeWhereOneIsReadTest {
      * asking has either been handed the answer — which is the shape to want, since a value chosen
      * for naming a place carries the name it was chosen for — or has stopped needing it, and those
      * are different things to know.
+     *
+     * <p>{@code NestedContainersAddingUp} asks it of the container one level down, under the
+     * element of the level above, so that the rules of that element's record about the container
+     * are read where the container is built — the name handed on, as every caller here does.
      */
     @Test
     void aPlaceBecomesANameInOnePlace() {
@@ -85,7 +89,8 @@ class ANameARuleWritesIsMadeWhereOneIsReadTest {
         assertEquals(List.of("souther.compiler.inputs.PlacedRules",
                         "souther.compiler.inputs.ReadQuantities$Roots",
                         "souther.compiler.inputs.RuleAddress",
-                        "souther.compiler.partition.Generator"),
+                        "souther.compiler.partition.Generator",
+                        "souther.compiler.partition.NestedContainersAddingUp"),
                 callersOf(souther.compiler.inputs.TermPath.class, "ruleKeyUnder"),
                 "a position becomes what a rule calls it here, and is handed on as that");
     }

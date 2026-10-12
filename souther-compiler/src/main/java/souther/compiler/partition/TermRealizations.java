@@ -1084,8 +1084,8 @@ final class TermRealizations {
                         new ContainersAddingUp.HowManyIsAskedFor(many, counted.answered());
                 return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
                         onTheOrder(total, adds, comesToAt.named(), within),
-                        at -> ContainersAddingUp.to(at, sourceType, adds, within, reading,
-                                holding, inside));
+                        at -> ContainersAddingUp.to(at, sourceType, keptApart, adds, within,
+                                reading, holding, inside));
             }
         }
 
@@ -1372,8 +1372,8 @@ final class TermRealizations {
                 yield holdingThatManyOfAClass(counted.counted(), sourceType, asked, orders,
                         reading);
             }
-            case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, orders,
-                    asked, within, reading, inside);
+            case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, keptApart,
+                    orders, asked, within, reading, inside);
             // Written by composing the container its elements stand in, which a value of one
             // element's type is not: a group holding it is never answered by one number alone
             // ({@link #jointRealizationOf}).
@@ -1455,7 +1455,7 @@ final class TermRealizations {
             // this number to be there. What that takes is choosing how many elements and what each
             // of them holds — one question whether the number is added up out of the container
             // itself or out of a path inside its elements, and answered for both in one place.
-            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, orders,
+            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, keptApart, orders,
                     within, reading, inside);
             // And this one writes on the order the value is written on. Written on the order the
             // answer is measured on, the thirteenth hour would be offered as the thirteenth second —
@@ -1563,8 +1563,10 @@ final class TermRealizations {
     }
 
     /** A container whose elements come to one of those numbers, which is what a row has to hold for
-     *  this number to be there. */
-    private static Realization addingUp(AskedAt asked, Type sourceType, TermOrders orders,
+     *  this number to be there, held by a value whose rules keep its elements apart at
+     *  {@code keptApart}. */
+    private static Realization addingUp(AskedAt asked, Type sourceType,
+                                        List<List<String>> keptApart, TermOrders orders,
                                         SearchRegion within,
                                         RuleReadingContext reading, DemandsInside inside) {
         if (orders.answered() == null) {
@@ -1580,8 +1582,8 @@ final class TermRealizations {
         // taken over a run would be asked about a carrier the run has and the number does not.
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 onTheOrder(asked.walking(), orders, asked.named(), within),
-                total -> ContainersAddingUp.to(total, sourceType, orders, within, reading,
-                        inside));
+                total -> ContainersAddingUp.to(total, sourceType, keptApart, orders, within,
+                        reading, inside));
     }
 
     /**
@@ -2245,11 +2247,12 @@ final class TermRealizations {
      * number nothing reads.
      */
     private static Realization overARun(TakenAs how, Type sourceType,
+                                        List<List<String>> keptApart,
                                         TermOrders orders, AskedAt asked,
                                         SearchRegion within,
                                         RuleReadingContext reading, DemandsInside inside) {
         return switch (how) {
-            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, orders,
+            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, keptApart, orders,
                     within, reading, inside);
             // How many a run holds is the size the walk's law says, which no term over a run is
             // made for ({@code NumericTerm.TakenOver.of}).
