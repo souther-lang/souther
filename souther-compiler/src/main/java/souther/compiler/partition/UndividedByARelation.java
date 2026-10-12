@@ -1,7 +1,9 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.DeclaredClauses;
+import souther.compiler.check.ClauseMeaning;
+import souther.compiler.check.ClauseRead;
 import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.PublishedRules;
 import souther.compiler.check.Shape;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
@@ -58,10 +60,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * nothing of that — the runs of each, and of every sum and difference of the two, can be what they
  * would be untied — so what is asked is whether anything could tie the term at all. Nothing ties it
  * where nothing names it but ends on itself, which case a value around it is and how many a value
- * around it holds: no rule of a value it sits in, which is where a rule over two of its positions
+ * around it holds: no rule of a value it sits in reading a place at, under or around it, other
+ * than for how many a container around it holds, which is where a rule over two of its positions
  * is written; nothing a way took in that turns on another number with it, or on another number of
  * the place it is taken of — a date on the twenty-ninth of February is in a leap year; and nothing
- * a way stated and none of this took in. Where one does, nothing is shown of the term, whether or not the rule ties it.
+ * a way stated and none of this took in. Where one does, nothing is shown of the term, whether or
+ * not the rule ties it.
  *
  * <p>Held as the relation and not as the answer, because the answer is asked twice: once of what
  * the declarations leave, and again of the rows a way lets through, where {@code n == x} under
@@ -472,19 +476,41 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether a rule of some value {@code path} sits in may name it beside another position: some
-     * value around it — the parameter itself, and every value between — wears a name, or is a
-     * declaration, that writes a rule.
+     * The rules of each name {@link #mayBeTiedByTheDeclarations} read, kept with the reading: what
+     * a position is left is kept per position ({@link Left}), and many positions sit in one value.
+     */
+    private record RulesRead(Map<TypeSymbol.AtModule, PublishedRules> byName) {
+
+        static RulesRead of(InputReading read) {
+            return read.derived(RulesRead.class, _ -> new RulesRead(new ConcurrentHashMap<>()));
+        }
+    }
+
+    /**
+     * Whether a rule of some value {@code path} sits in may hold it back: some value around it —
+     * the parameter itself, and every value between — wears a name, or is a declaration, with a
+     * rule that reads a place at, under or around what stands at {@code path}.
      *
      * <p>A rule on the position's own type is about it alone and ties it to nothing; one on a
-     * value around it is where a rule over two of its positions is written. A value around it the
-     * reading holds no position for is one nothing can be said of, and may.
+     * value around it is where a rule over two of its positions is written. A rule there that reads
+     * only places beside the path leaves every value of the path standing beside some value of the
+     * rest — what it holds back is which of the rest stand together — and one reading a container
+     * around the path for nothing but how many it holds leaves its elements every value, wherever
+     * it may hold one. Both rest on some value of the rest being there, so a value around it the
+     * rules leave none of may. And a value around it the reading holds no position for is one
+     * nothing can be said of, and may.
+     *
+     * <p>A name the value wears and the declaration it is are asked alike: the rules of each call
+     * a place by the fields read down from the value, a newtype's own {@code value} being the value
+     * itself ({@link ClauseRead}).
      */
     private static boolean mayBeTiedByTheDeclarations(TermPath path, InputReading read) {
-        for (int length = 0; length < path.steps().size(); length++) {
-            Position around = read.domain().at(
-                    new TermPath(path.head(), path.steps().subList(0, length)).position());
-            if (around == null) {
+        List<TermPath.Step> steps = path.steps();
+        for (int length = 0; length < steps.size(); length++) {
+            TermPath here = new TermPath(path.head(), steps.subList(0, length));
+            Position around = read.domain().at(here.position());
+            // Where the rules leave no value of it, nothing stands beside the rest of it either.
+            if (around == null || around.nothingExists()) {
                 return true;
             }
             List<TypeSymbol> worn = new ArrayList<>(around.view().wrappers());
@@ -493,10 +519,106 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 case Shape.Sum sum -> worn.add(sum.name());
                 default -> { }
             }
-            for (DeclaredClauses.OnAName each : DeclaredClauses.of(worn, read.rules())) {
-                if (!each.conjuncts().isEmpty()) {
+            List<TermPath.Step> rest = steps.subList(length, steps.size());
+            for (TypeSymbol each : worn) {
+                if (mayHoldBack(each, here, rest, read)) {
                     return true;
                 }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a rule of {@code worn} may hold back what stands at {@code rest} below {@code here}:
+     * one reads a place there, or one was not reached or has no form to say what it reads.
+     */
+    private static boolean mayHoldBack(TypeSymbol worn, TermPath here, List<TermPath.Step> rest,
+                                       InputReading read) {
+        if (!(worn instanceof TypeSymbol.AtModule named)) {
+            return false;
+        }
+        PublishedRules rules = RulesRead.of(read).byName().computeIfAbsent(named,
+                name -> PublishedRules.governing(name, read.rules().published()));
+        if (!rules.everyRuleReached()) {
+            return true;
+        }
+        for (ClauseMeaning each : rules.reached()) {
+            if (!(each instanceof ClauseMeaning.Stated stated)) {
+                return true;
+            }
+            for (ClauseRead reading : stated.reads()) {
+                if (holdsBack(reading, here, rest, read)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a clause reading {@code reading} may hold back what stands at {@code rest} below
+     * {@code here}.
+     *
+     * <p>A rule names a place by fields alone ({@code RuleKey}), and a path
+     * goes on past its fields into an element or a case. So the two are held against each other
+     * along the fields the path starts with. They part where a field differs, and then the rule
+     * reads beside the path. Where the rule's place goes on below those fields it is under the
+     * path, or past a step no chain of fields names, and may hold it back. Where it stops at or
+     * above them it reads what the path stands in — everything there, unless what it reads is how
+     * many a container holds and the path goes on into the elements.
+     */
+    private static boolean holdsBack(ClauseRead reading, TermPath here, List<TermPath.Step> rest,
+                                     InputReading read) {
+        int fields = 0;
+        while (fields < rest.size() && rest.get(fields) instanceof TermPath.Step.Field) {
+            fields++;
+        }
+        List<String> at = reading.at().steps();
+        for (int i = 0; i < at.size() && i < fields; i++) {
+            if (!at.get(i).equals(((TermPath.Step.Field) rest.get(i)).name())) {
+                return false;
+            }
+        }
+        if (at.size() > fields || reading.kind() == ClauseRead.Kind.ITS_VALUES) {
+            return true;
+        }
+        // How many a container holds, read at or above where the path stops going by fields. Only
+        // where the container is exactly there and the path goes on into it is that apart from
+        // what stands at the path.
+        if (at.size() != fields || fields == rest.size()) {
+            return true;
+        }
+        List<TermPath.Step> container = new ArrayList<>(here.steps());
+        container.addAll(rest.subList(0, fields));
+        return !mayHoldOne(new TermPath(here.head(), container), read);
+    }
+
+    /**
+     * Whether the container at {@code at} is shown to hold one element beside some value of
+     * everything else: some value of it exists, and one is in a run of how many it holds that the
+     * rules are shown to leave whole ({@link SearchRegion#wholeRunOf}) — so some value holds
+     * exactly one.
+     *
+     * <p>One and not one or more. A container holding one element holds it whatever value it is —
+     * no second element is there to be apart from — so one taken is every value of the elements
+     * standing in some value. More than one asks the element's type for that many values apart,
+     * which a type holding fewer does not have.
+     *
+     * <p>Shown of the count, not of the value whole. Whether the rules of everything the
+     * container sits in project exactly is a question about all of them, and a pattern a field
+     * beside it is held to says nothing of how many it holds.
+     */
+    private static boolean mayHoldOne(TermPath at, InputReading read) {
+        Position container = read.domain().at(at.position());
+        if (container == null || container.nothingExists()) {
+            return false;
+        }
+        for (PositionBounds each : container.bounds()) {
+            if (each.term() instanceof NumericTerm.TakenOf taken
+                    && taken.takenAs() instanceof TakenAs.HowManyItHolds) {
+                NumericDomain.Bounds whole = read.quantities().region().wholeRunOf(taken);
+                return whole != null && whole.admits(ExactRatio.ONE);
             }
         }
         return false;

@@ -47,10 +47,16 @@ class ANameARuleWritesIsMadeWhereOneIsReadTest {
      * keeping elements apart is about as the clause names it — a value of the declaration and the
      * fields read off it — and reads the same name, a step shorter, of each record a run of fields
      * passes through on the way to the container: the record there names it from itself.
+     *
+     * <p>{@code Clauses$ReadsOfAClause} is in the first group too. It writes down the places a
+     * clause reads as the clause names them — a field of the value and the fields read off it,
+     * which of them are steps answered by {@code Location} — so that whether a rule reads a place
+     * is published by the declaration rather than worked out by whoever asks.
      */
     private static final List<String> THE_MAKERS = List.of(
             "souther.compiler.check.CardinalityPremise",
             "souther.compiler.check.CardinalityTransfer",
+            "souther.compiler.check.Clauses$ReadsOfAClause",
             "souther.compiler.check.ElementsApart",
             "souther.compiler.check.GuaranteeWalk",
             "souther.compiler.check.InvariantChecker",

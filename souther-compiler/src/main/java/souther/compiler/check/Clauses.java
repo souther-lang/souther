@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -12,6 +13,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -49,8 +51,8 @@ final class Clauses {
      * reached under it: a type spread by two of them is walked once. */
     private final Map<TypeSymbol.AtModule, PublishedRules> effective = new HashMap<>();
     /** Which of a declaration's own fields each typed clause reads — what a construction has to have
-     * filled for the clause to be read at all. */
-    private final Map<Core, Set<String>> readsFields = new IdentityHashMap<>();
+     * filled for the clause to be read at all, and which of them only for how many they hold. */
+    private final Map<Core, FieldsRead> readsFields = new IdentityHashMap<>();
 
     /**
      * @param source where this reads: the scope its names mean something in, where a declaration's
@@ -375,18 +377,137 @@ final class Clauses {
      * that produced it, which is the reading that already had the tree.
      */
     Set<String> fieldsRead(Core clause, TypeSymbol.AtModule named) {
+        return fieldsReadBy(clause, named).all();
+    }
+
+    /**
+     * The places {@code clause} reads in a value of {@code named}, and what it reads at each
+     * ({@link ClauseRead}), remembered with {@link #fieldsRead}.
+     *
+     * <p>Named as the rules of the value name a place ({@link RuleKey}), for the reason
+     * {@link #fieldsRead} names fields and not bindings: the places are the same in every reading.
+     */
+    Set<ClauseRead> reads(Core clause, TypeSymbol.AtModule named) {
+        return fieldsReadBy(clause, named).reads();
+    }
+
+    /** Both answers about what {@code clause} reads, from one walk of it. */
+    private FieldsRead fieldsReadBy(Core clause, TypeSymbol.AtModule named) {
         return readsFields.computeIfAbsent(clause, read -> {
             Map<BindingId, String> declared = new HashMap<>();
             bindingsOf(named).forEach((name, binding) -> declared.put(binding, name));
-            Set<String> found = new HashSet<>();
-            readsOf(read, binding -> {
-                String name = declared.get(binding);
+            Set<BindingId> bindings = new HashSet<>();
+            Set<ClauseRead> reads = new HashSet<>();
+            new ReadsOfAClause(declared, source.newtypes().of(named.key()), source.newtypes(),
+                    bindings, reads).walk(read);
+            Set<String> all = new HashSet<>();
+            for (BindingId each : bindings) {
+                String name = declared.get(each);
                 if (name != null) {
-                    found.add(name);
+                    all.add(name);
+                }
+            }
+            return new FieldsRead(Set.copyOf(all), Set.copyOf(reads));
+        });
+    }
+
+    /**
+     * What a clause reads.
+     *
+     * @param all   every field it reads
+     * @param reads every place of the value it reads, and what it reads there
+     */
+    private record FieldsRead(Set<String> all, Set<ClauseRead> reads) {}
+
+    /**
+     * One walk of a clause: every binding it reads, into {@code bindings}, and every place of the
+     * value it reads, into {@code reads}.
+     *
+     * <p>A chain of fields down from one of the value's fields is one place, at its end. Anything
+     * else is gone down, so a value read some other way is read at the longest chain it is made of
+     * — whole, where it is a field handed to an operation. The one exception is the value a count
+     * is taken of ({@link TakenAs.HowManyItHolds}) where it is a chain holding a list, a set or a
+     * map: what is read there is how many it holds.
+     *
+     * @param fields which of the value's fields each binding is
+     * @param wraps  whether the value is a newtype's, whose one field is the value itself; a
+     *               record's fields are each a place of their own
+     */
+    private record ReadsOfAClause(Map<BindingId, String> fields, boolean wraps,
+                                  DeclarationNewtypes newtypes,
+                                  Set<BindingId> bindings, Set<ClauseRead> reads) {
+
+        ReadsOfAClause {
+            Objects.requireNonNull(fields, "a walk of a clause knows which binding each field is");
+            Objects.requireNonNull(newtypes, "a walk of a clause knows which names wear one value");
+            Objects.requireNonNull(bindings, "a walk of a clause gathers bindings somewhere");
+            Objects.requireNonNull(reads, "a walk of a clause gathers places somewhere");
+        }
+
+        void walk(Core e) {
+            Location at = locationOf(e);
+            if (at != null) {
+                read(at, ClauseRead.Kind.ITS_VALUES);
+                return;
+            }
+            if (e instanceof Core.Read r) {
+                bindings.add(r.binding());
+            }
+            Core counted = e instanceof Core.PreservedCall call ? countedArgument(call) : null;
+            Core.forEachChild(e, child -> {
+                if (child == counted) {
+                    read(locationOf(child), ClauseRead.Kind.HOW_MANY_IT_HOLDS);
+                } else {
+                    walk(child);
                 }
             });
-            return Set.copyOf(found);
-        });
+        }
+
+        private void read(Location at, ClauseRead.Kind kind) {
+            bindings.add(at.root());
+            List<String> steps = new ArrayList<>();
+            if (!wraps) {
+                steps.add(fields.get(at.root()));
+            }
+            steps.addAll(at.path());
+            reads.add(new ClauseRead(new RuleKey(steps), kind));
+        }
+
+        /** Where {@code e} is in the value, where it is one of its fields or a chain read off one. */
+        private Location locationOf(Core e) {
+            return Location.of(e, newtypes,
+                    binding -> fields.containsKey(binding) ? Location.of(binding) : null,
+                    this::stepsOf);
+        }
+
+        /** The names of {@code p} that are steps: a newtype's own {@code value} is none
+         *  ({@link Location#isStep}). */
+        private FieldPath stepsOf(Core.FieldProjection p) {
+            List<String> out = new ArrayList<>();
+            Type from = p.base().type();
+            for (Core.FieldProjection.Step each : p.steps().inOrder()) {
+                if (Location.isStep(from, each.field(), newtypes)) {
+                    out.add(each.field());
+                }
+                from = each.type();
+            }
+            return FieldPath.of(out);
+        }
+
+        /** The argument of {@code call} it counts the elements of, where that is a place of the
+         *  value holding a list, a set or a map; null otherwise. */
+        private Core countedArgument(Core.PreservedCall call) {
+            BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven taken =
+                    DefaultBoundOperationFacts.get().numberTakenOf(call.declared().operation());
+            if (taken == null || !(taken.how() instanceof TakenAs.HowManyItHolds)) {
+                return null;
+            }
+            Core argument = call.args().get(taken.of().position());
+            Type holds = Core.withoutStanding(argument).type();
+            return (holds instanceof Type.ListOf || holds instanceof Type.SetOf
+                    || holds instanceof Type.MapOf) && locationOf(argument) != null
+                    ? argument : null;
+        }
     }
 
     /** {@code e} with each binding {@code given} names replaced by the value it was given. */
@@ -404,11 +525,4 @@ final class Clauses {
                         ? r : name);
     }
 
-    /** Every binding {@code e} reads, at any depth. */
-    private static void readsOf(Core e, java.util.function.Consumer<BindingId> f) {
-        if (e instanceof Core.Read r) {
-            f.accept(r.binding());
-        }
-        Core.forEachChild(e, child -> readsOf(child, f));
-    }
 }
