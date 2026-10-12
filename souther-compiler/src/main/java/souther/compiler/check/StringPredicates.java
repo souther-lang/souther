@@ -399,10 +399,15 @@ public enum StringPredicates {
                         Clauses.substituted(scoped.binding().value(), given));
                 yield saidIn(scoped.body(), symbols, inside);
             }
+            // The leaf put in the environment the bindings above it make, whole and once, and read
+            // off that one tree: what it is about and the text it names are two parts of one
+            // reading. Put there part by part, the text would be read inside a helper and the value
+            // it is about outside it, and the parameter a helper was handed would stand for a value
+            // of its own.
             case ClauseExpr.Leaf leaf when leaf.positive() -> {
-                Stated stated = statedBy(leaf.of(), symbols,
-                        e -> Terms.folded(Clauses.substituted(e, given), symbols,
-                                Denotations.none()) instanceof String written ? written : null);
+                Stated stated = statedBy(Clauses.substituted(leaf.of(), given), symbols,
+                        e -> Terms.folded(e, symbols, Denotations.none())
+                                instanceof String written ? written : null);
                 yield stated == null ? null : new Said(stated.subject(), stated.reading());
             }
             case ClauseExpr.Joined choice when choice.how() == ConditionJoin.EITHER ->
