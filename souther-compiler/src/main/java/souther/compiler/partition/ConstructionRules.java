@@ -15,6 +15,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -195,9 +196,12 @@ final class ConstructionRules {
      * The numbers among {@code fixed} that the rules of the value at {@code root} name, by what they
      * call each. A position those rules do not reach settles nothing in them, and the value itself
      * is no coordinate of its own rules.
+     *
+     * <p>In the order they were fixed, which is the caller's and the same on every run: the rules
+     * take each settling in turn, and an order a hash gave would be one more thing a run decides.
      */
     private Map<RuleKey, Count> fixedUnder(TermPath root, Map<TermPath, Place> fixed) {
-        Map<RuleKey, Count> out = new HashMap<>();
+        Map<RuleKey, Count> out = new LinkedHashMap<>();
         fixed.forEach((path, at) -> {
             if (!(at instanceof Count number)) {
                 return;
@@ -209,7 +213,7 @@ final class ConstructionRules {
                 }
             }
         });
-        return Map.copyOf(out);
+        return Collections.unmodifiableMap(out);
     }
 
     private static NumericDomain.Bounds meet(NumericDomain.Bounds one, NumericDomain.Bounds other) {
