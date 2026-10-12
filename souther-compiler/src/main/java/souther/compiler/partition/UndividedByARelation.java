@@ -27,7 +27,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * A relation this stage read over the input, held as what is asked of it: which of its places it
@@ -400,8 +402,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                          boolean every) {}
 
     /**
+     * What the declarations leave each position of one reading, kept with the reading.
+     *
+     * <p>A function of the position and the reading alone, asked again by every relation over the
+     * position and by each way a row arrives at one along, and each asking walks the rules of every
+     * value around the position. Empty where nothing is shown, since the map holds no null.
+     */
+    private static final class Left {
+
+        private final Map<TermPath, Optional<Takes>> byPosition = new ConcurrentHashMap<>();
+    }
+
+    /**
      * What the declarations leave {@code value}, or null where it is at no position read or a rule
      * of a value it sits in may tie it to another.
+     */
+    private static Takes takes(NumericTerm.ValueOf value, InputReading read) {
+        Left left = read.derived(Left.class, _ -> new Left());
+        // Not computeIfAbsent: a name the cases of a sum share is worked out by asking this of the
+        // position under each case, which would update the map from inside its own update.
+        Optional<Takes> kept = left.byPosition.get(value.position());
+        if (kept == null) {
+            kept = Optional.ofNullable(worksOut(value, read));
+            left.byPosition.put(value.position(), kept);
+        }
+        return kept.orElse(null);
+    }
+
+    /**
+     * {@link #takes}, worked out.
      *
      * <p>A name the cases of a sum share stands at no position of its own but at one under each
      * case ({@link NameReach#standingOf}), and a row holds one case. So it is left what every case
@@ -409,7 +438,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * reading of some case stopped before putting the name anywhere: what one case leaves it is
      * not what it takes in a row of another.
      */
-    private static Takes takes(NumericTerm.ValueOf value, InputReading read) {
+    private static Takes worksOut(NumericTerm.ValueOf value, InputReading read) {
         Position at = read.domain().at(value.position().position());
         if (at == null) {
             return read.domain().reach().standingOf(value.position())
