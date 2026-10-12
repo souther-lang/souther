@@ -437,6 +437,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/Methods", "collectCalls", "(" + core
                 + "Ljava/util/Map;Ljava/util/Set;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "coverage/Methods", "callsIn", "(" + core + "L" + c
+                + "types/ValueName$Helper;)I", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "flow/ValueArrivals", "fill", "(" + core + "L" + c + "flow/Naming;L" + c
                 + "flow/ComparisonWays;Ljava/util/Map;)V", Reading.STRUCTURE, EVALUATION);
         row(out, c + "flow/ValueArrivals", "partsOf", "(" + core + ")Ljava/util/List;",
@@ -465,6 +467,15 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "partition/ClosureApplications;L" + c
                 + "partition/LiveFlow;Ljava/util/List;ZLjava/util/List;Ljava/util/List;L" + c
                 + "partition/ConditionNumbering;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
+        // The way to a call of a helper that calls itself, whether a call stands somewhere, and
+        // whether a body builds a value: each looks for a choice, a call or a build.
+        row(out, c + "partition/ComparisonReadings", "wayTo", "(" + core + core + reads + "L" + c
+                + "partition/ComparisonReadings$Body;)L" + c + "partition/ComparisonReadings$Way;",
+                Reading.STRUCTURE, CHOICES_AND_CALLS);
+        row(out, c + "partition/ComparisonReadings", "holds", "(" + core + core + ")Z",
+                Reading.STRUCTURE, CHOICES_AND_CALLS);
+        row(out, c + "partition/ComparisonReadings", "buildsAValue", "(" + core + ")Z",
+                Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "partition/GuardThresholds", "throughEachValue", "(" + core + reads + "L"
                 + c + "check/Symbols;L" + c + "check/DeclarationNewtypes;L" + c
                 + "inputs/ReadMeaning$WhereKept;L" + c + "coverage/Arrivals;Ljava/util/List;)V",

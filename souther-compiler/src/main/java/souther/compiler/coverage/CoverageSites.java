@@ -671,6 +671,17 @@ public final class CoverageSites {
             return methods;
         }
 
+        /**
+         * How many calls of {@code helper} a run of the behavior whose body is {@code emitted} can
+         * make from outside the helper's own method, each counted where it is written.
+         *
+         * <p>What says whose a run recorded in the helper's method is. Where there is one, a run
+         * recorded there is that call's; where there are more, it is any of theirs.
+         */
+        public int callsOf(ValueName.Helper helper, Core emitted) {
+            return methods.callsOf(helper, emitted);
+        }
+
         /** What this plan is a numbering of, as two builds can be held against each other by. */
         public NumberingIdentity identity() {
             return numbering.identity();

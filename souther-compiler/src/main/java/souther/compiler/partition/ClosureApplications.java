@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 /**
@@ -347,11 +348,16 @@ sealed interface ClosureApplications {
         }).toList());
     }
 
-    /** The same applications past {@code step}. */
+    /**
+     * The same applications past {@code step}.
+     *
+     * <p>An arm entered this way adds nothing to what each application is reached under: the forks
+     * whose arms say what entering them states are entered by name ({@link #choosing}).
+     */
     default ClosureApplications entering(ScopeStep step, Symbols symbols,
                                          DeclarationNewtypes newtypes) {
         return step instanceof ScopeStep.Chosen(Choice.Decides decidedBy)
-                ? choosing(decidedBy, symbols, newtypes)
+                ? choosing(decidedBy, symbols, newtypes, null)
                 : moved(reads -> reads.entering(step, symbols, newtypes));
     }
 
@@ -361,21 +367,32 @@ sealed interface ClosureApplications {
     }
 
     /**
-     * The applications that enter the arm {@code decidedBy} decides, inside it.
+     * The applications that enter the arm {@code decidedBy} decides, inside it, each reached under
+     * what entering the arm states on it as well.
      *
      * <p>An application handed a value of a case the arm does not take never enters it, so it is
      * left out rather than read in an arm it does not reach. Where none enters, no run reaches
      * what is in the arm ({@link None}).
+     *
+     * <p>One that may enter it enters it where what {@code entered} states of it holds, read in
+     * that application's names: a run making the application on one value and taking another arm
+     * did not get to what is in this one. Null where nothing is added: an {@code if} whose
+     * condition was already {@link #taking taken}, or an arm entered by a step that says no more
+     * than which arm it is ({@link #entering}).
      */
     default ClosureApplications choosing(Choice.Decides decidedBy, Symbols symbols,
-                                         DeclarationNewtypes newtypes) {
+                                         DeclarationNewtypes newtypes,
+                                         Function<InputReads, Proposition> entered) {
         if (!(this instanceof Each(var each))) {
             return this;
         }
         List<Application> entering = each.stream()
                 .filter(one -> mayEnter(one, decidedBy, symbols, newtypes))
                 .map(one -> new Application(one.reads().choosing(decidedBy, symbols, newtypes),
-                        one.reached(), one.carriedIntoTheFirst(), one.metOn()))
+                        entered == null ? one.reached()
+                                : WhereAnApplicationIsMade.past(one.reached(),
+                                        entered.apply(one.reads())),
+                        one.carriedIntoTheFirst(), one.metOn()))
                 .toList();
         return entering.isEmpty() ? new None() : new Each(entering);
     }

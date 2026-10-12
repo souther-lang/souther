@@ -110,6 +110,59 @@ class ARowMeetsALineOnlyThroughAnElementTheRunComparedTest {
                 () -> "for want of what the run got to: " + reading);
     }
 
+    /**
+     * A closure handed values written out is applied to each, and on one of them may take an arm
+     * the comparison is not in: the run got an answer out of the comparison on the other value,
+     * and nothing compared this one.
+     */
+    @Test
+    void anApplicationThatTakesAnotherArmComparesNothing() {
+        String model = """
+                module probe
+
+                data Low
+                data High
+                data K1
+                data K2
+                data Kind = K1 | K2
+                data Item = { kind: Kind, v: Int }
+
+                behavior pick : (a: Item, b: Item) -> Low | High
+                let pick (a, b) =
+                    if List.all(x -> match x.kind with | K1 -> x.v > 5 | K2 -> true, [a, b])
+                    then High else Low
+                """;
+        assertFalse(hitOn(model, "(Item { kind = K1, v = 7 }, Item { kind = K2, v = 6 })",
+                        "pick/b.v", "6"),
+                "b takes the other arm: the comparison was made on a, and never on b");
+        assertTrue(hitOn(model, "(Item { kind = K1, v = 7 }, Item { kind = K1, v = 6 })",
+                        "pick/b.v", "6"),
+                "b takes the arm, so the comparison is made on it");
+    }
+
+    /** Whether the reading at {@code against} on {@code axis} was met by the one row, for a model
+     *  whose guard is written in. */
+    private static boolean hitOn(String model, String row, String axis, String against) {
+        JsonNode report = reportOfSource(model + """
+
+                example pick
+                    | "the row" : %s -> High
+                """.formatted(row));
+        JsonNode[] found = {null};
+        readingOn(report, axis, against, found);
+        assertTrue(found[0] != null, () -> "a line on " + axis + " has a point at " + against
+                + ": " + report);
+        return found[0].path("hit").asBoolean();
+    }
+
+    private static void readingOn(JsonNode node, String axis, String against, JsonNode[] found) {
+        if (node.isObject() && axis.equals(node.path("axis").asString())
+                && against.equals(node.path("against").asString()) && node.has("hit")) {
+            found[0] = node;
+        }
+        node.forEach(child -> readingOn(child, axis, against, found));
+    }
+
     /** Whether the reading at {@code against} of the guard's line was met by the one row. */
     private static boolean hitAt(String model, String guard, String row, String against) {
         return readingAt(model, guard, row, against).path("hit").asBoolean();

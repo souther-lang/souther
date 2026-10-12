@@ -30,36 +30,35 @@ final class MetOnARow {
     /** Each container stopped short in, the outermost first, as what is put to a row. */
     private final List<Level> levels;
 
+    /** What a row meets for the comparison to be made through it at all, put to rows; null where
+     *  nothing is asked. */
+    private final AStatementAtARow made;
+
     /** What a reading of no element can say, where this is not said at all. */
     private final ReadingGap notSaid;
 
-    private MetOnARow(List<Level> levels, ReadingGap notSaid) {
+    private MetOnARow(List<Level> levels, AStatementAtARow made, ReadingGap notSaid) {
         this.levels = levels;
+        this.made = made;
         this.notSaid = notSaid;
     }
 
     /** {@code metOn}, ready to be put to the readings of a behavior's rows. */
     static MetOnARow of(ElementsMetOn metOn, String behavior, Quantities quantities) {
         return switch (metOn) {
-            case ElementsMetOn.NotSaid(ReadingGap why) -> new MetOnARow(List.of(), why);
-            case ElementsMetOn.InOrder(var stopping) -> {
+            case ElementsMetOn.NotSaid(ReadingGap why) -> new MetOnARow(List.of(), null, why);
+            case ElementsMetOn.InOrder(var stopping, var madeWhere) -> {
                 List<Level> levels = new ArrayList<>();
                 for (ElementsMetOn.StopsAt each : stopping) {
                     levels.add(new Level(each.container(),
-                            AStatementAtARow.askable(each.stops())
-                                    ? AStatementAtARow.of(each.stops(), behavior, quantities)
-                                    : null,
-                            unasked(each.stops())));
+                            AStatementAtARow.of(each.stops(), behavior, quantities)));
                 }
-                yield new MetOnARow(List.copyOf(levels), null);
+                yield new MetOnARow(List.copyOf(levels),
+                        madeWhere instanceof Proposition.Always(boolean always) && always ? null
+                                : AStatementAtARow.of(madeWhere, behavior, quantities),
+                        null);
             }
         };
-    }
-
-    /** Why {@code stops} cannot be put to a row: a part of it nothing read, or a part no value
-     *  of a row settles. */
-    private static ReadingGap unasked(Proposition stops) {
-        return ReadingGap.ReachNotRead.of(Proposition.firstStopIn(stops));
     }
 
     /**
@@ -74,6 +73,15 @@ final class MetOnARow {
             return new AStatementAtARow.Answer.CouldNotTell(Set.of(notSaid));
         }
         Set<ReadingGap> unknown = new LinkedHashSet<>();
+        if (made != null) {
+            switch (made.at(reading)) {
+                case AStatementAtARow.Answer.Fails _ -> {
+                    return AStatementAtARow.Answer.FAILS;
+                }
+                case AStatementAtARow.Answer.CouldNotTell(var why) -> unknown.addAll(why);
+                case AStatementAtARow.Answer.Holds _ -> { }
+            }
+        }
         for (Level level : levels) {
             switch (level.at(reading)) {
                 case AStatementAtARow.Answer.Fails _ -> {
@@ -92,20 +100,16 @@ final class MetOnARow {
 
         private final TermPath container;
 
-        /** What stops the operation, put to rows; null where it cannot be. */
+        /** What stops the operation, put to rows. */
         private final AStatementAtARow stops;
-
-        /** Why it cannot be, where it cannot. */
-        private final ReadingGap unread;
 
         /** Each occurrence of the container read, by the row and what was chosen beside it. */
         private final Map<Object, Map<Map<TermPath, Integer>, Prefix>> read =
                 new IdentityHashMap<>();
 
-        Level(TermPath container, AStatementAtARow stops, ReadingGap unread) {
+        Level(TermPath container, AStatementAtARow stops) {
             this.container = container;
             this.stops = stops;
-            this.unread = unread;
         }
 
         AStatementAtARow.Answer at(BorderQuantity.Observation reading) {
@@ -117,11 +121,6 @@ final class MetOnARow {
                     // first application, which nothing is before.
                     if (among.chosen() == null) {
                         yield AStatementAtARow.Answer.HOLDS;
-                    }
-                    if (stops == null) {
-                        yield among.elements().indexOf(among.chosen()) == 0
-                                ? AStatementAtARow.Answer.HOLDS
-                                : new AStatementAtARow.Answer.CouldNotTell(Set.of(unread));
                     }
                     yield read.computeIfAbsent(among.walk(), _ -> new HashMap<>())
                             .computeIfAbsent(among.beside(), _ -> Prefix.of(stops, among))

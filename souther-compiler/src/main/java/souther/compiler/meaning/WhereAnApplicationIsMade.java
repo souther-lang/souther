@@ -102,6 +102,14 @@ public final class WhereAnApplicationIsMade {
     }
 
     /**
+     * What has to hold for a run to get somewhere by any of {@code ways}: one of them holding, and
+     * nowhere at all where there is none.
+     */
+    public static Proposition alongOneOf(List<Proposition> ways) {
+        return ways.isEmpty() ? new Proposition.Always(false) : Proposition.any(ways);
+    }
+
+    /**
      * One reading of a line, on one application: where the line decides on it, and what has to
      * hold for a run to make it.
      *

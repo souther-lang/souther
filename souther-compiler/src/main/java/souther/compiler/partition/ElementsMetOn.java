@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhereAnApplicationIsMade;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -9,7 +10,8 @@ import java.util.Objects;
 
 /**
  * Which elements of the input a run makes a comparison on, where the comparison stands inside
- * closures an operation applies to the elements of containers the input holds.
+ * closures an operation applies to the elements of containers the input holds, or in the body of a
+ * helper that walks one by calling itself.
  *
  * <p>Not whether a run makes the comparison at all, which is what stood on the way to it says and a
  * run through it records. This is which element: {@code List.any(x -> x > 0, xs)} applies its
@@ -25,15 +27,21 @@ public sealed interface ElementsMetOn {
 
     /**
      * Met on an element where, in each container the comparison's closures are applied over, no
-     * element before the one a reading names stopped the operation.
+     * element before the one a reading names stopped the operation — and where the row met
+     * {@code made}.
      *
-     * @param levels each container stopped short, the outermost first. None: a run that gets as
+     * @param levels each container stopped short in, the outermost first. None: a run that gets as
      *               far as the comparison makes it on every element a reading can name
+     * @param made   what a row meets for the comparison to be made through it at all, beyond a run
+     *               having been recorded through it: the way to the call of a helper whose body it
+     *               is, where that body is run by other calls too and a run recorded through it may
+     *               have been another call's
      */
-    record InOrder(List<StopsAt> levels) implements ElementsMetOn {
+    record InOrder(List<StopsAt> levels, Proposition made) implements ElementsMetOn {
 
         public InOrder {
             levels = List.copyOf(levels);
+            Objects.requireNonNull(made, "a comparison is made somewhere, or anywhere");
         }
     }
 
@@ -66,17 +74,38 @@ public sealed interface ElementsMetOn {
     }
 
     /** Every element a reading can name, which is what a comparison inside no such closure is. */
-    ElementsMetOn EVERY = new InOrder(List.of());
+    ElementsMetOn EVERY = new InOrder(List.of(), WhereAnApplicationIsMade.nothingAsked());
 
     /** The same, inside one more closure that stops in {@code container} at what {@code stops}
      *  says of an element. */
     default ElementsMetOn stoppingIn(TermPath container, Proposition stops) {
         return switch (this) {
-            case InOrder(var levels) -> {
+            case InOrder(var levels, var made) -> {
                 List<StopsAt> deeper = new ArrayList<>(levels);
                 deeper.add(new StopsAt(container, stops));
-                yield new InOrder(deeper);
+                yield new InOrder(deeper, made);
             }
+            case NotSaid _ -> this;
+        };
+    }
+
+    /** The same, made only where a row also meets {@code way}. */
+    default ElementsMetOn madeWhere(Proposition way) {
+        return switch (this) {
+            case InOrder(var levels, var made) ->
+                    new InOrder(levels, WhereAnApplicationIsMade.past(made, way));
+            case NotSaid _ -> this;
+        };
+    }
+
+    /**
+     * The same, made wherever a run was recorded through it: where nothing but one call runs the
+     * body the comparison is in, a run recorded there is that call's.
+     */
+    default ElementsMetOn madeWhereverRecorded() {
+        return switch (this) {
+            case InOrder(var levels, var _) ->
+                    new InOrder(levels, WhereAnApplicationIsMade.nothingAsked());
             case NotSaid _ -> this;
         };
     }

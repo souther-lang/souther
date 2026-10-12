@@ -1,8 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -120,6 +122,23 @@ final class AStatementAtARow {
         };
     }
 
+    /**
+     * Whether a row's own values say whether {@code stated} holds, where it is asked of a row
+     * rather than drawn: where a line decides, or how a run got somewhere. What {@link #askable}
+     * takes, and which case of a sum a position holds, which a row says by the value it wrote —
+     * and which no line is drawn on, so it is not askable.
+     */
+    static boolean readable(Proposition stated) {
+        return switch (stated) {
+            case Proposition.InCases(DecisionSubject.AnInput _, CasesLeft cases, boolean _,
+                                     String _) -> ofTheSum(cases);
+            case Proposition.All all -> all.parts().stream().allMatch(AStatementAtARow::readable);
+            case Proposition.Any any -> any.parts().stream().allMatch(AStatementAtARow::readable);
+            case Proposition.Some some -> readable(some.ofTheElement());
+            default -> askable(stated);
+        };
+    }
+
     /** The one count {@code affine} weighs where it weighs one and nothing else, or null. */
     static Quantity.HowManyMeet countIn(Relation.Affine affine) {
         return affine.form().coefs().size() == 1
@@ -130,11 +149,13 @@ final class AStatementAtARow {
     /**
      * {@code stated}, ready to be asked of rows.
      *
-     * <p>A part that is not {@link #askable} is put to no row and answered as not known wherever it
-     * decides the answer: a row says nothing of what nobody read, or of what it does not write. A
-     * statement that is askable is answered as it always was. Which is what a reader of where a
-     * run got to wants — a way through an arm nothing here reads, or past a closure over what a
-     * dependency answered, is a way nothing knows a row took, and not a way it did not.
+     * <p>Wider than {@link #askable}, which is whether a line is drawn on what is stated. Which case
+     * of a sum a position holds is read too, off the value the row wrote there: no line is drawn on
+     * it, and a way into an arm is that. Any other part that is not askable is put to no row and
+     * answered as not known wherever it decides the answer: a row says nothing of what nobody read,
+     * or of what it does not write. Which is what a reader of where a run got to wants — a way
+     * through an arm nothing here reads, or past a closure over what a dependency answered, is a
+     * way nothing knows a row took, and not a way it did not.
      *
      * @param quantities the reading of the input, which says which order each number is on
      */
@@ -154,6 +175,9 @@ final class AStatementAtARow {
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, String _) ->
                     positions.add(at);
             case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _, String _) ->
+                    positions.add(at);
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
+                                     boolean _, String _) when ofTheSum(cases) ->
                     positions.add(at);
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
                                        DecisionSubject.AnInput(TermPath other), boolean _,
@@ -376,6 +400,14 @@ final class AStatementAtARow {
             case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean holds,
                                      String _) -> heldAs(holds, ofItsValue(at, row,
                     value -> !(value instanceof ObservedValue.Absent)));
+            // Which case of a sum a position holds, which a row says by the value it wrote there.
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
+                                     boolean holds, String _) when ofTheSum(cases) ->
+                    heldAs(holds, ofItsValue(at, row, value -> switch (value) {
+                        case ObservedValue.Unit unit -> cases.leaves(unit.type());
+                        case ObservedValue.Constructed built -> cases.leaves(built.type());
+                        default -> null;
+                    }));
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
                                        DecisionSubject.AnInput(TermPath other), boolean holds,
                                        String _) -> heldAs(holds, theSame(one, other, row));
@@ -413,6 +445,11 @@ final class AStatementAtARow {
             }
             default -> notAsked(part);
         };
+    }
+
+    /** Whether every case {@code cases} leaves is a case of a sum, which a value says it is. */
+    private static boolean ofTheSum(CasesLeft cases) {
+        return cases.atoms().stream().allMatch(Refinement.SumCase.class::isInstance);
     }
 
     /**

@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.core.Core;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -89,6 +90,33 @@ record Methods(Map<String, Core> entries, Map<String, Core> bodies, Map<String, 
             }
         }
         return out;
+    }
+
+    /**
+     * How many calls of {@code helper} stand in {@code emitted} and in every method a run of it
+     * reaches, the helper's own method left out: each call as it is written, however often a run
+     * makes it.
+     */
+    int callsOf(ValueName.Helper helper, Core emitted) {
+        Map<String, Core> all = all();
+        Core own = passages.get(helper.name());
+        int count = callsIn(emitted, helper);
+        for (String name : closure(callsOf(emitted, all), each -> callsOf(all.get(each), all))) {
+            if (all.get(name) != own) {
+                count += callsIn(all.get(name), helper);
+            }
+        }
+        return count;
+    }
+
+    private static int callsIn(Core e, ValueName.Helper helper) {
+        if (e == null) {
+            return 0;
+        }
+        int[] count = {e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
+                && reached.denotes().equals(helper) ? 1 : 0};
+        Core.forEachChild(e, child -> count[0] += callsIn(child, helper));
+        return count[0];
     }
 
     /** The helpers' methods {@code emitted} reaches, directly or through another method. */
