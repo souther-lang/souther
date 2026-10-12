@@ -121,6 +121,44 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
                         .composedUnder("items").standing());
     }
 
+    /**
+     * Two quantifiers, one inside the other, and a value read under either container: it stands
+     * where both containers it could be under hold an element in every row meeting the demand.
+     *
+     * <p>A quantifier inside one asking every element is reached only where that container holds
+     * something, so some element of the inner one is no promise: a row holding none outside meets
+     * the whole of it with the inner container empty. A quantifier asking every element inside one
+     * asking some takes nothing from the outer one's element.
+     */
+    @Test
+    void whetherAValueStandsFollowsEveryQuantifierAroundIt() {
+        TermPath ofTheItem = ITEMS.element();
+        TermPath ofTheShelf = SHELF.key();
+
+        assertTrue(stands(true, true, ofTheItem), "some item, some entry: the item's value");
+        assertTrue(stands(true, true, ofTheShelf), "some item, some entry: the entry's key");
+        assertFalse(stands(false, true, ofTheShelf),
+                "every item, some entry: no item, and no entry asked for");
+        assertTrue(stands(true, false, ofTheItem), "some item, every entry: the item's value");
+        assertFalse(stands(true, false, ofTheShelf), "some item, every entry: a shelf of none");
+    }
+
+    /**
+     * Whether {@code value} stands, read off {@code items} asked {@code someItem} and inside it
+     * {@code shelf} asked {@code someEntry} — holding the value as a key, or holding none equal to
+     * it.
+     */
+    private static boolean stands(boolean someItem, boolean someEntry, TermPath value) {
+        RowDemand.WithinIt inside = new RowDemand.WithinIt(SHELF, someEntry, someEntry
+                ? new RowDemand.KeyedAs(value) : new RowDemand.NotKeyedAs(value));
+        ContentsAsked asked = asked(someItem
+                ? new RowDemand.Exists(ITEMS, List.of(inside), HOLDING)
+                : new RowDemand.ForAll(ITEMS, List.of(inside), HOLDING));
+        ContentsAsked.Asked one = asked.asked().getFirst();
+        assertEquals(value, one.value(), () -> "the one thing asked: " + asked);
+        return one.standsWhereMet();
+    }
+
     @Test
     void theElementAValueStandsInIsPlannedAndTheValueInsideIt() {
         ConstructionPlan plan = planned(0, someItemFiled(), ANY);

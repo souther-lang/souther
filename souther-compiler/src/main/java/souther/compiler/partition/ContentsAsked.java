@@ -45,12 +45,13 @@ record ContentsAsked(List<Asked> asked) {
      * equal to it — as an element, or as a key where {@code ofTheKey}.
      *
      * @param standsWhereMet whether a row composed this way has to have a value at {@code value} to
-     *                       hand over: every container it is inside is one the demand asks some
-     *                       element of, so each of them holds one in any row meeting it. False
-     *                       says nothing about whether those containers hold anything — only that
-     *                       one of them is asked about every element, so a row holding none there
-     *                       meets the demand too, and none of them is to be made to hold one for
-     *                       the value's sake
+     *                       hand over: every container it is inside is asked some element of by a
+     *                       quantifier every row meeting the demand reaches — one with only such
+     *                       quantifiers around it — so each of them holds one in any such row.
+     *                       False says nothing about whether those containers hold anything — only
+     *                       that some row meets the demand with one of them holding none, either
+     *                       because it is asked about every element or because a quantifier around
+     *                       it is, and none of them is to be made to hold one for the value's sake
      */
     record Asked(TermPath container, TermPath value, boolean holding, boolean ofTheKey,
                  boolean standsWhereMet) {
@@ -71,9 +72,11 @@ record ContentsAsked(List<Asked> asked) {
                 case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
                      RowDemand.ForTheRun _ -> { }
                 case RowDemand.Exists exists ->
-                        asked(exists.container(), true, exists.ofAnElement(), Set.of(), out);
+                        asked(exists.container(), true, exists.ofAnElement(), true, Set.of(),
+                                out);
                 case RowDemand.ForAll every ->
-                        asked(every.container(), false, every.ofEachElement(), Set.of(), out);
+                        asked(every.container(), false, every.ofEachElement(), true, Set.of(),
+                                out);
             }
         }
         return new ContentsAsked(out);
@@ -84,13 +87,20 @@ record ContentsAsked(List<Asked> asked) {
      * {@code ofTheElement} asks of the contents of containers: of this one, and of a container
      * inside its element, which a row writes alike in every element.
      *
-     * @param someOf the containers around this one the demand asks some element of
+     * @param everyRowAsksIt whether every row meeting the demand reaches this quantifier: each one
+     *                       around it asks some element of its container. One asking every element
+     *                       is met by its container holding none, and what is inside it is then
+     *                       asked of nothing
+     * @param inEveryRow     the containers around this one that hold an element in every row
+     *                       meeting the demand: each asked some element of by a quantifier every
+     *                       such row reaches
      */
     private static void asked(TermPath container, boolean some,
-                              List<RowDemand.OfAnElement> ofTheElement, Set<TermPath> someOf,
-                              List<Asked> into) {
-        Set<TermPath> withThis = new LinkedHashSet<>(someOf);
-        if (some) {
+                              List<RowDemand.OfAnElement> ofTheElement, boolean everyRowAsksIt,
+                              Set<TermPath> inEveryRow, List<Asked> into) {
+        boolean holdsOne = everyRowAsksIt && some;
+        Set<TermPath> withThis = new LinkedHashSet<>(inEveryRow);
+        if (holdsOne) {
             withThis.add(container);
         }
         for (RowDemand.OfAnElement one : ofTheElement) {
@@ -108,7 +118,7 @@ record ContentsAsked(List<Asked> asked) {
                         into.add(new Asked(container, value, false, true,
                                 standsWhereMet(value, withThis)));
                 case RowDemand.WithinIt(TermPath inner, boolean innerSome, var asked) ->
-                        asked(inner, innerSome, List.of(asked), withThis, into);
+                        asked(inner, innerSome, List.of(asked), holdsOne, withThis, into);
                 case RowDemand.SameAs _, RowDemand.DifferentFrom _, RowDemand.KeyedAs _,
                      RowDemand.NotKeyedAs _, RowDemand.Relational _, RowDemand.ATruth _,
                      RowDemand.InCases _ -> { }
@@ -117,11 +127,11 @@ record ContentsAsked(List<Asked> asked) {
     }
 
     /**
-     * Whether every container {@code value} is inside is one of {@code someOf}, so that each of
-     * them holds an element in any row meeting the demand and a value stands at {@code value}.
+     * Whether every container {@code value} is inside is one of {@code inEveryRow}, so that a
+     * value stands at {@code value} in any row meeting the demand.
      */
-    private static boolean standsWhereMet(TermPath value, Set<TermPath> someOf) {
-        return someOf.containsAll(value.containersHoldingIt());
+    private static boolean standsWhereMet(TermPath value, Set<TermPath> inEveryRow) {
+        return inEveryRow.containsAll(value.containersHoldingIt());
     }
 
     /**
