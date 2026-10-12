@@ -88,21 +88,22 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     }
 
     /**
-     * And says so where the fields' own type has already drawn a line through them.
+     * And says something where the fields' own type has already drawn a line through them — that
+     * the other field is not shown to reach every value here.
      *
-     * <p>Issue #868. {@code Cm}'s own bound places an end at each field, and the record's clause
-     * about the pair is a second statement about the same positions — so the report owed both, and
-     * said only the first while the {@code guard} of the same shape two declarations away named
-     * both of the positions it compared.
+     * <p>{@code Cm}'s own bound places an end at each field, and the record's clause about the pair
+     * is a second statement about the same positions, so the report owes both. And the bound is
+     * what keeps the clause from dividing nothing: no width is below nought, so a length above
+     * 150 is refused whatever the width is — some values here settle the clause on their own.
      */
     @Test
     void andSaysSoWhereTheFieldsOwnTypeAlreadyDrewALine() {
         FieldDomains read = readingOf(MEASURED, "Parcel");
 
         assertFalse(read.placedAt(RuleKey.of("length")).isEmpty(), "`Cm` places an end here");
-        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
                 reasonsAt(read, "length"));
-        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
                 reasonsAt(read, "width"));
     }
 
@@ -312,7 +313,8 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     }
 
     /**
-     * A clause relating two fields says that it relates them, at both.
+     * A clause relating two fields that take every value their type holds says that it relates
+     * them, at both.
      *
      * <p>Which is a different thing for a reader to do about it: nothing is missing from the
      * carrier — a line drawn on either field against a number would be read — and what a partition
@@ -323,6 +325,28 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
         FieldDomains read = readingOf("""
                 module example.spans
 
+                data Span = { low: Int, high: Int }
+                    invariant low < high
+                """, "Span");
+
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "low"));
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "high"));
+    }
+
+    /**
+     * And where a field's own type holds it to some of those values, the clause is not said to
+     * divide the other field by nothing.
+     *
+     * <p>{@code high} is never below nought, so it is never below a {@code low} at nought either:
+     * {@code high} at nought is refused whatever {@code low} is. And a rule beside the clause naming
+     * a field — here the one on its type — is what keeps the field from being shown to take every
+     * value, so neither field is said to be left undivided.
+     */
+    @Test
+    void aClauseRelatingTwoFieldsAFieldsTypeHoldsSaysTheOtherIsNotShownToReachIt() {
+        FieldDomains read = readingOf("""
+                module example.spans
+
                 data Bound = Int
                     invariant value >= 0
 
@@ -330,8 +354,10 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant low < high
                 """, "Span");
 
-        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "low"));
-        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "high"));
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+                reasonsAt(read, "low"));
+        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+                reasonsAt(read, "high"));
     }
 
     /**

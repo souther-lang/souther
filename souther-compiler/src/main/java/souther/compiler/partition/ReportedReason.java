@@ -276,6 +276,8 @@ public final class ReportedReason {
                     UndividedPosition.Reason.UNRESOLVED_CASE_PAIRING;
             case BlockReason.SeveralLinesInOneRule _ ->
                     UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE;
+            case BlockReason.RelationNotShownToReachEveryValue _ ->
+                    UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE;
             case BlockReason.ComparisonRelatingTwoValues _ ->
                     UndividedPosition.Reason.RULE_RELATING_TWO_VALUES;
             // Its own word, because what a reader does about it is different. A rule between two
@@ -293,13 +295,15 @@ public final class ReportedReason {
             // admits, which is a fact a reader acts on — the value written here is one of those.
             case BlockReason.RuleRestrictingToAdmittedValues _ ->
                     UndividedPosition.Reason.POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS;
-            // The same word, from the other reading of the same rule. What a document promises its
-            // reader is which kind of thing stopped the derivation, and a relation between two
-            // positions is one kind of thing whether the reading that met it was drawing a line or
-            // gathering values — so the split this compiler needs between the two is a split it
-            // keeps to itself, and the two vocabularies still come to one word for one rule.
+            // The word for a relation nothing showed reaches every value here, from the other
+            // reading of the same rule. What a document promises its reader is which kind of thing
+            // stopped the derivation, and a relation between two positions is one kind of thing
+            // whether the reading that met it was drawing a line or gathering values. A reading of
+            // values shows nothing of what the other position reaches, and is said where the
+            // reading of lines took the rule in no further — so where it showed the relation
+            // divides nothing, this word is not met beside that one.
             case BlockReason.ValueRuleRelatingTwoPositions _ ->
-                    UndividedPosition.Reason.RULE_RELATING_TWO_VALUES;
+                    UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE;
             // Its own word and not the one above. Both are rules this read to the end that divide
             // nothing, and what a reader may go on to do about them differs: one is waiting on a
             // class about two positions, and the other has nothing to wait for.

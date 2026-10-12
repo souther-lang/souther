@@ -18,6 +18,7 @@ import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -25,13 +26,16 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A value held against what an operation of the library answers of another value of the input
- * relates the two positions, as holding the two values against each other does.
+ * A value held against what an operation of the library answers of another value of the input is
+ * read as a relation of the two positions, and what it leaves each of them is what the other side
+ * is shown to reach.
  *
- * <p>{@code d == String.lowercase(s)} says nothing of which {@code d} or which {@code s} stands
- * there: whatever one holds, some value of the other meets it and some does not. So it is read to
- * the end and divides neither, the way {@code d == s} is — however the answer reaches the
- * comparison, written there, under a name, or handed to a helper.
+ * <p>{@code d == String.lowercase(s)} is read to the end however the answer reaches the comparison
+ * — written there, under a name, or handed to a helper. It leaves {@code s} undivided: whatever
+ * {@code s} holds, some {@code d} meets the answer and some does not. It is not shown to leave
+ * {@code d} so: no lowercased string holds a capital, so a {@code d} holding one settles the
+ * comparison whatever {@code s} is, and nothing here works out which strings the operation
+ * answers.
  *
  * <p>What the answer is is the operation and what it was handed, and not where it was made from:
  * {@code String.lowercase(s)} and {@code String.uppercase(s)} are made of one position and are two
@@ -58,13 +62,19 @@ class AValueHeldAgainstWhatAnOperationAnswersRelatesTheTwoTest {
                 + " than dividing the values here, about `" + position + "`";
     }
 
+    private static String notShown(String at, String position) {
+        return "· not read: comparison@" + at + " — what it states was read, and it relates the"
+                + " value here to another value not shown to reach every value here, so which values"
+                + " here settle it on their own is not worked out, about `" + position + "`";
+    }
+
     private static String madeFrom(String at, String position) {
         return "· not read: comparison@" + at + " — it is about a value made from this one, and"
                 + " what it says about the values here is not worked out, about `" + position + "`";
     }
 
     @Test
-    void aDomainHeldAgainstALowercasedAddressHandedToAHelperRelatesTheTwo() {
+    void aDomainHeldAgainstALowercasedAddressHandedToAHelperIsReadAsARelationOfTheTwo() {
         String report = measured("""
                 module w1
                 data Account = { id: Int, domain: String? }
@@ -75,47 +85,60 @@ class AValueHeldAgainstWhatAnOperationAnswersRelatesTheTwoTest {
                 behavior m : (s: String, a: Account) -> Bool
                 let m (s, a) = hasDomain(String.lowercase(s), a)
                 """);
-        assertEquals(List.of(relates("5:27", "a.domain@Some"), relates("5:27", "s")),
-                said(report), report);
-        assertTrue(report.contains("measurement: complete"), report);
+        assertEquals(Set.of(notShown("5:27", "a.domain@Some"), relates("5:27", "s")),
+                Set.copyOf(said(report)), report);
     }
 
     @Test
-    void theAnswerWrittenThereOrUnderANameRelatesTheSameTwo() {
-        assertEquals(List.of(relates("3:18", "d"), relates("3:18", "s")), said(measured("""
+    void theAnswerWrittenThereOrUnderANameIsTheSameRelation() {
+        assertEquals(Set.of(notShown("3:18", "d"), relates("3:18", "s")), Set.copyOf(said(measured("""
                 module w1
                 behavior m : (s: String, d: String) -> Bool
                 let m (s, d) = d == String.lowercase(s)
-                """)));
-        assertEquals(List.of(relates("4:4", "d"), relates("4:4", "s")), said(measured("""
+                """))));
+        assertEquals(Set.of(notShown("4:4", "d"), relates("4:4", "s")), Set.copyOf(said(measured("""
                 module w1
                 behavior m : (s: String, d: String) -> Bool
                 let m (s, d) = { let l = String.lowercase(s)
                  d == l }
-                """)));
-        assertEquals(List.of(relates("3:18", "d"), relates("3:18", "s")), said(measured("""
-                module w1
-                behavior m : (s: String, d: String) -> Bool
-                let m (s, d) = d < String.trim(String.lowercase(s))
-                """)));
+                """))));
+    }
+
+    /** Two values being one or not, and two held in order, are one relation of the two
+     *  positions: what it leaves each is the same either way. */
+    @Test
+    void aDenialAndAnOrderLeaveTheSameTwo() {
+        for (String compared : List.of("d /= String.lowercase(s)",
+                "d < String.trim(String.lowercase(s))")) {
+            assertEquals(Set.of(notShown("3:18", "d"), relates("3:18", "s")),
+                    Set.copyOf(said(measured("""
+                            module w1
+                            behavior m : (s: String, d: String) -> Bool
+                            let m (s, d) = %s
+                            """.formatted(compared)))), compared);
+        }
+    }
+
+    /** Two answers of positions apart, neither of which is shown to reach every value of the
+     *  other: a lowercased string is never an uppercased one with a letter in it. */
+    @Test
+    void twoAnswersOfPositionsApartAreNotShownToLeaveEitherUndivided() {
+        assertEquals(Set.of(notShown("3:36", "s"), notShown("3:36", "t")),
+                Set.copyOf(said(measured("""
+                        module w1
+                        behavior m : (s: String, t: String) -> Bool
+                        let m (s, t) = String.lowercase(t) == String.uppercase(s)
+                        """))));
     }
 
     @Test
-    void twoAnswersOfPositionsApartRelateThePositions() {
-        assertEquals(List.of(relates("3:36", "s"), relates("3:36", "t")), said(measured("""
-                module w1
-                behavior m : (s: String, t: String) -> Bool
-                let m (s, t) = String.lowercase(t) == String.uppercase(s)
-                """)));
-    }
-
-    @Test
-    void anAnswerThatCountsToANumberRelatesWhereItIsOneValueAndNotWhereItIsHeldInOrder() {
-        assertEquals(List.of(relates("3:18", "d"), relates("3:18", "t")), said(measured("""
-                module w1
-                behavior m : (d: Date, t: DateTime) -> Bool
-                let m (d, t) = d == DateTime.toDate(t)
-                """)));
+    void anAnswerThatCountsToANumberIsReadWhereItIsOneValueAndNotWhereItIsHeldInOrder() {
+        assertEquals(Set.of(notShown("3:18", "d"), relates("3:18", "t")),
+                Set.copyOf(said(measured("""
+                        module w1
+                        behavior m : (d: Date, t: DateTime) -> Bool
+                        let m (d, t) = d == DateTime.toDate(t)
+                        """))));
         assertTrue(said(measured("""
                 module w1
                 behavior m : (d: Date, t: DateTime) -> Bool

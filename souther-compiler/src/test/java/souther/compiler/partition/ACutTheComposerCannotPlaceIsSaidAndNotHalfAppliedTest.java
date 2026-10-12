@@ -190,7 +190,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
                         domain().quantities(rules()).ordersOf(axis.term()).answered(), at))),
                 new Reachability.Reaching(domain().quantities(rules()).region(),
                         Requirements.NONE, TruthsAsked.NONE, List.of(taken),
-                        Reachability.Ways.ONE),
+                        Reachability.Ways.ONE, List.of()),
                 Generator.CandidateCheck.ANY);
     }
 

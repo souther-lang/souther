@@ -46,9 +46,13 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * at them.
      *
      * <p>Every argument is a number of the input or another of these, so the value is one the input
-     * settles: an operation of the library answers the same of the same arguments on every run.
-     * Something past the input — what a dependency answered, a value the body bound — is no
-     * argument of one, and a call handed it is not read as one.
+     * settles. That rests on the language and not on this compiler: an operation the language
+     * defines answers one value wherever it is written with the same arguments (spec
+     * §invariant-discharge-terms), which is what lets two of these that are equal cancel. What a
+     * behavior answered, or a function a body was handed, is no such value — an injected behavior
+     * may answer differently each time it is asked — and is no operation of one. Something past
+     * the input — what a dependency answered, a value the body bound — is no argument of one, and
+     * a call handed it is not read as one.
      *
      * @param operation the operation applied
      * @param of        what it was handed, in the order it was handed them

@@ -113,13 +113,21 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
          * input's numbers moves with the other value from run to run, so it divides none of them —
          * as a relation between two positions does not.
          *
-         * @param over the coordinates of the input's numbers it relates
+         * <p>That it divides none of them is shown only where the other value reaches every value
+         * at the coordinate ({@link UndividedByARelation}): {@code n == String.length(s)} is false
+         * wherever {@code n} is below nought, which the length never reaches.
+         *
+         * @param over      the coordinates of the input's numbers it relates
+         * @param relations what it states, one relation for each reading of it — a closure's
+         *                  statement is read once for each application
          */
-        record AgainstAnotherValue(List<FilingCoordinate> over) implements Read {
+        record AgainstAnotherValue(List<FilingCoordinate> over,
+                                   List<UndividedByARelation> relations) implements Read {
 
             public AgainstAnotherValue {
                 over = List.copyOf(over);
-                if (over.isEmpty()) {
+                relations = List.copyOf(relations);
+                if (over.isEmpty() || relations.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a relation against another value relates some number of the input");
                 }
@@ -333,6 +341,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 new LinkedHashMap<>();
         List<FilingCoordinate> settled = new ArrayList<>();
         List<FilingCoordinate> against = new ArrayList<>();
+        List<UndividedByARelation> relations = new ArrayList<>();
         Map<Read, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
         for (ClosureApplications.Application one : each) {
             if (one.reached() instanceof Proposition.Always(boolean made) && !made) {
@@ -345,11 +354,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         settled.add(at);
                     }
                 });
-                case Read.AgainstAnotherValue alone -> alone.over().forEach(at -> {
-                    if (!against.contains(at)) {
-                        against.add(at);
-                    }
-                });
+                case Read.AgainstAnotherValue alone -> {
+                    alone.over().forEach(at -> {
+                        if (!against.contains(at)) {
+                            against.add(at);
+                        }
+                    });
+                    relations.addAll(alone.relations());
+                }
                 case Read.Several several -> several.parts().forEach(part -> lines
                         .computeIfAbsent(part.line(), _ -> new ArrayList<>())
                         .add(new WhereAnApplicationIsMade.OnOne(part.cases(), one.reached())));
@@ -363,7 +375,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // Every application's statement is a line or none of them is drawn, and one that relates
         // the input to another value is no line.
         if (!against.isEmpty()) {
-            return new Read.AgainstAnotherValue(against);
+            return new Read.AgainstAnotherValue(against, relations);
         }
         if (lines.isEmpty()) {
             return new Read.CutsNothing(settled);
@@ -551,10 +563,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Compared _ when counted != null -> counted;
             case Proposition.Compared _ when remainder != null -> remainder;
             case Proposition.Compared _ when related != null ->
-                    new Read.AgainstAnotherValue(related);
+                    against(related, stated.proposition());
             case Proposition.Some some
                     when valuesItRelates(some) instanceof List<FilingCoordinate> values ->
-                    new Read.AgainstAnotherValue(values);
+                    against(values, some);
             case Proposition.Compared(Relation.Ordered(
                     DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel proposition),
                     boolean holds, String _) when term.atOnePosition() != null ->
@@ -597,7 +609,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                InputReading read, InputReads reads, Arrivals answering) {
         List<FilingCoordinate> against = heldAgainstAnotherValue(stated);
         if (against != null) {
-            return new Read.AgainstAnotherValue(against);
+            return against(against, stated);
         }
         // A part the arithmetic met a shape it has no term for in is a stop whose reason was
         // decided where it was met. Which positions it is filed at is still asked of the
@@ -849,7 +861,60 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return lines;
         }
         List<FilingCoordinate> related = valuesItRelates(stated);
-        return related == null ? null : new Read.AgainstAnotherValue(related);
+        return related == null ? null : against(related, stated);
+    }
+
+    /**
+     * A relation {@code stated} that relates the input at {@code over}, as the relations it is
+     * made of.
+     *
+     * <p>A form is held as the form it is, and a count in it as what it counts: how many elements
+     * of one container are one of another's holds the two elements as one value, and how many
+     * different values a container holds holds its elements against one another. A statement that
+     * two values are one, some element of a container being one or not, is held as the two values
+     * of its one such part; one of several such parts holds the values it relates to the others as
+     * well, and nothing here shows what the whole of them leaves undivided.
+     */
+    private static Read.AgainstAnotherValue against(List<FilingCoordinate> over,
+                                                    Proposition stated) {
+        List<UndividedByARelation> relations = new ArrayList<>();
+        if (stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, String _)) {
+            relations.add(UndividedByARelation.ofAForm(affine.form(), affine.proposition()));
+            for (Quantity each : affine.form().coefs().keySet()) {
+                switch (each) {
+                    case Quantity.HowManyMeet count -> relations.add(oneValue(count.ofTheElement()));
+                    case Quantity.HowManyDifferent different -> relations.add(
+                            UndividedByARelation.amongTheValuesAt(
+                                    different.ofTheElement().inputPosition()));
+                    default -> { }
+                }
+            }
+        } else {
+            relations.add(oneValue(stated));
+        }
+        return new Read.AgainstAnotherValue(over, relations);
+    }
+
+    /** {@code stated} held as the two values of its one statement that two values are one. */
+    private static UndividedByARelation oneValue(Proposition stated) {
+        List<Proposition.SameValue> same = new ArrayList<>();
+        sameValuesIn(stated, same);
+        return same.size() == 1 && same.getFirst() instanceof Proposition.SameValue(
+                DecisionSubject.AnInput(TermPath one), DecisionSubject.AnInput(TermPath other),
+                boolean _, String _)
+                ? UndividedByARelation.ofTwoPositions(one, other)
+                : UndividedByARelation.SHOWING_NOTHING;
+    }
+
+    /** Every statement of two values being one {@code stated} is made of. */
+    private static void sameValuesIn(Proposition stated, List<Proposition.SameValue> out) {
+        switch (stated) {
+            case Proposition.SameValue same -> out.add(same);
+            case Proposition.Some some -> sameValuesIn(some.ofTheElement(), out);
+            case Proposition.All all -> all.parts().forEach(each -> sameValuesIn(each, out));
+            case Proposition.Any any -> any.parts().forEach(each -> sameValuesIn(each, out));
+            default -> { }
+        }
     }
 
     /**

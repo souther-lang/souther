@@ -217,6 +217,19 @@ public interface SearchRegion {
         return null;
     }
 
+    /**
+     * Whether the rules {@code term} is said with are shown to leave each number they relate the
+     * whole of its run, so that what {@link #projectionOf} answers of it is every value between
+     * the ends — a value taken out of it ({@link #apartAt}) and a class of whole numbers it is
+     * held to ({@link #valueClassAt}) aside.
+     *
+     * <p>False where nothing showed it, which is not that the run has gaps — and so for a region
+     * that has no proof to give, which is what the default is.
+     */
+    default boolean projectionCertifiedFor(NumericTerm term) {
+        return false;
+    }
+
     /** The same, of one term — the one-term case of the question above and not a second answer to
      *  it. */
     default NumericDomain.FormProjection projectionOf(NumericTerm term) {

@@ -4805,7 +4805,7 @@ public final class Generator {
                     reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure,
                             var _)
                             ? new Reachability.Ways.Whole(unsplit, figure, List.of())
-                            : Reachability.Ways.ONE);
+                            : Reachability.Ways.ONE, reaching.declined());
             ParameterCameToNothing one = new InOrder(subject, order, composed, standing, writes,
                     settled, thisWay, check, way.contents()).from(0, Map.of());
             if (one == null) {

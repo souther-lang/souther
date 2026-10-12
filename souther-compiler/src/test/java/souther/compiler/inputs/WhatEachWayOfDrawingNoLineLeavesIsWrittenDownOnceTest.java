@@ -153,7 +153,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // readings of `a < b`, opposite sentences about this compiler, and a document promises
         // its reader which kind of thing stopped a derivation rather than which reader stopped.
         table.put("ValueRuleRelatingTwoPositions",
-                "RULE_RELATING_TWO_VALUES/UNAFFECTED");
+                "RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE/UNAFFECTED");
         // Read to the end, and placed nowhere. Its own word beside the two above: the comparison
         // was taken apart, a line came out of it and every name it is between reached positions —
         // what was not reached is which of those positions the line runs between. Both measures are
@@ -163,6 +163,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // unknown; what is missing is a division of the input by more than one line of one rule,
         // and a run allowed more of everything meets the same statement.
         table.put("SeveralLinesInOneRule", "SEVERAL_LINES_IN_ONE_RULE/UNAFFECTED");
+        // Read to the end, and a relation whose other side is not shown to reach every value here.
+        // What it states is known; which values here settle it on their own is what is missing,
+        // and a run allowed more of everything meets the same relation.
+        table.put("RelationNotShownToReachEveryValue",
+                "RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE/UNAFFECTED");
         // What the rule states was taken apart, and the reason no line came of it is read off that
         // meaning. A part declined at how many readings are made is one a run allowed more may
         // read; every other part not read, a number no position holds and a statement of which
@@ -492,6 +497,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.ValueRuleRelatingTwoPositions(),
                 new BlockReason.CasePairingNotDetermined(),
                 new BlockReason.SeveralLinesInOneRule(),
+                new BlockReason.RelationNotShownToReachEveryValue(),
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),
                 new BlockReason.ComparisonNothingArrivesAtItsLine(),

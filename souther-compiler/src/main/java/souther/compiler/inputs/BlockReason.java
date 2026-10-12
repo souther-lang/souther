@@ -252,6 +252,7 @@ public sealed interface BlockReason {
                     case A_NUMBER_NO_POSITION_HOLDS -> 17;
                     case NO_RELATION_OF_NUMBERS -> 18;
                 };
+                case RelationNotShownToReachEveryValue _ -> 19;
             };
         }
 
@@ -293,7 +294,8 @@ public sealed interface BlockReason {
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
                      ValueRuleRelatingTwoPositions _, CasePairingNotDetermined _,
-                     SeveralLinesInOneRule _, WhatItStatesIsNoLine _ -> true;
+                     SeveralLinesInOneRule _, WhatItStatesIsNoLine _,
+                     RelationNotShownToReachEveryValue _ -> true;
             };
         }
 
@@ -326,7 +328,8 @@ public sealed interface BlockReason {
                      ValueRuleRelatingTwoPositions _, EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
-                     CasePairingNotDetermined _, SeveralLinesInOneRule _ ->
+                     CasePairingNotDetermined _, SeveralLinesInOneRule _,
+                     RelationNotShownToReachEveryValue _ ->
                         RunSensitivity.UNAFFECTED;
             };
         }
@@ -920,6 +923,22 @@ public sealed interface BlockReason {
      * meaning was read perfectly well.
      */
     record SeveralLinesInOneRule() implements RuleReadingStopped {}
+
+    /**
+     * What the rule states was read in full, and it relates the value here to another value that is
+     * not shown to reach every value here ({@link WhatARelationLeavesUndivided}).
+     *
+     * <p>{@code n == String.length(s)} is false wherever {@code n} is below nought, and
+     * {@code d == String.lowercase(s)} wherever {@code d} holds a capital: the other side never
+     * reaches those values, so some values here settle the rule whatever the other side holds. Which
+     * values those are is what an operation answers, or a rule the other position carries, and
+     * nothing here works it out.
+     *
+     * <p>Not a relation that divides nothing, which is the word for a value whose other side reaches
+     * all of it: said that way, a reader would take the values here as all alike under the rule. And
+     * not a rule whose meaning went unread, since what it states is known.
+     */
+    record RelationNotShownToReachEveryValue() implements RuleReadingStopped {}
 
     /**
      * A rule whose statement is no line on the input's numbers, for the reason {@code why} gives:

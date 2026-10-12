@@ -65,6 +65,11 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
+    public boolean projectionCertifiedFor(NumericTerm term) {
+        return within.projectionCertifiedFor(term);
+    }
+
+    @Override
     public Congruences valueClassAt(NumericTerm.ValueOf place) {
         return within.valueClassAt(place);
     }

@@ -19,6 +19,7 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.ProjectionCertification;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenAs;
@@ -1220,6 +1221,21 @@ final class ReadQuantities implements Quantities {
         // Under the context this question is asked in, which is what says which of those rules are
         // about the row being asked about at all.
         return runsIn(asked(form.coefs().keySet()), form, andTheDeclared);
+    }
+
+    /**
+     * Whether the rules {@code term} is said with are shown to leave each number they relate the
+     * whole of its run: what {@link #projectionOf} answers of it is then every value between the
+     * ends and not only where the values lie ({@link NumericDomain#projectionCertification}).
+     *
+     * <p>About the run and nothing else. A value taken out of it, or a class of whole numbers it is
+     * held to, are asked of the region beside this.
+     */
+    boolean projectionCertifiedFor(NumericTerm term) {
+        StructuralContext under = asked(List.of(term));
+        ConstraintState<InputAtom> rules = holding(effectiveConstraints(under), term, under);
+        return rules.numbers().projectionCertification()
+                instanceof ProjectionCertification.Certified;
     }
 
     /**
