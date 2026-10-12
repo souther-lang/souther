@@ -1754,7 +1754,7 @@ public final class InputReads {
 
     /**
      * The same, inside {@code block}, with each parameter an operation hands what an option holds
-     * standing for that value ({@link #handingWhatItHolds}).
+     * standing for that value ({@link #whatItHolds}, {@link #holding}).
      *
      * <p>An option holds one value or none, and an operation applying its closure to every element
      * of one hands the parameter that value, so a statement inside the closure is about it — the
