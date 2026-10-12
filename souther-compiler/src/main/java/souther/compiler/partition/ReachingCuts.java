@@ -398,13 +398,10 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         if (orders == null || !(orders.answered() instanceof Carrier.Ordinal ordinal)) {
             return List.of();
         }
-        List<TakenConstraint.AwayFrom> out = new ArrayList<>();
-        for (TypeSymbol each : ordinal.cases()) {
-            if (!narrowed.narrowing().leaves(each)) {
-                out.add(new TakenConstraint.AwayFrom(term, ordinal.at(each)));
-            }
-        }
-        return List.copyOf(out);
+        Set<TypeSymbol> left = narrowed.narrowing().leavesOfASum();
+        return ordinal.placesOf(each -> !left.contains(each)).stream()
+                .map(at -> new TakenConstraint.AwayFrom(term, at))
+                .toList();
     }
 
     /**

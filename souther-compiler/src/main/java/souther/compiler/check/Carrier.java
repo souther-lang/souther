@@ -35,6 +35,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * An order a rule is read against and a value is written back at, and the only place either
@@ -136,6 +137,17 @@ public sealed interface Carrier extends ValueOrder {
         public Place at(TypeSymbol name) {
             int index = cases.indexOf(name);
             return index < 0 ? null : Count.of(index);
+        }
+
+        /** Where each case {@code kept} keeps comes in the declaration, in that order. */
+        public List<Place> placesOf(Predicate<TypeSymbol> kept) {
+            List<Place> out = new ArrayList<>();
+            for (int index = 0; index < cases.size(); index++) {
+                if (kept.test(cases.get(index))) {
+                    out.add(Count.of(index));
+                }
+            }
+            return out;
         }
 
         /** The case at a count, which must be one this carrier holds ({@link #requiredOnGrid}). */

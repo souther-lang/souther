@@ -111,7 +111,7 @@ public final class DeclaredInput {
     public Taking taking(TermPath at, Type matchedAs, CasesLeft covered) {
         Taking asTheArmSaysIt = new Taking.Narrows(narrowedTo(at, covered));
         List<List<TypeSymbol>> readings = readingsAt(at);
-        List<TypeSymbol> chosen = leavesOf(covered.atoms());
+        Set<TypeSymbol> chosen = covered.leavesOfASum();
         if (readings == null || matchedAs == null || chosen.isEmpty()) {
             return asTheArmSaysIt;
         }
