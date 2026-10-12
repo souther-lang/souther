@@ -1,16 +1,21 @@
 package souther.compiler.codegen;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -22,6 +27,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * refused for it.
  */
 class AnAnswerThatIsTheOnlyConditionIsRecordedTest {
+
+    /** A plan numbering nothing but where an application's answer is recorded has a place to
+     *  record at, and no arm or comparison a row is owed for. */
+    @Test
+    void aPlanHoldingOnlyAnAnswerHasAPlaceToRecordAt() {
+        Compilation compilation = Compilation.ofSource("""
+                module p
+                behavior f : (xs: List<Bool>) -> Bool
+                let f (xs) = List.any(x -> x, xs)
+                """, "Main");
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("p")).value();
+        assertNotNull(checked, "the model compiles");
+        CoverageSites.Plan plan = checked.plan();
+
+        assertTrue(plan.sites().isEmpty(), () -> plan.sites().toString());
+        assertEquals(1, plan.answers().size(), () -> plan.answers().toString());
+        assertFalse(plan.hasNoProbes());
+    }
 
     @ParameterizedTest
     @ValueSource(strings = {"List.any(x -> x, xs)", "List.all(x -> x, xs)",
