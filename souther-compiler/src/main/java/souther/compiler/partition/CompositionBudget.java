@@ -100,10 +100,10 @@ public enum CompositionBudget {
     WAYS_UNDER_THE_CASES_TRIED(8),
 
     /** How many ways a search looks along where conditions on the way to a border came out one of
-     *  several ways, each a row is composed along whole. One for each open alternative of every
-     *  group of conditions that turn on positions in common, and not one for each way of taking
-     *  them all together ({@link OneOfEach}); past it the way is looked along whole, which narrows
-     *  by none of them. */
+     *  several ways, each a row is composed along whole. Every way of taking their open
+     *  alternatives together where they are no more than this; past it, each open alternative
+     *  once beside the others' first ({@link OneOfEach}), and the way looked along whole after
+     *  them, which narrows by none of them and is said to have been. */
     WAYS_A_WAY_IS_LOOKED_ALONG(16),
 
     /** How many alternatives of those conditions are taken in, one beside another, to find the

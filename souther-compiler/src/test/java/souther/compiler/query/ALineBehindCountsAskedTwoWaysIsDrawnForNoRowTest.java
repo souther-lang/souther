@@ -7,6 +7,7 @@ import souther.compiler.partition.Level;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -17,7 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>{@code List.any(x -> x > 5, xs)} leaves one or more elements above five, and each way of the
  * condition after it asks for none. That is said in the words of what closed the first way — a count
  * asked to be two things at once — as a case or a truth asked twice is, and not passed over as a
- * way some row takes with the other conditions on it left out.
+ * way some row takes with the other conditions on it left out. A way with nothing of several ways
+ * on it asking the same two counts is closed the same way.
  */
 class ALineBehindCountsAskedTwoWaysIsDrawnForNoRowTest {
 
@@ -42,11 +44,27 @@ class ALineBehindCountsAskedTwoWaysIsDrawnForNoRowTest {
                 | "none above" : ([ N(1) ], N(3)) -> No
             """;
 
+    /** The same counts asked on a way with nothing of several ways on it, which is closed for the
+     *  same reason and by the same judge. */
+    private static final String ONE_WAY = SOURCE.replace(
+            "guard List.all(x -> x <= 5, xs) || (n > 7 && List.all(x -> x <= 5, xs)) else No",
+            "guard List.all(x -> x <= 5, xs) else No");
+
     private static final Count BEHIND_THE_CONDITIONS = Count.of(50);
 
     @Test
     void theLineBehindTheConditionsIsDrawnForNoRow() {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
+        drawnForNoRow(SOURCE);
+    }
+
+    @Test
+    void theLineBehindCountsAskedTwiceOnOneWayIsDrawnForNoRow() {
+        assertNotEquals(SOURCE, ONE_WAY, "the condition of several ways is taken away");
+        drawnForNoRow(ONE_WAY);
+    }
+
+    private static void drawnForNoRow(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         List<BorderAssessment> edges = compilation.db()

@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.TermPath;
+import souther.compiler.partition.OneOfEach.Step;
+import souther.compiler.partition.OneOfEach.Walked;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -13,14 +15,15 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The ways conditions of several ways come to are the ways of each group of them that turns on
- * positions in common, added up and not multiplied — and a proof that nothing is past them comes
- * only from a group walked to its end.
+ * The ways conditions of several ways come to: every way a row takes where the figure lets them
+ * all be handed on, and otherwise some of them with the figure that left the rest — with the
+ * looking for them the ways of each group that turns on positions in common, added up and not
+ * multiplied, and a proof that nothing is past them only from a group walked to its end.
  */
 class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
 
@@ -34,9 +37,10 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
 
     private record Choice(List<List<Entry>> alternatives) implements Entry {}
 
-    /** What is asked so far is the values left at each position; none left closes it. */
-    private static final OneOfEach.Vocabulary<Entry, Map<TermPath, Set<Integer>>> VALUES =
-            new OneOfEach.Vocabulary<>() {
+    /** What is asked so far is the values left at each position; none left at one closes it,
+     *  said by that position. */
+    private static final OneOfEach.Vocabulary<Entry, Map<TermPath, Set<Integer>>, TermPath>
+            VALUES = new OneOfEach.Vocabulary<>() {
 
                 @Override
                 public List<List<Entry>> alternatives(Entry entry) {
@@ -54,19 +58,19 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
                 }
 
                 @Override
-                public Map<TermPath, Set<Integer>> with(Map<TermPath, Set<Integer>> so,
-                                                        Entry entry) {
+                public Step<Map<TermPath, Set<Integer>>, TermPath> with(
+                        Map<TermPath, Set<Integer>> so, Entry entry) {
                     if (!(entry instanceof Ask(TermPath at, Set<Integer> values))) {
-                        return so;
+                        return new Step.Held<>(so);
                     }
                     Set<Integer> left = new HashSet<>(so.getOrDefault(at, values));
                     left.retainAll(values);
                     if (left.isEmpty()) {
-                        return null;
+                        return new Step.Closed<>(at);
                     }
                     Map<TermPath, Set<Integer>> out = new LinkedHashMap<>(so);
                     out.put(at, left);
-                    return out;
+                    return new Step.Held<>(out);
                 }
             };
 
@@ -82,34 +86,69 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
         return new Choice(out);
     }
 
-    private static OneOfEach.Walked<Entry> walked(Entry... entries) {
+    private static Walked<Entry, TermPath> walked(Entry... entries) {
         return OneOfEach.walk(List.of(entries), VALUES,
                 CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
                 CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
     }
 
-    /** Two conditions on two positions: each alternative once, beside the other's first. */
+    @SuppressWarnings("unchecked")
+    private static Walked.Open<Entry, TermPath> open(Walked<Entry, TermPath> walked) {
+        return assertInstanceOf(Walked.Open.class, walked, () -> "some way open: " + walked);
+    }
+
+    /** Two conditions on two positions, every combination within the figure: each of them,
+     *  since a row past both is along one. */
     @Test
-    void conditionsOnPositionsApartAreEachAlternativeOnce() {
+    void conditionsOnPositionsApartWithinTheFigureAreEveryCombination() {
         Choice onX = oneOf(ask(X, 1), ask(X, 2), ask(X, 3));
         Choice onY = oneOf(ask(Y, 1), ask(Y, 2), ask(Y, 3));
-        OneOfEach.Walked<Entry> walked = walked(onX, onY);
+        Walked.Open<Entry, TermPath> walked = open(walked(onX, onY));
 
-        assertTrue(walked.everyWay(), () -> "every way looked at: " + walked);
-        assertEquals(List.of(
-                        List.of(ask(X, 1), ask(Y, 1)),
-                        List.of(ask(X, 2), ask(Y, 1)),
-                        List.of(ask(X, 3), ask(Y, 1)),
-                        List.of(ask(X, 1), ask(Y, 2)),
-                        List.of(ask(X, 1), ask(Y, 3))),
-                walked.ways(), "the alternatives added up, and not their nine ways together");
+        assertTrue(walked.everyWay(), () -> "every way a row takes: " + walked);
+        List<List<Entry>> every = new ArrayList<>();
+        for (int x = 1; x <= 3; x++) {
+            for (int y = 1; y <= 3; y++) {
+                every.add(List.of(ask(X, x), ask(Y, y)));
+            }
+        }
+        assertEquals(every, walked.ways());
+    }
+
+    /**
+     * Two conditions on two positions whose combinations are more than the figure: each
+     * alternative once, beside the other's first — and the figure, since a row may be along a
+     * combination left out.
+     */
+    @Test
+    void conditionsOnPositionsApartPastTheFigureAreEachAlternativeOnceAndTheFigure() {
+        List<Entry> onX = new ArrayList<>();
+        List<Entry> onY = new ArrayList<>();
+        for (int each = 1; each <= 5; each++) {
+            onX.add(ask(X, each));
+            onY.add(ask(Y, each));
+        }
+        Walked.Open<Entry, TermPath> walked = open(walked(oneOf(onX.toArray(Entry[]::new)),
+                oneOf(onY.toArray(Entry[]::new))));
+
+        assertFalse(walked.everyWay(), () -> "not every way a row takes: " + walked);
+        assertEquals(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG, walked.stoppedBy());
+        List<List<Entry>> each = new ArrayList<>();
+        each.add(List.of(ask(X, 1), ask(Y, 1)));
+        for (int x = 2; x <= 5; x++) {
+            each.add(List.of(ask(X, x), ask(Y, 1)));
+        }
+        for (int y = 2; y <= 5; y++) {
+            each.add(List.of(ask(X, 1), ask(Y, y)));
+        }
+        assertEquals(each, walked.ways());
     }
 
     /** Two conditions on one position are walked together, and a way they close is left out. */
     @Test
     void conditionsOnOnePositionAreTakenTogether() {
-        OneOfEach.Walked<Entry> walked = walked(oneOf(ask(X, 1), ask(X, 2)),
-                oneOf(ask(X, 2), ask(X, 3)));
+        Walked.Open<Entry, TermPath> walked = open(walked(oneOf(ask(X, 1), ask(X, 2)),
+                oneOf(ask(X, 2), ask(X, 3))));
 
         assertEquals(List.of(List.of(ask(X, 2), ask(X, 2))), walked.ways());
         assertTrue(walked.everyWay());
@@ -122,12 +161,20 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
      */
     @Test
     void aGroupWalkedToItsEndAndClosedClosesTheWhole() {
-        OneOfEach.Walked<Entry> walked = walked(ask(X, 0), oneOf(ask(Y, 1), ask(Y, 2)),
+        Walked<Entry, TermPath> walked = walked(ask(X, 0), oneOf(ask(Y, 1), ask(Y, 2)),
                 oneOf(ask(X, 1), ask(X, 2)));
 
-        assertEquals(List.of(), walked.ways());
-        assertEquals(List.of(ask(X, 0), ask(X, 1)), walked.closedBy(),
-                "what is asked beside the conditions, and the first alternative that closed");
+        assertEquals(new Walked.Closed<>(List.of(ask(X, 0), ask(X, 1)), X), walked,
+                "what is asked beside the conditions, the first alternative that closed, and"
+                        + " the position nothing was left at");
+    }
+
+    /** What is asked beside the choices is judged by the walk too, with no choice on the way. */
+    @Test
+    void whatIsAskedBesideTheChoicesClosesTheWayWithNoChoiceOnIt() {
+        Walked<Entry, TermPath> walked = walked(ask(X, 0), ask(Y, 1), ask(X, 1));
+
+        assertEquals(new Walked.Closed<>(List.of(ask(X, 0), ask(Y, 1), ask(X, 1)), X), walked);
     }
 
     /** A condition nested in an alternative is chosen where it stands. */
@@ -135,7 +182,7 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
     void aConditionInsideAnAlternativeIsChosenWhereItStands() {
         Choice inner = oneOf(ask(X, 1), ask(X, 2));
         Choice outer = new Choice(List.of(List.of(ask(X, 1, 2), inner), List.of(ask(X, 3))));
-        OneOfEach.Walked<Entry> walked = walked(outer, ask(Y, 0));
+        Walked.Open<Entry, TermPath> walked = open(walked(outer, ask(Y, 0)));
 
         assertEquals(List.of(
                         List.of(ask(X, 1, 2), ask(X, 1), ask(Y, 0)),
@@ -153,9 +200,9 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
     void aNestedChoiceIsKeptWhereTheAlternativesAreMadeAfresh() {
         Choice inner = oneOf(ask(X, 1), ask(X, 2));
         Choice outer = new Choice(List.of(List.of(ask(X, 1, 2), inner), List.of(ask(X, 3))));
-        OneOfEach.Walked<Entry> walked = OneOfEach.walk(List.of(outer, ask(Y, 0)), AFRESH,
-                CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
-                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
+        Walked.Open<Entry, TermPath> walked = open(OneOfEach.walk(List.of(outer, ask(Y, 0)),
+                AFRESH, CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG));
 
         assertEquals(List.of(
                         List.of(ask(X, 1, 2), ask(X, 1), ask(Y, 0)),
@@ -181,9 +228,8 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
         }
         entries.add(oneOf(alternatives.toArray(Entry[]::new)));
         entries.add(oneOf(ask(Y, 1), ask(Y, 2)));
-        OneOfEach.Walked<Entry> walked = walked(entries.toArray(Entry[]::new));
+        Walked.Open<Entry, TermPath> walked = open(walked(entries.toArray(Entry[]::new)));
 
-        assertFalse(walked.ways().isEmpty(), () -> "the first group's ways: " + walked);
         assertTrue(walked.ways().stream().allMatch(way -> way.stream().noneMatch(each ->
                         each instanceof Ask(TermPath at, var _) && at.equals(Y))),
                 "the group not looked at is chosen in none of them");
@@ -191,8 +237,8 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
     }
 
     /** {@link #VALUES}, handing the alternatives of a choice over as new entries each time. */
-    private static final OneOfEach.Vocabulary<Entry, Map<TermPath, Set<Integer>>> AFRESH =
-            new OneOfEach.Vocabulary<>() {
+    private static final OneOfEach.Vocabulary<Entry, Map<TermPath, Set<Integer>>, TermPath>
+            AFRESH = new OneOfEach.Vocabulary<>() {
 
                 @Override
                 public List<List<Entry>> alternatives(Entry entry) {
@@ -213,8 +259,8 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
                 }
 
                 @Override
-                public Map<TermPath, Set<Integer>> with(Map<TermPath, Set<Integer>> so,
-                                                        Entry entry) {
+                public Step<Map<TermPath, Set<Integer>>, TermPath> with(
+                        Map<TermPath, Set<Integer>> so, Entry entry) {
                     return VALUES.with(so, entry);
                 }
             };
@@ -235,11 +281,11 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
         for (int each = 0; each <= most; each++) {
             alternatives.add(ask(X, each));
         }
-        OneOfEach.Walked<Entry> walked = walked(oneOf(alternatives.toArray(Entry[]::new)));
+        Walked.Open<Entry, TermPath> walked = open(walked(oneOf(
+                alternatives.toArray(Entry[]::new))));
 
         assertEquals(most, walked.ways().size());
         assertEquals(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG, walked.stoppedBy());
-        assertNull(walked.closedBy());
     }
 
     /**
@@ -255,11 +301,18 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
             entries.add(oneOf(ask(X, 0, 1), ask(X, 0, 1, 2)));
         }
         entries.add(oneOf(ask(X, 5), ask(X, 6)));
-        OneOfEach.Walked<Entry> walked = walked(entries.toArray(Entry[]::new));
 
-        assertEquals(List.of(), walked.ways());
-        assertNull(walked.closedBy(), () -> "nothing proved: " + walked);
-        assertNotNull(walked.stoppedBy());
-        assertEquals(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT, walked.stoppedBy());
+        assertEquals(new Walked.Stopped<Entry, TermPath>(
+                        CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT),
+                walked(entries.toArray(Entry[]::new)), "nothing proved and no way found");
+    }
+
+    /** A way with no choice on it that holds together is the one way, and every way. */
+    @Test
+    void aWayWithNoChoiceIsTheOneWay() {
+        Walked.Open<Entry, TermPath> walked = open(walked(ask(X, 0), ask(Y, 1)));
+
+        assertEquals(List.of(List.of(ask(X, 0), ask(Y, 1))), walked.ways());
+        assertNull(walked.stoppedBy());
     }
 }

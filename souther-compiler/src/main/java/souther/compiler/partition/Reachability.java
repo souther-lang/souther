@@ -48,35 +48,44 @@ public sealed interface Reachability {
      */
     static Reachability of(WayToTheBorder way, SearchRegion declarations) {
         Reachability taken = taking(way, declarations, Ways.ONE);
-        if (!(taken instanceof Reaching whole) || way.severalWays().isEmpty()) {
+        if (!(taken instanceof Reaching whole)) {
             return taken;
         }
-        // Where a condition on the way came out one of several ways, a row is past it along one
-        // of them: the way is each of them as well, and a search looks along each. Every row is
-        // along one, so where every way of some of them closes, nothing reaches.
-        OneOfEach.Walked<OnTheWay> walked = way.along();
-        // Every way of some of them closes, which is said in the words of what closed the first:
-        // a count asked twice as much as a case or a truth, none of which leaves the way a row.
-        Reachability closed = walked.closedBy() == null ? null
-                : WayToTheBorder.closing(walked.closedBy());
-        if (closed != null) {
-            return closed;
-        }
-        List<Reaching> along = new ArrayList<>();
-        for (List<OnTheWay> one : walked.ways()) {
-            // Open as far as the cases and the truths it asks, which is all that closes a way.
-            if (taking(new WayToTheBorder(one), declarations, Ways.ONE) instanceof Reaching open) {
-                along.add(open);
+        // Whether the conditions on the way hold together is the walk's to say, on a way with
+        // nothing of several ways on it as much as on one with: a count asked twice, or a case a
+        // relation's term needs, closes a way as a case asked twice does. Where a condition came
+        // out one of several ways, a row is past it along one of them, and where every way of
+        // some of them closes, nothing reaches.
+        return switch (way.along()) {
+            case OneOfEach.Walked.Closed<OnTheWay, Reachability>(var _, var why) -> why;
+            case OneOfEach.Walked.Stopped<OnTheWay, Reachability>(var figure) ->
+                    whole.splitAs(new Ways.Whole(way.severalWays(), figure, List.of()));
+            case OneOfEach.Walked.Open<OnTheWay, Reachability> _
+                    when way.severalWays().isEmpty() -> whole;
+            case OneOfEach.Walked.Open<OnTheWay, Reachability>(var ways, var stoppedBy) -> {
+                List<Reaching> along = new ArrayList<>();
+                for (List<OnTheWay> one : ways) {
+                    along.add(reaching(new WayToTheBorder(one), declarations));
+                }
+                // Every way a row takes is among them, so a search looking along each looks
+                // along every row past the way, and what all of them state the way states.
+                // Otherwise they are looked along first, each narrower than the way, and past
+                // them the way is looked along whole — which every row past it is on, so none of
+                // them being closed proves nothing — and the conditions it was not looked along
+                // each way of say so.
+                yield whole.splitAs(stoppedBy == null ? new Ways.Each(along)
+                        : new Ways.Whole(way.severalWays(), stoppedBy, along));
             }
+        };
+    }
+
+    /** {@code way}, one the walk found holds together, as a composer reads it. */
+    private static Reaching reaching(WayToTheBorder way, SearchRegion declarations) {
+        if (taking(way, declarations, Ways.ONE) instanceof Reaching open) {
+            return open;
         }
-        if (!walked.everyWay()) {
-            // More ways than are looked along: the ones the figures let through are looked along
-            // first, each narrower than the way, and past them the way is looked along whole —
-            // which every row past it is on, so none of them being closed proves nothing — and the
-            // conditions it was not looked along each way of say so.
-            return whole.splitAs(new Ways.Whole(way.severalWays(), walked.stoppedBy(), along));
-        }
-        return whole.splitAs(new Ways.Each(along));
+        throw new IllegalStateException("a way the walk found open asks nothing twice, since the"
+                + " walk asks of it all that is asked here");
     }
 
     /** {@code way} read in its own vocabularies, split as {@code ways} says. */
@@ -136,14 +145,14 @@ public sealed interface Reachability {
         record One() implements Ways {}
 
         /**
-         * Split into the ways some row may take, every one narrower than the way whole: each open
-         * alternative of each condition of several ways once, beside open alternatives of the
-         * conditions that turn on other positions ({@link OneOfEach}). A way the rules leave
-         * nothing along is not among them, so one alone is left where the rules close every
-         * other.
+         * Split into every way some row may take, each narrower than the way whole: every
+         * combination of one open alternative of each condition of several ways
+         * ({@link OneOfEach}). A way the rules leave nothing along is not among them, so one alone
+         * is left where the rules close every other.
          *
-         * <p>Every alternative some row may take is along one of them, so what every one of them
-         * states is what the way states, and what one states is no more than one way's.
+         * <p>Every row past the way is along one of them, so what every one of them states is what
+         * the way states, and what one states is no more than one way's. Where the figure left
+         * some combination out, the way is not this but {@link Whole}.
          *
          * @param along one or more
          */

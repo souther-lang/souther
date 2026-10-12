@@ -167,6 +167,20 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * Two choices on places apart are proved along every way of taking them together, and not
+     * along each alternative once: {@code y} reaches every {@code x} along three of the four, and
+     * along the last — {@code x} from twenty, {@code y} up to ten — it reaches none.
+     */
+    @Test
+    void choicesOnPlacesApartAreProvedAlongEveryWayOfTakingThemTogether() {
+        assertEquals(Map.of("x", NOT_SHOWN, "y", NOT_SHOWN),
+                left("x: Int, y: Int", "data Unused = Int",
+                        "if (x >= 0 && x <= 10 || x >= 20 && x <= 30)"
+                                + " && (y >= 0 && y <= 30 || y >= 0 && y <= 10)"
+                                + " then x == y else false", "4:112"));
+    }
+
+    /**
      * A run whose end the rules put at a third is handed over from a hair below it, which no
      * value of {@code x} is, so it is not taken as a run {@code x} fills — here, where the values
      * asked of it are all above a third, as anywhere. An end at a half is written as it is.

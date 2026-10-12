@@ -21,17 +21,20 @@ import java.util.Set;
  * one holds together with what is asked beside it turns on the positions it asks about, so two
  * choices asking about none in common never close each other, and what closes one closes it beside
  * any alternative of the other. The choices are parted into such groups first, and each group is
- * walked on its own: the walk over a group is a product of its choices, and the walk over the whole
- * is the sum of those and not their product.
+ * walked on its own: the looking is the groups' ways added up, and not every way of taking them
+ * together.
  *
- * <p><b>And the ways handed on are no product either.</b> A row along one way of each group is a
- * row of the whole, so every open way of every group is handed on once, beside the first open way
- * of every other group — enough for each alternative to be composed along, and as many as the
- * groups' ways added up.
+ * <p><b>Every way a row takes, or some of them and the figure that left the rest.</b> A row past
+ * the choices is along one open way of each group at once, so the ways a row takes are every
+ * combination of them. Those are handed on where the figure lets them all be, and then a row past
+ * the choices is along one of them — which is what a reader concluding something of every row
+ * from what holds along each of them needs. Where they are more, each open way of each group is
+ * handed on once, beside the first open way of every other group: enough for each alternative to
+ * be composed along, and never said to be every way a row takes ({@link Walked.Open#stoppedBy}).
  *
  * <p><b>A proof only from a group walked to the end.</b> Where every way of one group closes, no
- * row is past the choices, whatever the others hold — and the way that closed first says why. A
- * group the figure stopped proves nothing, however many of its ways closed.
+ * row is past the choices, whatever the others hold — and the way that closed first, with what
+ * closed it, says why. A group the figure stopped proves nothing, however many of its ways closed.
  *
  * <p>Nested choices — an alternative asking one of several things itself — are chosen where they
  * stand, in the group of the choice they are inside.
@@ -46,8 +49,9 @@ final class OneOfEach {
      *
      * @param <E> an entry of what is asked
      * @param <S> what the entries taken in so far come to, as far as whether they hold together
+     * @param <R> why entries do not hold together, as the reader of the walk says it
      */
-    interface Vocabulary<E, S> {
+    interface Vocabulary<E, S, R> {
 
         /** The alternatives {@code entry} is one of, each as the entries it asks; null where it is
          *  no choice. */
@@ -59,31 +63,81 @@ final class OneOfEach {
         /** Nothing taken in. */
         S nothing();
 
-        /** {@code so} with {@code entry} taken in, or null where the two cannot hold together. */
-        S with(S so, E entry);
+        /** {@code so} with {@code entry} taken in, or why the two cannot hold together. */
+        Step<S, R> with(S so, E entry);
     }
 
     /**
-     * What the walk came to.
-     *
-     * @param ways     each way handed on, as the entries it asks with every choice in it replaced
-     *                 by the entries of the alternative taken; empty where no way is open
-     * @param closedBy where the choices of some group were all closed, the first way of it that
-     *                 closed, with the choices it had not reached left out — what says why no row
-     *                 is past the whole; null where no group was walked to the end and found closed
-     * @param stoppedBy the figure that stopped the walk or the handing on, null where every way
-     *                  was looked at and every open way is handed on
+     * What taking one more entry in came to: what the entries hold together as, or why they do
+     * not. The one judge of it, so that what a walk found closed is said in the words of what
+     * closed it and is never worked out again by a reader with fewer of them.
      */
-    record Walked<E>(List<List<E>> ways, List<E> closedBy, CompositionBudget stoppedBy) {
+    sealed interface Step<S, R> {
 
-        Walked {
-            ways = ways.stream().map(List::copyOf).toList();
-            closedBy = closedBy == null ? null : List.copyOf(closedBy);
+        /** They hold together, as {@code so}. */
+        record Held<S, R>(S so) implements Step<S, R> {}
+
+        /** They do not, for {@code why}. */
+        record Closed<S, R>(R why) implements Step<S, R> {}
+    }
+
+    /** What the walk came to. */
+    sealed interface Walked<E, R> {
+
+        /**
+         * No row is past the entries: every way of some group closes, or what is asked beside
+         * the choices does.
+         *
+         * @param way the first way that closed, as the entries it asks with the choices it had not
+         *            reached left out
+         * @param why what closed it
+         */
+        record Closed<E, R>(List<E> way, R why) implements Walked<E, R> {
+
+            public Closed {
+                way = List.copyOf(way);
+            }
         }
 
-        /** Whether every way was looked at and every open one is handed on. */
-        boolean everyWay() {
-            return stoppedBy == null;
+        /**
+         * Ways some row may take, each as the entries it asks with every choice in it replaced by
+         * the entries of the alternative taken.
+         *
+         * @param ways      one or more
+         * @param stoppedBy null where every way a row takes is among {@code ways} — every
+         *                  combination of the open alternatives — so that every row past the
+         *                  entries is along one of them; otherwise the figure that left the rest
+         *                  unlooked at or not handed on, and {@code ways} are only some of them
+         */
+        record Open<E, R>(List<List<E>> ways, CompositionBudget stoppedBy)
+                implements Walked<E, R> {
+
+            public Open {
+                ways = ways.stream().map(List::copyOf).toList();
+                if (ways.isEmpty()) {
+                    throw new IllegalArgumentException("ways left open are one or more");
+                }
+            }
+
+            /** Whether every way a row takes is among these. */
+            public boolean everyWay() {
+                return stoppedBy == null;
+            }
+        }
+
+        /**
+         * Nothing is said of the ways: the figure stopped the walk before any way was found open
+         * or closed whole.
+         *
+         * @param stoppedBy the figure
+         */
+        record Stopped<E, R>(CompositionBudget stoppedBy) implements Walked<E, R> {
+
+            public Stopped {
+                if (stoppedBy == null) {
+                    throw new IllegalArgumentException("a walk stopped is stopped by a figure");
+                }
+            }
         }
     }
 
@@ -91,9 +145,9 @@ final class OneOfEach {
      * The ways {@code entries} comes to, looking at as many alternatives as {@code looking} lets
      * and handing on as many ways as {@code handing} does.
      */
-    static <E, S> Walked<E> walk(List<E> entries, Vocabulary<E, S> asked,
-                                 CompositionBudget looking, CompositionBudget handing) {
-        Vocabulary<E, S> vocabulary = new Once<>(asked);
+    static <E, S, R> Walked<E, R> walk(List<E> entries, Vocabulary<E, S, R> asked,
+                                       CompositionBudget looking, CompositionBudget handing) {
+        Vocabulary<E, S, R> vocabulary = new Once<>(asked);
         S base = vocabulary.nothing();
         List<E> choices = new ArrayList<>();
         for (E each : entries) {
@@ -101,26 +155,28 @@ final class OneOfEach {
                 choices.add(each);
                 continue;
             }
-            base = vocabulary.with(base, each);
-            if (base == null) {
-                return new Walked<>(List.of(), rebuilt(entries, vocabulary, Map.of()), null);
+            switch (vocabulary.with(base, each)) {
+                case Step.Held<S, R>(S so) -> base = so;
+                case Step.Closed<S, R>(R why) -> {
+                    return new Walked.Closed<>(rebuilt(entries, vocabulary, Map.of()), why);
+                }
             }
         }
         if (choices.isEmpty()) {
-            return new Walked<>(List.of(entries), null, null);
+            return new Walked.Open<>(List.of(entries), null);
         }
         int[] left = {looking.maximum()};
         CompositionBudget stoppedBy = null;
         List<List<Map<E, Integer>>> open = new ArrayList<>();
         for (List<E> group : groups(choices, vocabulary)) {
-            Group<E, S> walked = new Group<>(vocabulary, looking, handing, left);
+            Group<E, S, R> walked = new Group<>(vocabulary, looking, handing, left);
             walked.from(new ArrayDeque<>(group), new IdentityHashMap<>(), base);
             if (walked.open.isEmpty() && walked.stoppedBy == null) {
-                return new Walked<>(List.of(),
-                        rebuilt(entries, vocabulary, walked.firstClosed), null);
+                return new Walked.Closed<>(rebuilt(entries, vocabulary, walked.firstClosed),
+                        walked.firstWhy);
             }
-            if (walked.stoppedBy != null) {
-                stoppedBy = stoppedBy == null ? walked.stoppedBy : stoppedBy;
+            if (walked.stoppedBy != null && stoppedBy == null) {
+                stoppedBy = walked.stoppedBy;
             }
             // A group the figure stopped before it found a way open is one whose choices go
             // unchosen: the ways the groups before it found are handed on without them, and the
@@ -130,24 +186,62 @@ final class OneOfEach {
             }
         }
         if (open.isEmpty()) {
-            return new Walked<>(List.of(), null, stoppedBy);
+            return new Walked.Stopped<>(stoppedBy);
+        }
+        List<Map<E, Integer>> handedOn;
+        if (stoppedBy == null && noMoreThan(handing.maximum(), open)) {
+            handedOn = everyCombination(open);
+        } else {
+            handedOn = eachOnce(open);
+            stoppedBy = stoppedBy == null ? handing : stoppedBy;
         }
         List<List<E>> ways = new ArrayList<>();
-        for (Map<E, Integer> chosen : handedOn(open)) {
+        for (Map<E, Integer> chosen : handedOn) {
             if (ways.size() == handing.maximum()) {
-                stoppedBy = stoppedBy == null ? handing : stoppedBy;
                 break;
             }
             ways.add(rebuilt(entries, vocabulary, chosen));
         }
-        return new Walked<>(ways, null, stoppedBy);
+        return new Walked.Open<>(ways, stoppedBy);
+    }
+
+    /** Whether the combinations of one open way of each group are no more than {@code most}. */
+    private static <E> boolean noMoreThan(int most, List<List<Map<E, Integer>>> open) {
+        long out = 1;
+        for (List<Map<E, Integer>> group : open) {
+            out *= group.size();
+            if (out > most) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Every combination of one open way of each group, the first group's ways turning
+     *  slowest. */
+    private static <E> List<Map<E, Integer>> everyCombination(
+            List<List<Map<E, Integer>>> open) {
+        List<Map<E, Integer>> out = new ArrayList<>();
+        out.add(new IdentityHashMap<>());
+        for (List<Map<E, Integer>> group : open) {
+            List<Map<E, Integer>> wider = new ArrayList<>();
+            for (Map<E, Integer> before : out) {
+                for (Map<E, Integer> way : group) {
+                    Map<E, Integer> both = new IdentityHashMap<>(before);
+                    both.putAll(way);
+                    wider.add(both);
+                }
+            }
+            out = wider;
+        }
+        return out;
     }
 
     /**
      * Every open way of each group once, beside the first open way of every other group, the
      * first of all of them first.
      */
-    private static <E> List<Map<E, Integer>> handedOn(List<List<Map<E, Integer>>> open) {
+    private static <E> List<Map<E, Integer>> eachOnce(List<List<Map<E, Integer>>> open) {
         List<Map<E, Integer>> out = new ArrayList<>();
         out.add(together(open, -1, 0));
         for (int group = 0; group < open.size(); group++) {
@@ -170,8 +264,8 @@ final class OneOfEach {
 
     /** {@code entries} with each choice {@code chosen} names replaced where it stands by the
      *  entries of its alternative, and each it does not name left out. */
-    private static <E, S> List<E> rebuilt(List<E> entries, Vocabulary<E, S> vocabulary,
-                                          Map<E, Integer> chosen) {
+    private static <E, S, R> List<E> rebuilt(List<E> entries, Vocabulary<E, S, R> vocabulary,
+                                             Map<E, Integer> chosen) {
         List<E> out = new ArrayList<>();
         for (E each : entries) {
             List<List<E>> alternatives = vocabulary.alternatives(each);
@@ -192,7 +286,8 @@ final class OneOfEach {
      * order the choices came — a position counting as in common with any position above or below
      * it, since what is asked of a value is asked of what is inside it.
      */
-    private static <E, S> List<List<E>> groups(List<E> choices, Vocabulary<E, S> vocabulary) {
+    private static <E, S, R> List<List<E>> groups(List<E> choices,
+                                                  Vocabulary<E, S, R> vocabulary) {
         List<Set<TermPath>> turnsOn = new ArrayList<>();
         for (E each : choices) {
             Set<TermPath> positions = new LinkedHashSet<>();
@@ -231,8 +326,8 @@ final class OneOfEach {
     }
 
     /** Every position {@code entry} turns on, inside its alternatives as well. */
-    private static <E, S> void allPositions(E entry, Vocabulary<E, S> vocabulary,
-                                            Set<TermPath> into) {
+    private static <E, S, R> void allPositions(E entry, Vocabulary<E, S, R> vocabulary,
+                                               Set<TermPath> into) {
         List<List<E>> alternatives = vocabulary.alternatives(entry);
         if (alternatives == null) {
             into.addAll(vocabulary.positions(entry));
@@ -262,14 +357,15 @@ final class OneOfEach {
      * <p>A choice is filed under the entry it is, by identity, from the walk to the ways handed
      * on: a choice nested in an alternative is an entry of that alternative, and a vocabulary
      * making the alternatives afresh each time it is asked hands back another entry equal to it,
-     * under which nothing was filed — so the nested choice would be left out of the way.
+     * under which nothing was filed — so the nested choice would be left out of the way. Answered
+     * once, the alternatives are the one tree the walk and the ways are both read off.
      */
-    private static final class Once<E, S> implements Vocabulary<E, S> {
+    private static final class Once<E, S, R> implements Vocabulary<E, S, R> {
 
-        private final Vocabulary<E, S> asked;
+        private final Vocabulary<E, S, R> asked;
         private final Map<E, List<List<E>>> alternatives = new IdentityHashMap<>();
 
-        Once(Vocabulary<E, S> asked) {
+        Once(Vocabulary<E, S, R> asked) {
             this.asked = asked;
         }
 
@@ -294,7 +390,7 @@ final class OneOfEach {
         }
 
         @Override
-        public S with(S so, E entry) {
+        public Step<S, R> with(S so, E entry) {
             return asked.with(so, entry);
         }
     }
@@ -303,19 +399,21 @@ final class OneOfEach {
      * The walk over one group: each choice in turn, each of its alternatives taken in beside what
      * was taken before it, a nested choice chosen where it stands.
      */
-    private static final class Group<E, S> {
+    private static final class Group<E, S, R> {
 
-        private final Vocabulary<E, S> vocabulary;
+        private final Vocabulary<E, S, R> vocabulary;
         private final CompositionBudget looking;
         private final CompositionBudget handing;
         private final int[] left;
         private final List<Map<E, Integer>> open = new ArrayList<>();
+        /** The first way that closed, and what closed it. */
         private Map<E, Integer> firstClosed;
+        private R firstWhy;
         /** The figure that stopped this group's walk, or null where it was walked to the end. */
         private CompositionBudget stoppedBy;
 
-        Group(Vocabulary<E, S> vocabulary, CompositionBudget looking, CompositionBudget handing,
-              int[] left) {
+        Group(Vocabulary<E, S, R> vocabulary, CompositionBudget looking,
+              CompositionBudget handing, int[] left) {
             this.vocabulary = vocabulary;
             this.looking = looking;
             this.handing = handing;
@@ -345,18 +443,23 @@ final class OneOfEach {
                 left[0]--;
                 chosen.put(next, which);
                 S here = so;
+                R closedBy = null;
                 Deque<E> after = new ArrayDeque<>(pending);
                 List<E> nested = new ArrayList<>();
                 for (E each : alternatives.get(which)) {
                     if (vocabulary.alternatives(each) != null) {
                         nested.add(each);
-                    } else if (here != null) {
-                        here = vocabulary.with(here, each);
+                    } else if (closedBy == null) {
+                        switch (vocabulary.with(here, each)) {
+                            case Step.Held<S, R>(S held) -> here = held;
+                            case Step.Closed<S, R>(R why) -> closedBy = why;
+                        }
                     }
                 }
-                if (here == null) {
+                if (closedBy != null) {
                     if (firstClosed == null) {
                         firstClosed = new IdentityHashMap<>(chosen);
+                        firstWhy = closedBy;
                     }
                 } else {
                     for (int each = nested.size() - 1; each >= 0; each--) {

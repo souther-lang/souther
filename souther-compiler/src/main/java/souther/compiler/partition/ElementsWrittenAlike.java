@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.partition.OneOfEach.Step;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -56,15 +57,22 @@ final class ElementsWrittenAlike {
                 .allMatch(cut -> RowDemand.writtenAlikeAsItStands(cut.demand()))) {
             return Choices.NONE;
         }
-        OneOfEach.Walked<OnTheWay.TakenIn> walked = OneOfEach.walk(reaching.boundedOnTheWay(),
-                new OneElement(reaching), CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
-                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
-        List<Reachability.Reaching> out = new ArrayList<>();
-        for (List<OnTheWay.TakenIn> way : walked.ways()) {
-            out.add(new Reachability.Reaching(reaching.region(), reaching.requirements(),
-                    reaching.truths(), way, reaching.ways(), reaching.declined()));
-        }
-        return new Choices(out, walked.stoppedBy());
+        return switch (OneOfEach.walk(reaching.boundedOnTheWay(), new OneElement(reaching),
+                CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG)) {
+            case OneOfEach.Walked.Closed<OnTheWay.TakenIn, OnTheWay.TakenIn> _ -> Choices.NONE;
+            case OneOfEach.Walked.Stopped<OnTheWay.TakenIn, OnTheWay.TakenIn>(var figure) ->
+                    new Choices(List.of(), figure);
+            case OneOfEach.Walked.Open<OnTheWay.TakenIn, OnTheWay.TakenIn>(
+                    var ways, var stoppedBy) -> {
+                List<Reachability.Reaching> out = new ArrayList<>();
+                for (List<OnTheWay.TakenIn> way : ways) {
+                    out.add(new Reachability.Reaching(reaching.region(), reaching.requirements(),
+                            reaching.truths(), way, reaching.ways(), reaching.declined()));
+                }
+                yield new Choices(out, stoppedBy);
+            }
+        };
     }
 
     /**
@@ -76,9 +84,10 @@ final class ElementsWrittenAlike {
                            Map<TermPath, List<TakenConstraint>> relations) {}
 
     /** The demands of a way as one element written into every element of a container meets
-     *  them. */
+     *  them, a way no one element meets said by the demand it cannot meet beside the ones before
+     *  it. */
     private record OneElement(Reachability.Reaching reaching)
-            implements OneOfEach.Vocabulary<OnTheWay.TakenIn, Written> {
+            implements OneOfEach.Vocabulary<OnTheWay.TakenIn, Written, OnTheWay.TakenIn> {
 
         @Override
         public List<List<OnTheWay.TakenIn>> alternatives(OnTheWay.TakenIn entry) {
@@ -122,7 +131,7 @@ final class ElementsWrittenAlike {
         }
 
         @Override
-        public Written with(Written so, OnTheWay.TakenIn entry) {
+        public Step<Written, OnTheWay.TakenIn> with(Written so, OnTheWay.TakenIn entry) {
             TermPath container;
             List<RowDemand.OfAnElement> asked;
             switch (entry.demand()) {
@@ -136,7 +145,7 @@ final class ElementsWrittenAlike {
                 }
                 case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
                      RowDemand.ForTheRun _ -> {
-                    return so;
+                    return new Step.Held<>(so);
                 }
             }
             Requirements required = so.required();
@@ -149,7 +158,7 @@ final class ElementsWrittenAlike {
                     case RowDemand.InCases cases -> {
                         if (!(required.merge(cases.requirements())
                                 instanceof Requirements.Merge.Merged(Requirements both))) {
-                            return null;
+                            return new Step.Closed<>(entry);
                         }
                         required = both;
                     }
@@ -160,15 +169,15 @@ final class ElementsWrittenAlike {
                 }
             }
             if (!(TruthsAsked.of(truths) instanceof TruthsAsked.Merge.Merged)) {
-                return null;
+                return new Step.Closed<>(entry);
             }
             if (relations.size() > had
                     && TakenConstraint.nothingMeetsAll(relations, reaching.region())) {
-                return null;
+                return new Step.Closed<>(entry);
             }
             Map<TermPath, List<TakenConstraint>> byContainer = new LinkedHashMap<>(so.relations());
             byContainer.put(container, List.copyOf(relations));
-            return new Written(required, List.copyOf(truths), byContainer);
+            return new Step.Held<>(new Written(required, List.copyOf(truths), byContainer));
         }
     }
 }

@@ -198,18 +198,34 @@ public final class AnAnswerComposed {
             }
         }
         // The ways the statements together can be taken: one way of all of them is enough, so
-        // those are looked along — each open alternative once, beside those of the statements'
-        // other choices ({@link OneOfEach}) — and past the figures each statement is one a figure
-        // stopped the looking for.
+        // those are looked along — every combination of their open alternatives where the figure
+        // lets them all be, and otherwise each open alternative once beside the others' first
+        // ({@link OneOfEach}) — and where a figure left some of them, each statement is one a
+        // figure stopped the looking for.
         List<Asked> entries = new ArrayList<>();
         for (Pending each : pending) {
             each.reads().forEach(read -> entries.add(new Asked(each.statement(), read)));
         }
-        OneOfEach.Walked<Asked> walked = OneOfEach.walk(entries, new WrittenTogether(asked),
+        List<List<Asked>> ways;
+        CompositionBudget jointly;
+        switch (OneOfEach.walk(entries, new WrittenTogether(asked),
                 CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
-                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
+                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG)) {
+            case OneOfEach.Walked.Closed<Asked, Asked> _ -> {
+                ways = List.of();
+                jointly = null;
+            }
+            case OneOfEach.Walked.Stopped<Asked, Asked>(var figure) -> {
+                ways = List.of();
+                jointly = figure;
+            }
+            case OneOfEach.Walked.Open<Asked, Asked>(var open, var stoppedBy) -> {
+                ways = open;
+                jointly = stoppedBy;
+            }
+        }
         Attempt first = null;
-        for (List<Asked> way : walked.ways()) {
+        for (List<Asked> way : ways) {
             Attempt here = composedAlong(subject, at, required, asked, unaccounted, way, demands);
             if (here.outcome() instanceof Outcome.Composed && here.unaccounted().isEmpty()) {
                 return here;
@@ -220,7 +236,7 @@ public final class AnAnswerComposed {
             first = Attempt.nothing(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                     unaccounted);
         }
-        return sayingWhatStoppedTheLooking(first, pending, walked.stoppedBy());
+        return sayingWhatStoppedTheLooking(first, pending, jointly);
     }
 
     /** One thing a statement asks, and the statement. */
@@ -229,12 +245,13 @@ public final class AnAnswerComposed {
     /**
      * What the statements ask as far as whether one way of them holds together: the truths it
      * asks beside the ones the answer is asked outright, and that nothing it asks is something no
-     * value is composed toward or no value meets.
+     * value is composed toward or no value meets. A way that does not hold together is said by
+     * the read it cannot take in beside the ones before it.
      *
      * @param asked the truths the answer is asked beside the statements
      */
     private record WrittenTogether(List<RowDemand.ATruth> asked)
-            implements OneOfEach.Vocabulary<Asked, List<RowDemand.ATruth>> {
+            implements OneOfEach.Vocabulary<Asked, List<RowDemand.ATruth>, Asked> {
 
         @Override
         public List<List<Asked>> alternatives(Asked entry) {
@@ -261,17 +278,19 @@ public final class AnAnswerComposed {
         }
 
         @Override
-        public List<RowDemand.ATruth> with(List<RowDemand.ATruth> so, Asked entry) {
+        public OneOfEach.Step<List<RowDemand.ATruth>, Asked> with(List<RowDemand.ATruth> so,
+                                                                  Asked entry) {
             if (!composedAgainst(entry.read())) {
-                return null;
+                return new OneOfEach.Step.Closed<>(entry);
             }
             if (!(entry.read() instanceof DemandReading.Read.Demands(RowDemand.ATruth truth))) {
-                return so;
+                return new OneOfEach.Step.Held<>(so);
             }
             List<RowDemand.ATruth> truths = new ArrayList<>(so);
             truths.add(truth);
             return TruthsAsked.of(truths) instanceof TruthsAsked.Merge.Merged
-                    ? List.copyOf(truths) : null;
+                    ? new OneOfEach.Step.Held<>(List.copyOf(truths))
+                    : new OneOfEach.Step.Closed<>(entry);
         }
     }
 
