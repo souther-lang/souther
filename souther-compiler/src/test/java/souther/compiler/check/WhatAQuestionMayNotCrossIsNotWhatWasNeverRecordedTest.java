@@ -65,7 +65,7 @@ class WhatAQuestionMayNotCrossIsNotWhatWasNeverRecordedTest {
     private static InputReads reads(ElementProvenance provenance) {
         ElementBindings elements = new ElementBindings(
                 Map.of(ELEMENT, List.of(new HeldIn(read("xs", CONTAINER), HeldIn.Part.ELEMENT,
-                        HowAClosureIsApplied.TO_EVERY_ELEMENT))),
+                        HowAClosureIsApplied.TO_EVERY_ELEMENT, false))),
                 Map.of(CONTAINER, read("held", HELD)),
                 provenance, Map.of());
         return InputReads.ofParameters(Map.of(HELD, "held", MADE_FROM, "made"),

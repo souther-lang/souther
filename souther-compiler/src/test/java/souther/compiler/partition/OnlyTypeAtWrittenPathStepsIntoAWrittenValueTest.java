@@ -90,10 +90,7 @@ class OnlyTypeAtWrittenPathStepsIntoAWrittenValueTest {
      * <p>So what is named here is on the composing side, and being on it is what the entry is for.
      * {@code Generator.edgeAt} takes the numbers one location is to be written for and hands what
      * it finds to the composition; a method that arrived here having read a row would be the same
-     * category error one call further out. {@code Generator.keptApartUnder} asks what is written
-     * as an element of the innermost container a position being composed is inside, since that
-     * element's record is what keeps the elements of a list it holds apart — the value a builder
-     * writes there and not a value a row was read at.
+     * category error one call further out.
      */
     @Test
     void theWalkIsAskedWhereAValueIsComposed() {
@@ -108,11 +105,7 @@ class OnlyTypeAtWrittenPathStepsIntoAWrittenValueTest {
                         + "Ljava/util/SequencedMap;"
                         + "Lsouther/compiler/inputs/SearchRegion;"
                         + "Lsouther/compiler/partition/DemandsInside;)"
-                        + "Lsouther/compiler/partition/Generator$Edge;",
-                        "souther.compiler.partition.Generator#keptApartUnder("
-                        + "Lsouther/compiler/partition/MeasuredInput;"
-                        + "Lsouther/compiler/inputs/TermPath;)"
-                        + "Ljava/util/List;"), asks,
+                        + "Lsouther/compiler/partition/Generator$Edge;"), asks,
                 "where a value is written is asked where one is composed, and a second asker is a"
                         + " reader answering its own question out of that one");
     }

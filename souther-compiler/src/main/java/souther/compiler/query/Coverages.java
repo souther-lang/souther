@@ -32,6 +32,7 @@ import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BodyDistinction;
 import souther.compiler.partition.Border;
+import souther.compiler.partition.ClassCoexistence;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.ReachingCuts;
 import souther.compiler.partition.Demand;
@@ -502,6 +503,7 @@ final class Coverages {
             combining[i] = toldApartAt(toldApart, axes.get(i)).makesCombinations();
         }
         List<PartitionEvidence.PairSpace.AxisPair> space = new ArrayList<>();
+        ClassCoexistence among = ClassCoexistence.among(axes);
         for (int i = 0; i < axes.size(); i++) {
             if (!combining[i]) {
                 continue;
@@ -510,7 +512,7 @@ final class Coverages {
                 if (!combining[j]) {
                     continue;
                 }
-                long between = combinationsOf(axes.get(i), axes.get(j));
+                long between = combinationsOf(among, axes, i, j);
                 if (between > 0) {
                     space.add(new PartitionEvidence.PairSpace.AxisPair(
                             new PartitionEvidence.PairSpace.Between(
@@ -607,17 +609,17 @@ final class Coverages {
     /**
      * How many combinations two positions' classes make between them.
      *
-     * <p>The product where the two are in one value, and less where they are not. What a row at a
-     * class has to be is one merge ({@link souther.compiler.inputs.Requirements}), and the same
-     * merge is what the generator asks before it composes a row — so what is counted here and what
-     * a row is offered for come from one reading rather than from two that agree until a case is
-     * added.
+     * <p>The product where the two are in one value, and less where they are not. Which two classes
+     * can be in one value is {@link ClassCoexistence}'s answer, and the same answer is what decides
+     * which combinations are left ({@link #uncovered}) — so what is counted here and what a row is
+     * asked for come from one reading rather than from two that agree until a case is added.
      */
-    private static long combinationsOf(Axis one, Axis other) {
+    private static long combinationsOf(ClassCoexistence among, List<Axis> axes, int one,
+                                       int other) {
         long count = 0;
-        for (PartitionClass here : one.classes()) {
-            for (PartitionClass there : other.classes()) {
-                if (one.requiring(here).compatibleWith(other.requiring(there))) {
+        for (int here = 0; here < axes.get(one).classes().size(); here++) {
+            for (int there = 0; there < axes.get(other).classes().size(); there++) {
+                if (among.canHoldTogether(one, here, other, there)) {
                     count++;
                 }
             }
@@ -644,9 +646,10 @@ final class Coverages {
      * rows reached; which ones are left is wanted where something acts on them, and is worked out
      * from the positions — which are the model's and are not part of an answer about the rows.
      *
-     * <p>Compatible combinations only, asked the way the count is asked. A class of a position
-     * under one case of a sum and a class of a position under another are in no one value, so they
-     * make no combination and nothing is owed at them.
+     * <p>Combinations a value can be in only, asked the way the count is asked. A class of a
+     * position under one case of a sum and a class of a position under another are in no one value,
+     * and neither are a class of an element's field and a count of its list that admits no element,
+     * so they make no combination and nothing is owed at them.
      *
      * <p>Empty where no count was made. A combination nothing was read about is not one no row is
      * in, and a list of the whole space would be read as a list of gaps.
@@ -661,6 +664,7 @@ final class Coverages {
         List<souther.compiler.partition.ObligationIdentity.OfAFallbackPairCell> out =
                 new ArrayList<>();
         List<Axis> ordered = axes.axes();
+        ClassCoexistence among = ClassCoexistence.among(ordered);
         for (int i = 0; i < ordered.size(); i++) {
             for (int j = i + 1; j < ordered.size(); j++) {
                 PartitionEvidence.PairSpace.Between between =
@@ -670,15 +674,16 @@ final class Coverages {
                     continue;
                 }
                 Set<PartitionEvidence.PairSpace.Cell> reached = made.reached(between);
-                for (PartitionClass here : ordered.get(i).classes()) {
-                    for (PartitionClass there : ordered.get(j).classes()) {
-                        if (!ordered.get(i).requiring(here)
-                                .compatibleWith(ordered.get(j).requiring(there))) {
+                List<PartitionClass> ones = ordered.get(i).classes();
+                List<PartitionClass> others = ordered.get(j).classes();
+                for (int here = 0; here < ones.size(); here++) {
+                    for (int there = 0; there < others.size(); there++) {
+                        if (!among.canHoldTogether(i, here, j, there)) {
                             continue;
                         }
                         PartitionEvidence.PairSpace.Cell cell =
-                                new PartitionEvidence.PairSpace.Cell(
-                                        between, here.id(), there.id());
+                                new PartitionEvidence.PairSpace.Cell(between,
+                                        ones.get(here).id(), others.get(there).id());
                         if (!reached.contains(cell)) {
                             out.add(cell.owedBy(behavior));
                         }

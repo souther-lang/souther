@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
@@ -759,9 +760,13 @@ public final class CoverageSites {
          * has arms, and control points for them, and no site at all — so a reader asking this to
          * find out whether there is anything to be about would skip exactly the bodies a claim is
          * made in.
+         *
+         * <p>A place an application's answer is recorded at is one such site, beside the arms and
+         * comparisons: a body whose only condition is what {@code List.any(x -> x, xs)} answers has
+         * no arm and no comparison of its own, and its answer is still recorded.
          */
         public boolean hasNoProbes() {
-            return sites.isEmpty();
+            return sites.isEmpty() && answersByNode.isEmpty();
         }
 
         /** The probe numbers of {@code node}'s arms, in the order the emitter emits them, or null
@@ -1521,31 +1526,24 @@ public final class CoverageSites {
         private static Stands standsIn(Core e) {
             Core at = e;
             while (true) {
-                ConstructOccurrence occurrence;
                 switch (at) {
-                    case Core.LetIn let when opensACopyOfAnOperation(let) -> {
-                        at = let.body();
-                        continue;
+                    case Core.LetIn let when opensACopyOfAnOperation(let) -> at = let.body();
+                    case Core.Widen _ -> {
+                        return null;
                     }
-                    case Core.LetIn _ -> occurrence = null;
-                    case Core.Widen _ -> occurrence = null;
-                    case Core.Binary binary -> occurrence = binary.occurrence();
-                    case Core.Call call -> occurrence = call.occurrence();
-                    case Core.If iff -> occurrence = iff.occurrence();
-                    case Core.IfConstructed attempt -> occurrence = attempt.occurrence();
-                    case Core.Match match -> occurrence = match.occurrence();
-                    default -> occurrence = null;
+                    default -> {
+                        ConstructOccurrence occurrence = ACopyOfAnApplication.occurrenceOf(at);
+                        return occurrence == null || !occurrence.isWritten() ? null
+                                : new Stands(at, occurrence.lineage());
+                    }
                 }
-                return occurrence == null || !occurrence.isWritten() ? null
-                        : new Stands(at, occurrence.lineage());
             }
         }
 
         /** Whether {@code let} binds what an application of one of the language's operations
          *  handed the copy of it, which is the binding that copy opens with. */
         private static boolean opensACopyOfAnOperation(Core.LetIn let) {
-            return let.binder().binding().owner() instanceof BindingOwner.Expansion copy
-                    && copy.expanded() instanceof ValueName.Stdlib.Operation;
+            return ACopyOfAnApplication.ofACopyOfAnOperation(let);
         }
 
         /**

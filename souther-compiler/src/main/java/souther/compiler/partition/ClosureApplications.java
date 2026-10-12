@@ -203,16 +203,25 @@ sealed interface ClosureApplications {
                     }
                 }
                 case InputReads.Applications.NoneHanded _ -> {
-                    List<Denotation> containers = around.reads().containersAppliedOver(block);
+                    List<InputReads.AppliedOver> appliedOver =
+                            around.reads().containersAppliedOver(block);
+                    List<Denotation> containers = appliedOver.stream()
+                            .map(InputReads.AppliedOver::container).toList();
                     List<TermPath> positions = positionsAppliedOver(containers, read);
-                    List<DecisionSubject> appliedOver = positions.stream()
-                            .<DecisionSubject>map(DecisionSubject.AnInput::new).toList();
-                    asked |= !appliedOver.isEmpty();
+                    // An option is applied over where it holds its one value, and a container
+                    // where it holds anything.
+                    List<DecisionSubject> holding = new ArrayList<>();
+                    List<DecisionSubject> present = new ArrayList<>();
+                    for (int at = 0; at < positions.size(); at++) {
+                        (appliedOver.get(at).anOption() ? present : holding)
+                                .add(new DecisionSubject.AnInput(positions.get(at)));
+                    }
+                    asked |= !positions.isEmpty();
                     InputReads entered = around.reads().entering(step, symbols, newtypes);
                     out.add(new Application(entered,
-                            appliedOver.isEmpty() ? around.reached()
+                            positions.isEmpty() ? around.reached()
                                     : WhereAnApplicationIsMade.whereOneOfTheContainersHoldsSomething(
-                                            around.reached(), appliedOver),
+                                            around.reached(), holding, present),
                             around.carriedIntoTheFirst(),
                             metOn(block, containers, around, entered, read)));
                 }

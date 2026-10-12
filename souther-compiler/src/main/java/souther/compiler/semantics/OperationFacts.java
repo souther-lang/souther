@@ -73,7 +73,8 @@ public final class OperationFacts {
      * beside it would be a kind nothing validates until someone remembers — and the arrangement is
      * meant to make remembering unnecessary.
      */
-    private static final List<Declared> DECLARED = withWhereThePiecesCameFrom(declared());
+    private static final List<Declared> DECLARED =
+            withWhetherAnOptionHoldsAValue(withWhereThePiecesCameFrom(declared()));
 
     /**
      * {@code declared}, with where the elements of each list put together of pieces came from
@@ -99,6 +100,26 @@ public final class OperationFacts {
                             new ElementLineage.InsideClosureResult<>(
                                     new ElementLineage.Source<>(source, 1)));
                 }));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * {@code declared}, with whether what an operation answering the closure on what an option
+     * holds holds anything stated from that: exactly where the option does.
+     *
+     * <p>Stated from it and never beside it, as where the pieces came from is. Read as a law, it
+     * is what every reader of whether an answer holds a value already asks.
+     */
+    private static List<Declared> withWhetherAnOptionHoldsAValue(List<Declared> declared) {
+        List<Declared> out = new ArrayList<>(declared);
+        for (Declared each : declared) {
+            if (each.fact() instanceof OperationFact.AnswersTheClosureOnWhatItHolds(
+                    ArgumentRef option)) {
+                out.add(new Declared(each.operation(), law(AnswerAspect.PRESENCE,
+                        new LawProposition.Observed<>(new LawSubject.Argument<>(option),
+                                new SideAnswered(AnswerAspect.PRESENCE, true)))));
             }
         }
         return List.copyOf(out);
@@ -482,9 +503,7 @@ public final class OperationFacts {
             about("String", "reverse", law(AnswerAspect.EMPTINESS, holdsSomething(at(0)))),
             about("String", "characters", law(AnswerAspect.EMPTINESS, holdsSomething(at(0)))),
             about("String", "codePoints", law(AnswerAspect.EMPTINESS, holdsSomething(at(0)))),
-            about("Option", "map", law(AnswerAspect.PRESENCE,
-                    new LawProposition.Observed<>(new LawSubject.Argument<>(CONTAINER),
-                            new SideAnswered(AnswerAspect.PRESENCE, true)))),
+            about("Option", "map", new OperationFact.AnswersTheClosureOnWhatItHolds(CONTAINER)),
             about("List", "max", law(AnswerAspect.PRESENCE, holdsSomething(at(0)))),
             about("List", "min", law(AnswerAspect.PRESENCE, holdsSomething(at(0)))),
 

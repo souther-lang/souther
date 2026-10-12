@@ -700,7 +700,7 @@ final class Pullback {
                                 reads)), checked.emptyWhereItHolds()),
                 () -> partOf(at, truthCompared(stated, reads)),
                 () -> heldAgainstAWrittenTruth(stated, reads),
-                () -> partOf(at, ofTwoCasesWrittenOut(stated, reads)),
+                () -> partOf(at, ofTwoValuesWrittenOut(stated, reads)),
                 () -> partOf(at, asACut(stated, arithmetic.get(), fixed)),
                 () -> partOf(at, onAnOrder(stated, arithmetic.get(), reads)),
                 () -> ofTheYearOfADate(stated, at, fixed, reads),
@@ -861,6 +861,8 @@ final class Pullback {
     private Derivation.MatchArms armsOf(Core.Match match, InputReads reads,
                                         BiFunction<Core, InputReads, Derivation> states) {
         List<Derivation> selections = selectionsOf(match, reads);
+        boolean ofAnEntry = reads.holdsAnEntryLookedUp(match.scrutinee(),
+                read.rules().symbols(), read.rules().newtypes());
         List<Derivation.MatchArms.Arm> arms = new ArrayList<>();
         for (int i = 0; i < match.cases().size(); i++) {
             Core.Case arm = match.cases().get(i);
@@ -868,8 +870,7 @@ final class Pullback {
                     read.rules().symbols(), read.rules().newtypes());
             arms.add(new Derivation.MatchArms.Arm(selections.get(i),
                     states.apply(arm.body(), inside),
-                    reads.valueOfTheEntryLookedUp(match.scrutinee(), arm,
-                            read.rules().symbols(), read.rules().newtypes()) != null));
+                    ofAnEntry && arm.binding() instanceof Core.ArmBinding.Payload));
         }
         return new Derivation.MatchArms(arms);
     }
@@ -3935,31 +3936,36 @@ final class Pullback {
     }
 
     /**
-     * Whether two values, each standing as a case written with nothing in it, are the same case —
-     * or null where the comparison is no such one.
+     * Whether two values, each standing as a case written with nothing in it or each as a string
+     * written out, are the same — or null where the comparison is no such one.
      *
      * <p>Neither side is a place a row writes at, so there is nothing a line could be drawn on: what
-     * it states is the same on every row, and it is what the two cases are. {@code Alice == Alice}
+     * it states is the same on every row, and it is what the two values are. {@code Alice == Alice}
      * holds and {@code Alice == Bob} does not, which a filter handed the values written out asks
-     * of each element it keeps.
+     * of each element it keeps; and {@code "b" == "a"} does not, which a choice of strings read in
+     * each of its cases asks of the case taken ({@link #throughWhatItStopsAt}).
      */
-    private Derivation ofTwoCasesWrittenOut(StatedComparison stated, InputReads reads) {
+    private Derivation ofTwoValuesWrittenOut(StatedComparison stated, InputReads reads) {
         Rel rel = stated.claim().statedRelation();
         if (rel != Rel.EQ && rel != Rel.NE) {
             return null;
         }
-        TypeSymbol left = caseWrittenAt(stated.left(), reads);
-        TypeSymbol right = left == null ? null : caseWrittenAt(stated.right(), reads);
-        return right == null ? null
+        Object left = valueWrittenAt(stated.left(), reads);
+        Object right = left == null ? null : valueWrittenAt(stated.right(), reads);
+        // Two of one kind: a case and a string are not compared, and are no answer here.
+        return right == null || left.getClass() != right.getClass() ? null
                 : new Derivation.WrittenOut(left.equals(right) == (rel == Rel.EQ));
     }
 
-    /** The case {@code side} stands as, where it stands as one written with nothing in it, or
-     *  null. */
-    private TypeSymbol caseWrittenAt(Core side, InputReads reads) {
-        Core stands = Core.withoutStanding(reads.standing(side, read.rules().symbols(),
-                read.rules().newtypes()).value());
-        return stands instanceof Core.UnitValue unit ? unit.data() : null;
+    /** The case {@code side} stands as, where it stands as one written with nothing in it, or the
+     *  string, where it stands as one written out — or null. */
+    private Object valueWrittenAt(Core side, InputReads reads) {
+        return switch (Core.withoutStanding(reads.standing(side, read.rules().symbols(),
+                read.rules().newtypes()).value())) {
+            case Core.UnitValue unit -> unit.data();
+            case Core.Str text -> text.value();
+            default -> null;
+        };
     }
 
     /**

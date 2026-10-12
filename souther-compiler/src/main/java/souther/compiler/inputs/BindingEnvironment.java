@@ -199,6 +199,12 @@ final class BindingEnvironment {
         return value == null ? new BindingRole.Unknown() : new BindingRole.Alias(value);
     }
 
+    /** What the operations applying the closure {@code binding} is a parameter of hand it, each
+     *  container and how, whatever else the name has come to stand for on the way here. */
+    List<HeldIn> handedFrom(BindingId binding) {
+        return elements.containersOf(binding);
+    }
+
     /** The containers the closure {@code binding} is a parameter of is applied over, where every
      *  application of it is an operation's ({@link ElementBindings#enteredOver}). */
     List<Core> enteredOver(BindingId binding) {
@@ -371,8 +377,11 @@ final class BindingEnvironment {
     public int hashCode() {
         int h = hash;
         if (h == 0) {
-            h = Objects.hash(roots, handed, bound().keySet(), heldHash.get(), callsStand,
-                    selected);
+            // The names of what was handed and what was selected, as of what was bound: what each
+            // is handed or picked out by is a tree, and equality reads it where a hash would walk
+            // it for every environment made.
+            h = Objects.hash(roots, handed.keySet(), bound().keySet(), heldHash.get(), callsStand,
+                    selected.keySet());
             hash = h;
         }
         return h;

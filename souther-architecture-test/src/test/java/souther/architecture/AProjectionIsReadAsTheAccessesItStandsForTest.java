@@ -304,6 +304,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.STRUCTURE, BINDINGS);
         row(out, c + "inputs/InputReads", "walkNames", "(" + core + "Ljava/util/Set;Ljava/util/Set;)V",
                 Reading.STRUCTURE, BINDINGS);
+        row(out, c + "flow/ValueArrivals", "readCopies", "(" + core + "L" + c
+                + "types/OccurrenceLineage$Expansion;)V", Reading.STRUCTURE,
+                "which copy of an application each node is code of: a name read off a value says"
+                        + " nothing of where it is written, so a projection is where its base is");
         row(out, c + "inputs/InputReads", "readsAnApplied", "(" + core + "L" + c
                 + "check/Symbols;L" + c + "check/DeclarationNewtypes;Ljava/util/Set;)Z",
                 Reading.STRUCTURE, BINDINGS);
@@ -400,8 +404,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.STRUCTURE, EVALUATION);
         row(out, c + "core/WhatABodyReads", "binding",
                 "(" + core + "Lsouther/compiler/types/BindingId;)Z",
-                Reading.THE_TREE_THAT_RUNS, RUNS);
-        row(out, c + "check/KeyedAccumulation", "sameValue", "(" + core + core + ")Z",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/GrowingFold", "adds", "(" + core + ")I",
                 Reading.THE_TREE_THAT_RUNS, RUNS);

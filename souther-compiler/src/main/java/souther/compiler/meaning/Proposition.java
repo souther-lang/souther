@@ -37,6 +37,10 @@ public sealed interface Proposition {
      * <p>Spelled once, when the proposition is made: it is what parts are kept once and put in order
      * by, and asked of every part each time parts are joined, so a spelling built on asking would be
      * built again for every join a part goes into.
+     *
+     * <p>And what each of them hashes as. It is one of the values compared, so two equal
+     * propositions spell it alike, and a string keeps its hash; worked out from the parts instead, a
+     * hash walks the whole proposition each time one is used as a key.
      */
     String key();
 
@@ -143,6 +147,11 @@ public sealed interface Proposition {
      */
     record Compared(Relation relation, boolean holds, String key) implements Proposition {
 
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
+
         public Compared(Relation relation, boolean holds) {
             this(relation, holds, null);
         }
@@ -170,6 +179,11 @@ public sealed interface Proposition {
      * @param key spelled from the rest when it is made, whatever is handed in
      */
     record Truth(DecisionSubject of, boolean holds, String key) implements Proposition {
+
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
 
         public Truth(DecisionSubject of, boolean holds) {
             this(of, holds, null);
@@ -199,6 +213,11 @@ public sealed interface Proposition {
     record InCases(DecisionSubject of, CasesLeft cases, boolean holds, String key)
             implements Proposition {
 
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
+
         public InCases(DecisionSubject of, CasesLeft cases, boolean holds) {
             this(of, cases, holds, null);
         }
@@ -222,6 +241,11 @@ public sealed interface Proposition {
      * @param key spelled from the rest when it is made, whatever is handed in
      */
     record Present(DecisionSubject of, boolean holds, String key) implements Proposition {
+
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
 
         public Present(DecisionSubject of, boolean holds) {
             this(of, holds, null);
@@ -248,6 +272,11 @@ public sealed interface Proposition {
      */
     record SameValue(DecisionSubject one, DecisionSubject other, boolean holds, String key)
             implements Proposition {
+
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
 
         public SameValue(DecisionSubject one, DecisionSubject other, boolean holds) {
             this(one, other, holds, null);
@@ -283,6 +312,11 @@ public sealed interface Proposition {
     record LastToHold(TermPath container, TermPath position, boolean holds, String key)
             implements Proposition {
 
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
+
         public LastToHold(TermPath container, TermPath position, boolean holds) {
             this(container, position, holds, null);
         }
@@ -306,6 +340,11 @@ public sealed interface Proposition {
      * @param key spelled from the parts' own when it is made, whatever is handed in
      */
     record All(List<Proposition> parts, String key) implements Proposition {
+
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
 
         public All(List<Proposition> parts) {
             this(parts, null);
@@ -331,6 +370,11 @@ public sealed interface Proposition {
      * @param key spelled from the parts' own when it is made, whatever is handed in
      */
     record Any(List<Proposition> parts, String key) implements Proposition {
+
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
 
         public Any(List<Proposition> parts) {
             this(parts, null);
@@ -365,6 +409,11 @@ public sealed interface Proposition {
     record Some(DecisionSubject container, Proposition ofTheElement, boolean holds, String key)
             implements Proposition {
 
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
+
         public Some(DecisionSubject container, Proposition ofTheElement, boolean holds) {
             this(container, ofTheElement, holds, null);
         }
@@ -394,6 +443,11 @@ public sealed interface Proposition {
      * @param key spelled from the rest when it is made, whatever is handed in
      */
     record Carried(ACarriedValue value, boolean holds, String key) implements Proposition {
+
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
 
         public Carried(ACarriedValue value, boolean holds) {
             this(value, holds, null);
@@ -442,6 +496,11 @@ public sealed interface Proposition {
     record SomeReachable(TermPath at, TermPath writtenAt, List<String> through,
                          Proposition atANode, Optional<Proposition> noneBelow, boolean holds,
                          String key) implements Proposition {
+
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
 
         public SomeReachable(TermPath at, TermPath writtenAt, List<String> through,
                              Proposition atANode, Optional<Proposition> noneBelow, boolean holds) {
@@ -502,6 +561,11 @@ public sealed interface Proposition {
     record Unread(Optional<ModelOccurrence> where, int ordinal, WhyUnread why, boolean fixed,
                   boolean holds, String key) implements Proposition {
 
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
+
         public Unread(Optional<ModelOccurrence> where, int ordinal, WhyUnread why, boolean fixed,
                       boolean holds) {
             this(where, ordinal, why, fixed, holds, null);
@@ -543,6 +607,11 @@ public sealed interface Proposition {
      * @param key spelled from the statements' own when it is made, whatever is handed in
      */
     record OnAnApplication(List<Proposition> each, String key) implements Proposition {
+
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
 
         public OnAnApplication(List<Proposition> each) {
             this(each, null);

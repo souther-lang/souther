@@ -23,12 +23,14 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Every axiom about a kernel holds of what the kernel computes, over values chosen at the edges it
@@ -107,6 +109,77 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
         WhatTheLibraryComputes.Held held = WhatTheLibraryComputes.run(statements);
         assertEquals(List.of(), held.broken());
         assertEquals(List.of(), held.neverAnswered(), "an axiom held to no call that answered");
+    }
+
+    /**
+     * Every kernel said to answer its closure on what an option holds answers, of an option holding
+     * a value, an option holding what the closure answers on that value, and of one holding none,
+     * one holding none.
+     *
+     * <p>Written with {@code match} over both options and not as a statement about some element
+     * of the answer: the statements run above read an option's element through
+     * {@code Option.map}, which would be holding the kernel to itself.
+     */
+    @Test
+    void everyKernelAnsweringItsClosureOnWhatAnOptionHoldsAnswersThat() throws Exception {
+        Stdlib stdlib = DefaultStdlib.get();
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        StringBuilder source = new StringBuilder("module demo\n\ndata N = { n: Int }\n");
+        List<String> runs = new ArrayList<>();
+        for (ValueName.Stdlib.Operation operation : stdlib.entries().keySet()) {
+            BoundOperationFacts.ClosureOnWhatItHolds answers =
+                    facts.answersTheClosureOnWhatItHolds(operation);
+            if (answers == null) {
+                continue;
+            }
+            Stdlib.Signature declaration = stdlib.entry(operation).signature();
+            List<Type> params = WhatTheLibraryComputes.instantiated(declaration.params(),
+                    declaration);
+            Type.FnOf closure = (Type.FnOf) params.get(answers.closure().position());
+            if (closure.params().getFirst() != Type.Prim.INT
+                    || closure.result() != Type.Prim.INT) {
+                throw new IllegalStateException("no closure from " + Type.show(closure) + " is"
+                        + " written here");
+            }
+            // The value itself, a value made of it, and one made of nothing it was handed.
+            for (String body : List.of("v", "v + 1", "0")) {
+                String name = "answers" + runs.size();
+                List<String> args = new ArrayList<>(List.of("", ""));
+                args.set(answers.closure().position(), "v -> " + body);
+                args.set(answers.option().position(), "i.xs");
+                String call = operation.qualified() + "(" + String.join(", ", args) + ")";
+                source.append("\ndata I").append(name).append(" = { xs: ")
+                        .append(Type.show(params.get(answers.option().position())))
+                        .append(" }\n\nbehavior ").append(name).append(" : (i: I").append(name)
+                        .append(") -> N constructs N\nlet ").append(name).append(" (i) = N {\n")
+                        .append("    n = match ").append(call).append(" with\n")
+                        .append("        | Some r -> (match i.xs with\n")
+                        .append("            | Some v -> if r == ").append(body)
+                        .append(" then 1 else 0\n")
+                        .append("            | None -> 0)\n")
+                        .append("        | None -> (match i.xs with\n")
+                        .append("            | Some v -> 0\n")
+                        .append("            | None -> 1)\n}\n");
+                runs.add(name);
+            }
+        }
+        WhatTheLibraryComputes.Program program =
+                new WhatTheLibraryComputes.Program("demo", source.toString());
+        List<String> wrong = new ArrayList<>();
+        int answered = 0;
+        for (String name : runs) {
+            for (Long held : Arrays.asList(null, -1L, 0L, 2L)) {
+                Map<String, Object> input = new HashMap<>();
+                input.put("xs", held);
+                Object out = program.answer(name, "I" + name, "N", input);
+                answered++;
+                if (!Map.of("n", 1L).equals(out)) {
+                    wrong.add(name + " over " + held + " answered " + out);
+                }
+            }
+        }
+        assertEquals(List.of(), wrong, source::toString);
+        assertTrue(answered > 0, "no kernel is said to answer its closure on what an option holds");
     }
 
     @Test
