@@ -12,6 +12,7 @@ import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -153,6 +154,10 @@ public final class ValueArrivals<P> {
      * handed the application is the model's code even where the copy holds it, and says so.
      */
     private OccurrenceLineage.Expansion standingIn;
+
+    /** Whether the model states the application each copy met was made for, by the copy: every
+     *  node of one copy asks the same question. */
+    private final Map<OccurrenceLineage.Expansion, Boolean> stated = new HashMap<>();
 
     /**
      * What a value built in the tree means, for a tree that builds values it does not hold the
@@ -542,8 +547,8 @@ public final class ValueArrivals<P> {
             return null;
         }
         ACopyOfAnApplication copy = ACopyOfAnApplication.of(e);
-        return copy == null || ModelOccurrence.statedAt(copy.application()).isEmpty()
-                ? null : copy;
+        return copy == null || !stated.computeIfAbsent(copy.copy(),
+                each -> ModelOccurrence.statedAt(copy.application()).isPresent()) ? null : copy;
     }
 
     /**

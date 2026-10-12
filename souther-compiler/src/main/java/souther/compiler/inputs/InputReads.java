@@ -111,6 +111,12 @@ public final class InputReads {
      *  {@link #pathsUnder}; null until it is first asked. No part of what this reading is. */
     private Map<Core, PathResolution> paths;
     private DeclarationNewtypes pathsUnder;
+    /** What each block entered from here was read as, under the declarations
+     *  {@link #blocksUnder}; null until a block is first entered. No part of what this reading
+     *  is. Entered once, a reading inside it is the same reading each time, and the questions
+     *  asked of it keep their answers. */
+    private Map<Core.Block, InputReads> blocks;
+    private DeclarationNewtypes blocksUnder;
 
     /**
      * The applications of closures, the arms of choices and the calls of behaviors a reading here is
@@ -1133,20 +1139,20 @@ public final class InputReads {
     }
 
     /**
-     * Whether {@code arm} opens a value made of an entry of the input's map that a lookup
+     * Whether what {@code option} holds is made of an entry of the input's map that a lookup
      * answered: the lookup's own answer, or an option made of it by an operation answering its
-     * closure on what an option holds.
+     * closure on what an option holds. An arm opening it is about that entry.
      *
-     * <p>Which entry the arm is about, and not what the name under it is. A name opening the
+     * <p>Which entry an arm is about, and not what the name under it is. A name opening the
      * lookup itself stands at the map's elements; one opening what a closure made of the entry's
      * value stands for what the closure made, and the entry is only what it was made of. Either
      * way what the arm states is about the entry whose key was asked for, which is what the
-     * proposition over the arm says.
+     * proposition over the arm says. Asked of the option and not of each arm, since it is the
+     * same answer for every arm that opens it.
      */
-    public boolean opensAnEntryLookedUp(Core scrutinee, Core.Case arm, Symbols symbols,
+    public boolean holdsAnEntryLookedUp(Core option, Symbols symbols,
                                         DeclarationNewtypes newtypes) {
-        return arm.binding() instanceof Core.ArmBinding.Payload
-                && entryHeldBy(scrutinee, symbols, newtypes) != null;
+        return entryHeldBy(option, symbols, newtypes) != null;
     }
 
     /**
@@ -1187,7 +1193,7 @@ public final class InputReads {
      * {@code let} binds one, and the closure's parameter stands for what the other option holds
      * ({@link #handingWhatItHolds}). So the value is never the entry's own: under
      * {@code Option.map(x -> x + 1, Map.get(k, m))} the name is the entry's value and one more,
-     * and which entry it was made of is said apart from it ({@link #opensAnEntryLookedUp}).
+     * and which entry it was made of is said apart from it ({@link #holdsAnEntryLookedUp}).
      */
     private InputReads holdingWhatItHolds(Core option, Core.Binder name, Symbols symbols,
                                           DeclarationNewtypes newtypes) {
@@ -1715,6 +1721,22 @@ public final class InputReads {
      */
     private InputReads handedWhatOptionsHold(Core.Block block, Symbols symbols,
                                              DeclarationNewtypes newtypes) {
+        if (blocks == null) {
+            blocks = new IdentityHashMap<>();
+            blocksUnder = newtypes;
+        } else if (blocksUnder != newtypes) {
+            return handingWhatOptionsHold(block, symbols, newtypes);
+        }
+        InputReads entered = blocks.get(block);
+        if (entered == null) {
+            entered = handingWhatOptionsHold(block, symbols, newtypes);
+            blocks.put(block, entered);
+        }
+        return entered;
+    }
+
+    private InputReads handingWhatOptionsHold(Core.Block block, Symbols symbols,
+                                              DeclarationNewtypes newtypes) {
         InputReads out = this;
         for (Core.Binder param : block.params()) {
             if (param != null && param.binding() != null

@@ -861,6 +861,8 @@ final class Pullback {
     private Derivation.MatchArms armsOf(Core.Match match, InputReads reads,
                                         BiFunction<Core, InputReads, Derivation> states) {
         List<Derivation> selections = selectionsOf(match, reads);
+        boolean ofAnEntry = reads.holdsAnEntryLookedUp(match.scrutinee(),
+                read.rules().symbols(), read.rules().newtypes());
         List<Derivation.MatchArms.Arm> arms = new ArrayList<>();
         for (int i = 0; i < match.cases().size(); i++) {
             Core.Case arm = match.cases().get(i);
@@ -868,8 +870,7 @@ final class Pullback {
                     read.rules().symbols(), read.rules().newtypes());
             arms.add(new Derivation.MatchArms.Arm(selections.get(i),
                     states.apply(arm.body(), inside),
-                    reads.opensAnEntryLookedUp(match.scrutinee(), arm,
-                            read.rules().symbols(), read.rules().newtypes())));
+                    ofAnEntry && arm.binding() instanceof Core.ArmBinding.Payload));
         }
         return new Derivation.MatchArms(arms);
     }
