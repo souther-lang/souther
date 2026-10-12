@@ -9,7 +9,10 @@ import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
+import souther.compiler.inputs.Case;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
@@ -23,8 +26,12 @@ import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.SideAnswered;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -51,6 +58,12 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     private static final TermPath C = TermPath.of("c");
     private static final TermPath XS = TermPath.of("xs");
     private static final TermPath YS = TermPath.of("ys");
+    private static final TermPath S = TermPath.of("s");
+    private static final TermPath T = TermPath.of("t");
+
+    private static final TypeSymbol HOT = TypeSymbols.declared(new TypeKey("probe", "Hot"));
+    private static final TypeSymbol WARM = TypeSymbols.declared(new TypeKey("probe", "Warm"));
+    private static final TypeSymbol COLD = TypeSymbols.declared(new TypeKey("probe", "Cold"));
 
     private static Derivation truthAt(TermPath at) {
         return new Derivation.ATruthOfASubject(new DecisionSubject.AnInput(at), true);
@@ -96,6 +109,45 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         assertEquals(Proposition.any(List.of(
                 Proposition.all(List.of(truth(A), truth(C))),
                 Proposition.all(List.of(truth(A).denied(), truth(B))))), stated);
+    }
+
+    /**
+     * An arm over cases of a subject that share none with the cases an arm before it selects is
+     * taken wherever it selects: a value of its case is already outside theirs, and saying so again
+     * for every arm before it makes each arm as long as the match. Where the cases do meet, the arm
+     * before it still decides.
+     */
+    @Test
+    void anArmOverCasesNoArmBeforeItSharesIsItsCaseAlone() {
+        Proposition stated = concluded(new Derivation.MatchArms(List.of(
+                new Derivation.MatchArms.Arm(casesAt(S, HOT), truthAt(A)),
+                new Derivation.MatchArms.Arm(casesAt(S, WARM), truthAt(B)),
+                new Derivation.MatchArms.Arm(casesAt(S, HOT, COLD), truthAt(C)))));
+        assertEquals(Proposition.any(List.of(
+                Proposition.all(List.of(inCases(S, HOT), truth(A))),
+                Proposition.all(List.of(inCases(S, WARM), truth(B))),
+                Proposition.all(List.of(inCases(S, HOT).denied(), inCases(S, HOT, COLD),
+                        truth(C))))), stated);
+        assertEquals(Proposition.all(List.of(inCases(S, HOT).denied(), inCases(S, HOT, COLD))),
+                concluded(new Derivation.AnArmTaken(
+                        List.of(casesAt(S, HOT), casesAt(S, WARM)), casesAt(S, HOT, COLD))));
+        // The same cases of another subject are no case of this one.
+        assertEquals(Proposition.all(List.of(inCases(T, HOT).denied(), inCases(S, WARM))),
+                concluded(new Derivation.AnArmTaken(List.of(casesAt(T, HOT)),
+                        casesAt(S, WARM))));
+    }
+
+    private static CasesLeft casesOf(TypeSymbol... leaves) {
+        return CasesLeft.ofEach(Arrays.stream(leaves)
+                .map(leaf -> Refinement.of(new Case.SumCase(leaf, true))).toList());
+    }
+
+    private static Derivation casesAt(TermPath at, TypeSymbol... leaves) {
+        return new Derivation.CasesOfASubject(new DecisionSubject.AnInput(at), casesOf(leaves));
+    }
+
+    private static Proposition inCases(TermPath at, TypeSymbol... leaves) {
+        return new Proposition.InCases(new DecisionSubject.AnInput(at), casesOf(leaves), true);
     }
 
     @Test
