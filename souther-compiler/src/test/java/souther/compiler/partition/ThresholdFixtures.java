@@ -17,7 +17,6 @@ import souther.compiler.values.Allowance;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Ways a test with no measurement pipeline beside it reads thresholds or assembles a partition on
@@ -107,7 +106,7 @@ final class ThresholdFixtures {
         singled.forEach(each -> evidence.add(new RuleEvidence.Singles(each)));
         return Partitions.withEvidence(base, reading, evidence, List.of(), allowance, ruleReading,
                 rulesWithoutALine, between, reaching,
-                new MeasureClosure.Drawing.FromTheReading(), Set.of());
+                new MeasureClosure.Drawing.FromTheReading(), ArmsNamed.NONE);
     }
 
     private ThresholdFixtures() {}

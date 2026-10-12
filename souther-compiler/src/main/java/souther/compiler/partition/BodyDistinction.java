@@ -124,13 +124,13 @@ public sealed interface BodyDistinction {
      * the ways in to the arms or the meetings as well, a way no run takes would be read as a
      * decision the body makes.
      *
-     * <p>And with the elements whose case the body matches
-     * ({@link Partitions.Partitioning#casesMatchedInside}): told apart by the body, and placed by
-     * no way a run takes, since the tree that runs has no name for an element a closure is handed.
+     * <p>And with the case each arm of a {@code match} is where the tree that runs could not name
+     * it ({@link ArmsNamed}): such an arm is about a position, and which class went which way
+     * through it is not read.
      */
     static Map<AxisId, BodyDistinction> of(CoverageRead.Read read, MeasuredInput subject) {
         return WhatABodyTellsApart.of(read, subject.axes(),
                 subject.partitioning().rulesWithoutALine(),
-                subject.partitioning().casesMatchedInside());
+                subject.partitioning().armsNamed());
     }
 }

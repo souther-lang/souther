@@ -28,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -64,17 +65,17 @@ final class WhatABodyTellsApart {
     private final List<Axis> axes;
     /** The rules the reading of the input read to the end and found no line in, with why. */
     private final List<RuleWithoutALine> noLine;
-    /** The elements whose case a {@code match} in the body turns on, which no way names. */
-    private final Set<TermPath> casesMatchedInside;
+    /** The case each arm of a {@code match} is, where the tree the operations stand in names it. */
+    private final ArmsNamed armsNamed;
     /** Which position each condition is about and what it admits there, asked once of each. */
     private final Map<souther.compiler.reading.Condition, Placed> placed = new HashMap<>();
 
     private WhatABodyTellsApart(MeasuredInput.MeasuredAxes measured,
-                                List<RuleWithoutALine> noLine, Set<TermPath> casesMatchedInside) {
+                                List<RuleWithoutALine> noLine, ArmsNamed armsNamed) {
         this.measured = measured;
         this.axes = measured.axes();
         this.noLine = noLine;
-        this.casesMatchedInside = casesMatchedInside;
+        this.armsNamed = armsNamed;
         this.unread = new boolean[axes.size()];
         for (int at = 0; at < axes.size(); at++) {
             splits.add(new ArrayList<>());
@@ -85,14 +86,13 @@ final class WhatABodyTellsApart {
     /**
      * What the body read as {@code read} tells apart at each position {@code measured}, where
      * {@code noLine} is what the reading of the input found about the rules it drew no line for and
-     * {@code casesMatchedInside} the elements whose case the body matches.
+     * {@code armsNamed} the case each arm of a {@code match} is, read where the operations stand.
      */
     static Map<AxisId, BodyDistinction> of(CoverageRead.Read read,
                                            MeasuredInput.MeasuredAxes measured,
                                            List<RuleWithoutALine> noLine,
-                                           Set<TermPath> casesMatchedInside) {
-        WhatABodyTellsApart reading =
-                new WhatABodyTellsApart(measured, noLine, casesMatchedInside);
+                                           ArmsNamed armsNamed) {
+        WhatABodyTellsApart reading = new WhatABodyTellsApart(measured, noLine, armsNamed);
         List<Axis> axes = measured.axes();
         for (WayIn way : read.taken()) {
             reading.take(way);
@@ -161,6 +161,17 @@ final class WhatABodyTellsApart {
     /** Where {@code each} stands, which is {@link ConditionPlacement}'s answer, and what it admits
      *  there. */
     private Placed placing(souther.compiler.reading.Condition each) {
+        // An arm the reading of the runs named no position for, which the tree the operations
+        // stand in names as a case of a position: an arm of a `match` on what a closure was handed
+        // out of a container. Placed where that case would be, and put to no class there — the
+        // closure is applied to each element, a different case each time and none on an empty
+        // container, so which class took the arm is not this arm's to say.
+        if (each instanceof souther.compiler.reading.Condition.Arm arm) {
+            Optional<souther.compiler.reading.Condition.Case> named = armsNamed.of(arm);
+            if (named.isPresent()) {
+                return withheld(placing(named.get()));
+            }
+        }
         return switch (ConditionPlacement.of(each, measured)) {
             // A fork the reading could not name a subject for: a value no position is, a name bound
             // over several cases, an attempted construction. Which way it goes may turn on any
@@ -179,6 +190,27 @@ final class WhatABodyTellsApart {
                 }
                 yield new Placed.UnderTheCases(List.copyOf(out));
             }
+        };
+    }
+
+    /**
+     * {@code placed}, about the same positions and putting nothing it says there to classes: a
+     * condition this compiler names the position of and cannot place.
+     */
+    private static Placed withheld(Placed placed) {
+        return switch (placed) {
+            case Placed.About it -> new Placed.About(it.at(), null);
+            case Placed.UnderTheCases it -> {
+                List<Placed.UnderACase> out = new ArrayList<>();
+                for (Placed.UnderACase one : it.underEach()) {
+                    out.add(new Placed.UnderACase(
+                            one.about() == null ? null : new Placed.About(one.about().at(), null),
+                            one.taken(), one.neverHolds()));
+                }
+                yield new Placed.UnderTheCases(List.copyOf(out));
+            }
+            case Placed.AboutNoPosition it -> it;
+            case Placed.SubjectUnknown it -> it;
         };
     }
 
@@ -621,13 +653,9 @@ final class WhatABodyTellsApart {
                                 && written.contains(comparison.origin()));
             }
         }
-        // And a `match` on the case of an element, which tells the element apart where no way
-        // places it: the closure it is in is applied to each element, to a different case each
-        // time.
-        boolean matchedNoWayPlaces = casesMatchedInside.contains(axis.path());
         // Unread over anything read. What was read at the position is part of what the body tells
         // apart there, and a part is never said as the whole.
-        boolean unplacedHere = unread[at] || ruleNoDecisionRead || matchedNoWayPlaces;
+        boolean unplacedHere = unread[at] || ruleNoDecisionRead;
         List<List<String>> groups = groupsOf(axis.classes(), splits.get(at));
         // Unless what was read already tells every class apart, which nothing further can refine:
         // whatever went unread, the partition is the finest there is.

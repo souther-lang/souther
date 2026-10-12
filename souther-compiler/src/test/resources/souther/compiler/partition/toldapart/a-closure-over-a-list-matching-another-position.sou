@@ -5,6 +5,10 @@
 // So the element is told apart nowhere this reading knows of, however the closure ranges over it,
 // and is left as every position is beside a decision no position is named for.
 //
+// What the closure answers does not turn on the element, so `List.all` answers whether the list is
+// empty or what the `match` answered. The reading of the input draws that line at the list's
+// length, and no decision reads it into classes.
+//
 // told apart at f: 2 groups of 2
 // told apart at List.length(xs): unread here
 // told apart at xs[*]: unread somewhere

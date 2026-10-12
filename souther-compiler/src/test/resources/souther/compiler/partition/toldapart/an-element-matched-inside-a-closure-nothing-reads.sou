@@ -1,11 +1,13 @@
-// A `match` on an element inside a closure whose answer nothing reads tells the element apart
-// nowhere.
+// A `match` on an element inside a closure whose answer nothing reads is told apart as one whose
+// answer is read.
 //
-// What `List.all` answers here is bound and never used, so no answer of the behavior turns on it,
-// and the element is left as every position is beside a decision no position is named for.
+// What `List.all` answers here is bound and never used, and the closure is still run: a run takes
+// its arms as it takes the arms of a `match` at the top whose answer is never used, which tells its
+// position apart all the same. What is told apart is read off the ways runs take, and whether an
+// answer is used afterwards is no part of that.
 //
 // told apart at n: 2 groups of 2
-// told apart at xs[*]: unread somewhere
+// told apart at xs[*]: unread here
 module example.elementmatchedunread
 
 data North

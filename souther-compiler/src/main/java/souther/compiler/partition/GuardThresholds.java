@@ -51,7 +51,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
-import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -93,8 +92,7 @@ public final class GuardThresholds {
      * {@code c} on the low side and are two different rules about it — so it is read where the
      * operator is still in hand, and which values arrive is asked of the reading of the whole body.
      *
-     * @param casesMatchedInside the positions inside a container whose case a {@code match} turns
-     *                           on, which the same walk names ({@link ComparisonReadings})
+     * @param armsNamed the case each arm of a {@code match} is, which the same walk names
      */
     public record Guards(List<LineEvidence> evidence,
                          RulesWithNoLine noLine,
@@ -102,18 +100,17 @@ public final class GuardThresholds {
                          ReachingCuts reaching,
                          List<ComparisonReadings.ForkMet> forks,
                          Map<ConditionOccurrence, Citation> conditionsMet,
-                         Set<TermPath> casesMatchedInside) {
+                         ArmsNamed armsNamed) {
 
         public static final Guards NONE =
                 new Guards(List.of(), RulesWithNoLine.NONE, List.of(), ReachingCuts.NONE,
-                        List.of(), Map.of(), Set.of());
+                        List.of(), Map.of(), ArmsNamed.NONE);
 
         public Guards {
             evidence = List.copyOf(evidence);
             between = List.copyOf(between);
             forks = List.copyOf(forks);
             conditionsMet = Map.copyOf(conditionsMet);
-            casesMatchedInside = Set.copyOf(casesMatchedInside);
         }
 
         /** The lines, read off what the walk said. Not a list of their own: the walk met these and
@@ -325,7 +322,7 @@ public final class GuardThresholds {
         }
         return new Guards(found, withoutALine.found(), between, cuts.made(),
                 comparisons.forks(), comparisons.conditionsMet(),
-                comparisons.casesMatchedInside());
+                comparisons.armsNamed());
     }
 
     /**
