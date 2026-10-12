@@ -304,6 +304,10 @@ public final class ReportedReason {
             // divides nothing, this word is not met beside that one.
             case BlockReason.ValueRuleRelatingTwoPositions _ ->
                     UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE;
+            // Its own word and not the one above: the relation is between elements of the one
+            // container here, and there is no other value to wait on for it.
+            case BlockReason.ValueRuleRelatingElements _ ->
+                    UndividedPosition.Reason.RULE_RELATING_ELEMENTS;
             // Its own word and not the one above. Both are rules this read to the end that divide
             // nothing, and what a reader may go on to do about them differs: one is waiting on a
             // class about two positions, and the other has nothing to wait for.

@@ -166,17 +166,18 @@ final class PlanComposer {
         }
         FixtureTemplate collection = switch (container) {
             case Shape.Sequence carrier -> {
-                // Every element is the one composed, and a set holds it once: one the rules ask
-                // to hold more has no room for them all to be it.
-                if (plan.eachOf() && carrier.kind() == Shape.Sequence.Kind.SET
-                        && plan.holds().least() > 1) {
+                // Every element is the one composed, and elements kept apart — a set's, or a
+                // list's its rules keep apart — hold it once: one the rules ask to hold more has
+                // no room for them all to be it.
+                List<List<String>> apart = ElementsKeptApart.at(plan.worn(), carrier, reading);
+                if (plan.eachOf() && !apart.isEmpty() && plan.holds().least() > 1) {
                     yield null;
                 }
                 if (key != null || !keysEachFiled.isEmpty()) {
                     throw new IllegalStateException("a plan put a key on what a list or a set"
                             + " holds, which files nothing under one: " + plan.at());
                 }
-                yield Witnesses.holding(carrier, holding, keptOut, plan.holds(), reading);
+                yield Witnesses.holding(carrier, apart, holding, keptOut, plan.holds(), reading);
             }
             case Shape.Mapping carrier -> Witnesses.holding(carrier, holding, keptOut,
                     key == null ? null : new Witnesses.Filed(key, element), keysEachFiled,

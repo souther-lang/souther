@@ -290,6 +290,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/ValueStanding", "eliminated", "(" + core + "Ljava/lang/Object;L" + c
                 + "check/ValueStanding$Names;L" + c + "check/BindingWalk;)Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "check/ElementsApart", "runTaken", "(" + core + ")Ljava/util/List;",
+                Reading.NAMES, READS_THE_NAMES);
         row(out, c + "check/AnalysisBody", "visit", "(" + core + "L" + c
                 + "check/ValueTemplates;Ljava/util/Set;Ljava/util/List;)V",
                 Reading.STRUCTURE, "finds the builds of values, which no name read is");

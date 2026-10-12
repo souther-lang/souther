@@ -2743,6 +2743,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + " which values here settle it on their own is not worked out";
             case RULE_RELATING_TWO_VALUES ->
                     "it relates the value here to another value rather than dividing the values here";
+            case RULE_RELATING_ELEMENTS -> "it says how the elements here stand to each other,"
+                    + " and which containers it leaves is not worked out";
             case RULE_ABOUT_A_RUN ->
                     "it is about what the values here come to rather than about any one of them,"
                             + " so it draws its line and divides none of them";

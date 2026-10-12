@@ -154,6 +154,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // its reader which kind of thing stopped a derivation rather than which reader stopped.
         table.put("ValueRuleRelatingTwoPositions",
                 "RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE/UNAFFECTED");
+        // Its own word beside that one: the relation is between the elements of the container
+        // here, which a set of its values does not hold, and a run allowed more of everything
+        // meets the same relation.
+        table.put("ValueRuleRelatingElements", "RULE_RELATING_ELEMENTS/UNAFFECTED");
         // Read to the end, and placed nowhere. Its own word beside the two above: the comparison
         // was taken apart, a line came out of it and every name it is between reached positions —
         // what was not reached is which of those positions the line runs between. Both measures are
@@ -495,6 +499,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.BehaviorDistinctionsTooCostly(),
                 new BlockReason.RulesNotHandedOnAsSets(),
                 new BlockReason.ValueRuleRelatingTwoPositions(),
+                new BlockReason.ValueRuleRelatingElements(),
                 new BlockReason.CasePairingNotDetermined(),
                 new BlockReason.SeveralLinesInOneRule(),
                 new BlockReason.RelationNotShownToReachEveryValue(),

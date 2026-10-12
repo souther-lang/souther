@@ -161,7 +161,9 @@ final class CardinalityComposer {
             case NumericDomain.FormProjection.NothingIsLeft _ -> null;
             case null -> NumericDomain.Bounds.OPEN;
         };
-        boolean distinct = holding.kind() == Shape.Sequence.Kind.SET;
+        // The element is the one number chosen, so elements kept apart at any run of it — a set's,
+        // or a list's its rules keep apart — are elements holding no number twice.
+        boolean distinct = !ElementsKeptApart.at(view, reading).isEmpty();
         int perPart = distinct ? MOST_ELEMENTS : 1;
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         List<Place> candidates = List.of();
@@ -409,8 +411,10 @@ final class CardinalityComposer {
             return none("the rules leave no value for an element of `" + container + "`");
         }
         // One value to repeat and as many different ones beside it as the size asked for leaves
-        // room for; a set holds each value once, so it holds nothing repeated.
-        boolean distinct = holding.kind() == Shape.Sequence.Kind.SET;
+        // room for; elements kept apart — a set's, or a list's its rules keep apart — hold each
+        // value once, so they hold nothing repeated. The element is the number, so apart at any run
+        // of it is apart as numbers.
+        boolean distinct = !ElementsKeptApart.at(view, reading).isEmpty();
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         List<Place> candidates = carrier.counts()
                 ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld)

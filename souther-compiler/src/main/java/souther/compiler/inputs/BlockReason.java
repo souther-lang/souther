@@ -234,25 +234,26 @@ public sealed interface BlockReason {
                 case UnreadComparisonForm _ -> 0;
                 case UnreadComparisonDomain _ -> 1;
                 case ValueRuleRelatingTwoPositions _ -> 2;
-                case CasePairingNotDetermined _ -> 3;
-                case RuleAboutADerivedValue _ -> 4;
-                case UnreadValueRule _ -> 5;
-                case NonAffineArithmetic _ -> 6;
-                case PatternTooCostly _ -> 7;
-                case OrderedExtentTooCostly _ -> 8;
-                case RuleAboutAnElementOfSeveralContainers _ -> 9;
-                case EndLeftOpenByAChoice _ -> 10;
-                case ValueRuleLeftOpenByAChoice _ -> 11;
-                case LineAtANumberNoRatioHolds _ -> 12;
-                case LineSideNotWorkedOut _ -> 13;
-                case SeveralLinesInOneRule _ -> 14;
+                case ValueRuleRelatingElements _ -> 3;
+                case CasePairingNotDetermined _ -> 4;
+                case RuleAboutADerivedValue _ -> 5;
+                case UnreadValueRule _ -> 6;
+                case NonAffineArithmetic _ -> 7;
+                case PatternTooCostly _ -> 8;
+                case OrderedExtentTooCostly _ -> 9;
+                case RuleAboutAnElementOfSeveralContainers _ -> 10;
+                case EndLeftOpenByAChoice _ -> 11;
+                case ValueRuleLeftOpenByAChoice _ -> 12;
+                case LineAtANumberNoRatioHolds _ -> 13;
+                case LineSideNotWorkedOut _ -> 14;
+                case SeveralLinesInOneRule _ -> 15;
                 case WhatItStatesIsNoLine(WhatItStatesIsNoLine.Why why) -> switch (why) {
-                    case MORE_READINGS_THAN_ARE_MADE -> 15;
-                    case A_PART_NOT_READ -> 16;
-                    case A_NUMBER_NO_POSITION_HOLDS -> 17;
-                    case NO_RELATION_OF_NUMBERS -> 18;
+                    case MORE_READINGS_THAN_ARE_MADE -> 16;
+                    case A_PART_NOT_READ -> 17;
+                    case A_NUMBER_NO_POSITION_HOLDS -> 18;
+                    case NO_RELATION_OF_NUMBERS -> 19;
                 };
-                case RelationNotShownToReachEveryValue _ -> 19;
+                case RelationNotShownToReachEveryValue _ -> 20;
             };
         }
 
@@ -293,7 +294,8 @@ public sealed interface BlockReason {
                      NonAffineArithmetic _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
-                     ValueRuleRelatingTwoPositions _, CasePairingNotDetermined _,
+                     ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
+                     CasePairingNotDetermined _,
                      SeveralLinesInOneRule _, WhatItStatesIsNoLine _,
                      RelationNotShownToReachEveryValue _ -> true;
             };
@@ -318,14 +320,15 @@ public sealed interface BlockReason {
                 // And every other, where nothing was compared against anything. A form nothing
                 // takes apart, values no line can be drawn on, a rule about a value made from this
                 // one, a rule about an element of one of several containers, a relation between two
-                // positions, a pairing nothing worked out and a rule of several lines are all met
-                // again by a run allowed more of everything. So is an end a choice left open: what
-                // the reading of ends stops on is a form it does not enter, and there is no figure
-                // it stopped at.
+                // positions or between the elements of one, a pairing nothing worked out and a rule
+                // of several lines are all met again by a run allowed more of everything. So is an
+                // end a choice left open: what the reading of ends stops on is a form it does not
+                // enter, and there is no figure it stopped at.
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                      RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
                      NonAffineArithmetic _,
-                     ValueRuleRelatingTwoPositions _, EndLeftOpenByAChoice _,
+                     ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
+                     EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
@@ -431,6 +434,7 @@ public sealed interface BlockReason {
         }
         return switch (why) {
             case RELATES_TWO_POSITIONS -> new ValueRuleRelatingTwoPositions();
+            case RELATES_ELEMENTS_OF_A_CONTAINER -> new ValueRuleRelatingElements();
             case FORM_NOT_READ -> new UnreadValueRule();
             // Its own, and not the one above. Both leave what may stand at the position open and
             // an author does different work about them: one is a clause to rewrite and one is a
@@ -464,7 +468,8 @@ public sealed interface BlockReason {
             // question of a rule standing. Written out rather than defaulted to: a reason added to
             // the vocabulary is a decision about which of the two halves it is, and a default takes
             // that decision by arriving at whichever arm was written last.
-            case EXACT_VALUES_TOO_COSTLY, RELATES_TWO_POSITIONS, FORM_NOT_READ,
+            case EXACT_VALUES_TOO_COSTLY, RELATES_TWO_POSITIONS, RELATES_ELEMENTS_OF_A_CONTAINER,
+                 FORM_NOT_READ,
                  ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY -> ofAQuestionStandingOn(why);
         };
     }
@@ -485,8 +490,8 @@ public sealed interface BlockReason {
     static QuestionStandingReason ofAQuestionStandingOn(souther.compiler.values.UnreadReason why) {
         return switch (why) {
             case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly();
-            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY ->
-                    ofARuleTheValueReadingLeft(why);
+            case RELATES_TWO_POSITIONS, RELATES_ELEMENTS_OF_A_CONTAINER, FORM_NOT_READ,
+                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY -> ofARuleTheValueReadingLeft(why);
             case NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT -> throw new IllegalArgumentException(
                     "a reason about " + why.about() + " leaves no question of a rule standing: "
                             + why);
@@ -510,7 +515,8 @@ public sealed interface BlockReason {
             case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly();
             // Refused above, each of them, and named here so that a reason added to the vocabulary
             // stops this rather than arriving as whichever arm is nearest.
-            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY,
+            case RELATES_TWO_POSITIONS, RELATES_ELEMENTS_OF_A_CONTAINER, FORM_NOT_READ,
+                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY,
                  NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT ->
                     throw new IllegalStateException("refused above: " + why);
         };
@@ -530,8 +536,8 @@ public sealed interface BlockReason {
     static RuleOfferShortfallReason ofANamedRule(UnreadReason why) {
         return switch (why) {
             case NOT_REACHED -> new ValueRulesNotReached();
-            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY ->
-                    ofARuleTheValueReadingLeft(why);
+            case RELATES_TWO_POSITIONS, RELATES_ELEMENTS_OF_A_CONTAINER, FORM_NOT_READ,
+                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY -> ofARuleTheValueReadingLeft(why);
             case NOT_REACHED_PAST_DEPTH_LIMIT, EXACT_VALUES_TOO_COSTLY ->
                     throw new IllegalArgumentException(
                             "a reason about " + why.about() + " is said of no rule an offer holds: "
@@ -856,6 +862,18 @@ public sealed interface BlockReason {
      * missing — over a position whose values this compiler cannot state.
      */
     record ValueRuleRelatingTwoPositions() implements RuleReadingStopped {}
+
+    /**
+     * A rule about a container says how its elements stand to each other, and what is held here is
+     * a set of the container's own values.
+     *
+     * <p>A stop of the reading of values, as the one above is, and for the same reason: what it
+     * arrived at is an upper bound — a container saying one element twice is among the values it
+     * holds and no row can take it. The rule was recognised, and the values built for the position
+     * keep it, so it is not {@link UnreadValueRule}; and the values it leaves were not worked out,
+     * so it is no rule read to the end either.
+     */
+    record ValueRuleRelatingElements() implements RuleReadingStopped {}
 
     /**
      * The reading of what the position may hold never reached the rules about it.

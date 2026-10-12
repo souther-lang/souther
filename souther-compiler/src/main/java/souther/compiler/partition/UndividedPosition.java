@@ -267,6 +267,17 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE,
         /**
+         * The rule says how the elements of the container here stand to each other, and which
+         * containers it leaves is not worked out.
+         *
+         * <p>{@code List.allDistinctBy(k -> k, value)} is about pairs of elements and not about any
+         * one value the position holds. It was recognised — a container composed here keeps it —
+         * so it is not {@link #UNSUPPORTED_SYNTAX}, and a reader told so would rewrite a rule that
+         * is not the difficulty. Nor is it a rule read to the end: the containers it refuses are
+         * still among what the position is taken to hold.
+         */
+        RULE_RELATING_ELEMENTS,
+        /**
          * The rule relates the value here to another value rather than dividing the values here.
          *
          * <p>{@code x < y} says where one position stands against another, and a class here is a

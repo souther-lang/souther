@@ -274,8 +274,27 @@ final class AdmissibleReading {
      */
     private PlannedValues<FactSubject> unreadable(ClauseExpr.Part part, Denotations at) {
         Core e = part.of();
-        return shortOf(part, names(e, at), relatesTwoPositions(e, at)
-                ? UnreadReason.RELATES_TWO_POSITIONS : UnreadReason.FORM_NOT_READ);
+        UnreadReason why = relatesElements(part, at) ? UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER
+                : relatesTwoPositions(e, at) ? UnreadReason.RELATES_TWO_POSITIONS
+                : UnreadReason.FORM_NOT_READ;
+        return shortOf(part, names(e, at), why);
+    }
+
+    /**
+     * Whether {@code part} states that no two elements of a position come to one answer of a
+     * closure this compiler reads ({@link ElementsApart#stated}).
+     *
+     * <p>Stated and not denied. Denied it says some two elements are alike, which nothing here
+     * builds for, and a closure this does not read is a form this did not read whatever it is
+     * handed — so both stay {@link UnreadReason#FORM_NOT_READ}.
+     */
+    private boolean relatesElements(ClauseExpr.Part part, Denotations at) {
+        if (!part.positive()
+                || !(Core.withoutStanding(part.of()) instanceof Core.PreservedCall call)) {
+            return false;
+        }
+        ElementsApart.Stated stated = ElementsApart.stated(call);
+        return stated != null && positionIn(stated.container(), at) != null;
     }
 
     /**
