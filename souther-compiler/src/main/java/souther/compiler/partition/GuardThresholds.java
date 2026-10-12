@@ -91,17 +91,20 @@ public final class GuardThresholds {
      * is not recoverable from a {@link Threshold} — {@code x <= c} and {@code x > c} both put
      * {@code c} on the low side and are two different rules about it — so it is read where the
      * operator is still in hand, and which values arrive is asked of the reading of the whole body.
+     *
+     * @param armsNamed the case each arm of a {@code match} is, which the same walk names
      */
     public record Guards(List<LineEvidence> evidence,
                          RulesWithNoLine noLine,
                          List<LineDrawn> between,
                          ReachingCuts reaching,
                          List<ComparisonReadings.ForkMet> forks,
-                         Map<ConditionOccurrence, Citation> conditionsMet) {
+                         Map<ConditionOccurrence, Citation> conditionsMet,
+                         ArmsNamed armsNamed) {
 
         public static final Guards NONE =
                 new Guards(List.of(), RulesWithNoLine.NONE, List.of(), ReachingCuts.NONE,
-                        List.of(), Map.of());
+                        List.of(), Map.of(), ArmsNamed.NONE);
 
         public Guards {
             evidence = List.copyOf(evidence);
@@ -318,7 +321,8 @@ public final class GuardThresholds {
                             each.failing())));
         }
         return new Guards(found, withoutALine.found(), between, cuts.made(),
-                comparisons.forks(), comparisons.conditionsMet());
+                comparisons.forks(), comparisons.conditionsMet(),
+                comparisons.armsNamed());
     }
 
     /**

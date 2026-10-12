@@ -18,7 +18,6 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.WhatAConditionRuns;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.types.ResolvedCase;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
 
@@ -196,18 +195,7 @@ final class CoverageNaming implements Naming<Outcome> {
         if (at == null) {
             return null;
         }
-        // The leaves the arm reaches and not the names it is written with. A case that is itself a
-        // sum stands for the leaves under it, and those are what a value at the position is; read by
-        // the written name, an arm for such a case admitted none of them.
-        List<String> names = new ArrayList<>();
-        for (ResolvedCase each : match.cases().get(part).pattern().cases()) {
-            if (each.atoms().isEmpty()) {
-                names.add(each.name().name());
-            } else {
-                each.atoms().forEach(atom -> names.add(atom.name()));
-            }
-        }
-        return new Condition.Case(at, names);
+        return Condition.Case.of(at, match.cases().get(part));
     }
 
     /**

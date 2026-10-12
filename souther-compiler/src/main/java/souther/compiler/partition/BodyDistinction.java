@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.PathReachability;
 import souther.compiler.reading.CoverageRead;
 
 import java.util.LinkedHashMap;
@@ -123,9 +124,20 @@ public sealed interface BodyDistinction {
      * <p>Read off the ways runs take and nothing else ({@link CoverageRead.Read#taken}). Taken from
      * the ways in to the arms or the meetings as well, a way no run takes would be read as a
      * decision the body makes.
+     *
+     * <p>And with the case each arm of a {@code match} is where the tree that runs could not name
+     * it ({@link ArmsNamed}): such an arm is about a position, and which class went which way
+     * through it is not read.
+     *
+     * <p>A way through a place {@code arrives} proves nothing reaches is a way no run takes. The
+     * reading of the runs keeps every way it could not rule out itself, and what the model's rules
+     * prove of the places on it is the other half of whether a run takes it — the half the
+     * obligations and the dead branches are read off as well.
      */
-    static Map<AxisId, BodyDistinction> of(CoverageRead.Read read, MeasuredInput subject) {
+    static Map<AxisId, BodyDistinction> of(CoverageRead.Read read, MeasuredInput subject,
+                                           PathReachability.Answers arrives) {
         return WhatABodyTellsApart.of(read, subject.axes(),
-                subject.partitioning().rulesWithoutALine());
+                subject.partitioning().rulesWithoutALine(),
+                subject.partitioning().armsNamed(), arrives);
     }
 }

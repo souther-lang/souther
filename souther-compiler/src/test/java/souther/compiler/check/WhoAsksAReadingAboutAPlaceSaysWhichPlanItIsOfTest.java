@@ -88,6 +88,13 @@ class WhoAsksAReadingAboutAPlaceSaysWhichPlanItIsOfTest {
                             + " means here is that nothing is known about the construct, which"
                             + " restricts nothing — the widest answer there is, and the one a"
                             + " reading of another module would give about every construct"),
+            new Licence("souther.compiler.partition.WhatABodyTellsApart.take -> at", 1,
+                    "whether a way some run of the body takes passes a place nothing arrives at,"
+                            + " asked of the places on that way; the reading is held to the plan"
+                            + " those places are of where the two are put together and handed in"
+                            + " (Adequacy.Coverage). What is concluded is about that way and the"
+                            + " copy of each construct on it, never about a construct's other"
+                            + " copies"),
             new Licence("souther.compiler.query.Adequacy.BranchEvidence.owed -> at", 1,
                     "the arms and the reading both come out of the store under one module name,"
                             + " inside the one method that asks for either. Nothing hands this pair"

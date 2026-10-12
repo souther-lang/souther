@@ -1,0 +1,25 @@
+// Nor a `match` on an element inside a closure past two guards no value meets together.
+//
+// No `n` is above ten and below zero, so no run reaches `List.all`, nor anything it runs.
+//
+// told apart at n: 2 groups of 2
+// told apart at xs[*]: untouched
+module example.elementmatchedpastnothing
+
+data North
+data South
+data Region = North | South
+
+data Ok = { n: Int }
+
+behavior judge : (n: Int, xs: List<Region>) -> Ok
+    constructs Ok
+
+let judge (n, xs) = {
+    guard n > 10 else Ok { n = 0 }
+    guard n < 0 else Ok { n = 1 }
+    guard List.all(r -> match r with
+        | North -> true
+        | South -> false, xs) else Ok { n = 2 }
+    Ok { n = 3 }
+}

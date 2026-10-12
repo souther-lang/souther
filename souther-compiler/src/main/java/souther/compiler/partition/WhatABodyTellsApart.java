@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.PathReachability;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
@@ -28,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -64,14 +66,25 @@ final class WhatABodyTellsApart {
     private final List<Axis> axes;
     /** The rules the reading of the input read to the end and found no line in, with why. */
     private final List<RuleWithoutALine> noLine;
+    /** The case each arm of a {@code match} is, where the tree the operations stand in names it. */
+    private final ArmsNamed armsNamed;
+    /** What the model's rules prove arrives at each place a way passes. */
+    private final PathReachability.Answers arrives;
+    /** Which classes of two positions can be in one value, asked of the positions a way stands
+     *  at together. */
+    private final ClassCoexistence coexistence;
     /** Which position each condition is about and what it admits there, asked once of each. */
     private final Map<souther.compiler.reading.Condition, Placed> placed = new HashMap<>();
 
     private WhatABodyTellsApart(MeasuredInput.MeasuredAxes measured,
-                                List<RuleWithoutALine> noLine) {
+                                List<RuleWithoutALine> noLine, ArmsNamed armsNamed,
+                                PathReachability.Answers arrives) {
         this.measured = measured;
         this.axes = measured.axes();
         this.noLine = noLine;
+        this.armsNamed = armsNamed;
+        this.arrives = arrives;
+        this.coexistence = ClassCoexistence.among(axes);
         this.unread = new boolean[axes.size()];
         for (int at = 0; at < axes.size(); at++) {
             splits.add(new ArrayList<>());
@@ -81,12 +94,17 @@ final class WhatABodyTellsApart {
 
     /**
      * What the body read as {@code read} tells apart at each position {@code measured}, where
-     * {@code noLine} is what the reading of the input found about the rules it drew no line for.
+     * {@code noLine} is what the reading of the input found about the rules it drew no line for and
+     * {@code armsNamed} the case each arm of a {@code match} is, read where the operations stand,
+     * and {@code arrives} what the model's rules prove arrives at each place a way passes.
      */
     static Map<AxisId, BodyDistinction> of(CoverageRead.Read read,
                                            MeasuredInput.MeasuredAxes measured,
-                                           List<RuleWithoutALine> noLine) {
-        WhatABodyTellsApart reading = new WhatABodyTellsApart(measured, noLine);
+                                           List<RuleWithoutALine> noLine,
+                                           ArmsNamed armsNamed,
+                                           PathReachability.Answers arrives) {
+        WhatABodyTellsApart reading =
+                new WhatABodyTellsApart(measured, noLine, armsNamed, arrives);
         List<Axis> axes = measured.axes();
         for (WayIn way : read.taken()) {
             reading.take(way);
@@ -155,6 +173,17 @@ final class WhatABodyTellsApart {
     /** Where {@code each} stands, which is {@link ConditionPlacement}'s answer, and what it admits
      *  there. */
     private Placed placing(souther.compiler.reading.Condition each) {
+        // An arm the reading of the runs named no position for, which the tree the operations
+        // stand in names as a case of a position: an arm of a `match` on what a closure was handed
+        // out of a container. Placed where that case would be, and put to no class there — the
+        // closure is applied to each element, a different case each time and none on an empty
+        // container, so which class took the arm is not this arm's to say.
+        if (each instanceof souther.compiler.reading.Condition.Arm arm) {
+            Optional<souther.compiler.reading.Condition.Case> named = armsNamed.of(arm);
+            if (named.isPresent()) {
+                return withheld(placing(named.get()));
+            }
+        }
         return switch (ConditionPlacement.of(each, measured)) {
             // A fork the reading could not name a subject for: a value no position is, a name bound
             // over several cases, an attempted construction. Which way it goes may turn on any
@@ -173,6 +202,27 @@ final class WhatABodyTellsApart {
                 }
                 yield new Placed.UnderTheCases(List.copyOf(out));
             }
+        };
+    }
+
+    /**
+     * {@code placed}, about the same positions and putting nothing it says there to classes: a
+     * condition this compiler names the position of and cannot place.
+     */
+    private static Placed withheld(Placed placed) {
+        return switch (placed) {
+            case Placed.About it -> new Placed.About(it.at(), null);
+            case Placed.UnderTheCases it -> {
+                List<Placed.UnderACase> out = new ArrayList<>();
+                for (Placed.UnderACase one : it.underEach()) {
+                    out.add(new Placed.UnderACase(
+                            one.about() == null ? null : new Placed.About(one.about().at(), null),
+                            one.taken(), one.neverHolds()));
+                }
+                yield new Placed.UnderTheCases(List.copyOf(out));
+            }
+            case Placed.AboutNoPosition it -> it;
+            case Placed.SubjectUnknown it -> it;
         };
     }
 
@@ -303,6 +353,14 @@ final class WhatABodyTellsApart {
 
     /** One way: what all of its decisions admit together at each position, if a value can take it. */
     private void take(WayIn way) {
+        // A place on the way the model's rules prove nothing arrives at is one no run passes, so
+        // no run takes the way and nothing on it is anything a run decides.
+        for (Decision decision : way.decisions()) {
+            if (arrives.at(decision.claims().at())
+                    instanceof souther.compiler.reach.Reachability.Unreachable) {
+                return;
+            }
+        }
         // What the way says at the positions it stands at whatever case a row is: a condition
         // about the position itself puts a row taking the way there.
         Admitted direct = new Admitted(axes.size());
@@ -351,6 +409,11 @@ final class WhatABodyTellsApart {
             }
             taken = taken.joinedWith(ways, measuredBy(together, underTheCases));
         }
+        // No two positions the way stands at leave classes that can be in one value, so no value
+        // takes it: an element's case on the way, and a count of its container that holds nothing.
+        if (!oneValueCanTake(taken)) {
+            return;
+        }
         // Only for a way some value takes. A decision nothing could place is still one no run makes
         // where the rest of its way admits no class.
         subjectUnknown |= subjectUnknownHere;
@@ -361,6 +424,45 @@ final class WhatABodyTellsApart {
             }
             unread[at] |= taken.unread[at];
         }
+    }
+
+    /**
+     * Whether every two positions {@code way} stands at leave it a class each that can be in one
+     * value ({@link ClassCoexistence}), as the count and the pairs owed ask it. A position the way
+     * puts to no class leaves it every class there, and a position with no classes has none to
+     * ask about, as it has nothing for a condition to tell apart.
+     */
+    private boolean oneValueCanTake(Admitted way) {
+        for (int one = 0; one < axes.size(); one++) {
+            if (!standsInAClass(way, one)) {
+                continue;
+            }
+            for (int other = one + 1; other < axes.size(); other++) {
+                if (standsInAClass(way, other) && !somePairHolds(way, one, other)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private boolean standsInAClass(Admitted way, int at) {
+        return way.stands[at] && !axes.get(at).classes().isEmpty();
+    }
+
+    private boolean somePairHolds(Admitted way, int one, int other) {
+        for (int here = 0; here < axes.get(one).classes().size(); here++) {
+            if (way.here[one] != null && !way.here[one][here]) {
+                continue;
+            }
+            for (int there = 0; there < axes.get(other).classes().size(); there++) {
+                if ((way.here[other] == null || way.here[other][there])
+                        && coexistence.canHoldTogether(one, here, other, there)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** The positions the conditions {@code together} are measured at under some case. */
