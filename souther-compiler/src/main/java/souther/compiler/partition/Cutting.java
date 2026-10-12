@@ -316,10 +316,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         Read drawn = onEachApplication(behavior, comparison, read, each, answering, conditions);
         // Where an application is made, and where a line decides on it, is part of what the line
-        // is; said in anything but what a row's own values answer, a row could not be asked
+        // is; said in anything but what a row's own numbers answer, a row could not be asked
         // whether it is somewhere the line decides, and none of the lines is drawn.
         return drawn instanceof Read.Several several && several.parts().stream()
-                .anyMatch(part -> !part.cases().stream().allMatch(AStatementAtARow::readable))
+                .anyMatch(part -> !part.cases().stream().allMatch(AStatementAtARow::askable))
                 ? severalNotDrawn(comparison, read, reads, answering)
                 : drawn;
     }

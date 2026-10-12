@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
@@ -90,9 +91,9 @@ final class AStatementAtARow {
 
     /**
      * Whether a row's own values say whether {@code stated} holds at it: relations over the
-     * input's own numbers, whether a position of the input is true or holds a value, joined,
-     * statements about the elements of a container the input holds — some element meeting
-     * something, or how many do, against a number — or nothing asked at all.
+     * input's own numbers, whether a position of the input is true, holds a value or is one of
+     * some cases of a sum, joined, statements about the elements of a container the input holds —
+     * some element meeting something, or how many do, against a number — or nothing asked at all.
      *
      * <p>Anything else is no statement a row can be asked about. Something nobody read, a truth of
      * what a dependency answered, or a count against another of the input's numbers is not settled
@@ -104,6 +105,11 @@ final class AStatementAtARow {
             case Proposition.Always _ -> true;
             case Proposition.Truth(DecisionSubject.AnInput _, boolean _, String _),
                  Proposition.Present(DecisionSubject.AnInput _, boolean _, String _) -> true;
+            // A row names the case it wrote at a position, and that answers only cases of a sum:
+            // whether an optional holds a value is asked as whether it is present.
+            case Proposition.InCases(DecisionSubject.AnInput _, CasesLeft cases, boolean _,
+                                     String _) ->
+                    cases.atoms().stream().allMatch(Refinement.SumCase.class::isInstance);
             case Proposition.SameValue(DecisionSubject.AnInput _, DecisionSubject.AnInput _,
                                        boolean _, String _) -> true;
             case Proposition.LastToHold _ -> true;
@@ -118,24 +124,10 @@ final class AStatementAtARow {
                         term.atOnePosition() != null;
                 case Relation.Ordered _ -> false;
             };
-            default -> false;
-        };
-    }
-
-    /**
-     * Whether a row's own values say whether {@code stated} holds, where it is asked of a row
-     * rather than drawn: where a line decides, or how a run got somewhere. What {@link #askable}
-     * takes, and which case of a sum a position holds, which a row says by the value it wrote —
-     * and which no line is drawn on, so it is not askable.
-     */
-    static boolean readable(Proposition stated) {
-        return switch (stated) {
-            case Proposition.InCases(DecisionSubject.AnInput _, CasesLeft cases, boolean _,
-                                     String _) -> ofTheSum(cases);
-            case Proposition.All all -> all.parts().stream().allMatch(AStatementAtARow::readable);
-            case Proposition.Any any -> any.parts().stream().allMatch(AStatementAtARow::readable);
-            case Proposition.Some some -> readable(some.ofTheElement());
-            default -> askable(stated);
+            case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
+                 Proposition.SameValue _, Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _ -> false;
+            case Proposition.Carried carried -> throw carried.handedToAReader();
         };
     }
 
@@ -149,13 +141,11 @@ final class AStatementAtARow {
     /**
      * {@code stated}, ready to be asked of rows.
      *
-     * <p>Wider than {@link #askable}, which is whether a line is drawn on what is stated. Which case
-     * of a sum a position holds is read too, off the value the row wrote there: no line is drawn on
-     * it, and a way into an arm is that. Any other part that is not askable is put to no row and
-     * answered as not known wherever it decides the answer: a row says nothing of what nobody read,
-     * or of what it does not write. Which is what a reader of where a run got to wants — a way
-     * through an arm nothing here reads, or past a closure over what a dependency answered, is a
-     * way nothing knows a row took, and not a way it did not.
+     * <p>A part that is not {@link #askable} is put to no row and answered as not known wherever it
+     * decides the answer: a row says nothing of what nobody read, or of what it does not write.
+     * Which is what a reader of where a run got to wants — a way through an arm nothing here reads,
+     * or past a closure over what a dependency answered, is a way nothing knows a row took, and not
+     * a way it did not.
      *
      * @param quantities the reading of the input, which says which order each number is on
      */
@@ -176,9 +166,8 @@ final class AStatementAtARow {
                     positions.add(at);
             case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _, String _) ->
                     positions.add(at);
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
-                                     boolean _, String _) when ofTheSum(cases) ->
-                    positions.add(at);
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft _,
+                                     boolean _, String _) -> positions.add(at);
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
                                        DecisionSubject.AnInput(TermPath other), boolean _,
                                        String _) -> {
@@ -202,7 +191,10 @@ final class AStatementAtARow {
                     into.computeIfAbsent(compared.relation(),
                             relation -> OneRelation.of(relation, behavior, quantities));
             // Put to no row: answered as not known where it is asked ({@link #notAsked}).
-            default -> { }
+            case Proposition.Compared _, Proposition.Truth _, Proposition.Present _,
+                 Proposition.InCases _, Proposition.SameValue _, Proposition.Unread _,
+                 Proposition.OnAnApplication _, Proposition.SomeReachable _ -> { }
+            case Proposition.Carried carried -> throw carried.handedToAReader();
         }
     }
 
@@ -400,14 +392,9 @@ final class AStatementAtARow {
             case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean holds,
                                      String _) -> heldAs(holds, ofItsValue(at, row,
                     value -> !(value instanceof ObservedValue.Absent)));
-            // Which case of a sum a position holds, which a row says by the value it wrote there.
             case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
-                                     boolean holds, String _) when ofTheSum(cases) ->
-                    heldAs(holds, ofItsValue(at, row, value -> switch (value) {
-                        case ObservedValue.Unit unit -> cases.leaves(unit.type());
-                        case ObservedValue.Constructed built -> cases.leaves(built.type());
-                        default -> null;
-                    }));
+                                     boolean holds, String _) when askable(part) ->
+                    heldAs(holds, amongCases(at, cases, row));
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
                                        DecisionSubject.AnInput(TermPath other), boolean holds,
                                        String _) -> heldAs(holds, theSame(one, other, row));
@@ -443,13 +430,11 @@ final class AStatementAtARow {
                 yield compared.holds() || held instanceof Answer.CouldNotTell ? held
                         : held instanceof Answer.Holds ? Answer.FAILS : Answer.HOLDS;
             }
-            default -> notAsked(part);
+            case Proposition.Compared _, Proposition.Truth _, Proposition.Present _,
+                 Proposition.InCases _, Proposition.SameValue _, Proposition.Unread _,
+                 Proposition.OnAnApplication _, Proposition.SomeReachable _ -> notAsked(part);
+            case Proposition.Carried carried -> throw carried.handedToAReader();
         };
-    }
-
-    /** Whether every case {@code cases} leaves is a case of a sum, which a value says it is. */
-    private static boolean ofTheSum(CasesLeft cases) {
-        return cases.atoms().stream().allMatch(Refinement.SumCase.class::isInstance);
     }
 
     /**
@@ -495,6 +480,36 @@ final class AStatementAtARow {
                     yield answer ? Answer.HOLDS : Answer.FAILS;
                 }
                 // The row put nothing here, as a relation over a position a row left empty fails.
+                case ObservationAtPoint.WroteNothing _ -> Answer.FAILS;
+                case ObservationAtPoint.BelongsToAnotherReading _ ->
+                        new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));
+            };
+        };
+    }
+
+    /**
+     * Whether the value a row put at {@code at} is one of {@code cases}: whether the walk reaches it
+     * at the position narrowed to them, as every narrowed position a reading names is reached.
+     *
+     * <p>Asked of the walk and not of the value. What a row wrote at a position arrives wearing the
+     * names the position is declared under, and the walk is what takes them off before it asks
+     * which case a value is ({@link Classifier#inside}): the value at a position declared
+     * {@code Open = Flag} is in the case it wraps, and a record whose own field is called
+     * {@code value} is the case it is. Holding where a value is there and the narrowed walk reaches
+     * it, failing where it does not or where the row put nothing there, and not read where the
+     * walk did not get there.
+     */
+    private static Answer amongCases(TermPath at, CasesLeft cases,
+                                     BorderQuantity.Observation row) {
+        Answer there = ofItsValue(at, row, _ -> true);
+        if (!(there instanceof Answer.Holds)) {
+            return there;
+        }
+        return switch (row.at(DeclaredInput.narrowedTo(at, cases))) {
+            case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
+                    new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
+            case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
+                case ObservationAtPoint.Value _ -> Answer.HOLDS;
                 case ObservationAtPoint.WroteNothing _ -> Answer.FAILS;
                 case ObservationAtPoint.BelongsToAnotherReading _ ->
                         new Answer.CouldNotTell(Set.of(ReadingGap.NO_VALUE));

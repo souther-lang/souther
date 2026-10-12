@@ -36,6 +36,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -175,10 +176,11 @@ public final class WhatTheRulesLeave {
     private static AWayThrough amongCases(TermPath at, CasesLeft cases, boolean among,
                                           InputReading read) {
         List<TypeSymbol> named = namedIn(cases);
+        Set<TypeSymbol> anyOf = Set.copyOf(named);
         Optional<List<List<TypeSymbol>>> readings = read.declared().leavesAt(at);
         if (readings.isPresent() && !named.isEmpty() && readings.get().stream().allMatch(
-                leaves -> among ? leaves.stream().noneMatch(named::contains)
-                        : named.containsAll(leaves))) {
+                leaves -> among ? leaves.stream().noneMatch(anyOf::contains)
+                        : anyOf.containsAll(leaves))) {
             return new AWayThrough.RuledOut(new WhyRuledOut.TheDeclarationLeavesNone(at,
                     readings.get().getLast(), named, among));
         }
@@ -187,10 +189,11 @@ public final class WhatTheRulesLeave {
             return LEFT;
         }
         List<Case> asked = new ArrayList<>();
+        Set<Refinement> atoms = Set.copyOf(cases.atoms());
         for (Case each : Distinctions.ofType(position.view().shape(), read.rules().symbols(),
                 read.rules().kinds(), read.rules().sums())) {
             Refinement one = Refinement.of(each);
-            if (one != null && cases.atoms().contains(one) == among) {
+            if (one != null && atoms.contains(one) == among) {
                 asked.add(each);
             }
         }

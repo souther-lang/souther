@@ -282,8 +282,7 @@ public sealed interface Derivation {
             for (int i = 0; i < arms.size(); i++) {
                 Arm arm = arms.get(i);
                 Proposition selects = selecting.get(i);
-                List<Proposition> arrives = new ArrayList<>(before.stream()
-                        .map(Proposition::denied).toList());
+                List<Proposition> arrives = new ArrayList<>(noArmBefore(before, selects));
                 Proposition states = stating.get(i);
                 // The entry an arm picks out is the one its statement is about: the statement
                 // sits inside the quantifier that selected it, where its subjects under the
@@ -332,13 +331,42 @@ public sealed interface Derivation {
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            List<Proposition> arrives = new ArrayList<>();
-            for (Derivation each : before) {
-                arrives.add(numbering.of(each).denied());
-            }
-            arrives.add(numbering.of(selects));
+            List<Proposition> earlier = before.stream().map(numbering::of).toList();
+            Proposition selecting = numbering.of(selects);
+            List<Proposition> arrives = new ArrayList<>(noArmBefore(earlier, selecting));
+            arrives.add(selecting);
             return Proposition.all(arrives);
         }
+    }
+
+    /**
+     * That none of the arms written before one selecting {@code selects} selects the value, as the
+     * parts a value arriving at that arm meets: each of them denied, but an arm selecting cases of
+     * the same subject that share none with the cases {@code selects} leaves, which every value it
+     * selects is already outside.
+     *
+     * <p>A match over the cases of a sum, one case an arm, is then each arm's case and nothing
+     * besides, rather than its case beside the denial of every case before it.
+     */
+    private static List<Proposition> noArmBefore(List<Proposition> before, Proposition selects) {
+        List<Proposition> out = new ArrayList<>();
+        for (Proposition each : before) {
+            if (!apart(each, selects)) {
+                out.add(each.denied());
+            }
+        }
+        return out;
+    }
+
+    /** Whether no value both {@code one} and {@code other} select can be, by the cases of one
+     *  subject each holds it to. */
+    private static boolean apart(Proposition one, Proposition other) {
+        return one instanceof Proposition.InCases(
+                DecisionSubject of, CasesLeft cases, boolean holds, String _)
+                && holds
+                && other instanceof Proposition.InCases(
+                        DecisionSubject same, CasesLeft chosen, boolean chosenHolds, String _)
+                && chosenHolds && of.equals(same) && cases.meet(chosen) == null;
     }
 
     /**
