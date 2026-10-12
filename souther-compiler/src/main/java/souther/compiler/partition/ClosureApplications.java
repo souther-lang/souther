@@ -203,7 +203,8 @@ sealed interface ClosureApplications {
                     }
                 }
                 case InputReads.Applications.NoneHanded _ -> {
-                    List<TermPath> positions = positionsAppliedOver(block, around.reads(), read);
+                    List<Denotation> containers = around.reads().containersAppliedOver(block);
+                    List<TermPath> positions = positionsAppliedOver(containers, read);
                     List<DecisionSubject> appliedOver = positions.stream()
                             .<DecisionSubject>map(DecisionSubject.AnInput::new).toList();
                     asked |= !appliedOver.isEmpty();
@@ -213,7 +214,7 @@ sealed interface ClosureApplications {
                                     : WhereAnApplicationIsMade.whereOneOfTheContainersHoldsSomething(
                                             around.reached(), appliedOver),
                             around.carriedIntoTheFirst(),
-                            metOn(block, around, entered, read)));
+                            metOn(block, containers, around, entered, read)));
                 }
                 case InputReads.Applications.Unsaid _ -> {
                     return new NotSaid(around.metOn().notSaidAnywhere(new ReadingGap.ReachNotRead(
@@ -235,7 +236,7 @@ sealed interface ClosureApplications {
 
     /**
      * Which elements the application of {@code block} that stands for every element of what it is
-     * handed is made on: those {@code around} is made on, and where the operation stops at an
+     * handed — {@code containers} — is made on: those {@code around} is made on, and where the operation stops at an
      * answer, the elements no element before stopped it at — what the closure answers on one,
      * read in the names {@code entered} it with.
      *
@@ -249,13 +250,13 @@ sealed interface ClosureApplications {
      * every element for want of knowing. A closure handed no element at all is made on the
      * elements {@code around} is.
      */
-    private static ElementsMetOn metOn(Core.Block block, Application around, InputReads entered,
+    private static ElementsMetOn metOn(Core.Block block, List<Denotation> containers,
+                                       Application around, InputReads entered,
                                        InputReading read) {
         List<HowAClosureIsApplied> applied = around.reads().howItIsApplied(block);
         if (applied.stream().allMatch(HowAClosureIsApplied.TO_EVERY_ELEMENT::equals)) {
             return around.metOn();
         }
-        List<Denotation> containers = around.reads().containersAppliedOver(block);
         if (applied.size() > 1) {
             return notSaid(around.metOn(), containers, read,
                     new ReadingGap.ReachNotRead(ReadingGap.ReachNotRead.Why.A_PART_NOT_READ));
@@ -321,17 +322,17 @@ sealed interface ClosureApplications {
     }
 
     /**
-     * The positions of the input the containers {@code block} is applied over stand at, or none
-     * where there are none or one of them stands at no position.
+     * The positions of the input {@code containers}, those a closure is applied over, stand at, or
+     * none where there are none or one of them stands at no position.
      *
      * <p>Every one or nothing: a run may be inside the closure by the operation over the container
      * that stands at no position with every other empty, so saying one of the rest holds something
      * would be saying more than is known.
      */
-    private static List<TermPath> positionsAppliedOver(Core.Block block, InputReads reads,
+    private static List<TermPath> positionsAppliedOver(List<Denotation> containers,
                                                        InputReading read) {
         List<TermPath> out = new ArrayList<>();
-        for (Denotation container : reads.containersAppliedOver(block)) {
+        for (Denotation container : containers) {
             Optional<TermPath> at = Pullback.positionHoldingWhatItHolds(container, read);
             if (at.isEmpty()) {
                 return List.of();
