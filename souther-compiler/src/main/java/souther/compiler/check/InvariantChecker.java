@@ -671,7 +671,7 @@ public final class InvariantChecker {
          * {@link #withoutClausesOf}: a clause has as many conjuncts as the author wrote, and taking
          * the clause away answers for all of them at once.
          */
-        static Reach withoutParts(java.util.Set<PartId<RuleRef.Invariant>> parts) {
+        static Reach withoutParts(Set<PartId<RuleRef.Invariant>> parts) {
             return parts.isEmpty() ? EVERYTHING
                     : new Reach(RulesLeftOut.NONE, PartsLeftOut.without(parts), _ -> false);
         }
@@ -2076,15 +2076,19 @@ public final class InvariantChecker {
         }
 
         /** Whether {@code part} is the only part naming {@code path}, or a place at or under it,
-         *  or one it is under. */
+         *  or one it is under — and was seen naming it, so that what is said rests on the walk
+         *  having met the place and not on its having met nothing there. */
         boolean onlyNamedBy(RuleKey path, PartId<RuleRef.Invariant> part) {
+            boolean seen = false;
             for (Map.Entry<RuleKey, Set<PartId<RuleRef.Invariant>>> each : named().entrySet()) {
-                if ((each.getKey().isAtOrUnder(path) || path.isAtOrUnder(each.getKey()))
-                        && !each.getValue().equals(Set.of(part))) {
-                    return false;
+                if (each.getKey().isAtOrUnder(path) || path.isAtOrUnder(each.getKey())) {
+                    if (!each.getValue().equals(Set.of(part))) {
+                        return false;
+                    }
+                    seen = true;
                 }
             }
-            return true;
+            return seen;
         }
 
         private Map<RuleKey, Set<PartId<RuleRef.Invariant>>> named() {
@@ -3130,10 +3134,11 @@ public final class InvariantChecker {
                 return Set.of();
             }
             Coordinate at = each.getKey();
-            boolean every = at.at().of() instanceof NumberAt.OfWhatNumber.OfItsOwnValue
-                    && partsNaming.onlyNamedBy(at.path(), part);
+            boolean itsPlace = at.at().of() instanceof NumberAt.OfWhatNumber.OfItsOwnValue;
+            boolean every = itsPlace && partsNaming.onlyNamedBy(at.path(), part);
             terms.add(new WhatARelationLeavesUndivided.Term<>(List.of(at.path()), each.getValue(),
-                    NumericDomain.Bounds.OPEN, every ? NumericDomain.Bounds.OPEN : null, null));
+                    NumericDomain.Bounds.OPEN, every ? NumericDomain.Bounds.OPEN : null, null,
+                    itsPlace));
         }
         return WhatARelationLeavesUndivided.of(terms, over.constant(),
                 over.comparison().claim().statedRelation(),
@@ -3634,7 +3639,7 @@ public final class InvariantChecker {
          * ({@code UnreadComparison.over}). Typed as a sequence, this would promise an order that is
          * whatever a hash of the atoms happened to give.
          */
-        record Over(StatedComparison comparison, java.util.Set<Coordinate> numbers,
+        record Over(StatedComparison comparison, Set<Coordinate> numbers,
                     Map<Coordinate, ExactRatio> weights, ExactRatio constant)
                 implements CanonicalForm {
 
@@ -3644,7 +3649,7 @@ public final class InvariantChecker {
                             "a form over no number is one whose positions cancelled, which is"
                                     + " the arm with the residue");
                 }
-                numbers = java.util.Set.copyOf(numbers);
+                numbers = Set.copyOf(numbers);
                 weights = Collections.unmodifiableMap(new LinkedHashMap<>(weights));
                 if (!weights.keySet().equals(numbers)) {
                     throw new IllegalArgumentException("each number of a form is weighed: "
@@ -3664,8 +3669,8 @@ public final class InvariantChecker {
 
             /** The places these numbers are at, which is fewer than the numbers wherever one name
              *  carries two. */
-            java.util.Set<RuleKey> positions() {
-                java.util.Set<RuleKey> out = new LinkedHashSet<>();
+            Set<RuleKey> positions() {
+                Set<RuleKey> out = new LinkedHashSet<>();
                 numbers.forEach(each -> out.add(each.path()));
                 return out;
             }
@@ -3723,7 +3728,7 @@ public final class InvariantChecker {
                 terms.outcomeOf(recognised.left(), at, byName::containsKey);
         AffineForms.Outcome<FactSubject, Denotations> right =
                 terms.outcomeOf(recognised.right(), at, byName::containsKey);
-        for (AffineForms.Outcome<FactSubject, Denotations> side : java.util.List.of(left, right)) {
+        for (AffineForms.Outcome<FactSubject, Denotations> side : List.of(left, right)) {
             if (side instanceof AffineForms.Outcome.StoppedAt<FactSubject, Denotations> stopped) {
                 return new CanonicalForm.NotRead(recognised, stopped.node(), stopped.at(),
                         stopped.why().nonAffineOperation());
@@ -3741,16 +3746,18 @@ public final class InvariantChecker {
         // The numbers the form is left over, counted as numbers. A path carries more than one — a
         // string has its own order and its length — so a form over two numbers of one name is over
         // two things, and counting the names would call it one.
-        java.util.Set<Coordinate> numbers = new LinkedHashSet<>();
+        Set<Coordinate> numbers = new LinkedHashSet<>();
         // And what each is weighed by, which two names for one number weigh together — null where
         // that is no number held.
         Map<Coordinate, ExactRatio> weights = new LinkedHashMap<>();
         for (Map.Entry<FactSubject, ExactRatio> each : whole.coefs().entrySet()) {
             Coordinate number = byName.get(each.getKey());
             numbers.add(number);
-            ExactRatio had = weights.get(number);
-            weights.put(number,
-                    had == null ? each.getValue() : had.plus(each.getValue()).orNull());
+            // Asked whether the number was weighed before, and not read off the weight: a sum no
+            // number holds is null, and is no weight to start again from.
+            weights.put(number, !weights.containsKey(number) ? each.getValue()
+                    : weights.get(number) == null ? null
+                    : weights.get(number).plus(each.getValue()).orNull());
         }
         return numbers.isEmpty() ? new CanonicalForm.CutsNothing(recognised, whole.constant())
                 : new CanonicalForm.Over(recognised, numbers, weights, whole.constant());

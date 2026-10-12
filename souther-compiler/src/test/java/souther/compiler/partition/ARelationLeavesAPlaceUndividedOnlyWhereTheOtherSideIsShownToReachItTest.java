@@ -107,6 +107,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         + " || value == Date(\"2022-01-01\")", "y == Date.year(d.value)", "4:18"));
     }
 
+    /** A day apart, the last date has no date after it and the first none before: two values of
+     *  one type each settle it at an end, which taking the same values does not reach. */
+    @Test
+    void twoValuesADayApartAreNotShownToReachEachOther() {
+        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+                left("a: Date, b: Date", "data Unused = Int", "Date.daysBetween(a, b) == 1",
+                        "4:39"));
+    }
+
     @Test
     void twoValuesOfOneDeclaredTypeReachEachOther() {
         assertEquals(Map.of("c", RELATES, "e", RELATES),
@@ -125,6 +134,22 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("a", RELATES, "b", NOT_SHOWN),
                 left("a: Int, b: Int", "data Unused = Int", "if a > 0 then a < b else false",
                         "4:32"));
+    }
+
+    /**
+     * What a weighed term has to stand at is the rest over its weight: under {@code 2h + y < 0}
+     * with {@code y} at most minus five, {@code y} at minus five needs an {@code h} below two and a
+     * half, which an {@code h} from four on never is.
+     */
+    @Test
+    void aWeighedTermHasToStandAtTheRestOverItsWeight() {
+        String declarations = "data Y = Int invariant value >= -10 && value <= -5";
+        assertEquals(Map.of("h", NOT_SHOWN, "y", NOT_SHOWN),
+                left("h: Int, y: Y", declarations,
+                        "if h >= 4 && h <= 11 then 2 * h + y.value < 0 else false", "4:58"));
+        assertEquals(Map.of("h", NOT_SHOWN, "y", RELATES),
+                left("h: Int, y: Y", declarations,
+                        "if h >= 0 && h <= 20 then 2 * h + y.value < 0 else false", "4:58"));
     }
 
     /** A way over two places ties them, however each runs on its own. */

@@ -104,19 +104,31 @@ class AValueHeldAgainstWhatAnOperationAnswersRelatesTheTwoTest {
                 """))));
     }
 
-    /** Two values being one or not, and two held in order, are one relation of the two
-     *  positions: what it leaves each is the same either way. */
+    /** Two values being one or not is a relation of the two positions as two values being one
+     *  is. */
     @Test
-    void aDenialAndAnOrderLeaveTheSameTwo() {
-        for (String compared : List.of("d /= String.lowercase(s)",
-                "d < String.trim(String.lowercase(s))")) {
-            assertEquals(Set.of(notShown("3:18", "d"), relates("3:18", "s")),
-                    Set.copyOf(said(measured("""
-                            module w1
-                            behavior m : (s: String, d: String) -> Bool
-                            let m (s, d) = %s
-                            """.formatted(compared)))), compared);
-        }
+    void aDenialLeavesTheSameTwo() {
+        assertEquals(Set.of(notShown("3:18", "d"), relates("3:18", "s")),
+                Set.copyOf(said(measured("""
+                        module w1
+                        behavior m : (s: String, d: String) -> Bool
+                        let m (s, d) = d /= String.lowercase(s)
+                        """))));
+    }
+
+    /**
+     * Held in order, the answer may stand at the least string, which every string of spaces is
+     * trimmed to and no {@code d} is below: each of them settles the comparison whatever {@code d}
+     * holds, so the order is not shown to leave {@code s} undivided.
+     */
+    @Test
+    void anOrderAgainstAnAnswerAtTheEndOfItsTypeIsNotShownToLeaveItsPlaceUndivided() {
+        assertEquals(Set.of(notShown("3:18", "d"), notShown("3:18", "s")),
+                Set.copyOf(said(measured("""
+                        module w1
+                        behavior m : (s: String, d: String) -> Bool
+                        let m (s, d) = d < String.trim(String.lowercase(s))
+                        """))));
     }
 
     /** Two answers of positions apart, neither of which is shown to reach every value of the

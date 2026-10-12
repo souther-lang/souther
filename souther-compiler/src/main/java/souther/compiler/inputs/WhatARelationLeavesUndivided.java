@@ -39,7 +39,21 @@ import java.util.function.BiPredicate;
  * <p>The ends of a type are not values a model divides. {@code x < y} is false at the greatest
  * {@code x} an {@code Int} holds whatever {@code y} is, as it is at the least string under
  * {@code y < x}; that is where the representation stops, and a run that stops only there is said
- * with no end at all.
+ * with no end at all. That is so only where what the reaching term has to stand at is the other
+ * term's own value — two terms weighed one and minus one, held against nought — so that every value
+ * it is needed at is a value of the type. Moved by a constant or a weight, an end of the type is a
+ * value whose partner is past the end: {@code Date.daysBetween(a, b) == 1} at the last date needs a
+ * {@code b} no date is, so that {@code a} settles it whatever {@code b} holds. And even then it is
+ * so of the value at a place, which is one value there, and not of what an operation answers:
+ * every string of spaces is one {@code String.trim} answers the least string of, and none of them
+ * is below {@code d < String.trim(s)}'s {@code d}. So where an order needs the reaching term past
+ * an end the other runs to, the end is passed over only where the other is the value at its
+ * place.
+ *
+ * <p>An order needs the reaching term strictly past each value it has to stand at on one side
+ * only. {@code x < y} at {@code y} needs some {@code x} below it, where the comparison holds, and
+ * some {@code x} at it or above, where it does not; which side is the strict one follows from the
+ * relation and the sign of the term's weight.
  *
  * <p>Asked of the terms and not of how a reading came to them, so every reading that says a
  * relation divides no place asks this one question, over whatever it names its places by.
@@ -58,9 +72,11 @@ public final class WhatARelationLeavesUndivided {
      * @param realizes a run every value of which it is shown to take, or null where none is shown
      * @param takes    what values it takes, compared with another term's by equality — null where
      *                 nothing says
+     * @param itsPlace whether it is the value at its one place, so that an end of its type it runs
+     *                 to is one value there and not every value something answers it at
      */
     public record Term<P>(List<P> madeOf, ExactRatio weight, NumericDomain.Bounds holds,
-                          NumericDomain.Bounds realizes, Object takes) {
+                          NumericDomain.Bounds realizes, Object takes, boolean itsPlace) {
 
         public Term {
             if (madeOf == null || weight == null || weight.signum() == 0 || holds == null) {
@@ -106,7 +122,8 @@ public final class WhatARelationLeavesUndivided {
                                        Rel relation) {
         Term<P> reaching = terms.get(by);
         boolean exactly = relation == Rel.EQ || relation == Rel.NE;
-        if (exactly && sameValues(terms, by, of)) {
+        boolean itsValue = standsAtTheOthersValue(terms, constant);
+        if (exactly && itsValue && sameValues(terms, by, of)) {
             return true;
         }
         if (reaching.realizes() == null) {
@@ -121,18 +138,64 @@ public final class WhatARelationLeavesUndivided {
         if (needed == null) {
             return false;
         }
-        return exactly ? needed.within(reaching.realizes())
-                : needed.strictlyWithin(reaching.realizes());
+        // An end of the type moved by a constant or a weight is needed past the end.
+        if ((needed.runsDown() || needed.runsUp()) && !itsValue) {
+            return false;
+        }
+        if (exactly) {
+            return needed.within(reaching.realizes());
+        }
+        boolean strictlyBelow = strictlyBelow(relation, reaching.weight());
+        if ((strictlyBelow ? needed.runsDown() : needed.runsUp())
+                && !othersAreTheirPlaces(terms, by)) {
+            return false;
+        }
+        return needed.around(reaching.realizes(), strictlyBelow);
     }
 
-    /** Two values taking the same values, and nothing else in the relation. */
+    /**
+     * Whether, where the term weighed {@code weight} has to stand at a value for {@code relation}
+     * to come out either way, it has to stand strictly below it on one side — and otherwise
+     * strictly above it. The relation holds the terms' sum against nought: with the weight
+     * positive, the sum under {@code <} holds strictly below the value and fails at it or above,
+     * and under {@code >=} fails strictly below it.
+     */
+    private static boolean strictlyBelow(Rel relation, ExactRatio weight) {
+        boolean below = relation == Rel.LT || relation == Rel.GE;
+        return (weight.signum() > 0) == below;
+    }
+
+    /** Whether every term but the one at {@code by} is the value at its place. */
+    private static <P> boolean othersAreTheirPlaces(List<Term<P>> terms, int by) {
+        for (int i = 0; i < terms.size(); i++) {
+            if (i != by && !terms.get(i).itsPlace()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether each of two terms stands exactly at the other's value: two terms weighed one and
+     * minus one, held against nought — or against a value that is no number, which only such two
+     * are.
+     */
+    private static <P> boolean standsAtTheOthersValue(List<Term<P>> terms, ExactRatio constant) {
+        if (terms.size() != 2 || (constant != null && constant.signum() != 0)) {
+            return false;
+        }
+        ExactRatio one = terms.get(0).weight();
+        return one.abs().equals(ExactRatio.ONE)
+                && one.plus(terms.get(1).weight()) instanceof ExactAnswer.Held<ExactRatio>(
+                        ExactRatio sum)
+                && sum.signum() == 0;
+    }
+
+    /** Whether the two terms of a relation each standing at the other's value take the same
+     *  values. */
     private static <P> boolean sameValues(List<Term<P>> terms, int by, int of) {
-        Term<P> reaching = terms.get(by);
-        Term<P> reached = terms.get(of);
-        return terms.size() == 2 && reaching.takes() != null
-                && reaching.takes().equals(reached.takes())
-                && reaching.weight().abs().equals(ExactRatio.ONE)
-                && reached.weight().abs().equals(ExactRatio.ONE);
+        Object takes = terms.get(by).takes();
+        return takes != null && takes.equals(terms.get(of).takes());
     }
 
     /**
@@ -146,15 +209,10 @@ public final class WhatARelationLeavesUndivided {
      */
     private static <P> Run needed(List<Term<P>> terms, int by, ExactRatio constant) {
         Term<P> reaching = terms.get(by);
-        if (terms.size() == 2 && (constant == null || constant.signum() == 0)) {
+        if (standsAtTheOthersValue(terms, constant)) {
             Term<P> other = terms.get(1 - by);
-            ExactAnswer<ExactRatio> sum = reaching.weight().plus(other.weight());
-            if (reaching.weight().abs().equals(ExactRatio.ONE)
-                    && sum instanceof ExactAnswer.Held<ExactRatio>(ExactRatio cancelled)
-                    && cancelled.signum() == 0) {
-                return new OfPlaces(other.holds().min() == null ? null : other.holds().min().at(),
-                        other.holds().max() == null ? null : other.holds().max().at());
-            }
+            return new OfPlaces(other.holds().min() == null ? null : other.holds().min().at(),
+                    other.holds().max() == null ? null : other.holds().max().at());
         }
         if (constant == null) {
             return null;
@@ -174,8 +232,9 @@ public final class WhatARelationLeavesUndivided {
                 return null;
             }
         }
-        Interval over = rest.times(reaching.weight().negated());
-        Interval at = over == null ? null : over.over(reaching.weight().abs());
+        // Where the term's weight and the rest come to nought: the rest turned and over the weight.
+        ExactRatio turned = ExactRatio.ONE.negated().dividedBy(reaching.weight()).orNull();
+        Interval at = turned == null ? null : rest.times(turned);
         return at == null ? null : at.asRun();
     }
 
@@ -229,10 +288,11 @@ public final class WhatARelationLeavesUndivided {
             return lowFrom(realized.min(), false) && highTo(realized.max(), false);
         }
 
-        /** Whether {@code realized} holds values beyond this run at both ends, as well as all of
-         *  it. */
-        default boolean strictlyWithin(NumericDomain.Bounds realized) {
-            return lowFrom(realized.min(), true) && highTo(realized.max(), true);
+        /** Whether {@code realized} holds, beside every value of this run, a value strictly below
+         *  it and one at it or above — or, not {@code strictlyBelow}, one strictly above it and one
+         *  at it or below. */
+        default boolean around(NumericDomain.Bounds realized, boolean strictlyBelow) {
+            return lowFrom(realized.min(), strictlyBelow) && highTo(realized.max(), !strictlyBelow);
         }
 
         private boolean lowFrom(Endpoint end, boolean beyond) {
@@ -242,8 +302,10 @@ public final class WhatARelationLeavesUndivided {
             if (runsDown()) {
                 return false;
             }
+            // An end the run does not take says nothing of the value nearest it, which a run of
+            // whole numbers may not have below a needed value that is not whole.
             Integer order = againstTheLeast(end.at());
-            return order != null && (order < 0 || (order == 0 && !beyond && end.inclusive()));
+            return order != null && end.inclusive() && (order < 0 || (order == 0 && !beyond));
         }
 
         private boolean highTo(Endpoint end, boolean beyond) {
@@ -254,7 +316,7 @@ public final class WhatARelationLeavesUndivided {
                 return false;
             }
             Integer order = againstTheGreatest(end.at());
-            return order != null && (order > 0 || (order == 0 && !beyond && end.inclusive()));
+            return order != null && end.inclusive() && (order > 0 || (order == 0 && !beyond));
         }
     }
 
@@ -346,15 +408,6 @@ public final class WhatARelationLeavesUndivided {
                 return null;
             }
             return by.signum() >= 0 ? new Interval(one, two) : new Interval(two, one);
-        }
-
-        Interval over(ExactRatio by) {
-            ExactRatio one = low == null ? null : low.dividedBy(by).orNull();
-            ExactRatio two = high == null ? null : high.dividedBy(by).orNull();
-            if ((low != null && one == null) || (high != null && two == null)) {
-                return null;
-            }
-            return new Interval(one, two);
         }
 
         Run asRun() {

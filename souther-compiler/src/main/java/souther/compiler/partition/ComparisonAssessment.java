@@ -649,7 +649,9 @@ sealed interface ComparisonAssessment {
                     "a rule watched at no place is not one to ask what arrives at: " + read);
         }
         List<Reachability.Reaching> arriving = waysArrivedBy(way, arrivals);
-        ComparisonAssessment asked = switch (read) {
+        // With no way arriving, what the relation leaves is what the declarations leave, which
+        // the reading already holds.
+        ComparisonAssessment asked = arriving.isEmpty() ? read : switch (read) {
             case AcrossPositions across -> across.whereRowsArrive(reading, arriving);
             case AgainstAnotherValue against -> against.whereRowsArrive(reading, arriving);
             default -> read;

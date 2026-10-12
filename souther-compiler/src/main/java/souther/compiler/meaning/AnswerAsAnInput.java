@@ -253,28 +253,49 @@ public final class AnswerAsAnInput {
                     return null;
                 }
                 inputs.add(term);
-                coefs.merge(each.getKey(), each.getValue(), (a, b) -> a.plus(b).orNull());
+                if (!weighed(coefs, each.getKey(), each.getValue())) {
+                    return null;
+                }
                 continue;
             }
             // What an operation answers of numbers of the input is kept as those numbers are,
-            // and only while none of them is fixed: what it answers of a fixed value is a value
-            // nothing here works out.
+            // where this is only asked what the statement is about: it is no number a value
+            // composed for the answer can be held to.
             if (each.getKey() instanceof Quantity.WhatAnOperationAnswers answers) {
-                List<NumericTerm> madeOf = answers.positionsItIsMadeOf();
-                if (!askingWhatItIsAbout || madeOf.stream().anyMatch(pinned::containsKey)) {
+                if (!askingWhatItIsAbout) {
                     return null;
                 }
-                inputs.addAll(madeOf);
-                coefs.merge(answers, each.getValue(), (a, b) -> a.plus(b).orNull());
+                inputs.addAll(answers.positionsItIsMadeOf());
+                if (!weighed(coefs, answers, each.getValue())) {
+                    return null;
+                }
                 continue;
             }
             Quantity atom = quantity(each.getKey());
-            if (atom == null) {
+            if (atom == null || !weighed(coefs, atom, each.getValue())) {
                 return null;
             }
-            coefs.merge(atom, each.getValue(), (a, b) -> a.plus(b).orNull());
         }
         return new LinearForm<>(constant, coefs);
+    }
+
+    /**
+     * Adds {@code weight} to what {@code coefs} weighs {@code atom} by, which two terms read as one
+     * number weigh together — false where the sum is no number held, and the form is not one this
+     * can write.
+     */
+    private static boolean weighed(Map<Quantity, ExactRatio> coefs, Quantity atom,
+                                   ExactRatio weight) {
+        if (!coefs.containsKey(atom)) {
+            coefs.put(atom, weight);
+            return true;
+        }
+        ExactRatio sum = coefs.get(atom).plus(weight).orNull();
+        if (sum == null) {
+            return false;
+        }
+        coefs.put(atom, sum);
+        return true;
     }
 
     private Quantity quantity(Quantity quantity) {

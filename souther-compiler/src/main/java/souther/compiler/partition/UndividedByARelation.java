@@ -229,12 +229,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? run : NumericDomain.Bounds.OPEN;
             Way way = each.term() == null || !heldWhole ? Way.TIES
                     : wayOf(each.term(), conditions);
-            NumericDomain.Bounds realizes = way == Way.TIES ? null
-                    : realized(each.term(), read, region, way);
-            Takes takes = way == Way.UNTOUCHED && each.term() instanceof NumericTerm.ValueOf value
-                    ? takes(value, read) : null;
+            Takes source = way == Way.TIES ? null : switch (each.term()) {
+                case NumericTerm.ValueOf value -> takes(value, read);
+                case NumericTerm.TakenOf taken ->
+                        takes(new NumericTerm.ValueOf(taken.position()), read);
+                case NumericTerm.CodePointClassCount _ -> null;
+            };
+            NumericDomain.Bounds realizes = source == null ? null
+                    : realized(each.term(), source, region, way);
+            Takes takes = way == Way.UNTOUCHED && each.term() instanceof NumericTerm.ValueOf
+                    ? source : null;
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
-                    realizes, takes));
+                    realizes, takes, each.term() instanceof NumericTerm.ValueOf));
         }
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         // A term only reaches where nothing ties it, which is what it is asked of before it is
@@ -294,19 +300,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * way places ends on it, or it is a number taken of such a value, what it takes is what the
      * region leaves it — where that is shown to be every value between the ends: the rules
      * certified to leave the whole of the run, no value taken out, no class of whole numbers.
+     *
+     * @param source what the declarations leave the value {@code term} is, or is taken of
      */
-    private static NumericDomain.Bounds realized(NumericTerm.FromOnePosition term,
-                                                 InputReading read, SearchRegion region,
-                                                 Way way) {
+    private static NumericDomain.Bounds realized(NumericTerm.FromOnePosition term, Takes source,
+                                                 SearchRegion region, Way way) {
+        if (!source.every()) {
+            return null;
+        }
         return switch (term) {
-            case NumericTerm.ValueOf value -> !(takes(value, read) instanceof Takes takes)
-                    || !takes.every() ? null
-                    : way == Way.UNTOUCHED ? NumericDomain.Bounds.OPEN
+            case NumericTerm.ValueOf value -> way == Way.UNTOUCHED ? NumericDomain.Bounds.OPEN
                     : wholeRun(value, region);
             case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
                     .everyAnswerItCanGiveHasASourceValue(taken.operation())
-                    && takes(new NumericTerm.ValueOf(taken.position()), read) instanceof Takes takes
-                    && takes.every() ? wholeRun(taken, region) : null;
+                    ? wholeRun(taken, region) : null;
             case NumericTerm.CodePointClassCount _ -> null;
         };
     }
