@@ -294,8 +294,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     /**
      * What is the same at every comparison of one body: whose body it is, what the plan numbered,
      * the module's names, the reading of the input, what the input's rules leave each quantity, and
-     * what the paths leave arriving at each comparison — and which comparisons are the decision
-     * table's, over what a dependency of this body answered.
+     * what the paths leave arriving at each comparison.
      *
      * <p>Where the reading belongs, and it is not in the environment the walk carries. That
      * environment is a function of the program point — a binding met, an arm entered — and the
@@ -304,8 +303,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      */
     private record Body(String behavior, InputReading read,
                         Arrivals answering, Templates templates,
-                        List<TruthMet> truths, List<ForkDecided> decided,
-                        WhatAnAnswerTakesUp dependencies, StatedHere stated,
+                        List<TruthMet> truths, List<ForkDecided> decided, StatedHere stated,
                         WhatConditionsState conditions, CallContext context, Core root,
                         InputReads atTheRoot) {
 
@@ -313,7 +311,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
          *  tree, and the copy that call makes of each construct in it. */
         Body inside(Core helperBody, CallContext called, InputReads reads) {
             return new Body(behavior, read, Arrivals.inTheTree(helperBody), templates, truths,
-                    decided, dependencies, stated, conditions, called, helperBody, reads);
+                    decided, stated, conditions, called, helperBody, reads);
         }
 
         Symbols symbols() {
@@ -339,7 +337,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * tree could make on its own.
      */
     static ComparisonReadings of(String behavior, AnalysisBody analysis, InputReading read,
-                                 InputReads reads, WhatAnAnswerTakesUp dependencies) {
+                                 InputReads reads) {
         Core body = analysis.core();
         List<Reading> readings = new ArrayList<>();
         List<ForkMet> forks = new ArrayList<>();
@@ -364,7 +362,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         trees.addAll(analysis.templatesAfterTheirBuilders());
         Arrivals answering = Arrivals.inTheTrees(trees, analysis.templates()::bodyOf);
         walk(body, new Body(behavior, read, answering,
-                        templates, truths, decided, dependencies, stated, conditions,
+                        templates, truths, decided, stated, conditions,
                         CallContext.OF_THE_BODY, body, reads),
                 reads, ClosureApplications.OUTSIDE,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
@@ -380,7 +378,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 // No root a way is read from: what stood on the way to a template is every build's
                 // way joined, which no walk down the template says.
                 walk(template, new Body(behavior, read, answering,
-                        templates, truths, decided, dependencies, stated, conditions,
+                        templates, truths, decided, stated, conditions,
                         CallContext.OF_THE_BODY, null, null),
                         defined, ClosureApplications.OUTSIDE, LiveFlow.of(template),
                         entry.assumed(), entry.live(),
