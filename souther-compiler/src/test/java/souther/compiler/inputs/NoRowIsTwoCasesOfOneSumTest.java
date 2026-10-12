@@ -7,6 +7,9 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Rel;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -61,6 +64,44 @@ class NoRowIsTwoCasesOfOneSumTest {
     void andTheOrderTheyWereFixedInIsNoPartOfTheAnswer() {
         assertEquals(bothFixed(false), bothFixed(true),
                 "the same two fixings, whichever way round they were said");
+    }
+
+    /**
+     * A relation over a number under the other case, taken into a region that fixed one under the
+     * first, is a condition no row meets, as the second fixing is: the region holds nothing, and
+     * for the same reason.
+     *
+     * <p>Which is what a reader asking whether some element can meet two relations is told. Some
+     * element of a list of a sum being an {@code A} with one number and a {@code B} with another is
+     * no element, and the reader narrowing a region one relation at a time is how it finds that out.
+     */
+    @Test
+    void aRelationTakenInUnderTheOtherCaseLeavesTheRowNowhere() {
+        InputDomain read = reading(MODEL, "read");
+        NumericTerm underA = new NumericTerm.ValueOf(pathOf(read, "h.q@A.lo"));
+        NumericTerm underB = new NumericTerm.ValueOf(pathOf(read, "h.q@B.lo"));
+        SearchRegion fixedUnderA = read.quantities(rulesOf(MODEL))
+                .given(underA, Count.of(BigDecimal.ONE)).region();
+
+        SearchRegion both = fixedUnderA.assuming(LinearForm.atom(underB), Rel.GE).taken();
+
+        assertInstanceOf(EmptyInput.TwoRefinementsAtOnePosition.class,
+                both.emptiness().orElseThrow(() -> new AssertionError(
+                        "no row is both cases, and nothing said so")));
+    }
+
+    /** And a question about where a number under the other case runs, in that region, is
+     *  answered: no row gives it a value there, so it runs nowhere. */
+    @Test
+    void aNumberUnderTheOtherCaseRunsNowhere() {
+        InputDomain read = reading(MODEL, "read");
+        NumericTerm underA = new NumericTerm.ValueOf(pathOf(read, "h.q@A.lo"));
+        NumericTerm underB = new NumericTerm.ValueOf(pathOf(read, "h.q@B.lo"));
+        SearchRegion fixedUnderA = read.quantities(rulesOf(MODEL))
+                .given(underA, Count.of(BigDecimal.ONE)).region();
+
+        assertInstanceOf(NumericDomain.FormProjection.NothingIsLeft.class,
+                fixedUnderA.projectionOf(underB));
     }
 
     /** Both positions fixed, in one order or the other. */

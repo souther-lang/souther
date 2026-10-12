@@ -398,13 +398,10 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         if (orders == null || !(orders.answered() instanceof Carrier.Ordinal ordinal)) {
             return List.of();
         }
-        List<TakenConstraint.AwayFrom> out = new ArrayList<>();
-        for (TypeSymbol each : ordinal.cases()) {
-            if (!narrowed.narrowing().leaves(each)) {
-                out.add(new TakenConstraint.AwayFrom(term, ordinal.at(each)));
-            }
-        }
-        return List.copyOf(out);
+        Set<TypeSymbol> left = narrowed.narrowing().leavesOfASum();
+        return ordinal.placesOf(each -> !left.contains(each)).stream()
+                .map(at -> new TakenConstraint.AwayFrom(term, at))
+                .toList();
     }
 
     /**
@@ -545,8 +542,9 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      */
     static DeclaredInput.Taking taking(TermPath position, CasesLeft cases, InputReading read) {
         InputDomain inputs = read.domain();
-        DeclaredInput.Taking taking = taking(inputs, inputs.declared(read.rules()), position,
-                inputs.typeAt(position, read.rules()), cases);
+        DeclaredInput declared = inputs.declared(read.rules());
+        DeclaredInput.Taking taking = taking(inputs, declared, position,
+                declared.matchedAs(inputs.typeAt(position, read.rules()), cases), cases);
         if (taking == null) {
             throw new IllegalStateException("a statement of which case the value at `" + position
                     + "` is was read, and the reading of the input holds no place there");

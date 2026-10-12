@@ -111,7 +111,7 @@ public final class DeclaredInput {
     public Taking taking(TermPath at, Type matchedAs, CasesLeft covered) {
         Taking asTheArmSaysIt = new Taking.Narrows(narrowedTo(at, covered));
         List<List<TypeSymbol>> readings = readingsAt(at);
-        List<TypeSymbol> chosen = leavesOf(covered.atoms());
+        Set<TypeSymbol> chosen = covered.leavesOfASum();
         if (readings == null || matchedAs == null || chosen.isEmpty()) {
             return asTheArmSaysIt;
         }
@@ -144,6 +144,24 @@ public final class DeclaredInput {
         CasesLeft both = covered.keeping(each -> each instanceof Refinement.SumCase sum
                 && left.contains(sum.leaf()));
         return new Taking.Narrows(narrowedTo(at, both));
+    }
+
+    /**
+     * What a statement that a value of {@code type} is one of {@code covered} matched the value as:
+     * the type itself where its leaves hold those cases, and otherwise what the names it wears wrap.
+     *
+     * <p>A statement of which case a value is names leaves of a sum, and taking a newtype's
+     * {@code value} is no step, so the value at a position declared {@code Open = Flag} is said to
+     * be {@code Yes} at that position: the arm that said it matched a {@code Flag}. Read as the
+     * {@code Open} the position is declared, the statement names a case the reading does not have.
+     */
+    public Type matchedAs(Type type, CasesLeft covered) {
+        Set<TypeSymbol> chosen = covered.leavesOfASum();
+        if (type == null || chosen.isEmpty() || Set.copyOf(
+                AtomSpace.subjectAtoms(type, source.kinds(), source.sums())).containsAll(chosen)) {
+            return type;
+        }
+        return source.inners().terminal(type);
     }
 
     /**

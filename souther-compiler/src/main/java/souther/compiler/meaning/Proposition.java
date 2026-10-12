@@ -9,9 +9,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -590,29 +588,42 @@ public sealed interface Proposition {
     /** Why the first part of {@code stated} nothing read stopped, in the order its parts are
      *  kept, or null where every part was read. */
     static WhyUnread firstStopIn(Proposition stated) {
-        List<WhyUnread> stops = stopsIn(stated);
+        List<WhyUnread> stops = new ArrayList<>(1);
+        stopsIn(stated, stops, true);
         return stops.isEmpty() ? null : stops.getFirst();
     }
 
     /** Why each part of {@code stated} nothing read stopped, in the order its parts are kept. */
     static List<WhyUnread> stopsIn(Proposition stated) {
         List<WhyUnread> out = new ArrayList<>();
-        stopsIn(stated, out);
+        stopsIn(stated, out, false);
         return List.copyOf(out);
     }
 
-    private static void stopsIn(Proposition stated, List<WhyUnread> into) {
-        switch (stated) {
+    /** Each stop in {@code stated} added to {@code into} in the order its parts are kept, or the
+     *  first alone where {@code first}; whether one was added. */
+    private static boolean stopsIn(Proposition stated, List<WhyUnread> into, boolean first) {
+        return switch (stated) {
             case Unread unread -> into.add(unread.why());
-            case All all -> all.parts().forEach(part -> stopsIn(part, into));
-            case Any any -> any.parts().forEach(part -> stopsIn(part, into));
-            case OnAnApplication applications ->
-                    applications.each().forEach(one -> stopsIn(one, into));
-            case Some some -> stopsIn(some.ofTheElement(), into);
-            case SomeReachable reached -> stopsIn(reached.atANode(), into);
+            case All all -> stopsIn(all.parts(), into, first);
+            case Any any -> stopsIn(any.parts(), into, first);
+            case OnAnApplication applications -> stopsIn(applications.each(), into, first);
+            case Some some -> stopsIn(some.ofTheElement(), into, first);
+            case SomeReachable reached -> stopsIn(reached.atANode(), into, first);
             case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
-                 LastToHold _, Carried _ -> { }
+                 LastToHold _, Carried _ -> false;
+        };
+    }
+
+    private static boolean stopsIn(List<Proposition> parts, List<WhyUnread> into, boolean first) {
+        boolean added = false;
+        for (Proposition part : parts) {
+            added |= stopsIn(part, into, first);
+            if (added && first) {
+                return true;
+            }
         }
+        return added;
     }
 
     /**
@@ -686,57 +697,52 @@ public sealed interface Proposition {
 
     /**
      * {@code relation} held or failing as {@code holds}, written as what it comes to where it holds
-     * a count of elements against nought ({@link #ofACount}).
+     * a count of elements against nought ({@link #ofACount}), or a count of statements about values
+     * written out as which of them hold ({@link WhichOfThemHold}).
+     *
+     * <p>For a relation that is no count of statements: how many choices one of those is written
+     * out as is held to a figure, and a figure is what a reading that compares one has in hand
+     * ({@link #compared(Relation, boolean, long)}).
+     *
+     * @throws IllegalArgumentException where {@code relation} is a count of statements
      */
     static Proposition compared(Relation relation, boolean holds) {
+        if (WhichOfThemHold.of(relation) != null) {
+            throw new IllegalArgumentException("a count of statements is compared with how many"
+                    + " choices of which hold are read: " + relation);
+        }
+        return compared(relation, holds, 0);
+    }
+
+    /**
+     * The same, or null where {@code relation} is a count of statements written out as more than
+     * {@code most} choices of which of them hold.
+     */
+    static Proposition compared(Relation relation, boolean holds, long most) {
         Proposition counted = ofACount(relation);
         if (counted == null) {
-            counted = whichOfThemHold(relation);
+            WhichOfThemHold choosing = WhichOfThemHold.of(relation);
+            if (choosing != null) {
+                counted = choosing.written(most);
+                if (counted == null) {
+                    return null;
+                }
+            }
         }
         Proposition held = counted != null ? counted : new Compared(relation, true);
         return holds ? held : held.denied();
     }
 
     /**
-     * What a relation over how many of some statements hold says: some choice of which of them hold
-     * and which do not that puts the number where the relation does — or null where the relation is
-     * over anything else, or a number of them the arithmetic could not hold.
+     * How many choices of which statements hold {@code relation} is written as, counted no further
+     * than one past {@code most} — or none where it is no relation over one count of statements.
      *
-     * <p>A choice that has one statement holding and not holding at once is none: the same value
-     * written twice meets a statement twice or not at all.
+     * <p>For a reading to hold a comparison of such a count to how many readings of one condition
+     * it makes, before the comparison is concluded.
      */
-    private static Proposition whichOfThemHold(Relation relation) {
-        if (!(relation instanceof Relation.Affine(LinearForm<Quantity> form, Rel rel))
-                || form.coefs().size() != 1
-                || !(form.coefs().keySet().iterator().next()
-                        instanceof Quantity.HowManyHold(List<Proposition> each))) {
-            return null;
-        }
-        ExactRatio by = form.coefs().values().iterator().next();
-        List<Proposition> ways = new ArrayList<>();
-        choices:
-        for (int chosen = 0; chosen < 1 << each.size(); chosen++) {
-            if (!(by.times(ExactRatio.of(Integer.bitCount(chosen)))
-                    .flatMap(weighed -> weighed.plus(form.constant()))
-                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio at))) {
-                return null;
-            }
-            if (!rel.holds(at.signum())) {
-                continue;
-            }
-            Map<String, Boolean> holding = new HashMap<>();
-            List<Proposition> parts = new ArrayList<>();
-            for (int i = 0; i < each.size(); i++) {
-                boolean holds = (chosen & 1 << i) != 0;
-                Boolean before = holding.putIfAbsent(each.get(i).key(), holds);
-                if (before != null && before != holds) {
-                    continue choices;
-                }
-                parts.add(holds ? each.get(i) : each.get(i).denied());
-            }
-            ways.add(all(parts));
-        }
-        return any(ways);
+    public static long choicesIn(Relation relation, long most) {
+        WhichOfThemHold choosing = WhichOfThemHold.of(relation);
+        return choosing == null ? 0 : choosing.choices(most);
     }
 
     /**

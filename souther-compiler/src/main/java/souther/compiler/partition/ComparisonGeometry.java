@@ -86,7 +86,8 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between) 
             case ComparisonAssessment.Several _ -> throw new IllegalArgumentException(
                     "a line of a statement is one line: " + assessed);
             case ComparisonAssessment.AnswerDependent _,
-                 ComparisonAssessment.OnADependencysAnswer _, ComparisonAssessment.NoInput _,
+                 ComparisonAssessment.OnADependencysAnswer _,
+                 ComparisonAssessment.StatesNoRelation _, ComparisonAssessment.NoInput _,
                  ComparisonAssessment.CutsNothing _, ComparisonAssessment.AgainstAnotherValue _,
                  ComparisonAssessment.OutsideTheDomain _,
                  ComparisonAssessment.NothingArrivesAtItsLine _,

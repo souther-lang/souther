@@ -433,11 +433,34 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Pullback$Sized;",
                     "counts the values a sum is read of one by one, and past the figure carries"
                             + " the number out as one nothing read, naming it"),
-            Map.entry("souther.compiler.partition.Pullback$ALawRead#count("
-                            + "Lsouther/compiler/semantics/LawNumber$HowManyMeet;)"
-                            + "Lsouther/compiler/partition/Pullback$Sized;",
-                    "counts the choices of which values written out meet a statement, and past"
-                            + " the figure carries the count out as a part nothing read, naming it"),
+            Map.entry("souther.compiler.partition.Pullback#pastTheReadings("
+                            + "Lsouther/compiler/meaning/Relation;)Z",
+                    "counts the choices of which values written out meet a statement that a"
+                            + " comparison of how many do admits against the figure, for the two"
+                            + " places a comparison is made to carry it out as a part nothing"
+                            + " read, naming it"),
+            Map.entry("souther.compiler.partition.Pullback$ALawRead#compared("
+                            + "Lsouther/compiler/semantics/LawProposition$Compared;)"
+                            + "Lsouther/compiler/meaning/Derivation;",
+                    "hands the figure to the comparison a law states, which writes a count of"
+                            + " statements out as no more choices than it, and past the figure"
+                            + " carries the comparison out as a part nothing read, naming it"),
+            Map.entry("souther.compiler.partition.Pullback#onAnOrder("
+                            + "Lsouther/compiler/check/StatedComparison;"
+                            + "Lsouther/compiler/partition/AffineReading$OfAComparison;"
+                            + "Lsouther/compiler/inputs/InputReads;)"
+                            + "Lsouther/compiler/meaning/Derivation;",
+                    "hands the figure to a comparison on an order, which holds no count of"
+                            + " statements to write out"),
+            Map.entry("souther.compiler.partition.Pullback#aRelation("
+                            + "Lsouther/compiler/meaning/Derivation$ComparisonReading;"
+                            + "Lsouther/compiler/numeric/LinearForm;"
+                            + "Lsouther/compiler/numeric/Rel;"
+                            + "Ljava/util/Map;)"
+                            + "Lsouther/compiler/meaning/Derivation;",
+                    "counts the choices of which values written out meet a statement that a"
+                            + " comparison of how many do admits, and past the figure carries the"
+                            + " comparison out as a part nothing read, naming it"),
             Map.entry("souther.compiler.partition.DecisionReading#<clinit>()V",
                     "how many paths through one body a decision is read for"),
             Map.entry("souther.compiler.partition.DecisionReading#of("

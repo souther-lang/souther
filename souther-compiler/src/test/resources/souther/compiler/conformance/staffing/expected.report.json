@@ -4034,7 +4034,7 @@
             "behavior" : "settleOvertime",
             "conditions" : [ {
               "kind" : "statement",
-              "condition" : "all[any[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], !agreement is Extended], any[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], !agreement is Standard, agreement is Extended]]",
+              "condition" : "all[any[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], !agreement is Extended], any[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], !agreement is Standard]]",
               "outcome" : "denied"
             } ]
           },
@@ -4045,7 +4045,7 @@
             "behavior" : "settleOvertime",
             "conditions" : [ {
               "kind" : "statement",
-              "condition" : "all[any[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], !agreement is Extended], any[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], !agreement is Standard, agreement is Extended], any[all[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], agreement is Extended], all[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], !agreement is Extended, agreement is Standard]]]",
+              "condition" : "all[any[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], !agreement is Extended], any[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], !agreement is Standard], any[all[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], agreement is Extended], all[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], agreement is Standard]]]",
               "outcome" : "held"
             } ]
           },
@@ -4065,7 +4065,7 @@
           "behavior" : "settleOvertime",
           "conditions" : [ {
             "kind" : "statement",
-            "condition" : "all[any[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], !agreement is Extended], any[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], !agreement is Standard, agreement is Extended]]",
+            "condition" : "all[any[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], !agreement is Extended], any[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], !agreement is Standard]]",
             "outcome" : "denied"
           } ]
         },
@@ -4078,7 +4078,7 @@
           "behavior" : "settleOvertime",
           "conditions" : [ {
             "kind" : "statement",
-            "condition" : "all[any[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], !agreement is Extended], any[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], !agreement is Standard, agreement is Extended], any[all[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], agreement is Extended], all[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], !agreement is Extended, agreement is Standard]]]",
+            "condition" : "all[any[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], !agreement is Extended], any[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], !agreement is Standard], any[all[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], agreement is Extended], all[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], agreement is Standard]]]",
             "outcome" : "held"
           } ]
         },
