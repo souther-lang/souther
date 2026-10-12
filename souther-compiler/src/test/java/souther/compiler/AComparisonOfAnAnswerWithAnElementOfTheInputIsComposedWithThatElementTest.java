@@ -32,7 +32,11 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  *
  * <p>Asked of the forms the comparison takes — through the value a lookup selects, spelled directly
  * and through the order an operation answers, and of some element of a list — because each states
- * the element and the answer together and none of them is a number of the input alone.
+ * the element and the answer together and none of them is a number of the input alone. And of the
+ * element asked two comparisons with the answer, either or both, and one beside a rule of the
+ * input alone: each way of the quantifier, held and denied, asks the row something else of the
+ * element. And of a helper met at two calls, only one of which is about the answer, and of the
+ * model the defect was reported with.
  */
 class AComparisonOfAnAnswerWithAnElementOfTheInputIsComposedWithThatElementTest {
 
@@ -42,7 +46,8 @@ class AComparisonOfAnAnswerWithAnElementOfTheInputIsComposedWithThatElementTest 
                 invariant value >= 0.0m
             data Quota = Decimal
                 invariant value > 0.0m
-            data Forecast = { byPeriod: Map<String, Amount>, list: List<Amount> }
+            data Span = { low: Amount, high: Amount }
+            data Forecast = { byPeriod: Map<String, Amount>, list: List<Amount>, spans: List<Span> }
             behavior quotaFor : (owner: Int, period: String) -> Quota
             behavior reaches : (owner: Int, forecast: Forecast, period: String) -> Int
                 depends on quotaFor
@@ -58,7 +63,7 @@ class AComparisonOfAnAnswerWithAnElementOfTheInputIsComposedWithThatElementTest 
                             if %s then 1 else 2
                         }
                 example reaches
-                    | "nothing filed" : (0, Forecast { byPeriod = [], list = [] }, "x")
+                    | "nothing filed" : (0, Forecast { byPeriod = [], list = [], spans = [] }, "x")
                         with quotaFor = Quota(1m) -> 0
                 """.formatted(condition);
     }
@@ -68,6 +73,88 @@ class AComparisonOfAnAnswerWithAnElementOfTheInputIsComposedWithThatElementTest 
                     let quota = quotaFor(owner, period)
                     if List.any(a -> a.value >= quota.value, forecast.list) then 1 else 2
                 }
+            """;
+
+    /** Some element of a list held against the answer at two of its numbers, joined by
+     *  {@code JOIN}. */
+    private static String someSpan(String join) {
+        return HEAD + """
+                    {
+                        let quota = quotaFor(owner, period)
+                        if List.any(s -> s.low.value >= quota.value %s s.high.value >= quota.value,
+                                forecast.spans) then 1 else 2
+                    }
+                """.formatted(join);
+    }
+
+    /**
+     * Some element of a list meeting a rule of the input beside the comparison with the answer:
+     * the element the answer is composed for has to meet that rule as well, and where no element
+     * may meet both, one that fails the rule is no element the answer was composed against.
+     */
+    private static final String BESIDE_A_RULE_OF_THE_INPUT = HEAD + """
+                {
+                    let quota = quotaFor(owner, period)
+                    if List.any(s -> s.low.value > 0.0m && s.high.value >= quota.value,
+                            forecast.spans) then 1 else 2
+                }
+            """;
+
+    /**
+     * A helper whose comparison is met at two calls: one of the input alone, one of the entry a
+     * lookup selects against the answer. The two are one comparison written once, and two
+     * conditions on the way to the rule — the second restated with its values in leaves the first
+     * as it was.
+     */
+    private static final String ONE_HELPER_TWO_CALLS = """
+            module p
+            data Amount = Decimal
+                invariant value >= 0.0m
+            data Quota = Decimal
+                invariant value > 0.0m
+            data Forecast = { byPeriod: Map<String, Amount>, floor: Amount }
+            behavior quotaFor : (owner: Int, period: String) -> Quota
+            behavior reaches : (owner: Int, forecast: Forecast, period: String) -> Int
+                depends on quotaFor
+            let atLeast (a: Decimal, b: Decimal) = a >= b
+            let reaches (owner, forecast, period, quotaFor) =
+                match Map.get(period, forecast.byPeriod) with
+                    | None -> 0
+                    | Some got -> {
+                        let quota = quotaFor(owner, period)
+                        if atLeast(forecast.floor.value, 5.0m) && atLeast(got.value, quota.value)
+                        then 1 else 2
+                    }
+            example reaches
+                | "nothing filed" : (0, Forecast { byPeriod = [], floor = Amount(0m) }, "x")
+                    with quotaFor = Quota(1m) -> 0
+                | "under the floor" : (0, Forecast { byPeriod = [("x", Amount(0m))],
+                    floor = Amount(0m) }, "x") with quotaFor = Quota(1m) -> 2
+            """;
+
+    /** The model the issue was reported with, which answers a record built of both values. */
+    private static final String AS_REPORTED = """
+            module f0
+            data Amount = Decimal
+                invariant value >= 0.0m
+            data Quota = Decimal
+                invariant value > 0.0m
+            data Forecast = { byPeriod: Map<String, Amount> }
+            data Short = { gap: Decimal }
+            behavior quotaFor : (owner: Int, period: String) -> Quota
+            behavior att : (owner: Int, forecast: Forecast, period: String) -> Bool | Short
+                depends on quotaFor
+            let att (owner, forecast, period, quotaFor) =
+                match Map.get(period, forecast.byPeriod) with
+                    | None -> false
+                    | Some got -> {
+                        let quota = quotaFor(owner, period)
+                        if Decimal.compare(got.value, quota.value) >= 0 then true
+                        else Short { gap = Decimal.subtract(quota.value, got.value) }
+                    }
+            example att
+                | "nothing filed" : (0, Forecast { byPeriod = [] }, "x")
+                    with quotaFor = Quota(1m) -> false
             """;
 
     /**
@@ -92,18 +179,58 @@ class AComparisonOfAnAnswerWithAnElementOfTheInputIsComposedWithThatElementTest 
     }
 
     private static final List<Row> LOOKED_UP_ROWS = List.of(
-            row("Forecast { byPeriod = [(\"x\", Amount(1m))], list = [] }", "1"),
-            row("Forecast { byPeriod = [(\"x\", Amount(0m))], list = [] }", "2"));
+            row("Forecast { byPeriod = [(\"x\", Amount(1m))], list = [], spans = [] }", "1"),
+            row("Forecast { byPeriod = [(\"x\", Amount(0m))], list = [], spans = [] }", "2"));
+
+    /**
+     * The behavior a form's rows are composed for, the rows, and what another rule of it answers
+     * — which the control answers a row with.
+     */
+    private record Composed(String behavior, List<Row> rows, String anotherRuleAnswers) {
+
+        /** What the control answers the row at {@code at} with: what another of the rows
+         *  answers, or another rule where there is no other row. */
+        String answeredOtherwise(int at) {
+            return rows.size() > 1 ? rows.get((at + 1) % rows.size()).answers()
+                    : anotherRuleAnswers;
+        }
+    }
 
     /** Each form, with the rows composed for the rules no row takes. */
-    private static final Map<String, List<Row>> COMPOSED = new LinkedHashMap<>();
+    private static final Map<String, Composed> COMPOSED = new LinkedHashMap<>();
+
+    private static void reaching(String model, Row... rows) {
+        COMPOSED.put(model, new Composed("reaches", List.of(rows), "2"));
+    }
 
     static {
-        COMPOSED.put(lookedUp("got.value >= quota.value"), LOOKED_UP_ROWS);
-        COMPOSED.put(lookedUp("Decimal.compare(got.value, quota.value) >= 0"), LOOKED_UP_ROWS);
-        COMPOSED.put(SOME_ELEMENT, List.of(
-                row("Forecast { byPeriod = [], list = [Amount(1m)] }", "1"),
-                row("Forecast { byPeriod = [], list = [Amount(0m)] }", "2")));
+        reaching(lookedUp("got.value >= quota.value"), LOOKED_UP_ROWS.toArray(Row[]::new));
+        reaching(lookedUp("Decimal.compare(got.value, quota.value) >= 0"),
+                LOOKED_UP_ROWS.toArray(Row[]::new));
+        reaching(SOME_ELEMENT,
+                row("Forecast { byPeriod = [], list = [Amount(1m)], spans = [] }", "1"),
+                row("Forecast { byPeriod = [], list = [Amount(0m)], spans = [] }", "2"));
+        reaching(someSpan("||"),
+                row("Forecast { byPeriod = [], list = [], spans = [Span { low = Amount(1m),"
+                        + " high = Amount(0m) }] }", "1"),
+                row("Forecast { byPeriod = [], list = [], spans = [Span { low = Amount(0m),"
+                        + " high = Amount(0m) }] }", "2"));
+        reaching(someSpan("&&"),
+                row("Forecast { byPeriod = [], list = [], spans = [Span { low = Amount(1m),"
+                        + " high = Amount(1m) }] }", "1"),
+                row("Forecast { byPeriod = [], list = [], spans = [Span { low = Amount(0m),"
+                        + " high = Amount(0m) }] }", "2"));
+        reaching(BESIDE_A_RULE_OF_THE_INPUT,
+                row("Forecast { byPeriod = [], list = [], spans = [Span { low = Amount(1m),"
+                        + " high = Amount(1m) }] }", "1"),
+                row("Forecast { byPeriod = [], list = [], spans = [Span { low = Amount(0m),"
+                        + " high = Amount(0m) }] }", "2"));
+        reaching(ONE_HELPER_TWO_CALLS,
+                row("Forecast { byPeriod = [(\"x\", Amount(1m))], floor = Amount(5m) }", "1"));
+        COMPOSED.put(AS_REPORTED, new Composed("att", List.of(
+                row("Forecast { byPeriod = [(\"x\", Amount(1m))] }", "true"),
+                row("Forecast { byPeriod = [(\"x\", Amount(0m))] }", "Short { gap = 1m }")),
+                "false"));
     }
 
     private static Compilation measured(String source) {
@@ -125,9 +252,10 @@ class AComparisonOfAnAnswerWithAnElementOfTheInputIsComposedWithThatElementTest 
     }
 
     /** The rows composed for the rules no row takes, as what each writes and stands in. */
-    private static List<List<String>> composedForTheRules(Compilation compilation) {
+    private static List<List<String>> composedForTheRules(Compilation compilation,
+                                                          String behavior) {
         Adequacy.Filling filling = Adequacy.generatedOf(compilation.db(),
-                compilation.modules().get(0)).get("reaches");
+                compilation.modules().get(0)).get(behavior);
         List<List<String>> out = new ArrayList<>();
         filling.generation().stream()
                 .filter(each -> each.finding().about() instanceof About.ARuleNoRowTakes)
@@ -147,16 +275,21 @@ class AComparisonOfAnAnswerWithAnElementOfTheInputIsComposedWithThatElementTest 
         return out;
     }
 
-    /** {@code model} with {@code rows} written as examples of it. */
-    private static String withRows(String model, List<Row> rows, boolean answeredAsTheModelDoes) {
+    /**
+     * {@code model} with the rows written as examples of it — each answered as the model does, or
+     * as another rule is ({@link Composed#answeredOtherwise}).
+     */
+    private static String withRows(String model, Composed composed,
+                                   boolean answeredAsTheModelDoes) {
+        List<Row> rows = composed.rows();
         StringBuilder out = new StringBuilder(model);
-        if (!model.contains("example reaches")) {
-            out.append("example reaches\n");
+        if (!model.contains("example " + composed.behavior())) {
+            out.append("example ").append(composed.behavior()).append('\n');
         }
         for (int at = 0; at < rows.size(); at++) {
             Row row = rows.get(at);
             String answered = answeredAsTheModelDoes ? row.answers()
-                    : row.answers().equals("1") ? "2" : "1";
+                    : composed.answeredOtherwise(at);
             out.append("    | \"composed ").append(at).append("\" : (").append(row.input())
                     .append(") with quotaFor = ").append(row.quota()).append(" -> ")
                     .append(answered).append('\n');
@@ -167,9 +300,9 @@ class AComparisonOfAnAnswerWithAnElementOfTheInputIsComposedWithThatElementTest 
     /** The element is written holding the value the answer was composed for. */
     @Test
     void eachFormIsComposedWithTheElementTheAnswerIsComparedWith() {
-        COMPOSED.forEach((model, expected) -> assertEquals(
-                expected.stream().map(Row::written).toList(),
-                composedForTheRules(measured(model)), model));
+        COMPOSED.forEach((model, composed) -> assertEquals(
+                composed.rows().stream().map(Row::written).toList(),
+                composedForTheRules(measured(model), composed.behavior()), model));
     }
 
     /**
@@ -178,8 +311,8 @@ class AComparisonOfAnAnswerWithAnElementOfTheInputIsComposedWithThatElementTest 
      */
     @Test
     void theRowsComposedTakeTheRuleTheyWereComposedFor() {
-        COMPOSED.forEach((model, rows) -> {
-            Compilation answered = measured(withRows(model, rows, true));
+        COMPOSED.forEach((model, composed) -> {
+            Compilation answered = measured(withRows(model, composed, true));
 
             assertEquals(List.of(), errors(answered), model);
             assertFalse(report(answered).contains("no row takes a decision rule"),
@@ -187,10 +320,10 @@ class AComparisonOfAnAnswerWithAnElementOfTheInputIsComposedWithThatElementTest 
         });
     }
 
-    /** The control: the same rows answered the other way are refused. */
+    /** The control: the same rows answered as another of them is are refused. */
     @Test
-    void theSameRowsAnsweredTheOtherWayAreRefused() {
-        COMPOSED.forEach((model, rows) -> assertFalse(
-                errors(measured(withRows(model, rows, false))).isEmpty(), model));
+    void theSameRowsAnsweredAsAnotherRuleAreRefused() {
+        COMPOSED.forEach((model, composed) -> assertFalse(
+                errors(measured(withRows(model, composed, false))).isEmpty(), model));
     }
 }

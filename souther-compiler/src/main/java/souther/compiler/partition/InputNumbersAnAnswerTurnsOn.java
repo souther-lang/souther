@@ -184,10 +184,10 @@ public final class InputNumbersAnAnswerTurnsOn {
      * take that in or the row cannot be asked to hold them.
      *
      * <p>Held where each statement names them, as what the statement asks of the row with them at
-     * those values ({@link AnswerAsAnInput#ofTheRow}). A number of an element is held on the
-     * element the statement is about, with everything else the statement asks of that element:
-     * held alone, a row could write the value at an element the statement does not select, and the
-     * answer composed for it would be composed for a row nobody wrote.
+     * those values ({@link AnswerAsAnInput#ofTheRow}). A number of an element is held where the
+     * statement reads it, inside the quantifier it is read under and beside what else the
+     * statement asks of that element: held as a relation of its own, it is a second value written
+     * at the container's location beside the element the quantifier asks for.
      */
     private static InputNumbersAnAnswerTurnsOn pinned(Reachability.Reaching reaching,
                                                      List<NumericTerm> terms,
@@ -209,7 +209,8 @@ public final class InputNumbersAnAnswerTurnsOn {
         List<OnTheWay.TakenIn> held = new ArrayList<>();
         for (AnswerDemand.AStatement statement : naming) {
             Proposition asked = AnswerAsAnInput.ofTheRow(statement.statement(), values);
-            List<DemandReading.Read> reads = asked == null ? null : ofTheRow.asked(asked);            if (reads == null) {
+            List<DemandReading.Read> reads = asked == null ? null : ofTheRow.asked(asked);
+            if (reads == null) {
                 return null;
             }
             for (DemandReading.Read read : reads) {
@@ -235,12 +236,15 @@ public final class InputNumbersAnAnswerTurnsOn {
         // left out, and what it is asked with the values in is that and more: the same statement,
         // read by the same reading. Kept beside it, the part the way could read would be written
         // first and on its own — the container holding one, say — and the element the values are
-        // for would have to be written beside it as a second value of that location.
-        Set<ConditionReportAnchor> restated = new LinkedHashSet<>();
-        naming.forEach(statement -> restated.add(statement.anchor()));
+        // for would have to be written beside it as a second value of that location. Only the
+        // entries that statement's own condition put on the way, and not every entry placed where
+        // it is written: a helper's comparison met at a second call is placed there too, and asks
+        // its own call's values. One that asks exactly what an entry here asks is that entry.
+        Set<OnTheWay.TakenIn> restated = new LinkedHashSet<>();
+        naming.forEach(statement -> restated.addAll(statement.readOnTheWay()));
         List<OnTheWay.TakenIn> cuts = new ArrayList<>();
         for (OnTheWay.TakenIn each : reaching.boundedOnTheWay()) {
-            if (!restated.contains(each.anchor())) {
+            if (!restated.contains(each)) {
                 cuts.add(each);
             }
         }

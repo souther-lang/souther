@@ -958,6 +958,16 @@ public final class Adequacy {
      */
     private static souther.compiler.partition.MeasuredInput subjectOf(
             Db db, String module, Hir.SpecBehavior spec) {
+        InputReading read = inputReadingOf(db, module, spec);
+        return read == null ? null : subjectOf(db, module, spec, read);
+    }
+
+    /**
+     * The same, of {@code read}, which is {@code spec}'s input as {@link #inputReadingOf} reads it:
+     * for a caller that hands the reading on beside the subject, and asks for it once.
+     */
+    private static MeasuredInput subjectOf(Db db, String module, Hir.SpecBehavior spec,
+                                           InputReading read) {
         souther.compiler.partition.Partitions.Partitioning divided =
                 db.ask(new Divided(module, spec.name())).value();
         Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
@@ -967,19 +977,7 @@ public final class Adequacy {
         // The reading is the one the classification holds, not one looked up beside it. Both this
         // and what divides it are about the same behavior of the same module, so there is no pair
         // to get wrong.
-        InputReading read = inputReadingOf(db, module, spec);
-        return read == null ? null
-                : souther.compiler.partition.MeasuredInput.of(spec.name(), read, divided);
-    }
-
-    /**
-     * What a statement about {@code spec}'s own input asks of a row, read as the subject's input
-     * is ({@link #subjectOf}), or null where the behavior has no such reading.
-     */
-    private static StatementsOfAnInput statementsOf(Db db, String module,
-                                                    Hir.SpecBehavior spec) {
-        InputReading read = inputReadingOf(db, module, spec);
-        return read == null ? null : StatementsOfAnInput.of(read);
+        return MeasuredInput.of(spec.name(), read, divided);
     }
 
     /** The reading of {@code spec}'s input every measure of it reads, or null where there is
@@ -2423,9 +2421,10 @@ public final class Adequacy {
             if (spec == null || sig == null || emitted == null) {
                 return Answer.absent();
             }
-            souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, spec);
+            InputReading read = inputReadingOf(db, name, spec);
+            MeasuredInput subject = read == null ? null : subjectOf(db, name, spec, read);
             Coverages.Probe probe = subject == null ? null
-                    : probing(sig, subject, statementsOf(db, name, spec), constructing(db, name),
+                    : probing(sig, subject, StatementsOfAnInput.of(read), constructing(db, name),
                             runningRowsOf(trialling(db, name), behavior, sig,
                                     numberingOf(db, name),
                                     RequiredDependencies.of(db, name, behavior)),
@@ -2852,12 +2851,13 @@ public final class Adequacy {
             if (spec == null || sig == null) {
                 return Answer.absent();
             }
-            souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, spec);
+            InputReading read = inputReadingOf(db, name, spec);
+            MeasuredInput subject = read == null ? null : subjectOf(db, name, spec, read);
             if (subject == null) {
                 return Answer.absent();
             }
             return Answer.of(Coverages.merged(Coverages.searched(measured, subject,
-                    probing(sig, subject, statementsOf(db, name, spec), constructing(db, name),
+                    probing(sig, subject, StatementsOfAnInput.of(read), constructing(db, name),
                             runningRowsOf(trialling(db, name), behavior, sig,
                                     numberingOf(db, name),
                                     RequiredDependencies.of(db, name, behavior)),
@@ -2884,7 +2884,7 @@ public final class Adequacy {
                                    StatementsOfAnInput ofTheRow,
                                    FixturesAtTheBoundary building, Generator.Trial trial,
                                    AnswersForARule answers) {
-        return building == null || answers == null || ofTheRow == null ? null
+        return building == null || answers == null ? null
                 : new ARowBuiltAndRun(sig, subject, ofTheRow, building, trial, answers);
     }
 
@@ -3071,7 +3071,7 @@ public final class Adequacy {
                 Membership.none()).reading(reading);
         return new AnswerSubjects.Standing(souther.compiler.partition.MeasuredInput.of(ANSWER,
                 read, souther.compiler.partition.Partitions.of(ANSWER, read, policy)),
-                souther.compiler.partition.StatementsOfAnInput.of(read));
+                StatementsOfAnInput.of(read));
     }
 
     /**

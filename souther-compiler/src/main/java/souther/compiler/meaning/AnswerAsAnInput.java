@@ -9,11 +9,13 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * A statement about what one dependency answered, said of the input that stands for that answer
@@ -91,38 +93,56 @@ public final class AnswerAsAnInput {
      * by the pair, so the row is held to the values the answer was composed for — where the
      * comparison has to hold, each number at its value, and where it has to fail, wherever an
      * element is still asked the rest, at its value too. Everything about the input alone is the
-     * row's as it is, and what is about the answer alone asks nothing of the row. So what the row
-     * is asked of the element a lookup selects is the selection and the value, together, as one
-     * element: asked apart, a row could hold the value at an entry the lookup does not select.
+     * row's as it is, and what is about the answer alone asks nothing of the row. Under a
+     * quantifier the values stay inside it, so what some element is asked is asked of one element
+     * — its value beside everything else the statement asks of it — and not of the container
+     * beside it.
      */
     public static Proposition ofTheRow(Proposition stated, Map<NumericTerm, ExactRatio> pinned) {
         return ofTheRow(stated, pinned, true);
     }
 
-    /** The same, with {@code positive} saying whether {@code stated} is asked to hold or to fail
-     *  where it stands. */
+    /**
+     * The same, with {@code positive} saying whether {@code stated} is asked to hold or to fail
+     * where it stands.
+     *
+     * <p>What comes back is held to one contract, and each case below is a condition sufficient
+     * for it. Asked to hold: a row meeting what comes back, with an answer meeting what {@link #of}
+     * made of {@code stated}, meets {@code stated}. Asked to fail, what comes back is what no place
+     * the statement is read at may meet: a row meeting it nowhere, with an answer failing what
+     * {@link #of} made of {@code stated}, fails {@code stated} there. A part the answer was
+     * composed for is held at the values whichever way it is asked, since which way it comes out
+     * is the answer's; a part about the input alone is asked of the row only where the answer was
+     * not composed to settle the whole without it.
+     *
+     * <p>Sufficient, not necessary: what comes back is what a row is composed to, in the words a
+     * row is, and a weaker condition the row's words cannot carry — one of several ways an
+     * element may be — is no condition a row is composed toward.
+     */
     private static Proposition ofTheRow(Proposition stated, Map<NumericTerm, ExactRatio> pinned,
                                         boolean positive) {
         if (!Proposition.aboutAnAnswer(stated)) {
             return stated;
         }
         return switch (stated) {
+            // Where every part has to hold, the row meets each. Where they cannot all hold, the
+            // answer was composed so that one part about it fails at the values, and which one is
+            // the answer's: so the row holds every value, and that part fails whatever the parts
+            // about the input alone come to — said as no place holding one of them away from its
+            // value.
             case Proposition.All all -> {
-                List<Proposition> parts = ofTheRow(all.parts(), pinned, positive);
-                yield parts == null ? null : Proposition.all(parts);
+                if (positive) {
+                    List<Proposition> parts = ofTheRow(all.parts(), pinned, true);
+                    yield parts == null ? null : Proposition.all(parts);
+                }
+                List<Proposition> away = ofTheRow(all.parts().stream()
+                        .filter(part -> !isTheRows(part)).toList(), pinned, false);
+                yield away == null ? null : Proposition.any(away);
             }
-            // Where it has to hold, the answer was composed for the parts about it, which is the
-            // whole holding whichever way the rest went; where it has to fail, every part has to.
-            case Proposition.Any any -> {
-                List<Proposition> parts = ofTheRow(positive ? any.parts().stream()
-                        .filter(Proposition::aboutAnAnswer).toList() : any.parts(),
-                        pinned, positive);
-                yield parts == null ? null : Proposition.any(parts);
-            }
-            case Proposition.OnAnApplication applications -> {
-                List<Proposition> each = ofTheRow(applications.each(), pinned, positive);
-                yield each == null ? null : Proposition.onAnApplication(each);
-            }
+            case Proposition.Any any -> oneOf(any.parts(), pinned, positive,
+                    Proposition::any);
+            case Proposition.OnAnApplication applications -> oneOf(applications.each(), pinned,
+                    positive, Proposition::onAnApplication);
             // An element of a container of the input. Where no element may meet it, every element
             // still asked the rest is held at the value, which the answer was composed to fail at.
             case Proposition.Some some when !(some.container()
@@ -164,6 +184,26 @@ public final class AnswerAsAnInput {
                     positive));
         }
         return positive ? Proposition.all(pins) : Proposition.any(pins);
+    }
+
+    /**
+     * What one of {@code parts} holding — joined by {@code joined} — asks of the row.
+     *
+     * <p>Where it has to hold, the answer was composed for the parts about it ({@link #of}), and
+     * which of them holds at the values is the answer's: so the row holds every value they name,
+     * and is asked nothing of the parts about the input alone, which the answer did not need.
+     * Where it has to fail, every part has to, and the row meets each as it stands.
+     */
+    private static Proposition oneOf(List<Proposition> parts,
+                                     Map<NumericTerm, ExactRatio> pinned, boolean positive,
+                                     Function<List<Proposition>, Proposition> joined) {
+        if (!positive) {
+            List<Proposition> each = ofTheRow(parts, pinned, false);
+            return each == null ? null : joined.apply(each);
+        }
+        List<Proposition> each = ofTheRow(parts.stream().filter(part -> !isTheRows(part))
+                .toList(), pinned, true);
+        return each == null ? null : Proposition.all(each);
     }
 
     private static List<Proposition> ofTheRow(List<Proposition> parts,
@@ -233,11 +273,14 @@ public final class AnswerAsAnInput {
      * where it is about something no value composed for one answer can be held to.
      *
      * <p>What a composer is to be told before it is asked: those numbers have to be put at values
-     * first, since which value the answer may be turns on them.
+     * first, since which value the answer may be turns on them. In the order the statement names
+     * them, which is the order their values are tried in — so one statement is composed for the
+     * same pair on every run.
      */
     public static Set<NumericTerm> inputNumbersIn(Proposition stated) {
         AnswerAsAnInput reading = asking(stated);
-        return reading == null ? null : Set.copyOf(reading.inputs);
+        return reading == null ? null
+                : Collections.unmodifiableSet(new LinkedHashSet<>(reading.inputs));
     }
 
     /**
@@ -331,9 +374,8 @@ public final class AnswerAsAnInput {
             // the row went is the row's, so the answer is held to the parts that are about it
             // ({@link #ofTheRow} holds the row to the values those were composed for).
             case Proposition.Any any -> {
-                List<Proposition> about = any.parts().stream()
-                        .filter(Proposition::aboutAnAnswer).toList();
-                List<Proposition> parts = propositions(about.isEmpty() ? any.parts() : about);
+                List<Proposition> parts = propositions(any.parts().stream()
+                        .filter(part -> !isTheRows(part)).toList());
                 yield parts == null ? null : Proposition.any(parts);
             }
             case Proposition.OnAnApplication applications -> {
@@ -362,22 +404,26 @@ public final class AnswerAsAnInput {
     }
 
     /**
-     * Whether {@code stated} is a part about the input alone that no number of it is put at a value
-     * for: which case, truth or value a position of the input holds, and whether one is there.
+     * Whether {@code stated} is a part about the input alone, whatever kind of statement it is.
      *
-     * <p>That is the row's to meet and not the answer's. The row is composed to the way and run, so
-     * a part it does not meet is a row that does not reach the rule, and is said as that; held
-     * against the answer instead, no value composed for the answer could meet it and the whole
-     * statement would be one nothing composes to.
+     * <p>That is the row's to meet and not the answer's, and what {@link #ofTheRow} leaves the row
+     * as it is. The row is composed to the way and run, so a part it does not meet is a row that
+     * does not reach the rule, and is said as that; held against the answer instead, no value
+     * composed for the answer could meet it, and a number of it put at a value here would be a
+     * value the row was never held to.
+     *
+     * <p>Not a part nothing read, nor one holding such a part, which says nothing about whose it
+     * is; and not one that holds or fails whatever the row and the answer are.
      */
     private static boolean isTheRows(Proposition stated) {
         return switch (stated) {
-            case Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
-                 Proposition.SameValue _, Proposition.LastToHold _,
-                 Proposition.SomeReachable _ -> !Proposition.aboutAnAnswer(stated);
-            case Proposition.Always _, Proposition.Unread _, Proposition.Compared _,
-                 Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
-                 Proposition.Some _, Proposition.Carried _ -> false;
+            case Proposition.Always _, Proposition.Unread _, Proposition.Carried _ -> false;
+            case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
+                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                 Proposition.SomeReachable _, Proposition.All _, Proposition.Any _,
+                 Proposition.OnAnApplication _, Proposition.Some _ ->
+                    !Proposition.aboutAnAnswer(stated)
+                            && !Proposition.leavesSomethingUnread(stated);
         };
     }
 
