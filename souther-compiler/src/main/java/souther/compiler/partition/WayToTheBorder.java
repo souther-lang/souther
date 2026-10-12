@@ -1,11 +1,15 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * How a row for one border came to be looked for where it is: every condition on the way, in the
@@ -230,70 +234,76 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     }
 
     /**
-     * The ways this one is, each with one alternative of every condition of several ways taken in
-     * where it stands ({@link OnTheWay.OneOf}) — just itself where it has none — as many as
-     * {@code most}, the first condition's alternatives changing slowest.
+     * The ways a row past this one may take, each with one alternative of conditions of several
+     * ways taken in where it stands ({@link OnTheWay.OneOf}) — and none of them a way that no row
+     * takes for the cases or the truths it asks.
      *
-     * <p>Every row past this way is past one of them, since a row past a condition of several ways
-     * met one of its alternatives. So a row is looked for along each, and nothing reaches the border
-     * only where nothing reaches along any of them — which only a split that holds every way can
-     * say, so it is told apart from one the figure cut ({@link Split#everyWay}).
+     * <p>Every row past this way is past one alternative of each such condition. Conditions that
+     * turn on no position in common are chosen apart, so the ways handed on are each open
+     * alternative once and not every way of taking them together ({@link OneOfEach}); and nothing
+     * reaches the border where every way of some of them closes, which a walk the figures stopped
+     * never says.
      */
-    public Split eachWay(int most) {
-        List<List<OnTheWay>> out = new ArrayList<>();
-        boolean every = waysFrom(onTheWay, new ArrayList<>(), out, most);
-        return new Split(out.stream().map(WayToTheBorder::new).toList(), every);
+    OneOfEach.Walked<OnTheWay> along() {
+        return OneOfEach.walk(onTheWay, ASKED_OF_A_ROW, CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
     }
 
     /**
-     * The ways this one was split into, and whether they are every way it is.
-     *
-     * @param ways     the first of them, one or more
-     * @param everyWay whether they are all of them; where not, the figure stopped the splitting and
-     *                 a row past this way may be on a way not among them
+     * What a way asks of a row as far as whether its conditions hold together: the cases it
+     * requires and the truths it asks, which are what two conditions on one way contradict each
+     * other in ({@link Reachability#of}), and a condition no row brings out the way taken.
      */
-    public record Split(List<WayToTheBorder> ways, boolean everyWay) {
+    private record HeldTogether(Requirements requirements, List<RowDemand.ATruth> truths) {}
 
-        public Split {
-            ways = List.copyOf(ways);
-        }
-    }
+    private static final OneOfEach.Vocabulary<OnTheWay, HeldTogether> ASKED_OF_A_ROW =
+            new OneOfEach.Vocabulary<>() {
 
-    /**
-     * Each way of {@code entries}, after {@code so}, put in {@code into} until it holds
-     * {@code most}: a condition of several ways is each of its alternatives in its place in turn,
-     * read as the entries it holds, so one inside an alternative is split where it stands too.
-     *
-     * <p>Made whole one at a time and never as a product first: how many there are is the figure's
-     * to bound, and a list of every one would be the size of what it stops.
-     *
-     * @return whether every way was put, which is false where {@code most} stopped it
-     */
-    private static boolean waysFrom(List<OnTheWay> entries, List<OnTheWay> so,
-                                    List<List<OnTheWay>> into, int most) {
-        int at = 0;
-        while (at < entries.size() && !(entries.get(at) instanceof OnTheWay.OneOf)) {
-            at++;
-        }
-        if (at == entries.size()) {
-            if (into.size() == most) {
-                return false;
-            }
-            List<OnTheWay> whole = new ArrayList<>(so);
-            whole.addAll(entries);
-            into.add(List.copyOf(whole));
-            return true;
-        }
-        List<OnTheWay> before = new ArrayList<>(so);
-        before.addAll(entries.subList(0, at));
-        List<OnTheWay> after = entries.subList(at + 1, entries.size());
-        for (List<OnTheWay> alternative : ((OnTheWay.OneOf) entries.get(at)).alternatives()) {
-            List<OnTheWay> rest = new ArrayList<>(alternative);
-            rest.addAll(after);
-            if (!waysFrom(rest, before, into, most)) {
-                return false;
-            }
-        }
-        return true;
-    }
+                @Override
+                public List<List<OnTheWay>> alternatives(OnTheWay entry) {
+                    return entry instanceof OnTheWay.OneOf several ? several.alternatives() : null;
+                }
+
+                @Override
+                public Set<TermPath> positions(OnTheWay entry) {
+                    return switch (entry) {
+                        case OnTheWay.TakenIn taken -> taken.demand().positions();
+                        case OnTheWay.Narrowed narrowed -> {
+                            Requirements required = narrowed.requirements();
+                            Set<TermPath> out = new LinkedHashSet<>(
+                                    required.refinements().keySet());
+                            for (NameReach.Crossing each : required.crossings()) {
+                                out.add(each.at());
+                                out.add(each.to());
+                            }
+                            yield out;
+                        }
+                        case OnTheWay.Settled _, OnTheWay.Declined _, OnTheWay.OneOf _ ->
+                                Set.of();
+                    };
+                }
+
+                @Override
+                public HeldTogether nothing() {
+                    return new HeldTogether(Requirements.NONE, List.of());
+                }
+
+                @Override
+                public HeldTogether with(HeldTogether so, OnTheWay entry) {
+                    return switch (entry) {
+                        case OnTheWay.Settled settled -> settled.thisWay() ? so : null;
+                        case OnTheWay.Narrowed narrowed ->
+                                so.requirements().merge(narrowed.requirements())
+                                        instanceof Requirements.Merge.Merged(Requirements both)
+                                        ? new HeldTogether(both, so.truths()) : null;
+                        case OnTheWay.TakenIn(var _, RowDemand.ATruth truth) -> {
+                            List<RowDemand.ATruth> truths = new ArrayList<>(so.truths());
+                            truths.add(truth);
+                            yield TruthsAsked.of(truths) instanceof TruthsAsked.Merge.Merged
+                                    ? new HeldTogether(so.requirements(), truths) : null;
+                        }
+                        case OnTheWay.TakenIn _, OnTheWay.Declined _, OnTheWay.OneOf _ -> so;
+                    };
+                }
+            };
 }

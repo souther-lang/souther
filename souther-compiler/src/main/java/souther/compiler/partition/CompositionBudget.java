@@ -94,11 +94,18 @@ public enum CompositionBudget {
      *  further and is carried out with the figure. */
     WAYS_UNDER_THE_CASES_TRIED(8),
 
-    /** How many ways one way to a border is split into where conditions on it came out one of
-     *  several ways, each a search looks along. What multiplies here is the alternatives of every
-     *  such condition on the way; past it the way is looked along whole, which narrows by none of
-     *  them, and nothing is proved of it from its alternatives. */
-    WAYS_A_WAY_IS_SPLIT_INTO(16),
+    /** How many ways a search looks along where conditions on the way to a border came out one of
+     *  several ways, each a row is composed along whole. One for each open alternative of every
+     *  group of conditions that turn on positions in common, and not one for each way of taking
+     *  them all together ({@link OneOfEach}); past it the way is looked along whole, which narrows
+     *  by none of them. */
+    WAYS_A_WAY_IS_LOOKED_ALONG(16),
+
+    /** How many alternatives of those conditions are taken in, one beside another, to find the
+     *  ways that are open. The walking beside the looking: an alternative that closes against what
+     *  was taken before it is looked at and is no way to compose along, and costs a putting
+     *  together of what is asked and not a row. A walk this stopped proves nothing closed. */
+    CHOICES_ON_A_WAY_LOOKED_AT(4096),
 
     /**
      * How many values of the numbers of the input a statement about an answer names are tried, each
@@ -388,6 +395,7 @@ public enum CompositionBudget {
             case PLACES_A_PAIR_IS_LOOKED_AT -> PLACES_A_PAIR_IS_TRIED_AT;
             case PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT ->
                     VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT;
+            case CHOICES_ON_A_WAY_LOOKED_AT -> WAYS_A_WAY_IS_LOOKED_ALONG;
             case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
                  ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,
                  ELEMENTS_A_COUNT_IS_COMPOSED_WITH, CONTAINERS_A_COUNT_IS_OFFERED,
@@ -399,7 +407,7 @@ public enum CompositionBudget {
                  LEVELS_A_SIDE_IS_ASKED_AT, TIMES_THE_RULES_ARE_ASKED_AGAIN,
                  VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,
                  PATHS_OF_A_DECISION_READ, READINGS_OF_ONE_CONDITION,
-                 WAYS_A_WAY_IS_SPLIT_INTO,
+                 WAYS_A_WAY_IS_LOOKED_ALONG,
                  DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,
                  CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
                  CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,

@@ -48,37 +48,31 @@ public sealed interface Reachability {
      */
     static Reachability of(WayToTheBorder way, SearchRegion declarations) {
         Reachability taken = taking(way, declarations, Ways.ONE);
-        if (!(taken instanceof Reaching whole)) {
+        if (!(taken instanceof Reaching whole) || way.severalWays().isEmpty()) {
             return taken;
         }
         // Where a condition on the way came out one of several ways, a row is past it along one
         // of them: the way is each of them as well, and a search looks along each. Every row is
-        // along one, so where none of them reaches, nothing does.
-        CompositionBudget figure = CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO;
-        WayToTheBorder.Split each = way.eachWay(figure.maximum());
-        if (each.everyWay() && each.ways().size() == 1) {
-            return whole;
+        // along one, so where every way of some of them closes, nothing reaches.
+        OneOfEach.Walked<OnTheWay> walked = way.along();
+        if (walked.closedBy() != null) {
+            return taking(new WayToTheBorder(walked.closedBy()), declarations, Ways.ONE);
         }
         List<Reaching> along = new ArrayList<>();
-        Reachability closed = null;
-        for (WayToTheBorder one : each.ways()) {
-            switch (taking(one, declarations, Ways.ONE)) {
-                case Reaching open -> along.add(open);
-                case Reachability shut -> {
-                    if (closed == null) {
-                        closed = shut;
-                    }
-                }
+        for (List<OnTheWay> one : walked.ways()) {
+            // Open as far as the cases and the truths it asks, which is all that closes a way.
+            if (taking(new WayToTheBorder(one), declarations, Ways.ONE) instanceof Reaching open) {
+                along.add(open);
             }
         }
-        if (!each.everyWay()) {
-            // More ways than are looked along: the ones the figure let through are looked along
+        if (!walked.everyWay()) {
+            // More ways than are looked along: the ones the figures let through are looked along
             // first, each narrower than the way, and past them the way is looked along whole —
             // which every row past it is on, so none of them being closed proves nothing — and the
-            // conditions it was not split at say so.
-            return whole.splitAs(new Ways.Whole(way.severalWays(), figure, along));
+            // conditions it was not looked along each way of say so.
+            return whole.splitAs(new Ways.Whole(way.severalWays(), walked.stoppedBy(), along));
         }
-        return along.isEmpty() ? closed : whole.splitAs(new Ways.Each(along));
+        return whole.splitAs(new Ways.Each(along));
     }
 
     /** {@code way} read in its own vocabularies, split as {@code ways} says. */
@@ -138,9 +132,14 @@ public sealed interface Reachability {
         record One() implements Ways {}
 
         /**
-         * Split into each way some row may take, every one narrower than the way whole. A way the
-         * rules leave nothing along is not among them, so one alone is left where the rules close
-         * every other.
+         * Split into the ways some row may take, every one narrower than the way whole: each open
+         * alternative of each condition of several ways once, beside open alternatives of the
+         * conditions that turn on other positions ({@link OneOfEach}). A way the rules leave
+         * nothing along is not among them, so one alone is left where the rules close every
+         * other.
+         *
+         * <p>Every alternative some row may take is along one of them, so what every one of them
+         * states is what the way states, and what one states is no more than one way's.
          *
          * @param along one or more
          */
@@ -157,8 +156,8 @@ public sealed interface Reachability {
 
         /**
          * Not split whole, though {@code unsplit} came out one of several ways: the ways they split
-         * it into are more than {@code figure} lets this look along, so the first of them are
-         * looked along and past them it is looked along whole.
+         * it into are more than {@code figure} lets this look along or look for, so the first of
+         * them are looked along and past them it is looked along whole.
          *
          * <p>The ones looked along are each enough for a row, and any of them may be the one an
          * author wrote the condition for, so they are not given up for the rest. The way whole is

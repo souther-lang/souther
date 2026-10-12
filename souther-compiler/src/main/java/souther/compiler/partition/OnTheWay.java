@@ -153,7 +153,7 @@ public sealed interface OnTheWay {
      * on one of {@code alternatives}.
      *
      * <p>Narrows nothing on its own, since no one alternative is what every arriving row met. What
-     * each alternative asks is a way of its own ({@link WayToTheBorder#eachWay}), and a row is
+     * each alternative asks is a way of its own ({@link Reachability#of}), and a row is
      * looked for along each of them; nothing reaches past the condition only where nothing reaches
      * along any of them.
      *

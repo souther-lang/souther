@@ -160,9 +160,12 @@ final class Reasons {
                         "how many ways down to what a total adds up are tried";
                 case WAYS_UNDER_THE_CASES_TRIED ->
                         "how many ways under the cases of a sum a container is written are tried";
-                case WAYS_A_WAY_IS_SPLIT_INTO ->
-                        "how many ways a way is split into where a condition on it is one of"
-                                + " several things";
+                case WAYS_A_WAY_IS_LOOKED_ALONG ->
+                        "how many ways a row is looked for along where conditions on the way are"
+                                + " one of several things";
+                case CHOICES_ON_A_WAY_LOOKED_AT ->
+                        "how many alternatives of conditions on the way are looked at to find the"
+                                + " ways a row may take";
                 case CHOICES_OF_INPUT_NUMBERS_LOOKED_AT ->
                         "how many choices of values for the input's numbers are looked at";
                 case PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED ->

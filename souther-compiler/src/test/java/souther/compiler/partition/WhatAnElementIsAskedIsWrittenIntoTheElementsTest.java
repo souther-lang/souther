@@ -142,13 +142,20 @@ class WhatAnElementIsAskedIsWrittenIntoTheElementsTest {
                 () -> "and nothing on the way is proved closed: " + attempt.unrepresented());
     }
 
-    /** Some element meeting one of two things is looked for along each, and found along one. */
+    /**
+     * Some element meeting one of two things is one demand with a way for each, and a row whose
+     * elements are written alike is looked for along each and found along one.
+     */
     @Test
     void oneOfSeveralThingsSomeElementMeetsIsFoundAlongOneOfThem() {
+        assertEquals(2, ofAnElement("someFarOut").ways().size(),
+                "one demand, with a way for each of the two");
         List<Generator.BoundaryAttempt> along = composedAlongEach("someFarOut");
-        assertEquals(2, along.size(), () -> "a way for each of the two: " + along);
+        assertEquals(2, along.size(), () -> "a row looked for along each: " + along);
         assertTrue(along.stream().anyMatch(Generator.BoundaryAttempt.Built.class::isInstance),
                 () -> "a row is written along one of them: " + along);
+        assertInstanceOf(Generator.BoundaryAttempt.Built.class, composedPast("someFarOut"),
+                "and that row is the one composed past the way");
     }
 
     /**
@@ -183,13 +190,20 @@ class WhatAnElementIsAskedIsWrittenIntoTheElementsTest {
      */
     @Test
     void everyElementOfAContainerInsideAnElementIsTwoWays() {
-        List<OnTheWay> stated = stated("someGroupAllDear");
-        OnTheWay.OneOf ways = assertInstanceOf(OnTheWay.OneOf.class, stated.getFirst(),
-                "the inner list's elements meeting it, or the inner list holding none");
-        assertEquals(2, ways.alternatives().size(), () -> "two ways: " + ways);
+        RowDemand.AnElementMeets ways = ofAnElement("someGroupAllDear");
+        assertEquals(2, ways.ways().size(), () -> "the inner list's elements meeting it, or the"
+                + " inner list holding none: " + ways);
         assertTrue(composedAlongEach("someGroupAllDear").stream()
                         .allMatch(Generator.BoundaryAttempt.Built.class::isInstance),
                 () -> "a row is written along each");
+    }
+
+    /** What some element is asked where {@code behavior} comes out true, which is one demand. */
+    private static RowDemand.AnElementMeets ofAnElement(String behavior) {
+        List<OnTheWay> stated = stated(behavior);
+        assertEquals(1, stated.size(), () -> "one demand: " + stated);
+        OnTheWay.TakenIn taken = assertInstanceOf(OnTheWay.TakenIn.class, stated.getFirst());
+        return assertInstanceOf(RowDemand.Exists.class, taken.demand()).ofAnElement();
     }
 
     /** What every element meets about a number beside it places that number with the element. */
@@ -217,12 +231,13 @@ class WhatAnElementIsAskedIsWrittenIntoTheElementsTest {
         return probed(reaching);
     }
 
-    /** The same along each way {@code behavior} coming out true splits the way into. */
+    /** The same along each way of writing the elements alike that {@code behavior} coming out
+     *  true asks. */
     private static List<Generator.BoundaryAttempt> composedAlongEach(String behavior) {
         Reachability.Reaching reaching = assertInstanceOf(Reachability.Reaching.class,
                 Reachability.of(new WayToTheBorder(stated(behavior)), declarations()));
         List<Generator.BoundaryAttempt> out = new ArrayList<>();
-        reaching.along().forEach(one -> out.add(probed(one)));
+        ElementsWrittenAlike.of(reaching).forEach(one -> out.add(probed(one)));
         return out;
     }
 

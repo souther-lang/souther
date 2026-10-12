@@ -68,8 +68,9 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
     }
 
     private static ContentsAsked everyKeyFiled() {
-        return asked(new RowDemand.ForAll(KS, List.of(new RowDemand.WithinIt(SHELF, true,
-                new RowDemand.KeyedAs(KS.element()))), HOLDING));
+        return asked(new RowDemand.ForAll(KS, RowDemand.AnElementMeets.only(List.of(
+                new RowDemand.WithinIt(SHELF, true, new RowDemand.KeyedAs(KS.element())))),
+                HOLDING));
     }
 
     /** What {@code ks} handed on, built holding {@code keys}. */
@@ -135,8 +136,9 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
     @Test
     void aValueReadOutsideTheListIsHandedForEachElementOfIt() {
         TermPath n = TermPath.of("n");
-        ContentsAsked asked = asked(new RowDemand.ForAll(KS, List.of(new RowDemand.WithinIt(SHELF,
-                true, new RowDemand.KeyedAs(n))), HOLDING));
+        ContentsAsked asked = asked(new RowDemand.ForAll(KS, RowDemand.AnElementMeets.only(
+                List.of(new RowDemand.WithinIt(SHELF, true, new RowDemand.KeyedAs(n)))),
+                HOLDING));
         ValuesHandedOn nBuilt = new ValuesHandedOn(Map.of(n, List.of(new ValuesHandedOn.Standing(
                 ElementsTaken.NONE, FixtureTemplate.string("x")))), Map.of(), Map.of());
 
@@ -155,8 +157,9 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
     void aValueIsReadInTheElementOfEveryContainerAroundIt() {
         TermPath os = TermPath.of("os");
         TermPath lines = os.element().then("ls");
-        ContentsAsked asked = asked(new RowDemand.ForAll(lines, List.of(new RowDemand.WithinIt(
-                SHELF, true, new RowDemand.KeyedAs(lines.element()))), HOLDING));
+        ContentsAsked asked = asked(new RowDemand.ForAll(lines, RowDemand.AnElementMeets.only(
+                List.of(new RowDemand.WithinIt(SHELF, true,
+                        new RowDemand.KeyedAs(lines.element())))), HOLDING));
         ElementsTaken first = ElementsTaken.NONE.and(os, 0).and(lines, 0);
         ElementsTaken second = ElementsTaken.NONE.and(os, 1).and(lines, 0);
         ElementsTaken third = ElementsTaken.NONE.and(os, 1).and(lines, 1);
@@ -180,8 +183,9 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
         TermPath input = TermPath.of("input");
         TermPath ks = input.then("ks");
         TermPath shelf = input.then("shelf");
-        ContentsAsked asked = asked(new RowDemand.ForAll(ks, List.of(new RowDemand.WithinIt(shelf,
-                true, new RowDemand.KeyedAs(ks.element()))), HOLDING));
+        ContentsAsked asked = asked(new RowDemand.ForAll(ks, RowDemand.AnElementMeets.only(
+                List.of(new RowDemand.WithinIt(shelf, true, new RowDemand.KeyedAs(ks.element())))),
+                HOLDING));
         ContentsAsked.Here here = resolved(asked, "input", ValuesHandedOn.NONE);
 
         assertEquals(List.of(), here.given());

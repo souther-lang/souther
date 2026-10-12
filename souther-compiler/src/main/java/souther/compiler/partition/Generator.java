@@ -758,9 +758,10 @@ public final class Generator {
                              // It stops a reading of what a condition means, and what it stopped
                              // is carried as a part nothing read, naming it.
                              READINGS_OF_ONE_CONDITION,
-                             // Past it the way is looked along whole, the row is composed either
-                             // way, and what was not split is carried with the row's account.
-                             WAYS_A_WAY_IS_SPLIT_INTO,
+                             // Past either the way is looked along whole, the row is composed
+                             // either way, and what was not looked along is carried with the row's
+                             // account.
+                             WAYS_A_WAY_IS_LOOKED_ALONG, CHOICES_ON_A_WAY_LOOKED_AT,
                              // What it stops is the looking for a way past a guard, beside a row
                              // already found, and what it stopped is carried beside that row.
                              RUNS_REPAIRING_A_ROW -> throw new IllegalArgumentException(
@@ -4673,6 +4674,28 @@ public final class Generator {
                                               NumbersAskedFor asking,
                                               Reachability.Reaching reaching, CandidateCheck check,
                                               StandInAttempt stood) {
+        // Where an element may meet something several ways, a row writing its elements alike is
+        // composed along each way of choosing one for every element first. A row along one is a
+        // row of the way; one of them coming to nothing says nothing of the rest, or of elements
+        // that differ, so past them the way is composed as it stands and says what it did not
+        // write.
+        for (Reachability.Reaching alike : ElementsWrittenAlike.of(reaching)) {
+            BoundaryAttempt one = probeFixingAlong(subject, label, fixing, asking, alike, check,
+                    stood);
+            if (one instanceof BoundaryAttempt.Built) {
+                return one;
+            }
+        }
+        return probeFixingAlong(subject, label, fixing, asking, reaching, check, stood);
+    }
+
+    /** {@link #probeFixing}, along a way whose demands of several ways are written as they
+     *  stand. */
+    private static BoundaryAttempt probeFixingAlong(MeasuredInput subject, String label,
+                                                    Map<RealizationTarget, Place> fixing,
+                                                    NumbersAskedFor asking,
+                                                    Reachability.Reaching reaching,
+                                                    CandidateCheck check, StandInAttempt stood) {
         LocationWrites decided = new LocationWrites();
         // What the rest of the row has to sit beside. A field of a record is not chosen from its own
         // type once another field of that record is fixed: the rule relating them says what is left,
@@ -5388,6 +5411,15 @@ public final class Generator {
                 countsOnTheWay.merge(count.identity(),
                         new CountsAsked(count, counts, many.againstNumbers(), cut),
                         CountsAsked::and);
+                continue;
+            }
+            // What an element meets one of several ways, with none chosen: a row whose elements
+            // are written alike writes one of them into every element, and which one is chosen
+            // before the row is composed ({@link ElementsWrittenAlike}). Composed with none chosen,
+            // nothing is placed for it and the elements written alike are why.
+            if (!RowDemand.writtenAlikeAsItStands(cut.demand())) {
+                gaps.add(new ReachabilityGap.Uncomposed(cut,
+                        new ReachabilityGap.Why.ElementsWrittenAlike()));
                 continue;
             }
             // A statement no composer writes toward: nothing is placed for it, and the run is what
