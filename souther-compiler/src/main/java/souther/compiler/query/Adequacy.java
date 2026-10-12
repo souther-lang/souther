@@ -29,8 +29,11 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.RunBodies;
 import souther.compiler.coverage.RunRecord;
 import souther.compiler.coverage.SiteNumbering;
+import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Reachability;
+import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.msg.DeadBranchMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.check.RuleCitation;
@@ -139,6 +142,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -1821,15 +1825,14 @@ public final class Adequacy {
             }
 
             @Override
-            public souther.compiler.diag.Diagnostic.Builder itsClosureIsAppliedToNothing(
-                    List<String> containers,
-                    List<souther.compiler.reach.PathDecision> decisions) {
-                souther.compiler.diag.Diagnostic.Builder out =
+            public Diagnostic.Builder itsClosureIsAppliedToNothing(List<String> containers,
+                                                                   List<PathDecision> decisions) {
+                Diagnostic.Builder out =
                         said.hint(new DeadBranchMessage.ItsClosureIsAppliedToNothing(
                                 containers.stream().map(each -> "`" + each + "`")
-                                        .collect(java.util.stream.Collectors.joining(", "))));
-                for (souther.compiler.reach.PathDecision each : decisions) {
-                    out = out.secondary(souther.compiler.diag.Region.point(each.at()),
+                                        .collect(Collectors.joining(", "))));
+                for (PathDecision each : decisions) {
+                    out = out.secondary(Region.point(each.at()),
                             each.held() ? new DeadBranchMessage.ThisOneHoldsOnTheWayHere()
                                     : new DeadBranchMessage.ThisOneFailsOnTheWayHere());
                 }

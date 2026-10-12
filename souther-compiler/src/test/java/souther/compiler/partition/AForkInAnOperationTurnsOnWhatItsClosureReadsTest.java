@@ -32,7 +32,7 @@ class AForkInAnOperationTurnsOnWhatItsClosureReadsTest {
             data North
             data South
             data Region = North | South
-            data Meeting = { r: Region }
+            data Meeting = { r: Region, s: Region }
             data Rs = { ms: List<Meeting>, other: Region, regions: List<Region>,
                         more: List<Region> }
             data Out = { n: Int }
@@ -64,6 +64,13 @@ class AForkInAnOperationTurnsOnWhatItsClosureReadsTest {
                 constructs Out
             let nested (rs) = Out { n = List.length(List.filter(
                 m -> List.all(r -> r == North, rs.regions), rs.ms)) }
+
+            behavior branching : (rs: Rs) -> Out
+                constructs Out
+            let branching (rs) = {
+                let unused = List.all(m -> if m.r == North then m.s == North else true, rs.ms)
+                Out { n = 0 }
+            }
 
             behavior asked : (rs: Rs) -> Out
                 depends on ok
@@ -117,6 +124,18 @@ class AForkInAnOperationTurnsOnWhatItsClosureReadsTest {
                 () -> "whether a meeting is kept is whether every region is `North`: " + told);
         assertInstanceOf(BodyDistinction.Untouched.class, told.get("rs.more[*]"), () -> "" + told);
         assertInstanceOf(BodyDistinction.Untouched.class, told.get("rs.ms[*].r"), () -> "" + told);
+    }
+
+    /**
+     * A closure whose body is an {@code if} answers with what the {@code if} answers, which reads
+     * what both its arms read; the {@code if} itself turns on its condition alone.
+     */
+    @Test
+    void aForkThatIsAClosuresBodyTurnsOnItsConditionAndNotOnItsArms() {
+        Map<String, BodyDistinction> told = toldApart("branching");
+
+        assertInstanceOf(BodyDistinction.Untouched.class, told.get("rs.ms[*].s"),
+                () -> "`s` is what the `then` arm answers, and nothing forks on it: " + told);
     }
 
     @Test

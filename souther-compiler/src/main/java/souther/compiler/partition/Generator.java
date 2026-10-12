@@ -21,8 +21,10 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.reading.CoverageRead;
+import souther.compiler.reading.Decision;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.TheRestOfTheBlock;
+import souther.compiler.reading.WayIn;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
@@ -1482,7 +1484,7 @@ public final class Generator {
         // depend on which arm is asking.
         List<WhereToLook>cells = placesFor(new LinkedHashSet<>(armsOwed), offered);
         // And the ways into the arms inside closures, read off the ways once for every arm asked.
-        Map<ArmProbe, List<souther.compiler.reading.WayIn>> namedWays =
+        Map<ArmProbe, List<WayIn>> namedWays =
                 waysNamedInto(read, axes.subject().partitioning().armsNamed());
         Set<ArmProbe> notOffered = new LinkedHashSet<>();
         // Which arms each held-back group could have been searched at, kept per group so that the
@@ -2097,7 +2099,7 @@ public final class Generator {
     private static List<WhereToLook>whereToLookFor(
             ArmProbe probe, souther.compiler.reading.CoverageRead.Read read,
             List<WhereToLook>cells,
-            Map<ArmProbe, List<souther.compiler.reading.WayIn>> namedWays,
+            Map<ArmProbe, List<WayIn>> namedWays,
             MeasuredInput.MeasuredAxes axes) {
         List<WhereToLook>out = new ArrayList<>();
         for (WhereToLook place : cells) {
@@ -2105,7 +2107,7 @@ public final class Generator {
                 out.add(place);
             }
         }
-        for (souther.compiler.reading.WayIn way : namedWays.getOrDefault(probe, List.of())) {
+        for (WayIn way : namedWays.getOrDefault(probe, List.of())) {
             CellSelection at =
                     InteractionCells.at(way, way.decisions().getLast().claims(), axes);
             if (at != null && out.stream().noneMatch(already -> already.at.sameAs(at))) {
@@ -2144,10 +2146,10 @@ public final class Generator {
      * the case both ask meets, and which two cases leave no cell for — nowhere to look, and
      * nothing said about the arm.
      */
-    private static Map<ArmProbe, List<souther.compiler.reading.WayIn>> waysNamedInto(
-            souther.compiler.reading.CoverageRead.Read read, ArmsNamed named) {
-        Map<ArmProbe, List<souther.compiler.reading.WayIn>> out = new HashMap<>();
-        for (souther.compiler.reading.WayIn way : read.taken()) {
+    private static Map<ArmProbe, List<WayIn>> waysNamedInto(CoverageRead.Read read,
+                                                            ArmsNamed named) {
+        Map<ArmProbe, List<WayIn>> out = new HashMap<>();
+        for (WayIn way : read.taken()) {
             if (way.decisions().isEmpty()
                     || !(way.decisions().getLast().claims().at() instanceof ControlPlace.Arm arm)
                     || arm.probe().isEmpty()
@@ -2156,17 +2158,16 @@ public final class Generator {
                     || why != PathAccess.Unsupported.Why.RUNS_WHERE_SOMETHING_CALLS_IT) {
                 continue;
             }
-            List<souther.compiler.reading.Decision> asCases = new ArrayList<>();
-            for (souther.compiler.reading.Decision decision : way.decisions()) {
+            List<Decision> asCases = new ArrayList<>();
+            for (Decision decision : way.decisions()) {
                 asCases.add(decision.constrains()
                         instanceof souther.compiler.reading.Condition.Arm at
-                        && named.of(at).orElse(null) instanceof souther.compiler.reading.Condition.Case
-                                taken
-                        ? new souther.compiler.reading.Decision(taken, decision.claims())
+                        && named.of(at).orElse(null)
+                                instanceof souther.compiler.reading.Condition.Case taken
+                        ? new Decision(taken, decision.claims())
                         : decision);
             }
-            out.computeIfAbsent(arm.probe().get(), _ -> new ArrayList<>())
-                    .add(new souther.compiler.reading.WayIn(asCases));
+            out.computeIfAbsent(arm.probe().get(), _ -> new ArrayList<>()).add(new WayIn(asCases));
         }
         return out;
     }

@@ -589,7 +589,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 // condition's parts were read just above, so a comparison is not read twice.
                 if (iff.occurrence() != null) {
                     ModelOccurrence.statedAt(in.context().of(iff.occurrence())).ifPresent(fork ->
-                            in.dependencies().reads(fork, DemandReading.statedBy(condition,
+                            in.dependencies().forkReads(fork, DemandReading.statedBy(condition,
                                     in.read(), in.conditions())));
                 }
                 Choice.Decides then = Choice.Decides.ofCondition(iff, true);
@@ -1144,11 +1144,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
         switch (applied) {
             case ClosureApplications.Each(var each) -> each.forEach(one ->
-                    in.dependencies().reads(answers.get(), in.conditions()
+                    in.dependencies().answerReads(answers.get(), in.conditions()
                             .truth(block.body(), one.reads(), in.read()).proposition()));
             case ClosureApplications.None _ -> { }
             case ClosureApplications.Outside _, ClosureApplications.NotSaid _ ->
-                    in.dependencies().unbounded(answers.get());
+                    in.dependencies().answerUnbounded(answers.get());
         }
     }
 

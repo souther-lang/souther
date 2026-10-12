@@ -64,9 +64,9 @@ public final class PositionsAStatementReads {
                  Quantity.OfABinding _ -> false;
             case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
                     .allMatch(each -> reads(each, out));
-            // A piece of a string is whatever the statement it is read inside says it is, which
-            // names the string.
-            case Quantity.CodePointsOfAPiece _ -> true;
+            // A piece of a string is whatever the statement it is read inside says it is, and the
+            // string that statement is about is no part of this quantity to collect.
+            case Quantity.CodePointsOfAPiece _ -> false;
             case Quantity.HowManyMeet(DecisionSubject counted, Proposition each) ->
                     reads(counted, out) && reads(each, out);
             case Quantity.HowManyHold(List<Proposition> each) -> each.stream()

@@ -211,9 +211,10 @@ final class WhatABodyTellsApart {
         if (each instanceof souther.compiler.reading.Condition.Arm arm) {
             Optional<souther.compiler.reading.Condition.Case> named = armsNamed.of(arm);
             if (named.isPresent()) {
-                return placing(named.get()) instanceof Placed.About about
+                Placed asTheCase = placing(named.get());
+                return asTheCase instanceof Placed.About about
                         ? new Placed.OfAnApplication(about, arm.arm().fork())
-                        : withheld(placing(named.get()));
+                        : withheld(asTheCase);
             }
             // A fork on what an operation over a container answers — `List.all(...)` — or a fork of
             // the operation's own body on what a closure the model handed it answers may turn on
@@ -260,19 +261,19 @@ final class WhatABodyTellsApart {
     private Optional<ForkDependencies.Dependency> dependencyOf(
             souther.compiler.reading.Condition.Arm arm) {
         Optional<ForkDependencies.Dependency> asWritten =
-                ModelOccurrence.statedAt(arm.arm().fork()).flatMap(dependencies::of);
+                ModelOccurrence.statedAt(arm.arm().fork()).flatMap(dependencies::ofTheFork);
         if (asWritten.isPresent() || arm.decidedBy().isEmpty()) {
             return asWritten;
         }
         ConstructOccurrence decides = arm.decidedBy().get();
         Optional<ModelOccurrence> stated = ModelOccurrence.statedAt(decides);
         if (stated.isPresent()) {
-            return dependencies.of(stated.get());
+            return dependencies.ofTheAnswer(stated.get());
         }
         Optional<ModelOccurrence> called = ModelOccurrence.operationCalledAround(decides);
         return called.isEmpty()
                 || called.equals(ModelOccurrence.operationCalledAround(arm.arm().fork()))
-                ? Optional.empty() : dependencies.of(called.get());
+                ? Optional.empty() : dependencies.ofTheAnswer(called.get());
     }
 
     /**
