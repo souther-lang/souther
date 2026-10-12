@@ -3437,22 +3437,15 @@ public final class Generator {
 
         private final List<List<Map<TermPath, CasesLeft>>> read = new ArrayList<>();
 
-        /** Which classes leave the container their position counts nothing to hold, by position
-         *  and class, read as they are first asked. */
-        private final List<List<Boolean>> leaveNothingInside = new ArrayList<>();
-
-        /** Which positions stand inside a container another position counts, by the two, read as
-         *  they are first asked. */
-        private final Boolean[][] inside;
+        /** What the pair space says of two classes beside their requirements. */
+        private final ClassCoexistence coexistence;
 
         WhatEachClassRequires(List<Axis> axes) {
             this.axes = axes;
             for (Axis axis : axes) {
                 read.add(new ArrayList<>(Collections.nCopies(axis.classes().size(), null)));
-                leaveNothingInside.add(
-                        new ArrayList<>(Collections.nCopies(axis.classes().size(), null)));
             }
-            this.inside = new Boolean[axes.size()][axes.size()];
+            this.coexistence = ClassCoexistence.among(axes);
         }
 
         /** What standing {@code axis} at its class {@code cls} requires. */
@@ -3472,26 +3465,7 @@ public final class Generator {
          * beside the requirements {@link #of} reads.
          */
         boolean leaveNoRoom(int one, int here, int other, int there) {
-            return (standsInside(other, one) && leavesNothingInside(one, here))
-                    || (standsInside(one, other) && leavesNothingInside(other, there));
-        }
-
-        private boolean standsInside(int standing, int counting) {
-            Boolean known = inside[standing][counting];
-            if (known == null) {
-                known = ClassCoexistence.standsInside(axes.get(standing), axes.get(counting));
-                inside[standing][counting] = known;
-            }
-            return known;
-        }
-
-        private boolean leavesNothingInside(int axis, int cls) {
-            Boolean known = leaveNothingInside.get(axis).get(cls);
-            if (known == null) {
-                known = ClassCoexistence.leavesNothingInside(axes.get(axis), cls);
-                leaveNothingInside.get(axis).set(cls, known);
-            }
-            return known;
+            return coexistence.leavesNoRoom(one, here, other, there);
         }
     }
 
@@ -5016,23 +4990,69 @@ public final class Generator {
         return most < 0 ? null : new DeclaredBounds.CountRange(least, most);
     }
 
+    /** Every count from one up, which is what a container holding something holds. */
+    private static final DeclaredBounds.CountRange FROM_ONE =
+            new DeclaredBounds.CountRange(1, Integer.MAX_VALUE);
+
     /**
-     * From how few to how many a class of how many a container holds takes, or null where the
-     * class is not one run of counts.
+     * From how few to how many a class of how many a container holds takes from one up, for a row
+     * asking something inside the container as well, or null where the arithmetic could not say.
      *
      * <p>Off the set the class is about and not off the values standing for it ({@link #sizesOf}).
      * A class from none to one may stand for itself with an empty container, and a row asking the
-     * container to hold an element as well needs the other count the class takes.
+     * container to hold an element as well needs the other count the class takes. And from one,
+     * whatever the class also holds below it: what is asked inside is somewhere only in a container
+     * holding something.
      */
     private static DeclaredBounds.CountRange countsOf(PartitionClass cls) {
         Recognition what = cls.recognises();
         while (what instanceof Recognition.Under under) {
             what = under.inner();
         }
-        if (!(what instanceof Recognition.OfACount count)
-                || !(count.is().asOneRun() instanceof NumericDomain.Bounds run)) {
+        if (!(what instanceof Recognition.OfACount count)) {
             return null;
         }
+        if (!(count.is().asOneRun() instanceof NumericDomain.Bounds run)) {
+            return oneCountFromOne(count);
+        }
+        DeclaredBounds.CountRange all = countsIn(run);
+        return all == null ? null : within(all, FROM_ONE);
+    }
+
+    /**
+     * The least count from one up a class of more than one run takes, as the one count a container
+     * is asked to hold, or null where none is found.
+     *
+     * <p>Such a class has no pair of ends holding only its counts, so one of them is asked for. Each
+     * count stepped over is one the class takes out, so the walk is as long as what it takes out
+     * and no longer.
+     */
+    private static DeclaredBounds.CountRange oneCountFromOne(Recognition.OfACount count) {
+        List<Place> takenOut = switch (count.is()) {
+            case NumericSet.AwayFrom away -> away.values();
+            case NumericSet.InARunExcept except -> except.excluded();
+            case NumericSet.At _, NumericSet.InARun _ -> List.of();
+        };
+        Endpoint low = count.is().extent().min();
+        Count from = low == null ? Count.of(1) : wholeAt(low, true);
+        if (from == null) {
+            return null;
+        }
+        if (from.compareTo(Count.of(1)) < 0) {
+            from = Count.of(1);
+        }
+        for (int step = 0; step <= takenOut.size(); step++) {
+            Count each = from.plus(step);
+            if (count.is().holds(each, count.carrier())) {
+                int many = CountDomain.asCount(each);
+                return many < 0 ? null : new DeclaredBounds.CountRange(many, many);
+            }
+        }
+        return null;
+    }
+
+    /** The whole counts between the ends of {@code run}, or null where an end is not a count. */
+    private static DeclaredBounds.CountRange countsIn(NumericDomain.Bounds run) {
         Count least = run.min() == null ? Count.ZERO : wholeAt(run.min(), true);
         Count most = run.max() == null ? null : wholeAt(run.max(), false);
         if (least == null || (run.max() != null && most == null)) {
@@ -7690,11 +7710,16 @@ public final class Generator {
         return new DemandsInside(among, required);
     }
 
-    /** Whether this row stands at a class of some position strictly inside {@code location}. */
+    /**
+     * Whether the {@code counting}th position is how many a container holds and this row stands at
+     * a class of some position inside that container, asked as the pair space asks it
+     * ({@link ClassCoexistence#standsInside}).
+     */
     private static boolean somethingStandsInside(MeasuredInput.MeasuredAxes axes, int[] where,
-                                                 TermPath location) {
+                                                 int counting) {
         for (int i = 0; i < axes.size(); i++) {
-            if (where[i] != NOT_HERE && isStrictlyUnder(axes.get(i).path(), location)) {
+            if (where[i] != NOT_HERE
+                    && ClassCoexistence.standsInside(axes.get(i), axes.get(counting))) {
                 return true;
             }
         }
@@ -8154,12 +8179,14 @@ public final class Generator {
                     // inside it, asks the container to hold that many and not to be one of the
                     // values standing for the class: written whole, the container would leave the
                     // position inside it nowhere to be written. Built to hold what is asked inside
-                    // it, to a size the class takes ({@link #countsOf}).
+                    // it, to a size the class takes from one up ({@link #countsOf}).
                     DeclaredBounds.CountRange holds = null;
-                    if (write == null && axes.get(i).countsWhatItsPathHolds()
-                            && somethingStandsInside(axes, where, path)) {
-                        DeclaredBounds.CountRange ofTheClass = countsOf(cls);
-                        holds = ofTheClass != null ? ofTheClass : sizesOf(offered);
+                    if (write == null && somethingStandsInside(axes, where, i)) {
+                        holds = countsOf(cls);
+                        if (holds == null) {
+                            DeclaredBounds.CountRange standingFor = sizesOf(offered);
+                            holds = standingFor == null ? null : within(standingFor, FROM_ONE);
+                        }
                     }
                     if (cls.selects() == null && !inThatValue
                             && (holds != null ? decided.size(path, holds)

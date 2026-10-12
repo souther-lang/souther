@@ -75,7 +75,8 @@ final class LocationWrites {
      *
      * <p>Refused where a value is written at it or at a value it is inside: that value already says
      * how many the container holds. Taken beside whatever is asked inside it, which the container
-     * is built to hold.
+     * is built to hold. Asked again, the container holds a count both asks take, and is refused
+     * only where there is none.
      */
     Written size(TermPath at, DeclaredBounds.CountRange holds) {
         for (TermPath whole : written.keySet()) {
@@ -85,7 +86,14 @@ final class LocationWrites {
         }
         DeclaredBounds.CountRange already = sized.get(at);
         if (already != null) {
-            return already.equals(holds) ? Written.AGAIN : Written.CONFLICTING;
+            DeclaredBounds.CountRange both = new DeclaredBounds.CountRange(
+                    Math.max(already.least(), holds.least()),
+                    Math.min(already.most(), holds.most()));
+            if (both.empty()) {
+                return Written.CONFLICTING;
+            }
+            sized.put(at, both);
+            return Written.AGAIN;
         }
         sized.put(at, holds);
         return Written.FIRST;

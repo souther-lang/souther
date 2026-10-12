@@ -503,6 +503,7 @@ final class Coverages {
             combining[i] = toldApartAt(toldApart, axes.get(i)).makesCombinations();
         }
         List<PartitionEvidence.PairSpace.AxisPair> space = new ArrayList<>();
+        ClassCoexistence among = ClassCoexistence.among(axes);
         for (int i = 0; i < axes.size(); i++) {
             if (!combining[i]) {
                 continue;
@@ -511,7 +512,7 @@ final class Coverages {
                 if (!combining[j]) {
                     continue;
                 }
-                long between = combinationsOf(axes.get(i), axes.get(j));
+                long between = combinationsOf(among, axes, i, j);
                 if (between > 0) {
                     space.add(new PartitionEvidence.PairSpace.AxisPair(
                             new PartitionEvidence.PairSpace.Between(
@@ -613,12 +614,12 @@ final class Coverages {
      * which combinations are left ({@link #uncovered}) — so what is counted here and what a row is
      * asked for come from one reading rather than from two that agree until a case is added.
      */
-    private static long combinationsOf(Axis one, Axis other) {
-        ClassCoexistence between = ClassCoexistence.between(one, other);
+    private static long combinationsOf(ClassCoexistence among, List<Axis> axes, int one,
+                                       int other) {
         long count = 0;
-        for (int here = 0; here < one.classes().size(); here++) {
-            for (int there = 0; there < other.classes().size(); there++) {
-                if (between.canHoldTogether(here, there)) {
+        for (int here = 0; here < axes.get(one).classes().size(); here++) {
+            for (int there = 0; there < axes.get(other).classes().size(); there++) {
+                if (among.canHoldTogether(one, here, other, there)) {
                     count++;
                 }
             }
@@ -663,6 +664,7 @@ final class Coverages {
         List<souther.compiler.partition.ObligationIdentity.OfAFallbackPairCell> out =
                 new ArrayList<>();
         List<Axis> ordered = axes.axes();
+        ClassCoexistence among = ClassCoexistence.among(ordered);
         for (int i = 0; i < ordered.size(); i++) {
             for (int j = i + 1; j < ordered.size(); j++) {
                 PartitionEvidence.PairSpace.Between between =
@@ -674,11 +676,9 @@ final class Coverages {
                 Set<PartitionEvidence.PairSpace.Cell> reached = made.reached(between);
                 List<PartitionClass> ones = ordered.get(i).classes();
                 List<PartitionClass> others = ordered.get(j).classes();
-                ClassCoexistence together =
-                        ClassCoexistence.between(ordered.get(i), ordered.get(j));
                 for (int here = 0; here < ones.size(); here++) {
                     for (int there = 0; there < others.size(); there++) {
-                        if (!together.canHoldTogether(here, there)) {
+                        if (!among.canHoldTogether(i, here, j, there)) {
                             continue;
                         }
                         PartitionEvidence.PairSpace.Cell cell =

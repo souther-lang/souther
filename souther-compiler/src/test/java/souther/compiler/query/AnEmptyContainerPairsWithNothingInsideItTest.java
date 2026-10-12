@@ -85,16 +85,17 @@ class AnEmptyContainerPairsWithNothingInsideItTest {
         Axis length = quote.axis("List.length(c.items)");
         Axis quantity = quote.axis("c.items[*].quantity");
 
-        ClassCoexistence countFirst = ClassCoexistence.between(length, quantity);
-        ClassCoexistence countSecond = ClassCoexistence.between(quantity, length);
+        ClassCoexistence countFirst = ClassCoexistence.among(List.of(length, quantity));
+        ClassCoexistence countSecond = ClassCoexistence.among(List.of(quantity, length));
         for (int count = 0; count < length.classes().size(); count++) {
             for (int held = 0; held < quantity.classes().size(); held++) {
                 String named = length.classes().get(count).id() + " with "
                         + quantity.classes().get(held).id();
                 boolean empty = length.classes().get(count).id()
                         .equals("List.length(c.items)/0 <= x <= 0");
-                assertEquals(!empty, countFirst.canHoldTogether(count, held), named);
-                assertEquals(!empty, countSecond.canHoldTogether(held, count), named);
+                assertEquals(!empty, countFirst.canHoldTogether(0, count, 1, held), named);
+                assertEquals(!empty, countSecond.canHoldTogether(0, held, 1, count), named);
+                assertEquals(!empty, countSecond.canHoldTogether(1, count, 0, held), named);
             }
         }
     }

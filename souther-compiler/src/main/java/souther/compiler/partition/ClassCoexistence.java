@@ -4,6 +4,8 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.numeric.Count;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -23,69 +25,101 @@ import java.util.List;
  * are left are two readings of one space, and a combination one of them leaves out and the other
  * keeps is a row asked for that no count will ever take.
  *
- * <p>Made once for two positions and asked of each combination of their classes. Which of the two
- * counts a container the other is inside, what a row at each class requires, and which count classes
- * hold nothing from one up are facts about one position or one class, and asked again for every
- * combination they would be worked out as many times as the other position has classes.
+ * <p>Made once for the positions of one behavior and asked of each combination of their classes.
+ * What a row at each class requires and which count classes hold nothing from one up are facts
+ * about one class, and which position counts a container another is inside is a fact about two
+ * positions. Each is worked out the first time it is asked and kept, rather than once for every
+ * combination or every pair it takes part in.
  */
 public final class ClassCoexistence {
 
-    private final List<Requirements> requiringOne;
-    private final List<Requirements> requiringOther;
-    private final boolean[] oneLeavesNoRoom;
-    private final boolean[] otherLeavesNoRoom;
+    private final List<Axis> axes;
 
-    private ClassCoexistence(Axis one, Axis other) {
-        this.requiringOne = one.classes().stream().map(one::requiring).toList();
-        this.requiringOther = other.classes().stream().map(other::requiring).toList();
-        this.oneLeavesNoRoom = noRoomLeftBy(one, other);
-        this.otherLeavesNoRoom = noRoomLeftBy(other, one);
+    /** What a row at each class requires, by position and class, for the positions asked about. */
+    private final List<List<Requirements>> requiring;
+
+    /** Which classes leave the container their position counts nothing to hold, by position and
+     *  class, for the positions asked about. */
+    private final boolean[][] leaveNothingInside;
+
+    /** Whether one position stands inside a container another counts, by the two. */
+    private final Boolean[][] inside;
+
+    private ClassCoexistence(List<Axis> axes) {
+        this.axes = List.copyOf(axes);
+        this.requiring = new ArrayList<>(Collections.nCopies(axes.size(), null));
+        this.leaveNothingInside = new boolean[axes.size()][];
+        this.inside = new Boolean[axes.size()][axes.size()];
     }
 
-    /** The answers for the classes of {@code one} against the classes of {@code other}. */
-    public static ClassCoexistence between(Axis one, Axis other) {
-        return new ClassCoexistence(one, other);
+    /** The answers for the classes of {@code axes}, asked of them by their indices. */
+    public static ClassCoexistence among(List<Axis> axes) {
+        return new ClassCoexistence(axes);
     }
 
     /**
-     * Whether a row sitting in the {@code here}th class of the first position and the
-     * {@code there}th class of the second at once is still possible, as far as the model says.
+     * Whether a row sitting in the {@code here}th class of the {@code one}th position and the
+     * {@code there}th class of the {@code other}th at once is still possible, as far as the model
+     * says.
      *
      * <p>One way only, as {@link Requirements#compatibleWith} is. False is a proof that no value
      * sits in both. True is not a proof that one does: it says nothing ruled the pair out, and a
      * reader wanting a value has to build one. Where the arithmetic could not say whether a count
      * class holds a count from one up, the answer is true.
-     *
-     * @param here  an index into the first position's classes
-     * @param there an index into the second position's classes
      */
-    public boolean canHoldTogether(int here, int there) {
-        return !oneLeavesNoRoom[here] && !otherLeavesNoRoom[there]
-                && requiringOne.get(here).compatibleWith(requiringOther.get(there));
+    public boolean canHoldTogether(int one, int here, int other, int there) {
+        return !leavesNoRoom(one, here, other, there)
+                && requiring(one).get(here).compatibleWith(requiring(other).get(there));
     }
 
     /**
-     * For each class of {@code counting}, whether it leaves no room for {@code standing}: whether
-     * {@code standing} is inside the container {@code counting} counts, and the class leaves that
-     * container nothing to hold.
+     * Whether one of the two classes leaves the container the other position stands inside
+     * nothing to hold: the half of {@link #canHoldTogether} beside the requirements, for a reader
+     * that merges those itself.
      */
-    private static boolean[] noRoomLeftBy(Axis counting, Axis standing) {
-        boolean[] out = new boolean[counting.classes().size()];
-        if (!standsInside(standing, counting)) {
-            return out;
+    public boolean leavesNoRoom(int one, int here, int other, int there) {
+        return (inside(other, one) && leavesNothingInside(one)[here])
+                || (inside(one, other) && leavesNothingInside(other)[there]);
+    }
+
+    private List<Requirements> requiring(int at) {
+        List<Requirements> known = requiring.get(at);
+        if (known == null) {
+            Axis axis = axes.get(at);
+            known = axis.classes().stream().map(axis::requiring).toList();
+            requiring.set(at, known);
         }
-        for (int c = 0; c < out.length; c++) {
-            out[c] = leavesNothingInside(counting, c);
+        return known;
+    }
+
+    private boolean inside(int standing, int counting) {
+        Boolean known = inside[standing][counting];
+        if (known == null) {
+            known = standsInside(axes.get(standing), axes.get(counting));
+            inside[standing][counting] = known;
         }
-        return out;
+        return known;
+    }
+
+    private boolean[] leavesNothingInside(int at) {
+        boolean[] known = leaveNothingInside[at];
+        if (known == null) {
+            Axis counting = axes.get(at);
+            known = new boolean[counting.classes().size()];
+            for (int c = 0; c < known.length; c++) {
+                known[c] = leavesNothingInside(counting, c);
+            }
+            leaveNothingInside[at] = known;
+        }
+        return known;
     }
 
     /**
      * Whether {@code counting} is how many some container {@code standing} is inside holds
      * ({@link Axis#countsWhatItsPathHolds}).
      *
-     * <p>The half of the answer that is about the two positions alone. A reader settling classes
-     * one position at a time asks it once for each two positions and keeps it.
+     * <p>The half of the answer that is about the two positions alone, and the whole of what a
+     * reader building a row asks to know whether the row's container has something asked inside it.
      */
     public static boolean standsInside(Axis standing, Axis counting) {
         return counting.countsWhatItsPathHolds()
@@ -96,9 +130,9 @@ public final class ClassCoexistence {
      * Whether a row in the {@code cls}th class of {@code counting} holds nothing in the container
      * it counts: whether the class admits none of the counts from one up.
      *
-     * <p>The half of the answer that is about one class alone, kept by the same reader.
+     * <p>The half of the answer that is about one class alone.
      */
-    public static boolean leavesNothingInside(Axis counting, int cls) {
+    private static boolean leavesNothingInside(Axis counting, int cls) {
         return counting.countsWhatItsPathHolds()
                 && admitsNoCountFromOne(counting.classes().get(cls).recognises());
     }

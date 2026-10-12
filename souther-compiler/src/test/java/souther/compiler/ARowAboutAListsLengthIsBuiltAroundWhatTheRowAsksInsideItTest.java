@@ -49,7 +49,7 @@ class ARowAboutAListsLengthIsBuiltAroundWhatTheRowAsksInsideItTest {
                 constructs Priced, Bad
 
             let quote (c) = {
-                guard length(c.items) >= %d else Empty
+                guard %s else Empty
                 guard all(i -> i.quantity >= 1, c.items) else Bad { count = length(filter(i -> i.quantity < 1, c.items)) }
                 Priced { total = 0 }
             }
@@ -121,6 +121,24 @@ class ARowAboutAListsLengthIsBuiltAroundWhatTheRowAsksInsideItTest {
         }
     }
 
+    /**
+     * A length class of more than one run — none, and two or more — beside a class inside: the list
+     * holds a count from the run above one, and not the none its values may be written at.
+     */
+    @Test
+    void aLengthClassOfTwoRunsHoldsACountFromTheRunThatHoldsSomething() {
+        List<Adequacy.GenerationDisposition> said = generated("length(c.items) /= 1", """
+                    | "one" : (Cart { items = [Item { quantity = 1, unitPrice = 1 }] }) -> Empty
+                """);
+
+        for (String inside : List.of("c.items[*].quantity/x < 1", "c.items[*].quantity/1 <= x")) {
+            List<String> rows = rowsFor(said, Set.of("List.length(c.items)//= 1", inside));
+            assertTrue(!rows.isEmpty() && rows.stream().allMatch(row -> elementsIn(row) >= 2),
+                    () -> "two elements at least, for " + inside + " beside a list of any count"
+                            + " but one: " + said);
+        }
+    }
+
     private static int elementsIn(String row) {
         return row.split("Item \\{", -1).length - 1;
     }
@@ -156,7 +174,11 @@ class ARowAboutAListsLengthIsBuiltAroundWhatTheRowAsksInsideItTest {
     }
 
     private static List<Adequacy.GenerationDisposition> generated(int least, String rows) {
-        Compilation compilation = Compilation.ofSource(MODEL.formatted(least) + rows, "Main");
+        return generated("length(c.items) >= " + least, rows);
+    }
+
+    private static List<Adequacy.GenerationDisposition> generated(String guard, String rows) {
+        Compilation compilation = Compilation.ofSource(MODEL.formatted(guard) + rows, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Offering offering = Adequacy.offeredFor(compilation.db(),
