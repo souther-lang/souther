@@ -7,6 +7,7 @@ import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.TheSignOfAnOrder;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
@@ -25,7 +26,6 @@ import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenAs;
-import souther.compiler.types.BindingId;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
 
@@ -1823,7 +1823,7 @@ public sealed interface Derivation {
      * the string holds one in the class that is not the separator. Of a split piece only that is
      * read: a statement about how many it holds, or that it holds none, turns on where the
      * separator stands. A character holds exactly one, so what is read of it is which classes that
-     * one is in, and comes to a set of code points ({@link #charactersMeeting}).
+     * one is in, and comes to a set of code points ({@link #held}).
      *
      * <p>What is counted is worked out here from what was read and where the string stands, and
      * {@code counted} is held to it: the count of those code points of that string, its length
@@ -2105,21 +2105,16 @@ public sealed interface Derivation {
 
             /**
              * The element is what a closure answers, written without the element it is handed:
-             * the value is read of the names it reads, {@code read}, and the name the closure
-             * gives its element, {@code element}, is none of them — so it is one value for every
+             * the walk over the value found it reading the name the closure gives its element
+             * nowhere ({@code walked}, which only that walk makes) — so it is one value for every
              * element, whatever is stated of it. What the element was kept by is stated of the
              * element the closure was handed, so each of those settles true.
              */
-            record WrittenWithoutTheElement(BindingId element, Set<BindingId> read)
+            record WrittenWithoutTheElement(WhatABodyReads.ReadsNothingOf walked)
                     implements Alike {
 
                 public WrittenWithoutTheElement {
-                    Objects.requireNonNull(element, "a closure names the element it is handed");
-                    read = Set.copyOf(read);
-                    if (read.contains(element)) {
-                        throw new IllegalArgumentException(
-                                "a value that reads " + element + " is written with it");
-                    }
+                    Objects.requireNonNull(walked, "the value was walked for the element's name");
                 }
             }
         }

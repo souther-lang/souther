@@ -155,9 +155,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * and each character it is taken apart into, stands at no place a row writes, and the piece is
      * whichever one the statement it is read inside is about. So it is no number of the input and
      * only appears inside a statement about some piece, which holds against one of them is what
-     * the string holds ({@link Derivation.SomePieceMeeting}, {@link
-     * Derivation.SomeCharacterMeeting}) — and is never compared on its own. Of a character, one
-     * code point, it is nought or one.
+     * the string holds ({@link Derivation.SomePieceMeeting}) — and is never compared on its own.
+     * Of a character, one code point, it is nought or one.
      */
     record CodePointsOfAPiece(CodePointClass counted) implements Quantity {
 

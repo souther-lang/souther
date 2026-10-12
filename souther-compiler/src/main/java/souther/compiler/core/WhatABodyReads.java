@@ -2,15 +2,15 @@ package souther.compiler.core;
 
 import souther.compiler.types.BindingId;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Which names a tree reads, asked of the tree that runs.
  *
  * <p>One walk for the question a reader of a body asks of an expression: whether it reads a
- * binding anywhere inside it, or which bindings it reads. A {@link Core.Read} says which binding it
- * is, so a binding of the same spelling further in is not the one asked about.
+ * binding anywhere inside it. A {@link Core.Read} says which binding it is, so a binding of the
+ * same spelling further in is not the one asked about.
  */
 public final class WhatABodyReads {
 
@@ -26,17 +26,47 @@ public final class WhatABodyReads {
         return found[0];
     }
 
-    /** Every binding {@code e} reads anywhere inside it. */
-    public static Set<BindingId> bindings(Core e) {
-        Set<BindingId> read = new HashSet<>();
-        gather(e, read);
-        return Set.copyOf(read);
+    /**
+     * That {@code e} reads {@code binding} nowhere inside it, as the walk {@link #binding} found
+     * it — or empty where it reads it somewhere.
+     */
+    public static Optional<ReadsNothingOf> without(Core e, BindingId binding) {
+        return binding(e, binding) ? Optional.empty() : Optional.of(new ReadsNothingOf(binding));
     }
 
-    private static void gather(Core e, Set<BindingId> into) {
-        if (e instanceof Core.Read read && read.binding() != null) {
-            into.add(read.binding());
+    /**
+     * That a tree was walked and reads {@code binding} nowhere inside it.
+     *
+     * <p>Made only by {@link #without}, after the walk, so holding one is that walk's answer and
+     * not a claim about it. It keeps the binding and not the tree: what it answers is said once,
+     * and a value holding it is compared by the binding alone.
+     */
+    public static final class ReadsNothingOf {
+
+        private final BindingId binding;
+
+        private ReadsNothingOf(BindingId binding) {
+            this.binding = Objects.requireNonNull(binding, "a walk asks after some binding");
         }
-        Core.forEachChild(e, child -> gather(child, into));
+
+        /** The binding the tree reads nowhere. */
+        public BindingId binding() {
+            return binding;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof ReadsNothingOf that && binding.equals(that.binding);
+        }
+
+        @Override
+        public int hashCode() {
+            return binding.hashCode();
+        }
+
+        @Override
+        public String toString() {
+            return "reads nothing of " + binding;
+        }
     }
 }

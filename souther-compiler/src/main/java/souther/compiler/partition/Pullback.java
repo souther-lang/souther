@@ -1645,10 +1645,10 @@ final class Pullback {
                     outerEach = each;
                     outerHanded = handed;
                     BindingId element = walk.element().binding();
-                    Set<BindingId> read = WhatABodyReads.bindings(step.value());
-                    writtenWithout = element == null || read.contains(element) ? null
-                            : new Derivation.EveryElementMeetsIt.Alike.WrittenWithoutTheElement(
-                                    element, read);
+                    writtenWithout = element == null ? null
+                            : WhatABodyReads.without(step.value(), element).map(
+                                    Derivation.EveryElementMeetsIt.Alike
+                                            .WrittenWithoutTheElement::new).orElse(null);
                 }
                 at = walk.walked();
                 peeled = true;

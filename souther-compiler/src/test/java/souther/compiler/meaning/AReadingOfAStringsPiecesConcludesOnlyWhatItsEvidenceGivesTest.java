@@ -12,6 +12,9 @@ import org.junit.jupiter.api.Timeout;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
+import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
@@ -31,7 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -51,6 +53,7 @@ class AReadingOfAStringsPiecesConcludesOnlyWhatItsEvidenceGivesTest {
     private static final TermPath TITLE = TermPath.of("title");
     private static final TermPath OTHER = TermPath.of("other");
     private static final CodePoints LOWER = CodePoints.between('a', 'z');
+    private static final SourcePos POS = new SourcePos(1, 1);
 
     private static NumericTerm.CodePointClassCount counting(TermPath of, CodePointClass counted) {
         return NumericTerm.CodePointClassCount.of(of, counted, Type.STRING,
@@ -85,17 +88,22 @@ class AReadingOfAStringsPiecesConcludesOnlyWhatItsEvidenceGivesTest {
                 "a split piece is read only as holding a code point that is not whitespace");
     }
 
+    /**
+     * A value is said to be written without the element only by the walk that found it reading
+     * the element nowhere: one that reads it, even inside another value, gets no such answer.
+     */
     @Test
-    void aValueSaidToBeWrittenWithoutTheElementReadsNoneOfIt() {
+    void aValueIsSaidToBeWrittenWithoutTheElementOnlyWhereItReadsNoneOfIt() {
         BindingOwner owner = new BindingOwner.OfValue("demo", "f");
         BindingId element = new BindingId(owner, 0);
         BindingId other = new BindingId(owner, 1);
-        assertEquals(Set.of(other),
-                new Derivation.EveryElementMeetsIt.Alike.WrittenWithoutTheElement(element,
-                        Set.of(other)).read());
-        assertThrows(IllegalArgumentException.class,
-                () -> new Derivation.EveryElementMeetsIt.Alike.WrittenWithoutTheElement(element,
-                        Set.of(element, other)));
+        Core readsOther = new Core.Read("t", other, Type.STRING, POS);
+        Core readsElement = new Core.Read("c", element, Type.STRING, POS);
+        Core both = new Core.ListLit(List.of(readsOther, readsElement), Type.STRING, POS);
+        assertEquals(element, WhatABodyReads.without(readsOther, element).orElseThrow()
+                .binding());
+        assertTrue(WhatABodyReads.without(readsElement, element).isEmpty());
+        assertTrue(WhatABodyReads.without(both, element).isEmpty());
     }
 
     @Test
