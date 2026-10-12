@@ -41,9 +41,8 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
      * once, and nothing here builds one list for two totals at once. So the condition is stated
      * and the row below it is composed without it.
      *
-     * <p>Not a single total over a run. That reached the stage too, for as long as a number of the
-     * way was placed only where it stood at one position — and a fixture standing on it stopped
-     * exercising the stage the day a total came to be placed as any other number is.
+     * <p>Not a single total over a run, which is placed as any number of the way is and has the
+     * list composed for it.
      */
     private static final String NUMBERS_NOTHING_COMPOSES_ONE_VALUE_FOR = """
             module example.numbers

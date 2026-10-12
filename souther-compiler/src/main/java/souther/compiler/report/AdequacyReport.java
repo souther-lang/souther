@@ -3878,20 +3878,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         // A value it could not hold is said after the figures and apart from them,
                         // since raising a figure does not reach it.
                         case ReachabilityGap.Why
-                                .TheWalkForItsPositionsWasStopped(var by, var unheld) ->
+                                .TheWalkForItsPositionsWasStopped(var by, var writes, var unheld) ->
                                 "a condition on positions this compiler stopped looking at ("
-                                        + stoppedAt(by, unheld) + ")";
+                                        + stoppedAt(by, writes, unheld) + ")";
                     };
         };
     }
 
-    /** The figures a walk met and the values it could not hold, each in its own words, figures
-     *  first. */
+    /** The figures a walk met, the populations it wrote some of, and the values it could not
+     *  hold, each in its own words, figures first. */
     private static String stoppedAt(CanonicalSelection<CompositionBudget> by,
+                                    CanonicalSelection<CompositionRepertoire> writes,
                                     CanonicalSelection<CompositionCapacity> unheld) {
         List<String> out = new ArrayList<>();
         if (!by.isEmpty()) {
             out.add(Reasons.said(by));
+        }
+        if (!writes.isEmpty()) {
+            out.add("writes some of " + Reasons.writes(writes) + " rather than all of them");
         }
         if (!unheld.isEmpty()) {
             out.add("could not hold " + Reasons.unheld(unheld));

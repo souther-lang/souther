@@ -89,7 +89,7 @@ class AnEdgeThatOfferedNothingSaysEverythingItIsShortOfTest {
 
     /** An edge that offered nothing and was short of {@code met}, as the outcome it comes to. */
     private static Generator.BoundaryAttempt cameToNothing(CompositionShortfall met) {
-        return new Generator.Edge(realization(met), null)
+        return new Generator.Edge(realization(met), null, null)
                 .cameToNothing(LABEL, CompositionAccount.NOTHING);
     }
 

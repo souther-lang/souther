@@ -212,10 +212,10 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
      */
     NumericWitness.Standing placesBeside(SearchRegion within, boolean oneMeets,
                                          WitnessSearch looking) {
-        List<NumericTerm> placed = new ArrayList<>();
+        List<NumericTerm.FromOnePosition> placed = new ArrayList<>();
         for (NumericTerm term : numbers()) {
-            if (!term.subjectPath().insideAContainer()) {
-                placed.add(term);
+            if (!term.subjectPath().insideAContainer() && term.atOnePosition() != null) {
+                placed.add(term.atOnePosition());
             }
         }
         SearchRegion region = within;
@@ -223,8 +223,8 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
             for (TakenConstraint each : anElementMeeting.get()) {
                 region = each.narrowing(region);
                 for (NumericTerm term : each.terms()) {
-                    if (!placed.contains(term)) {
-                        placed.add(term);
+                    if (term.atOnePosition() != null && !placed.contains(term.atOnePosition())) {
+                        placed.add(term.atOnePosition());
                     }
                 }
             }

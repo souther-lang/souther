@@ -368,7 +368,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/inputs/SearchRegion;Ljava/util/List;I"
                             + "Ljava/util/function/Function;"
                             + "Lsouther/compiler/partition/WitnessSearch;"
-                            + "Ljava/util/Map;Ljava/util/Set;Ljava/util/Set;)Z",
+                            + "Lsouther/compiler/partition/NumericWitness$Composing;"
+                            + "Ljava/util/SequencedMap;"
+                            + "Lsouther/compiler/partition/NumericWitness$Met;)Z",
                     "stops trying values of a position on the way and says which figure"),
             Map.entry("souther.compiler.partition.Generator#<clinit>()V",
                     "how many assignments a search composes"),

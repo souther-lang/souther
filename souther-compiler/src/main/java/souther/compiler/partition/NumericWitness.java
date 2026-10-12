@@ -10,10 +10,10 @@ import souther.compiler.numeric.PlacesApart;
 import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.SequencedMap;
 import java.util.Set;
@@ -73,19 +73,31 @@ final class NumericWitness {
             CompositionBudget.PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT.maximum();
 
     /**
-     * Where each of {@code terms} may stand together inside {@code within}, or null where this found
-     * no such assignment.
-     *
-     * @param on      what each position is counted on, or null for one this has no order for — which
-     *                is a position no value is chosen at here, and the whole assignment is refused
-     *                rather than made without it
-     * @param looking what the declarations leave each position and what one crossing of such a set
-     *                with a run may cost. Both, and from the one place that pairs them: a search
-     *                given the sets alone would have to reach for an allowance, and what it reached
-     *                for would be a budget nothing granted it
+     * Where each of {@code terms} may stand together inside {@code within}, with nothing asked of
+     * the assignment beyond the region admitting it.
      */
     static Standing of(SearchRegion within, List<? extends NumericTerm> terms,
                        Function<NumericTerm, Carrier> on, WitnessSearch looking) {
+        return of(within, terms, on, looking, Composing.ANY_ASSIGNMENT);
+    }
+
+    /**
+     * Where each of {@code terms} may stand together inside {@code within} and a row can be composed
+     * with them standing there, or what this found out about there being no such assignment.
+     *
+     * @param on        what each position is counted on, or null for one this has no order for —
+     *                  which is a position no value is chosen at here, and the whole assignment is
+     *                  refused rather than made without it
+     * @param looking   what the declarations leave each position and what one crossing of such a
+     *                  set with a run may cost. Both, and from the one place that pairs them: a
+     *                  search given the sets alone would have to reach for an allowance, and what it
+     *                  reached for would be a budget nothing granted it
+     * @param composing asked of every assignment the region admits, once every number of it stands
+     *                  somewhere
+     */
+    static Standing of(SearchRegion within, List<? extends NumericTerm> terms,
+                       Function<NumericTerm, Carrier> on, WitnessSearch looking,
+                       Composing composing) {
         // What the rules settle about the question, before any of it is looked for. Two ways for
         // them to settle it and both are the region as it was handed over: it may admit no
         // assignment at all, and it may admit one while leaving a position the question names
@@ -97,12 +109,91 @@ final class NumericWitness {
             return new Standing.ProvedImpossible();
         }
         SequencedMap<NumericTerm, Place> standing = new LinkedHashMap<>();
-        java.util.Set<CompositionBudget> stoppedBy =
-                java.util.EnumSet.noneOf(CompositionBudget.class);
-        Set<CompositionCapacity> unheld = new HashSet<>();
-        return walk(within, terms, 0, on, looking, standing, stoppedBy, unheld)
-                ? Standing.Found.walked(standing)
-                : new Standing.NotFound(stoppedBy, unheld);
+        Met met = new Met();
+        if (walk(within, terms, 0, on, looking, composing, standing, met)) {
+            return Standing.Found.walked(standing);
+        }
+        return met.settlesTheQuestion()
+                ? new Standing.ProvedImpossible()
+                : new Standing.NotFound(met.shortfall());
+    }
+
+    /**
+     * Whether a row can be composed with every number of an assignment standing where it does.
+     *
+     * <p><b>Asked of the whole assignment and not of a number as it is placed.</b> Which value is
+     * composed where a location is depends on every number standing there — how many a list holds
+     * and what its elements add up to are built as one list, which neither of them alone is — so a
+     * number asked about before the rest of its location is placed is asked a question the row
+     * never puts.
+     *
+     * <p>What the region admits is a necessary condition and this is the rest of it: a number the
+     * rules leave a value is not a number some value of the input comes to, and a walk that took the
+     * first for the second offers a row at a number nothing builds.
+     */
+    @FunctionalInterface
+    interface Composing {
+
+        /** Every assignment the region admits, as a caller that composes nothing from it asks. */
+        Composing ANY_ASSIGNMENT = _ -> new Composed.Built();
+
+        /** What composing a row with {@code standing} came to. */
+        Composed composes(SequencedMap<NumericTerm, Place> standing);
+    }
+
+    /**
+     * What composing a row with one assignment came to.
+     *
+     * <p>A row was composed, the rules were shown to leave the assignment no value, or neither. The
+     * second is about the model and the third about what this compiler built: what it fell short of
+     * on the way travels beside it as one value ({@link CompositionShortfall}), empty where the
+     * values it wrote were refused and filled where a figure was reached or a population written in
+     * part. A case per vocabulary would have every reader decide again which of them it had.
+     */
+    sealed interface Composed {
+
+        /** A row was composed. */
+        record Built() implements Composed {}
+
+        /**
+         * The rules leave no value at the assignment: what composing it showed, and not that
+         * composing it stopped.
+         */
+        record Refuted() implements Composed {}
+
+        /** No row was composed, and this is what of this compiler's the composing met. */
+        record NotBuilt(CompositionShortfall met) implements Composed {}
+    }
+
+    /**
+     * What every assignment the walk did not take met, gathered over the whole walk: the figures
+     * that stopped it, the values it could not hold, what composing a row with each assignment the
+     * region admitted fell short of — and whether every one of them was shown to have no value, the
+     * walk having been through every value the region admits.
+     */
+    private static final class Met {
+
+        private final Set<CompositionBudget> figures = EnumSet.noneOf(CompositionBudget.class);
+        private final Set<CompositionCapacity> unheld = new HashSet<>();
+        private CompositionShortfall composing = CompositionShortfall.NONE;
+        // Whether some assignment was shown to have no value, whether some was refused without
+        // being shown, and whether some number's values were left unwalked — by a figure, by an
+        // order with no step, or by there being nothing to read the number on.
+        private boolean refuted;
+        private boolean notBuilt;
+        private boolean leftUnwalked;
+
+        CompositionShortfall shortfall() {
+            return CompositionShortfall.of(figures, Set.of(), unheld).and(composing);
+        }
+
+        /**
+         * Whether what the walk met shows the rules leave the question nothing: every value the
+         * region admits walked, and every assignment of them shown to have no value.
+         */
+        boolean settlesTheQuestion() {
+            return refuted && !notBuilt && !leftUnwalked && shortfall().nothing();
+        }
     }
 
     /**
@@ -212,25 +303,27 @@ final class NumericWitness {
          * The rules leave the question nothing, which is the model's answer rather than this
          * compiler's.
          *
-         * <p>No figure travels with it and no assignment: nothing was walked, because the proof was
-         * there before any value was chosen.
+         * <p>Shown one of two ways, and no figure travels with either. The region leaves the
+         * question no assignment, which is there before any value is chosen; or the walk went
+         * through every value the region admits, and composing a row with each assignment of them
+         * showed the rules leave it no value. Not where one of them was refused without that
+         * being shown, or some value was left unwalked: a value nothing showed has none is one a
+         * longer search may build at.
          */
         record ProvedImpossible() implements Standing {}
 
         /**
          * Nothing was found, and nothing follows about whether an assignment exists.
          *
-         * <p>{@code stoppedBy} is what a reader could raise, and it is empty as readily as not — a
-         * walk that tried everything it had to try is not a walk that walked everything there is.
-         * {@code unheld} is the values the walk reached and could not hold, which no figure reaches
-         * past, and it is empty as readily.
+         * <p>{@code met} is what of this compiler's the walk and the composing of each assignment it
+         * reached fell short of, and it is empty as readily as not — a walk that tried everything it
+         * had to try is not a walk that walked everything there is. One value for all of it, so a
+         * caller that says why nothing was found says every part of it.
          */
-        record NotFound(java.util.Set<CompositionBudget> stoppedBy,
-                        Set<CompositionCapacity> unheld) implements Standing {
+        record NotFound(CompositionShortfall met) implements Standing {
 
             public NotFound {
-                stoppedBy = java.util.Set.copyOf(stoppedBy);
-                unheld = Set.copyOf(unheld);
+                Objects.requireNonNull(met, "a walk that found nothing says what it met, or none");
             }
         }
     }
@@ -241,20 +334,37 @@ final class NumericWitness {
      * <p>Depth-first, and the region is narrowed as each is chosen rather than at the end: a value
      * that leaves the rest nothing is stepped past here, where there is still another to try, and
      * not reported once every position has been given one.
+     *
+     * <p>And an assignment the region admits is taken only where a row is composed with it. Asked
+     * once every number stands somewhere ({@link Composing}), and one that comes to nothing is
+     * stepped past as a value the rules refuse is: the last number tries its next value, and past
+     * it the one before.
      */
     private static boolean walk(SearchRegion within, List<? extends NumericTerm> terms,
                                 int at,
                                 Function<NumericTerm, Carrier> on,
                                 WitnessSearch looking,
-                                Map<NumericTerm, Place> standing,
-                                java.util.Set<CompositionBudget> stoppedBy,
-                                Set<CompositionCapacity> unheld) {
+                                Composing composing,
+                                SequencedMap<NumericTerm, Place> standing,
+                                Met met) {
         if (at == terms.size()) {
-            return true;
+            return switch (composing.composes(standing)) {
+                case Composed.Built _ -> true;
+                case Composed.Refuted _ -> {
+                    met.refuted = true;
+                    yield false;
+                }
+                case Composed.NotBuilt(CompositionShortfall shortOf) -> {
+                    met.notBuilt = true;
+                    met.composing = met.composing.and(shortOf);
+                    yield false;
+                }
+            };
         }
         NumericTerm term = terms.get(at);
         Carrier carrier = on.apply(term);
         if (carrier == null) {
+            met.leftUnwalked = true;
             return false;
         }
         // Where the term runs under what has been fixed so far. The rules leaving it nothing here is
@@ -271,11 +381,14 @@ final class NumericWitness {
             case NumericDomain.FormProjection.NothingIsLeft _ -> {
                 return false;
             }
+            // Nothing read of where the term runs, and nothing walked of it.
             case null -> {
+                met.leftUnwalked = true;
                 return false;
             }
         }
         if (runs == null) {
+            met.leftUnwalked = true;
             return false;
         }
         // The three narrowings this position stands under, read once and handed to the walk whole.
@@ -285,6 +398,7 @@ final class NumericWitness {
         PlacesApart apart = apartAt(term, within);
         Place first = carrier.somethingOtherThan(apart, runs, admits, looking.meter());
         if (first == null) {
+            met.leftUnwalked = true;
             return false;
         }
         Outwards.Walked walked = Outwards.from(first, Count.of(1), carrier, runs,
@@ -295,7 +409,7 @@ final class NumericWitness {
                 continue;
             }
             standing.put(term, tried);
-            if (walk(next, terms, at + 1, on, looking, standing, stoppedBy, unheld)) {
+            if (walk(next, terms, at + 1, on, looking, composing, standing, met)) {
                 return true;
             }
             standing.remove(term);
@@ -303,6 +417,9 @@ final class NumericWitness {
         // What the walk of this position came to, read over the ways it can end rather than off one
         // of them. Each says something different about an empty hand, and a reading that asked only
         // whether a figure was met said the first of them about all three.
+        if (walked.ended() != Outwards.Ended.HAVING_TRIED_THEM_ALL) {
+            met.leftUnwalked = true;
+        }
         switch (walked.ended()) {
             // Every value this position had to offer was tried and none of them led anywhere.
             case HAVING_TRIED_THEM_ALL -> { }
@@ -312,9 +429,9 @@ final class NumericWitness {
             // something to find, and a reader handed the wrong one raises a number that reaches
             // nothing.
             case AT_THE_FIGURE_OF_CANDIDATES ->
-                    stoppedBy.add(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT);
+                    met.figures.add(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT);
             case AT_THE_FIGURE_OF_PLACES_LOOKED_AT ->
-                    stoppedBy.add(CompositionBudget.PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT);
+                    met.figures.add(CompositionBudget.PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT);
             // And an order with no step to take, where the one place this named is not the whole of
             // what the position holds. Nothing is recorded, because what was left is a population
             // and what travels from here is figures: an entry made here would tell a reader to raise
@@ -323,7 +440,7 @@ final class NumericWitness {
             case WITH_NO_STEP_TO_TAKE -> { }
             // And a place further out this could not hold. No figure reaches past it, so it is not
             // among the figures; it travels in its own vocabulary, with which way it went unheld.
-            case AT_A_PLACE_IT_COULD_NOT_HOLD -> unheld.add(new CompositionCapacity(
+            case AT_A_PLACE_IT_COULD_NOT_HOLD -> met.unheld.add(new CompositionCapacity(
                     CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
                     walked.unheld()));
         }
