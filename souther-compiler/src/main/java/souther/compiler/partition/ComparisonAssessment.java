@@ -659,30 +659,29 @@ sealed interface ComparisonAssessment {
             throw new IllegalArgumentException(
                     "a rule watched at no place is not one to ask what arrives at: " + read);
         }
-        List<Reachability.Reaching> arriving = waysArrivedBy(way, arrivals);
-        // With no way arriving, what the relation leaves is what the declarations leave, which
+        if (cutting != null) {
+            if (!arrivesAtSomePlace(cutting, way, arrivals,
+                    region -> cutting.reachedIn(region, drawnByAnInvariant))) {
+                return new NothingArrivesAtItsLine(cutting);
+            }
+            // A relation whose rows all come out one way where they arrive is decided there: no
+            // value of any position it relates comes out the other way, so it divides none of them,
+            // and what the other side reaches is no question about it. The line is still the line
+            // the rule draws, and its points still the ones no row can stand at.
+            if (read instanceof AcrossPositions across
+                    && !arrivesAtSomePlace(cutting, way, arrivals, cutting::crossedIn)) {
+                return across.decided();
+            }
+        }
+        // What a relation leaves undivided over the rows that arrive, asked only of a relation
+        // that is still one here. With no way arriving it is what the declarations leave, which
         // the reading already holds.
-        ComparisonAssessment asked = arriving.isEmpty() ? read : switch (read) {
+        List<Reachability.Reaching> arriving = waysArrivedBy(way, arrivals);
+        return arriving.isEmpty() ? read : switch (read) {
             case AcrossPositions across -> across.whereRowsArrive(reading, arriving);
             case AgainstAnotherValue against -> against.whereRowsArrive(reading, arriving);
             default -> read;
         };
-        if (cutting == null) {
-            return asked;
-        }
-        if (!arrivesAtSomePlace(cutting, way, arrivals,
-                region -> cutting.reachedIn(region, drawnByAnInvariant))) {
-            return new NothingArrivesAtItsLine(cutting);
-        }
-        // A relation whose rows all come out one way where they arrive is decided there: no value
-        // of any position it relates comes out the other way, so it divides none of them, and
-        // what the other side reaches is no question about it. The line is still the line the
-        // rule draws, and its points still the ones no row can stand at.
-        if (asked instanceof AcrossPositions across
-                && !arrivesAtSomePlace(cutting, way, arrivals, cutting::crossedIn)) {
-            return across.decided();
-        }
-        return asked;
     }
 
     /**

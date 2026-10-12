@@ -171,12 +171,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     Set<FilingCoordinate> undividedWhereRowsArrive(InputReading read,
                                                    List<Reachability.Reaching> ways) {
+        // What the declarations leave each side, which no way changes: asked once for all of them.
+        List<Takes> sources = new ArrayList<>();
+        for (Side each : sides) {
+            sources.add(switch (each.term()) {
+                case null -> null;
+                case NumericTerm.ValueOf value -> takes(value, read);
+                case NumericTerm.TakenOf taken ->
+                        takes(new NumericTerm.ValueOf(taken.position()), read);
+                case NumericTerm.CodePointClassCount _ -> null;
+            });
+        }
         if (ways.isEmpty()) {
-            return undividedAlong(read, read.quantities().region(), List.of(), true);
+            return undividedAlong(sources, read.quantities().region(), List.of(), true);
         }
         Set<FilingCoordinate> out = null;
         for (Reachability.Reaching each : ways) {
-            Set<FilingCoordinate> along = undividedAlong(read, each.region(),
+            Set<FilingCoordinate> along = undividedAlong(sources, each.region(),
                     conditionsOf(each), each.declined().isEmpty());
             if (out == null) {
                 out = along;
@@ -217,26 +228,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private record OnAWay(Set<TermPath> positions, NumericTerm runOf, boolean aCase) {}
 
-    /** The places shown undivided over the rows in {@code region}, a way stating
-     *  {@code conditions} there. */
-    private Set<FilingCoordinate> undividedAlong(InputReading read, SearchRegion region,
+    /**
+     * The places shown undivided over the rows in {@code region}, a way stating
+     * {@code conditions} there.
+     *
+     * @param sources what the declarations leave the value each side is, or is taken of, in the
+     *                order of the sides
+     */
+    private Set<FilingCoordinate> undividedAlong(List<Takes> sources, SearchRegion region,
                                                  List<OnAWay> conditions, boolean heldWhole) {
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
-        for (Side each : sides) {
-            NumericDomain.Bounds holds = each.term() != null
+        for (int i = 0; i < sides.size(); i++) {
+            Side each = sides.get(i);
+            NumericDomain.Bounds run = each.term() != null
                     && region.projectionOf(each.term())
-                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds run)
-                    ? run : NumericDomain.Bounds.OPEN;
+                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
+                    ? within : null;
+            NumericDomain.Bounds holds = run == null ? NumericDomain.Bounds.OPEN : run;
             Way way = each.term() == null || !heldWhole ? Way.TIES
                     : wayOf(each.term(), conditions);
-            Takes source = way == Way.TIES ? null : switch (each.term()) {
-                case NumericTerm.ValueOf value -> takes(value, read);
-                case NumericTerm.TakenOf taken ->
-                        takes(new NumericTerm.ValueOf(taken.position()), read);
-                case NumericTerm.CodePointClassCount _ -> null;
-            };
+            Takes source = way == Way.TIES ? null : sources.get(i);
             NumericDomain.Bounds realizes = source == null ? null
-                    : realized(each.term(), source, region, way);
+                    : realized(each.term(), source, region, run, way);
             Takes takes = way == Way.UNTOUCHED && each.term() instanceof NumericTerm.ValueOf
                     ? source : null;
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
@@ -302,33 +315,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * certified to leave the whole of the run, no value taken out, no class of whole numbers.
      *
      * @param source what the declarations leave the value {@code term} is, or is taken of
+     * @param run    what {@code region} leaves {@code term}, or null where it runs nowhere
      */
     private static NumericDomain.Bounds realized(NumericTerm.FromOnePosition term, Takes source,
-                                                 SearchRegion region, Way way) {
+                                                 SearchRegion region, NumericDomain.Bounds run,
+                                                 Way way) {
         if (!source.every()) {
             return null;
         }
         return switch (term) {
             case NumericTerm.ValueOf value -> way == Way.UNTOUCHED ? NumericDomain.Bounds.OPEN
-                    : wholeRun(value, region);
+                    : wholeRun(value, region, run);
             case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
                     .everyAnswerItCanGiveHasASourceValue(taken.operation())
-                    ? wholeRun(taken, region) : null;
+                    ? wholeRun(taken, region, run) : null;
             case NumericTerm.CodePointClassCount _ -> null;
         };
     }
 
-    /** What {@code region} leaves {@code term}, where that is shown to be every value between its
-     *  ends; null otherwise. */
+    /** {@code run}, what {@code region} leaves {@code term}, where that is shown to be every value
+     *  between its ends; null otherwise. */
     private static NumericDomain.Bounds wholeRun(NumericTerm.FromOnePosition term,
-                                                 SearchRegion region) {
-        if (!region.projectionCertifiedFor(term) || !region.apartAt(term).isEmpty()
+                                                 SearchRegion region, NumericDomain.Bounds run) {
+        if (run == null || !region.projectionCertifiedFor(term)
+                || !region.apartAt(term).isEmpty()
                 || (term instanceof NumericTerm.ValueOf value
                         && region.valueClassAt(value) != null)) {
             return null;
         }
-        return region.projectionOf(term) instanceof NumericDomain.FormProjection.Within(
-                NumericDomain.Bounds run) ? run : null;
+        return run;
     }
 
     /**

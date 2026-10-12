@@ -202,6 +202,10 @@ class AnArmNothingReachesIsNotOwedARowTest {
      * sits well inside both bounds, which is the other pair of points a border owes: the report a
      * report command writes is held to reliable domain coverage, so a model with nothing left over
      * has a row away from each line as well as against it.
+     *
+     * <p>All that is left is what {@code ordered} raises. With {@code b} held to ten, no {@code a}
+     * from ten on can be built, so which values {@code a} may hold is a question that relation
+     * raises, and nothing here works it out.
      */
     private static final String AT_THE_CAP = CAPPED
             + "    | \"at the cap\" : (Pair { a = Count(0), b = Count(10) }) -> Small\n"
@@ -214,8 +218,12 @@ class AnArmNothingReachesIsNotOwedARowTest {
         assertTrue(report.contains("out specified 1/1"),
                 () -> "`Big` is answered only where nothing reaches:\n" + report);
         assertFalse(report.contains("no row expects `Big`"), () -> report);
-        assertTrue(report.contains("adequacy: satisfied"),
-                () -> "and everything left is covered:\n" + report);
+        List<String> open = report.lines().map(String::strip)
+                .dropWhile(line -> !line.equals("what keeps it open"))
+                .filter(line -> line.contains(" at ") && line.contains(" — ")).toList();
+        assertFalse(open.isEmpty(), () -> "something keeps it open:\n" + report);
+        assertTrue(open.stream().allMatch(line -> line.contains("invariant Pair (ordered)")),
+                () -> "and it is only what `ordered` raises:\n" + report);
     }
 
     /** The same case built somewhere a row can get to. One producer proving nothing about the others
