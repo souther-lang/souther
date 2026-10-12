@@ -15,12 +15,14 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -300,16 +302,22 @@ final class Witnesses {
     private static Built ofSequence(Shape.Sequence carrier, List<List<String>> apart, int least,
                                     RuleReadingContext reading, Set<TypeSymbol> expanding) {
         List<Made> out = new ArrayList<>();
+        // What the others may be is a question about the element and the count and not about the
+        // value they are built around, so it is answered once for every one of them: the values at
+        // each run, as many as a container held around one value passes over, and each element
+        // made of them as it is first asked for.
+        ElementsMadeApart others = apart.isEmpty() ? null
+                : ElementsMadeApart.of(carrier.element(), apart, least + 2, reading,
+                        expanding);
         for (FixtureTemplate seed
                 : proposalsFor(carrier.element(), reading, expanding)) {
             List<FixtureTemplate> elements = new ArrayList<>();
-            if (apart.isEmpty()) {
+            if (others == null) {
                 for (int i = 0; i < least; i++) {
                     elements.add(seed);
                 }
             } else {
-                List<FixtureTemplate> around = apartAround(carrier.element(), apart,
-                        List.of(seed), Set.of(), least, reading, expanding);
+                List<FixtureTemplate> around = others.around(List.of(seed), Set.of(), least);
                 elements.addAll(around == null ? List.of(seed) : around);
             }
             out.add(new Made(FixtureTemplate.collection(elements), elements.size()));
@@ -340,77 +348,120 @@ final class Witnesses {
         if (size == 0) {
             return FixtureTemplate.collection(List.of());
         }
-        List<FixtureTemplate> elements = apartAround(carrier.element(),
-                ElementsApart.meet(fields, ElementsKeptApart.at(position, reading)),
-                List.of(), Set.of(), size, reading, Set.of());
+        List<FixtureTemplate> elements = ElementsMadeApart.of(carrier.element(),
+                ElementsApart.meet(fields, ElementsKeptApart.at(position, reading)), size + 1,
+                reading, Set.of()).around(List.of(), Set.of(), size);
         return elements == null || elements.size() < size ? null
                 : FixtureTemplate.collection(elements);
     }
 
     /**
-     * Every one of {@code held}, and others beside them up to {@code needed} in all, no two of them
-     * equal at any run of {@code at} and none written as any of {@code keptOut} — fewer where the
-     * values at a run give out, and null where two of {@code held} are equal at one.
+     * Elements of one type kept apart at some runs of their fields: the values each run may take,
+     * and the elements made of them.
      *
-     * <p>What {@code held} are at each run is read off them, so the others are kept apart from the
-     * values they actually hold and not from what they were asked to. A held value whose run this
-     * cannot read — one written as a spread over a value the module states — is apart from nothing
-     * here, and what comes back is a proposal the decoder answers.
-     *
-     * @param at runs of fields taken from an element, empty for the element itself, none of them
-     *           one another starts with ({@link ElementsApart})
+     * <p>Held apart from the containers built of them. Which values a run may take and what an
+     * element holding some of them is are questions about the element type and the runs, so a
+     * caller building several containers around different values asks them once — read again per
+     * container, every value an element is offered paid for the same values and the same records.
      */
-    private static List<FixtureTemplate> apartAround(Type element, List<List<String>> at,
-                                                     List<FixtureTemplate> held,
-                                                     Set<String> keptOut, int needed,
-                                                     RuleReadingContext reading,
-                                                     Set<TypeSymbol> expanding) {
-        List<Set<Hir.Expr>> taken = new ArrayList<>();
-        for (List<String> run : at) {
-            Set<Hir.Expr> here = new HashSet<>();
-            for (FixtureTemplate each : held) {
-                Hir.Expr value = valueAt(each.value(), run);
-                if (value != null && !here.add(value)) {
-                    return null;
+    private static final class ElementsMadeApart {
+
+        private final Type element;
+
+        /** Runs of fields taken from an element, empty for the element itself, none of them one
+         *  another starts with ({@link ElementsApart}). */
+        private final List<List<String>> at;
+
+        /** The values each run may take, in the order they are reached, or null where a run is no
+         *  run of fields of a record this writes. */
+        private final List<List<FixtureTemplate>> values;
+
+        /** Each element made, by the texts of the values placed at its runs in their order; empty
+         *  where none could be. */
+        private final Map<List<String>, Optional<FixtureTemplate>> made = new HashMap<>();
+
+        private final RuleReadingContext reading;
+
+        private ElementsMadeApart(Type element, List<List<String>> at,
+                                  List<List<FixtureTemplate>> values,
+                                  RuleReadingContext reading) {
+            this.element = element;
+            this.at = at;
+            this.values = values;
+            this.reading = reading;
+        }
+
+        /** Up to {@code many} values at each run of {@code at}. */
+        static ElementsMadeApart of(Type element, List<List<String>> at, int many,
+                                    RuleReadingContext reading, Set<TypeSymbol> expanding) {
+            List<List<FixtureTemplate>> values = new ArrayList<>();
+            for (List<String> run : at) {
+                Type type = typeAt(element, run, reading);
+                if (type == null) {
+                    return new ElementsMadeApart(element, at, null, reading);
                 }
+                values.add(distinctValuesOf(type, many, reading, expanding));
             }
-            taken.add(here);
+            return new ElementsMadeApart(element, at, values, reading);
         }
-        List<FixtureTemplate> out = new ArrayList<>(held);
-        if (out.size() >= needed) {
-            return out;
-        }
-        // One more than the values that may be passed over, since each kept out or already held
-        // may be among them.
-        int many = needed + keptOut.size() + held.size() + 1;
-        List<List<FixtureTemplate>> free = new ArrayList<>();
-        for (int r = 0; r < at.size(); r++) {
-            Type type = typeAt(element, at.get(r), reading);
-            if (type == null) {
+
+        /**
+         * Every one of {@code held}, and others beside them up to {@code needed} in all, no two of
+         * them equal at any run and none written as any of {@code keptOut} — fewer where the values
+         * at a run give out, and null where two of {@code held} are equal at one.
+         *
+         * <p>What {@code held} are at each run is read off them, so the others are kept apart from
+         * the values they actually hold and not from what they were asked to. A held value whose
+         * run this cannot read — one written as a spread over a value the module states — is apart
+         * from nothing here, and what comes back is a proposal the decoder answers.
+         */
+        List<FixtureTemplate> around(List<FixtureTemplate> held, Set<String> keptOut,
+                                     int needed) {
+            List<Set<Hir.Expr>> taken = new ArrayList<>();
+            for (List<String> run : at) {
+                Set<Hir.Expr> here = new HashSet<>();
+                for (FixtureTemplate each : held) {
+                    Hir.Expr value = valueAt(each.value(), run);
+                    if (value != null && !here.add(value)) {
+                        return null;
+                    }
+                }
+                taken.add(here);
+            }
+            List<FixtureTemplate> out = new ArrayList<>(held);
+            if (out.size() >= needed || values == null) {
                 return out;
             }
-            List<FixtureTemplate> values = new ArrayList<>();
-            for (FixtureTemplate each : distinctValuesOf(type, many, reading, expanding)) {
-                if (!taken.get(r).contains(bare(each.value()))) {
-                    values.add(each);
-                }
-            }
-            free.add(values);
-        }
-        for (int i = 0; out.size() < needed; i++) {
-            Map<List<String>, FixtureTemplate> placed = new LinkedHashMap<>();
+            List<List<FixtureTemplate>> free = new ArrayList<>();
             for (int r = 0; r < at.size(); r++) {
-                if (i >= free.get(r).size()) {
-                    return out;
+                List<FixtureTemplate> left = new ArrayList<>();
+                for (FixtureTemplate each : values.get(r)) {
+                    if (!taken.get(r).contains(bare(each.value()))) {
+                        left.add(each);
+                    }
                 }
-                placed.put(at.get(r), free.get(r).get(i));
+                free.add(left);
             }
-            FixtureTemplate one = holdingAt(element, placed, reading);
-            if (one != null && !keptOut.contains(one.text())) {
-                out.add(one);
+            for (int i = 0; out.size() < needed; i++) {
+                Map<List<String>, FixtureTemplate> placed = new LinkedHashMap<>();
+                List<String> written = new ArrayList<>();
+                for (int r = 0; r < at.size(); r++) {
+                    if (i >= free.get(r).size()) {
+                        return out;
+                    }
+                    FixtureTemplate value = free.get(r).get(i);
+                    placed.put(at.get(r), value);
+                    written.add(value.text());
+                }
+                FixtureTemplate one = made.computeIfAbsent(written,
+                        _ -> Optional.ofNullable(holdingAt(element, placed, reading)))
+                        .orElse(null);
+                if (one != null && !keptOut.contains(one.text())) {
+                    out.add(one);
+                }
             }
+            return out;
         }
-        return out;
     }
 
     /**
@@ -528,6 +579,8 @@ final class Witnesses {
         // other side proposed.
         List<List<FixtureTemplate>> keysFrom =
                 new ArrayList<>(Collections.nCopies(keys.size(), null));
+        // And the key type's values the others are taken from, which are no key proposal's.
+        List<FixtureTemplate> keyValues = distinctValuesOf(map.key(), least + 1, reading, expanding);
         pairing:
         for (int apart = 0; apart <= keys.size() + values.size() - 2; apart++) {
             for (int i = Math.max(0, apart - values.size() + 1);
@@ -537,8 +590,7 @@ final class Witnesses {
                     break pairing;
                 }
                 if (keysFrom.get(i) == null) {
-                    keysFrom.set(i,
-                            distinctFrom(keys.get(i), map.key(), least, reading, expanding));
+                    keysFrom.set(i, distinctFrom(keys.get(i), keyValues, least));
                 }
                 FixtureTemplate value = values.get(apart - i);
                 List<FixtureTemplate> entries = new ArrayList<>();
@@ -741,8 +793,11 @@ final class Witnesses {
         // Fewer than asked for is a type with too few values, which is a container the rules want
         // and nothing can build.
         if (!apart.isEmpty()) {
-            List<FixtureTemplate> around =
-                    apartAround(element, apart, elements, out, needed, reading, Set.of());
+            // One more than the values that may be passed over, since each kept out or already
+            // held may be among them.
+            List<FixtureTemplate> around = ElementsMadeApart.of(element, apart,
+                    needed + out.size() + elements.size() + 1, reading, Set.of())
+                    .around(elements, out, needed);
             return around == null || around.size() < needed ? null : around;
         }
         // A container that may say one of its values again says the one it was asked to hold,
@@ -766,21 +821,21 @@ final class Witnesses {
     }
 
     /**
-     * {@code seed} and up to {@code least} values in all, no two of them equal.
+     * {@code seed} and up to {@code least} values in all, no two of them equal, the others taken
+     * from {@code values} — the type's distinct values, one more than {@code least} since the seed
+     * is likely to be among them, read once by a caller with several seeds.
      *
      * <p>Fewer than asked where the type runs out, which is not the same as failing: a set of three
      * booleans is a thing no value satisfies, and offering the two that exist is a proposal the decoder
      * answers the way it answers any other.
      */
-    private static List<FixtureTemplate> distinctFrom(FixtureTemplate seed, Type type, int least,
-                                                      RuleReadingContext reading,
-                                                      Set<TypeSymbol> expanding) {
+    private static List<FixtureTemplate> distinctFrom(FixtureTemplate seed,
+                                                      List<FixtureTemplate> values, int least) {
         Set<String> written = new LinkedHashSet<>();
         List<FixtureTemplate> out = new ArrayList<>();
         written.add(seed.text());
         out.add(seed);
-        // One more than needed, since the seed is likely to be among them.
-        for (FixtureTemplate each : distinctValuesOf(type, least + 1, reading, expanding)) {
+        for (FixtureTemplate each : values) {
             if (out.size() >= least) {
                 break;
             }
