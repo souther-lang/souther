@@ -32,6 +32,7 @@ import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BodyDistinction;
 import souther.compiler.partition.Border;
+import souther.compiler.partition.ClassCoexistence;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.ReachingCuts;
 import souther.compiler.partition.Demand;
@@ -607,17 +608,16 @@ final class Coverages {
     /**
      * How many combinations two positions' classes make between them.
      *
-     * <p>The product where the two are in one value, and less where they are not. What a row at a
-     * class has to be is one merge ({@link souther.compiler.inputs.Requirements}), and the same
-     * merge is what the generator asks before it composes a row — so what is counted here and what
-     * a row is offered for come from one reading rather than from two that agree until a case is
-     * added.
+     * <p>The product where the two are in one value, and less where they are not. Which two classes
+     * can be in one value is {@link ClassCoexistence}'s answer, and the same answer is what decides
+     * which combinations are left ({@link #uncovered}) — so what is counted here and what a row is
+     * asked for come from one reading rather than from two that agree until a case is added.
      */
     private static long combinationsOf(Axis one, Axis other) {
         long count = 0;
         for (PartitionClass here : one.classes()) {
             for (PartitionClass there : other.classes()) {
-                if (one.requiring(here).compatibleWith(other.requiring(there))) {
+                if (ClassCoexistence.canHoldTogether(one, here, other, there)) {
                     count++;
                 }
             }
@@ -644,9 +644,10 @@ final class Coverages {
      * rows reached; which ones are left is wanted where something acts on them, and is worked out
      * from the positions — which are the model's and are not part of an answer about the rows.
      *
-     * <p>Compatible combinations only, asked the way the count is asked. A class of a position
-     * under one case of a sum and a class of a position under another are in no one value, so they
-     * make no combination and nothing is owed at them.
+     * <p>Combinations a value can be in only, asked the way the count is asked. A class of a
+     * position under one case of a sum and a class of a position under another are in no one value,
+     * and neither are a class of an element's field and a count of its list that admits no element,
+     * so they make no combination and nothing is owed at them.
      *
      * <p>Empty where no count was made. A combination nothing was read about is not one no row is
      * in, and a list of the whole space would be read as a list of gaps.
@@ -672,8 +673,8 @@ final class Coverages {
                 Set<PartitionEvidence.PairSpace.Cell> reached = made.reached(between);
                 for (PartitionClass here : ordered.get(i).classes()) {
                     for (PartitionClass there : ordered.get(j).classes()) {
-                        if (!ordered.get(i).requiring(here)
-                                .compatibleWith(ordered.get(j).requiring(there))) {
+                        if (!ClassCoexistence.canHoldTogether(
+                                ordered.get(i), here, ordered.get(j), there)) {
                             continue;
                         }
                         PartitionEvidence.PairSpace.Cell cell =
