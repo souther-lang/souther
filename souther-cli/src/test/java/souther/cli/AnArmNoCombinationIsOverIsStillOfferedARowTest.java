@@ -96,13 +96,13 @@ class AnArmNoCombinationIsOverIsStillOfferedARowTest {
             """;
 
     /**
-     * An arm this compiler cannot state a way into is said nothing about where a row goes through it.
+     * An arm inside a block is offered the row whose run goes through it, and nothing says it has
+     * none.
      *
-     * <p>No search composes a value for such an arm: the block runs under whatever applies it, so
-     * what steers a row there is not a class of this behavior's inputs. What is offered here is a
-     * row composed for the class the arm's own value is in, and running it goes through the arm — so
-     * the work is in front of the reader, and a line saying nothing offers a row for it would send
-     * them after work they have been handed.
+     * <p>The block runs where `List.map` applies it, and the arm is a case of the element it is
+     * handed: a run down it is one application, handed one `Off`. So a list holding an `Off` is
+     * where to look, and the row composed there is the row for the element's class as well —
+     * written once, with both above it.
      *
      * <p>The measurement is untouched: the gap is still a gap until the row is written and answered.
      */
@@ -111,7 +111,9 @@ class AnArmNoCombinationIsOverIsStillOfferedARowTest {
         Run run = examples(IN_A_BLOCK, "--generate");
 
         assertTrue(run.out().contains("no row goes through `case Off`"), run.out());
-        assertTrue(run.out().contains("| \"flags[*]=Off\" : ([Off])"),
+        assertTrue(run.out().contains("// fills case Off")
+                        && run.out().contains("// fills flags[*]=Off")
+                        && run.out().contains("| ([Off])"),
                 "a row whose run goes through the arm is offered: " + run.out());
         assertFalse(run.out().contains("nothing offers a row for `case Off`"),
                 "so nothing says the arm has none: " + run.out());
