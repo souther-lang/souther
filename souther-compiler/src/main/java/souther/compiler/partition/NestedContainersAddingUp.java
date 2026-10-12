@@ -18,7 +18,9 @@ import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.IntStream;
@@ -52,9 +54,10 @@ import java.util.stream.IntStream;
  */
 final class NestedContainersAddingUp {
 
-    /** Every container the path is inside, outermost first, and what each of them holds. */
+    /** Every container the path is inside, outermost first, what each of them holds, and what its
+     *  elements are kept apart at. */
     private record Level(TypeView view, Shape.Sequence holding, DeclaredBounds.CountRange howMany,
-                         ContainersAddingUp.Ways ways) {}
+                         ContainersAddingUp.Ways ways, ContainersAddingUp.KeptApart apart) {}
 
     /**
      * How the leaves are grouped: for a container above the innermost, one entry for each element
@@ -100,8 +103,9 @@ final class NestedContainersAddingUp {
         this.run = Objects.requireNonNull(run, "a run is read from somewhere");
     }
 
-    TermRealizations.Realization to(Place answer, Type container, TermOrders orders,
-                                    SearchRegion within, RuleReadingContext reading,
+    TermRealizations.Realization to(Place answer, Type container, List<List<String>> keptApart,
+                                    TermOrders orders, SearchRegion within,
+                                    RuleReadingContext reading,
                                     ContainersAddingUp.HowManyIsAskedFor alsoHolding,
                                     DemandsInside inside) {
         Carrier elements = orders.answered();
@@ -121,6 +125,9 @@ final class NestedContainersAddingUp {
         List<TermPath> chain = run.containersHoldingIt();
         List<Level> levels = new ArrayList<>();
         Type type = container;
+        // What the rules of the value holding each level's container keep its elements apart at:
+        // the caller's for the outermost, and the element's above it for each one inside it.
+        List<List<String>> held = keptApart;
         for (int at = 0; at < chain.size(); at++) {
             TermPath here = chain.get(at);
             TypeView view = TypeView.of(type, reading.source().inners(),
@@ -149,8 +156,11 @@ final class NestedContainersAddingUp {
                                     + " containers the total is spread over");
                 }
             }
+            DemandsInside asked = at == 0 ? inside : DemandsInside.NOTHING;
+            ContainersAddingUp.KeptApart apart = ContainersAddingUp.KeptApart.of(view, held,
+                    holding.element(), here.element(), demand, asked.required(), reading);
             ContainersAddingUp.Ways ways = ContainersAddingUp.waysDown(holding.element(),
-                    here.element(), demand, at == 0 ? inside : DemandsInside.NOTHING, reading);
+                    here.element(), demand, asked, apart, reading);
             if (ways.filled().isEmpty()) {
                 return ways.cutBy().isEmpty()
                         ? new TermRealizations.Realization.None(
@@ -160,8 +170,10 @@ final class NestedContainersAddingUp {
                                 CompositionShortfall.of(ways.cutBy()));
             }
             ways.cutBy().forEach(left::refused);
-            levels.add(new Level(view, holding, howMany, ways));
+            levels.add(new Level(view, holding, howMany, ways, apart));
             if (!innermost) {
+                held = ElementsKeptApart.heldUnder(holding.element(),
+                        chain.get(at + 1).ruleKeyUnder(here.element()), reading);
                 type = typeAlong(holding.element(), here, chain.get(at + 1), reading);
                 if (type == null) {
                     return new TermRealizations.Realization.Unexhausted(
@@ -429,8 +441,13 @@ final class NestedContainersAddingUp {
             }
             // The groupings are some of the many, always.
             left.notAllOf(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD);
+            // No two leaves alike where any level keeps its elements apart by what they are built
+            // around: leaves apart across the whole row are apart inside every container, and
+            // containers holding leaves of their own are apart as wholes.
+            boolean numbersApart = levels.stream().anyMatch(each -> each.apart().numbersApart());
             for (ContainersAddingUp.Spread how : ContainersAddingUp.Spread.values()) {
-                switch (ContainersAddingUp.splitting(total, count, ends, how, elements)) {
+                switch (ContainersAddingUp.splitting(total, count, ends, how, elements,
+                        numbersApart)) {
                     case ContainersAddingUp.Split.None _ -> { }
                     case ContainersAddingUp.Split.NotWorkedOut(var why) ->
                             left.unheld(new CompositionCapacity(
@@ -461,6 +478,11 @@ final class NestedContainersAddingUp {
         /**
          * The container of level {@code at} holding what {@code layout} says, taking the leaves it
          * holds off the front of {@code values}, or null where one of its elements cannot be built.
+         *
+         * <p>Null as well where the elements of a container above the innermost are not apart as
+         * its rules keep them. Leaves apart across the row put apart every container holding some,
+         * and two holding none are alike all the same: a grouping this writes that does so is one
+         * of the many it is not, which the walk says of every count.
          */
         private FixtureTemplate built(int at, Layout layout, Deque<BigDecimal> values, int way) {
             Level level = levels.get(at);
@@ -472,22 +494,29 @@ final class NestedContainersAddingUp {
                     mine.add(values.removeFirst());
                 }
                 return ContainersAddingUp.filled(mine, level.holding(), level.view(), filling,
-                        elements, reading);
+                        level.apart(), elements, reading);
             }
             List<FixtureTemplate> each = new ArrayList<>();
-            for (Layout below : layout.within()) {
-                FixtureTemplate inner = built(at + 1, below, values, way);
-                if (inner == null) {
+            List<Layout> within = layout.within();
+            for (int i = 0; i < within.size(); i++) {
+                FixtureTemplate inner = built(at + 1, within.get(i), values, way);
+                Map<TermPath, FixtureTemplate> own = level.apart().besideFor(i, within.size());
+                if (inner == null || own == null) {
                     return null;
                 }
+                Map<TermPath, FixtureTemplate> beside = new LinkedHashMap<>(own);
+                beside.putAll(filling.beside());
                 FixtureTemplate one = PlanComposer.compose(filling.plan().root(),
-                        new ValuesCarryingANumber(filling.fixed(), inner, filling.beside(),
+                        new ValuesCarryingANumber(filling.fixed(), inner, beside,
                                 filling.narrowed(), reading),
                         reading);
                 if (one == null) {
                     return null;
                 }
                 each.add(one);
+            }
+            if (!Witnesses.holdApart(each, level.apart().runs())) {
+                return null;
             }
             return WornNames.under(level.view().wrappers(), FixtureTemplate.collection(each),
                     reading.source());

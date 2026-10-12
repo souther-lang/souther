@@ -40,8 +40,8 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
 
     /** The rules asking a collection to hold one and capping it in no way. */
-    private static final ConstructionPlan.HowManyItHolds ONE_AT_LEAST =
-            (_, _) -> new DeclaredBounds.CountRange(1, Integer.MAX_VALUE);
+    private static final ConstructionPlan.WhatItMayHold ONE_AT_LEAST = (_, _) ->
+            ConstructionPlan.ItMayHold.counting(new DeclaredBounds.CountRange(1, Integer.MAX_VALUE));
 
 
     /** A case of a sum that is a newtype over an optional: the name is uncovered by the case and

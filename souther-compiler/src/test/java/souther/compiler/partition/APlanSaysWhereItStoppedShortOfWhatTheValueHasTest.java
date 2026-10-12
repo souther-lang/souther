@@ -45,13 +45,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
 
     /** The rules counting nothing, which is what every model here leaves them saying. */
-    private static final ConstructionPlan.HowManyItHolds ANY =
-            (_, _) -> new DeclaredBounds.CountRange(0, Integer.MAX_VALUE);
+    private static final ConstructionPlan.WhatItMayHold ANY = (_, _) ->
+            ConstructionPlan.ItMayHold.counting(new DeclaredBounds.CountRange(0, Integer.MAX_VALUE));
 
     /** The rules leaving a collection holding none, which is the model settling that nothing can be
      *  placed inside one. */
-    private static final ConstructionPlan.HowManyItHolds NONE_OF_THEM =
-            (_, _) -> new DeclaredBounds.CountRange(0, 0);
+    private static final ConstructionPlan.WhatItMayHold NONE_OF_THEM =
+            (_, _) -> ConstructionPlan.ItMayHold.counting(new DeclaredBounds.CountRange(0, 0));
 
 
     /**

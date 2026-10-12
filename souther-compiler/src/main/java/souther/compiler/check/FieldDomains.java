@@ -13,6 +13,7 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.revision.RevisionKnowledge;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
@@ -259,6 +260,16 @@ public final class FieldDomains {
      * this value alone, so it is worked out once for each place and not once for each question.
      */
     private final Map<RuleKey, Optional<Congruences>> classes = new ConcurrentHashMap<>();
+
+    /**
+     * What the rules keep the elements of each place apart at ({@link #keptApartAt}), and what the
+     * rules written on each declaration on the way keep apart, kept for the same reason
+     * {@link #classes} is: the answers turn on the rules of this value alone.
+     */
+    private final Map<RuleKey, List<List<String>>> keptApart = new ConcurrentHashMap<>();
+
+    private final Map<TypeSymbol.AtModule, Map<RuleKey, List<List<String>>>> writtenApart =
+            new ConcurrentHashMap<>();
 
     private FieldDomains(Map<RuleKey, NumericDomain.Bounds> byName,
                          Map<RuleKey, NumericDomain.Bounds> heldByName,
@@ -943,7 +954,7 @@ public final class FieldDomains {
      * asked for the other.
      */
     public Composing composing(Map<NumberAt<RuleKey>, Count> fixed) {
-        return new Composing(settling(fixed), atomAt, countAt);
+        return new Composing(settling(fixed), atomAt, countAt, this::keptApartAt);
     }
 
     /**
@@ -1062,11 +1073,17 @@ public final class FieldDomains {
         private final Map<RuleKey, FactSubject> atomAt;
         private final Map<RuleKey, Counted> countAt;
 
+        /** What the rules keep the elements at each place apart at, which no settling moves:
+         *  the reading this was taken off answers it ({@link FieldDomains#keptApartAt}). */
+        private final Function<RuleKey, List<List<String>>> keptApartAt;
+
         private Composing(ConstraintState<FactSubject> constraints,
-                          Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt) {
+                          Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt,
+                          Function<RuleKey, List<List<String>>> keptApartAt) {
             this.constraints = constraints;
             this.atomAt = atomAt;
             this.countAt = countAt;
+            this.keptApartAt = keptApartAt;
         }
 
         /**
@@ -1083,7 +1100,9 @@ public final class FieldDomains {
             NumericDomain.Bounds values = boundsOn(atomAt.get(path));
             Counted counted = countAt.get(path);
             NumericDomain.Bounds held = counted == null ? null : boundsOn(counted.atom());
-            return new ConstructionLimits(values, held == null ? null : new Held(held));
+            List<List<String>> apart = keptApartAt.apply(path);
+            return new ConstructionLimits(values, held == null && apart.isEmpty() ? null
+                    : new Held(held == null ? NumericDomain.Bounds.OPEN : held, apart));
         }
 
         /** Where these constraints stop one subject, or null where they stop it nowhere. */
@@ -1737,19 +1756,29 @@ public final class FieldDomains {
      * reading one as the other. There is one such mistake in this already: the atom a size rule
      * bounds is the size's, and writing it under the field is how a list would come to be told it
      * must be at least 2.
+     *
+     * <p>And which of its elements may stand beside each other, where a rule of the value holding
+     * it says no two of them are alike ({@link ElementsApart#heldAt}). That too is what the value
+     * there has to hold rather than what it is, and a builder of the value at a field is told both
+     * by the one thing that knows the field is held.
+     *
+     * @param bounds    how many it holds, open where no rule counts it
+     * @param keptApart the runs of fields its elements are kept apart at, as {@link ElementsApart}
+     *                  writes them; empty where no rule keeps them apart
      */
-    public record Held(NumericDomain.Bounds bounds) {
+    public record Held(NumericDomain.Bounds bounds, List<List<String>> keptApart) {
 
         public Held {
             if (bounds == null) {
                 throw new IllegalArgumentException("a floor with no bounds is no floor");
             }
+            keptApart = List.copyOf(keptApart);
         }
     }
 
     /**
      * What the rules say the value at {@code path} holds, or {@code null} where they count it in no
-     * way this read.
+     * way this read and keep none of its elements apart.
      *
      * <p>Read off the measure the type standing there names ({@link NumericMeasures#takenOf}), so a
      * field this can answer for is one whose values are counted by something. A field of a number has
@@ -1757,7 +1786,21 @@ public final class FieldDomains {
      */
     public Held heldAt(RuleKey path) {
         NumericDomain.Bounds bounds = heldByName.get(path);
-        return bounds == null ? null : new Held(bounds);
+        List<List<String>> apart = keptApartAt(path);
+        return bounds == null && apart.isEmpty() ? null
+                : new Held(bounds == null ? NumericDomain.Bounds.OPEN : bounds, apart);
+    }
+
+    /** What the rules keep the elements of the value at {@code path} apart at, worked out once for
+     *  each place since it turns on the rules of this value alone. */
+    private List<List<String>> keptApartAt(RuleKey path) {
+        if (named == null || source == null || path.isTheValueItself()) {
+            return List.of();
+        }
+        return keptApart.computeIfAbsent(path, at -> ElementsApart.heldAt(new Type.Ref(named), at,
+                each -> writtenApart.computeIfAbsent(each,
+                        declared -> ElementsApart.writtenOn(declared, source)),
+                source));
     }
 
     /**

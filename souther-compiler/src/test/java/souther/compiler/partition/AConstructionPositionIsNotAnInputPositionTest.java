@@ -65,8 +65,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AConstructionPositionIsNotAnInputPositionTest {
 
     /** The rules counting nothing, which is what every model here leaves them saying. */
-    private static final ConstructionPlan.HowManyItHolds ANY =
-            (_, _) -> new DeclaredBounds.CountRange(0, Integer.MAX_VALUE);
+    private static final ConstructionPlan.WhatItMayHold ANY = (_, _) ->
+            ConstructionPlan.ItMayHold.counting(new DeclaredBounds.CountRange(0, Integer.MAX_VALUE));
 
 
     /** Read once: what this asks of it does not change between its checks. */

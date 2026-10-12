@@ -204,8 +204,9 @@ class AContainerAddingUpHoldsWhatItsElementsAreAskedForTest {
         TermOrders orders = TermOrdersFixtures.at(total, named("Amount"), symbols);
         assertNotNull(orders.answered(), "and the order it answers on is the amounts'");
 
-        return ContainersAddingUp.to(Count.of(1), new Type.ListOf(named("Entry")), orders,
-                NothingTheRulesSay.REGION, RuleReadingContext.unshared(rules, POLICY), inside);
+        return ContainersAddingUp.to(Count.of(1), new Type.ListOf(named("Entry")), List.of(),
+                orders, NothingTheRulesSay.REGION, RuleReadingContext.unshared(rules, POLICY),
+                inside);
     }
 
     /** An entry of the case and payer asked for, holding {@code amount}. */

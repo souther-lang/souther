@@ -85,7 +85,7 @@ final class CardinalityComposer {
      * @param within     the region with every number of the row a count's statement reads beside
      *                   an element standing at one value
      */
-    static TermRealizations.Realization compose(Type sourceType,
+    static TermRealizations.Realization compose(Type sourceType, List<List<String>> keptApart,
                                                 List<RealizationTarget.ACount> counts,
                                                 SequencedMap<RealizationTarget, AskedAt> demands,
                                                 RealizationTarget.OfANumber manyItHolds,
@@ -128,7 +128,7 @@ final class CardinalityComposer {
                 handed.add(ACountHandedOn.of(each.count()).orElseThrow());
                 meeting.add(ACountHandedOn.counted(demands.get(each)));
             }
-            return handingOn(asked, handed, meeting, size, view, reading);
+            return handingOn(asked, handed, meeting, size, view, keptApart, reading);
         }
         Element element = Element.of(counts, container);
         if (element == null) {
@@ -161,7 +161,9 @@ final class CardinalityComposer {
             case NumericDomain.FormProjection.NothingIsLeft _ -> null;
             case null -> NumericDomain.Bounds.OPEN;
         };
-        boolean distinct = holding.kind() == Shape.Sequence.Kind.SET;
+        // The element is the one number chosen, so elements kept apart at any run of it — a set's,
+        // or a list's its rules keep apart — are elements holding no number twice.
+        boolean distinct = !ElementsKeptApart.at(view, keptApart, reading).isEmpty();
         int perPart = distinct ? MOST_ELEMENTS : 1;
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         List<Place> candidates = List.of();
@@ -259,11 +261,14 @@ final class CardinalityComposer {
      * @param meeting how many elements meet each count's statement, in the order of {@code asked}:
      *                what {@link ACountHandedOn#counted} says of the number each is asked at, and
      *                nothing where it says nothing
+     * @param keptApart what the rules of the value holding the container keep its elements apart
+     *                  at, which every container offered here keeps as well
      */
     private static TermRealizations.Realization handingOn(List<Asked> asked,
                                                           List<ACountHandedOn> handed,
                                                           List<OptionalInt> meeting,
                                                           NumericSet size, TypeView view,
+                                                          List<List<String>> keptApart,
                                                           RuleReadingContext reading) {
         List<FixtureTemplate> built = new ArrayList<>();
         Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
@@ -317,12 +322,14 @@ final class CardinalityComposer {
                 continue;
             }
             if (!splitAt.isEmpty()) {
-                FixtureTemplate apart = Witnesses.apart(view, elements, splitAt, reading);
+                FixtureTemplate apart =
+                        Witnesses.apart(view, elements, splitAt, keptApart, reading);
                 if (apart != null) {
                     ofThatSize.add(apart);
                 }
             } else {
-                ofThatSize.addAll(Witnesses.ofSize(view, elements, reading, Set.of()).values());
+                ofThatSize.addAll(
+                        Witnesses.ofSize(view, elements, keptApart, reading, Set.of()).values());
             }
             for (FixtureTemplate bare : ofThatSize) {
                 FixtureTemplate one = WornNames.under(view.wrappers(), bare, reading.source());
@@ -360,6 +367,7 @@ final class CardinalityComposer {
      * the key is the element itself.
      */
     static TermRealizations.Realization composeAlike(Type sourceType,
+                                                     List<List<String>> keptApart,
                                                      RealizationTarget.OfANumber alike,
                                                      RealizationTarget.OfANumber manyItHolds,
                                                      SequencedMap<RealizationTarget, AskedAt> demands,
@@ -409,8 +417,10 @@ final class CardinalityComposer {
             return none("the rules leave no value for an element of `" + container + "`");
         }
         // One value to repeat and as many different ones beside it as the size asked for leaves
-        // room for; a set holds each value once, so it holds nothing repeated.
-        boolean distinct = holding.kind() == Shape.Sequence.Kind.SET;
+        // room for; elements kept apart — a set's, or a list's its rules keep apart — hold each
+        // value once, so they hold nothing repeated. The element is the number, so apart at any run
+        // of it is apart as numbers.
+        boolean distinct = !ElementsKeptApart.at(view, keptApart, reading).isEmpty();
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         List<Place> candidates = carrier.counts()
                 ? valuesAlong(carrier, run, List.of(), MOST_ELEMENTS + 1, unheld)

@@ -45,11 +45,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
 
-    private static final ConstructionPlan.HowManyItHolds ANY =
-            (_, _) -> new DeclaredBounds.CountRange(0, Integer.MAX_VALUE);
+    private static final ConstructionPlan.WhatItMayHold ANY = (_, _) ->
+            ConstructionPlan.ItMayHold.counting(new DeclaredBounds.CountRange(0, Integer.MAX_VALUE));
 
-    private static final ConstructionPlan.HowManyItHolds NONE_OF_THEM =
-            (_, _) -> new DeclaredBounds.CountRange(0, 0);
+    private static final ConstructionPlan.WhatItMayHold NONE_OF_THEM =
+            (_, _) -> ConstructionPlan.ItMayHold.counting(new DeclaredBounds.CountRange(0, 0));
 
     private static final String MODEL = """
             module g
@@ -234,7 +234,7 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
 
     private static ConstructionPlan planned(int parameter,
                                             ConstructionPlan.ContentsComposed contents,
-                                            ConstructionPlan.HowManyItHolds howMany) {
+                                            ConstructionPlan.WhatItMayHold howMany) {
         ConstructionPlan.Result result = result(parameter, contents, howMany);
         return assertInstanceOf(ConstructionPlan.Result.Planned.class, result,
                 () -> "a plan is made: " + result).plan();
@@ -242,7 +242,7 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
 
     private static ConstructionPlan.Result result(int parameter,
                                                   ConstructionPlan.ContentsComposed contents,
-                                                  ConstructionPlan.HowManyItHolds howMany) {
+                                                  ConstructionPlan.WhatItMayHold howMany) {
         Symbols symbols = READ.symbols();
         return ConstructionPlan.of(READ.types().get(parameter),
                 TermPath.of(List.of("items", "filed").get(parameter)),

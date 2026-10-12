@@ -382,16 +382,14 @@ public final class BoundaryConstraints {
             return Optional.of(matching(call));
         }
         // `List.allDistinctBy(x -> x, value)` says of the elements that no two are equal, by the same
-        // value equality (spec §collections). A projection that is not the identity says it
-        // of something else — the elements' products, their ids — and there is no constraint for
-        // that, so the clause keeps its own check. Nor is there one where the elements have no
-        // message form: the constraint reports the elements it finds repeated, and a decoder
-        // library cannot write them.
-        BoundOperationFacts.NoTwoAlike alike =
-                DefaultBoundOperationFacts.get().statesNoTwoAlike(call.operation());
-        if (base instanceof Type.ListOf list && alike != null
-                && isValue(call.args().get(alike.container().position()))
-                && isIdentity(call.args().get(alike.by().position()))) {
+        // value equality (spec §collections). Read where every builder of a list reads it
+        // (ElementsApart), so the decoder and the rows composed for it agree about which rule says
+        // so. Apart at a run of fields says it of something else — the elements' ids — and there is
+        // no constraint for that, so the clause keeps its own check. Nor is there one where the
+        // elements have no message form: the constraint reports the elements it finds repeated, and
+        // a decoder library cannot write them.
+        List<String> apart = ElementsApart.apartAt(call, field);
+        if (base instanceof Type.ListOf list && apart != null && apart.isEmpty()) {
             MessageForm element = messageForm(list.element(), Set.of());
             return element == null ? Optional.empty() : Optional.of(new Unique(element));
         }
@@ -524,16 +522,6 @@ public final class BoundaryConstraints {
     private boolean applies(Core.PreservedCall call, Kernel kernel) {
         return call.operation() instanceof ValueName.Stdlib.Operation operation
                 && symbols.kernelOf(operation) == kernel;
-    }
-
-    /** Whether a projection hands back what it was given — {@code x -> x}, however the parameter is
-     * spelled. A block with one parameter is how a lambda arrives here (spec §blocks). The body reads
-     * the parameter when it reads that binding; a name spelled like it, bound elsewhere, is another
-     * value. */
-    private static boolean isIdentity(Core e) {
-        return Core.withoutStanding(e) instanceof Core.Block block && block.params().size() == 1
-                && Core.withoutStanding(block.body()) instanceof Core.Read read
-                && read.binding().equals(block.params().get(0).binding());
     }
 
     /** An Int literal, negation included ({@code -1}), or null when the operand is not one. */

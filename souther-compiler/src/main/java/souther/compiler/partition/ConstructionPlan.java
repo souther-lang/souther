@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.Shape;
 import souther.compiler.check.SumCases;
@@ -197,7 +198,9 @@ final class ConstructionPlan {
      *                 asked something; empty for a list or a set, and for a map nothing asks of
      *                 its keys
      * @param holds    from how few to how many the rules let it hold
-     * @param handed   whether the caller hands over values to write into it or keep out of it,
+     * @param keptApart what the rules of the value holding it keep its elements apart at
+     *                 ({@link ItMayHold#keptApart})
+     * @param handed  whether the caller hands over values to write into it or keep out of it,
      *                 which is asked of the caller when it is composed and of nobody otherwise
      * @param eachOf   whether {@code under} is what each element is, rather than an element it is
      *                 to hold: a container inside the element handed values by a demand on every
@@ -206,12 +209,13 @@ final class ConstructionPlan {
      *                 of the element is composed or searched for ({@link #composesItsElement})
      */
     record Held(TermPath at, Type type, List<TypeSymbol> worn, Optional<Node> under,
-                Optional<Node> key, DeclaredBounds.CountRange holds, boolean handed,
-                boolean eachOf)
+                Optional<Node> key, DeclaredBounds.CountRange holds,
+                List<List<String>> keptApart, boolean handed, boolean eachOf)
             implements Node {
 
         Held {
             worn = List.copyOf(worn);
+            keptApart = List.copyOf(keptApart);
             if (under.isEmpty() && key.isEmpty() && !handed) {
                 throw new IllegalArgumentException("a container built rather than chosen is built"
                         + " to hold something asked of it: " + at);
@@ -557,7 +561,7 @@ final class ConstructionPlan {
     static Result of(Type declared, TermPath at, NewtypeInners inners, Symbols symbols,
                      DeclarationKinds kinds, SumCases sums, Set<TermPath> decided,
                      Requirements additional, ContentsComposed contents,
-                     HowManyItHolds howMany) {
+                     WhatItMayHold howMany) {
         Requirements required = additional;
         Set<TermPath> standing = new LinkedHashSet<>(decided);
         standing.addAll(contents.paths());
@@ -604,10 +608,36 @@ final class ConstructionPlan {
      * Handed over as one answer with both ends, so that the floor and the cap are of one state of
      * the row.
      */
-    interface HowManyItHolds {
+    interface WhatItMayHold {
 
         /** What the rules let the value built at {@code at}, of type {@code building}, hold. */
-        DeclaredBounds.CountRange at(TermPath at, Type building);
+        ItMayHold at(TermPath at, Type building);
+    }
+
+    /**
+     * What the rules let a value built at a position hold: how many, and which of its elements may
+     * stand beside each other.
+     *
+     * <p>One answer, for the reason the two ends of the count are one: both are what the rules of
+     * the value holding this one say of it, read off one state of the row, and a caller holding one
+     * of them from somewhere else could build a container the count allows and those rules refuse.
+     *
+     * @param count     from how few to how many the rules let it hold
+     * @param keptApart the runs of fields the rules of the value holding it keep its elements apart
+     *                  at ({@link FieldDomains.Held#keptApart}); empty where nothing holds it or
+     *                  they say nothing of it. The names the value wears say their own, and are
+     *                  asked of it where it is composed
+     */
+    record ItMayHold(DeclaredBounds.CountRange count, List<List<String>> keptApart) {
+
+        ItMayHold {
+            keptApart = List.copyOf(keptApart);
+        }
+
+        /** As many as {@code count}, and nothing kept apart by what holds it. */
+        static ItMayHold counting(DeclaredBounds.CountRange count) {
+            return new ItMayHold(count, List.of());
+        }
     }
 
     /**
@@ -747,7 +777,7 @@ final class ConstructionPlan {
                                    DeclarationKinds kinds, SumCases sums,
                                    int depth,
                                    Set<TermPath> decided, Requirements required,
-                                   ContentsComposed contents, HowManyItHolds howMany) {
+                                   ContentsComposed contents, WhatItMayHold howMany) {
         // What the requirements leave standing here, worked out before anything is decided about
         // the position. Read once and in full: what is built, whether the search chooses it, and
         // where every path below it hangs all follow from it.
@@ -819,7 +849,8 @@ final class ConstructionPlan {
             // The floor is how many the rules ask the whole collection to hold and the value being
             // placed is one of them, so what a collection holding it comes to is the floor, or one
             // where the rules ask for none.
-            DeclaredBounds.CountRange holds = demanded ? howMany.at(here, building) : null;
+            ItMayHold mayHold = demanded ? howMany.at(here, building) : null;
+            DeclaredBounds.CountRange holds = mayHold == null ? null : mayHold.count();
             boolean placesOne = elementAsked || contents.holdsOneAt(here);
             // Asked before the figure and before the descent, because this is the model's answer
             // and those are this compiler's. A list the rules leave no room in holds nothing
@@ -838,7 +869,7 @@ final class ConstructionPlan {
             }
             if (!elementAsked && handed) {
                 return new NodeResult.Made(new Held(here, building, worn, Optional.empty(),
-                        Optional.empty(), holds, true, false));
+                        Optional.empty(), holds, mayHold.keptApart(), true, false));
             }
             // Built around its element for nothing but a container inside it, by a demand on
             // every element.
@@ -873,7 +904,7 @@ final class ConstructionPlan {
             // each element is and not one it holds.
             if (demanded) {
                 return new NodeResult.Made(new Held(here, building, worn, element, key, holds,
-                        handed, eachOf));
+                        mayHold.keptApart(), handed, eachOf));
             }
             // Nothing was asked for inside it, so the list is chosen whole — but where the walk
             // that would have found something gave up part-way, that is not the same answer. Read

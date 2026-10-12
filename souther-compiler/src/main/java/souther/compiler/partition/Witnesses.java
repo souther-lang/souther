@@ -1,22 +1,32 @@
 package souther.compiler.partition;
 
+import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.ElementsApart;
+import souther.compiler.check.FieldDomains;
+import souther.compiler.check.ReadingPolicy;
+import souther.compiler.revision.RevisionKnowledge;
+import souther.compiler.revision.RevisionWork;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
+import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -102,9 +112,12 @@ final class Witnesses {
      * no two of which are equal, which a type of two values has not got; the two that exist are a
      * proposal for a floor and are not the count asked for here, and offering them would put a row of
      * two under a line drawn at three.
+     *
+     * @param held what the rules of the value holding this one keep its elements apart at
+     *             ({@link ElementsKeptApart#heldBy}), nothing where nothing holds it
      */
-    static Sized ofSize(TypeView position, int size, RuleReadingContext reading,
-                        Set<TypeSymbol> expanding) {
+    static Sized ofSize(TypeView position, int size, List<List<String>> held,
+                        RuleReadingContext reading, Set<TypeSymbol> expanding) {
         Shape carrier = position.shape();
         if (size == 0) {
             // The same shapes {@link #sized} builds for, and for the same reason they are written
@@ -120,7 +133,7 @@ final class Witnesses {
                      Shape.Undecided _ -> List.<FixtureTemplate>of();
             });
         }
-        Built built = sized(position, size, reading, expanding);
+        Built built = sized(position, size, held, reading, expanding);
         return new Sized(built.exactly(size), built.heldBack());
     }
 
@@ -139,7 +152,7 @@ final class Witnesses {
      */
     static Generator.UnresolvedCombination.Reason reasonForSize(TypeView position, int size,
                                                                 RuleReadingContext reading) {
-        Sized made = ofSize(position, size, reading, Set.of());
+        Sized made = ofSize(position, size, List.of(), reading, Set.of());
         if (!made.values().isEmpty()) {
             return null;
         }
@@ -167,10 +180,13 @@ final class Witnesses {
      * {@link #ofSize}'s — a caller with a line to stand on takes that one, where a set the type has
      * too few values for comes back as nothing at all. The two read one build and neither is written
      * in terms of the other, so a cheaper value for a floor cannot move a line.
+     *
+     * @param held what the rules of the value holding this one keep its elements apart at, as
+     *             {@link #ofSize} takes it
      */
-    static List<FixtureTemplate> holding(TypeView position, int least, RuleReadingContext reading,
-                                         Set<TypeSymbol> expanding) {
-        return least <= 0 ? List.of() : sized(position, least, reading, expanding).all();
+    static List<FixtureTemplate> holding(TypeView position, int least, List<List<String>> held,
+                                         RuleReadingContext reading, Set<TypeSymbol> expanding) {
+        return least <= 0 ? List.of() : sized(position, least, held, reading, expanding).all();
     }
 
     /**
@@ -186,9 +202,10 @@ final class Witnesses {
      * reason there would put "nothing composes one" under every position that has no floor at all.
      */
     static Set<CompositionBudget> heldBackFor(TypeView position, int least,
+                                              List<List<String>> held,
                                               RuleReadingContext reading) {
         return least <= 0 ? Set.of()
-                : sized(position, least, reading, Set.of()).heldBack();
+                : sized(position, least, held, reading, Set.of()).heldBack();
     }
 
     /**
@@ -228,8 +245,8 @@ final class Witnesses {
         }
     }
 
-    private static Built sized(TypeView position, int least, RuleReadingContext reading,
-                               Set<TypeSymbol> expanding) {
+    private static Built sized(TypeView position, int least, List<List<String>> held,
+                               RuleReadingContext reading, Set<TypeSymbol> expanding) {
         if (least <= 0) {
             return Built.NONE;
         }
@@ -247,7 +264,8 @@ final class Witnesses {
                             : Built.of(ofThatManyCharacters(position, least, reading));
             case Shape.Sequence sequence -> least > MOST_ELEMENTS
                     ? Built.stoppedBy(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS)
-                    : ofSequence(sequence, least, reading, expanding);
+                    : ofSequence(sequence, ElementsKeptApart.at(position, held, reading), least,
+                            reading, expanding);
             case Shape.Mapping mapping -> least > MOST_ELEMENTS
                     ? Built.stoppedBy(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS)
                     : ofMapping(mapping, least, reading, expanding);
@@ -283,24 +301,35 @@ final class Witnesses {
     }
 
     /**
-     * A list of that many, or a set of that many no two of which are equal.
+     * A list or a set of that many, around each value the element is itself offered.
      *
-     * <p>A list may hold the same element as many times as it needs to. A set of three is three
-     * elements no two of which are equal, which the element's own values have to supply.
+     * <p>Elements free to repeat are that value as many times as it takes. Elements to be apart
+     * ({@code apart}, as {@link ElementsApart} reads them) are that value and others apart from it
+     * and from each other, which the values there have to supply — fewer than asked where they run
+     * out, which is not the same as failing: a set of three booleans is a thing no value satisfies,
+     * and offering the two that exist is a proposal the decoder answers the way it answers any
+     * other.
      */
-    private static Built ofSequence(Shape.Sequence carrier, int least, RuleReadingContext reading,
-                                    Set<TypeSymbol> expanding) {
+    private static Built ofSequence(Shape.Sequence carrier, List<List<String>> apart, int least,
+                                    RuleReadingContext reading, Set<TypeSymbol> expanding) {
         List<Made> out = new ArrayList<>();
+        // What the others may be is a question about the element and the count and not about the
+        // value they are built around, so it is answered once for every one of them: the values at
+        // each run, as many as a container held around one value passes over, and each element
+        // made of them as it is first asked for.
+        ElementsMadeApart others = apart.isEmpty() ? null
+                : ElementsMadeApart.of(carrier.element(), apart, least + 2, reading,
+                        expanding);
         for (FixtureTemplate seed
                 : proposalsFor(carrier.element(), reading, expanding)) {
             List<FixtureTemplate> elements = new ArrayList<>();
-            if (carrier.kind() == Shape.Sequence.Kind.LIST) {
+            if (others == null) {
                 for (int i = 0; i < least; i++) {
                     elements.add(seed);
                 }
             } else {
-                elements.addAll(
-                        distinctFrom(seed, carrier.element(), least, reading, expanding));
+                // One value held is equal to no other held, so this always builds.
+                elements.addAll(others.around(List.of(seed), Set.of(), least));
             }
             out.add(new Made(FixtureTemplate.collection(elements), elements.size()));
         }
@@ -318,41 +347,202 @@ final class Witnesses {
      * and not a proposal for any container of that size, which may say one value again. Apart at
      * those positions and not merely as whole values: two records equal at the one field the
      * statement reads are one element to it however the rest of them differ.
+     *
+     * <p>And apart wherever the rules ask it to be — its own names', and {@code held}, those of the
+     * value holding it ({@link ElementsKeptApart#heldBy}) — since those hold of every container
+     * built there whatever a caller needed it for.
      */
     static FixtureTemplate apart(TypeView position, int size, List<List<String>> fields,
-                                 RuleReadingContext reading) {
+                                 List<List<String>> held, RuleReadingContext reading) {
         if (!(position.shape() instanceof Shape.Sequence carrier)) {
             return null;
         }
         if (size == 0) {
             return FixtureTemplate.collection(List.of());
         }
-        // The values each position is apart at, one for each element.
-        List<List<FixtureTemplate>> atEach = new ArrayList<>();
-        for (List<String> each : fields) {
-            Type at = typeAt(carrier.element(), each, reading);
-            if (at == null) {
-                return null;
-            }
-            List<FixtureTemplate> values = distinctValuesOf(at, size, reading, Set.of());
-            if (values.size() < size) {
-                return null;
-            }
-            atEach.add(values);
+        // Nothing held, so nothing is equal to anything held and this always builds.
+        List<FixtureTemplate> elements = ElementsMadeApart.of(carrier.element(),
+                ElementsApart.meet(fields, ElementsKeptApart.at(position, held, reading)),
+                size + 1, reading, Set.of()).around(List.of(), Set.of(), size);
+        return elements.size() < size ? null : FixtureTemplate.collection(elements);
+    }
+
+    /**
+     * Elements of one type kept apart at some runs of their fields: the values each run may take,
+     * and the elements made of them.
+     *
+     * <p>Held apart from the containers built of them. Which values a run may take and what an
+     * element holding some of them is are questions about the element type and the runs, so a
+     * caller building several containers around different values asks them once — read again per
+     * container, every value an element is offered paid for the same values and the same records.
+     */
+    private static final class ElementsMadeApart {
+
+        private final Type element;
+
+        /** Runs of fields taken from an element, empty for the element itself, none of them one
+         *  another starts with ({@link ElementsApart}). */
+        private final List<List<String>> at;
+
+        /** The values each run may take, in the order they are reached, or null where a run is no
+         *  run of fields of a record this writes. */
+        private final List<List<FixtureTemplate>> values;
+
+        /** Each element made, by the texts of the values placed at its runs in their order; empty
+         *  where none could be. */
+        private final Map<List<String>, Optional<FixtureTemplate>> made = new HashMap<>();
+
+        private final RuleReadingContext reading;
+
+        private ElementsMadeApart(Type element, List<List<String>> at,
+                                  List<List<FixtureTemplate>> values,
+                                  RuleReadingContext reading) {
+            this.element = element;
+            this.at = at;
+            this.values = values;
+            this.reading = reading;
         }
-        List<FixtureTemplate> elements = new ArrayList<>();
-        for (int i = 0; i < size; i++) {
-            Map<List<String>, FixtureTemplate> placed = new LinkedHashMap<>();
-            for (int f = 0; f < fields.size(); f++) {
-                placed.put(fields.get(f), atEach.get(f).get(i));
+
+        /** Up to {@code many} values at each run of {@code at}. */
+        static ElementsMadeApart of(Type element, List<List<String>> at, int many,
+                                    RuleReadingContext reading, Set<TypeSymbol> expanding) {
+            List<List<FixtureTemplate>> values = new ArrayList<>();
+            for (List<String> run : at) {
+                Type type = typeAt(element, run, reading);
+                if (type == null) {
+                    return new ElementsMadeApart(element, at, null, reading);
+                }
+                values.add(distinctValuesOf(type, many, reading, expanding));
             }
-            FixtureTemplate element = holdingAt(carrier.element(), placed, reading);
-            if (element == null) {
+            return new ElementsMadeApart(element, at, values, reading);
+        }
+
+        /**
+         * Every one of {@code held}, and others beside them up to {@code needed} in all, no two of
+         * them equal at any run and none written as any of {@code keptOut} — fewer where the values
+         * at a run give out, and null where two of {@code held} are equal at one.
+         *
+         * <p>What {@code held} are at each run is read off them, so the others are kept apart from
+         * the values they actually hold and not from what they were asked to. A held value whose
+         * run this cannot read — one written as a spread over a value the module states — is apart
+         * from nothing here, and what comes back is a proposal the decoder answers.
+         */
+        List<FixtureTemplate> around(List<FixtureTemplate> held, Set<String> keptOut,
+                                     int needed) {
+            List<Set<Hir.Expr>> taken = new ArrayList<>();
+            for (List<String> run : at) {
+                Set<Hir.Expr> here = new HashSet<>();
+                for (FixtureTemplate each : held) {
+                    Hir.Expr value = valueAt(each.value(), run);
+                    if (value != null && !here.add(value)) {
+                        return null;
+                    }
+                }
+                taken.add(here);
+            }
+            List<FixtureTemplate> out = new ArrayList<>(held);
+            if (out.size() >= needed || values == null) {
+                return out;
+            }
+            List<List<FixtureTemplate>> free = new ArrayList<>();
+            for (int r = 0; r < at.size(); r++) {
+                List<FixtureTemplate> left = new ArrayList<>();
+                for (FixtureTemplate each : values.get(r)) {
+                    if (!taken.get(r).contains(bare(each.value()))) {
+                        left.add(each);
+                    }
+                }
+                free.add(left);
+            }
+            for (int i = 0; out.size() < needed; i++) {
+                Map<List<String>, FixtureTemplate> placed = new LinkedHashMap<>();
+                List<String> written = new ArrayList<>();
+                for (int r = 0; r < at.size(); r++) {
+                    if (i >= free.get(r).size()) {
+                        return out;
+                    }
+                    FixtureTemplate value = free.get(r).get(i);
+                    placed.put(at.get(r), value);
+                    written.add(value.text());
+                }
+                FixtureTemplate one = made.computeIfAbsent(written,
+                        _ -> Optional.ofNullable(holdingAt(element, placed, reading)))
+                        .orElse(null);
+                if (one != null && !keptOut.contains(one.text())) {
+                    out.add(one);
+                }
+            }
+            return out;
+        }
+    }
+
+    /**
+     * Up to {@code many} values of what an element of type {@code element} holds at {@code run},
+     * no two alike, in the order a collection reaches for them — or null where the run is no run
+     * of fields of a record this writes.
+     *
+     * <p>The values a list built around one number per element puts at a run that does not hold
+     * the number, so that its elements are apart there as its rules ask: the same values, in the
+     * same order, that elements made apart without a number are given ({@link ElementsMadeApart}).
+     */
+    static List<FixtureTemplate> valuesApartAt(Type element, List<String> run, int many,
+                                               RuleReadingContext reading) {
+        Type type = typeAt(element, run, reading);
+        return type == null ? null : distinctValuesOf(type, many, reading, Set.of());
+    }
+
+    /**
+     * Whether no two of {@code elements} hold one value at any of {@code runs}.
+     *
+     * <p>A value whose run this cannot read — one written as a spread over a value the module
+     * states — is apart from nothing here, and the decoder answers for it.
+     */
+    static boolean holdApart(List<FixtureTemplate> elements, List<List<String>> runs) {
+        for (List<String> run : runs) {
+            Set<Hir.Expr> seen = new HashSet<>();
+            for (FixtureTemplate each : elements) {
+                Hir.Expr value = valueAt(each.value(), run);
+                if (value != null && !seen.add(value)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * What {@code value} holds at the end of {@code run}, under no name it wears, or null where it
+     * is not written out field by field down to there.
+     */
+    private static Hir.Expr valueAt(Hir.Expr value, List<String> run) {
+        Hir.Expr at = bare(value);
+        for (String field : run) {
+            if (!(at instanceof Hir.NewData record) || !record.spreads().isEmpty()) {
                 return null;
             }
-            elements.add(element);
+            Hir.Expr found = null;
+            for (Hir.FieldInit each : record.inits()) {
+                if (each.name().equals(field)) {
+                    found = each.value();
+                }
+            }
+            if (found == null) {
+                return null;
+            }
+            at = bare(found);
         }
-        return FixtureTemplate.collection(elements);
+        return at;
+    }
+
+    /** {@code value} with the names a fixture writes around it taken off, so that two values are
+     *  compared as what they wrap. */
+    private static Hir.Expr bare(Hir.Expr value) {
+        Hir.Expr at = value;
+        while (at instanceof Hir.Apply applied && applied.args().size() == 1
+                && applied.application() instanceof ApplicationOrigin.ComposedFixture) {
+            at = applied.args().getFirst();
+        }
+        return at;
     }
 
     /** The type at the end of {@code fields} taken from a value of {@code type}, or null where one
@@ -404,7 +594,8 @@ final class Witnesses {
             }
             given.put(each.getKey(), inner);
         }
-        List<FixtureTemplate> composed = Partitions.composed(named, reading, Set.of(), given);
+        List<FixtureTemplate> composed = Partitions.composed(named,
+                Partitions.rulesOver(view.wrappers(), named, source), reading, Set.of(), given);
         return composed.isEmpty() ? null
                 : WornNames.under(view.wrappers(), composed.getFirst(), source);
     }
@@ -435,6 +626,8 @@ final class Witnesses {
         // other side proposed.
         List<List<FixtureTemplate>> keysFrom =
                 new ArrayList<>(Collections.nCopies(keys.size(), null));
+        // And the key type's values the others are taken from, which are no key proposal's.
+        List<FixtureTemplate> keyValues = distinctValuesOf(map.key(), least + 1, reading, expanding);
         pairing:
         for (int apart = 0; apart <= keys.size() + values.size() - 2; apart++) {
             for (int i = Math.max(0, apart - values.size() + 1);
@@ -444,8 +637,7 @@ final class Witnesses {
                     break pairing;
                 }
                 if (keysFrom.get(i) == null) {
-                    keysFrom.set(i,
-                            distinctFrom(keys.get(i), map.key(), least, reading, expanding));
+                    keysFrom.set(i, distinctFrom(keys.get(i), keyValues, least));
                 }
                 FixtureTemplate value = values.get(apart - i);
                 List<FixtureTemplate> entries = new ArrayList<>();
@@ -479,7 +671,9 @@ final class Witnesses {
      *
      * <p>For a row being built around what it is asked to hold. What the rest are is not what was
      * asked for, and what they may be is: a list may hold the same value again and a set may not,
-     * and a caller padding one by hand would have to know which — the thing this reader is for.
+     * nor a list whose rules keep its elements apart ({@code apart}, as {@link ElementsApart} reads
+     * them), and a caller padding one by hand would have to know which — the thing this reader is
+     * for.
      *
      * <p><b>What it is to hold is values, and not elements.</b> Holding a value asks which values
      * are in it, so two values handed over that are one value are one element whichever carrier it
@@ -495,11 +689,11 @@ final class Witnesses {
      * kept out. Each of those is a container nothing can build, said as nothing built rather than
      * as a container of the wrong size or holding what it was to hold none of.
      */
-    static FixtureTemplate holding(Shape.Sequence carrier,
+    static FixtureTemplate holding(Shape.Sequence carrier, List<List<String>> apart,
                                    List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
                                    DeclaredBounds.CountRange holds, RuleReadingContext reading) {
-        List<FixtureTemplate> elements = elementsHolding(carrier.element(),
-                carrier.kind() == Shape.Sequence.Kind.LIST, holding, keptOut, holds, reading);
+        List<FixtureTemplate> elements = elementsHolding(carrier.element(), apart, holding,
+                keptOut, holds, reading);
         return elements == null ? null : FixtureTemplate.collection(elements);
     }
 
@@ -549,7 +743,7 @@ final class Witnesses {
                 ? new DeclaredBounds.CountRange(Math.max(keyed, holds.least()), holds.most())
                 : holds;
         List<FixtureTemplate> values =
-                elementsHolding(map.value(), true, holding, keptOut, room, reading);
+                elementsHolding(map.value(), List.of(), holding, keptOut, room, reading);
         if (values == null) {
             return null;
         }
@@ -618,10 +812,11 @@ final class Witnesses {
      * nothing equal to any of {@code keptOut}, and as many as the rules let it — or null where
      * nothing can.
      *
-     * @param repeats whether the container may hold one value twice, which a list's elements and a
-     *                map's values may and a set's elements may not
+     * @param apart what the values are to be apart at, as {@link ElementsApart} reads it: nothing
+     *              where they may repeat, which a list's elements and a map's values may unless a
+     *              rule says otherwise
      */
-    private static List<FixtureTemplate> elementsHolding(Type element, boolean repeats,
+    private static List<FixtureTemplate> elementsHolding(Type element, List<List<String>> apart,
                                                          List<FixtureTemplate> holding,
                                                          List<FixtureTemplate> keptOut,
                                                          DeclaredBounds.CountRange holds,
@@ -642,53 +837,52 @@ final class Witnesses {
         if (needed > holds.most()) {
             return null;
         }
+        // Fewer than asked for is a type with too few values, which is a container the rules want
+        // and nothing can build.
+        if (!apart.isEmpty()) {
+            // One more than the values that may be passed over, since each kept out or already
+            // held may be among them.
+            List<FixtureTemplate> around = ElementsMadeApart.of(element, apart,
+                    needed + out.size() + elements.size() + 1, reading, Set.of())
+                    .around(elements, out, needed);
+            return around == null || around.size() < needed ? null : around;
+        }
         // A container that may say one of its values again says the one it was asked to hold,
         // which is the value that is surely one the element's rules admit.
-        if (repeats && !elements.isEmpty()) {
+        if (!elements.isEmpty()) {
             while (elements.size() < needed) {
                 elements.add(elements.getFirst());
             }
             return elements;
         }
-        // One more than the values that may be passed over, since each kept out or already held
-        // may be among them.
-        int many = needed + out.size() + written.size() + 1;
-        for (FixtureTemplate each : distinctValuesOf(element, many, reading, Set.of())) {
-            if (elements.size() >= needed) {
-                break;
-            }
-            if (out.contains(each.text())) {
-                continue;
-            }
-            if (repeats) {
+        for (FixtureTemplate each
+                : distinctValuesOf(element, needed + out.size() + 1, reading, Set.of())) {
+            if (!out.contains(each.text())) {
                 while (elements.size() < needed) {
                     elements.add(each);
                 }
-            } else if (written.add(each.text())) {
-                elements.add(each);
+                return elements;
             }
         }
-        // Fewer than asked for is a type with too few values, which is a container the rules want
-        // and nothing can build.
-        return elements.size() < needed ? null : elements;
+        return needed == 0 ? elements : null;
     }
 
     /**
-     * {@code seed} and up to {@code least} values in all, no two of them equal.
+     * {@code seed} and up to {@code least} values in all, no two of them equal, the others taken
+     * from {@code values} — the type's distinct values, one more than {@code least} since the seed
+     * is likely to be among them, read once by a caller with several seeds.
      *
      * <p>Fewer than asked where the type runs out, which is not the same as failing: a set of three
      * booleans is a thing no value satisfies, and offering the two that exist is a proposal the decoder
      * answers the way it answers any other.
      */
-    private static List<FixtureTemplate> distinctFrom(FixtureTemplate seed, Type type, int least,
-                                                      RuleReadingContext reading,
-                                                      Set<TypeSymbol> expanding) {
+    private static List<FixtureTemplate> distinctFrom(FixtureTemplate seed,
+                                                      List<FixtureTemplate> values, int least) {
         Set<String> written = new LinkedHashSet<>();
         List<FixtureTemplate> out = new ArrayList<>();
         written.add(seed.text());
         out.add(seed);
-        // One more than needed, since the seed is likely to be among them.
-        for (FixtureTemplate each : distinctValuesOf(type, least + 1, reading, expanding)) {
+        for (FixtureTemplate each : values) {
             if (out.size() >= least) {
                 break;
             }
@@ -721,10 +915,26 @@ final class Witnesses {
      * answers is how many characters, and a type whose rule says which of them gets a string it
      * refuses at every element after the first. The rules are what tell the values apart there, the
      * same as a range does for a number ({@link Partitions#numberInside}).
+     *
+     * <p>Then, for a type with no carrier to step, values that differ in what they hold: a record at
+     * one of its fields and a collection in how many it holds ({@link #differing}). A list kept
+     * apart as records, or as lists, has its elements from here — taken from the proposals alone it
+     * had one of them, and a list of two was a list saying one value twice.
      */
     private static List<FixtureTemplate> distinctValuesOf(Type type, int many,
                                                           RuleReadingContext reading,
                                                           Set<TypeSymbol> expanding) {
+        return distinctValuesOf(type, many, null, reading, expanding);
+    }
+
+    /**
+     * The same, of a value at a field whose record's rules say what it holds ({@code held}, null
+     * where nothing holds it): a collection differing in how many it holds holds as many as those
+     * rules leave, kept apart as they keep it.
+     */
+    static List<FixtureTemplate> distinctValuesOf(Type type, int many, FieldDomains.Held held,
+                                                  RuleReadingContext reading,
+                                                  Set<TypeSymbol> expanding) {
         Set<String> written = new LinkedHashSet<>();
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : dividesInto(type, reading, expanding)) {
@@ -755,6 +965,18 @@ final class Witnesses {
         if (out.size() >= many) {
             return List.copyOf(out);
         }
+        for (FixtureTemplate each : reading.revision().settled(
+                new Differing(type, many, held, reading, expanding))) {
+            if (out.size() >= many) {
+                return List.copyOf(out);
+            }
+            if (written.add(each.text())) {
+                out.add(each);
+            }
+        }
+        if (out.size() >= many) {
+            return List.copyOf(out);
+        }
         // Asked last and only where there is room for what it answers. What a position is offered
         // is a reading of every rule on it and costs what that reading costs, and a loop that asks
         // for the list and then leaves it alone pays for it at every count already filled.
@@ -767,6 +989,121 @@ final class Witnesses {
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The values {@link #differing} builds, as work settled by everything they are built from: the
+     * type, how many, what holds it, the names it is inside, and the source and policy the rules
+     * are read under — the source by its origin, as {@link Partitions.ARecordComposed} is keyed.
+     *
+     * <p>Kept, because each is a record or a collection composed under its rules, and a list kept
+     * apart asks for them at every size and every point a search visits.
+     */
+    private static final class Differing implements RevisionWork<List<FixtureTemplate>> {
+
+        private final Type type;
+
+        private final int many;
+
+        private final FieldDomains.Held held;
+
+        private final Set<TypeSymbol> expanding;
+
+        private final RuleReadingSource.Origin origin;
+
+        private final ReadingPolicy policy;
+
+        private final RuleReadingContext reading;
+
+        Differing(Type type, int many, FieldDomains.Held held, RuleReadingContext reading,
+                  Set<TypeSymbol> expanding) {
+            this.type = type;
+            this.many = many;
+            this.held = held;
+            this.expanding = Set.copyOf(expanding);
+            this.origin = reading.source().origin();
+            this.policy = reading.policy();
+            this.reading = reading;
+        }
+
+        @Override
+        public List<FixtureTemplate> workedOut(RevisionKnowledge revision) {
+            return differing(type, many, held, reading, expanding);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Differing it && type.equals(it.type) && many == it.many
+                    && Objects.equals(held, it.held) && expanding.equals(it.expanding)
+                    && origin.equals(it.origin) && policy.equals(it.policy);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(type, many, held, expanding, origin, policy);
+        }
+
+        @Override
+        public String toString() {
+            return "Differing[" + many + " of " + type + " inside " + expanding + "]";
+        }
+    }
+
+    /**
+     * Values of {@code type} that differ in what they hold, up to {@code many} of them, under every
+     * name it wears: a record's at one of its fields ({@link Partitions#differingAtAField}) and a
+     * collection's in how many it holds, from the fewest its rules and {@code held} leave. Nothing
+     * for a type that holds nothing of its own, whose values were asked for above.
+     *
+     * <p>Each built as a value of its position is, under the rules there, so what differs is a
+     * value of the type and not a shape that carries a difference.
+     */
+    private static List<FixtureTemplate> differing(Type type, int many, FieldDomains.Held held,
+                                                   RuleReadingContext reading,
+                                                   Set<TypeSymbol> expanding) {
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
+        for (TypeSymbol wears : view.wrappers()) {
+            if (!inside.add(wears)) {
+                return List.of();
+            }
+        }
+        return switch (view.shape()) {
+            case Shape.Product record -> {
+                if (!(record.name() instanceof TypeSymbol.AtModule named)) {
+                    yield List.of();
+                }
+                List<FixtureTemplate> out = new ArrayList<>();
+                for (FixtureTemplate each : Partitions.differingAtAField(named,
+                        Partitions.rulesOver(view.wrappers(), named, source), many, reading,
+                        inside)) {
+                    out.add(WornNames.under(view.wrappers(), each, source));
+                }
+                yield out;
+            }
+            case Shape.Sequence _, Shape.Mapping _ -> {
+                DeclaredBounds.CountRange range = Partitions.heldRange(type, reading, held);
+                List<List<String>> apart = ElementsKeptApart.heldBy(held);
+                List<FixtureTemplate> out = new ArrayList<>();
+                // Up to the first size that builds nothing: one holding more is built of what
+                // that one could not have, so the sizes past it are walked for nothing — and
+                // where the rules cap no size, walked as far as a count goes.
+                for (int size = Math.max(range.least(), 0);
+                     size <= range.most() && out.size() < many; size++) {
+                    Sized one = ofSize(view, size, apart, reading, inside);
+                    if (one.values().isEmpty()) {
+                        break;
+                    }
+                    out.add(one.values().getFirst());
+                }
+                yield out;
+            }
+            case Shape.Scalar _, Shape.Optional _, Shape.Unit _, Shape.Sum _, Shape.Cases _,
+                 Shape.Unresolved _, Shape.Tuple _, Shape.Function _, Shape.Uninhabited _,
+                 Shape.Bottom _, Shape.Erroneous _, Shape.Undecided _ -> List.of();
+        };
     }
 
     /**

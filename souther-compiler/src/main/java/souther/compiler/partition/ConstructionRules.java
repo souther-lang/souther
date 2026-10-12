@@ -161,13 +161,15 @@ final class ConstructionRules {
                                         Map<RuleKey, Count> settled) {
         RuleReadingSource source = reading.source();
         // Whether the position is a record, and which record, are one answer and it is the
-        // reading's. The rules are then read on the declaration the fields came off — a position
-        // written under a name takes its fields from what that name wraps, and reading the rules on
-        // the name instead would be asking a declaration that has no such field.
-        return TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
+        // reading's. The rules are then read on the name the value is written under where it wraps
+        // that record, whose reading reaches the record's own rules and names its fields as the
+        // record does, and on the record where it is written bare.
+        if (!(TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums())
-                        instanceof Shape.Product(TypeSymbol.AtModule declared, Map<String, Type> _)
-                ? FieldDomains.of(declared, reading, settled) : FieldDomains.NONE;
+                instanceof Shape.Product(TypeSymbol.AtModule declared, Map<String, Type> _))) {
+            return FieldDomains.NONE;
+        }
+        return FieldDomains.of(Partitions.rulesOver(type, declared, source), reading, settled);
     }
 
     private List<RuleRoots.Naming> namingOf(TermPath path) {
@@ -220,8 +222,14 @@ final class ConstructionRules {
         return one == null ? other : other == null ? one : one.meet(other);
     }
 
+    /** Both values' answers: how many the two leave together, and every run either keeps the
+     *  elements apart at. */
     private static FieldDomains.Held meet(FieldDomains.Held one, FieldDomains.Held other) {
-        return one == null ? other
-                : other == null ? one : new FieldDomains.Held(one.bounds().meet(other.bounds()));
+        if (one == null || other == null) {
+            return one == null ? other : one;
+        }
+        List<List<String>> apart = new ArrayList<>(one.keptApart());
+        apart.addAll(other.keptApart());
+        return new FieldDomains.Held(one.bounds().meet(other.bounds()), List.copyOf(apart));
     }
 }

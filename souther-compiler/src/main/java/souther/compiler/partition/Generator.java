@@ -6548,8 +6548,21 @@ public final class Generator {
         // there is measured on as well, and the two are one value only for as long as no term
         // arrives where they part. Handed over as the question rather than as an answer, since a
         // group is over several terms and each of them is measured where this reading says.
-        return edgeFrom(TermRealizations.allSatisfying(writtenAt, group,
-                subject.quantities(), within, subject.ruleReading(), inside), group);
+        return edgeFrom(TermRealizations.allSatisfying(writtenAt, keptApartUnder(subject, at),
+                group, subject.quantities(), within, subject.ruleReading(), inside), group);
+    }
+
+    /**
+     * What the rules of every value whose clauses name {@code at} keep the elements of the value
+     * written there apart at ({@link ConstructionRules#heldAt}) — nothing where none of them names
+     * it.
+     *
+     * <p>Read where the plan's composing reads them, so a list built as a field of an element of
+     * another list is kept apart as its own record says, whichever of the two builds it. Nothing
+     * settled: what is kept apart is the same whatever a row fixes.
+     */
+    private static List<List<String>> keptApartUnder(MeasuredInput subject, TermPath at) {
+        return ElementsKeptApart.heldBy(ConstructionRules.of(subject, Map.of()).heldAt(at));
     }
 
     /**
@@ -8760,8 +8773,10 @@ public final class Generator {
                 subject.rules().inners(), subject.symbols(), subject.rules().kinds(),
                 subject.rules().sums(),
                 fixed.keySet(), additional, handedHere,
-                (at, building) -> within(heldRange(rules, at, building, subject.ruleReading()),
-                        sized.get(at)));
+                (at, building) -> new ConstructionPlan.ItMayHold(
+                        within(heldRange(rules, at, building, subject.ruleReading()),
+                                sized.get(at)),
+                        ElementsKeptApart.heldBy(rules.heldAt(at))));
         ConstructionPlan plan;
         switch (planned) {
             case ConstructionPlan.Result.Planned made -> plan = made.plan();

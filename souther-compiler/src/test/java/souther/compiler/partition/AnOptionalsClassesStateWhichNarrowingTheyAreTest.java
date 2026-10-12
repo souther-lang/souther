@@ -36,8 +36,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
 
     /** The rules asking a collection to hold one and capping it in no way. */
-    private static final ConstructionPlan.HowManyItHolds ONE_AT_LEAST =
-            (_, _) -> new DeclaredBounds.CountRange(1, Integer.MAX_VALUE);
+    private static final ConstructionPlan.WhatItMayHold ONE_AT_LEAST = (_, _) ->
+            ConstructionPlan.ItMayHold.counting(new DeclaredBounds.CountRange(1, Integer.MAX_VALUE));
 
 
     private static final String FLAGGED = """

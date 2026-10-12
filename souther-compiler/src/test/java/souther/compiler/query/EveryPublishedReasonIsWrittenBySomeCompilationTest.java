@@ -295,6 +295,19 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior f : (n: Int, s: String) -> Answer
                 let f (n, s) = if n == String.length(s) then Yes else No
                 """.formatted(ANSWER)));
+        // A rule about how a list's elements stand to each other, which no set of the list's own
+        // values holds.
+        out.put(UndividedPosition.Reason.RULE_RELATING_ELEMENTS, of("""
+                module m
+                %s
+                data Keys = List<String>
+                    invariant apart = List.allDistinctBy(k -> k, value)
+                behavior f : (ks: Keys, shelf: Map<String, String>) -> Answer
+                let f (ks, shelf) =
+                    if List.any(k -> match Map.get(k, shelf) with
+                            | Some v -> true
+                            | None -> false, ks.value) then Yes else No
+                """.formatted(ANSWER)));
         // The same operation over the input's own numbers draws a line for each relation, and the
         // line on a decides nothing any row reaches: wherever a passes five, a + n is past it too.
         out.put(UndividedPosition.Reason.RULE_NEVER_TURNS_ON_THIS_LINE, of("""
@@ -573,8 +586,13 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
     }
 
     /**
-     * Every {@code notRead} entry's reason and every shortfall cause's {@code unread}, wherever in
-     * the document they stand.
+     * Every {@code notRead} entry's reason, every reason a question left standing was
+     * {@code stopped} by, and every shortfall cause's {@code unread}, wherever in the document they
+     * stand.
+     *
+     * <p>The question's surface as well as the position's. A rule about a container as a whole
+     * leaves a question about that container and divides none of its elements, so the word for it
+     * is written where the question is and never in a position's entry.
      *
      * <p>Walked rather than reached by a path, because what is being asked is whether the word was
      * written at all: a path written out here would be a second statement of where the writer puts
@@ -585,6 +603,12 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
             for (String name : node.propertyNames()) {
                 if (name.equals("notRead")) {
                     node.get(name).forEach(each -> out.add(each.get("reason").asString()));
+                }
+                // Written as the reason itself in some places and as an entry holding one in
+                // others.
+                if (name.equals("stopped")) {
+                    node.get(name).forEach(each -> out.add(each.isObject()
+                            ? each.get("reason").asString() : each.asString()));
                 }
                 // A cause a limit refused carries no reason, and is not one of these.
                 if (name.equals("synthesisShortfallCauses")) {
