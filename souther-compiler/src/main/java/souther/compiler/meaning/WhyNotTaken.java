@@ -122,11 +122,11 @@ public sealed interface WhyNotTaken {
         A_PLACE_THE_PATH_DOES_NOT_READ,
 
         /**
-         * Which case a value is, or whether an optional holds one, as what a path knows: a path
-         * knows relations of numbers and truths, and which arm a value takes is decided by the
-         * fork that enters it rather than kept as a fact.
+         * A value being none of some cases, as what a path knows: a path keeps which cases a value
+         * may still be, and the rest of what its type divides into is not read where it takes one
+         * in.
          */
-        A_PATH_KNOWS_NO_CASES,
+        A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT,
 
         /** Two values being one, as what a path knows, which is no relation of numbers. */
         A_PATH_KNOWS_NO_SAMENESS_OF_VALUES,
@@ -171,7 +171,7 @@ public sealed interface WhyNotTaken {
                      A_NODE_BELOW_WHAT_A_ROW_WRITES ->
                         Domain.WHAT_A_ROW_IS_WRITTEN_IN;
                 case A_PATH_KNOWS_NO_ALTERNATIVES, A_PLACE_THE_PATH_DOES_NOT_READ,
-                     A_PATH_KNOWS_NO_CASES, A_PATH_KNOWS_NO_SAMENESS_OF_VALUES,
+                     A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT, A_PATH_KNOWS_NO_SAMENESS_OF_VALUES,
                      A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER, A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS,
                      A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS, A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN,
                      A_NUMBER_THE_PATH_CANNOT_HOLD ->

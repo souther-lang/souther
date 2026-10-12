@@ -1755,12 +1755,19 @@ public final class Adequacy {
             @Override
             public souther.compiler.diag.Diagnostic.Builder conditionsThatCannotAllHold(
                     List<souther.compiler.reach.PathDecision> decisions) {
-                souther.compiler.diag.Diagnostic.Builder out =
-                        said.hint(new DeadBranchMessage.TheConditionsOnTheWayHereCannotAllHold());
-                for (souther.compiler.reach.PathDecision each : decisions) {
-                    out = out.secondary(souther.compiler.diag.Region.point(each.at()),
-                            each.held() ? new DeadBranchMessage.ThisOneHoldsOnTheWayHere()
-                                    : new DeadBranchMessage.ThisOneFailsOnTheWayHere());
+                return marked(said.hint(
+                        new DeadBranchMessage.TheConditionsOnTheWayHereCannotAllHold()), decisions);
+            }
+
+            /** {@code out} with each of {@code decisions} marked where it is written, saying which
+             *  way the way here needs it to go. */
+            private static Diagnostic.Builder marked(Diagnostic.Builder out,
+                                                     List<PathDecision> decisions) {
+                for (PathDecision each : decisions) {
+                    out = out.secondary(Region.point(each.at()), each.said(
+                            new DeadBranchMessage.ThisOneHoldsOnTheWayHere(),
+                            new DeadBranchMessage.ThisOneFailsOnTheWayHere(),
+                            new DeadBranchMessage.ThisArmIsTakenOnTheWayHere()));
                 }
                 return out;
             }
@@ -1827,16 +1834,9 @@ public final class Adequacy {
             @Override
             public Diagnostic.Builder itsClosureIsAppliedToNothing(List<String> containers,
                                                                    List<PathDecision> decisions) {
-                Diagnostic.Builder out =
-                        said.hint(new DeadBranchMessage.ItsClosureIsAppliedToNothing(
-                                containers.stream().map(each -> "`" + each + "`")
-                                        .collect(Collectors.joining(", "))));
-                for (PathDecision each : decisions) {
-                    out = out.secondary(Region.point(each.at()),
-                            each.held() ? new DeadBranchMessage.ThisOneHoldsOnTheWayHere()
-                                    : new DeadBranchMessage.ThisOneFailsOnTheWayHere());
-                }
-                return out;
+                return marked(said.hint(new DeadBranchMessage.ItsClosureIsAppliedToNothing(
+                        containers.stream().map(each -> "`" + each + "`")
+                                .collect(Collectors.joining(", ")))), decisions);
             }
 
             @Override

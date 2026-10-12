@@ -3964,8 +3964,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         + " than a row is written meets the condition";
                 case A_PLACE_THE_PATH_DOES_NOT_READ -> "a condition on a place the path does not"
                         + " read";
-                case A_PATH_KNOWS_NO_CASES -> "which case a value is, or whether it holds one,"
-                        + " which no fact a path knows says";
+                case A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT -> "a value being none of some cases,"
+                        + " which a path knows only as the cases it may still be";
                 case A_PATH_KNOWS_NO_SAMENESS_OF_VALUES -> "two values being one, which no fact a"
                         + " path knows says";
                 case A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER -> "a place on an order, which no fact a"
@@ -4648,7 +4648,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case AN_ANSWER_A_ROW_STANDS_IN -> "answer_a_row_stands_in";
                     case A_NODE_BELOW_WHAT_A_ROW_WRITES -> "node_below_what_a_row_writes";
                     case A_PLACE_THE_PATH_DOES_NOT_READ -> "place_the_path_does_not_read";
-                    case A_PATH_KNOWS_NO_CASES -> "path_knows_no_cases";
+                    case A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT -> "path_knows_no_case_a_value_is_not";
                     case A_PATH_KNOWS_NO_SAMENESS_OF_VALUES -> "path_knows_no_sameness_of_values";
                     case A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER -> "path_knows_no_place_on_an_order";
                     case A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS -> "path_knows_no_count_of_elements";

@@ -1,8 +1,11 @@
 package souther.compiler.check;
 
 import souther.compiler.inputs.AnEvaluation;
+import souther.compiler.inputs.Case;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -49,12 +52,14 @@ import java.util.function.Function;
  *
  * <p><b>What is taken.</b> A comparison over numbers of the input — a value at a position, the size
  * of a container at one — as the relation it states. A truth at a position. Both halves of a
- * conjunction, since both hold. Nothing at all where the condition is never met, since nothing
- * reaches there.
+ * conjunction, since both hold. Of a disjunction, the one part what is known leaves, or nothing
+ * reached where it leaves none. That some element meets something, as the container holding one.
+ * Which cases a value may be, and whether an optional holds one. Nothing at all where the
+ * condition is never met, since nothing reaches there.
  *
- * <p><b>What is not.</b> A disjunction, since which half holds is not known; that some element
- * meets something, since which element is not known; what every element meets, which a path holds
- * only as the closure it was written with; a case, a value being present, two values being one,
+ * <p><b>What is not.</b> Which of several parts of a disjunction holds, where what is known leaves
+ * more than one; which element meets something; what every element meets, which a path holds
+ * only as the closure it was written with; a value being none of some cases, two values being one,
  * a place on an order, a count of elements, a place this tree does not read, and a part nothing
  * read. Each is left out with the limit of {@link Known} it meets, which is the sound answer with
  * less: a path that took nothing in has ruled nothing out.
@@ -180,9 +185,9 @@ final class MeaningAssumptions {
                 }
             }
             case Proposition.Always _ -> { }
-            // What a path knows is facts that all hold, and which of several holds, or which
-            // element, is no fact of it.
-            case Proposition.Any _, Proposition.OnAnApplication _ ->
+            case Proposition.Any any -> takingOneOf(any);
+            // Which application is no fact of a path.
+            case Proposition.OnAnApplication _ ->
                     WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
                             WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), asked)
                             .forEach(this::notTaken);
@@ -191,6 +196,15 @@ final class MeaningAssumptions {
             case Proposition.Some(DecisionSubject.AnInput(TermPath container),
                                   Proposition.Always(boolean anyElement), boolean holds, var _)
                     when anyElement -> holdingOne(container, holds);
+            // Some element meeting something is the container holding one as well, which is taken
+            // where a path names the count; which element it is, is not.
+            case Proposition.Some(DecisionSubject.AnInput(TermPath container), var _,
+                                  boolean holds, var _) when holds -> {
+                tookTheCount(container, true);
+                WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
+                        WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), asked)
+                        .forEach(this::notTaken);
+            }
             // Some element is one of several; every element is a fact a path holds only as the
             // closure it was written with.
             case Proposition.Some some -> WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
@@ -219,8 +233,14 @@ final class MeaningAssumptions {
                     outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
                 }
             }
-            case Proposition.InCases _, Proposition.Present _ ->
-                    outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_CASES);
+            case Proposition.Present(DecisionSubject of, boolean holds, var _) ->
+                    inCases(of, CasesLeft.of(Refinement.of(new Case.Presence(holds))));
+            case Proposition.InCases(DecisionSubject of, CasesLeft cases, boolean holds, var _)
+                    when holds -> inCases(of, cases);
+            // A value none of some cases is one of the rest of what its type divides into, which
+            // is not read here.
+            case Proposition.InCases _ ->
+                    outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT);
             case Proposition.SameValue _, Proposition.LastToHold _ ->
                     outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_SAMENESS_OF_VALUES);
         }
@@ -430,23 +450,88 @@ final class MeaningAssumptions {
     }
 
     /**
+     * The value {@code of} is one of {@code cases}, taken in under the subject a fork on it in the
+     * tree names it by, so an arm further in on the same value is read under it
+     * ({@link Known#inCases}).
+     */
+    private void inCases(DecisionSubject of, CasesLeft cases) {
+        FactSubject value = switch (of) {
+            case DecisionSubject.AnInput(TermPath at) -> placeOf(at);
+            case DecisionSubject.AnAnswer answer -> {
+                Core standing = answering(answer);
+                yield standing == null ? null : terms.subjectOf(standing, at);
+            }
+        };
+        if (value == null) {
+            outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
+            return;
+        }
+        known = known.inCases(value, cases);
+        taken = true;
+    }
+
+    /**
+     * One of {@code any}'s parts holding, taken as far as a path holds it.
+     *
+     * <p>Which part holds is no fact of a path, but a part that cannot hold under what is known is
+     * one the others are left to: each part is taken alone, from what is known here, and one that
+     * leaves nothing is dropped. None left is nothing reached; one left is that one holding, taken
+     * as it would be on its own. Two or more left is which of them holds, and is declined.
+     *
+     * <p>A part taken only in part and still leaving nothing is dropped all the same: what it left
+     * out would only have narrowed further.
+     */
+    private void takingOneOf(Proposition.Any any) {
+        List<MeaningAssumptions> left = new ArrayList<>();
+        for (Proposition part : any.parts()) {
+            MeaningAssumptions alone = new MeaningAssumptions(terms, places, at, known);
+            alone.take(part);
+            if (!alone.known.reachesNothing()) {
+                left.add(alone);
+            }
+        }
+        switch (left.size()) {
+            case 0 -> {
+                known = known.reachingNothing();
+                taken = true;
+            }
+            case 1 -> {
+                MeaningAssumptions only = left.getFirst();
+                known = only.known;
+                taken |= only.taken;
+                only.notTaken.forEach(this::notTaken);
+            }
+            default -> WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
+                    WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), any)
+                    .forEach(this::notTaken);
+        }
+    }
+
+    /**
      * The container at {@code container} holding at least one element, or none where
      * {@code holds} is false, taken in as what its count is: the same atom a clause or a guard
      * stating the count names.
      */
     private void holdingOne(TermPath container, boolean holds) {
+        if (!tookTheCount(container, holds)) {
+            outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
+        }
+    }
+
+    /** The same, saying whether the count was named here at all, and nothing about why not. */
+    private boolean tookTheCount(TermPath container, boolean holds) {
         Type type = places.typeAt().apply(container);
         ValueName size = type == null ? null : NumericMeasures.takenOf(type, terms.newtypeInners());
         FactSubject count = size == null ? null : terms.sizeAtPlace(size, placeOf(container));
         if (count == null) {
-            outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
-            return;
+            return false;
         }
         carrying(count, size);
         known = known.taking(LinearForm.atomMinusConstant(count, ExactRatio.ONE),
                 holds ? Rel.GE : Rel.LT, Known.Held.ON_THE_PATH,
                 terms.kindsOf(LinearForm.atom(count)));
         taken = true;
+        return true;
     }
 
     /** Whether {@code taken} is the count of what its position holds. */

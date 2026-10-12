@@ -57,7 +57,7 @@ class APointTriedWithSeveralValuesIsAnsweredByWhatWasBuiltTest {
                 constructs No
 
             let f (x, y) = {
-                guard Int.abs(x.value) > 100 else No { why = 0 }
+                guard x.value * x.value > 100 else No { why = 0 }
                 guard x.value < y.value else No { why = 1 }
                 Yes { v = 1 }
             }
@@ -181,7 +181,7 @@ class APointTriedWithSeveralValuesIsAnsweredByWhatWasBuiltTest {
                 constructs No
 
             let f (x) = {
-                guard Int.abs(x.value) > 100 else No { why = 0 }
+                guard x.value * x.value > 100 else No { why = 0 }
                 guard x.value < %d else No { why = 1 }
                 Yes { v = 1 }
             }

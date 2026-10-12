@@ -630,7 +630,7 @@ public final class PathReachability {
             }
             case Core.Match match -> {
                 walk(match.scrutinee(), k, at, reads, decided, nothingAbove);
-                cases(match, reads, nothingAbove);
+                cases(match, k, at, reads, decided, nothingAbove);
                 // The scrutinee once and then the arms, written out rather than left to the generic
                 // walk. A `Match`'s children are its scrutinee as well as its arm bodies, so
                 // walking them all reads the scrutinee a second time — under a fork this time,
@@ -642,8 +642,8 @@ public final class PathReachability {
                 // same act a parameter gets it by.
                 //
                 // Under an arm, this fork stands above whatever is inside it. Which arm was taken
-                // is not recorded as a decision: nothing was assumed from it, and a proof naming it
-                // would claim work the domains did not do.
+                // is recorded as a decision where taking it settled which cases the value matched
+                // may be, since a fork further in on the same value is read under that.
                 for (Core.Case arm : match.cases()) {
                     PathEngine.Entered in = engine.enteringArm(arm, match.scrutinee(), k, at);
                     // And the name the arm binds stands for the scrutinee's position narrowed to
@@ -651,7 +651,7 @@ public final class PathReachability {
                     // its line.
                     walk(arm.body(), in.known(), in.at(),
                             reads.choosing(Choice.Decides.ofCase(match, arm), symbols, newtypes),
-                            decided, false);
+                            taking(decided, arm, !in.known().cases().equals(k.cases())), false);
                 }
             }
             case Core.Block block -> {
@@ -925,7 +925,22 @@ public final class PathReachability {
             return decided;
         }
         List<PathDecision> out = new ArrayList<>(decided);
-        out.add(new PathDecision(at, held));
+        out.add(PathDecision.ofACondition(at, held));
+        return out;
+    }
+
+    /**
+     * The forks on the way here, with {@code arm} taken — where taking it {@code settled}
+     * something of the value it matched, which is the same rule as for a condition: an arm nothing
+     * was taken from narrowed nothing.
+     */
+    private static List<PathDecision> taking(List<PathDecision> decided, Core.Case arm,
+                                             boolean settled) {
+        if (!settled) {
+            return decided;
+        }
+        List<PathDecision> out = new ArrayList<>(decided);
+        out.add(new PathDecision(arm.pos(), PathDecision.Way.TAKEN));
         return out;
     }
 
@@ -966,8 +981,13 @@ public final class PathReachability {
      * body reaches first is reached by the behavior being applied at all. So the witness takes both
      * — every rule of the position read and leaving the case, and nothing decided on the way — and
      * is built here where both are in hand rather than assembled by whoever asks.
+     *
+     * <p>And an arm the rules leave may still be one the way here does not: a fork further out on
+     * the same value took other cases of it, or a condition settled whether it holds anything. That
+     * is the forks on the way, this arm among them, and is asked of what holds here.
      */
-    private void cases(Core.Match match, InputReads reads, boolean nothingAbove) {
+    private void cases(Core.Match match, Known k, Denotations in, InputReads reads,
+                       List<PathDecision> decided, boolean nothingAbove) {
         ControlPlace.Arm[] arms = plan.armsOf(match);
         if (arms == null) {
             return;
@@ -988,6 +1008,11 @@ public final class PathReachability {
             Optional<Proof> proof = ruling.ruledOut(i).flatMap(why -> proofOf(why, arm));
             if (proof.isPresent()) {
                 out.put(arms[i], new Reachability.Unreachable(proof.get()));
+                continue;
+            }
+            if (engine.takingItsCases(arm, match.scrutinee(), k, in).reachesNothing()) {
+                out.put(arms[i], new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(
+                        taking(decided, arm, true))));
                 continue;
             }
             if (path == null) {

@@ -160,14 +160,16 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
      * three or less: the third guard always takes the other way out, and the construction under it
      * is not reached.
      *
-     * <p>Nothing is reported there. A construction the program never builds is not one to report
-     * about — and a construction whose guards contradict is where the two readings would otherwise
-     * come out one established and the other refused, which is a check contradicting itself rather
-     * than an answer.
+     * <p>Nothing is reported about the construction. One the program never builds is not one to
+     * report about — and a construction whose guards contradict is where the two readings would
+     * otherwise come out one established and the other refused, which is a check contradicting
+     * itself rather than an answer. What is reported is the branch past the guard, which nothing
+     * reaches ({@code E1327}): no case of the operation leaves it anything, the same answer the walk
+     * past the guard came to.
      */
     @Test
     void aGuardNoCaseCanSatisfyIsNotWalkedPast() {
-        assertEquals(List.of(), codesOf(TYPES + """
+        assertEquals(List.of("E1327"), codesOf(TYPES + """
                 behavior odd : (a: Int, b: Int) -> AboveTen | Bad constructs AboveTen
                 let odd (a, b) = {
                     guard a >= 10
@@ -190,7 +192,7 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
      */
     @Test
     void guardsThatCannotAllHoldAreNotWalkedPastEitherWhereTheFormsAreKeptAsWritten() {
-        assertEquals(List.of(), codesOf(TYPES + """
+        assertEquals(List.of("E1327"), codesOf(TYPES + """
                 behavior sum : (a: Int, b: Int, c: Int) -> NonNeg | Bad constructs NonNeg
                 let sum (a, b, c) = {
                     guard a + c < 0
@@ -213,7 +215,7 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
      */
     @Test
     void aGuardIsReadAgainstWhatTheOperationsInsideItAnswer() {
-        assertEquals(List.of(), codesOf(TYPES + """
+        assertEquals(List.of("E1327"), codesOf(TYPES + """
                 behavior nearest : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg
                 let nearest (a, b) = {
                     guard Int.min(Int.abs(a), Int.abs(b)) < 0
@@ -226,7 +228,7 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
     /** The same for what a size answers, which is known the same way and read at the same point. */
     @Test
     void aGuardIsReadAgainstTheSizesInsideItToo() {
-        assertEquals(List.of(), codesOf(TYPES + """
+        assertEquals(List.of("E1327"), codesOf(TYPES + """
                 behavior shorter : (xs: List<Int>, ys: List<Int>) -> NonNeg | Bad
                     constructs NonNeg
                 let shorter (xs, ys) = {
