@@ -92,6 +92,11 @@ class WhoTakesAPlansNumberingHasItsBodiesTest {
                             + " are held to being one plan's before either is read. Both are"
                             + " parameters of one call, which is where a caller could put two"
                             + " modules' together"),
+            new Licence("souther.compiler.query.Adequacy.Coverage.measured -> identity", 1,
+                    "the ways a run of the body takes are read off this plan's places, and what"
+                            + " the model's rules prove arrives at those places is asked of a"
+                            + " reading of them, so the two are held to being one plan's where they"
+                            + " are put together and handed on to what the body tells apart"),
             new Licence("souther.compiler.partition.GuardThresholds.of -> identity", 1,
                     "the rules read off the guards are asked what arrives at comparisons this plan"
                             + " names, so the two are held to being one plan's. Both are handed in,"

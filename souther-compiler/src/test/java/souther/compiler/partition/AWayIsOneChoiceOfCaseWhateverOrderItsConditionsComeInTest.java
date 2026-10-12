@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.check.PathReachability;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -64,14 +65,16 @@ class AWayIsOneChoiceOfCaseWhateverOrderItsConditionsComeInTest {
                         .reading(RuleReadings.of(c, "probe.order")),
                 c.db().ask(new Adequacy.Divided("probe.order", "smallOnes")).value());
 
-        Map<AxisId, BodyDistinction> asWritten = BodyDistinction.of(read, subject);
+        PathReachability.Answers arrives =
+                c.db().ask(new Adequacy.PathReached("probe.order")).value().get("smallOnes");
+        Map<AxisId, BodyDistinction> asWritten = BodyDistinction.of(read, subject, arrives);
         List<WayIn> turned = new ArrayList<>();
         for (WayIn way : read.taken()) {
             turned.add(new WayIn(lastFirst(way)));
         }
         Map<AxisId, BodyDistinction> turnedRound = BodyDistinction.of(new CoverageRead.Read(
                 read.interactions(), read.arms(), turned, read.restOfTheBlock(),
-                read.answersNothing()), subject);
+                read.answersNothing()), subject, arrives);
 
         assertEquals(asWritten, turnedRound);
         AxisId large = subject.axes().axes().stream()

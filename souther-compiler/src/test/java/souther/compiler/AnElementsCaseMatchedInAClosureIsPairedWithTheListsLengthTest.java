@@ -77,33 +77,35 @@ class AnElementsCaseMatchedInAClosureIsPairedWithTheListsLengthTest {
                         + northern.pairs().space());
     }
 
+    private static final String KEYED = """
+            module example.keys
+
+            data North
+            data South
+            data Region = North | South
+
+            data Usage = { counts: Map<Region, Int> }
+            data Out = Int
+
+            behavior northern : (u: Usage) -> Out
+                constructs Out
+
+            let northern (u) = {
+                guard Map.size(u.counts) >= %d else Out(0)
+                guard List.all(k -> match k with
+                    | North -> true
+                    | South -> false, Map.keys(u.counts)) else Out(1)
+                Out(2)
+            }
+
+            example northern
+                | (Usage { counts = [] }) -> Out(0)
+            """;
+
     /** A map's keys likewise, beside how many the map holds. */
     @Test
     void theCasesOfAKeyArePairedWithTheSizeThatHoldsOne() {
-        PartitionEvidence counted = measured("""
-                module example.keys
-
-                data North
-                data South
-                data Region = North | South
-
-                data Usage = { counts: Map<Region, Int> }
-                data Out = Int
-
-                behavior northern : (u: Usage) -> Out
-                    constructs Out
-
-                let northern (u) = {
-                    guard Map.size(u.counts) >= 1 else Out(0)
-                    guard List.all(k -> match k with
-                        | North -> true
-                        | South -> false, Map.keys(u.counts)) else Out(1)
-                    Out(2)
-                }
-
-                example northern
-                    | (Usage { counts = [] }) -> Out(0)
-                """, "example.keys", "northern");
+        PartitionEvidence counted = measured(KEYED.formatted(1), "example.keys", "northern");
 
         assertEquals(2, sizeOf(counted, "Map.size(u.counts)", "u.counts[key]"),
                 () -> "a map of one or more meets both cases of its key and an empty map neither: "
@@ -115,7 +117,7 @@ class AnElementsCaseMatchedInAClosureIsPairedWithTheListsLengthTest {
      */
     @Test
     void aCountTakingNoneAndSomeHoldsTheElementOfTheCaseAsked() {
-        List<Adequacy.GenerationDisposition> said = generated(MODEL.formatted(2));
+        List<Adequacy.GenerationDisposition> said = generated(MODEL.formatted(2), MODULE);
 
         for (String region : List.of("North", "South")) {
             List<String> rows = rowsFor(said,
@@ -124,6 +126,24 @@ class AnElementsCaseMatchedInAClosureIsPairedWithTheListsLengthTest {
                             row.equals("Usage { regions = [" + region + "] }")),
                     () -> "one " + region + " beside a list of fewer than two: " + rows + " of "
                             + said);
+        }
+    }
+
+    /**
+     * A size of fewer than two beside a case of a key: a map of one entry, filed under a key of
+     * that case.
+     */
+    @Test
+    void aSizeTakingNoneAndSomeHoldsAKeyOfTheCaseAsked() {
+        List<Adequacy.GenerationDisposition> said = generated(KEYED.formatted(2), "example.keys");
+
+        for (String region : List.of("North", "South")) {
+            List<String> rows = rowsFor(said,
+                    Set.of("Map.size(u.counts)/0 <= x < 2", region));
+            assertTrue(!rows.isEmpty() && rows.stream().allMatch(row ->
+                            row.matches("Usage \\{ counts = \\[\\(" + region + ", [^)]*\\)] }")),
+                    () -> "one entry under a " + region + " beside a map of fewer than two: "
+                            + rows + " of " + said);
         }
     }
 
@@ -180,12 +200,12 @@ class AnElementsCaseMatchedInAClosureIsPairedWithTheListsLengthTest {
         };
     }
 
-    private static List<Adequacy.GenerationDisposition> generated(String model) {
+    private static List<Adequacy.GenerationDisposition> generated(String model, String module) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Offering offering = Adequacy.offeredFor(compilation.db(),
-                OfferingRequest.overTheModule(MODULE));
+                OfferingRequest.overTheModule(module));
         List<Adequacy.GenerationDisposition> out = new ArrayList<>();
         offering.searched().values().forEach(filling -> out.addAll(filling.generation()));
         return out;

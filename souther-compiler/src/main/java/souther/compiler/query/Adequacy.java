@@ -48,6 +48,7 @@ import souther.compiler.check.FakeTables;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.check.ElementBindings;
+import souther.compiler.check.PathReachability;
 import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.check.DeclarationCitations;
 import souther.compiler.check.DeclaredSig;
@@ -2159,9 +2160,17 @@ public final class Adequacy {
             Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
             boolean withABody = checked != null && checked.behaviorBodies().containsKey(spec.name())
                     && met != null && met.get(spec.name()) != null;
-            Map<AxisId, BodyDistinction> toldApart = withABody
-                    ? BodyDistinction.of(met.get(spec.name()), subject)
-                    : BodyDistinction.withoutABody(subject.axes().axes());
+            Map<AxisId, BodyDistinction> toldApart;
+            if (withABody) {
+                // What the model's rules prove arrives at each place, which the ways read are
+                // places of: one plan's places, held to being so.
+                PathReachability.Answers arrives =
+                        arrivalsOf(db.ask(new PathReached(name)).value(), spec);
+                arrives.requireNumbering(checked.plan().identity());
+                toldApart = BodyDistinction.of(met.get(spec.name()), subject, arrives);
+            } else {
+                toldApart = BodyDistinction.withoutABody(subject.axes().axes());
+            }
             return Coverages.of(subject, seen,
                     db.ask(new Front.Adequacy()).value().measures(), toldApart);
         }
