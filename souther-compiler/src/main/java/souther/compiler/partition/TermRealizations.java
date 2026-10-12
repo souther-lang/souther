@@ -228,7 +228,8 @@ final class TermRealizations {
          * nothing reaches it by counting what a walk refused.
          *
          * <p>The word is how a reader downstream treats it and {@code detail} is what happened in
-         * this attempt, which is the arrangement {@link Generator.UnresolvedCombination} has. A
+         * this attempt, which is the arrangement {@link Generator.UnresolvedCombination} has between
+         * its reason and what it said ({@link Generator.UnresolvedCombination#said()}). A
          * word read for the shape of the question outlives whatever made it true, so what a reader
          * is owed beyond it is evidence rather than another word.
          *

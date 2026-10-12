@@ -405,6 +405,12 @@ public final class Generator {
      * a pair space holds is what the rows reach and what is unknown, and this compiler assesses
      * reachability nowhere.
      *
+     * @param classes what the row was composed for: the classes of a combination, or the one label
+     *             of a point
+     * @param detail the position the combination came to nothing at, where several combinations
+     *             came to nothing at the same one, or null. A name and never a sentence: it is
+     *             printed where the subject goes ({@link #subject()}), and a sentence there reads as
+     *             the thing no row was found for. What a walk found out is {@code said}
      * @param said what the class said about itself where it said anything, in its own words. Kept
      *             beside the reason rather than folded into it: the reason is the category a reader
      *             acts on, and this is the sentence that says which case of it this was. Folded into
@@ -836,12 +842,27 @@ public final class Generator {
             this(classes, reason, detail, said, new LinkedHashMap<>());
         }
 
-        public UnresolvedCombination(List<String> classes, Reason reason, String detail) {
-            this(classes, reason, detail, Optional.empty());
-        }
-
         public UnresolvedCombination(List<String> classes, Reason reason) {
             this(classes, reason, null, Optional.empty());
+        }
+
+        /**
+         * One at a point, with what the walk for it found out said beside the word.
+         *
+         * <p>A point is its own subject: one label, and no position several of these share. So
+         * what the walk found goes where a reader is told which case of the word this was, and
+         * never where the point is named.
+         */
+        static UnresolvedCombination atAPoint(
+                String label, Reason reason, String said,
+                SequencedMap<TermPath, StringOfferShortfall> alsoShort) {
+            return new UnresolvedCombination(List.of(label), reason, null,
+                    Optional.ofNullable(said), alsoShort);
+        }
+
+        /** The same, of a walk whose offer was short of nothing the rules leave. */
+        static UnresolvedCombination atAPoint(String label, Reason reason, String said) {
+            return atAPoint(label, reason, said, new LinkedHashMap<>());
         }
 
         /**
@@ -850,6 +871,9 @@ public final class Generator {
          * <p>A position nothing can write a value for makes every combination it takes part in
          * unfillable, and saying so once per combination is one fact repeated a hundred times. The
          * position is the fact; the combinations are arithmetic on it.
+         *
+         * <p>Where there is no such position, the classes themselves: a combination's, or a
+         * point's one label.
          */
         public String subject() {
             return detail == null ? String.join(" x ", classes) : detail;
@@ -4538,9 +4562,9 @@ public final class Generator {
 
             /** The same, of a search that has something to say about where it stopped, and that
              *  met more than a figure on the way. */
-            static Stopped at(String label, String detail, CompositionShortfall met,
+            static Stopped at(String label, String said, CompositionShortfall met,
                               CompositionAccount unrepresented) {
-                return at(label, detail, new LinkedHashMap<>(), met, unrepresented);
+                return at(label, said, new LinkedHashMap<>(), met, unrepresented);
             }
 
             /**
@@ -4551,12 +4575,12 @@ public final class Generator {
              * act on first is what the word is for — so neither is dropped for the other, and
              * neither is made into a second word.
              */
-            static Stopped at(String label, String detail,
+            static Stopped at(String label, String said,
                               SequencedMap<TermPath, StringOfferShortfall> alsoShort,
                               CompositionShortfall met, CompositionAccount unrepresented) {
-                return new Stopped(new UnresolvedCombination(List.of(label),
-                        UnresolvedCombination.Reason.wordFor(met.figures()), detail,
-                        Optional.empty(), alsoShort), met, unrepresented);
+                return new Stopped(UnresolvedCombination.atAPoint(label,
+                        UnresolvedCombination.Reason.wordFor(met.figures()), said, alsoShort),
+                        met, unrepresented);
             }
         }
 
@@ -4591,18 +4615,18 @@ public final class Generator {
             }
 
             /** One at the label given, of a search that has something to say about what it saw. */
-            static Unexhausted at(String label, String detail, CompositionShortfall met,
+            static Unexhausted at(String label, String said, CompositionShortfall met,
                                   CompositionAccount unrepresented) {
-                return at(label, detail, new LinkedHashMap<>(), met, unrepresented);
+                return at(label, said, new LinkedHashMap<>(), met, unrepresented);
             }
 
             /** The same, of one whose offer was also short of what the rules about it leave. */
-            static Unexhausted at(String label, String detail,
+            static Unexhausted at(String label, String said,
                                   SequencedMap<TermPath, StringOfferShortfall> alsoShort,
                                   CompositionShortfall met, CompositionAccount unrepresented) {
-                return new Unexhausted(new UnresolvedCombination(List.of(label),
-                        UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, detail,
-                        Optional.empty(), alsoShort), met, unrepresented);
+                return new Unexhausted(UnresolvedCombination.atAPoint(label,
+                        UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, said,
+                        alsoShort), met, unrepresented);
             }
         }
 
@@ -4634,10 +4658,10 @@ public final class Generator {
             }
 
             /** One at the label given, in the word the search itself came back with. */
-            static Limited at(String label, UnresolvedCombination.Reason why, String detail,
+            static Limited at(String label, UnresolvedCombination.Reason why, String said,
                               java.util.Set<CompositionBudget> by,
                               CompositionAccount unrepresented) {
-                return new Limited(new UnresolvedCombination(List.of(label), why, detail), by,
+                return new Limited(UnresolvedCombination.atAPoint(label, why, said), by,
                         unrepresented);
             }
         }
@@ -4913,7 +4937,7 @@ public final class Generator {
         switch (CompositionOrder.of(parametersOf(subject), asked)) {
             case CompositionOrder.Result.Ordered(CompositionOrder ordered) -> order = ordered;
             case CompositionOrder.Result.Circular circular -> {
-                return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
                         UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                         circularly(circular)), where.unrepresented());
             }
@@ -4926,7 +4950,7 @@ public final class Generator {
         switch (elements.requiredBeside(reaching.requirements())) {
             case Requirements.Merge.Merged(Requirements both) -> rowIs = both;
             case Requirements.Merge.Conflict conflict -> {
-                return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
                         UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                         ElementWrites.writtenAlike(conflict.at())),
                         where.unrepresented());
@@ -5002,14 +5026,13 @@ public final class Generator {
                         return BoundaryAttempt.Stopped.at(label, found.met().figures(),
                                 where.unrepresented());
                     }
-                    return new BoundaryAttempt.Unresolved(new UnresolvedCombination(
-                            List.of(label),
+                    return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
                             found.wordFor(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
                             A_CASE_WAS_NOT_READ), where.unrepresented());
                 }
                 case WhatTheAlternativesCameTo.Came.NothingToSayItIn<ParameterCameToNothing> _ -> {
-                    return new BoundaryAttempt.Unresolved(new UnresolvedCombination(
-                            List.of(label), UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                    return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
+                            UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                             NO_CASE_HOLDS_THEM), where.unrepresented());
                 }
                 // No row is handed a caller on the way to a point, so none is passed over.
@@ -5061,7 +5084,7 @@ public final class Generator {
             return switch (answered) {
                 case Outcome.Unresolved(UnresolvedCombination.Reason word, String said) ->
                         new BoundaryAttempt.Unresolved(
-                                new UnresolvedCombination(List.of(label), word, said),
+                                UnresolvedCombination.atAPoint(label, word, said),
                                 where.unrepresented());
                 case Outcome.Stopped(CompositionShortfall met,
                                      SequencedMap<TermPath, StringOfferShortfall> offered,
@@ -5079,10 +5102,10 @@ public final class Generator {
                 case Outcome.OfferShort(
                         SequencedMap<TermPath, StringOfferShortfall> offered, String said) ->
                         new BoundaryAttempt.Unresolved(
-                                new UnresolvedCombination(List.of(label),
+                                UnresolvedCombination.atAPoint(label,
                                         UnresolvedCombination.Reason
                                                 .NOT_ALL_CANDIDATES_COULD_BE_OFFERED,
-                                        said, Optional.empty(), offered),
+                                        said, offered),
                                 where.unrepresented());
                 case Outcome.Limited(UnresolvedCombination.Reason word, String said,
                                      Set<CompositionBudget> by) ->
@@ -7828,10 +7851,13 @@ public final class Generator {
          * The word says the question is open; only this says whether a number somebody raises, or
          * a rule somebody rewrites, reaches it — which is the whole of what tells a figure from
          * work nobody has done.
+         *
+         * <p>{@code said} is what the search said of itself, so it goes where a reader is told
+         * which case of the word this was, and the combination stays what the attempt is about.
          */
-        static Attempt no(UnresolvedCombination.Reason reason, String detail,
+        static Attempt no(UnresolvedCombination.Reason reason, String said,
                           SearchShortfall found) {
-            return new Attempt(null, reason, detail, Optional.empty(), found);
+            return new Attempt(null, reason, null, Optional.ofNullable(said), found);
         }
 
         /**
@@ -8399,7 +8425,7 @@ public final class Generator {
                 // compiler writes none of the values for arrives as a search that left something
                 // untried with nothing of this compiler's beside it.
                 return RowComposed.Failed.ofTheRow(new Attempt(null, composed.reason(),
-                        group.getKey().toString(), Optional.ofNullable(composed.detail()),
+                        group.getKey().toString(), Optional.ofNullable(composed.said()),
                         SearchShortfall.of(composed.met())));
             }
             together.put(group.getKey(), composed.values());
@@ -8821,9 +8847,9 @@ public final class Generator {
             // The word alone, because there was nothing of this compiler's beside it. A search that
             // met no figure and walked to the end of what this writes has nothing for a reader to
             // raise, and an empty account of what it met is what says so.
-            case Outcome.Unresolved(UnresolvedCombination.Reason why, String detail) ->
-                    RowComposed.Failed.at(p, atThis(Attempt.over(why, detail, Optional.empty(),
-                            found.shortfall()), p, alone));
+            case Outcome.Unresolved(UnresolvedCombination.Reason why, String said) ->
+                    RowComposed.Failed.at(p, atThis(Attempt.over(why, null,
+                            Optional.ofNullable(said), found.shortfall()), p, alone));
             // The figure's word, and beside it both what the offer was short of and what the search
             // met. A figure being reached and a rule that gave no value are two things an author
             // acts on, and the one that decides what they do first is the word.
@@ -8838,18 +8864,19 @@ public final class Generator {
             // author rewriting a rule and an author allowing more act on the same category and go
             // to different places, and which rule it was is what sends them.
             case Outcome.OfferShort(
-                    SequencedMap<TermPath, StringOfferShortfall> offered, String detail) ->
+                    SequencedMap<TermPath, StringOfferShortfall> offered, String said) ->
                     RowComposed.Failed.at(p, atThis(Attempt.no(
                             UnresolvedCombination.Reason.NOT_ALL_CANDIDATES_COULD_BE_OFFERED,
-                            detail, SearchShortfall.of(CompositionShortfall.NONE, offered)
+                            said, SearchShortfall.of(CompositionShortfall.NONE, offered)
                                     .and(found.shortfall())), p, alone));
             // The word the search came to, and beside it the figure that made what it was handed
             // short of the position. Neither half follows from the other — a search that refused
             // everything it was given did so over less than there was — so a reader is told both
             // what happened and that a number of this compiler's is why it happened over so little.
-            case Outcome.Limited(UnresolvedCombination.Reason why, String detail,
+            case Outcome.Limited(UnresolvedCombination.Reason why, String said,
                                  Set<CompositionBudget> by) ->
-                    RowComposed.Failed.at(p, atThis(Attempt.over(why, detail, Optional.empty(),
+                    RowComposed.Failed.at(p, atThis(Attempt.over(why, null,
+                            Optional.ofNullable(said),
                             SearchShortfall.of(CompositionShortfall.of(by))
                                     .and(found.shortfall())), p, alone));
             // A value nothing planned, in the word for a reading no search could be made of, with
@@ -10447,8 +10474,11 @@ public final class Generator {
          * <p>Carried from the walk that composed nothing rather than worked out here. Two walks
          * come back with one word and what they met differs, and a reader left with the word alone
          * would be telling them apart by what the sentence does not say.
+         *
+         * <p>A sentence, so what an account carries it as is what the point said, and never the
+         * position several combinations share ({@link UnresolvedCombination#detail()}).
          */
-        String detail() {
+        String said() {
             return switch (came) {
                 case TermRealizations.Realization.None none -> none.detail();
                 case TermRealizations.Realization.Unexhausted some -> some.detail();
@@ -10524,21 +10554,21 @@ public final class Generator {
                                       CompositionAccount unrepresented) {
             CompositionShortfall met = met();
             if (!met.figures().isEmpty()) {
-                return BoundaryAttempt.Stopped.at(label, detail(), met, unrepresented);
+                return BoundaryAttempt.Stopped.at(label, said(), met, unrepresented);
             }
             if (!met.nothing()) {
-                return BoundaryAttempt.Unexhausted.at(label, detail(), met, unrepresented);
+                return BoundaryAttempt.Unexhausted.at(label, said(), met, unrepresented);
             }
             // A row at a point is one row at one thing somebody is owed, and this edge is the
             // search for it — so what the search settled about the numbers is what the point comes
             // to. Which is the one place the proof is published, because it is the one place where
             // what was walked and what is owed are the same question.
             return new BoundaryAttempt.Unresolved(
-                    new UnresolvedCombination(List.of(label),
+                    UnresolvedCombination.atAPoint(label,
                             settlesTheQuestion()
                                     ? UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE
                                     : reason(),
-                            detail()),
+                            said()),
                     unrepresented);
         }
 
