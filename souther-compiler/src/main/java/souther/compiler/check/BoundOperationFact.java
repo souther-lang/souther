@@ -116,6 +116,12 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
                             DeclaredArgument string)
             implements OneAboutAnOperation {}
 
+    /** The operation's answer holds, exactly where {@code option} holds a value, what
+     *  {@code closure} answers on it. */
+    record AnswersTheClosureOnWhatItHolds(DeclaredOperation operation, DeclaredArgument option,
+                                          DeclaredArgument closure)
+            implements OneAboutAnOperation {}
+
     /** Every element of the operation's answer comes out on {@code side}. */
     record EveryElementOfItsAnswerIs(DeclaredOperation operation, SideAnswered side)
             implements OneAboutAnOperation {}

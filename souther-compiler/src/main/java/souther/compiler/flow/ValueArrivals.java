@@ -2,17 +2,23 @@ package souther.compiler.flow;
 
 import souther.compiler.check.Choice;
 import souther.compiler.check.ScopeStep;
+import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.OccurrenceLineage;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
@@ -141,6 +147,23 @@ public final class ValueArrivals<P> {
     private final WhereTheOperationsAre operations;
 
     /**
+     * The copy of an application the model states that each node is code of, or null where it is
+     * the model's own code — where the operations stand, and never where they are expanded
+     * ({@link #readCopies}). What the model handed the application is the model's code even where
+     * the copy holds it, and says so.
+     */
+    private final IdentityHashMap<Core, OccurrenceLineage.Expansion> codeOf =
+            new IdentityHashMap<>();
+
+    /** The nodes a copy of an application the model states is entered at, which is what the
+     *  application answers. */
+    private final Set<Core> enteredAt = Collections.newSetFromMap(new IdentityHashMap<>());
+
+    /** Whether the model states the application each copy met was made for, by the copy: every
+     *  node of one copy asks the same question. */
+    private final Map<OccurrenceLineage.Expansion, Boolean> stated = new HashMap<>();
+
+    /**
      * What a value built in the tree means, for a tree that builds values it does not hold the
      * bodies of.
      */
@@ -243,6 +266,7 @@ public final class ValueArrivals<P> {
         ValueArrivals<P> reading =
                 new ValueArrivals<>(naming, semantics, operations, templates, templateComes);
         if (body != null) {
+            reading.readCopies(body, null);
             reading.fill(body, naming, ways, Map.of());
         }
         return reading;
@@ -495,9 +519,95 @@ public final class ValueArrivals<P> {
         if (already != null) {
             return already;
         }
-        Paths<P> answer = normalised(e, reading(e, naming, comparisons, bound));
+        Paths<P> answer = reading(e, naming, comparisons, bound);
+        if (enteredAt.contains(e)) {
+            answer = answering(e, answer, naming, comparisons, bound);
+        }
+        answer = normalised(e, answer);
         settled.put(e, answer);
         return answer;
+    }
+
+    /**
+     * Which copy of an application the model states each node of {@code e} is code of, and where
+     * each such copy is entered — worked out from the body's shape before anything is settled.
+     *
+     * <p>A function of where a node stands and of nothing a walk carries. A node is settled where
+     * the value it is part of is read and again where the body is filled, and each of those has to
+     * find the same answer, so it is read off the tree once, here, and looked up.
+     *
+     * <p>A node that says where it is written says which copy it belongs to: the model's own code
+     * where it is code of none, the copy where the model states that copy's application, and,
+     * where it is code of a copy made inside another copy's code — which the model states nothing
+     * of — still the copy its parent is code of. One that does not say — a name, a literal, a value
+     * built from parts — is code of whatever its parent is code of. A node met under two of these is
+     * one shared across two places, and which of its readings is kept would turn on which was
+     * walked first, so it is refused.
+     */
+    private void readCopies(Core e, OccurrenceLineage.Expansion parent) {
+        if (e == null) {
+            return;
+        }
+        OccurrenceLineage.Expansion in = parent;
+        ACopyOfAnApplication copy = null;
+        if (operations == WhereTheOperationsAre.STAND_IN_IT
+                && ACopyOfAnApplication.occurrenceOf(e) != null) {
+            ACopyOfAnApplication code = ACopyOfAnApplication.of(e);
+            copy = code != null && stated(code) ? code : null;
+            if (code == null || copy != null) {
+                in = copy == null ? null : copy.copy();
+            }
+        }
+        if (codeOf.containsKey(e)) {
+            if (!Objects.equals(codeOf.get(e), in)) {
+                throw new IllegalStateException("one Core instance is code of " + codeOf.get(e)
+                        + " in one place and of " + in + " in another: " + e);
+            }
+            return;
+        }
+        codeOf.put(e, in);
+        if (copy != null && !copy.copy().equals(parent)) {
+            enteredAt.add(e);
+        }
+        OccurrenceLineage.Expansion inner = in;
+        Core.forEachChild(e, child -> readCopies(child, inner));
+    }
+
+    /** Whether {@code e} is code of a copy of an application the model states. */
+    private boolean inACopy(Core e) {
+        return codeOf.get(e) != null;
+    }
+
+    /**
+     * Whether the model states the application {@code copy} was made for.
+     *
+     * <p>Where the operations stand, an application the model writes is one value of the model's,
+     * as a call of one the language keeps standing is, and the walk the operation's code does is
+     * the operation's: no way through it is a way of the body. Where they are expanded, that walk
+     * is part of the tree that runs, and its ways are ways of it.
+     */
+    private boolean stated(ACopyOfAnApplication copy) {
+        return stated.computeIfAbsent(copy.copy(),
+                each -> ModelOccurrence.statedAt(copy.application()).isPresent());
+    }
+
+    /**
+     * The ways to {@code e}, the node a copy of an application is entered at, which is what the
+     * application answers: the ways of what the model handed it as {@code read} has them, split
+     * by the truth the application answers where it answers one, as a call of an operation standing
+     * is ({@link #built}).
+     */
+    private Paths<P> answering(Core e, Paths<P> read, Naming<P> naming,
+                               ComparisonWays comparisons, Map<BindingId, Bound<P>> bound) {
+        if (!Type.BOOL.equals(e.type()) || read.orNone().size() != 1) {
+            return read;
+        }
+        Paths<P> settledTwoWays = comparedOut(e, read.orNone().get(0), naming, comparisons,
+                named -> {
+                    Bound<P> was = bound.get(named.binding());
+                    return was == null ? null : was.settledBy();
+                });
+        return settledTwoWays != null ? settledTwoWays : read;
     }
 
     /**
@@ -540,8 +650,10 @@ public final class ValueArrivals<P> {
                                 inside(into, naming, comparisons, bound))
                         : new Paths.Held<>(List.of());
             }
-            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() ->
-                    through(binary, naming, comparisons, bound);
+            // Not inside a copy of an application: the operation stopping early is its own walk,
+            // and the value comes out as the application answers.
+            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled()
+                    && !inACopy(binary) -> through(binary, naming, comparisons, bound);
             // A fork inside one of the language's own operations is the operation's and not the
             // body's: what the language defines the meaning of is the operation, so the ways
             // through the walk it does are no ways of the body. It arrives as one value, as a call
@@ -591,7 +703,9 @@ public final class ValueArrivals<P> {
                 return out;
             }
         }
-        if (out.orNone().size() == 1) {
+        // A value of an application's code is the application's, and comes out the way the
+        // application answers ({@link #answering}).
+        if (out.orNone().size() == 1 && !inACopy(e)) {
             Paths<P> settledTwoWays = comparedOut(e, out.orNone().get(0), naming, comparisons,
                     read -> {
                         Bound<P> named = bound.get(read.binding());

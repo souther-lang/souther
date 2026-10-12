@@ -235,6 +235,23 @@ public sealed interface OperationFact {
     }
 
     /**
+     * What the operation answers holds a value exactly where {@code option} does, and the value it
+     * holds is what the closure answers on the one {@code option} holds: {@code Some(f(x))} of
+     * {@code Some(x)}, and nothing of nothing.
+     *
+     * <p>Whether the answer holds anything is the weaker part of this, and is stated from it
+     * rather than beside it. What the value is, is a value the closure builds and not one the
+     * option holds, so a statement about the answer's value is a statement about the closure's
+     * answer on the option's value, and never about the option's value itself.
+     */
+    record AnswersTheClosureOnWhatItHolds(ArgumentRef option) implements OperationFact {
+
+        public AnswersTheClosureOnWhatItHolds {
+            Objects.requireNonNull(option, "the value the closure is handed is held by some option");
+        }
+    }
+
+    /**
      * The operation answers the elements of {@code list} from the index {@code count} names on, in
      * the order they stand there: each of them once, and nothing else. All of them where the count
      * is nought or less, and none where it is past the last.

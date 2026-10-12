@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Choice;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.ScopeStep;
+import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Naming;
@@ -303,9 +304,15 @@ final class DecisionNaming implements Naming<DecisionPath> {
      * The construct of the model {@code value} itself is, where a run through it is recorded there:
      * a comparison, or an application of one of the language's operations, written where it stands
      * and not reached through a name.
+     *
+     * <p>An application the library writes in the language is met as the copy of it the body was
+     * given, and the reading of the ways takes no truth of that copy's code but the one its answer
+     * comes out as, at the node it is entered at; what a run answered there is recorded as the
+     * application's ({@link ACopyOfAnApplication}).
      */
     private static Optional<ModelOccurrence> recordedAsItself(Core value) {
-        return switch (Core.withoutStanding(value)) {
+        Core e = Core.withoutStanding(value);
+        Optional<ModelOccurrence> itself = switch (e) {
             case Core.Binary binary when Comparison.of(binary).isPresent()
                     && binary.occurrence() != null ->
                     ModelOccurrence.statedAt(binary.occurrence());
@@ -313,6 +320,11 @@ final class DecisionNaming implements Naming<DecisionPath> {
                     ModelOccurrence.statedAt(applied.occurrence());
             default -> Optional.empty();
         };
+        if (itself.isPresent()) {
+            return itself;
+        }
+        ACopyOfAnApplication copy = ACopyOfAnApplication.of(e);
+        return copy == null ? Optional.empty() : ModelOccurrence.statedAt(copy.application());
     }
 
     /**

@@ -369,6 +369,24 @@ final class OperationFactBinder {
                         holdToTheDeclaration(declaration, pieces.string(), null,
                                 TypeRequirement.TEXT, "the string that falls into pieces"));
             }
+            // An option of what the closure answers, made of an option of what it is handed.
+            case OperationFact.AnswersTheClosureOnWhatItHolds answers -> {
+                if (stdlib.intrinsicOf(theLibraryOperation(operation.operation())) == null) {
+                    throw new IllegalStateException(operation.operation() + " is written in the"
+                            + " language, and what it answers of an option is its body's to say");
+                }
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.OPTIONAL,
+                        "an option of what a closure answers");
+                DeclaredArgument option = holdToTheDeclaration(declaration, answers.option(),
+                        new ArgumentRef.TheContainer(), TypeRequirement.OPTIONAL,
+                        "the option whose value the closure is handed");
+                DeclaredArgument closure = holdToTheDeclaration(declaration,
+                        new ArgumentRef.TheClosure(), new ArgumentRef.TheClosure(),
+                        TypeRequirement.CLOSURE, "what is made of the value");
+                holdTheClosureToTheOptions(declaration, option, closure);
+                yield new BoundOperationFact.AnswersTheClosureOnWhatItHolds(operation, option,
+                        closure);
+            }
             case OperationFact.EveryElementOfItsAnswerIs every -> {
                 holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
                         "a container every element of which comes out on a side");
@@ -906,6 +924,32 @@ final class OperationFactBinder {
                     + " and its closure answers "
                     + (answered == null ? "nothing" : Type.show(answered))
                     + ", which is not what a piece made as " + piece + " is made of");
+        }
+    }
+
+    /**
+     * Holds an operation said to answer its closure on what {@code option} holds to its signature:
+     * the closure takes one value, of what the option holds, and what it answers is what the
+     * answer holds.
+     */
+    private static void holdTheClosureToTheOptions(CompleteSignature declaration,
+                                                   DeclaredArgument option,
+                                                   DeclaredArgument closure) {
+        String name = ((ValueName.Stdlib) declaration.declaring().operation()).qualified();
+        ClosurePositions handed = Combinators.positionsOf(declaration.declaring().operation());
+        if (handed == null || handed.containerArg() != option.position()) {
+            throw new IllegalStateException(name + " is said to hand its closure what argument "
+                    + (option.position() + 1) + " holds, and its signature hands no closure that");
+        }
+        Type.FnOf fn = (Type.FnOf) declaration.params().get(closure.position());
+        Type held = ((Type.OptionOf) option.stands()).element();
+        Type answered = ((Type.OptionOf) declaration.result()).element();
+        if (fn.params().size() != 1 || !fn.params().getFirst().equals(held)
+                || !fn.result().equals(answered)) {
+            throw new IllegalStateException(name + " answers " + Type.show(declaration.result())
+                    + " of " + Type.show(option.stands()) + " and its closure is "
+                    + Type.show(fn) + ", which is not a closure from what the one holds to what"
+                    + " the other does");
         }
     }
 

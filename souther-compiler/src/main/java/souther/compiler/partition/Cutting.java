@@ -618,6 +618,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 yield several != null ? several
                         : severalNotDrawn(comparison, read, reads, answering);
             }
+            // Some element meeting several parts, which is the parts read of that element: a
+            // lookup's answer compared as a whole is its entry under the key meeting the
+            // comparison, and the line is the comparison's on the entry. Inside an either-or it is
+            // the same parts, read there.
+            case Proposition.Some some when some.holds()
+                    && !Proposition.leavesSomethingUnread(some) -> {
+                Read several = several(behavior, comparison.left(), some, read, reads);
+                yield several != null ? several
+                        : severalNotDrawn(comparison, read, reads, answering);
+            }
             default -> noLine(comparison, stated.proposition(), onTheInput.arithmetic(), read,
                     reads, answering);
         };

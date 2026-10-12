@@ -80,14 +80,22 @@ public final class WhereAnApplicationIsMade {
      * values they hold are not written out, and so no application is said; an operation may stop
      * before it makes any, so this is necessary for an application and not enough for one.
      *
-     * @param appliedOver the positions of the containers, one for each operation applying the
-     *                    closure
+     * <p>An option is a container of one value at most, and the closure is applied to that value
+     * where the option holds one: what holds there is that it holds a value, and no statement about
+     * some element of it, which would ask how many it holds of something that holds one or none.
+     *
+     * @param holding the positions of the containers, one for each operation applying the closure
+     *                to every element of one
+     * @param present the positions of the options, one for each operation applying the closure to
+     *                the value one holds
      */
     public static Proposition whereOneOfTheContainersHoldsSomething(Proposition outer,
-                                                                    List<DecisionSubject> appliedOver) {
-        return past(outer, Proposition.any(appliedOver.stream()
-                .<Proposition>map(at -> new Proposition.Some(at, nothingAsked(), true))
-                .toList()));
+                                                                    List<DecisionSubject> holding,
+                                                                    List<DecisionSubject> present) {
+        List<Proposition> any = new ArrayList<>();
+        holding.forEach(at -> any.add(new Proposition.Some(at, nothingAsked(), true)));
+        present.forEach(at -> any.add(new Proposition.Present(at, true)));
+        return past(outer, Proposition.any(any));
     }
 
     /** Whether {@code cases} say a line decides wherever a row is. */
