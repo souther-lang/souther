@@ -633,23 +633,31 @@ final class AStatementAtARow {
 
     /**
      * Where each relation this reads over {@code term} turns over, for a term whose values are
-     * ordered and not counted: the places the term is held against.
+     * ordered and not counted, with every other position it reads standing where {@code beside}
+     * says: the places the term is held against.
      *
-     * <p>A form cannot be over such a term, since there is no number to weigh, so the one place a
-     * relation turns is the place the term is compared with. Between two of them, and past the
-     * last, every relation reads any value of the term the same way.
+     * <p>There is no number to weigh such a term by, so the one place a relation turns is the place
+     * the term is compared with: written in the relation, or held at the other position the
+     * quantity reads it against ({@link LinearQuantity#levelWith}). Between two of them, and past
+     * the last, every relation reads any value of the term the same way.
      *
-     * @return null where a form reads the term, which a value chosen from a run could answer
-     *         either way
+     * @return null where the quantity a relation reads the term on says no one place is level with
+     *         it, which a value chosen from a run could answer either way
      */
-    List<Place> placesTurnedAt(NumericTerm term) {
+    List<Place> placesTurnedAt(NumericTerm term, Map<NumericTerm, Place> beside) {
         List<Place> out = new ArrayList<>();
         for (OneRelation each : relations.values()) {
             switch (each) {
-                case OneRelation.OfAForm(LinearQuantity _, LinearForm<NumericTerm> form, Rel _) -> {
-                    if (form.coefs().containsKey(term)) {
+                case OneRelation.OfAForm(LinearQuantity over, LinearForm<NumericTerm> form,
+                                         Rel _) -> {
+                    if (!form.coefs().containsKey(term)) {
+                        continue;
+                    }
+                    Place level = over.levelWith(term, form.constant(), beside);
+                    if (level == null) {
                         return null;
                     }
+                    out.add(level);
                 }
                 case OneRelation.OnAnOrder(LinearQuantity _, NumericTerm on, Place at, Rel _) -> {
                     if (on.equals(term)) {
@@ -678,8 +686,7 @@ final class AStatementAtARow {
 
             @Override
             public ExactAnswer<Boolean> holdsAt(Map<NumericTerm, Place> values) {
-                return OrderedAffineBoundary.at(form, values)
-                        .map(sum -> rel.holds(sum.signum()));
+                return over.signAt(values, form.constant()).map(rel::holds);
             }
         }
 
@@ -701,8 +708,12 @@ final class AStatementAtARow {
                         throw new IllegalStateException("a relation put to rows is over the"
                                 + " input's own numbers: " + affine);
                     }
-                    yield new OfAForm(Cutting.readAt(behavior, form, quantities), form,
-                            affine.proposition());
+                    LinearQuantity over = Cutting.readAt(behavior, form, quantities);
+                    if (over == null) {
+                        throw new IllegalStateException("an order with no numbers under it is in a"
+                                + " form only as two positions held against each other: " + affine);
+                    }
+                    yield new OfAForm(over, form, affine.proposition());
                 }
                 case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel rel)
                         when term.atOnePosition() != null -> new OnAnOrder(

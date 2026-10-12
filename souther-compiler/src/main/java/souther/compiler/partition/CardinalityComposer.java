@@ -183,7 +183,7 @@ final class CardinalityComposer {
         } else {
             List<Place> turns = new ArrayList<>();
             for (Asked one : asked) {
-                List<Place> where = one.placesTurnedAt(element.term());
+                List<Place> where = one.placesTurnedAt(element.term(), beside);
                 if (where == null) {
                     return notChosen("where `" + one + "` turns over an element of `" + container
                             + "` could not be worked out");
@@ -512,9 +512,10 @@ final class CardinalityComposer {
          *  beside} says; null where that could not be worked out. */
         List<ExactRatio> turnsAt(NumericTerm element, Map<NumericTerm, Place> beside);
 
-        /** The places an element turns over at, where its values are ordered and not counted; null
-         *  where that could not be worked out. */
-        List<Place> placesTurnedAt(NumericTerm element);
+        /** The places an element turns over at, where its values are ordered and not counted, with
+         *  the positions beside it where {@code beside} says; null where that could not be worked
+         *  out. */
+        List<Place> placesTurnedAt(NumericTerm element, Map<NumericTerm, Place> beside);
 
         /** Whether a container of {@code values}, read whole as {@code row}, has as many elements
          *  answering this as it asks — for every count the reading leaves, where one was not read. */
@@ -550,8 +551,8 @@ final class CardinalityComposer {
             }
 
             @Override
-            public List<Place> placesTurnedAt(NumericTerm element) {
-                return perElement.placesTurnedAt(element);
+            public List<Place> placesTurnedAt(NumericTerm element, Map<NumericTerm, Place> beside) {
+                return perElement.placesTurnedAt(element, beside);
             }
         }
 
@@ -589,10 +590,18 @@ final class CardinalityComposer {
                 return out;
             }
 
-            /** An element standing in a set of ordered values is not one this chooses. */
+            /** The ends of the set, which are where standing in it turns over on an order with no
+             *  numbers as on one with them. */
             @Override
-            public List<Place> placesTurnedAt(NumericTerm element) {
-                return null;
+            public List<Place> placesTurnedAt(NumericTerm element, Map<NumericTerm, Place> beside) {
+                List<Place> out = new ArrayList<>();
+                NumericDomain.Bounds extent = set.extent();
+                for (Endpoint end : Arrays.asList(extent.min(), extent.max())) {
+                    if (end != null) {
+                        out.add(end.at());
+                    }
+                }
+                return out;
             }
         }
     }

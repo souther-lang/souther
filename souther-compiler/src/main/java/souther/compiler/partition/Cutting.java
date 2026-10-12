@@ -1066,13 +1066,52 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *
      * <p>Decided here, where every other quantity a relation is over is decided: a reader of where
      * a line decides holds the relation and asks this for what to read.
+     *
+     * <p>A sum where every order has numbers under it, and the two positions apart where they are
+     * two held against each other on an order with none: two strings stand no measurable distance
+     * apart and are still one above the other, which is how {@link #readOnce} reads the same pair.
+     *
+     * @return null where some order has no numbers under it and the form is not two positions held
+     *         against each other, which is a form nothing here can read a row at
      */
     static LinearQuantity readAt(String behavior, LinearForm<NumericTerm> form,
                                  Quantities quantities) {
         Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
         form.coefs().keySet().forEach(term -> on.put(term, quantities.ordersOf(term)));
-        return new BorderQuantity.OverAForm(behavior,
-                new LinearForm<>(ExactRatio.ZERO, form.coefs()), on);
+        if (on.values().stream().allMatch(orders -> orders.answered().counts())) {
+            return new BorderQuantity.OverAForm(behavior,
+                    new LinearForm<>(ExactRatio.ZERO, form.coefs()), on);
+        }
+        return heldAgainstEachOther(behavior, form, on);
+    }
+
+    /**
+     * The two positions {@code form} holds against each other, the one weighed by one and the other
+     * by minus one, on orders a value of one stands somewhere on — or null where it is no such pair.
+     */
+    private static BorderQuantity.Apart heldAgainstEachOther(String behavior,
+                                                             LinearForm<NumericTerm> form,
+                                                             Map<NumericTerm, TermOrders> on) {
+        if (form.coefs().size() != 2) {
+            return null;
+        }
+        TermOrders here = null;
+        TermOrders there = null;
+        for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+            TermOrders orders = on.get(each.getKey());
+            orders.areOf(each.getKey());
+            if (each.getValue().equals(ExactRatio.ONE)) {
+                here = orders;
+            } else if (each.getValue().equals(ExactRatio.ONE.negated())) {
+                there = orders;
+            }
+        }
+        if (here == null || there == null
+                || here.term().atOnePosition() == null || there.term().atOnePosition() == null
+                || !here.answered().standsAgainst(there.answered())) {
+            return null;
+        }
+        return new BorderQuantity.Apart(behavior, here, there);
     }
 
     /** The same, for one position held against a place on the order it stands on. */

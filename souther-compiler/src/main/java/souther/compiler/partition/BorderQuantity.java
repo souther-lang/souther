@@ -21,6 +21,7 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 
 import java.math.BigDecimal;
@@ -325,6 +326,35 @@ public sealed interface BorderQuantity
         @Override
         public LinearForm<NumericTerm> direction() {
             return LinearForm.difference(on.term(), against.term());
+        }
+
+        /**
+         * Where the two have no numbers under them, which one stands above the other as places:
+         * only standing level is a distance two strings come to, so any other {@code constant} is
+         * one no row of them can be read at.
+         */
+        @Override
+        public ExactAnswer<Integer> signAt(Map<NumericTerm, Place> values, ExactRatio constant) {
+            if (counts()) {
+                return LinearQuantity.super.signAt(values, constant);
+            }
+            if (constant.signum() != 0) {
+                return ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS);
+            }
+            return ExactAnswer.held(Integer.signum(
+                    values.get(on.term()).compareTo(values.get(against.term()))));
+        }
+
+        /** The other end, where the two have no numbers under them and stand level. */
+        @Override
+        public Place levelWith(NumericTerm term, ExactRatio constant,
+                               Map<NumericTerm, Place> beside) {
+            if (counts() || constant.signum() != 0) {
+                return null;
+            }
+            NumericTerm other = on.term().equals(term) ? against.term()
+                    : against.term().equals(term) ? on.term() : null;
+            return other == null ? null : beside.get(other);
         }
 
         /**

@@ -4,6 +4,8 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 
@@ -181,6 +183,31 @@ public sealed interface LinearQuantity extends BorderQuantity
         }
         return stopped.isEmpty() ? new ValuesAtARow.Read(read)
                 : new ValuesAtARow.CouldNotTell(stopped);
+    }
+
+    /**
+     * Which side of nought this quantity with {@code constant} added comes to at {@code values}:
+     * minus one, nought or one, which is what a relation against nought asks of it.
+     *
+     * <p>Its terms weighed and added up, where they have numbers under them. Where they do not, the
+     * quantity says what being above, below or level comes to without a sum.
+     */
+    default ExactAnswer<Integer> signAt(Map<NumericTerm, Place> values, ExactRatio constant) {
+        return OrderedAffineBoundary.at(new LinearForm<>(constant, direction().coefs()), values)
+                .map(ExactRatio::signum);
+    }
+
+    /**
+     * The one place {@code term} comes level with the rest of this quantity at, with
+     * {@code constant} added and every other term standing where {@code beside} says — or null where
+     * no one place is that.
+     *
+     * <p>For a term on an order with no numbers, where a line is the place it meets and not a number
+     * it is weighed to. A form of several such terms meets nothing at one place, so this answers
+     * null unless a quantity says otherwise.
+     */
+    default Place levelWith(NumericTerm term, ExactRatio constant, Map<NumericTerm, Place> beside) {
+        return null;
     }
 
     /** What each of a form's terms is measured on, for a reader of a line rather than of a row. */
