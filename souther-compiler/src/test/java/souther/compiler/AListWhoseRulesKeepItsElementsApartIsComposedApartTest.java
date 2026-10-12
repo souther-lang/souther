@@ -113,6 +113,56 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
                 | "filed" : (Keys(["a", "b"]), [("a", "x"), ("b", "x")]) -> 1
             """;
 
+    /**
+     * Some element filed in a map, of a list a record holds and whose rules keep the elements
+     * apart: the rule is the record's, and the list composed at its field keeps it.
+     */
+    private static final String SOME_IN_A_RECORD = """
+            module p
+            data Box = { ks: List<String> }
+                invariant several = List.length(ks) >= 2
+                invariant apart = List.allDistinctBy(k -> k, ks)
+            behavior pick : (b: Box, shelf: Map<String, String>) -> Int
+            let pick (b, shelf) =
+                if List.any(k -> match Map.get(k, shelf) with
+                        | Some v -> true
+                        | None -> false, b.ks) then 1 else 0
+            example pick
+                | "a" : (Box { ks = ["a", "b"] }, []) -> 0
+            """;
+
+    /** So many elements over a line, of a list of numbers a record holds and keeps apart. */
+    private static final String COUNTED_IN_A_RECORD = """
+            module p
+            data Box = { ks: List<Int> }
+                invariant several = List.length(ks) >= 3
+                invariant apart = List.allDistinctBy(k -> k, ks)
+            behavior pick : (b: Box) -> Int
+            let pick (b) =
+                if List.length(List.filter(k -> k > 5, b.ks)) >= 2 then 1 else 0
+            example pick
+                | "a" : (Box { ks = [1, 2, 3] }) -> 0
+            """;
+
+    /**
+     * A list held by a record held by another, the inner record keeping its elements apart and the
+     * outer one asking it to hold several: both are rules about the one list.
+     */
+    private static final String IN_A_RECORD_INSIDE_ANOTHER = """
+            module p
+            data Inner = { ks: List<String> }
+                invariant apart = List.allDistinctBy(k -> k, ks)
+            data Outer = { inner: Inner }
+                invariant several = List.length(inner.ks) >= 2
+            behavior pick : (o: Outer, shelf: Map<String, String>) -> Int
+            let pick (o, shelf) =
+                if List.any(k -> match Map.get(k, shelf) with
+                        | Some v -> true
+                        | None -> false, o.inner.ks) then 1 else 0
+            example pick
+                | "a" : (Outer { inner = Inner { ks = ["a", "b"] } }, []) -> 0
+            """;
+
     /** Each form, with the row composed for the decision rule no example takes and what the model
      *  answers it. */
     private static final Map<String, Composed> COMPOSED = Map.of(
@@ -130,7 +180,12 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
                             + " Line { sku = \"xx\", serial = \"xx\", q = 0 }])",
                     "[(\"x\", \"x\")]"), 1),
             COUNTED, new Composed(List.of("Keys([4, 6, 7])"), 1),
-            HANDED_ON, new Composed(List.of("Keys([\"x\", \"xx\"])", "[]"), 0));
+            HANDED_ON, new Composed(List.of("Keys([\"x\", \"xx\"])", "[]"), 0),
+            SOME_IN_A_RECORD, new Composed(List.of("Box { ks = [\"x\", \"xx\"] }",
+                    "[(\"x\", \"x\")]"), 1),
+            COUNTED_IN_A_RECORD, new Composed(List.of("Box { ks = [4, 6, 7] }"), 1),
+            IN_A_RECORD_INSIDE_ANOTHER, new Composed(List.of(
+                    "Outer { inner = Inner { ks = [\"x\", \"xx\"] } }", "[(\"x\", \"x\")]"), 1));
 
     private record Composed(List<String> inputs, int answer) {}
 
@@ -142,7 +197,10 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
             SOME_BY_FIELD_AND_WHOLE, List.of(List.of("sku")),
             SOME_BY_TWO_FIELDS, List.of(List.of("sku"), List.of("serial")),
             COUNTED, List.of(List.of()),
-            HANDED_ON, List.of(List.of()));
+            HANDED_ON, List.of(List.of()),
+            SOME_IN_A_RECORD, List.of(List.of()),
+            COUNTED_IN_A_RECORD, List.of(List.of()),
+            IN_A_RECORD_INSIDE_ANOTHER, List.of(List.of()));
 
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -183,13 +241,25 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
         return out;
     }
 
-    /** The elements of the list {@code value} writes, under whatever names it wears. */
+    /** The elements of the list {@code value} writes, under whatever names it wears, or of the one
+     *  list a record it writes holds somewhere among its fields. */
     private static List<Hir.Expr> elementsOf(Hir.Expr value) {
         Hir.Expr at = value;
         while (at instanceof Hir.Apply applied && applied.args().size() == 1) {
             at = applied.args().getFirst();
         }
-        return at instanceof Hir.ListLit list ? list.elements() : null;
+        if (at instanceof Hir.ListLit list) {
+            return list.elements();
+        }
+        if (at instanceof Hir.NewData record) {
+            for (Hir.FieldInit each : record.inits()) {
+                List<Hir.Expr> inside = elementsOf(each.value());
+                if (inside != null) {
+                    return inside;
+                }
+            }
+        }
+        return null;
     }
 
     /** What {@code element} holds at the end of {@code run}, under whatever names it wears. */

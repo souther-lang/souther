@@ -104,6 +104,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
     private static final List<String> WALKING = List.of(
             row(CHECK + "BoundaryConstraints", "messageForm",
                     "(" + TYPE + "Ljava/util/Set;)Lsouther/compiler/core/MessageForm;", THE_SPINE),
+            row(CHECK + "ElementsApart", "heldAt",
+                    "(" + TYPE + "L" + CHECK + "RuleKey;Ljava/util/function/Function;" + SOURCE
+                            + ")Ljava/util/List;",
+                    THE_POSITION),
             row(CHECK + "InvariantChecker", "name",
                     "(Lsouther/compiler/core/Core;L" + CHECK + "RuleKey;" + TYPE + "L" + CHECK
                             + "Denotations;" + SYMBOLS
@@ -129,12 +133,13 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "BehaviorInputs", "view", "(" + TYPE + ")L" + TYPE_VIEW + ";",
                     THE_POSITION),
             row(PARTITION + "CardinalityComposer", "compose",
-                    "(" + TYPE + "Ljava/util/List;Ljava/util/SequencedMap;L" + PARTITION
-                            + "RealizationTarget$OfANumber;Ljava/util/List;L" + INPUTS
+                    "(" + TYPE + "Ljava/util/List;Ljava/util/List;Ljava/util/SequencedMap;L"
+                            + PARTITION + "RealizationTarget$OfANumber;Ljava/util/List;L" + INPUTS
                             + "SearchRegion;" + CONTEXT + ")" + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "CardinalityComposer", "composeAlike",
-                    "(" + TYPE + "L" + PARTITION + "RealizationTarget$OfANumber;L" + PARTITION
+                    "(" + TYPE + "Ljava/util/List;L" + PARTITION + "RealizationTarget$OfANumber;L"
+                            + PARTITION
                             + "RealizationTarget$OfANumber;Ljava/util/SequencedMap;L" + INPUTS
                             + "Quantities;L" + INPUTS + "SearchRegion;" + CONTEXT + ")"
                             + REALIZATION,
@@ -148,7 +153,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(" + TYPE + "L" + INPUTS + "TermPath;" + INNERS + SYMBOLS + KINDS + SUMS
                             + "ILjava/util/Set;L" + INPUTS + "Requirements;L" + PARTITION
                             + "ConstructionPlan$ContentsComposed;L" + PARTITION
-                            + "ConstructionPlan$HowManyItHolds;)L" + PARTITION
+                            + "ConstructionPlan$WhatItMayHold;)L" + PARTITION
                             + "ConstructionPlan$NodeResult;",
                     THE_POSITION),
             row(PARTITION + "ContainersAddingUp", "to",
@@ -203,7 +208,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "TermRealizations", "holdingExactly",
-                    "(" + TYPE + "Lsouther/compiler/numeric/Place;" + CONTEXT + ")" + REALIZATION,
+                    "(" + TYPE + "Ljava/util/List;Lsouther/compiler/numeric/Place;" + CONTEXT + ")"
+                            + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "TermRealizations", "namesOf",
                     "(" + TYPE + SOURCE + ")L" + PARTITION + "WornNames;", THE_POSITION),

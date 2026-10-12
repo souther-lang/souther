@@ -641,11 +641,16 @@ final class TermRealizations {
         /**
          * The values to write at the group's location, answering every number it asks.
          *
+         * @param keptApart what the rules of the value holding the location keep the elements of a
+         *                  container written there apart at ({@link ElementsKeptApart#heldUnder}),
+         *                  which a way writing a container element by element keeps beside what
+         *                  the container's own names keep
          * @param inside what the value is asked to hold at positions inside it, which only a way
          *               that composes a value element by element can take
          *               ({@link #composesWhatIsInside})
          */
-        Realization from(Type sourceType, SequencedMap<RealizationTarget, AskedAt> demands,
+        Realization from(Type sourceType, List<List<String>> keptApart,
+                         SequencedMap<RealizationTarget, AskedAt> demands,
                          Quantities measuring, SearchRegion within, RuleReadingContext reading,
                          DemandsInside inside);
 
@@ -660,11 +665,11 @@ final class TermRealizations {
         record OneNumberOnItsOwn(RealizationTarget.OfANumber number) implements JointBuilder {
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
-                return satisfying(sourceType, measuring.ordersOf(number.term()),
+                return satisfying(sourceType, keptApart, measuring.ordersOf(number.term()),
                         demands.get(number), within, reading, inside);
             }
         }
@@ -691,7 +696,7 @@ final class TermRealizations {
             }
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
@@ -720,7 +725,7 @@ final class TermRealizations {
             }
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
@@ -748,7 +753,7 @@ final class TermRealizations {
             }
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
@@ -788,7 +793,7 @@ final class TermRealizations {
             }
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
@@ -834,7 +839,7 @@ final class TermRealizations {
             }
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
@@ -906,7 +911,7 @@ final class TermRealizations {
             }
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
@@ -978,7 +983,7 @@ final class TermRealizations {
             }
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
@@ -1052,7 +1057,7 @@ final class TermRealizations {
                 implements JointBuilder {
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
@@ -1111,13 +1116,13 @@ final class TermRealizations {
             }
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
                 nothingInside(inside);
-                return CardinalityComposer.compose(sourceType, counts, demands, manyItHolds,
-                        standingAt, within, reading);
+                return CardinalityComposer.compose(sourceType, keptApart, counts, demands,
+                        manyItHolds, standingAt, within, reading);
             }
         }
 
@@ -1137,13 +1142,13 @@ final class TermRealizations {
                 implements JointBuilder {
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
                 nothingInside(inside);
-                return CardinalityComposer.composeAlike(sourceType, alike, manyItHolds, demands,
-                        measuring, within, reading);
+                return CardinalityComposer.composeAlike(sourceType, keptApart, alike, manyItHolds,
+                        demands, measuring, within, reading);
             }
         }
 
@@ -1196,19 +1201,21 @@ final class TermRealizations {
                                      Quantities measuring,
                                      SearchRegion within,
                                      RuleReadingContext reading) {
-        return allSatisfying(sourceType, demands, measuring, within, reading,
+        return allSatisfying(sourceType, List.of(), demands, measuring, within, reading,
                 DemandsInside.NOTHING);
     }
 
     /**
-     * The same, with the value asked to hold {@code inside} at positions inside it as well.
+     * The same, with the value asked to hold {@code inside} at positions inside it as well, and
+     * held by a value whose rules keep the elements of a container written there apart at
+     * {@code keptApart} ({@link JointBuilder#from}).
      *
      * <p>Only for a group whose value is composed rather than read ({@link #composesWhatIsInside}).
      * A value written as one number — a literal, a moment spelled in parts — has no positions
      * inside it to hold anything, and a caller handing demands to one has asked for a value nothing
      * here writes.
      */
-    static Realization allSatisfying(Type sourceType,
+    static Realization allSatisfying(Type sourceType, List<List<String>> keptApart,
                                      SequencedMap<RealizationTarget, AskedAt> demands,
                                      Quantities measuring,
                                      SearchRegion within,
@@ -1225,7 +1232,8 @@ final class TermRealizations {
             case JointRealization.Missing(CompositionRepertoire notAllOf) ->
                     new Realization.Unexhausted(CompositionShortfall.writing(Set.of(notAllOf)), null);
             case JointRealization.Supported(JointBuilder builder) ->
-                    builder.from(sourceType, demands, measuring, within, reading, inside);
+                    builder.from(sourceType, keptApart, demands, measuring, within, reading,
+                            inside);
         };
     }
 
@@ -1328,11 +1336,14 @@ final class TermRealizations {
     static Realization satisfying(Type sourceType, TermOrders orders, AskedAt asked,
                                   SearchRegion within,
                                   RuleReadingContext reading) {
-        return satisfying(sourceType, orders, asked, within, reading, DemandsInside.NOTHING);
+        return satisfying(sourceType, List.of(), orders, asked, within, reading,
+                DemandsInside.NOTHING);
     }
 
-    /** The same, with the value asked to hold {@code inside} at positions inside it as well. */
-    private static Realization satisfying(Type sourceType, TermOrders orders, AskedAt asked,
+    /** The same, with the value asked to hold {@code inside} at positions inside it as well, and
+     *  held by a value whose rules keep its elements apart at {@code keptApart}. */
+    private static Realization satisfying(Type sourceType, List<List<String>> keptApart,
+                                          TermOrders orders, AskedAt asked,
                                           SearchRegion within,
                                           RuleReadingContext reading, DemandsInside inside) {
         if (sourceType == null) {
@@ -1354,7 +1365,8 @@ final class TermRealizations {
                 yield standing(sourceType, orders, asked, within, reading);
             }
             case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(),
-                    taken.transformation(), sourceType, orders, asked, within, reading, inside);
+                    taken.transformation(), sourceType, keptApart, orders, asked, within,
+                    reading, inside);
             case NumericTerm.CodePointClassCount counted -> {
                 nothingInside(inside);
                 yield holdingThatManyOfAClass(counted.counted(), sourceType, asked, orders,
@@ -1424,6 +1436,7 @@ final class TermRealizations {
      */
     private static Realization taken(TakenAs how, TakenArguments arguments,
                                      ValueTransformation from, Type sourceType,
+                                     List<List<String>> keptApart,
                                      TermOrders orders, AskedAt asked,
                                      SearchRegion within,
                                      RuleReadingContext reading, DemandsInside inside) {
@@ -1436,7 +1449,8 @@ final class TermRealizations {
         return switch (how) {
             // A container has no order of its own and is built out of what it holds, so this arm
             // takes none. That is the arm's own answer and not an order standing in for nothing.
-            case TakenAs.HowManyItHolds _ -> holding(sourceType, asked, orders, reading);
+            case TakenAs.HowManyItHolds _ ->
+                    holding(sourceType, keptApart, asked, orders, reading);
             // A container whose elements come to the total, which is what a row has to hold for
             // this number to be there. What that takes is choosing how many elements and what each
             // of them holds — one question whether the number is added up out of the container
@@ -2259,7 +2273,8 @@ final class TermRealizations {
      * the next count of the set is asked after it — so a set holding a count the type has no value
      * for is not a set nothing writes a value in.
      */
-    private static Realization holding(Type sourceType, AskedAt asked, TermOrders orders,
+    private static Realization holding(Type sourceType, List<List<String>> keptApart,
+                                       AskedAt asked, TermOrders orders,
                                        RuleReadingContext reading) {
         // From none upward, which is as far as a count runs and as many of them as the figure
         // allows. A count is the one account whose numbers are whole and whose window is the whole
@@ -2267,7 +2282,7 @@ final class TermRealizations {
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 wholeNumbers(asked.walking(), orders.answered(), 0, Integer.MAX_VALUE,
                         CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
-                count -> holdingExactly(sourceType, count, reading));
+                count -> holdingExactly(sourceType, keptApart, count, reading));
     }
 
     /**
@@ -2791,8 +2806,8 @@ final class TermRealizations {
     }
 
     /** Values of the position holding exactly that many, which is {@link Witnesses}' answer. */
-    private static Realization holdingExactly(Type sourceType, Place answer,
-                                              RuleReadingContext reading) {
+    private static Realization holdingExactly(Type sourceType, List<List<String>> keptApart,
+                                              Place answer, RuleReadingContext reading) {
         int many = CountDomain.asCount(answer);
         if (many < 0) {
             return new Realization.None(
@@ -2811,7 +2826,7 @@ final class TermRealizations {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                     ((WornNames.Unwritable) wears).why());
         }
-        Witnesses.Sized built = Witnesses.ofSize(holder, many, reading, Set.of());
+        Witnesses.Sized built = Witnesses.ofSize(holder, many, keptApart, reading, Set.of());
         if (built.values().isEmpty()) {
             // Read off the build that was already done. `Witnesses` keeps what it made and why it
             // stopped as two halves of one answer for exactly this, and asking it again would be

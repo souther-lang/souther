@@ -73,7 +73,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.Witnesses#<clinit>()V",
                     "how many elements and characters a proposal holds, and how many pairings"),
             Map.entry("souther.compiler.partition.Witnesses#sized("
-                            + "Lsouther/compiler/check/TypeView;I"
+                            + "Lsouther/compiler/check/TypeView;ILjava/util/List;"
                             + "Lsouther/compiler/check/RuleReadingContext;Ljava/util/Set;)"
                             + "Lsouther/compiler/partition/Witnesses$Built;",
                     "stops at the elements and the characters, and says which"),
@@ -130,7 +130,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "how far a count handed on is looked for, which the composer says as that"
                             + " figure where none was found below it"),
             Map.entry("souther.compiler.partition.CardinalityComposer#compose("
-                            + "Lsouther/compiler/types/Type;Ljava/util/List;"
+                            + "Lsouther/compiler/types/Type;Ljava/util/List;Ljava/util/List;"
                             + "Ljava/util/SequencedMap;"
                             + "Lsouther/compiler/partition/RealizationTarget$OfANumber;"
                             + "Ljava/util/List;Lsouther/compiler/inputs/SearchRegion;"
@@ -141,13 +141,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.CardinalityComposer#handingOn("
                             + "Ljava/util/List;Ljava/util/List;Ljava/util/List;"
                             + "Lsouther/compiler/partition/NumericSet;"
-                            + "Lsouther/compiler/check/TypeView;"
+                            + "Lsouther/compiler/check/TypeView;Ljava/util/List;"
                             + "Lsouther/compiler/check/RuleReadingContext;)"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "stops at a size or at the containers offered, and hands the figure over in"
                             + " the shortfall it comes back with"),
             Map.entry("souther.compiler.partition.CardinalityComposer#composeAlike("
-                            + "Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/types/Type;Ljava/util/List;"
                             + "Lsouther/compiler/partition/RealizationTarget$OfANumber;"
                             + "Lsouther/compiler/partition/RealizationTarget$OfANumber;"
                             + "Ljava/util/SequencedMap;Lsouther/compiler/inputs/Quantities;"
@@ -363,7 +363,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Set;"
                             + "Lsouther/compiler/inputs/Requirements;"
                             + "Lsouther/compiler/partition/ConstructionPlan$ContentsComposed;"
-                            + "Lsouther/compiler/partition/ConstructionPlan$HowManyItHolds;)"
+                            + "Lsouther/compiler/partition/ConstructionPlan$WhatItMayHold;)"
                             + "Lsouther/compiler/partition/ConstructionPlan$NodeResult;",
                     "stops descending where a value is still made of positions, and says which"
                             + " figure — on the position where it stopped, or as the whole plan"
@@ -486,7 +486,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // whole and whose window is wider than the figure, so the figure bounds how many it
             // tries and what it hands over beside them is whether it ran out of numbers first.
             Map.entry("souther.compiler.partition.TermRealizations#holding("
-                            + "Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/types/Type;Ljava/util/List;"
                             + "Lsouther/compiler/partition/AskedAt;"
                             + "Lsouther/compiler/inputs/TermOrders;"
                             + "Lsouther/compiler/check/RuleReadingContext;)"

@@ -42,10 +42,16 @@ class ANameARuleWritesIsMadeWhereOneIsReadTest {
      * <p>{@code UniversalElementFacts} is in the first group and is the one to watch: it rebases
      * what a reading said about an element onto the field a construction wrote it at, which is the
      * one place a name is made out of another name.
+     *
+     * <p>{@code ElementsApart} is in the first group as well. It writes down the container a rule
+     * keeping elements apart is about as the clause names it — a value of the declaration and the
+     * fields read off it — and reads the same name, a step shorter, of each record a run of fields
+     * passes through on the way to the container: the record there names it from itself.
      */
     private static final List<String> THE_MAKERS = List.of(
             "souther.compiler.check.CardinalityPremise",
             "souther.compiler.check.CardinalityTransfer",
+            "souther.compiler.check.ElementsApart",
             "souther.compiler.check.GuaranteeWalk",
             "souther.compiler.check.InvariantChecker",
             "souther.compiler.check.UniversalElementFacts",

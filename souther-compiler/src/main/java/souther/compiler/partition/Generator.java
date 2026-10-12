@@ -6431,8 +6431,24 @@ public final class Generator {
         // there is measured on as well, and the two are one value only for as long as no term
         // arrives where they part. Handed over as the question rather than as an answer, since a
         // group is over several terms and each of them is measured where this reading says.
-        return edgeFrom(TermRealizations.allSatisfying(writtenAt, group,
-                subject.quantities(), within, subject.ruleReading(), inside), group);
+        return edgeFrom(TermRealizations.allSatisfying(writtenAt, keptApartUnder(subject, at),
+                group, subject.quantities(), within, subject.ruleReading(), inside), group);
+    }
+
+    /**
+     * What the rules of the parameter {@code at} is under keep the elements of the value written
+     * there apart at, read where the plan's composing reads them ({@link #heldAt}) — nothing where
+     * they cannot name it.
+     */
+    private static List<List<String>> keptApartUnder(MeasuredInput subject, TermPath at) {
+        for (int p = 0; p < subject.parameters().size(); p++) {
+            TermPath root = TermPath.of(subject.parameters().get(p));
+            if (at.isAtOrUnder(root)) {
+                return ElementsKeptApart.heldUnder(subject.types().get(p), at.ruleKeyUnder(root),
+                        subject.ruleReading());
+            }
+        }
+        return List.of();
     }
 
     /**
@@ -8591,8 +8607,10 @@ public final class Generator {
                 subject.rules().inners(), subject.symbols(), subject.rules().kinds(),
                 subject.rules().sums(),
                 fixed.keySet(), additional, handedHere,
-                (at, building) -> within(heldRange(under, at, building, subject.ruleReading()),
-                        sized.get(at)));
+                (at, building) -> new ConstructionPlan.ItMayHold(
+                        within(heldRange(under, at, building, subject.ruleReading()),
+                                sized.get(at)),
+                        ElementsKeptApart.heldBy(heldAt(under, at))));
         ConstructionPlan plan;
         switch (planned) {
             case ConstructionPlan.Result.Planned made -> plan = made.plan();
@@ -8864,9 +8882,14 @@ public final class Generator {
     private static DeclaredBounds.CountRange heldRange(FieldDomains rules, TermPath path,
                                                        Type building,
                                                        RuleReadingContext reading) {
+        return Partitions.heldRange(building, reading, heldAt(rules, path));
+    }
+
+    /** What the rules of the parameter say the value at {@code path} holds, or null where they
+     *  say nothing of it or it is no place of theirs. */
+    private static FieldDomains.Held heldAt(FieldDomains rules, TermPath path) {
         RuleKey field = fieldUnder(path);
-        return Partitions.heldRange(building, reading,
-                field == null ? null : rules.heldAt(field));
+        return field == null ? null : rules.heldAt(field);
     }
 
     /**

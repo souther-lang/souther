@@ -1403,7 +1403,7 @@ public final class Partitions {
         bare.addAll(whereTheRulesLeaveTheValue(view, reading, within));
         bare.addAll(whatAFormatAsksFor(stated.patterns(), reading));
         // What the rules say the value holds, before the value that would hold nothing.
-        bare.addAll(Witnesses.holding(view, characters.least(), reading, inside));
+        bare.addAll(Witnesses.holding(view, characters.least(), List.of(), reading, inside));
         List<FixtureTemplate> ofTheShape =
                 whatTheShapeStandsFor(view.shape(), reading, within, inside);
         bare.addAll(ofTheShape);
@@ -1835,7 +1835,8 @@ public final class Partitions {
                                                      FieldDomains.Held held) {
         TypeView view = TypeView.of(type, reading.source().inners(), reading.source().symbols(),
                         reading.source().kinds(), reading.source().sums());
-        return Witnesses.heldBackFor(view, leastHeld(view, reading, held), reading);
+        return Witnesses.heldBackFor(view, leastHeld(view, reading, held),
+                ElementsKeptApart.heldBy(held), reading);
     }
 
     /**
@@ -1968,7 +1969,8 @@ public final class Partitions {
         // position rather than of each value built for it.
         if (WornNames.of(view.wrappers(), ruleSource) instanceof WornNames.Spelled spelled) {
             for (FixtureTemplate bare : Witnesses.holding(view,
-                    leastHeld(view, reading, held), reading, expanding)) {
+                    leastHeld(view, reading, held), ElementsKeptApart.heldBy(held), reading,
+                    expanding)) {
                 candidates.add(RepresentativeSource.under(spelled.names(), bare));
             }
         }

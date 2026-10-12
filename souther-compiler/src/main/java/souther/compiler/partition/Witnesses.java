@@ -108,9 +108,12 @@ final class Witnesses {
      * no two of which are equal, which a type of two values has not got; the two that exist are a
      * proposal for a floor and are not the count asked for here, and offering them would put a row of
      * two under a line drawn at three.
+     *
+     * @param held what the rules of the value holding this one keep its elements apart at
+     *             ({@link ElementsKeptApart#heldBy}), nothing where nothing holds it
      */
-    static Sized ofSize(TypeView position, int size, RuleReadingContext reading,
-                        Set<TypeSymbol> expanding) {
+    static Sized ofSize(TypeView position, int size, List<List<String>> held,
+                        RuleReadingContext reading, Set<TypeSymbol> expanding) {
         Shape carrier = position.shape();
         if (size == 0) {
             // The same shapes {@link #sized} builds for, and for the same reason they are written
@@ -126,7 +129,7 @@ final class Witnesses {
                      Shape.Undecided _ -> List.<FixtureTemplate>of();
             });
         }
-        Built built = sized(position, size, reading, expanding);
+        Built built = sized(position, size, held, reading, expanding);
         return new Sized(built.exactly(size), built.heldBack());
     }
 
@@ -145,7 +148,7 @@ final class Witnesses {
      */
     static Generator.UnresolvedCombination.Reason reasonForSize(TypeView position, int size,
                                                                 RuleReadingContext reading) {
-        Sized made = ofSize(position, size, reading, Set.of());
+        Sized made = ofSize(position, size, List.of(), reading, Set.of());
         if (!made.values().isEmpty()) {
             return null;
         }
@@ -173,10 +176,13 @@ final class Witnesses {
      * {@link #ofSize}'s — a caller with a line to stand on takes that one, where a set the type has
      * too few values for comes back as nothing at all. The two read one build and neither is written
      * in terms of the other, so a cheaper value for a floor cannot move a line.
+     *
+     * @param held what the rules of the value holding this one keep its elements apart at, as
+     *             {@link #ofSize} takes it
      */
-    static List<FixtureTemplate> holding(TypeView position, int least, RuleReadingContext reading,
-                                         Set<TypeSymbol> expanding) {
-        return least <= 0 ? List.of() : sized(position, least, reading, expanding).all();
+    static List<FixtureTemplate> holding(TypeView position, int least, List<List<String>> held,
+                                         RuleReadingContext reading, Set<TypeSymbol> expanding) {
+        return least <= 0 ? List.of() : sized(position, least, held, reading, expanding).all();
     }
 
     /**
@@ -192,9 +198,10 @@ final class Witnesses {
      * reason there would put "nothing composes one" under every position that has no floor at all.
      */
     static Set<CompositionBudget> heldBackFor(TypeView position, int least,
+                                              List<List<String>> held,
                                               RuleReadingContext reading) {
         return least <= 0 ? Set.of()
-                : sized(position, least, reading, Set.of()).heldBack();
+                : sized(position, least, held, reading, Set.of()).heldBack();
     }
 
     /**
@@ -234,8 +241,8 @@ final class Witnesses {
         }
     }
 
-    private static Built sized(TypeView position, int least, RuleReadingContext reading,
-                               Set<TypeSymbol> expanding) {
+    private static Built sized(TypeView position, int least, List<List<String>> held,
+                               RuleReadingContext reading, Set<TypeSymbol> expanding) {
         if (least <= 0) {
             return Built.NONE;
         }
@@ -253,7 +260,7 @@ final class Witnesses {
                             : Built.of(ofThatManyCharacters(position, least, reading));
             case Shape.Sequence sequence -> least > MOST_ELEMENTS
                     ? Built.stoppedBy(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS)
-                    : ofSequence(sequence, ElementsKeptApart.at(position, reading), least,
+                    : ofSequence(sequence, ElementsKeptApart.at(position, held, reading), least,
                             reading, expanding);
             case Shape.Mapping mapping -> least > MOST_ELEMENTS
                     ? Built.stoppedBy(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS)
@@ -317,8 +324,8 @@ final class Witnesses {
                     elements.add(seed);
                 }
             } else {
-                List<FixtureTemplate> around = others.around(List.of(seed), Set.of(), least);
-                elements.addAll(around == null ? List.of(seed) : around);
+                // One value held is equal to no other held, so this always builds.
+                elements.addAll(others.around(List.of(seed), Set.of(), least));
             }
             out.add(new Made(FixtureTemplate.collection(elements), elements.size()));
         }
@@ -337,22 +344,23 @@ final class Witnesses {
      * those positions and not merely as whole values: two records equal at the one field the
      * statement reads are one element to it however the rest of them differ.
      *
-     * <p>And apart wherever the position's own rules ask it to be ({@link ElementsApart}), since
-     * those hold of every container built there whatever a caller needed it for.
+     * <p>And apart wherever the rules ask it to be — its own names', and {@code held}, those of the
+     * value holding it ({@link ElementsKeptApart#heldBy}) — since those hold of every container
+     * built there whatever a caller needed it for.
      */
     static FixtureTemplate apart(TypeView position, int size, List<List<String>> fields,
-                                 RuleReadingContext reading) {
+                                 List<List<String>> held, RuleReadingContext reading) {
         if (!(position.shape() instanceof Shape.Sequence carrier)) {
             return null;
         }
         if (size == 0) {
             return FixtureTemplate.collection(List.of());
         }
+        // Nothing held, so nothing is equal to anything held and this always builds.
         List<FixtureTemplate> elements = ElementsMadeApart.of(carrier.element(),
-                ElementsApart.meet(fields, ElementsKeptApart.at(position, reading)), size + 1,
-                reading, Set.of()).around(List.of(), Set.of(), size);
-        return elements == null || elements.size() < size ? null
-                : FixtureTemplate.collection(elements);
+                ElementsApart.meet(fields, ElementsKeptApart.at(position, held, reading)),
+                size + 1, reading, Set.of()).around(List.of(), Set.of(), size);
+        return elements.size() < size ? null : FixtureTemplate.collection(elements);
     }
 
     /**

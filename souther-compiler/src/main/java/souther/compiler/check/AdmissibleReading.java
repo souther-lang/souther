@@ -282,11 +282,14 @@ final class AdmissibleReading {
 
     /**
      * Whether {@code part} states that no two elements of a position come to one answer of a
-     * closure this compiler reads ({@link ElementsApart#stated}).
+     * closure this compiler reads ({@link ElementsApart#stated}), of a container the builders of
+     * that position are told about ({@link ElementsApart#readsAPlace}).
      *
      * <p>Stated and not denied. Denied it says some two elements are alike, which nothing here
      * builds for, and a closure this does not read is a form this did not read whatever it is
-     * handed — so both stay {@link UnreadReason#FORM_NOT_READ}.
+     * handed — so both stay {@link UnreadReason#FORM_NOT_READ}. So does a container written any
+     * other way: a rule this calls one about how the elements stand is one a container composed
+     * for the position keeps.
      */
     private boolean relatesElements(ClauseExpr.Part part, Denotations at) {
         if (!part.positive()
@@ -294,7 +297,8 @@ final class AdmissibleReading {
             return false;
         }
         ElementsApart.Stated stated = ElementsApart.stated(call);
-        return stated != null && positionIn(stated.container(), at) != null;
+        return stated != null && ElementsApart.readsAPlace(stated.container())
+                && positionIn(stated.container(), at) != null;
     }
 
     /**

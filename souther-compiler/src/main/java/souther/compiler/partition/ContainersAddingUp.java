@@ -1237,7 +1237,8 @@ final class ContainersAddingUp {
                     reading.source().symbols(),
                     reading.source().kinds(), reading.source().sums(), decided,
                     inside.required(), ConstructionPlan.ContentsComposed.NONE,
-                    (_, building) -> Partitions.heldRange(building, reading, null));
+                    (_, building) -> ConstructionPlan.ItMayHold.counting(
+                            Partitions.heldRange(building, reading, null)));
         }
 
         /** The way the last answer is about. */

@@ -35,8 +35,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class APlanAsksAMapForWhatIsAskedOfEachPartTest {
 
-    private static final ConstructionPlan.HowManyItHolds ANY =
-            (_, _) -> new DeclaredBounds.CountRange(0, Integer.MAX_VALUE);
+    private static final ConstructionPlan.WhatItMayHold ANY = (_, _) ->
+            ConstructionPlan.ItMayHold.counting(new DeclaredBounds.CountRange(0, Integer.MAX_VALUE));
 
     private static final String DEEP_VALUES = """
             module g

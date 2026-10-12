@@ -49,8 +49,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
 
     /** The rules counting nothing, which is what every model here leaves them saying. */
-    private static final ConstructionPlan.HowManyItHolds ANY =
-            (_, _) -> new DeclaredBounds.CountRange(0, Integer.MAX_VALUE);
+    private static final ConstructionPlan.WhatItMayHold ANY = (_, _) ->
+            ConstructionPlan.ItMayHold.counting(new DeclaredBounds.CountRange(0, Integer.MAX_VALUE));
 
 
     /**
@@ -225,8 +225,9 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
                 Set.of(TermPath.of("query").then("item").then("method").then("amount"),
                         bag.element()),
                 Requirements.NONE, ConstructionPlan.ContentsComposed.NONE,
-                (at, _) -> at.equals(bag) ? new DeclaredBounds.CountRange(0, 0)
-                        : new DeclaredBounds.CountRange(0, Integer.MAX_VALUE));
+                (at, _) -> ConstructionPlan.ItMayHold.counting(at.equals(bag)
+                        ? new DeclaredBounds.CountRange(0, 0)
+                        : new DeclaredBounds.CountRange(0, Integer.MAX_VALUE)));
 
         assertInstanceOf(ConstructionPlan.ModelRefusal.NoRoom.class,
                 assertInstanceOf(ConstructionPlan.Result.Refused.class, asked,

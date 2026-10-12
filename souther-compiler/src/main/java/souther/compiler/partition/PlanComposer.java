@@ -167,9 +167,10 @@ final class PlanComposer {
         FixtureTemplate collection = switch (container) {
             case Shape.Sequence carrier -> {
                 // Every element is the one composed, and elements kept apart — a set's, or a
-                // list's its rules keep apart — hold it once: one the rules ask to hold more has
-                // no room for them all to be it.
-                List<List<String>> apart = ElementsKeptApart.at(plan.worn(), carrier, reading);
+                // list's its rules or those of what holds it keep apart — hold it once: one the
+                // rules ask to hold more has no room for them all to be it.
+                List<List<String>> apart =
+                        ElementsKeptApart.at(plan.worn(), carrier, plan.keptApart(), reading);
                 if (plan.eachOf() && !apart.isEmpty() && plan.holds().least() > 1) {
                     yield null;
                 }
