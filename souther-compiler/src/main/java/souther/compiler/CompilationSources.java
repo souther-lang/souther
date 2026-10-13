@@ -55,8 +55,8 @@ public final class CompilationSources {
      * <p>The root is the caller's own. What is found below it is not, so it is read only if it is a
      * regular file of a bounded size: a link found under the root is an error and is not followed,
      * because what it points at may be something that was never meant to be a source, and a report
-     * quotes the source it is about. A {@code .sou} that is not a regular file at all is an error for
-     * the same reason.
+     * quotes the source it is about. A {@code .sou} that is not a regular file at all — a directory,
+     * a pipe — is an error for the same reason.
      *
      * <p>Every one, or an error: a directory under the root that cannot be opened, or a tree larger
      * than the walk will look at, is an error rather than fewer sources, since a program compiled
@@ -70,27 +70,12 @@ public final class CompilationSources {
     public static List<SourceFile> readTree(Path root) throws IOException {
         ConfinedTree tree = ConfinedTree.at(root);
         List<String> found = new ArrayList<>();
-        tree.walk(BoundedRead.MOST_ENTRIES, new ConfinedTree.Entries() {
-            @Override
-            public void regularFile(String relative) {
-                if (relative.endsWith(SUFFIX)) {
-                    found.add(relative);
-                }
-            }
-
-            // Kept so that reading it refuses it, with the name of what was refused.
-            @Override
-            public void link(String relative) {
-                if (relative.endsWith(SUFFIX)) {
-                    found.add(relative);
-                }
-            }
-
-            @Override
-            public void other(String relative) {
-                if (relative.endsWith(SUFFIX)) {
-                    found.add(relative);
-                }
+        // A source is what is named one, whatever it turns out to be on disk: an entry of any kind
+        // but a regular file is kept so that reading it refuses it, with the name of what was
+        // refused, rather than passed over as though it were not there.
+        tree.walk(BoundedRead.MOST_ENTRIES, entry -> {
+            if (entry.relative().endsWith(SUFFIX)) {
+                found.add(entry.relative());
             }
         });
         found.sort(Comparator.comparing(Path::of));

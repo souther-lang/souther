@@ -155,9 +155,12 @@ public final class Backends {
                 // Only a link can be here and name nothing; a regular file exists.
                 throw new Refused("cli.backend.link", entry);
             }
-            if (Files.isRegularFile(entry)) {
-                found.add(describe(entry));
+            if (!Files.isRegularFile(entry)) {
+                // Named as a backend and not a file: a directory or a pipe is a backend that is
+                // not what it was meant to be, as a file that is not a jar is, and is said.
+                throw new Refused("cli.backend.descriptor", entry);
             }
+            found.add(describe(entry));
         }
         return found;
     }

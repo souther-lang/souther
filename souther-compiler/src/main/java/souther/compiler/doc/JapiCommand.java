@@ -105,6 +105,15 @@ public final class JapiCommand {
             return absolute.equals(root) ? root : confinedTo.resolve(root.relativize(absolute).toString());
         }
 
+        /**
+         * Whether {@code link}, a link found under an entry, leads to a file this disk reads: a run
+         * the caller opened reads through a link as any program would, and a confined one reads no
+         * link at all.
+         */
+        boolean readsThrough(Path link) {
+            return confinedTo == null && Files.isRegularFile(link);
+        }
+
         byte[] read(Path file) throws IOException {
             try (java.io.InputStream in = confinedTo == null
                     ? Files.newInputStream(file) : Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
@@ -295,9 +304,20 @@ public final class JapiCommand {
                             entry.work().spend(1);
                         }
 
+                        // A name to suggest is one findClass would answer: a regular file, and a
+                        // link where this run's disk reads through one.
                         @Override
-                        public void regularFile(String relative) {
-                            add(names, relative);
+                        public void reached(ConfinedTree.Reached reached) {
+                            switch (reached) {
+                                case ConfinedTree.Reached.RegularFile file -> add(names, file.relative());
+                                case ConfinedTree.Reached.Link link -> {
+                                    if (entry.disk().readsThrough(at.resolve(link.relative()))) {
+                                        add(names, link.relative());
+                                    }
+                                }
+                                case ConfinedTree.Reached.Directory _, ConfinedTree.Reached.Other _ -> {
+                                }
+                            }
                         }
 
                         // A directory below the entry that cannot be read is said, and the rest

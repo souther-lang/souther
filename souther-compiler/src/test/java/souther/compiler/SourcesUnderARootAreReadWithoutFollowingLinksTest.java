@@ -124,6 +124,13 @@ class SourcesUnderARootAreReadWithoutFollowingLinksTest {
     }
 
     @Test
+    void aSouThatIsADirectoryIsRefused(@TempDir Path dir) throws IOException {
+        Files.createDirectories(dir.resolve("invalid.sou"));
+
+        assertThrows(ConfinementException.class, () -> CompilationSources.readTree(dir));
+    }
+
+    @Test
     void aSouThatIsNotAFileIsRefused(@TempDir Path dir) throws IOException, InterruptedException {
         Path pipe = dir.resolve("piped.sou");
         int made;

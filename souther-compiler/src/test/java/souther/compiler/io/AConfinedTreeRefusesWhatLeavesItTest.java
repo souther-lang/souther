@@ -130,15 +130,12 @@ class AConfinedTreeRefusesWhatLeavesItTest {
         List<String> links = new ArrayList<>();
         ConfinedTree tree = ConfinedTree.at(root);
 
-        tree.walk(1_000, new ConfinedTree.Entries() {
-            @Override
-            public void regularFile(String relative) {
-                files.add(relative);
-            }
-
-            @Override
-            public void link(String relative) {
-                links.add(relative);
+        tree.walk(1_000, entry -> {
+            switch (entry) {
+                case ConfinedTree.Reached.RegularFile file -> files.add(file.relative());
+                case ConfinedTree.Reached.Link link -> links.add(link.relative());
+                case ConfinedTree.Reached.Directory _, ConfinedTree.Reached.Other _ -> {
+                }
             }
         });
 
@@ -146,7 +143,7 @@ class AConfinedTreeRefusesWhatLeavesItTest {
         assertEquals(List.of("b.sou", "dir"), links.stream().sorted().toList());
         assertThrows(LimitExceededException.class, () -> tree.walk(1, new ConfinedTree.Entries() {
             @Override
-            public void regularFile(String relative) {}
+            public void reached(ConfinedTree.Reached entry) {}
         }), "a walk that reaches the limit says it did not finish");
     }
 
@@ -160,8 +157,10 @@ class AConfinedTreeRefusesWhatLeavesItTest {
 
         ConfinedTree.at(dir).walk(2, new ConfinedTree.Entries() {
             @Override
-            public void regularFile(String relative) {
-                files.add(relative);
+            public void reached(ConfinedTree.Reached entry) {
+                if (entry instanceof ConfinedTree.Reached.RegularFile) {
+                    files.add(entry.relative());
+                }
             }
 
             @Override
@@ -188,7 +187,7 @@ class AConfinedTreeRefusesWhatLeavesItTest {
             IOException thrown = assertThrows(IOException.class, () -> tree.walk(1_000,
                     new ConfinedTree.Entries() {
                         @Override
-                        public void regularFile(String relative) {}
+                        public void reached(ConfinedTree.Reached entry) {}
                     }));
             assertTrue(thrown.getMessage().contains("private"), thrown.getMessage());
 
@@ -196,8 +195,10 @@ class AConfinedTreeRefusesWhatLeavesItTest {
             List<String> files = new ArrayList<>();
             tree.walk(1_000, new ConfinedTree.Entries() {
                 @Override
-                public void regularFile(String relative) {
-                    files.add(relative);
+                public void reached(ConfinedTree.Reached entry) {
+                    if (entry instanceof ConfinedTree.Reached.RegularFile) {
+                        files.add(entry.relative());
+                    }
                 }
 
                 @Override
@@ -218,7 +219,7 @@ class AConfinedTreeRefusesWhatLeavesItTest {
         List<String> unreadable = new ArrayList<>();
         ConfinedTree.Walker walker = new ConfinedTree.Walker(dir, 1_000, new ConfinedTree.Entries() {
             @Override
-            public void regularFile(String relative) {}
+            public void reached(ConfinedTree.Reached entry) {}
 
             @Override
             public void unreadable(String relative, IOException cause) {
@@ -232,7 +233,7 @@ class AConfinedTreeRefusesWhatLeavesItTest {
         assertEquals(List.of("a/b"), unreadable);
         ConfinedTree.Walker strict = new ConfinedTree.Walker(dir, 1_000, new ConfinedTree.Entries() {
             @Override
-            public void regularFile(String relative) {}
+            public void reached(ConfinedTree.Reached entry) {}
         });
         assertThrows(IOException.class,
                 () -> strict.postVisitDirectory(dir.resolve("a"), new IOException("gone")));
@@ -256,7 +257,7 @@ class AConfinedTreeRefusesWhatLeavesItTest {
                 }
 
                 @Override
-                public void regularFile(String relative) {}
+                public void reached(ConfinedTree.Reached entry) {}
 
                 @Override
                 public void unreadable(String relative, IOException cause) {
@@ -287,7 +288,7 @@ class AConfinedTreeRefusesWhatLeavesItTest {
         assertThrows(NotDirectoryException.class, () -> ConfinedTree.at(file).walk(1_000,
                 new ConfinedTree.Entries() {
                     @Override
-                    public void regularFile(String relative) {}
+                    public void reached(ConfinedTree.Reached entry) {}
                 }));
     }
 
@@ -299,7 +300,7 @@ class AConfinedTreeRefusesWhatLeavesItTest {
         assertThrows(NoSuchFileException.class, () -> ConfinedTree.at(root).walk(1_000,
                 new ConfinedTree.Entries() {
                     @Override
-                    public void regularFile(String relative) {}
+                    public void reached(ConfinedTree.Reached entry) {}
                 }));
     }
 
@@ -312,15 +313,12 @@ class AConfinedTreeRefusesWhatLeavesItTest {
         List<String> directories = new ArrayList<>();
         List<String> files = new ArrayList<>();
 
-        ConfinedTree.at(dir).walk(1_000, 2, new ConfinedTree.Entries() {
-            @Override
-            public void directory(String relative) {
-                directories.add(relative);
-            }
-
-            @Override
-            public void regularFile(String relative) {
-                files.add(relative);
+        ConfinedTree.at(dir).walk(1_000, 2, entry -> {
+            switch (entry) {
+                case ConfinedTree.Reached.RegularFile file -> files.add(file.relative());
+                case ConfinedTree.Reached.Directory directory -> directories.add(directory.relative());
+                case ConfinedTree.Reached.Link _, ConfinedTree.Reached.Other _ -> {
+                }
             }
         });
 
@@ -333,7 +331,7 @@ class AConfinedTreeRefusesWhatLeavesItTest {
         assertThrows(IOException.class, () -> ConfinedTree.at(dir.resolve("absent")).walk(1_000,
                 new ConfinedTree.Entries() {
                     @Override
-                    public void regularFile(String relative) {}
+                    public void reached(ConfinedTree.Reached entry) {}
                 }));
     }
     @Test

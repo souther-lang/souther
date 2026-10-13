@@ -218,22 +218,25 @@ public final class Workspace {
                         abandonment.stopIfAsked();
                     }
 
-                    // A link is not a project and is reported as one, and a class output that is
-                    // one is not read: the repository is somebody else's, and where a link leads
-                    // is not part of it.
+                    // A project is a directory. A link is not one, and a class output that is one
+                    // is not read: the repository is somebody else's, and where a link leads is
+                    // not part of it.
                     @Override
-                    public void directory(String relative) {
-                        Path project = walked.root().resolve(relative);
-                        ConfinedTree tree = ConfinedTree.at(project);
-                        for (Path layout : CLASS_OUTPUTS) {
-                            if (tree.isDirectory(layout.toString())) {
-                                outputs.add(project.resolve(layout));
+                    public void reached(ConfinedTree.Reached entry) {
+                        switch (entry) {
+                            case ConfinedTree.Reached.Directory directory -> {
+                                Path project = walked.root().resolve(directory.relative());
+                                ConfinedTree tree = ConfinedTree.at(project);
+                                for (Path layout : CLASS_OUTPUTS) {
+                                    if (tree.isDirectory(layout.toString())) {
+                                        outputs.add(project.resolve(layout));
+                                    }
+                                }
+                            }
+                            case ConfinedTree.Reached.RegularFile _, ConfinedTree.Reached.Link _,
+                                 ConfinedTree.Reached.Other _ -> {
                             }
                         }
-                    }
-
-                    @Override
-                    public void regularFile(String relative) {
                     }
 
                     // A directory the editor cannot open holds no project it could read, and the
@@ -281,11 +284,21 @@ public final class Workspace {
                         abandonment.stopIfAsked();
                     }
 
+                    // A source the editor reads is a regular file. One that is a link is not
+                    // followed out of the workspace, and one that is a directory or a pipe has no
+                    // text to analyse; an editor open on the rest is still worth more than none.
                     @Override
-                    public void regularFile(String relative) {
-                        if (relative.endsWith(SUFFIX)) {
-                            sources.put(tree.root().resolve(relative).toUri().toString(),
-                                    readOrEmpty(tree, relative));
+                    public void reached(ConfinedTree.Reached entry) {
+                        switch (entry) {
+                            case ConfinedTree.Reached.RegularFile file -> {
+                                if (file.relative().endsWith(SUFFIX)) {
+                                    sources.put(tree.root().resolve(file.relative()).toUri().toString(),
+                                            readOrEmpty(tree, file.relative()));
+                                }
+                            }
+                            case ConfinedTree.Reached.Directory _, ConfinedTree.Reached.Link _,
+                                 ConfinedTree.Reached.Other _ -> {
+                            }
                         }
                     }
 

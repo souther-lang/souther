@@ -184,6 +184,30 @@ public final class ConfinedTree {
     }
 
     /**
+     * An entry a walk reached and could read, as what it is on disk, named relative to the root with
+     * {@code /} between components; the root itself is {@code ""}. A caller is handed one of these
+     * and says what each kind means to it, in a switch the compiler holds to every kind: a kind a
+     * caller was not asked about is a kind it passes over without knowing, which is how a {@code .sou}
+     * that was a directory was left out of a tree of sources.
+     */
+    public sealed interface Reached {
+
+        String relative();
+
+        /** A regular file. */
+        record RegularFile(String relative) implements Reached {}
+
+        /** A directory, reported before what is in it; one the depth stops at is not gone into. */
+        record Directory(String relative) implements Reached {}
+
+        /** A link, which the walk did not go through. */
+        record Link(String relative) implements Reached {}
+
+        /** What is none of those: a pipe, a socket, a device. */
+        record Other(String relative) implements Reached {}
+    }
+
+    /**
      * What a walk reports. A link is reported and not followed.
      *
      * <p>A walk that did not see the whole tree says so, and by default says so by throwing: a
@@ -201,17 +225,8 @@ public final class ConfinedTree {
          */
         default void visited() throws IOException {}
 
-        /** A regular file, named relative to the root with {@code /} between components. */
-        void regularFile(String relative);
-
-        /** A directory, the root ({@code ""}) among them, before what is in it is reported. */
-        default void directory(String relative) {}
-
-        /** A link, which the walk did not go through. */
-        default void link(String relative) {}
-
-        /** What is neither a regular file, a directory nor a link: a pipe, a socket, a device. */
-        default void other(String relative) {}
+        /** An entry the walk reached and could read. */
+        void reached(Reached entry) throws IOException;
 
         /**
          * An entry the walk could not look at or into, or a directory it stopped reading part way
@@ -283,7 +298,7 @@ public final class ConfinedTree {
             if (!reach()) {
                 return FileVisitResult.TERMINATE;
             }
-            entries.directory(spelled(start, dir));
+            entries.reached(new Reached.Directory(spelled(start, dir)));
             return FileVisitResult.CONTINUE;
         }
 
@@ -293,16 +308,11 @@ public final class ConfinedTree {
                 return FileVisitResult.TERMINATE;
             }
             String relative = spelled(start, file);
-            if (attrs.isSymbolicLink()) {
-                entries.link(relative);
-            } else if (attrs.isRegularFile()) {
-                entries.regularFile(relative);
-            } else if (attrs.isDirectory()) {
-                // One the depth stops at: reached, and not gone into.
-                entries.directory(relative);
-            } else {
-                entries.other(relative);
-            }
+            entries.reached(attrs.isSymbolicLink() ? new Reached.Link(relative)
+                    : attrs.isRegularFile() ? new Reached.RegularFile(relative)
+                    // One the depth stops at: reached, and not gone into.
+                    : attrs.isDirectory() ? new Reached.Directory(relative)
+                    : new Reached.Other(relative));
             return FileVisitResult.CONTINUE;
         }
 
