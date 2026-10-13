@@ -1,5 +1,7 @@
 package souther.cli.backend;
 
+import souther.compiler.io.Listing;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -136,10 +138,14 @@ public final class Backends {
             }
             return List.of();
         }
-        List<Path> entries;
-        try (var listing = Files.list(directory)) {
-            entries = listing.filter(entry -> entry.getFileName().toString().endsWith(".jar"))
-                    .sorted().toList();
+        List<Path> entries = new ArrayList<>();
+        try {
+            Listing.each(directory, entry -> {
+                if (entry.getFileName().toString().endsWith(".jar")) {
+                    entries.add(entry);
+                }
+            });
+            entries.sort(null);
         } catch (IOException e) {
             throw new Refused("cli.backend.directory", directory, e.getMessage());
         }

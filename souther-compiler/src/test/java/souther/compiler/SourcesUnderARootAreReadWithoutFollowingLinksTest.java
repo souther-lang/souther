@@ -99,6 +99,31 @@ class SourcesUnderARootAreReadWithoutFollowingLinksTest {
     }
 
     @Test
+    void aRootThatIsAFileIsAnErrorRatherThanNoSources(@TempDir Path dir) throws IOException {
+        Path file = Files.writeString(dir.resolve("source.txt"), "data");
+
+        assertThrows(IOException.class, () -> CompilationSources.readTree(file));
+    }
+
+    @Test
+    void aRootThatIsALinkToNothingIsAnErrorRatherThanNoSources(@TempDir Path dir) throws IOException {
+        Path root = dir.resolve("root");
+        link(root, dir.resolve("absent"));
+
+        assertThrows(IOException.class, () -> CompilationSources.readTree(root));
+    }
+
+    @Test
+    void aRootThatIsALinkToADirectoryIsTheCallersOwnAndIsRead(@TempDir Path dir) throws IOException {
+        Path real = Files.createDirectories(dir.resolve("real"));
+        Files.writeString(real.resolve("a.sou"), "a");
+        Path root = dir.resolve("root");
+        link(root, real);
+
+        assertEquals(1, CompilationSources.readTree(root).size());
+    }
+
+    @Test
     void aSouThatIsNotAFileIsRefused(@TempDir Path dir) throws IOException, InterruptedException {
         Path pipe = dir.resolve("piped.sou");
         int made;

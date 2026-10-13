@@ -7,6 +7,8 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -206,6 +208,124 @@ class AConfinedTreeRefusesWhatLeavesItTest {
             assertEquals(List.of("private"), unreadable);
             assertEquals(List.of("visible.sou"), files);
         }
+    }
+
+    @Test
+    void aDirectoryReadPartWayIsReportedAsNotAllSeen(@TempDir Path dir) throws IOException {
+        // A directory that opened and then failed part way through its entries reaches the walk
+        // after what it holds, not before; the file system cannot be made to do that on demand, so
+        // the walk is handed it as Files.walkFileTree would hand it.
+        List<String> unreadable = new ArrayList<>();
+        ConfinedTree.Walker walker = new ConfinedTree.Walker(dir, 1_000, new ConfinedTree.Entries() {
+            @Override
+            public void regularFile(String relative) {}
+
+            @Override
+            public void unreadable(String relative, IOException cause) {
+                unreadable.add(relative);
+            }
+        });
+
+        walker.postVisitDirectory(dir.resolve("a").resolve("b"), new IOException("gone"));
+        walker.postVisitDirectory(dir.resolve("c"), null);
+
+        assertEquals(List.of("a/b"), unreadable);
+        ConfinedTree.Walker strict = new ConfinedTree.Walker(dir, 1_000, new ConfinedTree.Entries() {
+            @Override
+            public void regularFile(String relative) {}
+        });
+        assertThrows(IOException.class,
+                () -> strict.postVisitDirectory(dir.resolve("a"), new IOException("gone")));
+    }
+
+    @Test
+    void anEntryThatCouldNotBeReadIsCountedAgainstTheLimit(@TempDir Path dir) throws IOException {
+        List<ClosedDirectory> closed = new ArrayList<>();
+        try {
+            for (String name : List.of("a", "b", "c", "d")) {
+                closed.add(ClosedDirectory.shut(Files.createDirectories(dir.resolve(name))));
+            }
+            List<String> unreadable = new ArrayList<>();
+            int[] visited = {0};
+            List<LimitExceededException> reached = new ArrayList<>();
+
+            ConfinedTree.at(dir).walk(3, new ConfinedTree.Entries() {
+                @Override
+                public void visited() {
+                    visited[0]++;
+                }
+
+                @Override
+                public void regularFile(String relative) {}
+
+                @Override
+                public void unreadable(String relative, IOException cause) {
+                    unreadable.add(relative);
+                }
+
+                @Override
+                public void limitReached(LimitExceededException cause) {
+                    reached.add(cause);
+                }
+            });
+
+            // The root and two of the four, and then the third is one too many.
+            assertEquals(2, unreadable.size());
+            assertEquals(4, visited[0]);
+            assertEquals(1, reached.size());
+        } finally {
+            for (ClosedDirectory each : closed) {
+                each.close();
+            }
+        }
+    }
+
+    @Test
+    void aRootThatIsAFileIsNotATree(@TempDir Path dir) throws IOException {
+        Path file = Files.writeString(dir.resolve("source.txt"), "data");
+
+        assertThrows(NotDirectoryException.class, () -> ConfinedTree.at(file).walk(1_000,
+                new ConfinedTree.Entries() {
+                    @Override
+                    public void regularFile(String relative) {}
+                }));
+    }
+
+    @Test
+    void aRootThatIsALinkToNothingIsNotThere(@TempDir Path dir) throws IOException {
+        Path root = dir.resolve("root");
+        link(root, dir.resolve("absent"));
+
+        assertThrows(NoSuchFileException.class, () -> ConfinedTree.at(root).walk(1_000,
+                new ConfinedTree.Entries() {
+                    @Override
+                    public void regularFile(String relative) {}
+                }));
+    }
+
+    @Test
+    void aWalkReportsTheDirectoriesItReachesAndGoesNoDeeperThanItIsAsked(@TempDir Path dir)
+            throws IOException {
+        Files.createDirectories(dir.resolve("a/b/c"));
+        Files.writeString(dir.resolve("a/b/c/deep.sou"), "deep");
+        Files.writeString(dir.resolve("a/shallow.sou"), "shallow");
+        List<String> directories = new ArrayList<>();
+        List<String> files = new ArrayList<>();
+
+        ConfinedTree.at(dir).walk(1_000, 2, new ConfinedTree.Entries() {
+            @Override
+            public void directory(String relative) {
+                directories.add(relative);
+            }
+
+            @Override
+            public void regularFile(String relative) {
+                files.add(relative);
+            }
+        });
+
+        assertEquals(List.of("", "a", "a/b"), directories.stream().sorted().toList());
+        assertEquals(List.of("a/shallow.sou"), files);
     }
 
     @Test

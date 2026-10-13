@@ -3,19 +3,14 @@ package souther.lsp.analysis;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
-import java.nio.file.FileVisitOption;
-import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
 import souther.compiler.io.BoundedRead;
 import souther.compiler.io.ConfinedTree;
 import souther.compiler.io.LimitExceededException;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Abandonment;
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -212,54 +207,46 @@ public final class Workspace {
             if (!Files.isDirectory(root)) {
                 continue;
             }
+            ConfinedTree walked = ConfinedTree.at(root);
             try {
-                Files.walkFileTree(root, EnumSet.noneOf(FileVisitOption.class), PROJECT_DEPTH,
-                        new SimpleFileVisitor<>() {
-                            // Asked of every path the walk reaches, and not of the ones that turn
-                            // out to be projects. What costs time is the walk, and a root with no
-                            // project in it is a root this would read to the end after being told
-                            // to stop.
-                            @Override
-                            public FileVisitResult preVisitDirectory(Path dir,
-                                                                     BasicFileAttributes attrs) {
-                                project(dir);
-                                return FileVisitResult.CONTINUE;
-                            }
+                walked.walk(BoundedRead.MOST_ENTRIES, PROJECT_DEPTH, new ConfinedTree.Entries() {
+                    // Asked of every entry the walk reaches, and not of the ones that turn out to
+                    // be projects. What costs time is the walk, and a root with no project in it
+                    // is a root this would read to the end after being told to stop.
+                    @Override
+                    public void visited() {
+                        abandonment.stopIfAsked();
+                    }
 
-                            // A directory at the last depth is visited as an entry, not entered.
-                            // A link is not a project, and a class output that is one is not read:
-                            // the repository is somebody else's, and where a link leads is not
-                            // part of it.
-                            @Override
-                            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                                if (attrs.isDirectory()) {
-                                    project(file);
-                                }
-                                return FileVisitResult.CONTINUE;
+                    // A link is not a project and is reported as one, and a class output that is
+                    // one is not read: the repository is somebody else's, and where a link leads
+                    // is not part of it.
+                    @Override
+                    public void directory(String relative) {
+                        Path project = walked.root().resolve(relative);
+                        ConfinedTree tree = ConfinedTree.at(project);
+                        for (Path layout : CLASS_OUTPUTS) {
+                            if (tree.isDirectory(layout.toString())) {
+                                outputs.add(project.resolve(layout));
                             }
+                        }
+                    }
 
-                            // A directory the editor cannot open holds no project it could read,
-                            // and the rest of the workspace is still worth analysing.
-                            @Override
-                            public FileVisitResult visitFileFailed(Path file, IOException e) {
-                                return FileVisitResult.CONTINUE;
-                            }
+                    @Override
+                    public void regularFile(String relative) {
+                    }
 
-                            @Override
-                            public FileVisitResult postVisitDirectory(Path dir, IOException e) {
-                                return FileVisitResult.CONTINUE;
-                            }
+                    // A directory the editor cannot open holds no project it could read, and the
+                    // rest of the workspace is still worth analysing; so is the part of one too
+                    // large to look through.
+                    @Override
+                    public void unreadable(String relative, IOException cause) {
+                    }
 
-                            private void project(Path project) {
-                                abandonment.stopIfAsked();
-                                ConfinedTree tree = ConfinedTree.at(project);
-                                for (Path layout : CLASS_OUTPUTS) {
-                                    if (tree.isDirectory(layout.toString())) {
-                                        outputs.add(project.resolve(layout));
-                                    }
-                                }
-                            }
-                        });
+                    @Override
+                    public void limitReached(LimitExceededException cause) {
+                    }
+                });
             } catch (IOException _) {
                 // a root that cannot be walked contributes nothing; the workspace still works
             }

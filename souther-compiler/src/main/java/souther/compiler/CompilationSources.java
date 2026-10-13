@@ -62,6 +62,8 @@ public final class CompilationSources {
      * than the walk will look at, is an error rather than fewer sources, since a program compiled
      * from part of what it was named is a program nobody wrote.
      *
+     * @throws java.nio.file.NoSuchFileException when the root is not there, or is a link to nothing
+     * @throws java.nio.file.NotDirectoryException when the root is not a directory
      * @throws ConfinementException when a {@code .sou} under the root is a link or not a file
      * @throws LimitExceededException when the tree holds more entries than are looked at
      */
