@@ -166,6 +166,81 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
             }
             """;
 
+    /** That every element is at least ten, and that some element is five at the most: no list
+     *  meets both, so the rules past them are composed no row — and the list holding none meets
+     *  the first and not the second. */
+    private static final String EVERY_ELEMENT_AGAINST_HOW_MANY_MEET = """
+            module p
+            data Line = { q: Int }
+            behavior pick : (ls: List<Line>, n: Int) -> Int
+            let pick (ls, n) = {
+                guard List.all(l -> l.q >= 10, ls) else 0
+                guard List.length(List.filter(l -> l.q <= 5, ls)) >= 1 else 1
+                if n > 3 then 2 else 3
+            }
+            """;
+
+    /** The same two the other way round. */
+    private static final String HOW_MANY_MEET_AGAINST_EVERY_ELEMENT = """
+            module p
+            data Line = { q: Int }
+            behavior pick : (ls: List<Line>, n: Int) -> Int
+            let pick (ls, n) = {
+                guard List.length(List.filter(l -> l.q <= 5, ls)) >= 1 else 1
+                guard List.all(l -> l.q >= 10, ls) else 0
+                if n > 3 then 2 else 3
+            }
+            """;
+
+    /** The same two with every element's as one part of a condition. */
+    private static final String HOW_MANY_MEET_AGAINST_EVERY_ELEMENT_AS_A_PART = """
+            module p
+            data Line = { q: Int }
+            behavior pick : (ls: List<Line>, m: Int, n: Int) -> Int
+            let pick (ls, m, n) = {
+                guard List.all(l -> l.q >= 10, ls) && m >= 0 else 0
+                guard List.length(List.filter(l -> l.q <= 5, ls)) >= 1 else 1
+                if n > 3 then 2 else 3
+            }
+            """;
+
+    /** That every element is at least five, and that some element is at least seven: both hold of
+     *  a list, and an element meeting the second is not every element meeting the first. */
+    private static final String EVERY_ELEMENT_AND_A_STRICTER_COUNT = """
+            module p
+            data Line = { q: Int }
+            behavior pick : (ls: List<Line>, n: Int) -> Int
+            let pick (ls, n) = {
+                guard List.all(l -> l.q >= 5, ls) else 0
+                guard List.length(List.filter(l -> l.q >= 7, ls)) >= 1 else 1
+                if n > 3 then 2 else 3
+            }
+            """;
+
+    /** The same two the other way round. */
+    private static final String A_STRICTER_COUNT_AND_EVERY_ELEMENT = """
+            module p
+            data Line = { q: Int }
+            behavior pick : (ls: List<Line>, n: Int) -> Int
+            let pick (ls, n) = {
+                guard List.length(List.filter(l -> l.q >= 7, ls)) >= 1 else 1
+                guard List.all(l -> l.q >= 5, ls) else 0
+                if n > 3 then 2 else 3
+            }
+            """;
+
+    /** The same two with every element's as one part of a condition. */
+    private static final String EVERY_ELEMENT_AS_A_PART_AND_A_STRICTER_COUNT = """
+            module p
+            data Line = { q: Int }
+            behavior pick : (ls: List<Line>, m: Int, n: Int) -> Int
+            let pick (ls, m, n) = {
+                guard List.all(l -> l.q >= 5, ls) && m >= 0 else 0
+                guard List.length(List.filter(l -> l.q >= 7, ls)) >= 1 else 1
+                if n > 3 then 2 else 3
+            }
+            """;
+
     /** Each model, with what its body answers over the inputs a row holds and the answers of the
      *  rules some row of it is composed for. */
     private static final Map<String, Answered> ANSWERED = Map.ofEntries(
@@ -209,6 +284,36 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
             Map.entry(EVERY_ELEMENT_AS_A_PART, new Answered(row ->
                     !every(row.get(0), "q", 5) || number(row.get(1)) < 0 ? 0
                             : meeting(row.get(0), "q", 5) < 1 ? 1
+                            : number(row.get(2)) > 3 ? 2 : 3,
+                    Set.of(0, 1, 2, 3))),
+            Map.entry(EVERY_ELEMENT_AGAINST_HOW_MANY_MEET, new Answered(row ->
+                    !every(row.get(0), "q", 10) ? 0
+                            : atMost(row.get(0), "q", 5) < 1 ? 1
+                            : number(row.get(1)) > 3 ? 2 : 3,
+                    Set.of(0, 1))),
+            Map.entry(HOW_MANY_MEET_AGAINST_EVERY_ELEMENT, new Answered(row ->
+                    atMost(row.get(0), "q", 5) < 1 ? 1
+                            : !every(row.get(0), "q", 10) ? 0
+                            : number(row.get(1)) > 3 ? 2 : 3,
+                    Set.of(0, 1))),
+            Map.entry(HOW_MANY_MEET_AGAINST_EVERY_ELEMENT_AS_A_PART, new Answered(row ->
+                    !every(row.get(0), "q", 10) || number(row.get(1)) < 0 ? 0
+                            : atMost(row.get(0), "q", 5) < 1 ? 1
+                            : number(row.get(2)) > 3 ? 2 : 3,
+                    Set.of(0, 1))),
+            Map.entry(EVERY_ELEMENT_AND_A_STRICTER_COUNT, new Answered(row ->
+                    !every(row.get(0), "q", 5) ? 0
+                            : meeting(row.get(0), "q", 7) < 1 ? 1
+                            : number(row.get(1)) > 3 ? 2 : 3,
+                    Set.of(0, 1, 2, 3))),
+            Map.entry(A_STRICTER_COUNT_AND_EVERY_ELEMENT, new Answered(row ->
+                    meeting(row.get(0), "q", 7) < 1 ? 1
+                            : !every(row.get(0), "q", 5) ? 0
+                            : number(row.get(1)) > 3 ? 2 : 3,
+                    Set.of(0, 1, 2, 3))),
+            Map.entry(EVERY_ELEMENT_AS_A_PART_AND_A_STRICTER_COUNT, new Answered(row ->
+                    !every(row.get(0), "q", 5) || number(row.get(1)) < 0 ? 0
+                            : meeting(row.get(0), "q", 7) < 1 ? 1
                             : number(row.get(2)) > 3 ? 2 : 3,
                     Set.of(0, 1, 2, 3))));
 
@@ -336,6 +441,10 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
 
     private static long meeting(Hir.Expr list, String field, long least) {
         return fieldOf(list, field).stream().filter(each -> each >= least).count();
+    }
+
+    private static long atMost(Hir.Expr list, String field, long most) {
+        return fieldOf(list, field).stream().filter(each -> each <= most).count();
     }
 
     /** The whole number {@code value} writes. */

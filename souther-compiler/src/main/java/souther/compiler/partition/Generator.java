@@ -5590,8 +5590,8 @@ public final class Generator {
         // value of one of them ({@link ElementBound}). Whether it was is settled once every other
         // condition is placed: where nothing stands at the container by then, nothing composes it
         // under the bound, and the condition is placed as the value it otherwise is.
-        Map<OnTheWay.TakenIn, ElementBound> boundsOnTheElements = boundsOnTheElements(cuts,
-                fixing.keySet());
+        Map<OnTheWay.TakenIn, ElementBound> boundsOnTheElements = boundsOnTheElements(subject,
+                cuts, fixing.keySet());
         List<ElementBound> bounds = List.copyOf(boundsOnTheElements.values());
         // The counts the way asks for that are settled by nothing a condition places, each at the
         // least of what the conditions on it leave: where they will stand is known before any
@@ -5900,8 +5900,14 @@ public final class Generator {
     /**
      * The conditions that every element of a container meets something which are bounds on its
      * elements, each with the bound: a container some number of the row may be written at besides
-     * — a number a condition relating numbers names, or one the item fixes — and what every
-     * element is to meet along one way, over nothing but the element.
+     * — a number a condition relating numbers names, a count of its elements a condition asks
+     * for, or one the item fixes — and what every element is to meet along one way, over nothing
+     * but the element.
+     *
+     * <p>A count of its elements among them. How many elements meet a statement decides which
+     * elements the container holds, so the elements of a container composed for a count are
+     * chosen there — and a bound left out of that composing is a condition on every element the
+     * chosen ones were never held to.
      *
      * <p>Over nothing but the element, because a bound is part of what the container is composed
      * under, and a number outside it is one the composing does not choose. And along one way: a
@@ -5909,16 +5915,23 @@ public final class Generator {
      * where it is met ({@link ElementsWrittenAlike}).
      */
     private static Map<OnTheWay.TakenIn, ElementBound> boundsOnTheElements(
-            List<OnTheWay.TakenIn> cuts, Set<RealizationTarget> fixed) {
+            MeasuredInput subject, List<OnTheWay.TakenIn> cuts, Set<RealizationTarget> fixed) {
         List<TermPath> writtenBesides = new ArrayList<>();
         for (RealizationTarget each : fixed) {
             writtenBesides.add(each.writeRoot());
         }
         for (OnTheWay.TakenIn cut : cuts) {
-            if (cut.demand() instanceof RowDemand.Relational(var relation)) {
-                for (NumericTerm term : relation.terms()) {
-                    writtenBesides.add(RealizationTarget.of(term).writeRoot());
+            switch (cut.demand()) {
+                case RowDemand.Relational(var relation) -> {
+                    for (NumericTerm term : relation.terms()) {
+                        writtenBesides.add(RealizationTarget.of(term).writeRoot());
+                    }
                 }
+                case RowDemand.SoMany many -> writtenBesides.add(new RealizationTarget.ACount(
+                        CountedElements.of(subject.behavior(), many.count(), subject.quantities(),
+                                many.anElementMeeting())).writeRoot());
+                case RowDemand.Exists _, RowDemand.ForAll _, RowDemand.ATruth _,
+                     RowDemand.ForTheRun _ -> { }
             }
         }
         Map<OnTheWay.TakenIn, ElementBound> out = new LinkedHashMap<>();
