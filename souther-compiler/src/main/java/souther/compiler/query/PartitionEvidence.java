@@ -21,11 +21,11 @@ import souther.compiler.partition.UndividedPosition;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.SequencedMap;
-import java.util.SequencedSet;
 import java.util.Set;
 
 /**
@@ -604,7 +604,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                 // more than the space, and what is left would come out below nothing.
                 for (AxisPair pair : space) {
                     if (!(pair.owed() instanceof Owed.Listed(var cells))
-                            || !cells.containsAll(made.reached(pair.between()))) {
+                            || !new HashSet<>(cells).containsAll(made.reached(pair.between()))) {
                         throw new IllegalArgumentException("what the rows reached of "
                                 + pair.between() + " is among what is owed there: "
                                 + made.reached(pair.between()) + " against " + pair.owed());
@@ -665,12 +665,19 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         /** The combinations one relation owes a row for. */
         public sealed interface Owed {
 
-            /** Each of them, in the order of the classes of the first position and then the
-             *  second. */
-            record Listed(SequencedSet<Cell> cells) implements Owed {
+            /**
+             * Each of them, in the order of the classes of the first position and then the second.
+             *
+             * <p>A list, because the order is part of the answer — what is left is said in it — and
+             * two answers in different orders are two answers.
+             */
+            record Listed(List<Cell> cells) implements Owed {
 
                 public Listed {
-                    cells = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(cells));
+                    cells = List.copyOf(cells);
+                    if (new HashSet<>(cells).size() != cells.size()) {
+                        throw new IllegalArgumentException("a combination is owed once: " + cells);
+                    }
                 }
             }
 

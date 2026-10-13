@@ -542,7 +542,7 @@ final class Coverages {
         List<PartitionEvidence.PairSpace.AxisPair> space = new ArrayList<>();
         for (OwedBetween each : owed) {
             space.add(new PartitionEvidence.PairSpace.AxisPair(each.between(), listed
-                    ? new PartitionEvidence.PairSpace.Owed.Listed(each.cells())
+                    ? new PartitionEvidence.PairSpace.Owed.Listed(List.copyOf(each.cells()))
                     : new PartitionEvidence.PairSpace.Owed.Counted(each.count())));
         }
         // Before anything about the rows, because there are none to be about: a build that asked for
@@ -568,20 +568,10 @@ final class Coverages {
         // Which relation each pair of positions is, worked out once. Which two positions they are
         // does not turn on the row, and made inside the walk over the rows it is a name built and
         // thrown away for every row the behavior has.
-        Map<PartitionEvidence.PairSpace.Between, Set<PartitionEvidence.PairSpace.Cell>> owedBy =
-                new LinkedHashMap<>();
-        owed.forEach(each -> owedBy.put(each.between(), each.cells()));
         Map<Long, ReachedBetween> byPositions = new LinkedHashMap<>();
-        for (int i = 0; i < axes.size(); i++) {
-            for (int j = i + 1; j < axes.size(); j++) {
-                PartitionEvidence.PairSpace.Between relation =
-                        new PartitionEvidence.PairSpace.Between(axes.get(i).id(), axes.get(j).id());
-                Set<PartitionEvidence.PairSpace.Cell> here = reached.get(relation);
-                if (here != null) {
-                    byPositions.put((long) i * axes.size() + j,
-                            new ReachedBetween(relation, owedBy.get(relation), here));
-                }
-            }
+        for (OwedBetween each : owed) {
+            byPositions.put((long) each.one() * axes.size() + each.other(), new ReachedBetween(
+                    each.between(), each.cells(), reached.get(each.between())));
         }
         for (Readings.WhereARowSat where : readings.byRow()) {
             for (int i = 0; i < axes.size(); i++) {
@@ -670,16 +660,19 @@ final class Coverages {
                 }
             }
         }
-        return new OwedBetween(between, count, count <= room ? cells : new LinkedHashSet<>());
+        return new OwedBetween(one, other, between, count,
+                count <= room ? cells : new LinkedHashSet<>());
     }
 
     /**
      * The combinations of one relation a row is owed for, and how many there are.
      *
+     * @param one   which of the positions walked the relation's first is
+     * @param other which its second is
      * @param cells each of them, where there are no more than could be listed; empty past that
      */
-    private record OwedBetween(PartitionEvidence.PairSpace.Between between, long count,
-                               SequencedSet<PartitionEvidence.PairSpace.Cell> cells) {
+    private record OwedBetween(int one, int other, PartitionEvidence.PairSpace.Between between,
+                               long count, SequencedSet<PartitionEvidence.PairSpace.Cell> cells) {
     }
 
     /**

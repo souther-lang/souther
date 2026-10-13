@@ -1,6 +1,9 @@
 package souther.compiler.partition;
 
-import java.util.Set;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Which classes of two positions a run of a behavior's body reads together.
@@ -33,39 +36,107 @@ public sealed interface ReadTogether {
     record Every() implements ReadTogether {}
 
     /**
-     * What the ways a run takes read together.
+     * What the ways a run takes read together, held as one table of classes for each two
+     * positions.
      *
-     * @param combinations the combinations some way reads, each written once with its positions in
-     *                     the order the way met them
-     * @param everyOneWith the positions every combination of which is read whatever the ways say
+     * <p>A table and not the combinations as values: every way writes into it whatever it admits,
+     * so the same combination is written many times over, and a table makes each of those a store
+     * into a cell rather than a value built and hashed.
      */
-    record Read(Set<Combination> combinations, Set<AxisId> everyOneWith) implements ReadTogether {
+    final class Read implements ReadTogether {
 
-        public Read {
-            combinations = Set.copyOf(combinations);
-            everyOneWith = Set.copyOf(everyOneWith);
+        private final List<AxisId> axes;
+        private final List<List<String>> classes;
+        /** For each two positions, the {@code one}th before the {@code other}th, one cell per
+         *  class of the first against each class of the second; null where no way reads both. */
+        private final boolean[][] cells;
+        private final boolean[] everyOneWith;
+        private final Map<AxisId, Integer> at = new HashMap<>();
+        private final List<Map<String, Integer>> classAt;
+
+        /**
+         * @param axes         the positions, in the order the reading measured them
+         * @param classes      each position's classes, in the order of its axis
+         * @param cells        for each two positions in that order, as {@link #pair} numbers them,
+         *                     whether some way reads each class of the first with each class of the
+         *                     second, class of the first major; null where no way reads both
+         * @param everyOneWith whether every combination of each position is read whatever the
+         *                     ways say
+         */
+        public Read(List<AxisId> axes, List<List<String>> classes, boolean[][] cells,
+                    boolean[] everyOneWith) {
+            this.axes = List.copyOf(axes);
+            this.classes = classes.stream().<List<String>>map(List::copyOf).toList();
+            this.cells = new boolean[cells.length][];
+            for (int each = 0; each < cells.length; each++) {
+                this.cells[each] = cells[each] == null ? null : cells[each].clone();
+            }
+            this.everyOneWith = everyOneWith.clone();
+            this.classAt = this.classes.stream().map(Read::indexed).toList();
+            for (int index = 0; index < this.axes.size(); index++) {
+                at.put(this.axes.get(index), index);
+            }
+        }
+
+        private static Map<String, Integer> indexed(List<String> ids) {
+            Map<String, Integer> out = new HashMap<>();
+            for (int index = 0; index < ids.size(); index++) {
+                out.put(ids.get(index), index);
+            }
+            return out;
+        }
+
+        /** Which table the {@code one}th and {@code other}th positions share, the first before the
+         *  second. */
+        public static int pair(int one, int other, int positions) {
+            return one * positions + other;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof Read it && axes.equals(it.axes)
+                    && classes.equals(it.classes) && Arrays.deepEquals(cells, it.cells)
+                    && Arrays.equals(everyOneWith, it.everyOneWith));
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * axes.hashCode() + Arrays.deepHashCode(cells);
+        }
+
+        @Override
+        public String toString() {
+            return "ReadTogether.Read" + axes;
         }
     }
-
-    /**
-     * A class of one position and a class of another.
-     *
-     * @param one        the first position
-     * @param oneClass   its class
-     * @param other      the second position
-     * @param otherClass its class
-     */
-    record Combination(AxisId one, String oneClass, AxisId other, String otherClass) {}
 
     /** Whether some run reads class {@code oneClass} of {@code one} together with class
      *  {@code otherClass} of {@code other}, or the reading cannot say that none does. */
     default boolean reads(AxisId one, String oneClass, AxisId other, String otherClass) {
         return switch (this) {
             case Every _ -> true;
-            case Read it -> it.everyOneWith().contains(one) || it.everyOneWith().contains(other)
-                    || it.combinations().contains(new Combination(one, oneClass, other, otherClass))
-                    || it.combinations().contains(
-                            new Combination(other, otherClass, one, oneClass));
+            case Read it -> {
+                Integer first = it.at.get(one);
+                Integer second = it.at.get(other);
+                if (first == null || second == null) {
+                    throw new IllegalArgumentException("a combination of positions this reading"
+                            + " did not measure: " + one + " with " + other);
+                }
+                if (it.everyOneWith[first] || it.everyOneWith[second]) {
+                    yield true;
+                }
+                if (first > second) {
+                    yield it.reads(other, otherClass, one, oneClass);
+                }
+                Integer here = it.classAt.get(first).get(oneClass);
+                Integer there = it.classAt.get(second).get(otherClass);
+                if (here == null || there == null) {
+                    throw new IllegalArgumentException("a class this reading did not measure: "
+                            + oneClass + " of " + one + " with " + otherClass + " of " + other);
+                }
+                boolean[] table = it.cells[Read.pair(first, second, it.axes.size())];
+                yield table != null && table[here * it.classes.get(second).size() + there];
+            }
         };
     }
 }

@@ -23,6 +23,7 @@ import souther.compiler.partition.MeaningsOfABodyReading;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -241,8 +242,10 @@ public final class CoverageRead {
             taken = List.copyOf(taken);
             answeredBy = List.copyOf(answeredBy);
             saidInPart = Set.copyOf(saidInPart);
+            Set<WayIn> written = new HashSet<>(taken);
+            written.addAll(answeredBy);
             for (WayIn each : saidInPart) {
-                if (!taken.contains(each) && !answeredBy.contains(each)) {
+                if (!written.contains(each)) {
                     throw new IllegalArgumentException("a way said in part is a way taken or one"
                             + " the answer is settled by: " + each);
                 }

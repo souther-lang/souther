@@ -421,6 +421,47 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                 "a run under Y reads b, whichever way it ends");
     }
 
+    /**
+     * A value decided inside a helper the body calls is read where the helper's answer is used, as
+     * one decided in the body would be.
+     */
+    @Test
+    void aValueDecidedInAHelperIsReadWhereItsAnswerIsUsed() {
+        Measured helper = measured("""
+                module probe.helper
+
+                data Flat
+                data Metered
+                data Plan = Flat | Metered
+                data Low
+                data High
+                data Tier = Low | High
+                data Usage = Int
+                    invariant value >= 0
+                data Fee = Int
+
+                behavior charge : (plan: Plan, usage: Usage) -> Fee
+                    constructs Fee
+
+                let tier (u: Usage): Tier = if u.value <= 100 then Low else High
+
+                let feeFor (t: Tier): Fee = match t with
+                    | Low -> Fee(300)
+                    | High -> Fee(800)
+
+                let charge (plan, usage) =
+                    match plan with
+                        | Flat -> feeFor(tier(usage))
+                        | Metered -> Fee(1000)
+
+                example charge
+                    | (Flat, Usage(0)) -> Fee(300)
+                """, "charge");
+
+        assertEquals(Set.of("Flat × usage/0 <= x <= 100", "Flat × usage/100 < x"),
+                helper.owed(), "only Flat hands the usage to the helpers");
+    }
+
     private record Measured(String behavior, Compilation compilation,
                             PartitionEvidence evidence) {
 
