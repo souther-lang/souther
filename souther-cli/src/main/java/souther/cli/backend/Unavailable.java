@@ -44,7 +44,7 @@ public final class Unavailable {
         for (Backends.Searched searched : absent.searched()) {
             lines.add(searched(absent.target(), searched));
         }
-        lines.add(repository(failure, repository));
+        lines.addAll(repository(failure, repository));
         if (askingLaterMayAnswer(failure)) {
             lines.add(line("cli.backend.fetch.later", absent.target()));
         }
@@ -79,8 +79,29 @@ public final class Unavailable {
         };
     }
 
-    /** What the repository, called {@code repository}, answered, as the line that says it. */
-    public static Line repository(Central.Failure failure, String repository) {
+    /**
+     * What the repository, called {@code repository}, answered, as the lines that say it: one,
+     * and where no release was built against the Souther, one more for each thing the repository
+     * served that could not be read.
+     */
+    public static List<Line> repository(Central.Failure failure, String repository) {
+        if (!(failure instanceof Central.Failure.NoneBuilt none)) {
+            return List.of(answered(failure, repository));
+        }
+        List<Line> lines = new ArrayList<>();
+        lines.add(answered(failure, repository));
+        if (!none.unstated().isEmpty()) {
+            lines.add(line("cli.backend.central.unstated", repository,
+                    String.join(", ", none.unstated())));
+        }
+        if (!none.notVersions().isEmpty()) {
+            lines.add(line("cli.backend.central.notversions", repository,
+                    String.join(", ", none.notVersions())));
+        }
+        return lines;
+    }
+
+    private static Line answered(Central.Failure failure, String repository) {
         return switch (failure) {
             case Central.Failure.NotAsked _ -> line("cli.backend.central.notasked", repository);
             case Central.Failure.Unregistered unregistered ->
@@ -88,12 +109,9 @@ public final class Unavailable {
             case Central.Failure.Unpublished unpublished ->
                     line("cli.backend.central.unpublished", repository, unpublished.target(),
                             unpublished.metadata());
-            case Central.Failure.NoneBuilt none -> none.unreadable().isEmpty()
-                    ? line("cli.backend.central.none", repository, none.southerVersion(),
-                            String.join(", ", none.releases()))
-                    : line("cli.backend.central.none.unreadable", repository,
-                            none.southerVersion(), String.join(", ", none.releases()),
-                            String.join(", ", none.unreadable()));
+            case Central.Failure.NoneBuilt none ->
+                    line("cli.backend.central.none", repository, none.southerVersion(),
+                            String.join(", ", none.releases()));
             case Central.Failure.Unreachable unreachable ->
                     line("cli.backend.central.unreachable", repository, unreachable.uri(),
                             unreachable.reason());

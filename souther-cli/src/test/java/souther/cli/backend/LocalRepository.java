@@ -13,7 +13,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -22,23 +21,45 @@ import java.util.concurrent.Executors;
 /**
  * A Maven repository in Central's layout, served over HTTP on the loopback address for the length of
  * a test, which says every path it was asked for.
+ *
+ * <p>A path is served in one way, which {@link Serving} names, and is held back for a while first
+ * where the test says so: what is served and when it begins are the two things a test varies, and
+ * each path has one of each.
  */
 public final class LocalRepository implements AutoCloseable {
 
     private static final String ROOT = "/maven2/";
     private static final String GROUP = "org/souther-lang/";
 
+    /** How a path is answered. */
+    private sealed interface Serving {
+
+        /** The file, whole, or a 404 where there is none. */
+        record Whole() implements Serving {}
+
+        /** This status, and nothing else. */
+        record Status(int status) implements Serving {}
+
+        /** The request sent on to {@code location}. */
+        record Redirect(String location) implements Serving {}
+
+        /** The file, a {@code pieces}th at a time, {@code millis} apart. */
+        record Trickle(int pieces, long millis) implements Serving {}
+
+        /** Half the file under its full length, then nothing until the repository is closed. */
+        record Cut() implements Serving {}
+
+        /** The answer begun, and nothing of the file until the repository is closed. */
+        record Silent() implements Serving {}
+    }
+
     private final HttpServer server;
     private final Map<String, byte[]> files = new ConcurrentHashMap<>();
-    private final Map<String, Integer> statuses = new ConcurrentHashMap<>();
-    private final Set<String> cut = ConcurrentHashMap.newKeySet();
+    private final Map<String, Serving> serving = new ConcurrentHashMap<>();
+    private final Map<String, Long> heldBack = new ConcurrentHashMap<>();
     private final List<String> asked = new CopyOnWriteArrayList<>();
     private final CountDownLatch closed = new CountDownLatch(1);
-    private final Map<String, String> redirects = new ConcurrentHashMap<>();
     private volatile long pomDelay;
-    private final Map<String, Long> heldBack = new ConcurrentHashMap<>();
-    private final Map<String, long[]> trickled = new ConcurrentHashMap<>();
-    private final Set<String> silenced = ConcurrentHashMap.newKeySet();
 
     private LocalRepository(HttpServer server) {
         this.server = server;
@@ -140,7 +161,7 @@ public final class LocalRepository implements AutoCloseable {
 
     /** Answers the release's jar with {@code status} and nothing else. */
     public void answer(String artifactId, String version, String classifier, int status) {
-        statuses.put(path(artifactId, version, classifier, "jar"), status);
+        serving.put(path(artifactId, version, classifier, "jar"), new Serving.Status(status));
     }
 
     /**
@@ -148,7 +169,32 @@ public final class LocalRepository implements AutoCloseable {
      * repository is closed: a connection that has stopped.
      */
     public void cut(String artifactId, String version, String classifier) {
-        cut.add(path(artifactId, version, classifier, "jar"));
+        serving.put(path(artifactId, version, classifier, "jar"), new Serving.Cut());
+    }
+
+    /** Begins the answer for {@code path} and sends nothing of it until the repository is closed. */
+    public void silence(String path) {
+        serving.put(path, new Serving.Silent());
+    }
+
+    /** Serves {@code path} a {@code pieces}th at a time, {@code millis} apart, all of it in the end. */
+    public void trickle(String path, int pieces, long millis) {
+        serving.put(path, new Serving.Trickle(pieces, millis));
+    }
+
+    /** Answers {@code path} by sending the request on to {@code location}. */
+    public void redirect(String path, String location) {
+        serving.put(path, new Serving.Redirect(location));
+    }
+
+    /** Begins the answer for {@code path}, however it is served, only after {@code millis}. */
+    public void holdBack(String path, long millis) {
+        heldBack.put(path, millis);
+    }
+
+    /** Begins the answer for every pom only after {@code millis}, as a repository far away does. */
+    public void slowPoms(long millis) {
+        pomDelay = millis;
     }
 
     public void put(String path, String content) {
@@ -161,83 +207,68 @@ public final class LocalRepository implements AutoCloseable {
                 + (classifier == null ? "" : "-" + classifier) + "." + extension;
     }
 
-    /** Answers {@code path} by sending the request on to {@code location}. */
-    public void redirect(String path, String location) {
-        redirects.put(path, location);
-    }
-
-    /** Answers every pom only after {@code millis}, as a repository far away does. */
-    public void slowPoms(long millis) {
-        pomDelay = millis;
-    }
-
-    /** Begins the answer for {@code path} only after {@code millis}. */
-    public void holdBack(String path, long millis) {
-        heldBack.put(path, millis);
-    }
-
-    /** Serves {@code path} a {@code pieces}th at a time, {@code millis} apart, all of it in the end. */
-    public void trickle(String path, int pieces, long millis) {
-        trickled.put(path, new long[] {pieces, millis});
-    }
-
-    /** Begins the answer for {@code path} and sends nothing of it until the repository is closed. */
-    public void silence(String path) {
-        silenced.add(path);
-    }
-
     private void serve(HttpExchange exchange) throws IOException {
         String path = exchange.getRequestURI().getPath();
         asked.add(path);
         String file = path.startsWith(ROOT) ? path.substring(ROOT.length()) : path;
-        Integer status = statuses.get(file);
+        pause(heldBack.getOrDefault(file, file.endsWith(".pom") ? pomDelay : 0));
         byte[] content = files.get(file);
-        long delay = heldBack.getOrDefault(file, file.endsWith(".pom") ? pomDelay : 0);
-        if (delay > 0) {
-            pause(delay);
-        }
         try (exchange) {
-            String location = redirects.get(file);
-            if (location != null) {
-                exchange.getResponseHeaders().add("Location", location);
-                exchange.sendResponseHeaders(302, -1);
-                return;
-            }
-            if (status != null || content == null) {
-                exchange.sendResponseHeaders(status != null ? status : 404, -1);
-                return;
-            }
-            exchange.sendResponseHeaders(200, content.length);
-            OutputStream body = exchange.getResponseBody();
-            long[] trickle = trickled.get(file);
-            if (trickle != null) {
-                int piece = (int) Math.ceil(content.length / (double) trickle[0]);
-                for (int from = 0; from < content.length; from += piece) {
-                    body.write(content, from, Math.min(piece, content.length - from));
-                    body.flush();
-                    pause(trickle[1]);
+            switch (serving.getOrDefault(file, new Serving.Whole())) {
+                case Serving.Status status -> exchange.sendResponseHeaders(status.status(), -1);
+                case Serving.Redirect redirect -> {
+                    exchange.getResponseHeaders().add("Location", redirect.location());
+                    exchange.sendResponseHeaders(302, -1);
                 }
-                body.close();
-                return;
-            }
-            if (!cut.contains(file) && !silenced.contains(file)) {
-                body.write(content);
-                body.close();
-                return;
-            }
-            if (cut.contains(file)) {
-                body.write(content, 0, content.length / 2);
-            }
-            body.flush();
-            try {
-                closed.await();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                case Serving.Whole _ -> {
+                    if (content == null) {
+                        exchange.sendResponseHeaders(404, -1);
+                    } else {
+                        exchange.sendResponseHeaders(200, content.length);
+                        try (OutputStream body = exchange.getResponseBody()) {
+                            body.write(content);
+                        }
+                    }
+                }
+                case Serving.Trickle trickle -> {
+                    exchange.sendResponseHeaders(200, content.length);
+                    try (OutputStream body = exchange.getResponseBody()) {
+                        int piece = (int) Math.ceil(content.length / (double) trickle.pieces());
+                        for (int from = 0; from < content.length; from += piece) {
+                            body.write(content, from, Math.min(piece, content.length - from));
+                            body.flush();
+                            pause(trickle.millis());
+                        }
+                    }
+                }
+                case Serving.Cut _ -> {
+                    exchange.sendResponseHeaders(200, content.length);
+                    OutputStream body = exchange.getResponseBody();
+                    body.write(content, 0, content.length / 2);
+                    body.flush();
+                    awaitClose();
+                }
+                case Serving.Silent _ -> {
+                    exchange.sendResponseHeaders(200, content.length);
+                    exchange.getResponseBody().flush();
+                    awaitClose();
+                }
             }
         }
     }
 
+    private void awaitClose() {
+        try {
+            closed.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private static void pause(long millis) {
+        if (millis <= 0) {
+            return;
+        }
         try {
             Thread.sleep(millis);
         } catch (InterruptedException e) {

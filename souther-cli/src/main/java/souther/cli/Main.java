@@ -236,13 +236,13 @@ public final class Main {
     private static Optional<Backends.Backend> fetchedFor(Backends backends,
                                                          Backends.Absent absent, Locale locale)
             throws Backends.Refused, IOException, InterruptedException {
-        Central central = Central.configured(System.getenv());
+        BackendFetch.Source source = Central.configured(System.getenv());
         Central.Failure failure;
         String offline = System.getenv(OFFLINE);
         if (offline != null && !offline.isEmpty()) {
             failure = new Central.Failure.NotAsked();
         } else {
-            switch (BackendFetch.whereAbsent(backends, central, absent.target(),
+            switch (BackendFetch.whereAbsent(backends, source, absent.target(),
                     absent.southerVersion(),
                     release -> fetching(System.err, locale, release))) {
                 case BackendFetch.Fetched fetched -> {
@@ -252,13 +252,10 @@ public final class Main {
                 case BackendFetch.Present present -> {
                     return Optional.of(present.backend());
                 }
-                case BackendFetch.Current current -> {
-                    return Optional.of(current.backend());
-                }
                 case BackendFetch.Failed failed -> failure = failed.failure();
             }
         }
-        List<Unavailable.Line> lines = Unavailable.of(absent, failure, central.name());
+        List<Unavailable.Line> lines = Unavailable.of(absent, failure, source.name());
         for (int i = 0; i < lines.size(); i++) {
             System.err.println((i == 0 ? "" : "  ")
                     + Messages.get(lines.get(i).key(), locale, lines.get(i).array()));
@@ -301,15 +298,14 @@ public final class Main {
             return 2;
         }
         String version = ModuleMetadata.compilerVersion();
-        Central central = Central.configured(System.getenv());
+        BackendFetch.Source source = Central.configured(System.getenv());
         try {
-            return switch (BackendFetch.again(Backends.installed(), central, target, version,
+            return switch (BackendFetch.again(Backends.installed(), source, target, version,
                     release -> fetching(System.out, locale, release))) {
                 case BackendFetch.Fetched fetched -> {
                     System.out.println(fetched(locale, fetched));
                     yield 0;
                 }
-                case BackendFetch.Present _ -> 0;
                 case BackendFetch.Current current -> {
                     System.out.println(Messages.get("cli.backend.fetch.current", locale,
                             current.release().artifactId(), current.release().version(),
@@ -317,11 +313,12 @@ public final class Main {
                     yield 0;
                 }
                 case BackendFetch.Failed failed -> {
-                    Unavailable.Line line = Unavailable.repository(failed.failure(),
-                            central.name());
                     System.err.println(Messages.get("cli.backend.fetch.failed", locale, target,
                             version));
-                    System.err.println("  " + Messages.get(line.key(), locale, line.array()));
+                    for (Unavailable.Line line : Unavailable.repository(failed.failure(),
+                            source.name())) {
+                        System.err.println("  " + Messages.get(line.key(), locale, line.array()));
+                    }
                     yield 2;
                 }
             };

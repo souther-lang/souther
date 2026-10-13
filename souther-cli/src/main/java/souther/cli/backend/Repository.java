@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -24,7 +25,7 @@ import java.util.Set;
  * and so is every address a redirect from it sends a request to: {@link #admits} is the one place
  * that is decided.
  */
-public final class Repository {
+public final class Repository implements Configured {
 
     /** Where releases are fetched from unless {@code souther.repository} says otherwise. */
     public static final URI MAVEN_CENTRAL = URI.create("https://repo.maven.apache.org/maven2/");
@@ -48,65 +49,53 @@ public final class Repository {
     private final URI root;
     private final String name;
     private final Route route;
-    private final Central.Failure.Misconfigured misconfigured;
     private HttpClient client;
 
-    private Repository(URI root, String name, Route route,
-                       Central.Failure.Misconfigured misconfigured) {
+    private Repository(URI root, String name, Route route) {
         this.root = root;
         this.name = name;
         this.route = route;
-        this.misconfigured = misconfigured;
     }
 
     /** The repository this run's settings name, or the setting that names none it can use. */
-    public static Repository configured(Map<String, String> environment) {
+    public static Configured configured(Map<String, String> environment) {
         String named = System.getProperty(SETTING);
-        URI root = MAVEN_CENTRAL;
-        String name = "Maven Central";
-        if (named != null && !named.isBlank()) {
-            name = named;
-            root = root(named);
-            if (root == null) {
-                return new Repository(MAVEN_CENTRAL, name, new Route.Direct(),
-                        new Central.Failure.Misconfigured(SETTING, named));
-            }
+        String name = named == null || named.isBlank() ? "Maven Central" : named;
+        Optional<URI> root = named == null || named.isBlank() ? Optional.of(MAVEN_CENTRAL)
+                : root(named);
+        if (root.isEmpty()) {
+            return new Configured.Unusable(name,
+                    new Central.Failure.Misconfigured(SETTING, named));
         }
-        if (loopback(root)
-                || bypassed(root.getHost(), either(environment, "NO_PROXY", "no_proxy"))) {
-            return new Repository(root, name, new Route.Direct(), null);
+        URI at = root.get();
+        if (loopback(at) || bypassed(at.getHost(),
+                either(environment, "NO_PROXY", "no_proxy").orElse(""))) {
+            return new Repository(at, name, new Route.Direct());
         }
-        if (System.getProperty("https.proxyHost") != null) {
-            return new Repository(root, name, new Route.AsJavaSays(), null);
+        Optional<String> proxy = either(environment, "HTTPS_PROXY", "https_proxy");
+        if (System.getProperty("https.proxyHost") != null || proxy.isEmpty()) {
+            return new Repository(at, name, new Route.AsJavaSays());
         }
-        String proxy = either(environment, "HTTPS_PROXY", "https_proxy");
-        if (proxy == null) {
-            return new Repository(root, name, new Route.AsJavaSays(), null);
-        }
-        InetSocketAddress address = proxyAddress(proxy);
-        return address == null
-                ? new Repository(root, name, new Route.Direct(),
-                        new Central.Failure.Misconfigured("HTTPS_PROXY", proxy))
-                : new Repository(root, name, new Route.Through(address), null);
+        Optional<InetSocketAddress> address = proxyAddress(proxy.get());
+        return address.isEmpty()
+                ? new Configured.Unusable(name,
+                        new Central.Failure.Misconfigured("HTTPS_PROXY", proxy.get()))
+                : new Repository(at, name, new Route.Through(address.get()));
     }
 
     /** The repository at {@code root}, reached directly; for a repository a test serves. */
     static Repository at(URI root) {
-        return new Repository(root, root.toString(), new Route.Direct(), null);
+        return new Repository(root, root.toString(), new Route.Direct());
     }
 
     /** What a reader is told the repository is called: Maven Central, or the address in its place. */
+    @Override
     public String name() {
         return name;
     }
 
     URI root() {
         return root;
-    }
-
-    /** The setting that names nothing this can ask, or null where the repository can be asked. */
-    Central.Failure.Misconfigured misconfigured() {
-        return misconfigured;
     }
 
     /** Whether a request may be sent to {@code uri}: over HTTPS, or plain HTTP on the loopback. */
@@ -137,14 +126,16 @@ public final class Repository {
         return client;
     }
 
-    private static URI root(String named) {
+    /** The repository a setting names, where it names one that may be asked. */
+    private static Optional<URI> root(String named) {
         URI uri;
         try {
             uri = new URI(named.endsWith("/") ? named : named + "/");
         } catch (URISyntaxException e) {
-            return null;
+            return Optional.empty();
         }
-        return uri.isAbsolute() && uri.getHost() != null && admits(uri) ? uri : null;
+        return uri.isAbsolute() && uri.getHost() != null && admits(uri) ? Optional.of(uri)
+                : Optional.empty();
     }
 
     /** Whether the host is this machine's loopback, as a name or an address, asking no resolver. */
@@ -153,25 +144,24 @@ public final class Repository {
         return host != null && LOOPBACK.contains(host.toLowerCase(Locale.ROOT));
     }
 
-    /** The first of the two spellings a variable is set under that is not blank, or null. */
-    private static String either(Map<String, String> environment, String upper, String lower) {
+    /** The first of the two spellings a variable is set under that is not blank. */
+    private static Optional<String> either(Map<String, String> environment, String upper,
+                                           String lower) {
         for (String variable : List.of(upper, lower)) {
             String value = environment.get(variable);
             if (value != null && !value.isBlank()) {
-                return value.strip();
+                return Optional.of(value.strip());
             }
         }
-        return null;
+        return Optional.empty();
     }
 
     /**
      * Whether {@code NO_PROXY} names the host: a list split at commas, each a host, a domain that
-     * covers its subdomains with or without a leading dot, or {@code *} for every host.
+     * covers its subdomains with or without a leading dot, or {@code *} for every host. An empty
+     * list names none. The host is one an absolute address has, so it is there.
      */
     static boolean bypassed(String host, String noProxy) {
-        if (host == null || noProxy == null) {
-            return false;
-        }
         String asked = host.toLowerCase(Locale.ROOT);
         for (String entry : noProxy.split(",")) {
             String named = entry.strip().toLowerCase(Locale.ROOT);
@@ -185,17 +175,17 @@ public final class Repository {
     }
 
     /** Where {@code HTTPS_PROXY} says the proxy is, written as a URL or as host and port. */
-    private static InetSocketAddress proxyAddress(String proxy) {
+    private static Optional<InetSocketAddress> proxyAddress(String proxy) {
         URI uri;
         try {
             uri = new URI(proxy.contains("://") ? proxy : "http://" + proxy);
         } catch (URISyntaxException e) {
-            return null;
+            return Optional.empty();
         }
         if (uri.getHost() == null) {
-            return null;
+            return Optional.empty();
         }
         int port = uri.getPort() >= 0 ? uri.getPort() : "https".equals(uri.getScheme()) ? 443 : 80;
-        return InetSocketAddress.createUnresolved(uri.getHost(), port);
+        return Optional.of(InetSocketAddress.createUnresolved(uri.getHost(), port));
     }
 }

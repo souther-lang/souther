@@ -9,6 +9,7 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -43,80 +44,132 @@ public final class BackendFetch {
     private static final Set<PosixFilePermission> READABLE =
             PosixFilePermissions.fromString("rw-r--r--");
 
-    /** What came of a fetch. */
-    public sealed interface Outcome permits Fetched, Present, Current, Failed {}
+    /**
+     * Where a fetch asks: a repository the settings name and that can be asked, or settings that
+     * name none, which answer every fetch with why.
+     */
+    public sealed interface Source permits Central, Configured.Unusable {
+
+        /** What a reader is told the repository is called. */
+        String name();
+    }
+
+    /** What came of a compile's fetch: the pair is there by now, or was fetched, or neither. */
+    public sealed interface Supplied permits Asked, Present {}
+
+    /**
+     * What came of a fetch the command asked for: the release was fetched, or is the one fetched
+     * before, or neither.
+     */
+    public sealed interface Refreshed permits Asked, Current {}
+
+    /**
+     * What came of asking the repository and fetching what it named, which either fetch can end
+     * in.
+     */
+    public sealed interface Asked extends Supplied, Refreshed permits Fetched, Failed {}
 
     /** The release was fetched, and is the backend for the pair. */
-    public record Fetched(Backends.Backend backend, Central.Release release) implements Outcome {}
+    public record Fetched(Backends.Backend backend, Central.Release release) implements Asked {}
+
+    /** Nothing was fetched, for the reason the repository gave. */
+    public record Failed(Central.Failure failure) implements Asked {}
 
     /** The pair was there when it was looked for again, so nothing was fetched. */
-    public record Present(Backends.Backend backend) implements Outcome {}
+    public record Present(Backends.Backend backend) implements Supplied {}
 
     /**
      * The newest release is the one fetched before and is still in place, so it was not fetched
      * again.
      */
-    public record Current(Backends.Backend backend, Central.Release release) implements Outcome {}
-
-    /** Nothing was fetched, for the reason the repository gave. */
-    public record Failed(Central.Failure failure) implements Outcome {}
+    public record Current(Backends.Backend backend, Central.Release release) implements Refreshed {}
 
     /**
      * The backend for the pair, fetched where the directories still do not hold it once this run has
      * the directory to itself.
      */
-    public static Outcome whereAbsent(Backends backends, Central central, String target,
-                                      String southerVersion, Consumer<Central.Release> starting)
+    public static Supplied whereAbsent(Backends backends, Source source, String target,
+                                       String southerVersion, Consumer<Central.Release> starting)
             throws Backends.Refused, IOException, InterruptedException {
-        return fetch(backends, central, target, southerVersion, starting, true);
+        return switch (source) {
+            case Configured.Unusable unusable -> new Failed(unusable.why());
+            case Central central -> whereAbsent(backends, central, target, southerVersion,
+                    starting);
+        };
+    }
+
+    private static Supplied whereAbsent(Backends backends, Central central, String target,
+                                        String southerVersion, Consumer<Central.Release> starting)
+            throws Backends.Refused, IOException, InterruptedException {
+        Optional<Central.Failure.Unregistered> unregistered = central.unregistered(target);
+        if (unregistered.isPresent()) {
+            return new Failed(unregistered.get());
+        }
+        Path directory = Files.createDirectories(backends.fetched());
+        synchronized (FETCHING) {
+            try (FileChannel channel = lockFile(directory); FileLock _ = channel.lock()) {
+                if (backends.find(target, southerVersion) instanceof Backends.Found found) {
+                    return new Present(found.backend());
+                }
+                return switch (central.release(target, southerVersion)) {
+                    case Central.Failure failure -> new Failed(failure);
+                    case Central.Release release ->
+                            download(backends, central, release, southerVersion, directory,
+                                    starting);
+                };
+            }
+        }
     }
 
     /**
      * The newest release for the pair, fetched whether or not one is held, in place of one this
      * command fetched before.
      */
-    public static Outcome again(Backends backends, Central central, String target,
-                                String southerVersion, Consumer<Central.Release> starting)
+    public static Refreshed again(Backends backends, Source source, String target,
+                                  String southerVersion, Consumer<Central.Release> starting)
             throws Backends.Refused, IOException, InterruptedException {
-        return fetch(backends, central, target, southerVersion, starting, false);
+        return switch (source) {
+            case Configured.Unusable unusable -> new Failed(unusable.why());
+            case Central central -> again(backends, central, target, southerVersion, starting);
+        };
     }
 
-    private static Outcome fetch(Backends backends, Central central, String target,
-                                 String southerVersion, Consumer<Central.Release> starting,
-                                 boolean onlyWhereAbsent)
+    private static Refreshed again(Backends backends, Central central, String target,
+                                   String southerVersion, Consumer<Central.Release> starting)
             throws Backends.Refused, IOException, InterruptedException {
-        Central.Failure.Unasked unasked = central.unaskable(target);
-        if (unasked != null) {
-            return new Failed(unasked);
+        Optional<Central.Failure.Unregistered> unregistered = central.unregistered(target);
+        if (unregistered.isPresent()) {
+            return new Failed(unregistered.get());
         }
         Path directory = Files.createDirectories(backends.fetched());
         synchronized (FETCHING) {
-            try (FileChannel channel = FileChannel.open(directory.resolve(LOCK),
-                    StandardOpenOption.CREATE, StandardOpenOption.WRITE);
-                 FileLock _ = channel.lock()) {
-                if (onlyWhereAbsent
-                        && backends.find(target, southerVersion) instanceof Backends.Found found) {
-                    return new Present(found.backend());
-                }
+            try (FileChannel channel = lockFile(directory); FileLock _ = channel.lock()) {
                 return switch (central.release(target, southerVersion)) {
                     case Central.Failure failure -> new Failed(failure);
                     case Central.Release release -> {
-                        Backends.Backend before = backends.fetchedBefore(release, southerVersion);
-                        if (before != null) {
-                            yield new Current(before, release);
-                        }
-                        backends.clearToFetch(release, southerVersion);
-                        starting.accept(release);
-                        yield download(backends, central, release, southerVersion, directory);
+                        Optional<Backends.Backend> before =
+                                backends.fetchedBefore(release, southerVersion);
+                        yield before.isPresent() ? new Current(before.get(), release)
+                                : download(backends, central, release, southerVersion, directory,
+                                        starting);
                     }
                 };
             }
         }
     }
 
-    private static Outcome download(Backends backends, Central central, Central.Release release,
-                                    String southerVersion, Path directory)
-            throws IOException, InterruptedException {
+    private static FileChannel lockFile(Path directory) throws IOException {
+        return FileChannel.open(directory.resolve(LOCK), StandardOpenOption.CREATE,
+                StandardOpenOption.WRITE);
+    }
+
+    /** Downloads the release, once the directory has said a fetch may write the pair's name. */
+    private static Asked download(Backends backends, Central central, Central.Release release,
+                                  String southerVersion, Path directory,
+                                  Consumer<Central.Release> starting)
+            throws Backends.Refused, IOException, InterruptedException {
+        backends.clearToFetch(release, southerVersion);
+        starting.accept(release);
         Path part = Files.createTempFile(directory, ".fetching-", ".part");
         try {
             central.download(release, part);
@@ -138,12 +191,13 @@ public final class BackendFetch {
     }
 
     /** Whether the downloaded jar's descriptor says it is the release's target, for this Souther. */
-    private static boolean isTheRelease(Path part, Central.Release release, String southerVersion) {
+    private static boolean isTheRelease(Path part, Central.Release release,
+                                        String southerVersion) {
         try {
             Backends.Backend described = Backends.describe(part);
             return described.name().equals(release.target())
                     && described.southerVersion().equals(southerVersion);
-        } catch (Backends.Refused notOne) {
+        } catch (Backends.Refused _) {
             return false;
         }
     }

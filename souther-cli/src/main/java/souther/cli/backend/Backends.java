@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.TreeSet;
 import java.util.jar.JarFile;
@@ -205,23 +206,24 @@ public final class Backends {
 
     /**
      * The backend the release was fetched as before, where it is still what the directories choose
-     * for the pair, or null.
+     * for the pair.
      *
      * <p>A released file does not change, so a jar fetched from the release's address is that
      * release for as long as it stands under the name it was fetched as. A record that names no
      * release, or another one, means the jar is to be fetched again, which costs a download and
      * nothing else.
      */
-    Backend fetchedBefore(Central.Release release, String southerVersion)
+    Optional<Backend> fetchedBefore(Central.Release release, String southerVersion)
             throws Refused, IOException {
         Path jar = fetchedAs(release, southerVersion);
         Path record = record(jar);
         if (!Files.isRegularFile(record)
                 || !Files.readString(record).equals(release.jar().toString())) {
-            return null;
+            return Optional.empty();
         }
         return find(release.target(), southerVersion) instanceof Found found
-                && found.backend().jar().equals(jar) ? found.backend() : null;
+                && found.backend().jar().equals(jar) ? Optional.of(found.backend())
+                : Optional.empty();
     }
 
     /**

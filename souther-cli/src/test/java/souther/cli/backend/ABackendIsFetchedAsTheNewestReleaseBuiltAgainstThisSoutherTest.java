@@ -71,12 +71,12 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
                 release -> { })).failure();
     }
 
-    private BackendFetch.Outcome fetch(String target) throws Exception {
+    private BackendFetch.Supplied fetch(String target) throws Exception {
         return BackendFetch.whereAbsent(backends, central(), target, HERE,
                 release -> { });
     }
 
-    private BackendFetch.Outcome again(String target) throws Exception {
+    private BackendFetch.Refreshed again(String target) throws Exception {
         return BackendFetch.again(backends, central(), target, HERE, release -> { });
     }
 
@@ -168,7 +168,8 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
         Files.delete(fetched.backend().jar());
         assertEquals(new Central.Failure.NoneBuilt(HERE,
                         List.of("0.1.0", "0.2.0", "0.3.0", "0.4.0", "0.5.0", "0.6.0"),
-                        List.of("0.7.0{x}", "0.6.0", "0.5.0", "0.4.0", "0.3.0", "0.2.0")),
+                        List.of("0.6.0", "0.5.0", "0.4.0", "0.3.0", "0.2.0"),
+                        List.of("0.7.0{x}")),
                 failed("wasm"));
     }
 
@@ -227,8 +228,8 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
         repository.release(WASM, "0.1.0", "cli", OTHER, jar("a", "wasm", OTHER));
         repository.release(WASM, "0.2.0", "cli", OTHER, jar("b", "wasm", OTHER));
 
-        assertEquals(new Central.Failure.NoneBuilt(HERE, List.of("0.1.0", "0.2.0"), List.of()),
-                failed("wasm"));
+        assertEquals(new Central.Failure.NoneBuilt(HERE, List.of("0.1.0", "0.2.0"), List.of(),
+                List.of()), failed("wasm"));
         assertEquals(List.of(), held());
     }
 
@@ -407,13 +408,13 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
         String jar = "/maven2/" + LocalRepository.path(WASM, "0.1.0", "cli", "jar");
 
         ExecutorService runs = Executors.newFixedThreadPool(4);
-        List<Future<BackendFetch.Outcome>> outcomes = new ArrayList<>();
+        List<Future<BackendFetch.Supplied>> outcomes = new ArrayList<>();
         try {
             for (int i = 0; i < 4; i++) {
                 outcomes.add(runs.submit(() -> fetch("wasm")));
             }
-            for (Future<BackendFetch.Outcome> outcome : outcomes) {
-                BackendFetch.Outcome done = outcome.get();
+            for (Future<BackendFetch.Supplied> outcome : outcomes) {
+                BackendFetch.Supplied done = outcome.get();
                 assertTrue(done instanceof BackendFetch.Fetched
                         || done instanceof BackendFetch.Present, done.toString());
             }
@@ -458,7 +459,7 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
         repository.metadata(WASM, "0.1.0");
         repository.release(WASM, "0.1.0", "cli", HERE, jar("silent", "wasm", HERE));
         repository.silence(LocalRepository.path(WASM, "0.1.0", "cli", "jar"));
-        Duration stall = Duration.ofMillis(500);
+        Duration stall = Duration.ofSeconds(1);
 
         long started = System.nanoTime();
         Central.Failure failure = failedWaiting(Duration.ofSeconds(60), stall);
@@ -466,8 +467,10 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
 
         assertTrue(assertInstanceOf(Central.Failure.Unreachable.class, failure).reason()
                 .startsWith("nothing arrived"), failure.toString());
-        assertTrue(took.compareTo(stall) >= 0 && took.compareTo(stall.multipliedBy(3).dividedBy(2))
-                < 0, took.toString());
+        // A stall and its looking come to a stall and two fifths at most; ending a stall late
+        // would be two. What lies between leaves a loaded machine room on either side.
+        assertTrue(took.compareTo(stall) >= 0 && took.compareTo(stall.multipliedBy(17)
+                .dividedBy(10)) < 0, took.toString());
     }
 
     @Test
@@ -479,7 +482,7 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
         assertTrue(Repository.bypassed("repo.maven.apache.org", "*"));
         assertFalse(Repository.bypassed("repo.maven.apache.org", "nexus.corp,,apache"));
         assertFalse(Repository.bypassed("notnexus.corp", "nexus.corp"));
-        assertFalse(Repository.bypassed("repo.maven.apache.org", null));
+        assertFalse(Repository.bypassed("repo.maven.apache.org", ""));
     }
 
     @Test

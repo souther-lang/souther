@@ -6,18 +6,21 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The CLI run as a process of its own, for what is a fact about a process: arguments, standard
  * streams, the working directory, the environment and the exit status.
  *
  * <p>The process is given a home of its own, so the directory a fetched backend goes to where
- * {@code SOUTHER_HOME} is unset is never the home of whoever runs the test, and none of the
- * variables that change what the CLI reads is inherited from that person either.
+ * {@code SOUTHER_HOME} is unset is never the home of whoever runs the test, and inherits none of
+ * that person's environment beyond what starting a process needs.
  */
 final class CliProcess {
 
     private CliProcess() {}
+
+    private static final Set<String> KEPT = Set.of("PATH", "SystemRoot", "TEMP", "TMP", "TMPDIR");
 
     record Ran(int code, String out, String err) {}
 
@@ -34,10 +37,9 @@ final class CliProcess {
         Path err = Files.createTempFile("cli", ".err");
         ProcessBuilder builder = new ProcessBuilder(command).directory(workingDirectory.toFile())
                 .redirectOutput(out.toFile()).redirectError(err.toFile());
-        for (String inherited : List.of("SOUTHER_HOME", "SOUTHER_LANG", Main.OFFLINE,
-                "HTTPS_PROXY", "https_proxy")) {
-            builder.environment().remove(inherited);
-        }
+        // What a process needs to start and to find a temporary directory, and nothing else: a
+        // variable the CLI reads, or comes to read, reaches it only where a test sets it.
+        builder.environment().keySet().retainAll(KEPT);
         builder.environment().putAll(environment);
         Process process = builder.start();
         try (var in = process.getOutputStream()) {

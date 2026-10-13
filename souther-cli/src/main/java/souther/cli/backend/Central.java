@@ -55,7 +55,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * rule, so a target this table does not have can still be installed by hand and cannot be fetched;
  * a {@link Release} exists only for a target the table has.
  */
-public final class Central {
+public final class Central implements BackendFetch.Source {
 
     private static final Coordinate GROUP = new Coordinate("org.souther-lang");
 
@@ -80,9 +80,9 @@ public final class Central {
             }
         }
 
-        /** The coordinate {@code value} is, or null where it is none. */
-        static Coordinate read(String value) {
-            return valid(value) ? new Coordinate(value) : null;
+        /** The coordinate {@code value} is, where it is one. */
+        static Optional<Coordinate> read(String value) {
+            return valid(value) ? Optional.of(new Coordinate(value)) : Optional.empty();
         }
 
         private static boolean valid(String value) {
@@ -176,15 +176,17 @@ public final class Central {
 
         /**
          * The target is released, and none of {@code releases} is built against the Souther.
-         * {@code unreadable} are the releases whose pom did not say what they were built against,
-         * and the versions listed that are not versions at all.
+         * {@code unstated} are the releases among them whose pom did not say what they were built
+         * against, and {@code notVersions} what the metadata lists that is not a version at all:
+         * two different things the repository got wrong, kept apart so each is said as what it is.
          */
-        record NoneBuilt(String southerVersion, List<String> releases, List<String> unreadable)
-                implements Declined {
+        record NoneBuilt(String southerVersion, List<String> releases, List<String> unstated,
+                         List<String> notVersions) implements Declined {
 
             public NoneBuilt {
                 releases = List.copyOf(releases);
-                unreadable = List.copyOf(unreadable);
+                unstated = List.copyOf(unstated);
+                notVersions = List.copyOf(notVersions);
             }
         }
 
@@ -225,9 +227,15 @@ public final class Central {
         this.patience = patience;
     }
 
-    /** The repository this run's settings name, waited for as long as a run usually is. */
-    public static Central configured(Map<String, String> environment) {
-        return new Central(Repository.configured(environment), Patience.USUAL);
+    /**
+     * Where this run's settings say to ask, waited for as long as a run usually is. Reading the
+     * settings asks nothing, so this is what a run that is told to ask nothing names too.
+     */
+    public static BackendFetch.Source configured(Map<String, String> environment) {
+        return switch (Repository.configured(environment)) {
+            case Repository repository -> new Central(repository, Patience.USUAL);
+            case Configured.Unusable unusable -> unusable;
+        };
     }
 
     /** The repository at {@code root}, reached directly and waited for as {@code patience} says. */
@@ -235,29 +243,26 @@ public final class Central {
         return new Central(Repository.at(root), patience);
     }
 
-    /** What a reader is told the repository is called. */
+    @Override
     public String name() {
         return repository.name();
     }
 
     /**
-     * Why {@code target} cannot be asked about at all, or null where it can. Answered without
+     * Why {@code target} cannot be asked about, where no artifact is known for it. Answered without
      * asking anything, and so before anything that would be done to ask.
      */
-    public Failure.Unasked unaskable(String target) {
-        if (repository.misconfigured() != null) {
-            return repository.misconfigured();
-        }
-        return ARTIFACTS.containsKey(target) ? null : new Failure.Unregistered(target);
+    Optional<Failure.Unregistered> unregistered(String target) {
+        return ARTIFACTS.containsKey(target) ? Optional.empty()
+                : Optional.of(new Failure.Unregistered(target));
     }
 
     /** The newest release of {@code target} built against {@code southerVersion}, or why none is. */
     public Answer release(String target, String southerVersion) throws InterruptedException {
-        Failure.Unasked unasked = unaskable(target);
-        if (unasked != null) {
-            return unasked;
-        }
         Artifact artifact = ARTIFACTS.get(target);
+        if (artifact == null) {
+            return new Failure.Unregistered(target);
+        }
         URI metadata = artifactRoot(GROUP, artifact.artifactId()).resolve("maven-metadata.xml");
         try {
             HttpResponse<byte[]> listed = small(metadata);
@@ -265,28 +270,30 @@ public final class Central {
                 return new Failure.Unpublished(target, metadata);
             }
             List<Coordinate> releases = new ArrayList<>();
-            List<String> unreadable = new ArrayList<>();
+            List<String> notVersions = new ArrayList<>();
             for (String listedVersion : texts(child(parse(metadata, served(metadata, listed)),
                     "versioning", "versions"), "version")) {
-                Coordinate version = Coordinate.read(listedVersion);
-                if (version == null) {
-                    unreadable.add(listedVersion);
+                Optional<Coordinate> version = Coordinate.read(listedVersion);
+                if (version.isEmpty()) {
+                    notVersions.add(listedVersion);
                 } else if (!listedVersion.endsWith("-SNAPSHOT")) {
-                    releases.add(version);
+                    releases.add(version.get());
                 }
             }
-            if (releases.isEmpty() && unreadable.isEmpty()) {
+            if (releases.isEmpty() && notVersions.isEmpty()) {
                 return new Failure.Unpublished(target, metadata);
             }
             releases.sort(Comparator.comparing(Coordinate::value, RELEASE_ORDER));
-            Coordinate built = newestBuiltAgainst(artifact, releases.reversed(), southerVersion,
-                    unreadable);
-            return built == null
-                    ? new Failure.NoneBuilt(southerVersion,
-                            releases.stream().map(Coordinate::value).toList(), unreadable)
-                    : new Release(target, artifact.artifactId().value(), built.value(),
-                            file(GROUP, artifact.artifactId(), built, artifact.classifier(),
-                                    "jar"));
+            List<String> unstated = new ArrayList<>();
+            Optional<Coordinate> built = newestBuiltAgainst(artifact, releases.reversed(),
+                    southerVersion, unstated);
+            if (built.isEmpty()) {
+                return new Failure.NoneBuilt(southerVersion,
+                        releases.stream().map(Coordinate::value).toList(), unstated, notVersions);
+            }
+            return new Release(target, artifact.artifactId().value(), built.get().value(),
+                    file(GROUP, artifact.artifactId(), built.get(), artifact.classifier(),
+                            "jar"));
         } catch (Stop stop) {
             return stop.failure();
         }
@@ -294,17 +301,18 @@ public final class Central {
 
     /**
      * The first of {@code newestFirst} whose pom says it was built against {@code southerVersion},
-     * or null. A release whose pom does not say is added to {@code unreadable} and passed over: it
-     * is one release's answer, and says nothing about the others. A repository that cannot be read
-     * ends the search, since the next pom would be asked of the same repository.
+     * where one does. A release whose pom does not say is added to {@code unstated} and passed
+     * over: it is one release's answer, and says nothing about the others. A repository that cannot
+     * be read ends the search, since the next pom would be asked of the same repository.
      *
      * <p>Each answer is a round trip, two where the Souther is in a parent pom, and a Souther a few
      * releases behind the backend's newest would wait for each in turn. So the poms are asked for
      * {@value #WINDOW} at a time and their answers read in order, newest first: the release taken,
      * and the failure said where one is, are the ones asking one at a time would come to.
      */
-    private Coordinate newestBuiltAgainst(Artifact artifact, List<Coordinate> newestFirst,
-                                          String southerVersion, List<String> unreadable)
+    private Optional<Coordinate> newestBuiltAgainst(Artifact artifact,
+                                                    List<Coordinate> newestFirst,
+                                                    String southerVersion, List<String> unstated)
             throws Stop, InterruptedException {
         try (ExecutorService asking = Executors.newVirtualThreadPerTaskExecutor()) {
             try {
@@ -320,14 +328,14 @@ public final class Central {
                         switch (answer(stated.get(i))) {
                             case Stated.Built built -> {
                                 if (built.southerVersion().equals(southerVersion)) {
-                                    return window.get(i);
+                                    return Optional.of(window.get(i));
                                 }
                             }
-                            case Stated.Unstated _ -> unreadable.add(window.get(i).value());
+                            case Stated.Unstated _ -> unstated.add(window.get(i).value());
                         }
                     }
                 }
-                return null;
+                return Optional.empty();
             } finally {
                 // What is still being asked once the answer is known is ended, not waited for.
                 asking.shutdownNow();
@@ -363,27 +371,29 @@ public final class Central {
             if (answer.statusCode() == 404) {
                 return new Stated.Unstated();
             }
-            Element project = parseOrNull(served(at, answer));
-            if (project == null) {
+            Optional<Element> project = parsed(served(at, answer));
+            if (project.isEmpty()) {
                 return new Stated.Unstated();
             }
-            Element stated = child(project, "properties", "souther.version");
+            Element stated = child(project.get(), "properties", "souther.version");
             if (stated != null) {
+                // Compared as written, as a descriptor's is; an expression Maven left unevaluated
+                // in a released pom states nothing, and is not a Souther version that differs.
                 String version = stated.getTextContent().strip();
                 return Backends.bare(version) && !version.contains("${")
                         ? new Stated.Built(version) : new Stated.Unstated();
             }
-            Element parent = child(project, "parent");
+            Element parent = child(project.get(), "parent");
             if (parent == null) {
                 return new Stated.Unstated();
             }
-            Coordinate group = Coordinate.read(text(parent, "groupId"));
-            Coordinate artifactId = Coordinate.read(text(parent, "artifactId"));
-            Coordinate version = Coordinate.read(text(parent, "version"));
-            if (group == null || artifactId == null || version == null) {
+            Optional<Coordinate> group = Coordinate.read(text(parent, "groupId"));
+            Optional<Coordinate> artifactId = Coordinate.read(text(parent, "artifactId"));
+            Optional<Coordinate> version = Coordinate.read(text(parent, "version"));
+            if (group.isEmpty() || artifactId.isEmpty() || version.isEmpty()) {
                 return new Stated.Unstated();
             }
-            at = file(group, artifactId, version, null, "pom");
+            at = file(group.get(), artifactId.get(), version.get(), null, "pom");
         }
         return new Stated.Unstated();
     }
@@ -546,12 +556,12 @@ public final class Central {
         }
     }
 
-    /** A pom's root element, or null where what was served is not one. */
-    private static Element parseOrNull(byte[] served) {
+    /** A pom's root element, where what was served is a document. */
+    private static Optional<Element> parsed(byte[] served) {
         try {
-            return document(served);
+            return Optional.of(document(served));
         } catch (SAXException | IOException e) {
-            return null;
+            return Optional.empty();
         }
     }
 
