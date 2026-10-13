@@ -711,9 +711,16 @@ public final class Generator {
              * carries what stopped a search; what a report and a document say of it is a separate
              * decision from this one, and moving a word here would move it for them.
              *
-             * <p>Budgets that come back with different words are not one stop. Nothing composes such
-             * a set — a stop is one place — and this says so rather than choosing between them,
-             * which would be a precedence over causes at the one layer that has none.
+             * <p>Budgets that come back with different words are the stops of more than one walk:
+             * a walk over the numbers of a set stopped at its figure after the attempt at each
+             * number met one of its own, or two searches whose findings were joined
+             * ({@link CompositionShortfall#and}). What such a search comes to is then what its
+             * walks came to together, which is not a choice between causes: the words say how far a
+             * walk got — to the end of what it was handed and composing nothing there, or stopped in
+             * front of something it did not try — and a search any walk of which stopped in front of
+             * something left that untried, whatever the others came to. So the word for a walk cut
+             * short takes in the word for one that ran to its end. Every budget still travels beside
+             * the word, so what somebody would raise is the same either way.
              */
             public static Reason wordFor(java.util.Collection<CompositionBudget> budgets) {
                 Reason word = null;
@@ -778,17 +785,31 @@ public final class Generator {
                              RUNS_REPAIRING_A_ROW -> throw new IllegalArgumentException(
                                 "no search comes back from this budget, so it has no word: " + each);
                     };
-                    if (word != null && word != here) {
-                        throw new IllegalStateException("one search stopped by budgets that come"
-                                + " back with two words: " + budgets);
-                    }
-                    word = here;
+                    word = word == null ? here : togetherWith(word, here);
                 }
                 if (word == null) {
                     throw new IllegalArgumentException(
                             "a search nothing stopped has no word to read off what stopped it");
                 }
                 return word;
+            }
+
+            /**
+             * What two walks of one search came to together, each said in the word its budget comes
+             * back with: the word for a walk cut short where either was, since the search then left
+             * something untried. Only those two words come back from a budget, so another pair is
+             * a budget given a word this has not been told how to put beside the others.
+             */
+            private static Reason togetherWith(Reason one, Reason other) {
+                if (one == other) {
+                    return one;
+                }
+                Set<Reason> both = EnumSet.of(one, other);
+                if (both.equals(EnumSet.of(NOTHING_COMPOSES_ONE, THE_SEARCH_LEFT_SOMETHING_UNTRIED))) {
+                    return THE_SEARCH_LEFT_SOMETHING_UNTRIED;
+                }
+                throw new IllegalStateException("budgets came back with " + one + " and " + other
+                        + ", and nothing says what the two come to together");
             }
 
             /**
