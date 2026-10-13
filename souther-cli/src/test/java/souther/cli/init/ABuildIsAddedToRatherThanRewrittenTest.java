@@ -293,6 +293,41 @@ class ABuildIsAddedToRatherThanRewrittenTest {
 
                 // souther { southerVersion = "0.4.0" }
                 """));
+    }
+
+    /**
+     * A version counts as set only in the forms this reads, and only where they configure this
+     * project.
+     *
+     * <p>A yes is what lets a model be written, so a name that only reads the same must be a no: a
+     * yes it could not stand behind leaves a project that stops at {@code compileSouther}.
+     */
+    @Test
+    void aVersionIsSetOnlyWhereTheExtensionIsTold() {
+        String applied = """
+                plugins {
+                    id("org.souther-lang.souther") version "0.2.0"
+                }
+
+                """;
+        assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(applied
+                + "souther.southerVersion.set(\"0.4.0\")\n"));
+        assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(applied
+                + "souther { southerVersion = \"0.4.0\" }\n"));
+        assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(applied
+                + "souther {\n    southerVersion.set(\"0.4.0\")\n}\n"));
+        assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(
+                "plugins {\n    id 'org.souther-lang.souther' version '0.2.0'\n}\n\n"
+                        + "souther {\n    southerVersion = '0.4.0'\n}\n"));
+
+        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(applied
+                + "val southerVersion = \"0.4.0\"\n"));
+        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(applied
+                + "println(\"southerVersion\")\n"));
+        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(applied
+                + "subprojects {\n    souther {\n        southerVersion = \"0.4.0\"\n    }\n}\n"));
+        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(applied
+                + "souther {\n    sourceDirectory = layout.projectDirectory.dir(\"model\")\n}\n"));
         assertEquals(GradleBuild.Applied.SOMEWHERE_ELSE, GradleBuild.appliedIn("""
                 plugins {
                     id("org.souther-lang.souther") version "0.1.0" apply false

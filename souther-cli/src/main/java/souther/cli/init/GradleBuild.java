@@ -61,12 +61,12 @@ final class GradleBuild {
     /** What a script says about the plugin, which is not always "yes" or "no". */
     enum Applied {
         /**
-         * It is requested in the `plugins` block and applied there, and the script says
-         * {@code southerVersion}. Nothing to add.
+         * It is requested in the `plugins` block and applied there, and the script sets the
+         * extension's version in a form this reads ({@code tellsTheVersion}). Nothing to add.
          */
         ALREADY,
         /**
-         * It is applied there, and the script says nothing of which Souther it compiles with.
+         * It is applied there, and the script sets no version in a form this reads.
          * Refused rather than added to. The plugin has no default and stops a project with a model
          * that names none, so leaving the script as it is would leave a project that does not build
          * once this command has written its model; and writing the block would override a version
@@ -105,8 +105,7 @@ final class GradleBuild {
                     if (!applies(block)) {
                         return Applied.SOMEWHERE_ELSE;
                     }
-                    return TELLS_THE_VERSION.matcher(said).find() ? Applied.ALREADY
-                            : Applied.UNTOLD;
+                    return tellsTheVersion(said) ? Applied.ALREADY : Applied.UNTOLD;
                 }
                 return rest.contains(BuildPlugins.GRADLE_ID) ? Applied.SOMEWHERE_ELSE
                         : Applied.NOT_YET;
@@ -139,11 +138,74 @@ final class GradleBuild {
     /** Where a plugin is asked for without being applied. */
     private static final Pattern APPLY_FALSE = Pattern.compile("apply\\s+false");
 
+    /** A {@code souther} block opening at the start of a line. */
+    private static final Pattern EXTENSION_BLOCK = Pattern.compile("(?m)^[ \\t]*souther\\s*\\{");
+
+    /** The version set at the start of a line inside that block, by assignment or {@code set}. */
+    private static final Pattern SETS_IN_THE_BLOCK =
+            Pattern.compile("(?m)^[ \\t]*southerVersion\\s*(?:=|\\.set\\s*\\()");
+
+    /** The version set at the start of a line through the extension's name. */
+    private static final Pattern SETS_THROUGH_THE_EXTENSION =
+            Pattern.compile("(?m)^[ \\t]*souther\\.southerVersion\\s*(?:=|\\.set\\s*\\()");
+
     /**
-     * Where the script sets the extension's version, however it is spelt: an assignment in a
-     * {@code souther} block, {@code souther.southerVersion.set(…)}, or a Groovy call.
+     * Whether the script, with its comments taken out, sets the extension's version in one of the
+     * two forms this reads: {@code southerVersion = …} or {@code southerVersion.set(…)} directly in a
+     * top-level {@code souther} block, or {@code souther.southerVersion} assigned or set at the top
+     * level.
+     *
+     * <p>Only those, because a yes here is what lets a model be written into the project, and a yes
+     * this could not stand behind leaves a project that stops at {@code compileSouther}. A name that
+     * merely reads the same — a local {@code val southerVersion}, the word inside a string, a block
+     * inside {@code subprojects} that configures some other project — sets nothing here. A version
+     * given in a form this does not read is answered no, and the refusal says what to write.
      */
-    private static final Pattern TELLS_THE_VERSION = Pattern.compile("\\bsoutherVersion\\b");
+    private static boolean tellsTheVersion(String said) {
+        Matcher through = SETS_THROUGH_THE_EXTENSION.matcher(said);
+        while (through.find()) {
+            if (atTopLevel(said, through.start())) {
+                return true;
+            }
+        }
+        Matcher block = EXTENSION_BLOCK.matcher(said);
+        while (block.find()) {
+            if (!atTopLevel(said, block.start())) {
+                continue;
+            }
+            int close = closingBrace(said, block.end() - 1);
+            if (close < 0) {
+                continue;
+            }
+            String inside = said.substring(block.end(), close);
+            Matcher sets = SETS_IN_THE_BLOCK.matcher(inside);
+            while (sets.find()) {
+                if (atTopLevel(inside, sets.start())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Whether {@code index} is outside every string and every brace of {@code script}. */
+    private static boolean atTopLevel(String script, int index) {
+        int depth = 0;
+        for (int i = 0; i < index; i++) {
+            char c = script.charAt(i);
+            if (c == '"' || c == '\'') {
+                i = endOfString(script, i);
+                if (i >= index) {
+                    return false;
+                }
+            } else if (c == '{') {
+                depth++;
+            } else if (c == '}') {
+                depth--;
+            }
+        }
+        return depth == 0;
+    }
 
     /**
      * The script with its comments taken out, so that what is read is what the build runs.
