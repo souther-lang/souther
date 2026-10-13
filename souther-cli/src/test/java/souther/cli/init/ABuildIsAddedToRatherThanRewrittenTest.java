@@ -56,7 +56,9 @@ class ABuildIsAddedToRatherThanRewrittenTest {
         assertTrue(edited.contains("<artifactId>souther-runtime</artifactId>"), edited);
         assertEquals(1, elements(edited, "plugin"));
         assertEquals("com.acme:billing", MavenBuild.coordinateOf(edited).toString());
-        assertTrue(edited.contains("<southerVersion>9.9.9</southerVersion>"));
+        // The plugin reads the Souther off the runtime the pom now names, and takes no version of
+        // its own.
+        assertFalse(edited.contains("southerVersion"), edited);
     }
 
     /** A pom with a {@code <build>} of its own is added to rather than given a second one. */
@@ -132,13 +134,15 @@ class ABuildIsAddedToRatherThanRewrittenTest {
                 group = "com.acme"
                 """;
 
-        String edited = GradleBuild.withThePluginApplied(script, true);
+        String edited = GradleBuild.withThePluginApplied(script, true, "9.9.9");
 
         assertTrue(edited.contains("id(\"org.souther-lang.souther\") version"));
         assertEquals(1, edited.split("plugins \\{", -1).length - 1,
                 "a second plugins block, which Gradle refuses:\n" + edited);
         assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(edited));
         assertEquals("com.acme", GradleBuild.groupOf(edited));
+        assertTrue(edited.endsWith("souther {\n    southerVersion = \"9.9.9\"\n}\n"),
+                "the plugin is not told which Souther to compile with:\n" + edited);
     }
 
     /**
@@ -162,7 +166,7 @@ class ABuildIsAddedToRatherThanRewrittenTest {
                 }
                 """;
 
-        String edited = GradleBuild.withThePluginApplied(script, true);
+        String edited = GradleBuild.withThePluginApplied(script, true, "9.9.9");
 
         assertTrue(edited.indexOf("org.souther-lang.souther") > edited.indexOf("*/"),
                 "the line landed inside the comment:\n" + edited);
@@ -173,10 +177,10 @@ class ABuildIsAddedToRatherThanRewrittenTest {
     /** A script with no {@code plugins} block gets one, at the top, where the only one may be. */
     @Test
     void aScriptWithNoPluginsBlockGetsOne() {
-        String edited = GradleBuild.withThePluginApplied("group = \"com.acme\"\n", true);
+        String edited = GradleBuild.withThePluginApplied("group = \"com.acme\"\n", true, "9.9.9");
 
         assertTrue(edited.startsWith("plugins {"), edited);
-        assertTrue(edited.endsWith("group = \"com.acme\"\n"), edited);
+        assertTrue(edited.contains("}\n\ngroup = \"com.acme\"\n\nsouther {"), edited);
     }
 
     /** A brace inside a string is not the end of the block it sits in. */
@@ -189,7 +193,7 @@ class ABuildIsAddedToRatherThanRewrittenTest {
                 }
                 """;
 
-        String edited = GradleBuild.withThePluginApplied(script, true);
+        String edited = GradleBuild.withThePluginApplied(script, true, "9.9.9");
 
         assertTrue(edited.indexOf("org.souther-lang.souther") > edited.indexOf("com.example.thing"),
                 "the line landed before the block it was meant to go inside:\n" + edited);
@@ -200,9 +204,11 @@ class ABuildIsAddedToRatherThanRewrittenTest {
     void aGroovyBuildGetsTheGroovySpelling() {
         assertFalse(GradleBuild.isKotlin("build.gradle"));
 
-        String edited = GradleBuild.withThePluginApplied("plugins {\n    id 'java'\n}\n", false);
+        String edited = GradleBuild.withThePluginApplied("plugins {\n    id 'java'\n}\n", false,
+                "9.9.9");
 
         assertTrue(edited.contains("id 'org.souther-lang.souther' version"), edited);
+        assertTrue(edited.contains("southerVersion = '9.9.9'"), edited);
     }
 
     /**
@@ -326,7 +332,8 @@ class ABuildIsAddedToRatherThanRewrittenTest {
      */
     @Test
     void aOneLinePluginsBlockIsAddedToInsideItsBraces() {
-        String edited = GradleBuild.withThePluginApplied("plugins { java }\n\ngroup = \"a\"\n", true);
+        String edited = GradleBuild.withThePluginApplied("plugins { java }\n\ngroup = \"a\"\n", true,
+                "9.9.9");
 
         int applied = edited.indexOf("id(\"org.souther-lang.souther\")");
         assertTrue(applied > edited.indexOf("plugins {"),

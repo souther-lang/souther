@@ -330,7 +330,8 @@ public final class InitCommand {
                 ? MavenBuild.withSoutherDeclared(was, project.southerVersion())
                 : GradleBuild.appliedIn(was) == GradleBuild.Applied.ALREADY ? was
                         : GradleBuild.withThePluginApplied(was,
-                                GradleBuild.isKotlin(file.getFileName().toString()));
+                                GradleBuild.isKotlin(file.getFileName().toString()),
+                                project.southerVersion());
         if (now.equals(was)) {
             return new Line(Did.KEPT, display(here, file));
         }

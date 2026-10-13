@@ -4,17 +4,26 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * A Gradle build somebody else wrote: what it calls the project, and the one line that makes it
- * compile a model.
+ * A Gradle build somebody else wrote: what it calls the project, and what makes it compile a model.
  *
- * <p>One line and no version to keep in step. The plugin adds the runtime the generated code calls,
- * at the version of the Souther it compiles with, and a dependency a Gradle plugin adds is in the
- * metadata the project publishes — so unlike Maven there is nothing for the build script to declare
- * beside the plugin itself.
+ * <p>The plugin, and the Souther it compiles with written once, in its extension. The plugin adds the
+ * runtime the generated code calls at that version, and a dependency a Gradle plugin adds is in the
+ * metadata the project publishes — so unlike Maven there is no dependency for the script to declare.
  */
 final class GradleBuild {
 
     private GradleBuild() {}
+
+    /**
+     * The block telling the plugin which Souther to compile with, which it has no default for.
+     *
+     * <p>The same text in Kotlin and Groovy but for the quotes, both assigning the extension's
+     * property.
+     */
+    static String extension(String southerVersion, boolean kotlin) {
+        String quote = kotlin ? "\"" : "'";
+        return "souther {\n    southerVersion = " + quote + southerVersion + quote + "\n}\n";
+    }
 
     /** How Kotlin and Groovy each write a plugin in a {@code plugins} block. */
     private static final String KOTLIN_LINE =
@@ -152,13 +161,25 @@ final class GradleBuild {
     }
 
     /**
-     * The script with the plugin applied.
+     * The script with the plugin applied and told which Souther to compile with.
+     *
+     * <p>The extension goes at the end, after everything the script already says: a script that did
+     * not apply the plugin has no {@code souther} block to add to.
+     */
+    static String withThePluginApplied(String script, boolean kotlin, String southerVersion) {
+        String applied = withThePluginLine(script, kotlin);
+        String separator = applied.endsWith("\n") ? "\n" : "\n\n";
+        return applied + separator + extension(southerVersion, kotlin);
+    }
+
+    /**
+     * The script with the plugin's line in its {@code plugins} block.
      *
      * <p>Into the {@code plugins} block where there is one, since a second block is an error Gradle
      * reports rather than a second list. A script with none gets one at the top, which is the only
      * place a {@code plugins} block may be.
      */
-    static String withThePluginApplied(String script, boolean kotlin) {
+    private static String withThePluginLine(String script, boolean kotlin) {
         String line = kotlin ? KOTLIN_LINE : GROOVY_LINE;
         // Found in the script with its comments taken out, and written into the script itself.
         // Blanking a comment keeps every other character where it was, so an offset means the same

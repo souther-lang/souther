@@ -48,17 +48,18 @@ A directory whose name is not one a module can have is refused and asked for `--
 with no target named: which backends are installed is theirs to say, and this command knows none
 besides the JVM.
 
-The generated Gradle build names no Souther version, where the Maven one names the version of the
-compiler that wrote it. On Gradle the plugin adds the runtime at the version it compiles with, so
-there is no second number in the build script to keep in step — and the version it compiles with is
-the one that plugin release was verified against, which need not be the one that ran `souther init`.
-Write it to say which:
+Either build names the Souther that wrote it, once. The Maven one names it as the version of the
+`souther-runtime` dependency, which the plugin reads as the Souther to compile with. The Gradle one
+names it in the plugin's extension, which has no default, and the plugin adds the runtime at that
+version itself:
 
 ```kotlin
 souther {
-    southerVersion = "0.1.0-rc5"
+    southerVersion = "0.4.0"
 }
 ```
+
+Adding to a Gradle build writes the same block at the end of the script.
 
 Where a `pom.xml` or a `build.gradle.kts` is already there, the coordinate is read out of it rather
 than written on the line, `--build` is not read — the build that is there is the build — and what is
