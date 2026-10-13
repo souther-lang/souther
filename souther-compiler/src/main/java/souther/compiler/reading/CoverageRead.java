@@ -11,6 +11,8 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.NormalReturn;
 import souther.compiler.coverage.RunBodies;
 import souther.compiler.coverage.UnreachableReasons;
+import souther.compiler.flow.Arrival;
+import souther.compiler.flow.Paths;
 import souther.compiler.flow.ValueArrivals;
 import souther.compiler.flow.Ways;
 import souther.compiler.inputs.InputReading;
@@ -136,6 +138,13 @@ public final class CoverageRead {
     /** Every way a run of the body is known to take, in the order the walk met them. */
     private final Set<WayIn> taken = new LinkedHashSet<>();
 
+    /** The ways the behavior's answer is settled by, in the order the reading holds them. */
+    private final Set<WayIn> answeredBy = new LinkedHashSet<>();
+
+    /** The ways of {@link #taken} and {@link #answeredBy} written without something that holds on
+     *  them. */
+    private final Set<WayIn> saidInPart = new LinkedHashSet<>();
+
     /** The parts a run arrives at and answers nothing from, in the order the walk met them. */
     private final List<NothingAnsweredHere> answersNothing = new ArrayList<>();
 
@@ -198,6 +207,18 @@ public final class CoverageRead {
      *                     matches on. Whole ways and never the decisions on them one at a time,
      *                     since a decision tells apart only what arrives where it is made — a
      *                     comparison under another one is made of the values the first let through
+     * @param answeredBy   the ways the behavior's answer is settled by, each as the decisions its
+     *                     value owes itself to. Not ways into a fork: a value decided under a
+     *                     {@code let} and handed into the arm of a fork further on is settled by
+     *                     both decisions, and no fork is reached by both. Read for which positions
+     *                     a run reads together and for nothing about one position, which the ways
+     *                     out of the forks already say
+     * @param saidInPart   the ways of {@code taken} and {@code answeredBy} written without something
+     *                     that holds on them: a step on the way this reading has no words for, what
+     *                     held above a fork reached more ways than are read, or a value settled more
+     *                     ways than are held apart, which is the way with nothing on it. Each still
+     *                     holds what it says, and says nothing of what else a run on it decided —
+     *                     so which positions a run reads together is not read off one of these
      * @param restOfTheBlock for each arm by which a run leaves a {@code guard} whose condition did
      *                       not hold, the arm the rest of the block is — which is where a run that
      *                       got past the guard went on — and the comparisons the guard decides by.
@@ -210,12 +231,22 @@ public final class CoverageRead {
     public record Read(List<Interaction> interactions,
                        java.util.SequencedMap<ArmProbe, PathAccess> arms,
                        List<WayIn> taken,
+                       List<WayIn> answeredBy,
+                       Set<WayIn> saidInPart,
                        java.util.SequencedMap<ArmProbe, TheRestOfTheBlock> restOfTheBlock,
                        List<NothingAnsweredHere> answersNothing) {
 
         public Read {
             interactions = List.copyOf(interactions);
             taken = List.copyOf(taken);
+            answeredBy = List.copyOf(answeredBy);
+            saidInPart = Set.copyOf(saidInPart);
+            for (WayIn each : saidInPart) {
+                if (!taken.contains(each) && !answeredBy.contains(each)) {
+                    throw new IllegalArgumentException("a way said in part is a way taken or one"
+                            + " the answer is settled by: " + each);
+                }
+            }
             answersNothing = List.copyOf(answersNothing);
             arms = java.util.Collections.unmodifiableSequencedMap(
                     new java.util.LinkedHashMap<>(arms));
@@ -292,6 +323,7 @@ public final class CoverageRead {
                 meetings, arms);
         walked.walkBody(run.entry(), null, naming,
                 new Reach.Ways(List.of(new WayIn(List.of()))), true);
+        walked.answeredBy(run.entry());
         // Each method after every body that calls into it, so it is entered every way it is
         // before it is read. One entering after its method was read is refused where it is made.
         for (Core method : run.methods()) {
@@ -308,7 +340,33 @@ public final class CoverageRead {
             walked.takesAt(group);
         }
         return new Read(found, arms.found(behavior), List.copyOf(walked.taken),
-                arms.restOfTheBlock(behavior), walked.answersNothing);
+                List.copyOf(walked.answeredBy), walked.saidInPart, arms.restOfTheBlock(behavior),
+                walked.answersNothing);
+    }
+
+    /**
+     * That the answer of {@code root}, the body just walked, is settled by the ways the reading of
+     * it holds.
+     *
+     * <p>One with nothing on it, said in part, where the reading will not hold the ways apart: it
+     * says that a run arrives and nothing of what it decided on the way, which is what is known.
+     */
+    private void answeredBy(Core root) {
+        if (!(reading.waysAt(root) instanceof Paths.Held<Outcome>(var arrivals))) {
+            WayIn nothingSaid = new WayIn(List.of());
+            answeredBy.add(nothingSaid);
+            saidInPart.add(nothingSaid);
+            return;
+        }
+        for (Arrival<Outcome> each : arrivals) {
+            WayIn way = new WayIn(each.path().holds());
+            answeredBy.add(way);
+            // A way the naming could not write down whole holds less than the value owes
+            // itself to.
+            if (!each.isComplete()) {
+                saidInPart.add(way);
+            }
+        }
     }
 
     /**
@@ -365,7 +423,15 @@ public final class CoverageRead {
         // Past the bound a way in is read no further, and nor is what is known on it: the fork's
         // own ways stand for it, which reads a decision against more than it was made in and
         // never against less.
-        taken.addAll(into.known().size() > MOST_WAYS_IN ? own.known() : into.known());
+        boolean pastTheBound = into.known().size() > MOST_WAYS_IN;
+        List<WayIn> known = pastTheBound ? own.known() : into.known();
+        taken.addAll(known);
+        // What was left out is said, whichever way it was left out: what held above the fork past
+        // the bound, or a step on the way nothing states. A way that holds less than a run on it
+        // decided is no answer to what that run read together.
+        if (pastTheBound || into instanceof Reach.Unnameable) {
+            saidInPart.addAll(known);
+        }
     }
 
     /**

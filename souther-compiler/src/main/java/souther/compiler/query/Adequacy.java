@@ -84,7 +84,6 @@ import souther.compiler.observe.Stage;
 import souther.compiler.partition.AnswersStoodIn;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
-import souther.compiler.partition.BodyDistinction;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.ClassOfAPosition;
@@ -114,6 +113,7 @@ import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputClassifications;
 import souther.compiler.partition.InputNumbersAnAnswerTurnsOn;
 import souther.compiler.partition.ObservedInputs;
+import souther.compiler.partition.BodyInputReading;
 import souther.compiler.partition.BodyReading;
 import souther.compiler.partition.FillResult;
 import souther.compiler.partition.GenerationPlan;
@@ -2179,19 +2179,19 @@ public final class Adequacy {
             Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
             boolean withABody = checked != null && checked.behaviorBodies().containsKey(spec.name())
                     && met != null && met.get(spec.name()) != null;
-            Map<AxisId, BodyDistinction> toldApart;
+            BodyInputReading body;
             if (withABody) {
                 // What the model's rules prove arrives at each place, which the ways read are
                 // places of: one plan's places, held to being so.
                 PathReachability.Answers arrives =
                         arrivalsOf(db.ask(new PathReached(name)).value(), spec);
                 arrives.requireNumbering(checked.plan().identity());
-                toldApart = BodyDistinction.of(met.get(spec.name()), subject, arrives);
+                body = BodyInputReading.of(met.get(spec.name()), subject, arrives);
             } else {
-                toldApart = BodyDistinction.withoutABody(subject.axes().axes());
+                body = BodyInputReading.withoutABody(subject.axes().axes());
             }
             return Coverages.of(subject, seen,
-                    db.ask(new Front.Adequacy()).value().measures(), toldApart);
+                    db.ask(new Front.Adequacy()).value().measures(), body);
         }
     }
 
@@ -7332,7 +7332,7 @@ public final class Adequacy {
                 if (branch != null && branch.measured().made().isPresent()) {
                     out.addAll(armFindings(behavior.name(), branch.arms()));
                 }
-                combinationFindings(db, name, behavior.name(), CombinationCriterion.of(
+                combinationFindings(behavior.name(), CombinationCriterion.of(
                         meetings == null ? null : meetings.get(behavior.name()), divided),
                         answersNothing, out);
                 ReplacementEvidence rewrites =
@@ -7379,7 +7379,7 @@ public final class Adequacy {
          * whether anything could compose a row for it is a further question, and the answer to it
          * is not part of whether the requirement stands.
          */
-        private static void combinationFindings(Db db, String module, String behavior,
+        private static void combinationFindings(String behavior,
                                                 CombinationCriterion criterion,
                                                 WhereNothingIsAnswered answersNothing,
                                                 List<Finding> out) {
@@ -7407,13 +7407,7 @@ public final class Adequacy {
                 // nowhere else: a space nobody walked is not a space every combination of which is
                 // missing, which is what a list of the whole of it would say.
                 case CombinationCriterion.PairFallback(var space) -> {
-                    souther.compiler.partition.MeasuredInput subject =
-                            subjectOf(db, module, behavior);
-                    if (subject == null) {
-                        return;
-                    }
-                    for (ObligationIdentity.OfAFallbackPairCell each
-                            : Coverages.uncovered(behavior, subject.axes(), space)) {
+                    for (ObligationIdentity.OfAFallbackPairCell each : space.left(behavior)) {
                         out.add(Finding.by(behavior, space.counted(),
                                 new About.ACombinationOfTwoClassesNoRowIsIn(each),
                                 ObligationDisposition.openOn(

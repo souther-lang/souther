@@ -17,6 +17,7 @@ import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.Decision;
+import souther.compiler.reading.NothingAnsweredHere;
 import souther.compiler.reading.WayIn;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
@@ -34,8 +35,8 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * The reading {@link BodyDistinction} is made by: the ways a body's runs take, each put to the
- * classes of every position it is about.
+ * The reading {@link BodyDistinction} and {@link ReadTogether} are made by: the ways a body's runs
+ * take, each put to the classes of every position it is about.
  *
  * <p><b>A way and not a decision.</b> A decision tells apart only what arrives where it is made. Under
  * {@code guard n > 0} a second {@code guard n > -10} is made of the values the first let through, and
@@ -78,6 +79,8 @@ final class WhatABodyTellsApart {
     private final ClassCoexistence coexistence;
     /** Which position each condition is about and what it admits there, asked once of each. */
     private final Map<souther.compiler.reading.Condition, Placed> placed = new HashMap<>();
+    /** The combinations of two positions' classes some way read so far reads together. */
+    private final Set<ReadTogether.Combination> readTogether = new LinkedHashSet<>();
 
     private WhatABodyTellsApart(MeasuredInput.MeasuredAxes measured,
                                 List<RuleWithoutALine> noLine, ArmsNamed armsNamed,
@@ -104,23 +107,44 @@ final class WhatABodyTellsApart {
      * positions what decides a fork may turn on, both read where the operations stand, and
      * {@code arrives} what the model's rules prove arrives at each place a way passes.
      */
-    static Map<AxisId, BodyDistinction> of(CoverageRead.Read read,
-                                           MeasuredInput.MeasuredAxes measured,
-                                           List<RuleWithoutALine> noLine,
-                                           ArmsNamed armsNamed,
-                                           ForkDependencies dependencies,
-                                           PathReachability.Answers arrives) {
+    static BodyInputReading of(CoverageRead.Read read,
+                               MeasuredInput.MeasuredAxes measured,
+                               List<RuleWithoutALine> noLine,
+                               ArmsNamed armsNamed,
+                               ForkDependencies dependencies,
+                               PathReachability.Answers arrives) {
         WhatABodyTellsApart reading =
                 new WhatABodyTellsApart(measured, noLine, armsNamed, dependencies, arrives);
         List<Axis> axes = measured.axes();
         for (WayIn way : read.taken()) {
-            reading.take(way);
+            reading.take(way, read.saidInPart().contains(way), true);
+        }
+        // And the ways a run ends, for what a run reads together and nothing else. Each of their
+        // decisions is on a way out of its fork already, which is what a position is told apart
+        // by; what these add is the decisions made on no one way into a fork and met in the value
+        // the run answers, or in a part where it answers nothing.
+        for (WayIn way : read.answeredBy()) {
+            reading.take(way, read.saidInPart().contains(way), false);
+        }
+        for (NothingAnsweredHere part : read.answersNothing()) {
+            for (List<souther.compiler.reading.Condition> way : part.ways()) {
+                reading.takeToAnEnd(way);
+            }
         }
         Map<AxisId, BodyDistinction> out = new LinkedHashMap<>();
+        Set<AxisId> everyOneWith = new LinkedHashSet<>();
         for (int at = 0; at < axes.size(); at++) {
             out.put(axes.get(at).id(), reading.at(at));
+            // A rule the body wrote that no decision reads tells the position apart where no way
+            // shows it, and what it reads beside it is not known — whether or not what the ways
+            // did read already tells every class apart, which is all the position's own answer
+            // asks.
+            if (reading.ruleNoDecisionRead(at)) {
+                everyOneWith.add(axes.get(at).id());
+            }
         }
-        return Map.copyOf(out);
+        return new BodyInputReading(out,
+                new ReadTogether.Read(reading.readTogether, everyOneWith));
     }
 
     /**
@@ -451,19 +475,28 @@ final class WhatABodyTellsApart {
         };
     }
 
-    /** The applications {@code way} goes down, by the element position each is about. */
-    private Map<Integer, Set<ConstructOccurrence>> applicationsAt(WayIn way) {
+    /** The applications a way holding {@code conditions} goes down, by the element position each
+     *  is about. */
+    private Map<Integer, Set<ConstructOccurrence>> applicationsAt(
+            List<souther.compiler.reading.Condition> conditions) {
         Map<Integer, Set<ConstructOccurrence>> out = new HashMap<>();
-        for (Decision decision : way.decisions()) {
-            if (placedOf(decision.constrains()) instanceof Placed.OfAnApplication it) {
+        for (souther.compiler.reading.Condition each : conditions) {
+            if (placedOf(each) instanceof Placed.OfAnApplication it) {
                 out.computeIfAbsent(it.about().at(), _ -> new LinkedHashSet<>()).add(it.fork());
             }
         }
         return out;
     }
 
-    /** One way: what all of its decisions admit together at each position, if a value can take it. */
-    private void take(WayIn way) {
+    /**
+     * One way: what all of its decisions admit together at each position, and which classes of two
+     * positions it reads together, if a value can take it.
+     *
+     * @param saidInPart whether the way was written without something that holds on it
+     * @param tellsApart whether what the way admits at each position is part of what the body
+     *                   tells apart there, as against only what it reads together
+     */
+    private void take(WayIn way, boolean saidInPart, boolean tellsApart) {
         // A place on the way the model's rules prove nothing arrives at is one no run passes, so
         // no run takes the way and nothing on it is anything a run decides.
         for (Decision decision : way.decisions()) {
@@ -472,15 +505,33 @@ final class WhatABodyTellsApart {
                 return;
             }
         }
+        take(way.conditions(), saidInPart, tellsApart);
+    }
+
+    /**
+     * A way to a part that answers nothing, held as the conditions on it: which classes of two
+     * positions a run there read together before it ended.
+     *
+     * <p>No run through such a part is watched, so there is no place on the way a proof could be
+     * asked of, and it is read as a way some value takes. A combination left owed there is one the
+     * account of the obligations says is open on the part.
+     */
+    private void takeToAnEnd(List<souther.compiler.reading.Condition> conditions) {
+        take(conditions, false, false);
+    }
+
+    /** The same of a way held as the conditions on it, once no place on it is proved to be one no
+     *  run passes. */
+    private void take(List<souther.compiler.reading.Condition> conditions, boolean saidInPart,
+                      boolean tellsApart) {
         // What the way says at the positions it stands at whatever case a row is: a condition
         // about the position itself puts a row taking the way there.
         Admitted direct = new Admitted(axes.size());
         boolean subjectUnknownHere = false;
         List<Placed.UnderTheCases> underTheCases = new ArrayList<>();
         List<souther.compiler.reading.Condition> saidUnderTheCases = new ArrayList<>();
-        Map<Integer, Set<ConstructOccurrence>> applicationsAt = applicationsAt(way);
-        for (Decision decision : way.decisions()) {
-            souther.compiler.reading.Condition each = decision.constrains();
+        Map<Integer, Set<ConstructOccurrence>> applicationsAt = applicationsAt(conditions);
+        for (souther.compiler.reading.Condition each : conditions) {
             switch (placedOf(each)) {
                 case Placed.About it -> {
                     direct.stands[it.at()] = true;
@@ -527,6 +578,7 @@ final class WhatABodyTellsApart {
             takenUnderEach.add(each.underEach().stream().map(Placed.UnderACase::taken).toList());
         }
         Admitted taken = direct;
+        List<Chosen> chosen = new ArrayList<>();
         for (List<Integer> together : CaseChoices.chosenTogether(takenUnderEach)) {
             List<Admitted> ways = waysUnderTheCases(together, underTheCases, saidUnderTheCases,
                     direct);
@@ -534,11 +586,17 @@ final class WhatABodyTellsApart {
             if (ways.isEmpty()) {
                 return;
             }
-            taken = taken.joinedWith(ways, measuredBy(together, underTheCases));
+            Set<Integer> touched = measuredBy(together, underTheCases);
+            taken = taken.joinedWith(ways, touched);
+            chosen.add(new Chosen(ways, touched));
         }
         // No two positions the way stands at leave classes that can be in one value, so no value
         // takes it: an element's case on the way, and a count of its container that holds nothing.
         if (!oneValueCanTake(taken)) {
+            return;
+        }
+        readTogether(direct, chosen, saidInPart || subjectUnknownHere);
+        if (!tellsApart) {
             return;
         }
         // Only for a way some value takes. A decision nothing could place is still one no run makes
@@ -550,6 +608,113 @@ final class WhatABodyTellsApart {
                 comparisonsRead.get(at).addAll(taken.stated.get(at));
             }
             unread[at] |= taken.unread[at];
+        }
+    }
+
+    /**
+     * The choices of case one group of conditions leaves a way ({@link CaseChoices}), and the
+     * positions they are measured at.
+     */
+    private record Chosen(List<Admitted> ways, Set<Integer> touched) {}
+
+    /**
+     * Which classes of two positions a way reads together, where {@code direct} is what it admits
+     * whatever case a row is and {@code chosen} what each group of its conditions about the cases
+     * of a sum leaves.
+     *
+     * <p>A position is read on the way where a decision on it is about the position, whether or not
+     * what it said was put to classes. Asked of each choice itself and not of the choices joined:
+     * the join is what the way admits at a position, and says nothing of which choice stood there.
+     *
+     * <p>Two positions under one group are read together a choice at a time, since a row is one
+     * choice: a condition under {@code Small} and a condition under {@code Large} are on no run
+     * together. Under two groups, or one under a group and one not, the choices of one say nothing
+     * of the other, so what each position is read in is taken whole.
+     *
+     * <p>A way written without something that holds on it, or holding a decision nothing could name
+     * the subject of, may read any position besides the ones it names. So every position is read on
+     * it, in whatever it admits there: what it does say still holds, and what it does not leaves
+     * every class.
+     */
+    private void readTogether(Admitted direct, List<Chosen> chosen, boolean saidInPart) {
+        int size = axes.size();
+        // The group each position is measured under, if one is: -1 where none is, and -2 where
+        // more than one is, which is read whole.
+        int[] group = new int[size];
+        Arrays.fill(group, -1);
+        for (int g = 0; g < chosen.size(); g++) {
+            for (int at : chosen.get(g).touched()) {
+                group[at] = group[at] == -1 ? g : -2;
+            }
+        }
+        boolean[] read = new boolean[size];
+        boolean[][] in = new boolean[size][];
+        for (int at = 0; at < size; at++) {
+            if (group[at] == -1) {
+                read[at] = reads(direct, at);
+                in[at] = direct.here[at];
+                continue;
+            }
+            boolean everyClass = false;
+            boolean[] some = new boolean[axes.get(at).classes().size()];
+            for (Chosen each : chosen) {
+                if (!each.touched().contains(at)) {
+                    continue;
+                }
+                for (Admitted way : each.ways()) {
+                    if (!reads(way, at)) {
+                        continue;
+                    }
+                    read[at] = true;
+                    if (way.here[at] == null) {
+                        everyClass = true;
+                    } else {
+                        for (int c = 0; c < some.length; c++) {
+                            some[c] |= way.here[at][c];
+                        }
+                    }
+                }
+            }
+            in[at] = everyClass ? null : some;
+        }
+        if (saidInPart) {
+            Arrays.fill(read, true);
+        }
+        for (int one = 0; one < size; one++) {
+            for (int other = one + 1; other < size; other++) {
+                if (!saidInPart && group[one] >= 0 && group[one] == group[other]) {
+                    for (Admitted way : chosen.get(group[one]).ways()) {
+                        if (reads(way, one) && reads(way, other)) {
+                            readTogether(one, way.here[one], other, way.here[other]);
+                        }
+                    }
+                } else if (read[one] && read[other]) {
+                    readTogether(one, in[one], other, in[other]);
+                }
+            }
+        }
+    }
+
+    /** Whether a decision on {@code way} is about the {@code at}th position. */
+    private static boolean reads(Admitted way, int at) {
+        return way.stands[at] || way.unread[at];
+    }
+
+    /** That the classes {@code here} of the {@code one}th position are read together with the
+     *  classes {@code there} of the {@code other}th, each null for every class. */
+    private void readTogether(int one, boolean[] here, int other, boolean[] there) {
+        List<PartitionClass> ones = axes.get(one).classes();
+        List<PartitionClass> others = axes.get(other).classes();
+        for (int i = 0; i < ones.size(); i++) {
+            if (here != null && !here[i]) {
+                continue;
+            }
+            for (int j = 0; j < others.size(); j++) {
+                if (there == null || there[j]) {
+                    readTogether.add(new ReadTogether.Combination(axes.get(one).id(),
+                            ones.get(i).id(), axes.get(other).id(), others.get(j).id()));
+                }
+            }
         }
     }
 
@@ -816,10 +981,33 @@ final class WhatABodyTellsApart {
     /** What the ways read tell apart at the {@code at}th position. */
     private BodyDistinction at(int at) {
         Axis axis = axes.get(at);
-        // What the body wrote that divided the position, each of which has to be a rule one of the
-        // comparisons read above is a reading of. A rule of the type is the model's distinction and
-        // not this behavior's, which is the whole question here, so it is not asked for.
-        //
+        // Unread over anything read. What was read at the position is part of what the body tells
+        // apart there, and a part is never said as the whole.
+        boolean unplacedHere = unread[at] || ruleNoDecisionRead(at);
+        List<List<String>> groups = groupsOf(axis.classes(), splits.get(at));
+        // Unless what was read already tells every class apart, which nothing further can refine:
+        // whatever went unread, the partition is the finest there is.
+        boolean everyClassApart = !splits.get(at).isEmpty()
+                && groups.size() == axis.classes().size();
+        if ((subjectUnknown || unplacedHere) && !everyClassApart) {
+            return new BodyDistinction.Unread(groups, unplacedHere);
+        }
+        if (splits.get(at).isEmpty()) {
+            return new BodyDistinction.Untouched();
+        }
+        return new BodyDistinction.Drawn(groups);
+    }
+
+    /**
+     * Whether the body wrote a rule dividing the {@code at}th position that no decision the ways
+     * read is a reading of.
+     *
+     * <p>What the body wrote that divided the position has to be a rule one of the comparisons read
+     * is a reading of. A rule of the type is the model's distinction and not this behavior's, which
+     * is the whole question here, so it is not asked for.
+     */
+    private boolean ruleNoDecisionRead(int at) {
+        Axis axis = axes.get(at);
         // A line is filed under the construct its rule is stated at, which is what a decision is
         // filed under too, so the two meet there. A parting — a comparison read for where it parts
         // the values rather than where it cuts them — carries the rule and not the construct, and a
@@ -844,21 +1032,7 @@ final class WhatABodyTellsApart {
                                 && written.contains(comparison.origin()));
             }
         }
-        // Unread over anything read. What was read at the position is part of what the body tells
-        // apart there, and a part is never said as the whole.
-        boolean unplacedHere = unread[at] || ruleNoDecisionRead;
-        List<List<String>> groups = groupsOf(axis.classes(), splits.get(at));
-        // Unless what was read already tells every class apart, which nothing further can refine:
-        // whatever went unread, the partition is the finest there is.
-        boolean everyClassApart = !splits.get(at).isEmpty()
-                && groups.size() == axis.classes().size();
-        if ((subjectUnknown || unplacedHere) && !everyClassApart) {
-            return new BodyDistinction.Unread(groups, unplacedHere);
-        }
-        if (splits.get(at).isEmpty()) {
-            return new BodyDistinction.Untouched();
-        }
-        return new BodyDistinction.Drawn(groups);
+        return ruleNoDecisionRead;
     }
 
     /** Every reading of a rule that drew a line on the position or composed its classes. */

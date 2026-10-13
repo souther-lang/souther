@@ -44,13 +44,17 @@ class PairSpaceTest {
 
             // Both positions are decided on and the two decisions meet nowhere — the answer is a
             // construction and not a value made of them — which is the behavior the pair space is
-            // the criterion of.
+            // the criterion of. The cost is asked under either kind, so every run reads the two
+            // together and each of the four combinations is owed.
             let submit (request) = match request.kind with
                 | Domestic -> {
                     guard request.cost.value <= 100 else Waiting { cost = request.cost }
                     Submitted { cost = request.cost }
                 }
-                | Overseas -> Submitted { cost = request.cost }
+                | Overseas -> {
+                    guard request.cost.value <= 100 else Waiting { cost = request.cost }
+                    Submitted { cost = request.cost }
+                }
             """;
 
     private static PartitionEvidence evidence(String source, String behavior) {

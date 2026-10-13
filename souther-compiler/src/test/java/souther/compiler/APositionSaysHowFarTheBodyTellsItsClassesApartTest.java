@@ -127,12 +127,10 @@ class APositionSaysHowFarTheBodyTellsItsClassesApartTest {
                 behavior judge : (r: Request, n: Int) -> Ok
                     constructs Ok
 
-                let judge (r, n) = {
-                    guard n > 10 else Ok { n = 0 }
+                let judge (r, n) =
                     match r with
-                        | Draft -> Ok { n = 1 }
-                        | Submitted -> Ok { n = 2 }
-                }
+                        | Draft -> if n > 10 then Ok { n = 1 } else Ok { n = 0 }
+                        | Submitted -> if n > 10 then Ok { n = 2 } else Ok { n = 0 }
 
                 example judge
                     | (Draft, 5)      -> Ok { n = 0 }
