@@ -1909,6 +1909,16 @@ public final class Generator {
                             break;
                         }
                     }
+                    // And held to what takes a run down a way into the arm, which is where to look
+                    // for an arm no class places a row at: one decided by a relation between
+                    // inputs is reached by values no class of either input holds.
+                    for (ArmProbe probe : arm.occurrences()) {
+                        if (seen != null) {
+                            break;
+                        }
+                        seen = heldOnAWayInto(probe, read, goingOn.holding(), axes, asked,
+                                looking, check, answers);
+                    }
                     yield seen;
                 }
                 case ReplacementOwed.ByOneAnswer _ -> {
@@ -1969,6 +1979,78 @@ public final class Generator {
             }
         }
         return new FillResult(composed, unresolved, reasons, Discharge.of(plan, discharged));
+    }
+
+    /**
+     * A row the rewrite {@code looking} asks about answers differently on, composed holding every
+     * condition on a way into arm {@code probe} to coming out as that way takes it — or null where
+     * none was.
+     *
+     * <p>What gets a row down the way is what gets a row past a guard ({@link HeldOutcome}), and
+     * it is a demand on the row and not a class of a position: a comparison relating two inputs
+     * comes out a way at values no class of either input holds, so this looks where the classes
+     * leave nowhere to. Every other position is chosen as a row is composed with nothing pinned,
+     * values passed over moving it to the next its rules leave. Where the row went is what running
+     * it says: a row the rewrite answers differently on went through the arm, since the rewrite
+     * changes nothing else.
+     *
+     * <p>A way with a condition nothing holds a row to is not looked down, and nothing is said of
+     * it here: what the search came to is the witness's account ({@link ReplacementWitness#ended}).
+     */
+    private static GeneratedRow heldOnAWayInto(ArmProbe probe, CoverageRead.Read read,
+                                               HeldOutcome.Of holding,
+                                               MeasuredInput.MeasuredAxes axes,
+                                               ReplacementOwed asked, ReplacementWitness looking,
+                                               CandidateCheck check, List<StoodInAnswer> answers) {
+        for (souther.compiler.reading.WayIn way : waysTakenInto(probe, read)) {
+            List<HeldOutcome> demands = new ArrayList<>();
+            boolean barred = false;
+            for (ControlClaim claim : way.claims()) {
+                Optional<HeldOutcome> holds = holding.at(claim.at());
+                if (holds.isEmpty()) {
+                    barred = true;
+                    break;
+                }
+                demands.add(holds.get());
+            }
+            if (barred || demands.isEmpty()) {
+                continue;
+            }
+            List<Purpose> purposes = List.of(new Purpose.ForAReplacement(asked));
+            if (composed(axes, composes(axes.axes()),
+                    heldTogether(axes.subject(), demands, check), check, Map.of(),
+                    atMost(MOST_REPAIRS, looking::composingStopped,
+                            inputs -> looking.of(new GeneratedRow(purposes, inputs, answers),
+                                    null)))
+                    instanceof RowComposed.Taken(List<FixtureTemplate> inputs)) {
+                return new GeneratedRow(purposes, inputs, answers);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The ways into arm {@code probe}: every one, where the reading wrote them all down, and
+     * otherwise the ways it read some run taking that end at the arm.
+     *
+     * <p>The second is not every way in, and is not offered as one. What it is used for is where
+     * to look, and a row found down one of them is a row; that none was found down them says
+     * nothing about the ways not written.
+     */
+    private static List<souther.compiler.reading.WayIn> waysTakenInto(ArmProbe probe,
+                                                                     CoverageRead.Read read) {
+        if (read.armAt(probe) instanceof PathAccess.Ways ways) {
+            return ways.ways();
+        }
+        List<souther.compiler.reading.WayIn> out = new ArrayList<>();
+        for (souther.compiler.reading.WayIn way : read.taken()) {
+            if (!way.decisions().isEmpty()
+                    && way.decisions().getLast().claims().at() instanceof ControlPlace.Arm arm
+                    && arm.probe().equals(Optional.of(probe))) {
+                out.add(way);
+            }
+        }
+        return out;
     }
 
     /**
