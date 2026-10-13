@@ -213,13 +213,16 @@ it is one of them:
 
 ## Embedding the compiler
 
-`souther.compiler.Compiler` is the one class name a caller outside this repository is meant to write
-down. It compiles a source string containing either one module or several linked modules:
+`souther.compiler.Compiler` is the one class a caller outside this repository is meant to call. It
+compiles a source string containing either one module or several linked modules:
 
 ```java
-Map<String, byte[]> classes = Compiler.compile(source);
-Map<String, byte[]> linked = Compiler.compileModules(List.of(employeeSource, tripSource));
+Map<String, ClassFileImage> classes = Compiler.compile(source);
+Map<String, ClassFileImage> linked = Compiler.compileModules(List.of(employeeSource, tripSource));
 ```
+
+Each class file is a `souther.compiler.jvm.ClassFileImage`, which compares by its bytes; `bytes()`
+hands a fresh copy of them to whatever takes octets — `defineClass`, a file, an archive.
 
 ## What Souther guarantees
 
