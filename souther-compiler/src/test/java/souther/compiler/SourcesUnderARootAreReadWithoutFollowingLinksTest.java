@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import souther.compiler.CompilationSources.SourceFile;
+import souther.compiler.io.ClosedDirectory;
 import souther.compiler.io.ConfinementException;
 import souther.compiler.meta.ModulePath;
 
@@ -16,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /** What is found under a root the caller named is not the caller's own, and is not followed out of it. */
@@ -62,6 +64,52 @@ class SourcesUnderARootAreReadWithoutFollowingLinksTest {
         link(root.resolve("dir"), outside);
 
         assertEquals(1, CompilationSources.readTree(root).size());
+    }
+
+    @Test
+    void aDirectoryUnderTheRootThatCannotBeOpenedIsAnErrorRatherThanFewerSources(@TempDir Path dir)
+            throws IOException {
+        Path root = Files.createDirectories(dir.resolve("project"));
+        Files.createDirectories(root.resolve("public"));
+        Files.writeString(root.resolve("public/visible.sou"), "visible");
+        Path closed = Files.createDirectories(root.resolve("private"));
+        Files.writeString(closed.resolve("hidden.sou"), "hidden");
+
+        // A program compiled from part of what it was named is a program nobody wrote, and it may
+        // well compile: nothing need import what was left out.
+        try (ClosedDirectory _ = ClosedDirectory.shut(closed)) {
+            IOException thrown = assertThrows(IOException.class, () -> CompilationSources.readTree(root));
+            assertTrue(thrown.getMessage().contains("private"), thrown.getMessage());
+        }
+    }
+
+    @Test
+    void aRootThatCannotBeOpenedIsAnErrorRatherThanNoSources(@TempDir Path dir) throws IOException {
+        Path root = Files.createDirectories(dir.resolve("project"));
+        Files.writeString(root.resolve("a.sou"), "a");
+
+        try (ClosedDirectory _ = ClosedDirectory.shut(root)) {
+            assertThrows(IOException.class, () -> CompilationSources.readTree(root));
+        }
+    }
+
+    @Test
+    void aRootThatIsNotThereIsAnErrorRatherThanNoSources(@TempDir Path dir) {
+        assertThrows(IOException.class, () -> CompilationSources.readTree(dir.resolve("absent")));
+    }
+
+    @Test
+    void aSouThatIsNotAFileIsRefused(@TempDir Path dir) throws IOException, InterruptedException {
+        Path pipe = dir.resolve("piped.sou");
+        int made;
+        try {
+            made = new ProcessBuilder("mkfifo", pipe.toString()).inheritIO().start().waitFor();
+        } catch (IOException e) {
+            made = -1;
+        }
+        assumeTrue(made == 0 && Files.exists(pipe), "a named pipe cannot be made here");
+
+        assertThrows(ConfinementException.class, () -> CompilationSources.readTree(dir));
     }
 
     @Test

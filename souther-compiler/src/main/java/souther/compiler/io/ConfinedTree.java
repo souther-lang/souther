@@ -184,7 +184,15 @@ public final class ConfinedTree {
         }
     }
 
-    /** What a walk reports. A link is reported and not followed. */
+    /**
+     * What a walk reports. A link is reported and not followed.
+     *
+     * <p>A walk that did not see the whole tree says so, and by default says so by throwing: a
+     * caller that answers "everything under the root" from a walk that skipped a directory it could
+     * not open answers with less than there is and does not know it. A caller for whom part of a tree
+     * is still an answer says so by overriding {@link #unreadable} or {@link #limitReached}, where
+     * the reader of that caller can see it.
+     */
     public interface Entries {
 
         /** Every entry the walk visits, before it is looked at further. */
@@ -195,16 +203,35 @@ public final class ConfinedTree {
 
         /** A link, which the walk did not go through. */
         default void link(String relative) {}
+
+        /** What is neither a regular file, a directory nor a link: a pipe, a socket, a device. */
+        default void other(String relative) {}
+
+        /**
+         * An entry the walk could not look at or into, so whatever is below it was not seen. The
+         * root itself is {@code ""}. Throws {@code cause} unless overridden; returning goes on with
+         * the rest of the tree.
+         */
+        default void unreadable(String relative, IOException cause) throws IOException {
+            throw cause;
+        }
+
+        /**
+         * The walk visited as many entries as it was allowed and stops there, so the rest of the
+         * tree was not seen. Throws {@code cause} unless overridden; returning ends the walk with
+         * what was reported.
+         */
+        default void limitReached(LimitExceededException cause) throws IOException {
+            throw cause;
+        }
     }
 
     /**
      * Walks the whole tree without following a link, visiting at most {@code mostEntries} entries.
-     * An entry that cannot be read is skipped.
-     *
-     * @return whether the walk reached the end of the tree rather than the limit
+     * An entry it could not look at, and reaching the limit, are reported to {@code entries}, which
+     * throws for each unless it says otherwise.
      */
-    public boolean walk(long mostEntries, Entries entries) throws IOException {
-        boolean[] complete = {true};
+    public void walk(long mostEntries, Entries entries) throws IOException {
         long[] visited = {0};
         // The root is the caller's own, so a link in the way to it is walked through; the walk
         // starts from what it resolves to, which is the one place a link is followed.
@@ -212,12 +239,14 @@ public final class ConfinedTree {
         Files.walkFileTree(start, EnumSet.noneOf(FileVisitOption.class), Integer.MAX_VALUE,
                 new SimpleFileVisitor<>() {
                     @Override
-                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
+                            throws IOException {
                         return count() ? FileVisitResult.CONTINUE : FileVisitResult.TERMINATE;
                     }
 
                     @Override
-                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
+                            throws IOException {
                         if (!count()) {
                             return FileVisitResult.TERMINATE;
                         }
@@ -226,25 +255,30 @@ public final class ConfinedTree {
                             entries.link(relative);
                         } else if (attrs.isRegularFile()) {
                             entries.regularFile(relative);
+                        } else if (!attrs.isDirectory()) {
+                            entries.other(relative);
                         }
                         return FileVisitResult.CONTINUE;
                     }
 
                     @Override
-                    public FileVisitResult visitFileFailed(Path file, IOException e) {
+                    public FileVisitResult visitFileFailed(Path file, IOException e)
+                            throws IOException {
+                        entries.unreadable(spelled(start, file),
+                                new IOException("could not read " + file + ": " + e, e));
                         return FileVisitResult.CONTINUE;
                     }
 
-                    private boolean count() {
+                    private boolean count() throws IOException {
                         entries.visited();
                         if (++visited[0] > mostEntries) {
-                            complete[0] = false;
+                            entries.limitReached(new LimitExceededException(
+                                    "more than " + mostEntries + " entries under " + root));
                             return false;
                         }
                         return true;
                     }
                 });
-        return complete[0];
     }
 
     private static String spelled(Path start, Path file) {

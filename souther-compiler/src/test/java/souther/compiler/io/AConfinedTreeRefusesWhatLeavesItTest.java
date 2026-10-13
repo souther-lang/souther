@@ -128,7 +128,7 @@ class AConfinedTreeRefusesWhatLeavesItTest {
         List<String> links = new ArrayList<>();
         ConfinedTree tree = ConfinedTree.at(root);
 
-        boolean complete = tree.walk(1_000, new ConfinedTree.Entries() {
+        tree.walk(1_000, new ConfinedTree.Entries() {
             @Override
             public void regularFile(String relative) {
                 files.add(relative);
@@ -140,15 +140,82 @@ class AConfinedTreeRefusesWhatLeavesItTest {
             }
         });
 
-        assertTrue(complete);
         assertEquals(List.of("a.sou"), files);
         assertEquals(List.of("b.sou", "dir"), links.stream().sorted().toList());
-        assertFalse(tree.walk(1, new ConfinedTree.Entries() {
+        assertThrows(LimitExceededException.class, () -> tree.walk(1, new ConfinedTree.Entries() {
             @Override
             public void regularFile(String relative) {}
         }), "a walk that reaches the limit says it did not finish");
     }
 
+    @Test
+    void aWalkThatReachesTheLimitEndsWithWhatItSawWhereTheCallerTakesPartOfATree(@TempDir Path dir)
+            throws IOException {
+        Files.writeString(dir.resolve("a.sou"), "a");
+        Files.writeString(dir.resolve("b.sou"), "b");
+        List<String> files = new ArrayList<>();
+        List<LimitExceededException> reached = new ArrayList<>();
+
+        ConfinedTree.at(dir).walk(2, new ConfinedTree.Entries() {
+            @Override
+            public void regularFile(String relative) {
+                files.add(relative);
+            }
+
+            @Override
+            public void limitReached(LimitExceededException cause) {
+                reached.add(cause);
+            }
+        });
+
+        // The root and one file are the two entries allowed.
+        assertEquals(1, files.size());
+        assertEquals(1, reached.size());
+        assertTrue(reached.getFirst().getMessage().contains(dir.toString()));
+    }
+
+    @Test
+    void aDirectoryTheWalkCannotOpenIsReportedRatherThanPassedOver(@TempDir Path dir)
+            throws IOException {
+        Files.writeString(dir.resolve("visible.sou"), "visible");
+        Path closed = Files.createDirectories(dir.resolve("private"));
+        Files.writeString(closed.resolve("hidden.sou"), "hidden");
+        try (ClosedDirectory _ = ClosedDirectory.shut(closed)) {
+            ConfinedTree tree = ConfinedTree.at(dir);
+
+            IOException thrown = assertThrows(IOException.class, () -> tree.walk(1_000,
+                    new ConfinedTree.Entries() {
+                        @Override
+                        public void regularFile(String relative) {}
+                    }));
+            assertTrue(thrown.getMessage().contains("private"), thrown.getMessage());
+
+            List<String> unreadable = new ArrayList<>();
+            List<String> files = new ArrayList<>();
+            tree.walk(1_000, new ConfinedTree.Entries() {
+                @Override
+                public void regularFile(String relative) {
+                    files.add(relative);
+                }
+
+                @Override
+                public void unreadable(String relative, IOException cause) {
+                    unreadable.add(relative);
+                }
+            });
+            assertEquals(List.of("private"), unreadable);
+            assertEquals(List.of("visible.sou"), files);
+        }
+    }
+
+    @Test
+    void aRootThatIsNotThereIsReportedRatherThanWalkedAsEmpty(@TempDir Path dir) {
+        assertThrows(IOException.class, () -> ConfinedTree.at(dir.resolve("absent")).walk(1_000,
+                new ConfinedTree.Entries() {
+                    @Override
+                    public void regularFile(String relative) {}
+                }));
+    }
     @Test
     void aStreamIsReadUpToTheLimitAndNoFurther() throws IOException {
         assertArrayEquals(new byte[]{1, 2, 3}, BoundedRead.bytes(new ByteArrayInputStream(new byte[]{1, 2, 3}), 3));
