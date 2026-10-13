@@ -36,6 +36,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 /**
@@ -571,6 +573,18 @@ final class DemandReading {
     }
 
     /**
+     * How many times the ways an element may meet a statement have been walked, for a test holding
+     * the readers of one input to walking the same parts once.
+     *
+     * <p>Counted rather than timed, for the reason {@link
+     * souther.compiler.check.InvariantChecker#readingsMade} gives: what is held is that asking the
+     * same parts again walks nothing, which is a shape and not a speed.
+     */
+    static long walksMade() {
+        return AnElementsWay.WALKS.get();
+    }
+
+    /**
      * One way an element may meet what is asked of it: what it is asked, what is asked of the row
      * beside it, and whether no element meets it at all.
      *
@@ -633,6 +647,37 @@ final class DemandReading {
          * or not it turns out closed, so a walk among closed ways stops where it is told to.
          */
         static List<AnElementsWay> eachWhole(List<List<AnElementsWay>> parts, InputReading read) {
+            Walked walked = read.derived(Walked.class, _ -> new Walked());
+            List<AnElementsWay> kept = walked.filed.get(parts);
+            if (kept == null) {
+                kept = walkedWhole(parts, read);
+                walked.filed.put(parts, kept);
+            }
+            return kept;
+        }
+
+        private static final AtomicLong WALKS = new AtomicLong();
+
+        /**
+         * The ways made whole out of each list of parts, kept with the reading they were walked in.
+         *
+         * <p>What a walk makes is settled by the parts and by what the declarations leave every
+         * element, which is this reading's, so the same parts walked again come to the same ways.
+         * And the same parts are walked again many times: a choice between statements is read
+         * wherever a statement it names is asked, and each of those readings walks it. Kept by the
+         * reading rather than by one question asked of it, because the questions that ask the same
+         * parts are many and each one is asked from its own start.
+         */
+        private static final class Walked {
+
+            private final Map<List<List<AnElementsWay>>, List<AnElementsWay>> filed =
+                    new ConcurrentHashMap<>();
+        }
+
+        /** {@link #eachWhole}, worked out. */
+        private static List<AnElementsWay> walkedWhole(List<List<AnElementsWay>> parts,
+                                                       InputReading read) {
+            WALKS.incrementAndGet();
             Set<AnElementsWay> open = new LinkedHashSet<>();
             int[] looked = {0};
             if (!walk(parts, 0, ASKING_NOTHING, read.quantities().region(), open, looked)) {
