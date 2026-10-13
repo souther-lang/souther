@@ -62,30 +62,37 @@ class AnArmARelationBetweenInputsDecidesIsRewrittenAndLookedForTest {
     private static final Pattern ROW = Pattern.compile(
             "\\(Date\\(\"([0-9-]+)\"\\), Date\\(\"([0-9-]+)\"\\), Megabytes\\((-?[0-9]+)\\)\\)");
 
+    /** What the rows holding nothing came to, measured once for both tests. */
+    private static Map<Replacement, ReplacementEvidence.Outcome> holdingNothing;
+
     @Test
-    void everyArmRewrittenAsItsSiblingIsShownByARowHoldingSomething() {
-        Map<Replacement, ReplacementEvidence.Outcome> rewrites =
-                armRewritesOf(modelWith(HOLDING_NOTHING));
+    void everyArmRewrittenAsItsSiblingIsShownByARowOnItsSideHoldingSomething() {
+        Map<Replacement, ReplacementEvidence.Outcome> rewrites = measuredHoldingNothing();
 
         assertEquals(4, rewrites.size(), "each of the four arms as its sibling: " + rewrites);
+        // The outer fork is the one written first, `elapsed < 0`; the inner one is `elapsed < 90`.
+        int outer = rewrites.keySet().stream()
+                .mapToInt(each -> ((Replacement.OfAnArm) each).fork().ordinal()).min()
+                .orElseThrow();
         rewrites.forEach((rewrite, outcome) -> {
-            ReplacementEvidence.Unnoticed gap = assertInstanceOf(
-                    ReplacementEvidence.Unnoticed.class, outcome,
-                    "no written row tells " + rewrite + " apart, and a row shows it differs");
-            ReplacementEvidence.ShownBy.AComposedRow shown = assertInstanceOf(
-                    ReplacementEvidence.ShownBy.AComposedRow.class, gap.shownBy(),
-                    "shown by a row composed for it: " + gap.shownBy());
-            assertFalse(shown.inputs().get(2).contains("Megabytes(0)"),
-                    "a row holding nothing answers alike down every arm: " + shown.inputs());
+            Replacement.OfAnArm arm = (Replacement.OfAnArm) rewrite;
+            List<String> inputs = shownBy(rewrite, outcome);
+            assertFalse(inputs.get(2).contains("Megabytes(0)"),
+                    "a row holding nothing answers alike down every arm: " + inputs);
+            long elapsed = elapsed(row(inputs));
+            boolean onItsSide = arm.fork().ordinal() == outer
+                    ? (arm.part() == 0) == (elapsed < 0)
+                    : elapsed >= 0 && (arm.part() == 0) == (elapsed < 90);
+            assertTrue(onItsSide, "the row shown for " + rewrite + " goes down that arm, "
+                    + elapsed + " days in: " + inputs);
         });
     }
 
     @Test
     void theRowsShowingThemTellEveryRewriteApartOnceAnswered() {
         Set<String> shown = new LinkedHashSet<>();
-        armRewritesOf(modelWith(HOLDING_NOTHING)).values().forEach(outcome -> shown.add(
-                "(" + String.join(", ", ((ReplacementEvidence.ShownBy.AComposedRow)
-                        ((ReplacementEvidence.Unnoticed) outcome).shownBy()).inputs()) + ")"));
+        measuredHoldingNothing().forEach((rewrite, outcome) ->
+                shown.add(row(shownBy(rewrite, outcome))));
         List<String> rows = new ArrayList<>(HOLDING_NOTHING);
         rows.addAll(shown);
 
@@ -96,16 +103,46 @@ class AnArmARelationBetweenInputsDecidesIsRewrittenAndLookedForTest {
                 "every rewrite told apart by a row answered as the rule says: " + rewrites);
     }
 
+    private static synchronized Map<Replacement, ReplacementEvidence.Outcome>
+            measuredHoldingNothing() {
+        if (holdingNothing == null) {
+            holdingNothing = armRewritesOf(modelWith(HOLDING_NOTHING));
+        }
+        return holdingNothing;
+    }
+
+    /** The inputs of the composed row {@code outcome} says shows {@code rewrite} differing. */
+    private static List<String> shownBy(Replacement rewrite, ReplacementEvidence.Outcome outcome) {
+        ReplacementEvidence.Unnoticed gap = assertInstanceOf(ReplacementEvidence.Unnoticed.class,
+                outcome, "no written row tells " + rewrite + " apart, and a row shows it differs");
+        return assertInstanceOf(ReplacementEvidence.ShownBy.AComposedRow.class, gap.shownBy(),
+                "shown by a row composed for " + rewrite + ": " + gap.shownBy()).inputs();
+    }
+
+    private static String row(List<String> inputs) {
+        return "(" + String.join(", ", inputs) + ")";
+    }
+
+    /** How many days from the row's purchase to the day it asks about. */
+    private static long elapsed(String row) {
+        Matcher read = read(row);
+        return ChronoUnit.DAYS.between(LocalDate.parse(read.group(1)),
+                LocalDate.parse(read.group(2)));
+    }
+
+    private static Matcher read(String row) {
+        Matcher read = ROW.matcher(row);
+        assertTrue(read.matches(), "a row of two dates and an amount: " + row);
+        return read;
+    }
+
     /** The rows, each answered as the add-on's rule says: the amount for ninety days counting
      *  the day of purchase, and nothing before or after. */
     private static String modelWith(List<String> rows) {
         StringBuilder out = new StringBuilder(BODY);
         for (String row : rows) {
-            Matcher read = ROW.matcher(row);
-            assertTrue(read.matches(), "a row of two dates and an amount: " + row);
-            long elapsed = ChronoUnit.DAYS.between(LocalDate.parse(read.group(1)),
-                    LocalDate.parse(read.group(2)));
-            String amount = elapsed >= 0 && elapsed < 90 ? read.group(3) : "0";
+            long elapsed = elapsed(row);
+            String amount = elapsed >= 0 && elapsed < 90 ? read(row).group(3) : "0";
             out.append("    | ").append(row).append(" -> Megabytes(").append(amount)
                     .append(")\n");
         }

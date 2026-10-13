@@ -1912,12 +1912,9 @@ public final class Generator {
                     // And held to what takes a run down a way into the arm, which is where to look
                     // for an arm no class places a row at: one decided by a relation between
                     // inputs is reached by values no class of either input holds.
-                    for (ArmProbe probe : arm.occurrences()) {
-                        if (seen != null) {
-                            break;
-                        }
-                        seen = heldOnAWayInto(probe, read, goingOn.holding(), axes, asked,
-                                looking, check, answers);
+                    for (int at = 0; seen == null && at < arm.occurrences().size(); at++) {
+                        seen = heldOnAWayInto(arm.occurrences().get(at), read, goingOn.holding(),
+                                axes, asked, looking, check, answers);
                     }
                     yield seen;
                 }
@@ -1982,46 +1979,42 @@ public final class Generator {
     }
 
     /**
-     * A row the rewrite {@code looking} asks about answers differently on, composed holding every
-     * condition on a way into arm {@code probe} to coming out as that way takes it — or null where
-     * none was.
+     * A row the rewrite {@code looking} asks about answers differently on, composed holding the
+     * last condition on a way into arm {@code probe} to coming out as that way takes it — or null
+     * where none was.
      *
      * <p>What gets a row down the way is what gets a row past a guard ({@link HeldOutcome}), and
      * it is a demand on the row and not a class of a position: a comparison relating two inputs
      * comes out a way at values no class of either input holds, so this looks where the classes
-     * leave nowhere to. Every other position is chosen as a row is composed with nothing pinned,
-     * values passed over moving it to the next its rules leave. Where the row went is what running
-     * it says: a row the rewrite answers differently on went through the arm, since the rewrite
-     * changes nothing else.
+     * leave nowhere to. The last condition only, because what holds it is held under the way to
+     * it, which takes in every condition before it; held besides, each of those would pin the row
+     * at a point of its own border, and two points of one position are a row nothing composes.
+     * Every other position is chosen as a row is composed with nothing pinned, values passed over
+     * moving it to the next its rules leave. Where the row went is what running it says: a row the
+     * rewrite answers differently on went through the arm, since the rewrite changes nothing else.
      *
-     * <p>A way with a condition nothing holds a row to is not looked down, and nothing is said of
-     * it here: what the search came to is the witness's account ({@link ReplacementWitness#ended}).
+     * <p>A way whose last condition nothing holds a row to is not looked down, and nothing is said
+     * of it here: what the search came to is the witness's account
+     * ({@link ReplacementWitness#ended}).
      */
     private static GeneratedRow heldOnAWayInto(ArmProbe probe, CoverageRead.Read read,
                                                HeldOutcome.Of holding,
                                                MeasuredInput.MeasuredAxes axes,
                                                ReplacementOwed asked, ReplacementWitness looking,
                                                CandidateCheck check, List<StoodInAnswer> answers) {
-        for (souther.compiler.reading.WayIn way : waysTakenInto(probe, read)) {
-            List<HeldOutcome> demands = new ArrayList<>();
-            boolean barred = false;
-            for (ControlClaim claim : way.claims()) {
-                Optional<HeldOutcome> holds = holding.at(claim.at());
-                if (holds.isEmpty()) {
-                    barred = true;
-                    break;
-                }
-                demands.add(holds.get());
-            }
-            if (barred || demands.isEmpty()) {
+        List<Purpose> purposes = List.of(new Purpose.ForAReplacement(asked));
+        for (WayIn way : waysNoClassPlaces(probe, read, axes)) {
+            if (way.decisions().isEmpty()) {
                 continue;
             }
-            List<Purpose> purposes = List.of(new Purpose.ForAReplacement(asked));
-            if (composed(axes, composes(axes.axes()),
-                    heldTogether(axes.subject(), demands, check), check, Map.of(),
-                    atMost(MOST_REPAIRS, looking::composingStopped,
-                            inputs -> looking.of(new GeneratedRow(purposes, inputs, answers),
-                                    null)))
+            Optional<HeldOutcome> holds = holding.at(way.decisions().getLast().claims().at());
+            if (holds.isPresent()
+                    && composed(axes, composes(axes.axes()),
+                            heldTogether(axes.subject(), List.of(holds.get()), check), check,
+                            Map.of(),
+                            atMost(MOST_REPAIRS, looking::composingStopped,
+                                    inputs -> looking.of(
+                                            new GeneratedRow(purposes, inputs, answers), null)))
                     instanceof RowComposed.Taken(List<FixtureTemplate> inputs)) {
                 return new GeneratedRow(purposes, inputs, answers);
             }
@@ -2030,27 +2023,39 @@ public final class Generator {
     }
 
     /**
-     * The ways into arm {@code probe}: every one, where the reading wrote them all down, and
-     * otherwise the ways it read some run taking that end at the arm.
+     * The ways into arm {@code probe} no class places a row down: of every way, where the reading
+     * wrote them all down, the ones {@link InteractionCells#at} places nowhere — the rest are where
+     * {@link #whereToLookFor} already looked — and otherwise the ways it read some run taking that
+     * end at the arm.
      *
      * <p>The second is not every way in, and is not offered as one. What it is used for is where
      * to look, and a row found down one of them is a row; that none was found down them says
      * nothing about the ways not written.
      */
-    private static List<souther.compiler.reading.WayIn> waysTakenInto(ArmProbe probe,
-                                                                     CoverageRead.Read read) {
+    private static List<WayIn> waysNoClassPlaces(ArmProbe probe, CoverageRead.Read read,
+                                                 MeasuredInput.MeasuredAxes axes) {
+        List<WayIn> out = new ArrayList<>();
         if (read.armAt(probe) instanceof PathAccess.Ways ways) {
-            return ways.ways();
+            for (WayIn way : ways.ways()) {
+                if (InteractionCells.at(way, ways.arrivesAt(), axes) == null) {
+                    out.add(way);
+                }
+            }
+            return out;
         }
-        List<souther.compiler.reading.WayIn> out = new ArrayList<>();
-        for (souther.compiler.reading.WayIn way : read.taken()) {
-            if (!way.decisions().isEmpty()
-                    && way.decisions().getLast().claims().at() instanceof ControlPlace.Arm arm
-                    && arm.probe().equals(Optional.of(probe))) {
+        for (WayIn way : read.taken()) {
+            if (armItEndsAt(way).equals(Optional.of(probe))) {
                 out.add(way);
             }
         }
         return out;
+    }
+
+    /** The arm a way ends at, where it ends at one the plan numbered. */
+    private static Optional<ArmProbe> armItEndsAt(WayIn way) {
+        return !way.decisions().isEmpty()
+                && way.decisions().getLast().claims().at() instanceof ControlPlace.Arm arm
+                ? arm.probe() : Optional.empty();
     }
 
     /**
@@ -2260,10 +2265,9 @@ public final class Generator {
                                                             ArmsNamed named) {
         Map<ArmProbe, List<WayIn>> out = new HashMap<>();
         for (WayIn way : read.taken()) {
-            if (way.decisions().isEmpty()
-                    || !(way.decisions().getLast().claims().at() instanceof ControlPlace.Arm arm)
-                    || arm.probe().isEmpty()
-                    || !(read.arms().get(arm.probe().get())
+            Optional<ArmProbe> endsAt = armItEndsAt(way);
+            if (endsAt.isEmpty()
+                    || !(read.arms().get(endsAt.get())
                             instanceof PathAccess.Unsupported(var why))
                     || why != PathAccess.Unsupported.Why.RUNS_WHERE_SOMETHING_CALLS_IT) {
                 continue;
@@ -2277,7 +2281,7 @@ public final class Generator {
                         ? new Decision(taken, decision.claims())
                         : decision);
             }
-            out.computeIfAbsent(arm.probe().get(), _ -> new ArrayList<>()).add(new WayIn(asCases));
+            out.computeIfAbsent(endsAt.get(), _ -> new ArrayList<>()).add(new WayIn(asCases));
         }
         return out;
     }
