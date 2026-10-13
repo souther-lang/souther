@@ -27,12 +27,20 @@ final class BuildPlugins {
 
     static final String MAVEN_ARTIFACT = "souther-maven-plugin";
 
-    static final String MAVEN_VERSION = "0.1.0";
+    /**
+     * Reads which Souther to compile with off the project's {@code souther-runtime} dependency, so
+     * a pom says the version once, in the dependency the published pom needs anyway.
+     */
+    static final String MAVEN_VERSION = "0.2.0";
 
     /** How Gradle names the plugin, which is not the artifact it resolves. */
     static final String GRADLE_ID = "org.souther-lang.souther";
 
-    static final String GRADLE_VERSION = "0.1.0";
+    /**
+     * Is told which Souther to compile with in its {@code souther} extension and has no default,
+     * and adds the runtime at that version itself.
+     */
+    static final String GRADLE_VERSION = "0.2.0";
 
     /** The runtime the generated code calls, at the version of the Souther that generated it. */
     static final String RUNTIME_ARTIFACT = "souther-runtime";

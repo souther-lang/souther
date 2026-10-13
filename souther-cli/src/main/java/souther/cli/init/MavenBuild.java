@@ -114,7 +114,7 @@ final class MavenBuild {
                     southerVersion);
         }
         if (!declaresThePlugin(written)) {
-            written = withPlugin(written, southerVersion);
+            written = withPlugin(written);
         }
         return written;
     }
@@ -133,15 +133,16 @@ final class MavenBuild {
         return Xml.insertInto(pom, PROJECT, wrap("dependencies", dependency));
     }
 
-    private static String withPlugin(String pom, String southerVersion) {
+    /**
+     * The pom with the plugin declared. No Souther version beside it: the plugin reads the one the
+     * runtime dependency names.
+     */
+    private static String withPlugin(String pom) {
         String plugin = """
                 <plugin>
                     <groupId>%s</groupId>
                     <artifactId>%s</artifactId>
                     <version>%s</version>
-                    <configuration>
-                        <southerVersion>%s</southerVersion>
-                    </configuration>
                     <executions>
                         <execution>
                             <goals><goal>compile</goal></goals>
@@ -149,7 +150,7 @@ final class MavenBuild {
                     </executions>
                 </plugin>"""
                 .formatted(BuildPlugins.GROUP, BuildPlugins.MAVEN_ARTIFACT,
-                        BuildPlugins.MAVEN_VERSION, southerVersion);
+                        BuildPlugins.MAVEN_VERSION);
         if (Xml.has(pom, PLUGINS)) {
             return Xml.insertInto(pom, PLUGINS, plugin);
         }

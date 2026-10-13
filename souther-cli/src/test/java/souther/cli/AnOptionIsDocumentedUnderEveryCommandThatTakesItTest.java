@@ -60,6 +60,92 @@ class AnOptionIsDocumentedUnderEveryCommandThatTakesItTest {
     }
 
     /**
+     * And the other way round: what a usage line writes is an option its command takes, with the
+     * value words the command reads.
+     *
+     * <p>A usage line is a promise a reader acts on, so one naming an option the parser refuses — or
+     * a value word it refuses — sends them to a refusal. Asked of the usage lines rather than of the
+     * prose, which may name an option to say it is not taken.
+     *
+     * <p>{@code --target} is read before any option, by the command line that hands everything
+     * after it to a backend, so it and what follows it are not this table's.
+     */
+    @Test
+    void everyOptionAUsageLineWritesIsOneItsCommandTakes() throws Exception {
+        Map<String, CliOption> bySpelling = new LinkedHashMap<>();
+        for (CliOption option : CliOption.values()) {
+            option.spellings().forEach(spelling -> bySpelling.put(spelling, option));
+        }
+        List<String> refused = new ArrayList<>();
+        List<String> read = new ArrayList<>();
+        for (String usage : usageLines(sections())) {
+            String command = usage.split("\\s+", 3)[1];
+            String written = usage.contains(" --target ")
+                    ? usage.substring(0, usage.indexOf(" --target ")) : usage;
+            Matcher option = USAGE_OPTION.matcher(written);
+            while (option.find()) {
+                String spelling = option.group(1);
+                read.add(command + " " + spelling);
+                CliOption taken = bySpelling.get(spelling);
+                if (taken == null || !taken.ownedBy(command)) {
+                    refused.add(spelling + " under " + command);
+                    continue;
+                }
+                String choice = option.group(2);
+                if (choice != null && !choice.equals(taken.valueSpelling())) {
+                    refused.add(spelling + " " + choice + " under " + command + ", which takes "
+                            + taken.valueSpelling());
+                }
+            }
+        }
+
+        assertTrue(read.contains("compile --adequacy"), () -> "usage lines read: " + read);
+        assertTrue(refused.isEmpty(),
+                RESOURCE + " writes in a usage line what its command does not take: " + refused);
+    }
+
+    /**
+     * An option in a usage line, and the value words written after it: one word or several joined
+     * by {@code |}. A placeholder such as {@code <path>} is not a word and is not read.
+     */
+    private static final Pattern USAGE_OPTION = Pattern.compile(
+            "(?<![\\w<-])(--?[A-Za-z][\\w-]*)(?: ([a-z][\\w-]*(?:\\|[a-z][\\w-]*)*))?");
+
+    /**
+     * Each usage statement in the document: a line in a fenced block that starts with
+     * {@code souther <command>}, joined with the indented lines that continue it.
+     */
+    private static List<String> usageLines(Map<String, String> sections) {
+        List<String> usages = new ArrayList<>();
+        for (String section : sections.values()) {
+            boolean fenced = false;
+            StringBuilder current = null;
+            for (String line : section.lines().toList()) {
+                if (line.startsWith("```")) {
+                    fenced = !fenced;
+                }
+                boolean continues = current != null && fenced && !line.isBlank()
+                        && Character.isWhitespace(line.charAt(0));
+                if (continues) {
+                    current.append(' ').append(line.strip());
+                    continue;
+                }
+                if (current != null) {
+                    usages.add(current.toString());
+                    current = null;
+                }
+                if (fenced && line.startsWith("souther ")) {
+                    current = new StringBuilder(line.strip());
+                }
+            }
+            if (current != null) {
+                usages.add(current.toString());
+            }
+        }
+        return usages;
+    }
+
+    /**
      * Whether the section writes this option, and not one it is the beginning of.
      *
      * <p>{@code -w} is in {@code --write} and {@code --color} is not {@code --colour}; a plain search

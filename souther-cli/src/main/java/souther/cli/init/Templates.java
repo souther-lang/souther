@@ -204,8 +204,8 @@ final class Templates {
 
                     <dependencies>
                         <!-- Generated code calls the runtime, so the pom this project publishes says
-                             so. The Souther plugin checks that this is the version the model is
-                             compiled with rather than adding it. -->
+                             so. The Souther plugin reads its version as the Souther to compile the
+                             model with, rather than adding it. -->
                         <dependency>
                             <groupId>%s</groupId>
                             <artifactId>%s</artifactId>
@@ -221,9 +221,6 @@ final class Templates {
                                 <groupId>%s</groupId>
                                 <artifactId>%s</artifactId>
                                 <version>${souther.plugin.version}</version>
-                                <configuration>
-                                    <southerVersion>${souther.version}</southerVersion>
-                                </configuration>
                                 <executions>
                                     <execution>
                                         <goals><goal>compile</goal></goals>
@@ -242,10 +239,10 @@ final class Templates {
     /**
      * The build script a new Gradle project is run by.
      *
-     * <p>No Souther version and no runtime dependency. On Gradle a dependency the plugin adds is in
-     * the metadata this project publishes, so the plugin adds the runtime at the version it compiles
-     * the model with, and a project naming no version is compiled by the Souther its plugin release
-     * was verified against.
+     * <p>The Souther version, in the plugin's extension, and no runtime dependency. On Gradle a
+     * dependency the plugin adds is in the metadata this project publishes, so the plugin adds the
+     * runtime at the version it compiles the model with. The plugin has no default version, so the
+     * one that generated the project is written down.
      */
     static String buildScript(Project project) {
         // Where the project starts with a behavior to drive, so a test the reader writes has
@@ -279,7 +276,8 @@ final class Templates {
                 repositories {
                     mavenCentral()
                 }
-                %s
+
+                %s%s
                 // Souther generates class files for this release, so the build reads them with a
                 // toolchain that is at least this.
                 java {
@@ -288,7 +286,9 @@ final class Templates {
                     }
                 }
                 %s""".formatted(BuildPlugins.GRADLE_ID, BuildPlugins.GRADLE_VERSION,
-                project.coordinate().groupId(), tests, JAVA_RELEASE, platform);
+                project.coordinate().groupId(),
+                GradleBuild.extension(project.southerVersion(), true), tests, JAVA_RELEASE,
+                platform);
     }
 
     /** What Gradle calls the project, which it takes from the settings file and not from the group. */
