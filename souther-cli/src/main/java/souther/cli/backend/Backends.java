@@ -4,13 +4,14 @@ import souther.compiler.io.Listing;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
-import java.util.Set;
 import java.util.TreeSet;
 import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
@@ -26,8 +27,11 @@ import java.util.zip.ZipEntry;
  * <p>A backend is identified by the pair, so jars for different Souther versions of one target may
  * stand side by side and only the one built against this Souther is chosen. The directories are
  * searched in the order given and the first that holds the target at all decides: a development
- * build that stands in for a packaged one is the answer even when it is not usable, and a stale one
- * is refused as such rather than being passed over for another.
+ * build that stands in for a packaged one is the answer even when it is built for another Souther,
+ * and is not passed over for a jar further down the list.
+ *
+ * <p>The first directory is also where a backend fetched from a repository is written, so a fetched
+ * one is found by the same search and the same descriptor as one put there by hand.
  */
 public final class Backends {
 
@@ -40,7 +44,56 @@ public final class Backends {
     /** What a descriptor says, and the jar it was read from. */
     public record Backend(String name, String southerVersion, Path jar) {}
 
-    /** Why a target cannot be run: a catalog key and what fills it. */
+    /** What the directories answer for one target and one Souther, where nothing in them is broken. */
+    public sealed interface Lookup permits Found, Absent {}
+
+    /** The backend for the pair. */
+    public record Found(Backend backend) implements Lookup {}
+
+    /**
+     * No directory holds the pair. {@code searched} is each directory looked in, in order, up to and
+     * including the one that held the target for other Southers, where one did.
+     */
+    public record Absent(String target, String southerVersion, List<Searched> searched)
+            implements Lookup {
+
+        public Absent {
+            searched = List.copyOf(searched);
+        }
+    }
+
+    /** What one directory held, as far as one target is concerned. */
+    public sealed interface Searched {
+
+        Path directory();
+
+        /** The directory does not exist. */
+        record NotThere(Path directory) implements Searched {}
+
+        /**
+         * The directory holds backends, none of them for the target. {@code targets} is what they
+         * answer to, sorted, and empty where the directory holds no backend.
+         */
+        record OtherTargets(Path directory, List<String> targets) implements Searched {
+
+            public OtherTargets {
+                targets = List.copyOf(new TreeSet<>(targets));
+            }
+        }
+
+        /** The directory holds the target, built against the other Southers {@code versions}. */
+        record OtherVersions(Path directory, List<String> versions) implements Searched {
+
+            public OtherVersions {
+                versions = List.copyOf(new TreeSet<>(versions));
+            }
+        }
+    }
+
+    /**
+     * Why the directories cannot be searched, or a backend cannot be put in one: a catalog key and
+     * what fills it.
+     */
     public static final class Refused extends Exception {
 
         private static final long serialVersionUID = 1L;
@@ -65,22 +118,26 @@ public final class Backends {
 
     private final List<Path> directories;
 
-    /** The directories to search, in the order they are searched. */
+    /** The directories to search, in the order they are searched; the first is written to. */
     public Backends(List<Path> directories) {
+        if (directories.isEmpty()) {
+            throw new IllegalArgumentException("a fetched backend has nowhere to go");
+        }
         this.directories = List.copyOf(directories);
     }
 
     /**
-     * The directories this Souther looks in: {@code $SOUTHER_HOME/backends} first, so that a build
-     * under development stands in for an installed one, then the one a package manager's launcher
-     * names with {@code souther.backends}. No install prefix is worked out from where this runs.
+     * The directories this Souther looks in: {@code $SOUTHER_HOME/backends} where that is set and
+     * {@code .souther/backends} under the user's home where it is not, then the one a package
+     * manager's launcher names with {@code souther.backends}. The first comes before the packaged
+     * one so that a build under development, or a backend fetched for this Souther, stands in for
+     * what was installed with it. No install prefix is worked out from where this runs.
      */
     public static Backends installed() {
         List<Path> directories = new ArrayList<>();
         String home = System.getenv("SOUTHER_HOME");
-        if (home != null && !home.isBlank()) {
-            directories.add(Path.of(home, "backends"));
-        }
+        directories.add(home != null && !home.isBlank() ? Path.of(home, "backends")
+                : Path.of(System.getProperty("user.home"), ".souther", "backends"));
         String packaged = System.getProperty("souther.backends");
         if (packaged != null && !packaged.isBlank()) {
             directories.add(Path.of(packaged));
@@ -88,44 +145,87 @@ public final class Backends {
         return new Backends(directories);
     }
 
+    /** Where a fetched backend is written. */
+    public Path fetched() {
+        return directories.getFirst();
+    }
+
     /**
-     * The backend for {@code target} that was built against {@code southerVersion}.
+     * The backend for {@code target} that was built against {@code southerVersion}, or what each
+     * directory held instead.
      *
-     * @throws Refused where the target is not installed, is installed for other versions only, is
-     *         installed twice for this one, or is held by something that is not a backend
+     * @throws Refused where the target is installed twice for this Souther, or a directory holds
+     *         something that is not a backend, or cannot be listed
      */
-    public Backend choose(String target, String southerVersion) throws Refused {
+    public Lookup find(String target, String southerVersion) throws Refused {
+        List<Searched> searched = new ArrayList<>();
         for (Path directory : directories) {
-            List<Backend> named = new ArrayList<>();
-            for (Backend backend : scan(directory)) {
-                if (backend.name().equals(target)) {
-                    named.add(backend);
-                }
+            if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) {
+                searched.add(new Searched.NotThere(directory));
+                continue;
             }
+            List<Backend> held = scan(directory);
+            List<Backend> named = held.stream()
+                    .filter(backend -> backend.name().equals(target)).toList();
             if (named.isEmpty()) {
+                searched.add(new Searched.OtherTargets(directory,
+                        held.stream().map(Backend::name).toList()));
                 continue;
             }
             List<Backend> built = named.stream()
                     .filter(backend -> backend.southerVersion().equals(southerVersion)).toList();
             if (built.size() == 1) {
-                return built.get(0);
+                return new Found(built.getFirst());
             }
             if (built.size() > 1) {
-                throw new Refused("cli.backend.duplicate", target, southerVersion,
-                        String.join(", ", built.stream().map(b -> b.jar().toString()).toList()));
+                throw duplicate(target, southerVersion, built);
             }
-            Set<String> versions = new TreeSet<>();
-            named.forEach(backend -> versions.add(backend.southerVersion()));
-            throw new Refused("cli.backend.version", target, String.join(", ", versions),
-                    southerVersion);
+            searched.add(new Searched.OtherVersions(directory,
+                    named.stream().map(Backend::southerVersion).toList()));
+            return new Absent(target, southerVersion, searched);
         }
-        Set<String> installed = new TreeSet<>();
-        for (Path directory : directories) {
-            scan(directory).forEach(backend -> installed.add(backend.name()));
+        return new Absent(target, southerVersion, searched);
+    }
+
+    /**
+     * Puts the jar at {@code downloaded}, in the directory a fetched backend goes to, as the backend
+     * for its pair, and answers with it as it is found there.
+     *
+     * <p>The jar is written under a name that is the pair's — {@code <target>-<version>.jar} — and
+     * replaces what is under that name, which is what a fetch for the same pair wrote before. A
+     * backend for the pair under any other name was put there by someone else, and is neither
+     * replaced nor stood beside. The move is atomic, so a search running at the same time sees the
+     * old jar or the new one and nothing between them; {@code downloaded} has to be in the same
+     * directory, and named so that a search does not read it as a backend.
+     *
+     * @throws Refused where the directory holds the pair under another name, or cannot be listed
+     * @throws IOException where the move fails, the jar is left where it was
+     */
+    Backend install(Path downloaded, Backend described) throws Refused, IOException {
+        Path directory = fetched();
+        Path target = directory.resolve(
+                described.name() + "-" + described.southerVersion() + ".jar");
+        List<Backend> held = scan(directory).stream()
+                .filter(backend -> backend.name().equals(described.name())
+                        && backend.southerVersion().equals(described.southerVersion())
+                        && !backend.jar().equals(target))
+                .toList();
+        if (!held.isEmpty()) {
+            throw new Refused("cli.backend.fetch.held", described.name(),
+                    described.southerVersion(), held.getFirst().jar());
         }
-        throw installed.isEmpty()
-                ? new Refused("cli.backend.unknown.none", target)
-                : new Refused("cli.backend.unknown", target, String.join(", ", installed));
+        try {
+            Files.move(downloaded, target, StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            throw new IOException(directory + " cannot replace a file atomically", e);
+        }
+        return new Backend(described.name(), described.southerVersion(), target);
+    }
+
+    private static Refused duplicate(String target, String southerVersion, List<Backend> built) {
+        return new Refused("cli.backend.duplicate", target, southerVersion,
+                String.join(", ", built.stream().map(b -> b.jar().toString()).toList()));
     }
 
     /** The backends in one directory, which holds none where it does not exist. */
@@ -166,7 +266,7 @@ public final class Backends {
     }
 
     /** What the jar's descriptor says, without loading anything from it. */
-    private static Backend describe(Path jar) throws Refused {
+    static Backend describe(Path jar) throws Refused {
         Properties descriptor = new Properties();
         try (JarFile archive = new JarFile(jar.toFile())) {
             ZipEntry entry = archive.getEntry(DESCRIPTOR);
@@ -193,7 +293,7 @@ public final class Backends {
      * <p>What the descriptor says is compared as written, as {@code .souther-version} is, so a value
      * that only matches once it has been trimmed is refused and not trimmed.
      */
-    private static boolean bare(String value) {
+    static boolean bare(String value) {
         return value != null && !value.isEmpty()
                 && value.chars().noneMatch(Character::isWhitespace);
     }
