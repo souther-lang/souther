@@ -102,18 +102,20 @@ public final class InitCommand {
             if (coordinateAsWritten != null) {
                 return refuse(err, locale, "cli.init.coordinate.declared", coordinateAsWritten);
             }
-            coordinate = coordinateOf(existing, at);
-            if (coordinate == null) {
-                return refuse(err, locale, "cli.init.coordinate.unreadable",
-                        display(here, existing.fileIn(at)), Coordinate.FORM);
-            }
             // Before a single file is written. A build file this cannot follow is one the
             // declaration would land outside of, and the author would be restoring their own file
-            // from the copy beside it — told by a command that reported success.
+            // from the copy beside it — told by a command that reported success. Asked before the
+            // coordinate, which is read out of the same file: one this cannot read has no
+            // coordinate to read, and that is not the reason to give.
             String unreadable = cannotBeAddedTo(existing, at);
             if (unreadable != null) {
                 return refuse(err, locale, unreadable, display(here, existing.fileIn(at)),
                         souther);
+            }
+            coordinate = coordinateOf(existing, at);
+            if (coordinate == null) {
+                return refuse(err, locale, "cli.init.coordinate.unreadable",
+                        display(here, existing.fileIn(at)), Coordinate.FORM);
             }
             target = at;
             if (level == null) {
@@ -254,6 +256,7 @@ public final class InitCommand {
             }
             return switch (GradleBuild.appliedIn(text,
                     GradleBuild.isKotlin(file.getFileName().toString()))) {
+                case UNREAD -> "cli.init.gradle.unreadable";
                 case SOMEWHERE_ELSE -> "cli.init.gradle.elsewhere";
                 case UNTOLD -> "cli.init.gradle.unversioned";
                 case ALREADY, NOT_YET -> null;
@@ -278,7 +281,8 @@ public final class InitCommand {
             if (build == BuildSystem.MAVEN) {
                 return MavenBuild.coordinateOf(text);
             }
-            String group = GradleBuild.groupOf(text);
+            String group = GradleBuild.groupOf(text,
+                    GradleBuild.isKotlin(file.getFileName().toString()));
             if (group == null) {
                 return null;
             }
@@ -290,7 +294,14 @@ public final class InitCommand {
                 if (name == null && Files.isRegularFile(path)) {
                     // The first that names it, and not the last that was read. A project may hold
                     // both files, and one of them saying nothing is not that project saying nothing.
-                    name = GradleBuild.rootProjectNameOf(Files.readString(path));
+                    String read = Files.readString(path);
+                    boolean kotlin = GradleBuild.isKotlin(settings);
+                    if (!GradleBuild.readable(read, kotlin)) {
+                        // Not a settings file naming nothing: one whose name this cannot read,
+                        // which the directory's name is no answer to.
+                        return null;
+                    }
+                    name = GradleBuild.rootProjectNameOf(read, kotlin);
                 }
             }
             if (name == null) {
@@ -343,7 +354,7 @@ public final class InitCommand {
                             project.southerVersion());
                     // Refused before anything was written (cannotBeAddedTo), so a script read as
                     // either here changed under this command.
-                    case SOMEWHERE_ELSE, UNTOLD -> throw new IllegalStateException(
+                    case UNREAD, SOMEWHERE_ELSE, UNTOLD -> throw new IllegalStateException(
                             file + " was refused and is being edited");
                 };
         if (now.equals(was)) {

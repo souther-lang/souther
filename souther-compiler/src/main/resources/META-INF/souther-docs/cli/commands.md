@@ -62,7 +62,10 @@ souther {
 Adding to a Gradle build writes the same block at the end of the script. One that already applies the
 plugin and does not say `southerVersion` is refused before anything is written, and told the block
 to write: the model would not build without it, and writing it could override a version a convention
-plugin gives.
+plugin gives. A script this command cannot read through — in Groovy, a `/` that is not a comment's,
+which opens a string or divides according to what a parser says, or anywhere a string, a comment or a
+brace that does not close — is refused too, with nothing written: where its blocks are is then not
+something it can tell.
 
 Where a `pom.xml` or a `build.gradle.kts` is already there, the coordinate is read out of it rather
 than written on the line, `--build` is not read — the build that is there is the build — and what is

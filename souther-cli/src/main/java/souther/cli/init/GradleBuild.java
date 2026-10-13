@@ -1,5 +1,6 @@
 package souther.cli.init;
 
+import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -46,20 +47,71 @@ final class GradleBuild {
         return fileName.endsWith(".kts");
     }
 
-    /** What the script sets as the group, or null where it sets none. */
-    static String groupOf(String script) {
-        Matcher found = GROUP.matcher(script);
-        return found.find() ? found.group(1) : null;
+    /**
+     * Whether every character of the script was placed as code, a comment or a string, and every
+     * brace closes: what the answers below take for granted, and what a caller asks before it
+     * takes a null from one of them as the script saying nothing.
+     */
+    static boolean readable(String script, boolean kotlin) {
+        return Read.of(script, kotlin).certain();
     }
 
-    /** What the settings script calls the root project, or null where it does not name it. */
-    static String rootProjectNameOf(String settings) {
-        Matcher found = ROOT_PROJECT_NAME.matcher(settings);
-        return found.find() ? found.group(1) : null;
+    /**
+     * What the script sets as the group, or null where it sets none, or sets it only where this
+     * cannot read — in a comment, in a string, in a block that configures some other project.
+     */
+    static String groupOf(String script, boolean kotlin) {
+        return assignedAtTopLevel(GROUP, "group", script, kotlin);
+    }
+
+    /** What the settings script calls the root project, or null where this reads it naming none. */
+    static String rootProjectNameOf(String settings, boolean kotlin) {
+        return assignedAtTopLevel(ROOT_PROJECT_NAME, "rootProject", settings, kotlin);
+    }
+
+    /**
+     * The string {@code assignment} gives its first group, at the first place it is code at the
+     * top level of the script: matched against the script with its comments taken out, so the
+     * string is there to read, and held to {@code Read.code} at the name it assigns, so a match
+     * that is inside a string or inside a block is not one.
+     */
+    private static String assignedAtTopLevel(Pattern assignment, String name, String script,
+                                             boolean kotlin) {
+        Read read = Read.of(script, kotlin);
+        if (!read.certain()) {
+            return null;
+        }
+        Matcher found = assignment.matcher(read.said());
+        while (found.find()) {
+            int at = read.said().indexOf(name, found.start());
+            if (read.code().startsWith(name, at) && atTopLevel(read.code(), at)) {
+                return found.group(1);
+            }
+        }
+        return null;
+    }
+
+    /** Where {@code opening} first matches at the top level of {@code code}, or null. */
+    private static MatchResult firstAtTopLevel(Pattern opening, String code) {
+        Matcher found = opening.matcher(code);
+        while (found.find()) {
+            if (atTopLevel(code, found.start())) {
+                return found.toMatchResult();
+            }
+        }
+        return null;
     }
 
     /** What a script says about the plugin, which is not always "yes" or "no". */
     enum Applied {
+        /**
+         * The walk met something in it that it cannot place, so it cannot say where the
+         * {@code plugins} block is, whether a block it found is the script's or text inside a
+         * string, or anything else. Refused: an answer here would be a guess, and every other
+         * answer leads either to the script being written into or to a model being written beside
+         * it.
+         */
+        UNREAD,
         /**
          * It is requested in the `plugins` block and applied there, and the script sets the
          * extension's version in a form this reads ({@code tellsTheVersion}). Nothing to add.
@@ -97,8 +149,11 @@ final class GradleBuild {
      */
     static Applied appliedIn(String script, boolean kotlin) {
         Read read = Read.of(script, kotlin);
-        Matcher found = PLUGINS.matcher(read.code());
-        if (found.find()) {
+        if (!read.certain()) {
+            return Applied.UNREAD;
+        }
+        MatchResult found = firstAtTopLevel(PLUGINS, read.code());
+        if (found != null) {
             int close = closingBrace(read.code(), found.end() - 1);
             if (close >= 0) {
                 String block = read.said().substring(found.end(), close);
@@ -108,10 +163,7 @@ final class GradleBuild {
                     if (!applies(block)) {
                         return Applied.SOMEWHERE_ELSE;
                     }
-                    // Yes only where every character was placed: a block read past something the
-                    // walk could not place may be inside it.
-                    return read.certain() && tellsTheVersion(read.code()) ? Applied.ALREADY
-                            : Applied.UNTOLD;
+                    return tellsTheVersion(read.code()) ? Applied.ALREADY : Applied.UNTOLD;
                 }
                 return rest.contains(BuildPlugins.GRADLE_ID) ? Applied.SOMEWHERE_ELSE
                         : Applied.NOT_YET;
@@ -230,7 +282,25 @@ final class GradleBuild {
         static Read of(String script, boolean kotlin) {
             Scan scan = new Scan(script, kotlin);
             scan.walk(0, false);
-            return new Read(scan.said.toString(), scan.code.toString(), scan.certain);
+            String code = scan.code.toString();
+            return new Read(scan.said.toString(), code, scan.certain && balanced(code));
+        }
+
+        /**
+         * Whether every brace of {@code code} closes one opened before it and every one opened is
+         * closed: where they do not, where a block ends is not something the script says.
+         */
+        private static boolean balanced(String code) {
+            int depth = 0;
+            for (int i = 0; i < code.length(); i++) {
+                char c = code.charAt(i);
+                if (c == '{') {
+                    depth++;
+                } else if (c == '}' && --depth < 0) {
+                    return false;
+                }
+            }
+            return depth == 0;
         }
     }
 
@@ -419,9 +489,16 @@ final class GradleBuild {
         // itself. Blanking keeps every other character where it was, so an offset means the same
         // thing in both — and a `plugins {` that is there only because somebody commented an old
         // one out, or wrote one in a string, is not a block this writes into.
-        String code = Read.of(script, kotlin).code();
-        Matcher found = PLUGINS.matcher(code);
-        if (!found.find()) {
+        Read read = Read.of(script, kotlin);
+        if (!read.certain()) {
+            // Answered UNREAD and refused before anything is written, so a script read so here
+            // changed under this command; a line put where the walk could not place would be a
+            // line put inside a string.
+            throw new IllegalStateException("a script this cannot read is being written into");
+        }
+        String code = read.code();
+        MatchResult found = firstAtTopLevel(PLUGINS, code);
+        if (found == null) {
             return "plugins {\n    " + line + "\n}\n\n" + script;
         }
         int close = closingBrace(code, found.end() - 1);

@@ -169,6 +169,59 @@ class WhatThisCommandCannotDecideItRefusesTest {
     }
 
     /**
+     * A Groovy build this cannot read through is refused with nothing written, and told why.
+     *
+     * <p>The {@code plugins} block here is text inside a slashy string. Read as the script's own,
+     * the plugin's line went inside the string and the run said the build was set up.
+     */
+    @Test
+    void aGradleBuildThisCannotReadIsRefusedWithNothingWritten(@TempDir Path directory)
+            throws IOException {
+        String script = """
+                def documentation = /
+                plugins {
+                    java
+                }
+                /
+
+                group = 'com.acme'
+                """;
+        Files.writeString(directory.resolve("build.gradle"), script);
+        Files.writeString(directory.resolve("settings.gradle"), "rootProject.name = 'billing'\n");
+
+        Run run = run(directory, "--model", "minimal");
+
+        assertEquals(2, run.code());
+        assertTrue(run.err().contains("cannot place"), run.err());
+        assertEquals(script, Files.readString(directory.resolve("build.gradle")));
+        assertTrue(Files.notExists(directory.resolve("src")), "a refusal wrote a source directory");
+        assertTrue(Files.notExists(directory.resolve("build.gradle.orig")), "a refusal wrote a copy");
+    }
+
+    /**
+     * A settings file this cannot read is not one that names nothing: the directory's name is no
+     * answer to it, and the coordinate is refused rather than guessed.
+     */
+    @Test
+    void aSettingsFileThisCannotReadIsNotTakenAsNamingNothing(@TempDir Path directory)
+            throws IOException {
+        Files.writeString(directory.resolve("build.gradle.kts"), """
+                plugins {
+                    java
+                }
+
+                group = "com.acme"
+                """);
+        Files.writeString(directory.resolve("settings.gradle.kts"),
+                "rootProject.name = \"billing\n");
+
+        Run run = run(directory, "--model", "minimal");
+
+        assertEquals(2, run.code());
+        assertTrue(Files.notExists(directory.resolve("src")), "a refusal wrote a source directory");
+    }
+
+    /**
      * A settings file that names nothing does not unname what another one named.
      *
      * <p>A project may hold both spellings. Read as the last one that was looked at rather than the

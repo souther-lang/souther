@@ -12,7 +12,9 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -140,7 +142,7 @@ class ABuildIsAddedToRatherThanRewrittenTest {
         assertEquals(1, edited.split("plugins \\{", -1).length - 1,
                 "a second plugins block, which Gradle refuses:\n" + edited);
         assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(edited, true));
-        assertEquals("com.acme", GradleBuild.groupOf(edited));
+        assertEquals("com.acme", GradleBuild.groupOf(edited, true));
         assertTrue(edited.endsWith("souther {\n    southerVersion = \"9.9.9\"\n}\n"),
                 "the plugin is not told which Souther to compile with:\n" + edited);
     }
@@ -415,25 +417,96 @@ class ABuildIsAddedToRatherThanRewrittenTest {
     }
 
     /**
-     * Where the walk meets what it cannot place, the answer is no, whatever it read past it.
-     *
-     * <p>In Groovy a {@code /} that is not a comment's opens a string or divides according to what
-     * came before it, which a parser says and this does not; and a string that never closes may
-     * have been meant to close anywhere. Either way a block read after it may be inside it. The
-     * cost is a refusal of a script that did set the version — answered by writing the line the
-     * refusal asks for — and never a project reported ready that does not build.
+     * A {@code plugins} block counts only at the top level, both where one is read and where one
+     * is written into.
      */
     @Test
-    void whatTheWalkCannotPlaceIsNeverAYes() {
+    void onlyATopLevelPluginsBlockIsTheScriptsOwn() {
+        String nested = """
+                subprojects {
+                    plugins {
+                        id("org.souther-lang.souther") version "0.2.0"
+                    }
+                }
+                """;
+
+        assertEquals(GradleBuild.Applied.SOMEWHERE_ELSE, GradleBuild.appliedIn(nested, true));
+        String edited = GradleBuild.withThePluginApplied("subprojects {\n    plugins {\n    }\n}\n",
+                true, "9.9.9");
+        assertTrue(edited.startsWith("plugins {\n    id(\"org.souther-lang.souther\")"), edited);
+    }
+
+    /**
+     * What a script calls its group and its root project is read where the build reads it: not in
+     * a comment, not in a string, not in a block that configures another project.
+     */
+    @Test
+    void aCoordinateIsReadOnlyWhereTheBuildSetsIt() {
+        assertEquals("com.acme", GradleBuild.groupOf("""
+                // group = "com.wrong"
+                val note = "group = 'com.wrong'"
+                subprojects {
+                    group = "com.wrong"
+                }
+                group = "com.acme"
+                """, true));
+        assertNull(GradleBuild.groupOf("/* group = \"com.wrong\" */\n", true));
+        assertEquals("billing", GradleBuild.rootProjectNameOf("""
+                /* rootProject.name = "wrong" */
+                rootProject.name = "billing"
+                """, true));
+        assertNull(GradleBuild.groupOf("def half = 4 / 2\ngroup = 'com.acme'\n", false));
+    }
+
+    /** A script this edited is one it then reads as set up, in either language. */
+    @Test
+    void aScriptThisEditedIsReadAsSetUp() {
+        for (boolean kotlin : List.of(true, false)) {
+            String edited = GradleBuild.withThePluginApplied(
+                    kotlin ? "plugins {\n    java\n}\n" : "plugins {\n    id 'java'\n}\n", kotlin,
+                    "9.9.9");
+            assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(edited, kotlin),
+                    edited);
+        }
+    }
+
+    /**
+     * Where the walk meets what it cannot place, the script is not read at all.
+     *
+     * <p>In Groovy a {@code /} that is not a comment's opens a string or divides according to what
+     * came before it, which a parser says and this does not; a string, a comment or a brace that
+     * never closes may have been meant to close anywhere. Either way a block found after it may be
+     * inside it — a version that is only text, or a {@code plugins} block that is only text and
+     * would be written into. So every answer that leads to a write or to a model is withheld, and
+     * the cost is a refusal of a script that was fine, never a project reported ready that does not
+     * build.
+     */
+    @Test
+    void whatTheWalkCannotPlaceIsNotReadAtAll() {
         String block = "souther {\n    southerVersion = \"0.4.0\"\n}\n";
         String groovy = "plugins {\n    id 'org.souther-lang.souther' version '0.2.0'\n}\n\n";
 
-        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(groovy
+        assertEquals(GradleBuild.Applied.UNREAD, GradleBuild.appliedIn(groovy
                 + "def pattern = /\n" + block + "/\n", false));
-        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(groovy
+        assertEquals(GradleBuild.Applied.UNREAD, GradleBuild.appliedIn(groovy
                 + "def half = 4 / 2\n\n" + block, false));
-        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(groovy
+        assertEquals(GradleBuild.Applied.UNREAD, GradleBuild.appliedIn(groovy
                 + block + "def note = 'never closed\n", false));
+        assertEquals(GradleBuild.Applied.UNREAD, GradleBuild.appliedIn(
+                "plugins {\n    id(\"org.souther-lang.souther\") version \"0.2.0\"\n}\n\n"
+                        + block + "tasks.test {\n", true));
+        // A plugins block that is only text is not one to write into.
+        assertEquals(GradleBuild.Applied.UNREAD, GradleBuild.appliedIn("""
+                def documentation = /
+                plugins {
+                    java
+                }
+                /
+
+                group = 'com.acme'
+                """, false));
+        assertThrows(IllegalStateException.class, () -> GradleBuild.withThePluginApplied(
+                "def documentation = /\nplugins {\n    java\n}\n/\n", false, "9.9.9"));
         // A dollar-slashy string is placed, so the block after one is the script's own.
         assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(groovy
                 + "def note = $/a $/ in it/$\n\n" + block, false));
