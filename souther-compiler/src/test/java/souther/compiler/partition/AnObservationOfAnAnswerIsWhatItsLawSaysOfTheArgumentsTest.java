@@ -354,6 +354,27 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
     }
 
     /**
+     * Some character of a string an operation made meeting what every code point meets is that
+     * string holding something, read as the operation's law says it: a string lowercased or
+     * uppercased holds something where the string does, though it is not as long, and one trimmed
+     * where the string holds something that is not whitespace.
+     */
+    @Test
+    void someCharacterOfAStringAnOperationMadeIsThatStringHoldingSomething() {
+        String anyCharacter = "if List.any(c -> String.matches(\"[^a]\", c)"
+                + " || String.matches(\"a\", c), String.characters(%s)) then 1 else 0";
+        Proposition ofTheString = stated(anyCharacter.formatted("b.s"));
+        assertNull(Proposition.firstStopIn(ofTheString), ofTheString.toString());
+        for (String made : List.of("String.lowercase", "String.uppercase")) {
+            assertEquals(ofTheString, stated(anyCharacter.formatted(made + "(b.s)")), made);
+        }
+        Proposition trimmed = stated(anyCharacter.formatted("String.trim(b.s)"));
+        assertNull(Proposition.firstStopIn(trimmed), trimmed.toString());
+        assertEquals(stated("if Bool.not(String.isEmpty(String.trim(b.s))) then 1 else 0"),
+                trimmed);
+    }
+
+    /**
      * Characters of a string lowercased are not characters of a string at a position: the case
      * mapping, and the composition after it, can take a letter the pattern accepts into one it
      * does not — {@code J} before a combining caron is {@code ǰ} once lowercased — so which code

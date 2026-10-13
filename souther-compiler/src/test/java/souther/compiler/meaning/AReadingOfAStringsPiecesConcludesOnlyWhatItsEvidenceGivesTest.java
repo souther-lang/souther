@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
@@ -37,6 +38,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -127,6 +129,29 @@ class AReadingOfAStringsPiecesConcludesOnlyWhatItsEvidenceGivesTest {
         assertThrows(IllegalArgumentException.class, () -> new Derivation.SomePieceMeeting(
                 SPLIT, OptionalInt.empty(), 0, holding(lower, TITLE, lower), aLowerCaseLetter(1)),
                 "the character of a statement read inside this one");
+    }
+
+    /**
+     * Some piece of a string is a reading of some element of a container that stands at no
+     * position, the one an operation made of the pieces, and of no container a row writes — even
+     * where what is asked of the element names nothing of it.
+     */
+    @Test
+    void somePieceIsNoReadingOfSomeElementOfAContainerAtAPosition() {
+        ValueName.Stdlib concat = ValueName.Stdlib.operation("String", "concat");
+        DeclaredArgument strings = DefaultBoundOperationFacts.get()
+                .keepsWhetherItHoldsACodePointOf(concat).string();
+        LawProposition.SomeElement<DeclaredArgument> some = new LawProposition.SomeElement<>(
+                strings, new LawProposition.Always<>(true), true);
+        Derivation quantified = new Derivation.ALawQuantifies(some,
+                new Derivation.SomePieceMeeting(SPLIT, OptionalInt.empty(), 0,
+                        Optional.of(new Derivation.Stopped(new WhyUnread.NoMeasureOfItsSize(),
+                                false)),
+                        new Derivation.ALawSettles(new LawProposition.Always<>(true))));
+        assertTrue(Derivation.ByALaw.readsTheLaw(some, quantified,
+                new Derivation.TheCall(concat, Map.of())));
+        assertFalse(Derivation.ByALaw.readsTheLaw(some, quantified,
+                new Derivation.TheCall(concat, Map.of(strings, OTHER))));
     }
 
     /**

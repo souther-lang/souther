@@ -808,8 +808,11 @@ public sealed interface Derivation {
                                             boolean holds, var _) ->
                             holds && standsAt(some.container(), container)
                                     && reads(some.ofTheElement(), ofTheElement);
+                    // The pieces of a string are the elements of a container an operation made,
+                    // which stands at no position.
                     case SomePieceMeeting(var _, var _, var _, var _, Derivation ofThePiece) ->
-                            reads(some.ofTheElement(), ofThePiece);
+                            positionOf(some.container()) == null
+                                    && reads(some.ofTheElement(), ofThePiece);
                     case OverElementsWrittenOut(List<Derivation> ofEach, boolean holds) -> {
                         Set<DeclaredArgument> inside = new HashSet<>(writtenOut);
                         inside.add(some.container());
@@ -1833,7 +1836,15 @@ public sealed interface Derivation {
      * handed, where that operation keeps whether it holds one.
      *
      * <p>{@code within} is how many statements about some piece this one is read inside of, and
-     * what was read of the piece is read of the counts of that piece and of no other.
+     * what was read of the piece is read of the counts of that piece and of no other. It tells
+     * apart the statements being read at once, one inside another, and nothing more: two
+     * statements read one after the other have the same one, and each takes only what was read
+     * of its own piece while it was being read.
+     *
+     * <p>Which string's pieces the container a law quantifies over holds is the reading's to
+     * follow, down through the walks and operations that made the container, and is not held
+     * here: a container made that way stands at no position of the input, which is all of it a
+     * law's call says ({@link ByALaw}).
      */
     record SomePieceMeeting(TheCall split, OptionalInt separator, int within,
                             Optional<Derivation> ofTheString, Derivation ofThePiece)
@@ -1873,8 +1884,13 @@ public sealed interface Derivation {
 
         /**
          * The statement that the string {@code operation} parts holds one of {@code meeting},
-         * over the call's arguments: how many of its code points are in that class is above
-         * nought, or how many it holds where every code point is — or null where it is none.
+         * over the call's arguments — or null where it is none.
+         *
+         * <p>Said as whether it holds one and not as how many it holds. Where every code point
+         * is one, it is the string holding something, which the laws say of an operation's answer
+         * where they say nothing of its length — a string lowercased holds something where the
+         * string did, and is not as long. Otherwise it is how many of its code points are in that
+         * class being above nought, which is the statement an operation is declared to keep.
          */
         public static LawProposition<DeclaredArgument> heldBy(ValueName.Stdlib operation,
                                                               CodePoints meeting) {
@@ -1886,10 +1902,12 @@ public sealed interface Derivation {
                 return null;
             }
             LawSubject<DeclaredArgument> string = new LawSubject.Argument<>(parted.string());
-            LawNumber<DeclaredArgument> counted = meeting.isEverything()
-                    ? new LawNumber.SizeOf<>(string)
-                    : new LawNumber.CodePointsOf<>(string, CodePointClass.of(meeting));
-            return new LawProposition.Compared<>(LinearForm.atom(counted), Rel.GT);
+            if (meeting.isEverything()) {
+                return new LawProposition.Observed<>(string,
+                        new SideAnswered(AnswerAspect.EMPTINESS, true));
+            }
+            return new LawProposition.Compared<>(LinearForm.atom(
+                    new LawNumber.CodePointsOf<>(string, CodePointClass.of(meeting))), Rel.GT);
         }
 
         /**
