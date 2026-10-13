@@ -83,7 +83,8 @@ class ARegionShownToHoldNothingIsNotWalkedTest {
         assertEquals(Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT),
                 assertInstanceOf(NumericWitness.Standing.NotFound.class,
                         witnessIn(NothingTheRulesSay.REGION),
-                        "nothing was shown empty, so nothing is proved about the pair").stoppedBy(),
+                        "nothing was shown empty, so nothing is proved about the pair")
+                        .met().figures(),
                 "and what it came back with is the figure it stopped at");
     }
 

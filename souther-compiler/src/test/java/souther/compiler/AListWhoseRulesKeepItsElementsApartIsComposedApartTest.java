@@ -305,7 +305,21 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
                     "Held(Box { ks = [\"x\", \"xx\"] })", "[(\"x\", \"x\")]"), 1)),
             Map.entry(A_NAME_COUNTING_A_RECORDS_LIST, new Composed(List.of(
                     "Held(Box { ks = [\"x\", \"xx\"] })", "[(\"x\", \"x\")]"), 1)),
-            Map.entry(SUMMED, new Composed(List.of("Keys([0, 1, 9])"), 1)));
+            Map.entry(SUMMED, new Composed(List.of("Keys([0, 1, 9])"), 1)),
+            Map.entry(SUMMED_APART_AT_ANOTHER_FIELD, new Composed(List.of(
+                    "Lines([Line { sku = \"x\", q = 10 }, Line { sku = \"xx\", q = 0 },"
+                            + " Line { sku = \"xxx\", q = 0 }])"), 1)),
+            Map.entry(SUMMED_OVER_LISTS_OF_A_LIST, new Composed(List.of(
+                    "Ledger { entries = [Entry { postings = [Posting { sku = \"x\", q = 0 },"
+                            + " Posting { sku = \"xx\", q = 1 }] },"
+                            + " Entry { postings = [Posting { sku = \"x\", q = 2 },"
+                            + " Posting { sku = \"xx\", q = 7 }] }] }"), 1)),
+            Map.entry(SUMMED_OVER_LISTS_SOME_EMPTY, new Composed(List.of(
+                    "Ledger { entries = [Entry { postings = [Posting { q = 0 }] },"
+                            + " Entry { postings = [Posting { q = 1 }] },"
+                            + " Entry { postings = [Posting { q = 2 }] },"
+                            + " Entry { postings = [Posting { q = 7 }] }, Entry { postings = [] }] }"),
+                    1)));
 
     private record Composed(List<String> inputs, int answer) {}
 

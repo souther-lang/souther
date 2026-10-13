@@ -174,6 +174,7 @@ public final class LevelRealizer {
         }
         Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
         Set<CompositionCapacity> unheld = new HashSet<>();
+        Set<CompositionRepertoire> notAllOf = EnumSet.noneOf(CompositionRepertoire.class);
         LevelCandidateSource.Offered offered =
                 LevelCandidateSource.forItem(over.where(), over.levels());
         if (offered.stoppedShort()) {
@@ -208,8 +209,8 @@ public final class LevelRealizer {
                     case NumericWitness.Standing.Found beside -> {
                         fixing.put(counted, Count.of(many));
                         for (NumericWitness.Standing.Found.Placed each : beside.inFixingOrder()) {
-                            if (!each.position().subjectPath().insideAContainer()) {
-                                fixing.putIfAbsent(RealizationTarget.of(each.position()),
+                            if (!each.term().subjectPath().insideAContainer()) {
+                                fixing.putIfAbsent(RealizationTarget.of(each.term()),
                                         each.place());
                             }
                         }
@@ -219,9 +220,10 @@ public final class LevelRealizer {
                         }
                     }
                     case NumericWitness.Standing.ProvedImpossible _ -> { }
-                    case NumericWitness.Standing.NotFound(var figures, var held) -> {
-                        stoppedBy.addAll(figures);
-                        unheld.addAll(held);
+                    case NumericWitness.Standing.NotFound(CompositionShortfall met) -> {
+                        stoppedBy.addAll(met.figures());
+                        notAllOf.addAll(met.populations());
+                        unheld.addAll(met.unheld());
                     }
                 }
             }
@@ -230,7 +232,7 @@ public final class LevelRealizer {
         stoppedBy.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
         return Realization.Unknown.leftOpen(
                 Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
-                stoppedBy, Set.of(), unheld);
+                stoppedBy, notAllOf, unheld);
     }
 
     /**
@@ -254,8 +256,9 @@ public final class LevelRealizer {
     private Realization ofACount(Standing.OfACount count, SearchRegion within,
                                  WitnessSearch looking, ValuesTried tried) {
         RealizationTarget.ACount counted = new RealizationTarget.ACount(count.count());
-        Set<CompositionBudget> stoppedBy = java.util.EnumSet.noneOf(CompositionBudget.class);
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
         Set<CompositionCapacity> unheld = new HashSet<>();
+        Set<CompositionRepertoire> notAllOf = EnumSet.noneOf(CompositionRepertoire.class);
         LevelCandidateSource.Offered offered =
                 LevelCandidateSource.forItem(count.where(), count.count().levels());
         if (offered.stoppedShort()) {
@@ -288,8 +291,8 @@ public final class LevelRealizer {
                     Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
                     fixing.put(counted, asked);
                     for (NumericWitness.Standing.Found.Placed each : beside.inFixingOrder()) {
-                        if (!each.position().subjectPath().insideAContainer()) {
-                            fixing.put(RealizationTarget.of(each.position()), each.place());
+                        if (!each.term().subjectPath().insideAContainer()) {
+                            fixing.put(RealizationTarget.of(each.term()), each.place());
                         }
                     }
                     Realization made = found(fixing, within, tried);
@@ -298,15 +301,16 @@ public final class LevelRealizer {
                     }
                 }
                 case NumericWitness.Standing.ProvedImpossible _ -> { }
-                case NumericWitness.Standing.NotFound(var figures, var held) -> {
-                    stoppedBy.addAll(figures);
-                    unheld.addAll(held);
+                case NumericWitness.Standing.NotFound(CompositionShortfall met) -> {
+                    stoppedBy.addAll(met.figures());
+                    notAllOf.addAll(met.populations());
+                    unheld.addAll(met.unheld());
                 }
             }
         }
         return Realization.Unknown.leftOpen(
                 Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
-                stoppedBy, Set.of(), unheld);
+                stoppedBy, notAllOf, unheld);
     }
 
     /**

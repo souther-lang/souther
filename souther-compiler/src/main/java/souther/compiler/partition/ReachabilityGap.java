@@ -4,12 +4,8 @@ import souther.compiler.meaning.WhyUnread;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
-import java.util.Collection;
-import java.util.EnumSet;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * A condition on the way to a border that a row for it was not composed against, and which stage
@@ -139,15 +135,14 @@ public sealed interface ReachabilityGap {
                 && ways.stream().allMatch(each -> each instanceof ProvedImpossible)) {
             return new ProvedImpossible(cut);
         }
-        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
-        Set<CompositionCapacity> unheld = new HashSet<>();
+        CompositionShortfall met = CompositionShortfall.NONE;
         boolean twoAtOneLocation = false;
         for (ReachabilityGap each : ways) {
             switch (each) {
-                case Uncomposed(var _, Why.TheWalkForItsPositionsWasStopped(var by, var notHeld)) -> {
-                    stoppedBy.addAll(by.written());
-                    unheld.addAll(notHeld.written());
-                }
+                case Uncomposed(var _, Why.TheWalkForItsPositionsWasStopped(
+                        var by, var writes, var unheld)) ->
+                        met = met.and(CompositionShortfall.of(by.written(), writes.written(),
+                                unheld.written()));
                 case Uncomposed(var _, Why.TwoNumbersAtOneLocation _) -> twoAtOneLocation = true;
                 case Uncomposed(var _, Why.NoValueComposedForItsPositions _),
                      Uncomposed(var _, Why.ElementsWrittenAlike _),
@@ -157,8 +152,8 @@ public sealed interface ReachabilityGap {
                         "a way of writing a cut is one the walk stated as a cut: " + each);
             }
         }
-        if (!stoppedBy.isEmpty() || !unheld.isEmpty()) {
-            return new Uncomposed(cut, Why.TheWalkForItsPositionsWasStopped.by(stoppedBy, unheld));
+        if (!met.nothing()) {
+            return new Uncomposed(cut, Why.TheWalkForItsPositionsWasStopped.by(met));
         }
         return new Uncomposed(cut, twoAtOneLocation
                 ? new Why.TwoNumbersAtOneLocation()
@@ -175,6 +170,16 @@ public sealed interface ReachabilityGap {
     sealed interface Why {
 
         /**
+         * What a walk for a condition's positions that found nothing comes to: stopped, where it
+         * met something of this compiler's, and found nothing in what it walked where it did not.
+         */
+        static Why ofAWalkThatFoundNothing(CompositionShortfall met) {
+            return met.nothing()
+                    ? new NoValueComposedForItsPositions()
+                    : TheWalkForItsPositionsWasStopped.by(met);
+        }
+
+        /**
          * No value was composed at some position the condition is over.
          *
          * <p>Said of the whole condition, because a cut over two positions is one statement about
@@ -186,40 +191,45 @@ public sealed interface ReachabilityGap {
         record NoValueComposedForItsPositions() implements Why {}
 
         /**
-         * The same, where a budget of this compiler's, or a value it could not hold, is what stopped
-         * the walk that would have placed the positions.
+         * The same, where something of this compiler's is what stopped the walk that would have
+         * placed the positions: a budget, a population the composing of a value there writes some of,
+         * or a value it could not hold.
          *
          * <p>A case beside the one above rather than a field on it. The two are different news: one
          * says nothing was found in what was walked, the other says the walking stopped, and only
-         * the second names something a reader could raise. Held as a set that is sometimes empty,
-         * every reader would decide again which of the two it had.
+         * the second names something a reader could do something about. Held as a set that is
+         * sometimes empty, every reader would decide again which of the two it had.
          *
          * <p>Not an {@link souther.compiler.query.EstablishmentGap}. A row was composed here; what
          * the budget cost is one condition on the way being composed against, and reporting it as a
          * point nothing could be established at would say more than happened.
          */
         record TheWalkForItsPositionsWasStopped(CanonicalSelection<CompositionBudget> by,
+                                                CanonicalSelection<CompositionRepertoire> writes,
                                                 CanonicalSelection<CompositionCapacity> unheld)
                 implements Why {
 
             /**
-             * Stopped by a figure, by a value it could not hold, or by both: the walk that would
-             * have placed the positions did not reach its end either way, and each is said in its
-             * own vocabulary since what a reader does about them differs.
+             * Stopped by a figure, by a population written in part, by a value it could not hold,
+             * or by more than one: the walk that would have placed the positions did not reach its
+             * end either way, and each is said in its own vocabulary since what a reader does about
+             * them differs.
              */
             public TheWalkForItsPositionsWasStopped {
-                if (by == null || unheld == null || (by.isEmpty() && unheld.isEmpty())) {
+                if (by == null || writes == null || unheld == null
+                        || (by.isEmpty() && writes.isEmpty() && unheld.isEmpty())) {
                     throw new IllegalArgumentException("a walk this compiler stopped says what"
-                            + " stopped it: a budget, or a value it could not hold");
+                            + " stopped it: a budget, a population it writes some of, or a value"
+                            + " it could not hold");
                 }
             }
 
-            /** What a walk met, in the order a report says it. */
-            public static TheWalkForItsPositionsWasStopped by(Collection<CompositionBudget> met,
-                                                              Collection<CompositionCapacity> unheld) {
+            /** What a walk met, every vocabulary of it, in the order a report says it. */
+            public static TheWalkForItsPositionsWasStopped by(CompositionShortfall met) {
                 return new TheWalkForItsPositionsWasStopped(
-                        PublicationOrders.COMPOSITION_BUDGETS.keep(met),
-                        PublicationOrders.COMPOSITION_CAPACITIES.keep(unheld));
+                        PublicationOrders.COMPOSITION_BUDGETS.keep(met.figures()),
+                        PublicationOrders.COMPOSITION_REPERTOIRES.keep(met.populations()),
+                        PublicationOrders.COMPOSITION_CAPACITIES.keep(met.unheld()));
             }
         }
 

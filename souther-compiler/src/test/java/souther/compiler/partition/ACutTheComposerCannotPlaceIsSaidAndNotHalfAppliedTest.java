@@ -121,6 +121,50 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
         }
     }
 
+    /**
+     * And a cut naming one total of a container beside how many it holds is placed.
+     *
+     * <p>The pair of the case above, so that what refuses it is the group and not the total. One
+     * list answers how many it holds and what one field of its elements comes to, so the total is
+     * placed as any number of the way is and the container is composed for both at once.
+     */
+    @Test
+    void aCutNamingOneTotalBesideHowManyTheContainerHoldsIsPlaced() {
+        Generator.BoundaryAttempt attempt = composing(axisAt("r.lines"), Count.of(2),
+                cut(aTotalOver("a")));
+
+        assertTrue(attempt.unrepresented().onTheWay().isEmpty(),
+                "how many a list holds and what its elements add up to are written together: "
+                        + attempt.unrepresented());
+        assertInstanceOf(Generator.BoundaryAttempt.Built.class, attempt,
+                "and the row is composed with the cut placed");
+    }
+
+    /**
+     * And a cut that names two totals of one container itself is said as that, with the row
+     * composed without it.
+     *
+     * <p>Nothing else is written at the container, so what makes them two demands on one location
+     * is that one cut names both. Asked against what stood before the cut alone, each would be
+     * alone at the container, and the pair would reach the composing of the container as a group
+     * nothing builds — which takes the whole row with it rather than the one condition.
+     */
+    @Test
+    void aCutNamingTwoTotalsOfOneContainerIsSaidAsThatAndTheRowIsComposedWithoutIt() {
+        OnTheWay.TakenIn both = new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(
+                new TakenConstraint.Affine(LinearForm.<NumericTerm>sumOfAtoms(aTotalOver("a"),
+                        aTotalOver("b")), Rel.GE)));
+
+        Generator.BoundaryAttempt attempt = composing(costAxis(), Count.of(100), both);
+
+        assertEquals(List.of(new ReachabilityGap.Uncomposed(both,
+                        new ReachabilityGap.Why.TwoNumbersAtOneLocation())),
+                attempt.unrepresented().onTheWay(),
+                "numbers of one location this writes no value for: " + attempt.unrepresented());
+        assertInstanceOf(Generator.BoundaryAttempt.Built.class, attempt,
+                "and the row is composed without the cut");
+    }
+
     /** The total of what stands at {@code field} in each of the container's elements. */
     private static NumericTerm aTotalOver(String field) {
         NumericTerm.TakenOver over = NumericTerm.TakenOver.of(

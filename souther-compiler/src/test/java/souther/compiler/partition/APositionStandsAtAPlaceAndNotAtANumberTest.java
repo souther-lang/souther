@@ -128,10 +128,9 @@ class APositionStandsAtAPlaceAndNotAtANumberTest {
                         NothingTheDeclarationsNarrow.LOOKING));
     }
 
-    private static List<NumericTerm.FromOnePosition> positionsOf(
-            NumericWitness.Standing.Found found) {
+    private static List<NumericTerm> positionsOf(NumericWitness.Standing.Found found) {
         return found.inFixingOrder().stream()
-                .map(NumericWitness.Standing.Found.Placed::position).toList();
+                .map(NumericWitness.Standing.Found.Placed::term).toList();
     }
 
     /** Where {@code path} runs once it has been fixed at {@code at}, as the two ends. */

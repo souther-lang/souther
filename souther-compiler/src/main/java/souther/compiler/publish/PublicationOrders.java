@@ -314,6 +314,7 @@ public final class PublicationOrders {
                     // stopped the search. Each sits by the trying figure it was split from.
                     CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT,
                     CompositionBudget.PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT,
+                    CompositionBudget.ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR,
                     CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
                     // Beside the one above it, and for the same reason: both bound how many times
                     // the thing a reader asked about is tried, where the ones before them bound

@@ -95,7 +95,7 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
      * @param cuts every cut the way took in, of which the ones naming {@code term} are read
      * @param on   the order {@code term}'s values are counted on
      */
-    public static NumbersAskedFor askedOf(NumericTerm.FromOnePosition term,
+    public static NumbersAskedFor askedOf(NumericTerm term,
                                    SearchRegion within, Carrier on,
                                    List<OnTheWay.TakenIn> cuts) {
         // What the rules leave is where they leave it on the term's own order, so without one
@@ -136,7 +136,7 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
     /** What the relations an element is to meet ask of {@code term}, each read off a region it
      *  narrows. */
     private static NumbersAskedFor ofTheElement(List<RowDemand.Relational> relations,
-                                                NumericTerm.FromOnePosition term,
+                                                NumericTerm term,
                                                 SearchRegion within, Carrier on) {
         NumbersAskedFor asked = ANYTHING;
         for (RowDemand.Relational each : relations) {
@@ -149,7 +149,7 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
     }
 
     /** What {@code within} leaves {@code term}, on its own order. */
-    private static NumbersAskedFor leaving(NumericTerm.FromOnePosition term, SearchRegion within,
+    private static NumbersAskedFor leaving(NumericTerm term, SearchRegion within,
                                            Carrier on) {
         return switch (within.projectionOf(term)) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->

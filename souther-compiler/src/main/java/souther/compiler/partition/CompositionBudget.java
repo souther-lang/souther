@@ -208,6 +208,22 @@ public enum CompositionBudget {
     PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT(64),
 
     /**
+     * How many assignments of the numbers the conditions on the way to one point name a row is
+     * composed for, to learn whether one composes.
+     *
+     * <p>Its own figure and not either of the two above. Those bound the values of one position
+     * the walk tries, and composing is asked of an assignment of every position at once — so how
+     * many times it is asked grows as their product, and a value of each composes a location as
+     * expensive as the containers the numbers are written into. Spent over every condition on the
+     * way to the point, and not afresh for each: a condition placed with others and then on its own
+     * asks of the same allowance, so splitting a search is no way past it.
+     *
+     * <p>Its outcome is the outcome of the two above: the row is composed, and what was not
+     * composed against is one condition on the way ({@link ReachabilityGap}).
+     */
+    ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR(64),
+
+    /**
      * How many values a point is tried with after a row composed for one of them does not stand
      * there.
      *
@@ -400,6 +416,9 @@ public enum CompositionBudget {
             case PLACES_A_PAIR_IS_LOOKED_AT -> PLACES_A_PAIR_IS_TRIED_AT;
             case PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT ->
                     VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT;
+            // And the composing of what that walk tries, which bounds the same walk from the other
+            // end: the values it reaches, each composed for.
+            case ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR -> VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT;
             case CHOICES_ON_A_WAY_LOOKED_AT -> WAYS_A_WAY_IS_LOOKED_ALONG;
             case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
                  ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,
