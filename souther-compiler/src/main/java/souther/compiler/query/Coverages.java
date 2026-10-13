@@ -1008,23 +1008,11 @@ final class Coverages {
         Criterion refused = runBeside(border.border(), false);
         Criterion kept = runBeside(border.border(), true);
         String label = border.border().label();
-        // Where the line could not be worked out no row is reused for it, and each line is
-        // searched for: reusing is a saving and never what decides a line.
-        Optional<OrderedAffineBoundary> held = OrderedAffineBoundary.of(border.border()).orNull();
-        OrderedAffineBoundary drawn = held == null ? null : held.orElse(null);
+        // Each line searched for on its own. Which lines a row composed here settles is the row's
+        // to say once it is read back, and that is asked where every offered row is weighed, in
+        // Settlements — which also drops a row another one already answers for.
         List<ARowTellingTheLinesApart.AtOneReading> out = new ArrayList<>();
-        List<ARowTellingTheLinesApart.AtOneReading> composed = new ArrayList<>();
         for (AnotherLineTheRowsAllow.Stands line : lines.standing()) {
-            // A row already composed at this reading that rules this line out too is the row for
-            // it, asked by the rule every other reader of the row asks it by. Searched again, the
-            // same region would be walked for a row the block would then drop as answered by the
-            // first one.
-            ARowTellingTheLinesApart.AtOneReading already = rulingOut(line, drawn, composed);
-            if (already != null) {
-                out.add(new ARowTellingTheLinesApart.AtOneReading(border.border(),
-                        line.direction(), already.composedAt(), already.searches()));
-                continue;
-            }
             SearchOutcomes tried = SearchOutcomes.none();
             ARowTellingTheLinesApart.AtOneReading found = null;
             if (refused != null) {
@@ -1038,38 +1026,11 @@ final class Coverages {
                 found = search.tellingApart(kept, label, line.direction(), keptSide.get());
                 tried = tried.plus(found.searches());
             }
-            if (found != null && found.composedAt() != null) {
-                composed.add(found);
-                out.add(found);
-            } else {
-                out.add(new ARowTellingTheLinesApart.AtOneReading(border.border(),
-                        line.direction(), null, tried));
-            }
+            out.add(found != null && found.composedAt() != null ? found
+                    : new ARowTellingTheLinesApart.AtOneReading(border.border(), line.direction(),
+                            null, tried));
         }
         return new ARowTellingTheLinesApart(out);
-    }
-
-    /**
-     * The first of {@code composed} whose row rules {@code line} out, or null where none does or
-     * the row names no number at a position either line is over.
-     */
-    private static ARowTellingTheLinesApart.AtOneReading rulingOut(
-            AnotherLineTheRowsAllow.Stands line, OrderedAffineBoundary drawn,
-            List<ARowTellingTheLinesApart.AtOneReading> composed) {
-        if (drawn == null) {
-            return null;
-        }
-        for (ARowTellingTheLinesApart.AtOneReading each : composed) {
-            Map<NumericTerm, Place> at = each.composedAt();
-            // Reused only where it is shown to rule the line out: a sum the arithmetic could not
-            // hold leaves the line to its own search.
-            if (at.keySet().containsAll(drawn.direction().direction().keySet())
-                    && at.keySet().containsAll(line.direction().direction().keySet())
-                    && Boolean.TRUE.equals(line.ruledOutBy(drawn, at).orNull())) {
-                return each;
-            }
-        }
-        return null;
     }
 
     /**
