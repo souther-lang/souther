@@ -138,6 +138,19 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
     }
 
     @Test
+    void aRepositoryNamedOverPlainHttpElsewhereIsNotAskedAndNamedAsItWasSet() throws Exception {
+        String named = "http://repository.example/maven2/";
+
+        Ran ran = CliProcess.run(work, Map.of(), List.of("-Duser.home=" + userHome,
+                "-Dsouther.repository=" + named), "", "compile", "--target", "wasm");
+
+        assertEquals(2, ran.code());
+        assertTrue(ran.err().contains("souther.repository") && ran.err().contains(named),
+                ran.err());
+        assertFalse(Files.exists(fetchedTo()), "a fetch that could ask nothing made " + fetchedTo());
+    }
+
+    @Test
     void aTargetInstalledTwiceIsRefusedAndNothingIsFetchedInItsPlace() throws Exception {
         released("never");
         FakeBackend.write(fetchedTo().resolve("a.jar"), "wasm", HERE, "a");

@@ -62,7 +62,13 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
     }
 
     private Central central() {
-        return Central.at(repository.uri(), Duration.ofSeconds(30));
+        return Central.at(repository.uri(), Central.Patience.USUAL);
+    }
+
+    private Central.Failure failedWaiting(Duration answer, Duration stall) throws Exception {
+        return assertInstanceOf(BackendFetch.Failed.class, BackendFetch.whereAbsent(backends,
+                Central.at(repository.uri(), new Central.Patience(answer, stall)), "wasm", HERE,
+                release -> { })).failure();
     }
 
     private BackendFetch.Outcome fetch(String target) throws Exception {
@@ -284,10 +290,7 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
 
         // A tenth of a second is short of what a download would be given, and long enough here:
         // this one has stopped, so taking it to have stopped sooner changes nothing about it.
-        Central.Failure failure = assertInstanceOf(BackendFetch.Failed.class,
-                BackendFetch.whereAbsent(backends,
-                        Central.at(repository.uri(), Duration.ofMillis(100)), "wasm", HERE,
-                        release -> { })).failure();
+        Central.Failure failure = failedWaiting(Duration.ofSeconds(60), Duration.ofMillis(100));
 
         assertTrue(assertInstanceOf(Central.Failure.Unreachable.class, failure).reason()
                 .startsWith("nothing arrived"), failure.toString());
@@ -424,15 +427,69 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
     }
 
     @Test
+    void aJarThatKeepsArrivingIsWaitedForPastTheTimeASmallFileHas() throws Exception {
+        repository.metadata(WASM, "0.1.0");
+        repository.release(WASM, "0.1.0", "cli", HERE, jar("slow", "wasm", HERE));
+        repository.trickle(LocalRepository.path(WASM, "0.1.0", "cli", "jar"), 8, 150);
+
+        BackendFetch.Fetched fetched = assertInstanceOf(BackendFetch.Fetched.class,
+                BackendFetch.whereAbsent(backends, Central.at(repository.uri(),
+                        new Central.Patience(Duration.ofMillis(400), Duration.ofMillis(600))),
+                        "wasm", HERE, release -> { }));
+
+        assertEquals(home.resolve("wasm-" + HERE + ".jar"), fetched.backend().jar());
+    }
+
+    @Test
+    void aJarWhoseAnswerNeverBeginsIsGivenUpOnceAnAnswerShouldHaveBegun() throws Exception {
+        repository.metadata(WASM, "0.1.0");
+        repository.release(WASM, "0.1.0", "cli", HERE, jar("late", "wasm", HERE));
+        repository.holdBack(LocalRepository.path(WASM, "0.1.0", "cli", "jar"), 5000);
+
+        Central.Failure failure = failedWaiting(Duration.ofMillis(300), Duration.ofSeconds(60));
+
+        assertTrue(assertInstanceOf(Central.Failure.Unreachable.class, failure).reason()
+                .startsWith("no answer began"), failure.toString());
+        assertEquals(List.of(), held());
+    }
+
+    @Test
+    void aJarThatBeginsAndSendsNothingIsGivenUpAStallLaterAndNotTwo() throws Exception {
+        repository.metadata(WASM, "0.1.0");
+        repository.release(WASM, "0.1.0", "cli", HERE, jar("silent", "wasm", HERE));
+        repository.silence(LocalRepository.path(WASM, "0.1.0", "cli", "jar"));
+        Duration stall = Duration.ofMillis(500);
+
+        long started = System.nanoTime();
+        Central.Failure failure = failedWaiting(Duration.ofSeconds(60), stall);
+        Duration took = Duration.ofNanos(System.nanoTime() - started);
+
+        assertTrue(assertInstanceOf(Central.Failure.Unreachable.class, failure).reason()
+                .startsWith("nothing arrived"), failure.toString());
+        assertTrue(took.compareTo(stall) >= 0 && took.compareTo(stall.multipliedBy(3).dividedBy(2))
+                < 0, took.toString());
+    }
+
+    @Test
     void noProxyNamesAHostADomainOrEveryHost() {
-        assertTrue(Central.bypassed("nexus.corp", "localhost, nexus.corp"));
-        assertTrue(Central.bypassed("repo.nexus.corp", "nexus.corp"));
-        assertTrue(Central.bypassed("repo.nexus.corp", ".nexus.corp"));
-        assertTrue(Central.bypassed("NEXUS.corp", "nexus.CORP"));
-        assertTrue(Central.bypassed("repo.maven.apache.org", "*"));
-        assertFalse(Central.bypassed("repo.maven.apache.org", "nexus.corp,,apache"));
-        assertFalse(Central.bypassed("notnexus.corp", "nexus.corp"));
-        assertFalse(Central.bypassed("repo.maven.apache.org", null));
+        assertTrue(Repository.bypassed("nexus.corp", "localhost, nexus.corp"));
+        assertTrue(Repository.bypassed("repo.nexus.corp", "nexus.corp"));
+        assertTrue(Repository.bypassed("repo.nexus.corp", ".nexus.corp"));
+        assertTrue(Repository.bypassed("NEXUS.corp", "nexus.CORP"));
+        assertTrue(Repository.bypassed("repo.maven.apache.org", "*"));
+        assertFalse(Repository.bypassed("repo.maven.apache.org", "nexus.corp,,apache"));
+        assertFalse(Repository.bypassed("notnexus.corp", "nexus.corp"));
+        assertFalse(Repository.bypassed("repo.maven.apache.org", null));
+    }
+
+    @Test
+    void onlyHttpsOrPlainHttpOnTheLoopbackMayBeAsked() {
+        assertTrue(Repository.admits(URI.create("https://repo.example/x")));
+        assertTrue(Repository.admits(URI.create("http://127.0.0.1:8080/x")));
+        assertTrue(Repository.admits(URI.create("http://localhost/x")));
+        assertFalse(Repository.admits(URI.create("http://repo.example/x")));
+        assertFalse(Repository.admits(URI.create("ftp://repo.example/x")));
+        assertFalse(Repository.admits(URI.create("file:///tmp/x.jar")));
     }
 
     @Test

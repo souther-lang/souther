@@ -33,7 +33,11 @@ import java.util.zip.ZipEntry;
  * installed for this one.
  *
  * <p>The first directory is also where a backend fetched from a repository is written, so a fetched
- * one is found by the same search and the same descriptor as one put there by hand.
+ * one is found by the same search and the same descriptor as one put there by hand. It is written
+ * under the pair's name, {@code <target>-<version>.jar}, and a record beside it says two things:
+ * that a fetch wrote the name, by being there, and which release stands under it, by the address it
+ * holds. Every question about either is answered by this class, so what makes a name a fetch's is
+ * decided in one place.
  */
 public final class Backends {
 
@@ -149,9 +153,13 @@ public final class Backends {
         return directories.getFirst();
     }
 
-    /** The name a fetched backend for the pair is written under. */
-    Path fetchedAs(String target, String southerVersion) {
-        return fetched().resolve(target + "-" + southerVersion + ".jar");
+    /**
+     * The name a fetched backend for the release's target and {@code southerVersion} is written
+     * under. Built from a release, which exists only for a target the repository's table has, and
+     * from this Souther's version, so no name a command line or a jar gave is ever made a path.
+     */
+    Path fetchedAs(Central.Release release, String southerVersion) {
+        return fetched().resolve(release.target() + "-" + southerVersion + ".jar");
     }
 
     /**
@@ -190,54 +198,85 @@ public final class Backends {
         return new Absent(target, southerVersion, searched);
     }
 
+    /** The record beside a fetched jar, under a name no search reads as a backend. */
+    private static Path record(Path jar) {
+        return jar.resolveSibling("." + jar.getFileName() + ".fetched");
+    }
+
+    /**
+     * The backend the release was fetched as before, where it is still what the directories choose
+     * for the pair, or null.
+     *
+     * <p>A released file does not change, so a jar fetched from the release's address is that
+     * release for as long as it stands under the name it was fetched as. A record that names no
+     * release, or another one, means the jar is to be fetched again, which costs a download and
+     * nothing else.
+     */
+    Backend fetchedBefore(Central.Release release, String southerVersion)
+            throws Refused, IOException {
+        Path jar = fetchedAs(release, southerVersion);
+        Path record = record(jar);
+        if (!Files.isRegularFile(record)
+                || !Files.readString(record).equals(release.jar().toString())) {
+            return null;
+        }
+        return find(release.target(), southerVersion) instanceof Found found
+                && found.backend().jar().equals(jar) ? found.backend() : null;
+    }
+
     /**
      * Refuses a fetch for the pair that would replace or stand beside a jar someone else put in the
      * directory a fetched backend goes to.
      *
-     * <p>A fetched jar is written under the pair's name, {@code <target>-<version>.jar}, and
-     * replaces what is there only where a fetch wrote it, which {@code fetchedThere} says. A jar
-     * under that name that no fetch wrote was put there by hand, whatever it describes, and so is
-     * a jar for the pair under any other name. Asked before anything is downloaded, since the answer
-     * is the directory's and not the release's. Something under the name that is not a backend at
-     * all is refused as such, as every search refuses it.
+     * <p>A fetch replaces what is under the pair's name only where a fetch wrote it, which the
+     * record says. A jar under that name with no record was put there by hand, whatever it
+     * describes, and so is a jar for the pair under any other name. Asked before anything is
+     * downloaded, since the answer is the directory's and not the release's. Something under the
+     * name that is not a backend at all is refused as such, as every search refuses it.
      *
      * @throws Refused where the directory holds such a jar, or cannot be listed
      */
-    void clearToFetch(String target, String southerVersion, boolean fetchedThere)
-            throws Refused {
-        Path name = fetchedAs(target, southerVersion);
+    void clearToFetch(Central.Release release, String southerVersion) throws Refused {
+        Path name = fetchedAs(release, southerVersion);
+        boolean fetchedThere = Files.isRegularFile(record(name));
         for (Backend backend : scan(fetched())) {
             boolean ours = backend.jar().equals(name) && fetchedThere;
-            boolean pair = backend.name().equals(target)
+            boolean pair = backend.name().equals(release.target())
                     && backend.southerVersion().equals(southerVersion);
             if (!ours && (pair || backend.jar().equals(name))) {
-                throw new Refused("cli.backend.fetch.held", target, southerVersion,
+                throw new Refused("cli.backend.fetch.held", release.target(), southerVersion,
                         backend.jar());
             }
         }
     }
 
     /**
-     * Puts the jar at {@code downloaded}, in the directory a fetched backend goes to, under the
-     * pair's name, replacing what a fetch wrote there before, and answers with it as it is found
-     * there. {@link #clearToFetch} is asked first.
+     * Puts the jar at {@code downloaded}, which was held to its descriptor as the release's, in the
+     * directory a fetched backend goes to under the pair's name, replacing what a fetch wrote there
+     * before, and answers with it as it is found there. {@link #clearToFetch} is asked first.
      *
      * <p>The move is atomic, so a search running at the same time sees the old jar or the new one
      * and nothing between them; {@code downloaded} has to be in the same directory, and named so
-     * that a search does not read it as a backend.
+     * that a search does not read it as a backend. The record is emptied before the move and
+     * filled after, so a run ended between the two leaves a name that is still a fetch's to
+     * replace, and that names no release, so the next fetch downloads it again.
      *
      * @throws IOException where the move fails, the jar is left where it was
      */
-    Backend install(Path downloaded, Backend described) throws IOException {
+    Backend install(Path downloaded, Central.Release release, String southerVersion)
+            throws IOException {
         Path directory = fetched();
-        Path target = fetchedAs(described.name(), described.southerVersion());
+        Path target = fetchedAs(release, southerVersion);
+        Path record = record(target);
+        Files.writeString(record, "");
         try {
             Files.move(downloaded, target, StandardCopyOption.ATOMIC_MOVE,
                     StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException e) {
             throw new IOException(directory + " cannot replace a file atomically", e);
         }
-        return new Backend(described.name(), described.southerVersion(), target);
+        Files.writeString(record, release.jar().toString());
+        return new Backend(release.target(), southerVersion, target);
     }
 
     private static Refused duplicate(String target, String southerVersion, List<Backend> built) {

@@ -236,13 +236,14 @@ public final class Main {
     private static Optional<Backends.Backend> fetchedFor(Backends backends,
                                                          Backends.Absent absent, Locale locale)
             throws Backends.Refused, IOException, InterruptedException {
+        Central central = Central.configured(System.getenv());
         Central.Failure failure;
         String offline = System.getenv(OFFLINE);
         if (offline != null && !offline.isEmpty()) {
             failure = new Central.Failure.NotAsked();
         } else {
-            switch (BackendFetch.whereAbsent(backends, Central.configured(System.getenv()),
-                    absent.target(), absent.southerVersion(),
+            switch (BackendFetch.whereAbsent(backends, central, absent.target(),
+                    absent.southerVersion(),
                     release -> fetching(System.err, locale, release))) {
                 case BackendFetch.Fetched fetched -> {
                     System.err.println(fetched(locale, fetched));
@@ -257,7 +258,7 @@ public final class Main {
                 case BackendFetch.Failed failed -> failure = failed.failure();
             }
         }
-        List<Unavailable.Line> lines = Unavailable.of(absent, failure, Central.named());
+        List<Unavailable.Line> lines = Unavailable.of(absent, failure, central.name());
         for (int i = 0; i < lines.size(); i++) {
             System.err.println((i == 0 ? "" : "  ")
                     + Messages.get(lines.get(i).key(), locale, lines.get(i).array()));
@@ -300,9 +301,9 @@ public final class Main {
             return 2;
         }
         String version = ModuleMetadata.compilerVersion();
+        Central central = Central.configured(System.getenv());
         try {
-            return switch (BackendFetch.again(Backends.installed(),
-                    Central.configured(System.getenv()), target, version,
+            return switch (BackendFetch.again(Backends.installed(), central, target, version,
                     release -> fetching(System.out, locale, release))) {
                 case BackendFetch.Fetched fetched -> {
                     System.out.println(fetched(locale, fetched));
@@ -317,7 +318,7 @@ public final class Main {
                 }
                 case BackendFetch.Failed failed -> {
                     Unavailable.Line line = Unavailable.repository(failed.failure(),
-                            Central.named());
+                            central.name());
                     System.err.println(Messages.get("cli.backend.fetch.failed", locale, target,
                             version));
                     System.err.println("  " + Messages.get(line.key(), locale, line.array()));

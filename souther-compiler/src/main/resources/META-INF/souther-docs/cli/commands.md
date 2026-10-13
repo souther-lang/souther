@@ -170,7 +170,9 @@ that name, and a release fetched before and still in place is not fetched again.
 name that no fetch wrote, or one for the pair under any other name, was put there by hand, and the
 fetch is refused before anything is downloaded. The jar is written under another name first, held to
 its descriptor, and moved into place in one step, so a fetch that stops part way leaves nothing that
-is read as a backend. Two runs fetching into one directory take turns.
+is read as a backend. Two runs fetching into one directory take turns. The metadata and each pom have
+a minute to arrive; a jar has a minute for its answer to begin, and is then given as long as it
+takes, ending only where nothing more has arrived for half a minute.
 
 The jar is what Maven Central serves over HTTPS, with no checksum or key to hold it to: a backend is
 released after the Souther it is built against, so nothing about it is known to this one. The proxy is

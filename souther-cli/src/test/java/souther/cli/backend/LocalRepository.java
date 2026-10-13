@@ -36,6 +36,9 @@ public final class LocalRepository implements AutoCloseable {
     private final CountDownLatch closed = new CountDownLatch(1);
     private final Map<String, String> redirects = new ConcurrentHashMap<>();
     private volatile long pomDelay;
+    private final Map<String, Long> heldBack = new ConcurrentHashMap<>();
+    private final Map<String, long[]> trickled = new ConcurrentHashMap<>();
+    private final Set<String> silenced = ConcurrentHashMap.newKeySet();
 
     private LocalRepository(HttpServer server) {
         this.server = server;
@@ -168,18 +171,30 @@ public final class LocalRepository implements AutoCloseable {
         pomDelay = millis;
     }
 
+    /** Begins the answer for {@code path} only after {@code millis}. */
+    public void holdBack(String path, long millis) {
+        heldBack.put(path, millis);
+    }
+
+    /** Serves {@code path} a {@code pieces}th at a time, {@code millis} apart, all of it in the end. */
+    public void trickle(String path, int pieces, long millis) {
+        trickled.put(path, new long[] {pieces, millis});
+    }
+
+    /** Begins the answer for {@code path} and sends nothing of it until the repository is closed. */
+    public void silence(String path) {
+        silenced.add(path);
+    }
+
     private void serve(HttpExchange exchange) throws IOException {
         String path = exchange.getRequestURI().getPath();
         asked.add(path);
         String file = path.startsWith(ROOT) ? path.substring(ROOT.length()) : path;
         Integer status = statuses.get(file);
         byte[] content = files.get(file);
-        if (file.endsWith(".pom") && pomDelay > 0) {
-            try {
-                Thread.sleep(pomDelay);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+        long delay = heldBack.getOrDefault(file, file.endsWith(".pom") ? pomDelay : 0);
+        if (delay > 0) {
+            pause(delay);
         }
         try (exchange) {
             String location = redirects.get(file);
@@ -194,18 +209,39 @@ public final class LocalRepository implements AutoCloseable {
             }
             exchange.sendResponseHeaders(200, content.length);
             OutputStream body = exchange.getResponseBody();
-            if (!cut.contains(file)) {
+            long[] trickle = trickled.get(file);
+            if (trickle != null) {
+                int piece = (int) Math.ceil(content.length / (double) trickle[0]);
+                for (int from = 0; from < content.length; from += piece) {
+                    body.write(content, from, Math.min(piece, content.length - from));
+                    body.flush();
+                    pause(trickle[1]);
+                }
+                body.close();
+                return;
+            }
+            if (!cut.contains(file) && !silenced.contains(file)) {
                 body.write(content);
                 body.close();
                 return;
             }
-            body.write(content, 0, content.length / 2);
+            if (cut.contains(file)) {
+                body.write(content, 0, content.length / 2);
+            }
             body.flush();
             try {
                 closed.await();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
+        }
+    }
+
+    private static void pause(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 

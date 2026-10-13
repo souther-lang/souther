@@ -15,10 +15,17 @@ import java.util.function.Consumer;
 /**
  * Fetches a target's backend from a repository into the directory a fetched backend goes to.
  *
+ * <p>A fetch goes through its steps in the order each costs more than the one before, and stops at
+ * the first that answers: what can be decided without asking anything — the target has no artifact,
+ * a setting names nothing — is decided before the directory is touched; what the directory says —
+ * the pair is there by now, the release is the one fetched before, a jar put there by hand would be
+ * replaced — is decided before anything is downloaded; and the jar is held to its descriptor before
+ * it is put where a search reads it.
+ *
  * <p>The jar is written to a file in that directory whose name a search does not read as a
- * backend, held to its descriptor, and only then moved under the pair's name. A fetch that stops
- * part way — the connection drops, the run is ended — leaves nothing a search finds, and the
- * backend that was there before, if one was, stays usable throughout.
+ * backend, and only then moved under the pair's name. A fetch that stops part way — the connection
+ * drops, the run is ended — leaves nothing a search finds, and the backend that was there before,
+ * if one was, stays usable throughout.
  *
  * <p>Two runs fetching into one directory take turns, under a lock on a file there. The one that
  * waited looks again before it asks the repository, so a compile that waited for another compile's
@@ -78,9 +85,7 @@ public final class BackendFetch {
                                  String southerVersion, Consumer<Central.Release> starting,
                                  boolean onlyWhereAbsent)
             throws Backends.Refused, IOException, InterruptedException {
-        // Before the directory is made or locked: a target with nothing to ask for, or a setting
-        // that names nothing to ask, is answered without touching the disk.
-        Central.Failure unasked = central.unaskable(target);
+        Central.Failure.Unasked unasked = central.unaskable(target);
         if (unasked != null) {
             return new Failed(unasked);
         }
@@ -96,82 +101,35 @@ public final class BackendFetch {
                 return switch (central.release(target, southerVersion)) {
                     case Central.Failure failure -> new Failed(failure);
                     case Central.Release release -> {
-                        Backends.Backend held = heldAs(backends, release, southerVersion);
-                        if (held != null) {
-                            yield new Current(held, release);
+                        Backends.Backend before = backends.fetchedBefore(release, southerVersion);
+                        if (before != null) {
+                            yield new Current(before, release);
                         }
-                        Path name = backends.fetchedAs(release.target(), southerVersion);
-                        backends.clearToFetch(release.target(), southerVersion,
-                                Files.isRegularFile(record(name)));
+                        backends.clearToFetch(release, southerVersion);
                         starting.accept(release);
-                        yield install(backends, central, release, southerVersion, directory);
+                        yield download(backends, central, release, southerVersion, directory);
                     }
                 };
             }
         }
     }
 
-    /**
-     * The backend the release was fetched as before, where it is still what the directories
-     * choose for the pair, or null.
-     *
-     * <p>A released file does not change, so a jar fetched from the release's address is that
-     * release for as long as it stands under the name it was fetched as. Which address that was is
-     * written beside it, after it is in place; a record that names no release or another one asks
-     * for the jar again, which costs a download and nothing else. A name with no record at all was
-     * not written by a fetch, and is refused before this is asked.
-     */
-    private static Backends.Backend heldAs(Backends backends, Central.Release release,
-                                           String southerVersion)
-            throws Backends.Refused, IOException {
-        Path jar = backends.fetchedAs(release.target(), southerVersion);
-        Path record = record(jar);
-        if (!Files.isRegularFile(record)
-                || !Files.readString(record).equals(release.jar().toString())) {
-            return null;
-        }
-        return backends.find(release.target(), southerVersion) instanceof Backends.Found found
-                && found.backend().jar().equals(jar) ? found.backend() : null;
-    }
-
-    /**
-     * Where the address a fetched jar came from is written: beside it, under a name no search
-     * reads.
-     */
-    private static Path record(Path jar) {
-        return jar.resolveSibling("." + jar.getFileName() + ".fetched");
-    }
-
-    private static Outcome install(Backends backends, Central central, Central.Release release,
-                                   String southerVersion, Path directory)
-            throws Backends.Refused, IOException, InterruptedException {
+    private static Outcome download(Backends backends, Central central, Central.Release release,
+                                    String southerVersion, Path directory)
+            throws IOException, InterruptedException {
         Path part = Files.createTempFile(directory, ".fetching-", ".part");
         try {
             central.download(release, part);
-            Backends.Backend described;
-            try {
-                described = Backends.describe(part);
-            } catch (Backends.Refused notOne) {
-                return notTheBackend(release, southerVersion);
-            }
-            if (!described.name().equals(release.target())
-                    || !described.southerVersion().equals(southerVersion)) {
-                return notTheBackend(release, southerVersion);
+            if (!isTheRelease(part, release, southerVersion)) {
+                return new Failed(new Central.Failure.NotTheBackend(release.jar(),
+                        release.target(), southerVersion));
             }
             // A temporary file is the writer's alone, and the jar it becomes is read by whoever
             // runs this Souther, which in a shared SOUTHER_HOME is not only the one who fetched it.
             if (Files.getFileStore(part).supportsFileAttributeView(PosixFileAttributeView.class)) {
                 Files.setPosixFilePermissions(part, READABLE);
             }
-            // The record says two things: that the name is a fetch's, by being there, and which
-            // release stands under it, by what it holds. It is emptied before the move and filled
-            // after, so a run ended between the two leaves a name that is still a fetch's to
-            // replace, and that names no release, so the next fetch downloads it again.
-            Path record = record(backends.fetchedAs(described.name(), southerVersion));
-            Files.writeString(record, "");
-            Backends.Backend installed = backends.install(part, described);
-            Files.writeString(record, release.jar().toString());
-            return new Fetched(installed, release);
+            return new Fetched(backends.install(part, release, southerVersion), release);
         } catch (Central.Stop stop) {
             return new Failed(stop.failure());
         } finally {
@@ -179,8 +137,14 @@ public final class BackendFetch {
         }
     }
 
-    private static Outcome notTheBackend(Central.Release release, String southerVersion) {
-        return new Failed(new Central.Failure.NotTheBackend(release.jar(), release.target(),
-                southerVersion));
+    /** Whether the downloaded jar's descriptor says it is the release's target, for this Souther. */
+    private static boolean isTheRelease(Path part, Central.Release release, String southerVersion) {
+        try {
+            Backends.Backend described = Backends.describe(part);
+            return described.name().equals(release.target())
+                    && described.southerVersion().equals(southerVersion);
+        } catch (Backends.Refused notOne) {
+            return false;
+        }
     }
 }

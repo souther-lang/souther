@@ -45,11 +45,24 @@ public final class Unavailable {
             lines.add(searched(absent.target(), searched));
         }
         lines.add(repository(failure, repository));
-        if (failure instanceof Central.Failure.NotAsked
-                || failure instanceof Central.Failure.Unreachable) {
+        if (askingLaterMayAnswer(failure)) {
             lines.add(line("cli.backend.fetch.later", absent.target()));
         }
         return lines;
+    }
+
+    /**
+     * Whether fetching ahead of the compile, where the repository can be reached, may answer what
+     * this run could not: where the run was told to ask nothing, or the repository could not be
+     * read. Where nothing can be asked about the target, or the repository was read and holds no
+     * backend for the pair, asking again answers the same.
+     */
+    private static boolean askingLaterMayAnswer(Central.Failure failure) {
+        return switch (failure) {
+            case Central.Failure.Unasked unasked -> unasked instanceof Central.Failure.NotAsked;
+            case Central.Failure.Unanswered _ -> true;
+            case Central.Failure.Declined _ -> false;
+        };
     }
 
     private static Line searched(String target, Backends.Searched searched) {
