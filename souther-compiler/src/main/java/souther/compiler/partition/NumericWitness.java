@@ -105,7 +105,7 @@ final class NumericWitness {
         // value, and a position inside that collection has no value — and a walk that met either of
         // them would spend what it is allowed on values the rules refuse and come back naming a
         // figure.
-        if (within.emptiness().isPresent() || leavesNothing(within, terms)) {
+        if (leavesTheQuestionNothing(within, terms)) {
             return new Standing.ProvedImpossible();
         }
         SequencedMap<NumericTerm, Place> standing = new LinkedHashMap<>();
@@ -194,6 +194,19 @@ final class NumericWitness {
         boolean settlesTheQuestion() {
             return refuted && !notBuilt && !leftUnwalked && shortfall().nothing();
         }
+    }
+
+    /**
+     * Whether {@code within} settles that {@code terms} have no assignment in it before any value
+     * is chosen: it admits none at all, or leaves one of them nowhere to stand.
+     *
+     * <p>The region's proof and nothing walked, so a caller holding a region narrower than the
+     * question — one an earlier choice was given to — asks it again of the region the question is
+     * about.
+     */
+    static boolean leavesTheQuestionNothing(SearchRegion within,
+                                            List<? extends NumericTerm> terms) {
+        return within.emptiness().isPresent() || leavesNothing(within, terms);
     }
 
     /**

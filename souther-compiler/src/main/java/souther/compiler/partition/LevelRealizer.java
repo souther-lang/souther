@@ -256,7 +256,7 @@ public final class LevelRealizer {
     private Realization ofACount(Standing.OfACount count, SearchRegion within,
                                  WitnessSearch looking, ValuesTried tried) {
         RealizationTarget.ACount counted = new RealizationTarget.ACount(count.count());
-        Set<CompositionBudget> stoppedBy = java.util.EnumSet.noneOf(CompositionBudget.class);
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
         Set<CompositionCapacity> unheld = new HashSet<>();
         Set<CompositionRepertoire> notAllOf = EnumSet.noneOf(CompositionRepertoire.class);
         LevelCandidateSource.Offered offered =

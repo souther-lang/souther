@@ -54,7 +54,7 @@ class WhatAWalkFoundIsSaidOfThePointAndNeverInItsPlaceTest {
     private static Generator.UnresolvedCombination whyOf(TermRealizations.Realization came) {
         return assertInstanceOf(Generator.BoundaryAttempt.NoRow.class,
                 new Generator.Edge(came, null, null).cameToNothing(LABEL,
-                        CompositionAccount.NOTHING),
+                        CompositionAccount.NOTHING, true),
                 "an edge that offered nothing builds no row").why();
     }
 }

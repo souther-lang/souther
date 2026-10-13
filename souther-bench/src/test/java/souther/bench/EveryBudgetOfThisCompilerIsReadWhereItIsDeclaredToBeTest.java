@@ -372,6 +372,12 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/SequencedMap;"
                             + "Lsouther/compiler/partition/NumericWitness$Met;)Z",
                     "stops trying values of a position on the way and says which figure"),
+            Map.entry("souther.compiler.partition.Generator$WayComposer#composes("
+                            + "Ljava/util/Map;Ljava/util/Set;Ljava/util/Map;"
+                            + "Ljava/util/SequencedMap;Ljava/util/SequencedMap;Ljava/util/List;)"
+                            + "Lsouther/compiler/partition/NumericWitness$Composed;",
+                    "stops composing for the values of the numbers on the way and says which"
+                            + " figure"),
             Map.entry("souther.compiler.partition.Generator#<clinit>()V",
                     "how many assignments a search composes"),
             Map.entry("souther.compiler.partition.Generator#conditioned("
