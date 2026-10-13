@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.DeclaredArgument;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -36,6 +38,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -55,37 +58,100 @@ class AReadingOfAStringsPiecesConcludesOnlyWhatItsEvidenceGivesTest {
     private static final CodePoints LOWER = CodePoints.between('a', 'z');
     private static final SourcePos POS = new SourcePos(1, 1);
 
+    private static final ValueName.Stdlib CHARACTERS =
+            ValueName.Stdlib.operation("String", "characters");
+    /** A call taking the characters of the string at {@code TITLE}. */
+    private static final Derivation.TheCall SPLIT = new Derivation.TheCall(CHARACTERS,
+            Map.of(DefaultBoundOperationFacts.get().piecesOf(CHARACTERS).string(), TITLE));
+
     private static NumericTerm.CodePointClassCount counting(TermPath of, CodePointClass counted) {
         return NumericTerm.CodePointClassCount.of(of, counted, Type.STRING,
                 ScopedDeclarations.wrapsOf(SYMBOLS));
     }
 
-    /** A character read as matching {@code [a-z]}. */
-    private static Derivation aLowerCaseLetter() {
-        return new Derivation.ACharacterInAClass(new PatternMeaning.Symbols(LOWER));
+    /**
+     * The string {@code CHARACTERS} parts read as holding one of {@code stated}, the way a law's
+     * comparison is read: its number read as how many of {@code counted} the string at
+     * {@code of} holds.
+     */
+    private static Optional<Derivation> holding(CodePointClass stated, TermPath of,
+                                                CodePointClass counted) {
+        LawProposition.Compared<?> law = assertInstanceOf(LawProposition.Compared.class,
+                Derivation.SomePieceMeeting.heldBy(CHARACTERS, stated.held()));
+        LawNumber<?> number = law.form().coefs().keySet().iterator().next();
+        return Optional.of(Derivation.ALawComparison.of(law, Map.of(number,
+                        LinearForm.atom(new DecisionAtom.OfTheInput(counting(of, counted)))),
+                Map.of(), List.of(), 1));
+    }
+
+    /** A character read as matching {@code [a-z]}, {@code within} statements about some piece. */
+    private static Derivation aLowerCaseLetter(int within) {
+        return new Derivation.ACharacterInAClass(new PatternMeaning.Symbols(LOWER), within);
     }
 
     @Test
     void someCharacterIsCountedOfItsOwnStringByTheSetItWasReadAs() {
-        Derivation.SomePieceMeeting met = new Derivation.SomePieceMeeting(TITLE,
-                OptionalInt.empty(), Optional.of(counting(TITLE, CodePointClass.of(LOWER))),
-                aLowerCaseLetter());
-        assertInstanceOf(Proposition.Compared.class, met.concludes(Optional.empty()));
+        CodePointClass lower = CodePointClass.of(LOWER);
+        Derivation.SomePieceMeeting met = new Derivation.SomePieceMeeting(SPLIT,
+                OptionalInt.empty(), 0, holding(lower, TITLE, lower), aLowerCaseLetter(0));
+        assertEquals(new Proposition.Compared(new Relation.Affine(LinearForm.<Quantity>atom(
+                        new DecisionAtom.OfTheInput(counting(TITLE, lower))), Rel.GT), true),
+                met.concludes(Optional.empty()));
+        CodePointClass notWhitespace = new CodePointClass.NotWhitespace();
         assertThrows(IllegalArgumentException.class, () -> new Derivation.SomePieceMeeting(
-                TITLE, OptionalInt.empty(),
-                Optional.of(counting(TITLE, new CodePointClass.NotWhitespace())),
-                aLowerCaseLetter()), "another class of the same string");
+                SPLIT, OptionalInt.empty(), 0,
+                holding(notWhitespace, TITLE, notWhitespace), aLowerCaseLetter(0)),
+                "another class of the same string");
         assertThrows(IllegalArgumentException.class, () -> new Derivation.SomePieceMeeting(
-                TITLE, OptionalInt.empty(),
-                Optional.of(counting(OTHER, CodePointClass.of(LOWER))),
-                aLowerCaseLetter()), "the same class of another string");
+                SPLIT, OptionalInt.empty(), 0, holding(lower, TITLE, notWhitespace),
+                aLowerCaseLetter(0)), "the class stated, counted as another");
         assertThrows(IllegalArgumentException.class, () -> new Derivation.SomePieceMeeting(
-                TITLE, OptionalInt.empty(), Optional.empty(), aLowerCaseLetter()),
-                "no count where a character can meet it");
+                SPLIT, OptionalInt.empty(), 0, holding(lower, OTHER, lower),
+                aLowerCaseLetter(0)), "the same class of another string");
         assertThrows(IllegalArgumentException.class, () -> new Derivation.SomePieceMeeting(
-                TITLE, OptionalInt.of(','),
-                Optional.of(counting(TITLE, CodePointClass.of(LOWER))), aLowerCaseLetter()),
+                SPLIT, OptionalInt.empty(), 0, Optional.empty(), aLowerCaseLetter(0)),
+                "no reading where a character can meet it");
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.SomePieceMeeting(
+                SPLIT, OptionalInt.of(','), 0, holding(lower, TITLE, lower), aLowerCaseLetter(0)),
                 "a split piece is read only as holding a code point that is not whitespace");
+    }
+
+    /**
+     * What is read of the character of one statement about some character is no reading of the
+     * character of another: the statement read inside it is about a piece of its own.
+     */
+    @Test
+    void aCharacterOfAnotherStatementIsNoCharacterOfThisOne() {
+        CodePointClass lower = CodePointClass.of(LOWER);
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.SomePieceMeeting(
+                SPLIT, OptionalInt.empty(), 1, holding(lower, TITLE, lower), aLowerCaseLetter(0)),
+                "the character of the statement this one is read inside of");
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.SomePieceMeeting(
+                SPLIT, OptionalInt.empty(), 0, holding(lower, TITLE, lower), aLowerCaseLetter(1)),
+                "the character of a statement read inside this one");
+    }
+
+    /**
+     * Some piece of a string is a reading of some element of a container that stands at no
+     * position, the one an operation made of the pieces, and of no container a row writes — even
+     * where what is asked of the element names nothing of it.
+     */
+    @Test
+    void somePieceIsNoReadingOfSomeElementOfAContainerAtAPosition() {
+        ValueName.Stdlib concat = ValueName.Stdlib.operation("String", "concat");
+        DeclaredArgument strings = DefaultBoundOperationFacts.get()
+                .keepsWhetherItHoldsACodePointOf(concat).string();
+        LawProposition.SomeElement<DeclaredArgument> some = new LawProposition.SomeElement<>(
+                strings, new LawProposition.Always<>(true), true);
+        Derivation quantified = new Derivation.ALawQuantifies(some,
+                new Derivation.SomePieceMeeting(SPLIT, OptionalInt.empty(), 0,
+                        Optional.of(new Derivation.Stopped(new WhyUnread.NoMeasureOfItsSize(),
+                                false)),
+                        new Derivation.ALawSettles(new LawProposition.Always<>(true))));
+        assertTrue(Derivation.ByALaw.readsTheLaw(some, quantified,
+                new Derivation.TheCall(concat, Map.of())));
+        assertFalse(Derivation.ByALaw.readsTheLaw(some, quantified,
+                new Derivation.TheCall(concat, Map.of(strings, OTHER))));
     }
 
     /**
@@ -111,7 +177,7 @@ class AReadingOfAStringsPiecesConcludesOnlyWhatItsEvidenceGivesTest {
         LawProposition.SomeElement<String> some = new LawProposition.SomeElement<>("xs",
                 new LawProposition.Always<>(true), true);
         assertThrows(IllegalArgumentException.class, () -> new Derivation.EveryElementMeetsIt(
-                some, aLowerCaseLetter(), new Derivation.WrittenOut(true),
+                some, aLowerCaseLetter(0), new Derivation.WrittenOut(true),
                 new Derivation.EveryElementMeetsIt.Alike.Settled()));
     }
 

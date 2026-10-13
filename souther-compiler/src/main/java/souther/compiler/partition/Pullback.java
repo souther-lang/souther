@@ -230,6 +230,12 @@ final class Pullback {
     private final Conclusion trying = Conclusion.reusing();
     private final Set<DecisionSubject> quantifying = new HashSet<>();
     /**
+     * The pieces of a string a statement about some one of is being read of, each with how many
+     * such statements it is read inside of: a count of a piece is a count of the piece of one of
+     * these, and names which ({@link Quantity.CodePointsOfAPiece}).
+     */
+    private final Map<Pieces, Integer> parting = new HashMap<>();
+    /**
      * Where whether a container holds anything was asked, while what it holds is being read.
      *
      * <p>What a size of a position is read off is the expression that asked about it — the check or
@@ -1282,10 +1288,11 @@ final class Pullback {
                         ElementAt each, Denotation handed) {}
 
     /** Where a container's elements stand, what each is there for the statement quantified over
-     *  them, and what was kept of them on the way — and, where they are the pieces of a string
-     *  rather than something standing at a position, which pieces. What stands there is held only
-     *  for a value a dependency answered, whose type nothing else says; a position of the input has
-     *  its type from the declarations, which is asked where it is wanted. */
+     *  them, and what was kept of them on the way — or, where they are the pieces of a string
+     *  rather than something standing at a position, which pieces, and no place they stand at.
+     *  What stands there is held only for a value a dependency answered, whose type nothing else
+     *  says; a position of the input has its type from the declarations, which is asked where it
+     *  is wanted. */
     private record Located(DecisionSubject held, Type heldType, ElementAt each,
                            Denotation handed, List<Kept> kept, Pieces pieces) {}
 
@@ -1295,9 +1302,28 @@ final class Pullback {
     private record AStep(Denotation answer, Core.Binder element, Denotation walked,
                          boolean holdsTheAnswers) {}
 
-    /** The pieces of the string at {@code string} that a split at {@code separator}, one code
-     *  point, leaves — or, with no separator, its characters, each code point a piece. */
-    private record Pieces(TermPath string, OptionalInt separator) {}
+    /**
+     * The pieces {@code split}, a call of {@code operation} read in {@code at}, answers of the
+     * string it was handed as {@code string}: what a split at {@code separator}, one code point,
+     * leaves — or, with no separator, its characters, each code point a piece.
+     *
+     * <p>One call in one reading is one set of pieces: the call by identity, since a name stands
+     * for the very node its binding was given, and the reading by what it holds. What else is held
+     * is what that call and reading say.
+     */
+    private record Pieces(Core.PreservedCall split, ValueName.Stdlib operation, InputReads at,
+                          DeclaredArgument string, OptionalInt separator) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Pieces that && split == that.split && at.equals(that.at);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * System.identityHashCode(split) + at.hashCode();
+        }
+    }
 
     /** A statement read of each value a container written out holds, or why it was not. */
     private sealed interface WrittenOutRead {
@@ -1893,6 +1919,9 @@ final class Pullback {
                 return unread(over, in,
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
+            if (located.pieces() != null) {
+                return somePiece(some, located, over, in);
+            }
             DecisionSubject heldAt = located.held();
             Derivation answered = located.handed() == null
                     ? aboutAnElement(some.container(), heldAt, located.each(),
@@ -1916,9 +1945,6 @@ final class Pullback {
             }
             answered = alsoWhatWasKept(answered, located.kept());
             Proposition element = trying.of(answered);
-            if (located.pieces() != null) {
-                return somePiece(located.pieces(), answered, element, over, in);
-            }
             Optional<Derivation> holdsSomething = Optional.empty();
             if (Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(heldAt, element)) {
                 DecisionAtom size = sizeOfSubject(heldAt, located.heldType());
@@ -1931,38 +1957,57 @@ final class Pullback {
         }
 
         /**
-         * Some piece of the string meeting {@code element}, which is what was read of one piece:
-         * the string holding a code point the pieces meeting it hold ({@link
-         * Derivation.SomePieceMeeting}) — where that is all that was asked of the piece.
+         * Some piece of the string {@code located} holds the pieces of meeting {@code some}: what
+         * is asked of one piece read of the piece of this statement, and then the string holding
+         * a code point the pieces meeting that hold ({@link Derivation.SomePieceMeeting}) — where
+         * that is all that was asked of the piece.
          *
          * <p>What else may be asked of a piece split at a separator is not what the string holds.
          * That it holds none, or how many, or that it is as long as something, turns on how the
          * separator stands in the string, and nothing of the input says that: it stops there. Of
          * a character, every code point the set holds, the string holding one is the string
          * holding anything, which is how long it is.
+         *
+         * <p>What the string holds is read as the statement it is about the string the call
+         * parts, at that call ({@link Derivation.SomePieceMeeting#heldBy}): of the position it
+         * stands at, or through what made it, as any argument of a call is read.
          */
-        private Derivation somePiece(Pieces pieces, Derivation answered, Proposition element,
-                                     Core over, InputReads in) {
-            CodePoints held = Derivation.SomePieceMeeting.held(pieces.separator(), element);
+        private Derivation somePiece(LawProposition.SomeElement<DeclaredArgument> some,
+                                     Located located, Core over, InputReads in) {
+            Pieces pieces = located.pieces();
+            if (parting.containsKey(pieces)) {
+                return unread(e, reads, new WhyUnread.TwoElementsOfOneContainer());
+            }
+            int within = parting.size();
+            parting.put(pieces, within);
+            Derivation answered;
+            try {
+                answered = located.handed() == null
+                        ? ofAnElement(some.container(), located.each(), some.ofTheElement())
+                        : ofTheValue(some.container(), some.ofTheElement(), located.handed());
+                answered = alsoWhatWasKept(answered, located.kept());
+            } finally {
+                parting.remove(pieces);
+            }
+            Proposition element = trying.of(answered);
+            CodePoints held = Derivation.SomePieceMeeting.held(pieces.separator(), within,
+                    element);
             if (held == null) {
                 WhyUnread stopped = Proposition.firstStopIn(element);
                 return unread(over, in, stopped != null ? stopped : new WhyUnread.AtNoPosition(
                         WhyUnread.AtNoPosition.Place.CONTAINER));
             }
-            NumericTerm counted = null;
-            if (!held.isEmpty()) {
-                Type type = read.domain().typeAt(pieces.string(), read.rules());
-                counted = held.isEverything() ? sizeAt(pieces.string()) : type == null ? null
-                        : NumericTerm.CodePointClassCount.of(pieces.string(),
-                                CodePointClass.of(held), type, read.rules().inners());
-                if (counted == null) {
-                    return unread(over, in, new WhyUnread.NoMeasureOfItsSize());
-                }
-            }
+            AnOperationApplied split =
+                    new AnOperationApplied(pieces.operation(), pieces.split().args());
+            LawProposition<DeclaredArgument> holding =
+                    Derivation.SomePieceMeeting.heldBy(pieces.operation(), held);
+            Optional<Derivation> ofTheString = holding == null ? Optional.empty()
+                    : Optional.of(new ALawRead(split, pieces.split(), pieces.at()).of(holding));
             // Met as a part of its own, as how many a container holds above nought is: it is a
             // statement about a number of the string, which is what a line is drawn on.
-            return leaf(new Derivation.SomePieceMeeting(pieces.string(), pieces.separator(),
-                    Optional.ofNullable(counted), answered),
+            return leaf(new Derivation.SomePieceMeeting(
+                    callOf(pieces.operation(), split, pieces.at(), Set.of(pieces.string())),
+                    pieces.separator(), within, ofTheString, answered),
                     askedAt != null ? askedAt : new Denotation(e, reads));
         }
 
@@ -1979,12 +2024,21 @@ final class Pullback {
             if (!quantifying.add(held)) {
                 return null;
             }
+            try {
+                return ofAnElement(container, element, ofTheElement);
+            } finally {
+                quantifying.remove(held);
+            }
+        }
+
+        /** {@code ofTheElement} read of {@code element}, the element of {@code container}. */
+        private Derivation ofAnElement(DeclaredArgument container, ElementAt element,
+                                       LawProposition<DeclaredArgument> ofTheElement) {
             elements.put(container, element);
             try {
                 return of(ofTheElement);
             } finally {
                 elements.remove(container);
-                quantifying.remove(held);
             }
         }
 
@@ -2176,18 +2230,17 @@ final class Pullback {
                             : new Located(standing, heldType, outerEach, outerHanded, located,
                                     null);
                 }
-                // The pieces of a string at a position, each of which is one of the elements and
-                // no place a row writes. Only whether some piece meets a statement is asked of
-                // them: how many of the pieces do depends on how the separator stands in the
-                // string, which no number of the input says.
+                // The pieces of a string, each of which is one of the elements and no place a row
+                // writes. Only whether some piece meets a statement is asked of them: how many of
+                // the pieces do depends on how the separator stands in the string, which no number
+                // of the input says.
                 Pieces pieces = counting ? null : piecesOf(at);
                 if (pieces != null) {
                     ElementAt each = new ElementAt.APiece(pieces);
                     settle(pending, each, null, located);
-                    DecisionSubject string = new DecisionSubject.AnInput(pieces.string());
                     return outerEach == null
-                            ? new Located(string, null, each, null, located, pieces)
-                            : new Located(string, null, outerEach, outerHanded, located, pieces);
+                            ? new Located(null, null, each, null, located, pieces)
+                            : new Located(null, null, outerEach, outerHanded, located, pieces);
                 }
                 AStep walk = stepBeneath(at, counting);
                 // A map filed under the key of each element of a list: an entry is there for
@@ -2251,19 +2304,19 @@ final class Pullback {
 
         /**
          * The pieces {@code container} is, where it is what an operation answering the pieces of a
-         * string was given — a string at a position of the input, and a separator written as one
-         * code point where it parts the string at one — or null where it is not.
+         * string answered — with a separator written as one code point where it parts the string
+         * at one — or null where it is not.
          *
          * <p>A separator that is longer, or is not written out, is a call this does not say the
          * pieces of: a longer one can stand across where a shorter one is looked for, and one that
          * is not a constant is any of them.
          */
         private Pieces piecesOf(Denotation container) {
-            if (!(Core.withoutStanding(container.value()) instanceof Core.PreservedCall call)) {
+            if (!(Core.withoutStanding(container.value()) instanceof Core.PreservedCall call)
+                    || !(call.declared().operation() instanceof ValueName.Stdlib operation)) {
                 return null;
             }
-            BoundOperationFacts.Pieces parted =
-                    DefaultBoundOperationFacts.get().piecesOf(call.declared().operation());
+            BoundOperationFacts.Pieces parted = DefaultBoundOperationFacts.get().piecesOf(operation);
             if (parted == null) {
                 return null;
             }
@@ -2280,19 +2333,15 @@ final class Pullback {
                 }
                 separatedBy = OptionalInt.of(written.value().codePointAt(0));
             }
-            Denotation string = container.at().standing(
-                    call.args().get(parted.string().position()), read.rules().symbols(),
-                    read.rules().newtypes());
-            return string.at().pathOf(string.value(), read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath at)
-                    ? new Pieces(at, separatedBy) : null;
+            return new Pieces(call, operation, container.at(), parted.string(), separatedBy);
         }
 
         /**
          * The call, a pattern matched against one character of a string, as the character being
          * one of the code points the pattern accepts the string of alone ({@link
          * Derivation.ACharacterInAClass}) — or null where it is no such call: another predicate,
-         * or a subject that is not a character.
+         * a subject that is not a character, or one of characters no statement about some
+         * character being read is about.
          */
         Derivation aCharacterInAClass() {
             if (!(Core.withoutStanding(e) instanceof Core.PreservedCall call)
@@ -2304,8 +2353,9 @@ final class Pullback {
                     StringPredicates.of(read.rules().symbols().kernelOf(operation));
             Pieces piece = predicate == null ? null
                     : pieceThatIs(call.args().get(predicate.subject()), reads);
-            return piece == null || piece.separator().isPresent() ? null
-                    : leaf(new Derivation.ACharacterInAClass(matches.meaning()), e, reads);
+            Integer within = piece == null ? null : parting.get(piece);
+            return within == null || piece.separator().isPresent() ? null
+                    : leaf(new Derivation.ACharacterInAClass(matches.meaning(), within), e, reads);
         }
 
         /**
@@ -2870,13 +2920,26 @@ final class Pullback {
                 // for the string is that statement's to say ({@link #somePiece}).
                 return of instanceof LawSubject.ElementOf<DeclaredArgument>(
                         DeclaredArgument container)
-                        && elements.get(container) instanceof ElementAt.APiece
-                        ? new Sized.AsAForm(LinearForm.atom(
-                                new Quantity.CodePointsOfAPiece(counted)))
+                        && elements.get(container) instanceof ElementAt.APiece(Pieces pieces)
+                        ? codePointsOfAPiece(pieces, counted)
                         : new Sized.NotSized(new WhyUnread.AtNoPosition(
                                 WhyUnread.AtNoPosition.Place.SUBJECT));
             }
             return codePointsAt(at, counted);
+        }
+
+        /**
+         * How many of the code points of a piece of {@code pieces} are in {@code counted}: of the
+         * piece the statement about some one of them being read is about — and of none where no
+         * such statement is being read.
+         */
+        private Sized codePointsOfAPiece(Pieces pieces, CodePointClass counted) {
+            Integer within = parting.get(pieces);
+            return within == null
+                    ? new Sized.NotSized(new WhyUnread.AtNoPosition(
+                            WhyUnread.AtNoPosition.Place.SUBJECT))
+                    : new Sized.AsAForm(LinearForm.atom(
+                            new Quantity.CodePointsOfAPiece(counted, within)));
         }
 
         /**
@@ -2894,8 +2957,8 @@ final class Pullback {
                 return new Sized.AsAForm(LinearForm.constant(ExactRatio.of(
                         written.value().codePoints().filter(counted::contains).count())));
             }
-            return pieceThatIs(value, in) != null
-                    ? new Sized.AsAForm(LinearForm.atom(new Quantity.CodePointsOfAPiece(counted)))
+            Pieces piece = pieceThatIs(value, in);
+            return piece != null ? codePointsOfAPiece(piece, counted)
                     : new Sized.NotSized(new WhyUnread.AtNoPosition(
                             WhyUnread.AtNoPosition.Place.SUBJECT));
         }

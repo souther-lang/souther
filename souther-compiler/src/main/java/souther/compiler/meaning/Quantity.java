@@ -157,18 +157,26 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * only appears inside a statement about some piece, which holds against one of them is what
      * the string holds ({@link Derivation.SomePieceMeeting}) — and is never compared on its own.
      * Of a character, one code point, it is nought or one.
+     *
+     * <p>Which statement that is, is {@code within}: how many statements about some piece of a
+     * string it is read inside of, the outermost being nought. A statement about some piece read
+     * inside another one names two pieces, and a count of the outer piece is no count of the inner.
      */
-    record CodePointsOfAPiece(CodePointClass counted) implements Quantity {
+    record CodePointsOfAPiece(CodePointClass counted, int within) implements Quantity {
 
         public CodePointsOfAPiece {
             if (counted == null) {
                 throw new IllegalArgumentException("code points of a piece are counted by a class");
             }
+            if (within < 0) {
+                throw new IllegalArgumentException(
+                        "a piece is of a statement some number of statements in: " + within);
+            }
         }
 
         @Override
         public String spelled() {
-            return "#(" + counted + ")(a piece)";
+            return "#(" + counted + ")(a piece " + within + " in)";
         }
 
         @Override

@@ -16,8 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * A guard over a value the body made is read through what made it, and is measured as the guard
  * written over what that was made of.
  *
- * <p>Two models, each the way an author wrote it. A text made of the words of a lowercased title
- * holds something where the title holds a code point that is not whitespace; and every item of a
+ * <p>Two models, each the way an author wrote it. A text made of the words of a lowercased title,
+ * or of the characters of one put back together, holds something where the title holds a code
+ * point that is not whitespace; and every item of a
  * list a helper chooses by whether the cart is open meeting a statement is the cart being closed,
  * or every item of it meeting it. Each is asked of the report a person reads, which is where a
  * rule this could not read came out.
@@ -44,6 +45,20 @@ class AValueIsReadThroughWhatMadeItBeforeWhereItStandsTest {
                 module p
                 behavior f : (t: String) -> Bool
                 let f (t) = String.length(String.join("-", String.words(String.lowercase(t)))) >= 1
+                """);
+        assertEquals(List.of(), notRead(report));
+        assertTrue(report.contains("read as f/#(not whitespace)(t): = 0"), report);
+        assertTrue(report.contains("read as f/#(not whitespace)(t): = 1"), report);
+    }
+
+    @Test
+    void aTextMadeOfTheCharactersOfALowercasedTitleIsMeasuredOnTheTitle() {
+        String report = measured("""
+                module p
+                behavior f : (t: String) -> Int
+                let f (t) =
+                    if String.length(t |> String.lowercase |> String.characters |> String.concat
+                        |> String.words |> String.join("-")) >= 1 then 1 else 0
                 """);
         assertEquals(List.of(), notRead(report));
         assertTrue(report.contains("read as f/#(not whitespace)(t): = 0"), report);
