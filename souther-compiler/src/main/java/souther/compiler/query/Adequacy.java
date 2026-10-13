@@ -3228,9 +3228,9 @@ public final class Adequacy {
                             .A_ROW_HERE_IS_WAITING_FOR_ITS_ANSWER);
             case About.ACaseNoRowExpects _ -> new GenerationOutcome.NotSupported(
                     GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE);
-            // A row does answer this: one at the line's OFF point that the line beside it keeps.
-            // What became of the search for one is the reading's to say and is read where the
-            // lines are ({@link ARowTellingTheLinesApart}).
+            // A row does answer this: one the model refuses within reach of the rows it keeps, or
+            // one it keeps at or past the rows it refuses. What became of the search for one is the
+            // reading's to say and is read where the lines are ({@link ARowTellingTheLinesApart}).
             case About.ALineTheRowsDoNotTellFromAnother _ -> null;
             // A row stands here and the search that settled the rule composed it, so what became
             // of it is that search's answer and is read where the rows are ({@link #atRule}).
@@ -5151,7 +5151,7 @@ public final class Adequacy {
                                                       List<BorderAssessment> edges) {
             for (BorderAssessment each : edges) {
                 if (each.border().obligation().equals(untold.line().border().obligation())) {
-                    return each.toldApart().outcome();
+                    return each.toldApart().outcome(untold.direction());
                 }
             }
             throw new IllegalStateException("a finding about a line this generation searched no"
@@ -6561,7 +6561,7 @@ public final class Adequacy {
          * Taken whole for the reason the rest are: a caller handing over a measure beside it would
          * give this finding whatever another line of the same behavior went without.
          */
-        public static Finding by(FindingSubject subject, AnotherLineTheRowsAllow.OneDoes found,
+        public static Finding by(FindingSubject subject, AnotherLineTheRowsAllow.Stands found,
                                  About about) {
             return new Finding(subject, found.weakening(), about, NOTHING_OPEN);
         }
@@ -7766,11 +7766,16 @@ public final class Adequacy {
                             : account.made().orElseGet(List::of)) {
                 owes.add(owed.point().line());
             }
+            // One finding per line of the family the rows leave standing: each is owed a row of its
+            // own, and one said for the border would be answered by a row ruling out any of them.
             for (BorderAssessment line : lines) {
-                if (line.beside() instanceof AnotherLineTheRowsAllow.OneDoes named
+                if (line.beside() instanceof AnotherLineTheRowsAllow.ByDirection named
                         && owes.contains(line.border().obligation())) {
-                    out.add(Finding.by(new FindingSubject.OfABehavior(behavior), named,
-                            new About.ALineTheRowsDoNotTellFromAnother(line)));
+                    for (AnotherLineTheRowsAllow.Stands standing : named.standing()) {
+                        out.add(Finding.by(new FindingSubject.OfABehavior(behavior), standing,
+                                new About.ALineTheRowsDoNotTellFromAnother(line,
+                                        standing.direction())));
+                    }
                 }
             }
         }

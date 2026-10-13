@@ -1149,37 +1149,7 @@
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.packing",
-                  "declaredOn" : "Straws",
-                  "clause" : 0
-                },
-                "part" : 0,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "0"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "packBox",
@@ -1275,37 +1245,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.packing",
-                  "declaredOn" : "Straws",
-                  "clause" : 0
-                },
-                "part" : 1,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "20"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "packBox",
@@ -1401,37 +1341,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.packing",
-                  "declaredOn" : "Bars",
-                  "clause" : 0
-                },
-                "part" : 0,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "0"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "packBox",
@@ -1527,37 +1437,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.packing",
-                  "declaredOn" : "Bars",
-                  "clause" : 0
-                },
-                "part" : 1,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "20"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "packBox",
@@ -1653,31 +1533,91 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "comparison",
-                "rule" : {
+          "besides" : [ {
+            "obligationId" : {
+              "line" : {
+                "which" : {
                   "kind" : "comparison",
-                  "declaredIn" : "conformance.packing",
-                  "definition" : "packBox",
-                  "behavior" : "packBox",
-                  "ordinal" : 7,
-                  "lowered" : 0
-                }
+                  "rule" : {
+                    "kind" : "comparison",
+                    "declaredIn" : "conformance.packing",
+                    "definition" : "packBox",
+                    "behavior" : "packBox",
+                    "ordinal" : 7,
+                    "lowered" : 0
+                  }
+                },
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
               },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : true,
-                "singles" : false
+              "level" : {
+                "kind" : "a_count",
+                "at" : "4800"
               },
-              "narrowedWithin" : [ ]
+              "direction" : "3 * bars + straws"
             },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "4800"
-            }
-          },
+            "standing" : "ruled_out"
+          }, {
+            "obligationId" : {
+              "line" : {
+                "which" : {
+                  "kind" : "comparison",
+                  "rule" : {
+                    "kind" : "comparison",
+                    "declaredIn" : "conformance.packing",
+                    "definition" : "packBox",
+                    "behavior" : "packBox",
+                    "ordinal" : 7,
+                    "lowered" : 0
+                  }
+                },
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "level" : {
+                "kind" : "a_count",
+                "at" : "4800"
+              },
+              "direction" : "bars + straws"
+            },
+            "standing" : "ruled_out"
+          }, {
+            "obligationId" : {
+              "line" : {
+                "which" : {
+                  "kind" : "comparison",
+                  "rule" : {
+                    "kind" : "comparison",
+                    "declaredIn" : "conformance.packing",
+                    "definition" : "packBox",
+                    "behavior" : "packBox",
+                    "ordinal" : 7,
+                    "lowered" : 0
+                  }
+                },
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "level" : {
+                "kind" : "a_count",
+                "at" : "4800"
+              },
+              "direction" : "bars"
+            },
+            "standing" : "ruled_out"
+          } ],
           "lineId" : {
             "target" : {
               "behavior" : "packBox",
@@ -2428,37 +2368,7 @@
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.packing",
-                  "declaredOn" : "Hour",
-                  "clause" : 0
-                },
-                "part" : 0,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "0"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "bookSlot",
@@ -2554,37 +2464,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.packing",
-                  "declaredOn" : "Hour",
-                  "clause" : 0
-                },
-                "part" : 1,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "24"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "bookSlot",
@@ -2680,37 +2560,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.packing",
-                  "declaredOn" : "Hour",
-                  "clause" : 0
-                },
-                "part" : 0,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "0"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "bookSlot",
@@ -2806,37 +2656,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.packing",
-                  "declaredOn" : "Hour",
-                  "clause" : 0
-                },
-                "part" : 1,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "24"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "bookSlot",
@@ -2932,31 +2752,119 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "comparison",
-                "rule" : {
+          "besides" : [ {
+            "obligationId" : {
+              "line" : {
+                "which" : {
                   "kind" : "comparison",
-                  "declaredIn" : "conformance.packing",
-                  "definition" : "bookSlot",
-                  "behavior" : "bookSlot",
-                  "ordinal" : 2,
-                  "lowered" : 0
-                }
+                  "rule" : {
+                    "kind" : "comparison",
+                    "declaredIn" : "conformance.packing",
+                    "definition" : "bookSlot",
+                    "behavior" : "bookSlot",
+                    "ordinal" : 2,
+                    "lowered" : 0
+                  }
+                },
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
               },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : true,
-                "singles" : false
+              "level" : {
+                "kind" : "a_count",
+                "at" : "8"
               },
-              "narrowedWithin" : [ ]
+              "direction" : "until"
             },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "8"
-            }
-          },
+            "standing" : "ruled_out"
+          }, {
+            "obligationId" : {
+              "line" : {
+                "which" : {
+                  "kind" : "comparison",
+                  "rule" : {
+                    "kind" : "comparison",
+                    "declaredIn" : "conformance.packing",
+                    "definition" : "bookSlot",
+                    "behavior" : "bookSlot",
+                    "ordinal" : 2,
+                    "lowered" : 0
+                  }
+                },
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "level" : {
+                "kind" : "a_count",
+                "at" : "8"
+              },
+              "direction" : "-2 * from + until"
+            },
+            "standing" : "ruled_out"
+          }, {
+            "obligationId" : {
+              "line" : {
+                "which" : {
+                  "kind" : "comparison",
+                  "rule" : {
+                    "kind" : "comparison",
+                    "declaredIn" : "conformance.packing",
+                    "definition" : "bookSlot",
+                    "behavior" : "bookSlot",
+                    "ordinal" : 2,
+                    "lowered" : 0
+                  }
+                },
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "level" : {
+                "kind" : "a_count",
+                "at" : "8"
+              },
+              "direction" : "-from + 2 * until"
+            },
+            "standing" : "ruled_out"
+          }, {
+            "obligationId" : {
+              "line" : {
+                "which" : {
+                  "kind" : "comparison",
+                  "rule" : {
+                    "kind" : "comparison",
+                    "declaredIn" : "conformance.packing",
+                    "definition" : "bookSlot",
+                    "behavior" : "bookSlot",
+                    "ordinal" : 2,
+                    "lowered" : 0
+                  }
+                },
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "level" : {
+                "kind" : "a_count",
+                "at" : "8"
+              },
+              "direction" : "-from"
+            },
+            "standing" : "ruled_out"
+          } ],
           "lineId" : {
             "target" : {
               "behavior" : "bookSlot",

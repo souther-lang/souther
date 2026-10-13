@@ -50,6 +50,7 @@ import souther.compiler.partition.GuardThresholds;
 import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.PartitionClass;
 import souther.compiler.partition.Partitions;
+import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.InputClassifications;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.Reachability;
@@ -969,27 +970,30 @@ final class Coverages {
     }
 
     /**
-     * What looking for a row that tells this line from the one beside it came to, or that nobody
-     * asked where there is no such line.
+     * What looking for a row that rules out each line the rows leave standing beside this one came
+     * to, or that nobody asked where none is standing.
      *
-     * <p><b>The refused run beside this line, and not one point of it.</b> What tells the two lines
-     * apart is an input the model refuses and the other keeps, so the values to look through are
-     * refused ones — which is a run, and is what the point away from the line is in. Read as the
-     * point <em>against</em> the line instead, two things went wrong at once: a quantity whose order
-     * names no value beside the line has no such point and was never searched, and a level the rules
+     * <p><b>Both sides of the model's line.</b> A row rules a line of the family out where the model
+     * refuses it and the line, drawn anywhere the rows allow, keeps it — or where the model keeps it
+     * and the line, drawn anywhere the rows allow, refuses it ({@link
+     * AnotherLineTheRowsAllow.Stands}). Held to the first, a border whose earlier rules leave
+     * nothing on that side would be searched where nothing is, and a search of an unbounded region
+     * cannot show that: it would run to its budgets while the input that settles the line stands on
+     * the other side.
+     *
+     * <p>The refused side first, and the kept side only where it composed nothing. Either row
+     * settles the line, and what each search met is kept where neither composed one.
+     *
+     * <p><b>The run beside this line, and not one point of it.</b> Read as the point
+     * <em>against</em> the line instead, two things went wrong at once: a quantity whose order names
+     * no value beside the line has no such point and was never searched, and a level the rules
      * leave nothing at came back as a proof that the model leaves nowhere to write — a proof about
-     * one level, published as a proof about every input the two part company at.
+     * one level, published as a proof about every input that settles the line.
      *
      * <p>The run and not the half-space. Where a run beside a line stops is settled by the lines
-     * this position's other rules draw, so what this looks through is the values refused between
-     * this line and the next one along — a row past that is refused by a rule that has already
-     * decided, and is no row at this border. What is searched is narrower than what the rule
-     * refuses, and it is the whole of what a row here could be.
-     *
-     * <p>The run whole, which is the run the point away from the line is in together with the value
-     * against the line that point leaves out. That value is refused like every other in the run,
-     * and it is the nearest of them: a search starts at the line and walks away, so where the order
-     * names it, it is the first thing tried.
+     * this position's other rules draw, so what this looks through is the values between this line
+     * and the next one along — a row past that is decided by a rule that has already decided, and is
+     * no row at this border.
      *
      * <p>Asked whether or not a row already stands in there. A row at a point shows the line has
      * not moved and says nothing about which way it runs, which is what raised this question: the
@@ -997,20 +1001,38 @@ final class Coverages {
      */
     private static ARowTellingTheLinesApart tellingApart(BorderAssessment border,
                                                          OneSearchOfABorder search) {
-        if (!(border.beside() instanceof AnotherLineTheRowsAllow.OneDoes named)) {
+        if (!(border.beside() instanceof AnotherLineTheRowsAllow.ByDirection lines)
+                || lines.standing().isEmpty()) {
             return ARowTellingTheLinesApart.notAsked();
         }
-        Criterion refused = refuses(border.border());
-        if (refused == null) {
-            // The rules leave nothing outside this line, so there is nowhere a row could stand that
-            // the model refuses — and every input the two lines part company at is one of those.
-            return ARowTellingTheLinesApart.notAsked();
+        Criterion refused = runBeside(border.border(), false);
+        Criterion kept = runBeside(border.border(), true);
+        String label = border.border().label();
+        List<ARowTellingTheLinesApart.AtOneReading> out = new ArrayList<>();
+        for (AnotherLineTheRowsAllow.Stands line : lines.standing()) {
+            SearchOutcomes tried = SearchOutcomes.none();
+            ARowTellingTheLinesApart.AtOneReading found = null;
+            if (refused != null) {
+                found = search.tellingApart(refused, label, line.direction(),
+                        line::onTheRefusedSide);
+                tried = tried.plus(found.searches());
+            }
+            Optional<UnaryOperator<SearchRegion>> keptSide = line.onTheKeptSide();
+            if ((found == null || found.composedAt() == null) && kept != null
+                    && keptSide.isPresent()) {
+                found = search.tellingApart(kept, label, line.direction(), keptSide.get());
+                tried = tried.plus(found.searches());
+            }
+            out.add(found != null && found.composedAt() != null ? found
+                    : new ARowTellingTheLinesApart.AtOneReading(border.border(), line.direction(),
+                            null, tried));
         }
-        return search.tellingApart(refused, border.border().label(), named);
+        return new ARowTellingTheLinesApart(out);
     }
 
     /**
-     * The refused values beside {@code border}, as one run, or null where the rules leave none.
+     * The values beside {@code border} on the side the model keeps or on the side it refuses, as
+     * one run, or null where the rules leave none there.
      *
      * <p>Asked of the point that is in that run rather than worked out here. Where a run beside a
      * line stops is settled by every other rule reaching this position, and a second derivation of
@@ -1019,13 +1041,13 @@ final class Coverages {
      *
      * <p>The value against the line goes back in. The point out there names the run less that
      * value, because a row there is what that point is for and the value against the line is what
-     * the point beside it is for; refusing is not divided that way, and a search that left it out
-     * would pass over the nearest input the two lines part company at.
+     * the point beside it is for; a line of the family is not divided that way, and a search that
+     * left it out would pass over the nearest input that settles it.
      */
-    private static Criterion refuses(Border border) {
+    private static Criterion runBeside(Border border, boolean kept) {
         for (DomainPoint point : border.answers().keySet()) {
-            if (point.againstTheLine() || border.roleOf(point).inside()) {
-                continue;   // on the line, or on the side this one keeps
+            if (point.againstTheLine() || border.roleOf(point).inside() != kept) {
+                continue;   // on the line, or on the other side of it
             }
             if (border.demand(point) instanceof Demand.Owed owed
                     && owed.criterion() instanceof Criterion.Within in) {
@@ -1097,16 +1119,16 @@ final class Coverages {
         SearchOutcomes search(Criterion criterion, String label);
 
         /**
-         * What looking for a row that tells this line from {@code beside} came to.
+         * What looking for a row that rules out {@code direction} on one side of this line came to.
          *
-         * <p>{@code criterion} is everywhere this line refuses, and the region is narrowed to where
-         * the line beside it keeps a row. A row found there is one the model refuses and that line
-         * keeps, which is the whole of what tells the two apart — so nothing here has to be told
-         * which places the rows already stand at: a row in the file answers alike under both lines
-         * and is outside that region by the same arithmetic that put the threshold where it is.
+         * <p>{@code criterion} is the run on that side, and {@code narrowing} is where on it a row
+         * rules the line out ({@link AnotherLineTheRowsAllow.Stands}) — so nothing here has to be
+         * told which places the rows already stand at: a row in the file is outside that region by
+         * the same arithmetic that left the line standing.
          */
-        ARowTellingTheLinesApart tellingApart(Criterion criterion, String label,
-                                              AnotherLineTheRowsAllow.OneDoes beside);
+        ARowTellingTheLinesApart.AtOneReading tellingApart(Criterion criterion, String label,
+                                                           QuantityKey direction,
+                                                           UnaryOperator<SearchRegion> narrowing);
     }
 
     /**
@@ -1333,10 +1355,12 @@ final class Coverages {
             }
 
             @Override
-            public ARowTellingTheLinesApart tellingApart(Criterion criterion, String label,
-                                                         AnotherLineTheRowsAllow.OneDoes beside) {
-                Looked looked = looked(criterion, label, beside::tellingThemApart);
-                return ARowTellingTheLinesApart.of(border, looked.composed(), looked.outcomes());
+            public ARowTellingTheLinesApart.AtOneReading tellingApart(
+                    Criterion criterion, String label, QuantityKey direction,
+                    UnaryOperator<SearchRegion> narrowing) {
+                Looked looked = looked(criterion, label, narrowing);
+                return ARowTellingTheLinesApart.of(border, direction, looked.composed(),
+                        looked.outcomes());
             }
 
             /**
@@ -1701,15 +1725,47 @@ final class Coverages {
                 || b instanceof AnotherLineTheRowsAllow.NotDueYet || a.equals(b)) {
             return a;
         }
-        // The same line, and the input each names is its reading's own: the way to the border and
-        // the declarations a reading holds decide which input is one a row arrives at. A reading
-        // that named none has nothing to say against one that did.
-        if (a instanceof AnotherLineTheRowsAllow.OneDoes one
-                && b instanceof AnotherLineTheRowsAllow.OneDoes other && one.isTheLineOf(other)) {
-            return one.tellsApartAt() != null ? one : other;
+        // Line by line of the family, which two readings of one line share.
+        if (a instanceof AnotherLineTheRowsAllow.ByDirection one
+                && b instanceof AnotherLineTheRowsAllow.ByDirection other
+                && one.family().equals(other.family())) {
+            List<AnotherLineTheRowsAllow.Direction> each = new ArrayList<>();
+            for (int i = 0; i < one.each().size(); i++) {
+                each.add(besides(one.each().get(i), other.each().get(i)));
+            }
+            return new AnotherLineTheRowsAllow.ByDirection(each);
         }
         throw new IllegalStateException("two readings of one line disagreeing about which lines"
                 + " the rows leave standing beside it: " + a + " and " + b);
+    }
+
+    /**
+     * What two readings of one line say about one line of its family.
+     *
+     * <p>Not a sum of the two. Each reading folds the rows at its own positions, and the range of
+     * thresholds it leaves is that reading's: two readings that leave two ranges are this compiler
+     * saying two things about one measurement, and refused as that rather than merged into a range
+     * neither of them read.
+     */
+    static AnotherLineTheRowsAllow.Direction besides(AnotherLineTheRowsAllow.Direction a,
+                                                     AnotherLineTheRowsAllow.Direction b) {
+        // A reading that settled it answers for both, the way a reading that was asked does above:
+        // what stopped the other is about its own way to the border or its own rows' readings.
+        if (a instanceof AnotherLineTheRowsAllow.Undecided) {
+            return b;
+        }
+        if (b instanceof AnotherLineTheRowsAllow.Undecided || a.equals(b)) {
+            return a;
+        }
+        // The same range, and the input each names is its reading's own: the way to the border and
+        // the declarations a reading holds decide which input is one a row arrives at. A reading
+        // that named none has nothing to say against one that did.
+        if (a instanceof AnotherLineTheRowsAllow.Stands one
+                && b instanceof AnotherLineTheRowsAllow.Stands other && one.isTheLineOf(other)) {
+            return one.tellsApartAt() != null ? one : other;
+        }
+        throw new IllegalStateException("two readings of one line disagreeing about where the rows"
+                + " leave a line beside it: " + a + " and " + b);
     }
 
     /**

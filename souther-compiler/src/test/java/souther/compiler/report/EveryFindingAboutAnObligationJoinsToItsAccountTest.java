@@ -573,10 +573,11 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
         }
 
         assertEquals(List.of("-2 * x + y = 0 / -3 * x + y = 0", "y = x / y = 0",
-                        "x + 2 * y = 60 / y = 23"),
+                        "y = x / -x + 2 * y = 0", "x + 2 * y = 60 / y = 23",
+                        "x + 2 * y = 60 / x + 3 * y = 82"),
                 lines.stream().map(f -> f.get("subject").asString()).toList(),
-                () -> "each guard draws a line the rows leave another standing beside: "
-                        + behavior.get("findings"));
+                () -> "each guard draws a line the rows leave others standing beside, and each of"
+                        + " those is its own finding: " + behavior.get("findings"));
         for (JsonNode line : lines) {
             assertTrue(line.has("obligationId"),
                     () -> "a build refuses over this, so it names what it is about: " + line);
@@ -629,13 +630,14 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
             // for the same reason a class is.
             out.addAll(pairCellsOf(behavior));
             // And the lines themselves, beside the points of them. What a row shows at a line held
-            // against the lines beside it is which of two lines the model draws, which is owed of
-            // the whole line and of no point on it — so the entry is the line's own.
+            // against a line of its family is which of two lines the model draws, which is owed of
+            // the whole line and of no point on it — so the entries are the line's own, one per
+            // line of the family.
             JsonNode lines = partition.get("boundaries");
             if (lines != null) {
                 for (JsonNode line : lines) {
-                    if (line.has("obligationId")) {
-                        out.add(line);
+                    for (JsonNode beside : line.get("besides")) {
+                        out.add(beside);
                     }
                 }
             }

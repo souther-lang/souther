@@ -43,7 +43,7 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
     private static final NumericTerm.ValueOf Y = new NumericTerm.ValueOf(TermPath.of("y"));
 
     /** The line the rows leave standing beside the one the fixture draws. */
-    private static final AnotherLineTheRowsAllow.OneDoes BESIDE = beside();
+    private static final AnotherLineTheRowsAllow.Stands BESIDE = beside();
 
     @Test
     void whatEachReadingSearchedSurvivesTheMerge() {
@@ -65,7 +65,7 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
                 reading(line, lookedAndComposedNothing()), reading(line, made)))).getFirst();
 
         ARowTellingTheLinesApart.AtOneReading candidate =
-                merged.toldApart().firstComposed().orElseThrow();
+                merged.toldApart().firstComposed(BESIDE.direction()).orElseThrow();
         assertSame(made.each().getFirst().reading(), candidate.reading(),
                 "the row is held beside the reading that composed it, and not beside whichever"
                         + " reading the merge kept");
@@ -81,7 +81,7 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
                 reading(line, composedAt(1, 3)),
                 reading(line, lookedAndComposedNothing())))).getFirst();
 
-        assertTrue(merged.toldApart().firstComposed().isPresent(),
+        assertTrue(merged.toldApart().firstComposed(BESIDE.direction()).isPresent(),
                 "a reading that found nowhere to compose does not take away the row another one"
                         + " composed: the two looked in two regions");
     }
@@ -97,13 +97,14 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
                                         ItemAssessment.Coverage.NotAsked.NO_ROWS),
                                 ItemAssessment.WritabilityProjection.NOT_COMPUTED,
                                 SearchOutcomes.none())));
-        return new BorderAssessment(line, items, BESIDE, toldApart);
+        return new BorderAssessment(line, items,
+                new AnotherLineTheRowsAllow.ByDirection(List.of(BESIDE)), toldApart);
     }
 
     /** A search of one reading that composed a row standing at {@code x, y}. */
     private static ARowTellingTheLinesApart composedAt(int x, int y) {
         return new ARowTellingTheLinesApart(List.of(new ARowTellingTheLinesApart.AtOneReading(
-                TheLinesBesideABorder.aLineOverTwoPositions(), at(x, y),
+                TheLinesBesideABorder.aLineOverTwoPositions(), BESIDE.direction(), at(x, y),
                 SearchOutcomes.of(ItemAssessment.Attempt.Built.certified(
                         new Generator.GeneratedRow(new Generator.Purpose.Unstated(), List.of()),
                         WayToTheBorder.UNTOUCHED)))));
@@ -112,7 +113,7 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
     /** A search of one reading that ran and had nowhere to compose. */
     private static ARowTellingTheLinesApart lookedAndComposedNothing() {
         return new ARowTellingTheLinesApart(List.of(new ARowTellingTheLinesApart.AtOneReading(
-                TheLinesBesideABorder.aLineOverTwoPositions(), null,
+                TheLinesBesideABorder.aLineOverTwoPositions(), BESIDE.direction(), null,
                 SearchOutcomes.of(new ItemAssessment.Attempt.Unresolved(
                         new Generator.UnresolvedCombination(List.of("-2 * x + y = 0"),
                                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
@@ -127,12 +128,11 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
     }
 
     /** {@code y <= 3 * x}, which is the line the fixture's rows leave standing beside its own. */
-    private static AnotherLineTheRowsAllow.OneDoes beside() {
+    private static AnotherLineTheRowsAllow.Stands beside() {
         Map<NumericTerm, ExactRatio> direction = new LinkedHashMap<>();
         direction.put(X, ExactRatio.of(-3));
         direction.put(Y, ExactRatio.ONE);
-        return new AnotherLineTheRowsAllow.OneDoes(new QuantityKey(direction),
-                ExactRatio.ZERO,
-                Towards.BELOW, at(1, 3));
+        return new AnotherLineTheRowsAllow.Stands(new QuantityKey(direction),
+                ExactRatio.ZERO, null, Towards.BELOW, at(1, 3));
     }
 }

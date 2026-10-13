@@ -1408,6 +1408,10 @@ class EverySchemaWordIsAccountedForTest {
         // what holds the word to the enum here.
         held.add("/$defs/replacementObligationId/properties/rewrite");
         held.add("/$defs/replacement/properties/obligations/items/properties/disposition");
+        // Where a line of a border's family stands, written by a switch over the sealed answers
+        // about it for the same reason.
+        held.add("/$defs/partition/properties/boundaries/items/properties/besides/items"
+                + "/properties/standing");
         // Why a condition nothing read was not, by kind and by the word within it. Written by a
         // switch over the sealed reasons and the enums under them, for the reason the two above
         // are, and held to the schema by the same validation of the corpus documents.

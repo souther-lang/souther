@@ -172,7 +172,7 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
                 """);
         List<JsonNode> ofTheCount = new ArrayList<>();
         collect(report, ofTheCount, node -> "twice/a".equals(node.path("axis").asString())
-                && node.at("/obligationId/line/which/rule/ordinal").asInt() == 5);
+                && node.at("/lineId/line/which/rule/ordinal").asInt() == 5);
         assertEquals(1, ofTheCount.size(), () -> "the count's comparison draws one line on a: "
                 + ofTheCount);
         assertTrue(pointsAt(ofTheCount.getFirst(), "on").getFirst().path("hit").asBoolean(),

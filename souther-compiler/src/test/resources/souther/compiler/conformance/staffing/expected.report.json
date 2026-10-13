@@ -622,37 +622,7 @@
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.staffing",
-                  "declaredOn" : "WorkDays",
-                  "clause" : 0
-                },
-                "part" : 0,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "1"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "grantLeave",
@@ -748,37 +718,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.staffing",
-                  "declaredOn" : "WorkDays",
-                  "clause" : 0
-                },
-                "part" : 1,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "7"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "grantLeave",
@@ -874,34 +814,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "comparison",
-                "rule" : {
-                  "kind" : "comparison",
-                  "declaredIn" : "conformance.staffing",
-                  "definition" : "grantLeave",
-                  "behavior" : "grantLeave",
-                  "ordinal" : 1,
-                  "lowered" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "5"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "grantLeave",
@@ -1004,37 +917,7 @@
             "reason" : "no_rows"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.staffing",
-                  "declaredOn" : "Rate",
-                  "clause" : 0
-                },
-                "part" : 0,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "dense"
-              },
-              "at" : "0"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "grantLeave",
@@ -1130,37 +1013,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.staffing",
-                  "declaredOn" : "Rate",
-                  "clause" : 0
-                },
-                "part" : 1,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "dense"
-              },
-              "at" : "1"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "grantLeave",
@@ -1256,34 +1109,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "comparison",
-                "rule" : {
-                  "kind" : "comparison",
-                  "declaredIn" : "conformance.staffing",
-                  "definition" : "grantLeave",
-                  "behavior" : "grantLeave",
-                  "ordinal" : 5,
-                  "lowered" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "dense"
-              },
-              "at" : "0.8"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "grantLeave",
@@ -2338,37 +2164,7 @@
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.staffing",
-                  "declaredOn" : "Hours",
-                  "clause" : 0
-                },
-                "part" : 0,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "0"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "judgeHours",
@@ -2464,37 +2260,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.staffing",
-                  "declaredOn" : "Hours",
-                  "clause" : 0
-                },
-                "part" : 1,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "200"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "judgeHours",
@@ -2590,34 +2356,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "comparison",
-                "rule" : {
-                  "kind" : "comparison",
-                  "declaredIn" : "conformance.staffing",
-                  "definition" : "judgeHours",
-                  "behavior" : "judgeHours",
-                  "ordinal" : 1,
-                  "lowered" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : false,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "100"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "judgeHours",
@@ -2720,34 +2459,7 @@
             "reason" : "no_rows"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "comparison",
-                "rule" : {
-                  "kind" : "comparison",
-                  "declaredIn" : "conformance.staffing",
-                  "definition" : "judgeHours",
-                  "behavior" : "judgeHours",
-                  "ordinal" : 4,
-                  "lowered" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : false,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "45"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "judgeHours",
@@ -3758,37 +3470,7 @@
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.staffing",
-                  "declaredOn" : "Hours",
-                  "clause" : 0
-                },
-                "part" : 0,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "0"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "settleOvertime",
@@ -3884,37 +3566,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.staffing",
-                  "declaredOn" : "Hours",
-                  "clause" : 0
-                },
-                "part" : 1,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "200"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "settleOvertime",

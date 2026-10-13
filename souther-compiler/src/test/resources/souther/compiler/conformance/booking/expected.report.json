@@ -752,37 +752,7 @@
         "axes" : [ ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.booking",
-                  "declaredOn" : "Seat",
-                  "clause" : 0
-                },
-                "part" : 0,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "1"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "book",
@@ -878,37 +848,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.booking",
-                  "declaredOn" : "Seat",
-                  "clause" : 0
-                },
-                "part" : 1,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "300"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "book",
@@ -1004,37 +944,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.booking",
-                  "declaredOn" : "Party",
-                  "clause" : 0
-                },
-                "part" : 0,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "1"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "book",
@@ -1130,37 +1040,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.booking",
-                  "declaredOn" : "Party",
-                  "clause" : 0
-                },
-                "part" : 1,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "8"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "book",
@@ -1657,33 +1537,7 @@
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "comparison",
-                "rule" : {
-                  "kind" : "comparison",
-                  "declaredIn" : "conformance.vouchers",
-                  "definition" : "redeem",
-                  "behavior" : "redeem",
-                  "ordinal" : 3,
-                  "lowered" : 0
-                }
-              },
-              "facts" : {
-                "holdsAtTheValue" : true,
-                "singles" : true
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "text"
-              },
-              "at" : "spring"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "redeem",
@@ -1787,37 +1641,7 @@
             "reason" : "no_rows"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.vouchers",
-                  "declaredOn" : "Voucher",
-                  "clause" : 0
-                },
-                "part" : 0,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "1"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "redeem",
@@ -1918,37 +1742,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.vouchers",
-                  "declaredOn" : "Party",
-                  "clause" : 0
-                },
-                "part" : 0,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "1"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "redeem",
@@ -2044,37 +1838,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.vouchers",
-                  "declaredOn" : "Party",
-                  "clause" : 0
-                },
-                "part" : 1,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "8"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "redeem",
@@ -2170,34 +1934,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "comparison",
-                "rule" : {
-                  "kind" : "comparison",
-                  "declaredIn" : "conformance.vouchers",
-                  "definition" : "redeem",
-                  "behavior" : "redeem",
-                  "ordinal" : 1,
-                  "lowered" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "4"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "redeem",
@@ -3354,37 +3091,7 @@
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.waitlist",
-                  "declaredOn" : "Ticket",
-                  "clause" : 0
-                },
-                "part" : 0,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "1"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "seat",
@@ -3485,37 +3192,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.waitlist",
-                  "declaredOn" : "Party",
-                  "clause" : 0
-                },
-                "part" : 0,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "1"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "seat",
@@ -3611,37 +3288,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.waitlist",
-                  "declaredOn" : "Party",
-                  "clause" : 0
-                },
-                "part" : 1,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "8"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "seat",
@@ -3737,34 +3384,7 @@
             "notOwed" : "the_rules_refuse_it"
           } ]
         }, {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "comparison",
-                "rule" : {
-                  "kind" : "comparison",
-                  "declaredIn" : "conformance.waitlist",
-                  "definition" : "seat",
-                  "behavior" : "seat",
-                  "ordinal" : 1,
-                  "lowered" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : true,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "4"
-            }
-          },
+          "besides" : [ ],
           "lineId" : {
             "target" : {
               "behavior" : "seat",

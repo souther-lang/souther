@@ -19,6 +19,7 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -41,11 +42,11 @@ class AnInputIsNamedForALineBesideOnlyWhereTheDeclarationsAreNotShownToRefuseItT
 
     @Test
     void anInputTheDeclarationsRefuseIsPassedOverForAnother() {
-        AnotherLineTheRowsAllow.OneDoes plain = named(_ -> false);
+        AnotherLineTheRowsAllow.Stands plain = named(_ -> false);
         Map<NumericTerm, Place> nearest = plain.tellsApartAt();
         assertNotNull(nearest, "with nothing refused an input is named");
 
-        AnotherLineTheRowsAllow.OneDoes passedOver = named(nearest::equals);
+        AnotherLineTheRowsAllow.Stands passedOver = named(nearest::equals);
 
         assertEquals(plain.label(), passedOver.label(), "the line that stands is the same line");
         assertNotNull(passedOver.tellsApartAt(), "and another input is named for it");
@@ -54,9 +55,9 @@ class AnInputIsNamedForALineBesideOnlyWhereTheDeclarationsAreNotShownToRefuseItT
 
     @Test
     void whereEveryInputIsRefusedTheLineStandsAndNoInputIsNamed() {
-        AnotherLineTheRowsAllow.OneDoes plain = named(_ -> false);
+        AnotherLineTheRowsAllow.Stands plain = named(_ -> false);
 
-        AnotherLineTheRowsAllow.OneDoes refused = named(_ -> true);
+        AnotherLineTheRowsAllow.Stands refused = named(_ -> true);
 
         assertEquals(plain.label(), refused.label());
         assertNull(refused.tellsApartAt(),
@@ -66,22 +67,26 @@ class AnInputIsNamedForALineBesideOnlyWhereTheDeclarationsAreNotShownToRefuseItT
 
     @Test
     void twoReadingsOfOneLineAgreeWhateverInputEachNames() {
-        AnotherLineTheRowsAllow.OneDoes names = named(_ -> false);
-        AnotherLineTheRowsAllow.OneDoes namesNone = named(_ -> true);
+        AnotherLineTheRowsAllow.Stands names = named(_ -> false);
+        AnotherLineTheRowsAllow.Stands namesNone = named(_ -> true);
 
         assertSame(names, Coverages.besides(names, namesNone));
         assertSame(names, Coverages.besides(namesNone, names));
         assertSame(namesNone, Coverages.besides(namesNone, named(_ -> true)));
     }
 
-    private static AnotherLineTheRowsAllow.OneDoes named(Predicate<Map<NumericTerm, Place>> refused) {
+    /** The first line of the family these rows leave standing. */
+    private static AnotherLineTheRowsAllow.Stands named(Predicate<Map<NumericTerm, Place>> refused) {
         Border border = TheLinesBesideABorder.aLineOverTwoPositions();
         AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(border, true,
                 () -> new StandingAtAPoint.RowsRead(rowsOf(border, ROWS), Set.of(),
                         StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
                 List.of(), WayToTheBorder.UNTOUCHED, refused);
-        return assertInstanceOf(AnotherLineTheRowsAllow.OneDoes.class, said,
-                () -> "these rows leave a line standing: " + said);
+        List<AnotherLineTheRowsAllow.Stands> standing = assertInstanceOf(
+                AnotherLineTheRowsAllow.ByDirection.class, said,
+                () -> "these rows are held against the family: " + said).standing();
+        assertFalse(standing.isEmpty(), () -> "these rows leave a line standing: " + said);
+        return standing.getFirst();
     }
 
     /** One reading per row, each value on the term the quantity reads it at. */

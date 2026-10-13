@@ -5,8 +5,10 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.partition.QuantityKey;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -145,8 +147,13 @@ class TheInputShownForALineIsTheOneTheOfferedRowStandsAtTest {
         return new InputOfARowForALine(TheLinesBesideABorder.aLineOverTwoPositions(), at);
     }
 
+    /** The fixture's line held against {@code -3 * x + y}, one line of its family. */
     private static ObligationIdentity aLine() {
+        Map<NumericTerm, ExactRatio> direction = new LinkedHashMap<>();
+        direction.put(new NumericTerm.ValueOf(TermPath.of("x")), ExactRatio.of(-3));
+        direction.put(new NumericTerm.ValueOf(TermPath.of("y")), ExactRatio.ONE);
         return new ObligationIdentity.OfABorder(
-                TheLinesBesideABorder.aLineOverTwoPositions().obligation());
+                TheLinesBesideABorder.aLineOverTwoPositions().obligation(),
+                new QuantityKey(direction));
     }
 }

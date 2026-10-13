@@ -31,6 +31,8 @@ import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.partition.OrderedAffineBoundary;
+import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.ClassOfAPosition;
@@ -112,6 +114,7 @@ import souther.compiler.query.ReplacementReportAnchor;
 import souther.compiler.query.Replacements;
 import souther.compiler.query.DecisionRuleReading;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.AnotherLineTheRowsAllow;
 import souther.compiler.query.ArmDisposition;
 import souther.compiler.query.ArmExclusion;
 import souther.compiler.partition.WhereNothingIsAnswered;
@@ -4403,6 +4406,46 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * The obligations a line is owed as a line, one per line of its fault family, and where each
+     * stands.
+     *
+     * <p>The family whole, and never only the lines a finding names. Which lines the family holds is
+     * the model's own answer and no row moves it, so a consumer counting what a border is owed reads
+     * the same entries before its rows rule a line out as after — what changes is the word beside
+     * each. Empty where the border has no family ({@link AnotherLineTheRowsAllow.NoSuchQuestion}) or
+     * the question could not be put of it at all ({@link AnotherLineTheRowsAllow.CouldNotTell}),
+     * which the measure's weakening says.
+     */
+    private static void linesBeside(ArrayNode into, BorderAssessment boundary,
+                                    DocumentSources sources) {
+        Map<QuantityKey, String> standing = new LinkedHashMap<>();
+        switch (boundary.beside()) {
+            case AnotherLineTheRowsAllow.ByDirection lines -> {
+                for (AnotherLineTheRowsAllow.Direction each : lines.each()) {
+                    standing.put(each.direction(), switch (each) {
+                        case AnotherLineTheRowsAllow.RuledOut _ -> "ruled_out";
+                        case AnotherLineTheRowsAllow.Stands _ -> "stands";
+                        case AnotherLineTheRowsAllow.Undecided _ -> "undecided";
+                    });
+                }
+            }
+            case AnotherLineTheRowsAllow.NotDueYet(var family) ->
+                    family.forEach(each -> standing.put(each, "not_due"));
+            case AnotherLineTheRowsAllow.NotApplicable(var family, var _) ->
+                    family.forEach(each -> standing.put(each, "not_applicable"));
+            case AnotherLineTheRowsAllow.NoSuchQuestion _, AnotherLineTheRowsAllow.CouldNotTell _ -> {
+            }
+        }
+        standing.forEach((direction, word) -> {
+            ObjectNode one = into.addObject();
+            obligationId(one.putObject("obligationId"),
+                    new ObligationIdentity.OfABorder(boundary.border().obligation(), direction),
+                    sources);
+            one.put("standing", word);
+        });
+    }
+
+    /**
      * What tells one thing a row is owed for from every other, written the way {@code ruleId} is:
      * every part of the identity and nothing that merely reads well.
      *
@@ -4426,10 +4469,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // The line and where it is cut, which is what a border of the document is keyed by —
             // and no point, because what this is owed at is the line itself. Written the same way
             // a point writes the two of them it shares, so a consumer holding either reads one
-            // vocabulary.
-            case ObligationIdentity.OfABorder(var line) -> {
+            // vocabulary. And which line of the family it is held against, spelled the way a form
+            // is spelled and with no threshold: the threshold moves with the rows and the
+            // obligation does not.
+            case ObligationIdentity.OfABorder(var line, var direction) -> {
                 authoredLineId(into.putObject("line"), line.line());
                 level(into.putObject("level"), line.at());
+                into.put("direction", OrderedAffineBoundary.spelled(direction.direction()));
             }
             case ObligationIdentity.OfAnArm(var arm) -> armId(into, arm, sources);
             // The axis and which class of it, which is what an axis of the document is keyed by.
@@ -5934,11 +5980,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (BorderAssessment boundary : lines.made().orElseGet(List::of)) {
             DocumentItem drawn = boundaries.addObject();
             ObjectNode b = drawn.node();
-            // What this line is owed as a line, which is what the lines beside it are asked of. The
-            // four points under it are owed at places on it and carry their own; this is the id a
-            // finding about the line itself joins to.
-            obligationId(b.putObject("obligationId"),
-                    new ObligationIdentity.OfABorder(boundary.border().obligation()), sources);
+            // What this line is owed as a line: one obligation per line of its fault family, each
+            // with where it stands. The four points under it are owed at places on it and carry
+            // their own; these are the ids a finding about the line itself joins to.
+            linesBeside(b.putArray("besides"), boundary, sources);
             // Which line this is, which the id above does not say. What a line is owed is the
             // same at every position it is read at, and this array has an entry per position, so
             // two entries can carry one obligation. This is what tells them apart, and it is what
