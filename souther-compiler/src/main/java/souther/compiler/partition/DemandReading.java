@@ -647,13 +647,8 @@ final class DemandReading {
          * or not it turns out closed, so a walk among closed ways stops where it is told to.
          */
         static List<AnElementsWay> eachWhole(List<List<AnElementsWay>> parts, InputReading read) {
-            Walked walked = read.derived(Walked.class, _ -> new Walked());
-            List<AnElementsWay> kept = walked.filed.get(parts);
-            if (kept == null) {
-                kept = walkedWhole(parts, read);
-                walked.filed.put(parts, kept);
-            }
-            return kept;
+            return read.derived(Walked.class, _ -> new Walked())
+                    .filed.computeIfAbsent(parts, asked -> walkedWhole(asked, read));
         }
 
         private static final AtomicLong WALKS = new AtomicLong();
