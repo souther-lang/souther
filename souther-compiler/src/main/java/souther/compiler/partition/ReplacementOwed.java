@@ -33,17 +33,25 @@ public sealed interface ReplacementOwed {
      * @param replacing   the sites a run asks to answer with the sibling, and the part it asks for
      *                    at each — every site of the arm the classes carry the sibling at, in the
      *                    order of the sites
+     * @param seenThrough the inputs of each row stating its answer that a run was seen taking
+     *                    through one of {@code occurrences}, in the order the rows are written.
+     *                    Never empty: a rewrite of an arm is asked about because such a row went
+     *                    through it, and those inputs are somewhere a run through the arm is known
+     *                    to start from whatever a reading of the way in could state
      */
     record OfAnArm(SourceConstructOrigin fork, int part, int with, List<ArmProbe> occurrences,
-                   SequencedMap<Integer, Integer> replacing) implements ReplacementOwed {
+                   SequencedMap<Integer, Integer> replacing,
+                   List<List<ObservedValue>> seenThrough) implements ReplacementOwed {
 
         public OfAnArm {
             Objects.requireNonNull(fork, "an arm is an arm of some fork");
             occurrences = List.copyOf(occurrences);
             replacing = Collections.unmodifiableSequencedMap(new TreeMap<>(replacing));
-            if (occurrences.isEmpty() || replacing.isEmpty()) {
+            seenThrough = seenThrough.stream().map(List::copyOf).toList();
+            if (occurrences.isEmpty() || replacing.isEmpty() || seenThrough.isEmpty()) {
                 throw new IllegalArgumentException("a replacement of an arm is looked for where a run"
-                        + " through the arm is recorded and asked for where the classes carry it");
+                        + " through the arm is recorded, from the rows seen going through it, and"
+                        + " asked for where the classes carry it");
             }
         }
 

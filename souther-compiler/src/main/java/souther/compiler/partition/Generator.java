@@ -1879,28 +1879,17 @@ public final class Generator {
                     new ReplacementWitness(trial, ran, asked, plan.rewrites().runs());
             GeneratedRow found = switch (asked) {
                 case ReplacementOwed.OfAnArm arm -> {
+                    List<Purpose> purposes = List.of(new Purpose.ForAReplacement(asked));
                     List<WhereToLook> here =
                             placesFor(new LinkedHashSet<>(arm.occurrences()), offered);
                     GeneratedRow seen = null;
+                    // Where the classes place a row down a way into the arm. A row nothing
+                    // watched is not one a rewrite can be told on, and the search asks for none.
                     for (ArmProbe probe : arm.occurrences()) {
                         for (WhereToLook place : whereToLookFor(probe, read, here, namedWays,
                                 axes)) {
-                            int stopsBefore = looking.stops();
-                            switch (witnessFor(axes, place.at, check, trial, ran,
-                                    List.of(new Purpose.ForAReplacement(asked)), looking::of,
-                                    origins, references, answers)) {
-                                case Witness.Certified(GeneratedRow row, var _) -> seen = row;
-                                // The composing's own figure, where the witness did not stop it.
-                                case Witness.Limited _ -> {
-                                    if (looking.stops() == stopsBefore) {
-                                        looking.composingStopped();
-                                    }
-                                }
-                                // A row nothing watched is not one a rewrite can be told on, and
-                                // the search asked for none; the rest found nothing and said why.
-                                case Witness.Unconfirmed _, Witness.Exhausted _,
-                                     Witness.NoCombination _ -> { }
-                            }
+                            seen = looking.tookFrom(() -> witnessFor(axes, place.at, check, trial,
+                                    ran, purposes, looking::of, origins, references, answers));
                             if (seen != null) {
                                 break;
                             }
@@ -1914,7 +1903,13 @@ public final class Generator {
                     // inputs is reached by values no class of either input holds.
                     for (int at = 0; seen == null && at < arm.occurrences().size(); at++) {
                         seen = heldOnAWayInto(arm.occurrences().get(at), read, goingOn.holding(),
-                                axes, asked, looking, check, answers);
+                                axes, purposes, looking, check, answers);
+                    }
+                    // And from the rows seen going through it, which is where a run through the
+                    // arm is known to start whatever a reading of the way in could state.
+                    for (int at = 0; seen == null && at < arm.seenThrough().size(); at++) {
+                        seen = movedFrom(arm.seenThrough().get(at), axes, purposes, looking,
+                                check, answers);
                     }
                     yield seen;
                 }
@@ -1923,30 +1918,20 @@ public final class Generator {
                     // answering one value is told apart by any row it answers differently, and a
                     // behavior whose positions nothing divides has no class to look in.
                     List<Purpose> purposes = List.of(new Purpose.ForAReplacement(asked));
-                    GeneratedRow seen = composed(axes, composes(axes.axes()),
-                            HeldTogether.Asked.NOTHING, check, Map.of(),
-                            atMost(MOST_REPAIRS, looking::composingStopped,
-                                    inputs -> looking.of(new GeneratedRow(purposes, inputs,
-                                            answers), null)))
-                            instanceof RowComposed.Taken(List<FixtureTemplate> inputs)
-                            ? new GeneratedRow(purposes, inputs, answers) : null;
+                    List<FixtureTemplate> composedFirst = looking.tookFromComposing(() -> composed(
+                            axes, composes(axes.axes()), HeldTogether.Asked.NOTHING, check,
+                            Map.of(), witnessedBy(looking, purposes, answers)));
+                    GeneratedRow seen = composedFirst == null ? null
+                            : new GeneratedRow(purposes, composedFirst, answers);
                     for (int at = 0; at < axes.size() && seen == null; at++) {
                         for (int cls = 0; cls < axes.get(at).classes().size(); cls++) {
-                            int stopsBefore = looking.stops();
-                            Searched searched = search(axes, Pins.of(axes, Map.of(at, cls)),
-                                    List.of(new Purpose.ForAReplacement(asked)), origins,
-                                    (_, _) -> true, check, references, answers, List.of(),
-                                    row -> looking.of(row, null), true, goingOn.answersNothing());
-                            if (searched.row() != null) {
-                                seen = searched.row();
+                            Pins pins = Pins.of(axes, Map.of(at, cls));
+                            seen = looking.tookFromSearching(() -> search(axes, pins, purposes,
+                                    origins, (_, _) -> true, check, references, answers,
+                                    List.of(), row -> looking.of(row, null), true,
+                                    goingOn.answersNothing()));
+                            if (seen != null) {
                                 break;
-                            }
-                            // Cut short by the composing's own figure, and not by the witness
-                            // having stopped it: that one already says why it did.
-                            if (searched.came().why().reason()
-                                    == UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED
-                                    && looking.stops() == stopsBefore) {
-                                looking.composingStopped();
                             }
                         }
                     }
@@ -1993,33 +1978,94 @@ public final class Generator {
      * moving it to the next its rules leave. Where the row went is what running it says: a row the
      * rewrite answers differently on went through the arm, since the rewrite changes nothing else.
      *
-     * <p>A way whose last condition nothing holds a row to is not looked down, and nothing is said
-     * of it here: what the search came to is the witness's account
-     * ({@link ReplacementWitness#ended}).
+     * <p>A way whose last condition nothing holds a row to is not looked down here. That is a
+     * reading short of the way and not the arm out of reach, which is why the rows seen going
+     * through the arm are looked from as well ({@link #movedFrom}).
      */
     private static GeneratedRow heldOnAWayInto(ArmProbe probe, CoverageRead.Read read,
                                                HeldOutcome.Of holding,
                                                MeasuredInput.MeasuredAxes axes,
-                                               ReplacementOwed asked, ReplacementWitness looking,
+                                               List<Purpose> purposes, ReplacementWitness looking,
                                                CandidateCheck check, List<StoodInAnswer> answers) {
-        List<Purpose> purposes = List.of(new Purpose.ForAReplacement(asked));
         for (WayIn way : waysNoClassPlaces(probe, read, axes)) {
             if (way.decisions().isEmpty()) {
                 continue;
             }
             Optional<HeldOutcome> holds = holding.at(way.decisions().getLast().claims().at());
-            if (holds.isPresent()
-                    && composed(axes, composes(axes.axes()),
-                            heldTogether(axes.subject(), List.of(holds.get()), check), check,
-                            Map.of(),
-                            atMost(MOST_REPAIRS, looking::composingStopped,
-                                    inputs -> looking.of(
-                                            new GeneratedRow(purposes, inputs, answers), null)))
-                    instanceof RowComposed.Taken(List<FixtureTemplate> inputs)) {
+            if (holds.isEmpty()) {
+                continue;
+            }
+            List<FixtureTemplate> inputs = looking.tookFromComposing(() -> composed(axes,
+                    composes(axes.axes()),
+                    heldTogether(axes.subject(), List.of(holds.get()), check), check, Map.of(),
+                    witnessedBy(looking, purposes, answers)));
+            if (inputs != null) {
                 return new GeneratedRow(purposes, inputs, answers);
             }
         }
         return null;
+    }
+
+    /**
+     * A row the rewrite {@code looking} asks about answers differently on, composed from
+     * {@code seen}, the inputs of a row a run was seen taking through the arm — or null where none
+     * was.
+     *
+     * <p>The one place to look that rests on no reading of the way in: the run went through the
+     * arm, so its inputs are somewhere a run through it starts, whatever a reading of the
+     * conditions could state. What a row stating its answer would notice the rewrite by is a
+     * different answer, so one position is moved at a time and the rest kept where the run had
+     * them — each parameter in turn composed as a row with nothing pinned composes it, values
+     * passed over moving it to the next its rules leave, beside the others written as they were
+     * read. Written through the same check a composed value goes through, so what the run had is
+     * never a value the model refuses on this row's behalf; and where the row went is what running
+     * it says, as it is for every candidate the rewrite is asked about.
+     *
+     * <p>A value read off the run that this cannot write as a fixture leaves nothing to compose
+     * from, and nothing is said of it here: the inputs are the run's and the gap is this
+     * compiler's, which what the search came to already says ({@link ReplacementWitness#ended}).
+     * A parameter moved is the whole of it, so a position inside a record is moved with the rest
+     * of its record.
+     */
+    private static GeneratedRow movedFrom(List<ObservedValue> seen,
+                                          MeasuredInput.MeasuredAxes axes, List<Purpose> purposes,
+                                          ReplacementWitness looking, CandidateCheck check,
+                                          List<StoodInAnswer> answers) {
+        MeasuredInput subject = axes.subject();
+        List<FixtureTemplate> written = new ArrayList<>();
+        for (int p = 0; p < seen.size(); p++) {
+            if (!(ObservedFixtures.of(seen.get(p), subject.types().get(p), subject.ruleReading())
+                    instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                            FixtureTemplate value))) {
+                return null;
+            }
+            written.add(value);
+        }
+        for (int moved = 0; moved < written.size(); moved++) {
+            Map<String, Written> kept = new LinkedHashMap<>();
+            for (int p = 0; p < written.size(); p++) {
+                if (p != moved) {
+                    String parameter = subject.parameters().get(p);
+                    kept.put(parameter, new Written(List.of(new WrittenWay(written.get(p),
+                            Map.of(TermPath.of(parameter), written.get(p)))), false));
+                }
+            }
+            List<FixtureTemplate> inputs = looking.tookFromComposing(() -> composed(axes,
+                    composes(axes.axes()), HeldTogether.Asked.NOTHING, check, kept,
+                    witnessedBy(looking, purposes, answers)));
+            if (inputs != null) {
+                return new GeneratedRow(purposes, inputs, answers);
+            }
+        }
+        return null;
+    }
+
+    /** Every row a composing hands over, put to {@code looking} until it takes one — at most as
+     *  many as a search may compose for one requirement, the one past them said as the figure. */
+    private static RowTaking witnessedBy(ReplacementWitness looking, List<Purpose> purposes,
+                                         List<StoodInAnswer> answers) {
+        return atMost(MOST_REPAIRS, looking::composingStopped,
+                inputs -> looking.of(new GeneratedRow(purposes, inputs, answers), null));
     }
 
     /**
@@ -2888,9 +2934,13 @@ public final class Generator {
      *                parameter the origin states: one whose classes cannot be written against that
      *                value is composed instead, and the row says nothing about the stated value there
      * @param came    what the walks came to, or null where a row was taken
+     * @param stoppedShort whether a walk stopped in front of a candidate it had not built, or met
+     *                a figure of this compiler's on the way — which the word in {@code came} does
+     *                not tell from a walk that ran to the end of what this compiler writes. Never
+     *                where a row was taken
      */
     private record Searched(GeneratedRow row, Candidate from, Set<String> against,
-                            CameToNothing came) {}
+                            CameToNothing came, boolean stoppedShort) {}
 
     /** What a search makes of a row that holds every pin. */
     private enum Acceptance {
@@ -2958,14 +3008,16 @@ public final class Generator {
         WhatEachClassRequires requires = new WhatEachClassRequires(axes.axes());
         Traversal stated = nearestFirst(requires, reading, origins, admits, building);
         if (stated == Traversal.SATISFIED) {
-            return new Searched(building.found, building.foundAt, building.foundAgainst, null);
+            return new Searched(building.found, building.foundAt, building.foundAgainst, null,
+                    false);
         }
         // The composition, whatever the stated values spent, and with a budget of its own.
         Building composing = new Building(axes, pins, purposes, label, check, MOST_REPAIRS,
                 references, answers, held, accepts, rechoosing, answersNothing);
         Traversal composed = composing(requires, reading, origins, admits, composing);
         if (composed == Traversal.SATISFIED) {
-            return new Searched(composing.found, composing.foundAt, composing.foundAgainst, null);
+            return new Searched(composing.found, composing.foundAt, composing.foundAgainst, null,
+                    false);
         }
         // What the walks came to, added up the way a combination's readings are. What is pinned
         // is one reading — a class apiece at the positions the requirement names — so what is left
@@ -3010,7 +3062,9 @@ public final class Generator {
                             Optional.empty())
                     : found.published(pins.labels(), last.reason(), last.detail(), last.said());
         };
-        return new Searched(null, null, Set.of(), came);
+        return new Searched(null, null, Set.of(), came,
+                looked.found() == Completeness.Nothing.SEARCH_STOPPED
+                        || !found.met().figures().isEmpty());
     }
 
     /**
@@ -8187,18 +8241,70 @@ public final class Generator {
             return Acceptance.STOPPED;
         }
 
-        /**
-         * How many times this has stopped a search. A search cut short reads the same whether the
-         * cut was this or the composing's own figure, so a caller tells the two apart by whether
-         * this count moved while the search ran.
-         */
-        int stops() {
-            return stops;
-        }
-
         /** Composing the rows the search looked through stopped at a figure of its own. */
         void composingStopped() {
             stopped.add(ReplacementDisposition.Ended.A_FIGURE_OF_THE_COMPOSING);
+        }
+
+        /**
+         * The row a search over the readings of a combination took, or null.
+         *
+         * <p>This and the two below are where what a search for a row this asks about came to is
+         * read, one for each shape a search comes back in, and the only places: whether composing
+         * the rows it looked through stopped short at a figure of its own is read off what the
+         * search found out, so whoever runs a search has nothing to decide about it. A search cut
+         * short while this stopped it is this's to say, and is said ({@link #stop}); one that came
+         * to nothing any other way leaves nothing to add, and what is said of it is what was seen
+         * ({@link #ended}).
+         */
+        GeneratedRow tookFrom(Supplier<Witness> search) {
+            int before = stops;
+            Witness came = search.get();
+            if (came instanceof Witness.Certified(GeneratedRow row, var _)) {
+                return row;
+            }
+            shortOfAFigureUnlessThisStoppedIt(before, switch (came) {
+                // The walk over the readings stopped with readings it had not tried.
+                case Witness.Limited _ -> true;
+                case Witness.Exhausted none -> !none.found().met().figures().isEmpty();
+                case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ -> false;
+            });
+            return null;
+        }
+
+        /** The inputs of the row a composing took, or null ({@link #tookFrom}). */
+        List<FixtureTemplate> tookFromComposing(Supplier<RowComposed> search) {
+            int before = stops;
+            RowComposed came = search.get();
+            if (came instanceof RowComposed.Taken(List<FixtureTemplate> inputs)) {
+                return inputs;
+            }
+            shortOfAFigureUnlessThisStoppedIt(before, switch (came) {
+                case RowComposed.PassedOver(SearchShortfall found) ->
+                        !found.met().figures().isEmpty();
+                case RowComposed.Failed(Attempt why, var _) -> !why.found().met().figures().isEmpty();
+                // Stopped by what it handed its rows to: this, or the bound on how many it may be
+                // handed ({@link #atMost}), which says so where it is reached.
+                case RowComposed.Halted _, RowComposed.Taken _ -> false;
+            });
+            return null;
+        }
+
+        /** The row a search for a requirement took, or null ({@link #tookFrom}). */
+        GeneratedRow tookFromSearching(Supplier<Searched> search) {
+            int before = stops;
+            Searched came = search.get();
+            if (came.row() != null) {
+                return came.row();
+            }
+            shortOfAFigureUnlessThisStoppedIt(before, came.stoppedShort());
+            return null;
+        }
+
+        private void shortOfAFigureUnlessThisStoppedIt(int before, boolean shortOfAFigure) {
+            if (shortOfAFigure && stops == before) {
+                composingStopped();
+            }
         }
 
         /** How the search ended, where nothing was found: each way it stopped, and whether rows

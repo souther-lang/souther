@@ -6228,7 +6228,7 @@
             "with" : 0
           },
           "disposition" : "undecided",
-          "undecidedBecause" : [ "nothing_was_composed" ]
+          "undecidedBecause" : [ "no_row_answered_differently" ]
         }, {
           "obligationId" : {
             "behavior" : "出荷する",
@@ -9320,7 +9320,7 @@
             "with" : 0
           },
           "disposition" : "undecided",
-          "undecidedBecause" : [ "nothing_was_composed" ]
+          "undecidedBecause" : [ "no_row_answered_differently" ]
         }, {
           "obligationId" : {
             "behavior" : "restockByFold",

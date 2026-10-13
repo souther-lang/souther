@@ -103,6 +103,58 @@ class AnArmARelationBetweenInputsDecidesIsRewrittenAndLookedForTest {
                 "every rewrite told apart by a row answered as the rule says: " + rewrites);
     }
 
+    /**
+     * An arm under a condition no reading of the way in states a row can be held to — an
+     * {@code ||} of two inputs — is looked for from the rows seen going through it: the row shown
+     * keeps what took the run there and moves what the arm answers with.
+     */
+    @Test
+    void anArmNoReadingOfTheWayInStatesIsLookedForFromTheRowsSeenGoingThroughIt() {
+        Map<Replacement, ReplacementEvidence.Outcome> rewrites = armRewritesOf("""
+                module example.addon
+
+                data Megabytes = Int
+
+                behavior usable : (a: Bool, b: Bool, from: Date, on: Date, mb: Megabytes) -> Megabytes
+
+                let usable (a, b, from, on, mb) =
+                    if a || b then
+                        if Date.daysBetween(from, on) < 90 then mb else Megabytes(0)
+                    else Megabytes(0)
+
+                example usable
+                    | (true, false, Date("1970-01-01"), Date("1970-01-01"), Megabytes(0))
+                        -> Megabytes(0)
+                    | (true, false, Date("1969-10-03"), Date("1970-01-01"), Megabytes(0))
+                        -> Megabytes(0)
+                    | (false, false, Date("1970-01-01"), Date("1970-01-01"), Megabytes(0))
+                        -> Megabytes(0)
+                """);
+
+        int outer = rewrites.keySet().stream()
+                .mapToInt(each -> ((Replacement.OfAnArm) each).fork().ordinal()).min()
+                .orElseThrow();
+        Map.Entry<Replacement, ReplacementEvidence.Outcome> taken = rewrites.entrySet().stream()
+                .filter(each -> each.getKey() instanceof Replacement.OfAnArm arm
+                        && arm.fork().ordinal() == outer && arm.part() == 0)
+                .findFirst().orElseThrow(() -> new AssertionError(
+                        "the arm `a || b` takes, as its sibling: " + rewrites));
+        List<String> inputs = shownBy(taken.getKey(), taken.getValue());
+        assertTrue(inputs.get(0).equals("true") || inputs.get(1).equals("true"),
+                "down the arm `a || b` takes: " + inputs);
+        long elapsed = ChronoUnit.DAYS.between(LocalDate.parse(dateIn(inputs.get(2))),
+                LocalDate.parse(dateIn(inputs.get(3))));
+        assertTrue(elapsed >= 0 && elapsed < 90, "and inside the ninety days: " + inputs);
+        assertFalse(inputs.get(4).contains("Megabytes(0)"),
+                "holding something, which the arm answers and its sibling does not: " + inputs);
+    }
+
+    private static String dateIn(String written) {
+        Matcher read = Pattern.compile("Date\\(\"([0-9-]+)\"\\)").matcher(written);
+        assertTrue(read.matches(), "a date: " + written);
+        return read.group(1);
+    }
+
     private static synchronized Map<Replacement, ReplacementEvidence.Outcome>
             measuredHoldingNothing() {
         if (holdingNothing == null) {
