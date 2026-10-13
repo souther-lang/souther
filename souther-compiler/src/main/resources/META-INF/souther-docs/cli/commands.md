@@ -59,7 +59,10 @@ souther {
 }
 ```
 
-Adding to a Gradle build writes the same block at the end of the script.
+Adding to a Gradle build writes the same block at the end of the script. One that already applies the
+plugin and does not say `southerVersion` is refused before anything is written, and told the block
+to write: the model would not build without it, and writing it could override a version a convention
+plugin gives.
 
 Where a `pom.xml` or a `build.gradle.kts` is already there, the coordinate is read out of it rather
 than written on the line, `--build` is not read — the build that is there is the build — and what is

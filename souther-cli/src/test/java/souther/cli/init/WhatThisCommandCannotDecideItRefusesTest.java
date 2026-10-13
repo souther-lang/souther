@@ -132,6 +132,43 @@ class WhatThisCommandCannotDecideItRefusesTest {
     }
 
     /**
+     * A Gradle build that applies the plugin and says no Souther is refused before anything is
+     * written, and told the block to write.
+     *
+     * <p>Valid as it stands, since a project with no model names nothing. Left as it is, the model
+     * this command writes would stop the build at {@code compileSouther}; given the block, a version
+     * set where this does not read would be overridden by this command's own.
+     */
+    @Test
+    void aGradleBuildApplyingThePluginWithNoSoutherIsRefused(@TempDir Path directory)
+            throws IOException {
+        String script = """
+                plugins {
+                    java
+                    id("org.souther-lang.souther") version "0.2.0"
+                }
+
+                group = "com.acme"
+                """;
+        Files.writeString(directory.resolve("build.gradle.kts"), script);
+        Files.writeString(directory.resolve("settings.gradle.kts"), "rootProject.name = \"billing\"\n");
+
+        Run run = run(directory, "--model", "minimal");
+
+        assertEquals(2, run.code());
+        assertTrue(run.err().contains("southerVersion = \"9.9.9\""), run.err());
+        assertEquals(script, Files.readString(directory.resolve("build.gradle.kts")));
+        assertTrue(Files.notExists(directory.resolve("src")), "a refusal wrote a source directory");
+
+        Files.writeString(directory.resolve("build.gradle.kts"),
+                script + "\nsouther {\n    southerVersion = \"9.9.9\"\n}\n");
+
+        Run written = run(directory, "--model", "minimal");
+
+        assertEquals(0, written.code(), written.err());
+    }
+
+    /**
      * A settings file that names nothing does not unname what another one named.
      *
      * <p>A project may hold both spellings. Read as the last one that was looked at rather than the

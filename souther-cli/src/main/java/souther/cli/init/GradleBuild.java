@@ -60,8 +60,20 @@ final class GradleBuild {
 
     /** What a script says about the plugin, which is not always "yes" or "no". */
     enum Applied {
-        /** It is requested in the `plugins` block and applied there. Nothing to add. */
+        /**
+         * It is requested in the `plugins` block and applied there, and the script says
+         * {@code southerVersion}. Nothing to add.
+         */
         ALREADY,
+        /**
+         * It is applied there, and the script says nothing of which Souther it compiles with.
+         * Refused rather than added to. The plugin has no default and stops a project with a model
+         * that names none, so leaving the script as it is would leave a project that does not build
+         * once this command has written its model; and writing the block would override a version
+         * given somewhere this does not read — a convention plugin, another script — with this
+         * command's own.
+         */
+        UNTOLD,
         /** The script does not name it. A line goes into the `plugins` block. */
         NOT_YET,
         /**
@@ -90,7 +102,11 @@ final class GradleBuild {
                 String block = said.substring(found.end(), close);
                 String rest = said.substring(0, found.start()) + said.substring(close + 1);
                 if (requestsIt(block)) {
-                    return applies(block) ? Applied.ALREADY : Applied.SOMEWHERE_ELSE;
+                    if (!applies(block)) {
+                        return Applied.SOMEWHERE_ELSE;
+                    }
+                    return TELLS_THE_VERSION.matcher(said).find() ? Applied.ALREADY
+                            : Applied.UNTOLD;
                 }
                 return rest.contains(BuildPlugins.GRADLE_ID) ? Applied.SOMEWHERE_ELSE
                         : Applied.NOT_YET;
@@ -122,6 +138,12 @@ final class GradleBuild {
 
     /** Where a plugin is asked for without being applied. */
     private static final Pattern APPLY_FALSE = Pattern.compile("apply\\s+false");
+
+    /**
+     * Where the script sets the extension's version, however it is spelt: an assignment in a
+     * {@code souther} block, {@code souther.southerVersion.set(…)}, or a Groovy call.
+     */
+    private static final Pattern TELLS_THE_VERSION = Pattern.compile("\\bsoutherVersion\\b");
 
     /**
      * The script with its comments taken out, so that what is read is what the build runs.

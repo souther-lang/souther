@@ -104,9 +104,12 @@ class AnOptionIsDocumentedUnderEveryCommandThatTakesItTest {
                 RESOURCE + " writes in a usage line what its command does not take: " + refused);
     }
 
-    /** An option in a usage line, and the value words written after it where it writes a choice. */
+    /**
+     * An option in a usage line, and the value words written after it: one word or several joined
+     * by {@code |}. A placeholder such as {@code <path>} is not a word and is not read.
+     */
     private static final Pattern USAGE_OPTION = Pattern.compile(
-            "(?<![\\w<-])(--?[A-Za-z][\\w-]*)(?: ([a-z][\\w-]*(?:\\|[a-z][\\w-]*)+))?");
+            "(?<![\\w<-])(--?[A-Za-z][\\w-]*)(?: ([a-z][\\w-]*(?:\\|[a-z][\\w-]*)*))?");
 
     /**
      * Each usage statement in the document: a line in a fenced block that starts with

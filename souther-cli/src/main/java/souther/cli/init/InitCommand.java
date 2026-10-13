@@ -112,7 +112,8 @@ public final class InitCommand {
             // from the copy beside it — told by a command that reported success.
             String unreadable = cannotBeAddedTo(existing, at);
             if (unreadable != null) {
-                return refuse(err, locale, unreadable, display(here, existing.fileIn(at)));
+                return refuse(err, locale, unreadable, display(here, existing.fileIn(at)),
+                        souther);
             }
             target = at;
             if (level == null) {
@@ -236,11 +237,13 @@ public final class InitCommand {
     /**
      * Why the build file here is not one a declaration can be put into, or null where it is.
      *
-     * <p>Two ways of not being one, and they are different things to say. A pom whose tags do not
+     * <p>Three ways of not being one, and they are different things to say. A pom whose tags do not
      * match is a document this cannot walk down. A Gradle script that names the plugin outside its
      * {@code plugins} block, or asks for it with {@code apply false}, is a script whose author has
      * already said something about the plugin that this command does not read as applying it —
-     * and adding a second request is what Gradle refuses outright.
+     * and adding a second request is what Gradle refuses outright. And a script that applies the
+     * plugin and says no {@code southerVersion} is one whose version this command can neither see
+     * nor safely write ({@link GradleBuild.Applied#UNTOLD}).
      */
     private static String cannotBeAddedTo(BuildSystem build, Path at) {
         try {
@@ -248,8 +251,11 @@ public final class InitCommand {
             if (build == BuildSystem.MAVEN) {
                 return MavenBuild.canBeAddedTo(text) ? null : "cli.init.pom.unreadable";
             }
-            return GradleBuild.appliedIn(text) == GradleBuild.Applied.SOMEWHERE_ELSE
-                    ? "cli.init.gradle.elsewhere" : null;
+            return switch (GradleBuild.appliedIn(text)) {
+                case SOMEWHERE_ELSE -> "cli.init.gradle.elsewhere";
+                case UNTOLD -> "cli.init.gradle.unversioned";
+                case ALREADY, NOT_YET -> null;
+            };
         } catch (IOException e) {
             return build == BuildSystem.MAVEN ? "cli.init.pom.unreadable"
                     : "cli.init.gradle.elsewhere";
@@ -328,10 +334,16 @@ public final class InitCommand {
         String was = Files.readString(file);
         String now = build == BuildSystem.MAVEN
                 ? MavenBuild.withSoutherDeclared(was, project.southerVersion())
-                : GradleBuild.appliedIn(was) == GradleBuild.Applied.ALREADY ? was
-                        : GradleBuild.withThePluginApplied(was,
-                                GradleBuild.isKotlin(file.getFileName().toString()),
-                                project.southerVersion());
+                : switch (GradleBuild.appliedIn(was)) {
+                    case ALREADY -> was;
+                    case NOT_YET -> GradleBuild.withThePluginApplied(was,
+                            GradleBuild.isKotlin(file.getFileName().toString()),
+                            project.southerVersion());
+                    // Refused before anything was written (cannotBeAddedTo), so a script read as
+                    // either here changed under this command.
+                    case SOMEWHERE_ELSE, UNTOLD -> throw new IllegalStateException(
+                            file + " was refused and is being edited");
+                };
         if (now.equals(was)) {
             return new Line(Did.KEPT, display(here, file));
         }

@@ -272,8 +272,26 @@ class ABuildIsAddedToRatherThanRewrittenTest {
                 GradleBuild.appliedIn("plugins {\n    java\n}\n"));
         assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn("""
                 plugins {
-                    id("org.souther-lang.souther") version "0.1.0"
+                    id("org.souther-lang.souther") version "0.2.0"
                 }
+
+                souther {
+                    southerVersion = "0.4.0"
+                }
+                """));
+        // Applied, and nothing in the script says which Souther it compiles with: the plugin has
+        // no default, so a model added here would not build.
+        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn("""
+                plugins {
+                    id("org.souther-lang.souther") version "0.2.0"
+                }
+                """));
+        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn("""
+                plugins {
+                    id("org.souther-lang.souther") version "0.2.0"
+                }
+
+                // souther { southerVersion = "0.4.0" }
                 """));
         assertEquals(GradleBuild.Applied.SOMEWHERE_ELSE, GradleBuild.appliedIn("""
                 plugins {
