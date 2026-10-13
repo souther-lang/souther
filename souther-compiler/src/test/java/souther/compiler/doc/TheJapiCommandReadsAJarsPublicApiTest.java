@@ -306,6 +306,41 @@ class TheJapiCommandReadsAJarsPublicApiTest {
         assertFalse(listing.out().contains("acme.Secret"), "nor is the class listed: " + listing);
     }
 
+    @Test
+    void aClassFileThatIsALinkIsSuggestedWhereTheRunReadsThroughOneAndNotWhereItDoesNot()
+            throws Exception {
+        Path base = Files.createTempDirectory("japi-linked");
+        Path source = Files.createDirectories(base.resolve("src/acme")).resolve("Linked.java");
+        Files.writeString(source, """
+                package acme;
+
+                public final class Linked {
+                }
+                """);
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, OutputStream.nullOutputStream(),
+                OutputStream.nullOutputStream(), "-proc:none", "-d", base.resolve("built").toString(),
+                source.toString()));
+        Path workspace = Files.createDirectories(base.resolve("workspace"));
+        Path classes = Files.createDirectories(workspace.resolve("classes/acme"));
+        try {
+            Files.createSymbolicLink(classes.resolve("Linked.class"),
+                    base.resolve("built/acme/Linked.class"));
+        } catch (UnsupportedOperationException | java.io.IOException e) {
+            assumeTrue(false, "symbolic links cannot be made here: " + e);
+        }
+        String classPath = workspace.resolve("classes").toString();
+
+        Answer found = run("acme.Linked", "-cp", classPath);
+        Answer near = run("acme.Linkd", "-cp", classPath);
+        Answer confinedNear = runConfined(workspace, "acme.Linkd", "-cp", classPath);
+
+        // What a miss suggests is what asking for it would find: an open run reads the class
+        // through the link, and a confined one reads no link.
+        assertEquals(0, found.code(), found.err());
+        assertTrue(near.err().contains("acme.Linked"), near.err());
+        assertFalse(confinedNear.err().contains("acme.Linked"), confinedNear.err());
+    }
+
     /**
      * The types a source names are resolved by javac, which searches a class path with its own file
      * access. A confined run has to resolve them through the same confinement as everything else:

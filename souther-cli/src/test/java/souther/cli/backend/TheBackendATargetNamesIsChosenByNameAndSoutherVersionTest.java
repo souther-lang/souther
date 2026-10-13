@@ -135,6 +135,16 @@ class TheBackendATargetNamesIsChosenByNameAndSoutherVersionTest {
     }
 
     @Test
+    void aDirectoryNamedAsAJarIsNotOneEither(@TempDir Path dir) throws IOException {
+        Path named = Files.createDirectories(dir.resolve("b.jar"));
+
+        Backends.Refused said = refused(new Backends(List.of(dir)), "wasm");
+
+        assertEquals("cli.backend.descriptor", said.key());
+        assertArrayEquals(new Object[] {named}, said.arguments());
+    }
+
+    @Test
     void aLinkToAJarThatIsNotThereIsRefused(@TempDir Path dir) throws IOException {
         Path link = Files.createSymbolicLink(dir.resolve("wasm.jar"), dir.resolve("gone.jar"));
 

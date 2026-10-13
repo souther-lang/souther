@@ -7,12 +7,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
+import java.nio.file.FileVisitor;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
@@ -174,77 +175,177 @@ public final class ConfinedTree {
         Path directory = resolve(relative).getParent();
         while (directory != null && !directory.equals(root) && directory.startsWith(root)
                 && Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
-            try (var held = Files.list(directory)) {
-                if (held.findAny().isPresent()) {
-                    return;
-                }
+            if (Listing.anyIn(directory)) {
+                return;
             }
             Files.delete(directory);
             directory = directory.getParent();
         }
     }
 
-    /** What a walk reports. A link is reported and not followed. */
-    public interface Entries {
+    /**
+     * An entry a walk reached and could read, as what it is on disk, named relative to the root with
+     * {@code /} between components; the root itself is {@code ""}. A caller is handed one of these
+     * and says what each kind means to it, in a switch the compiler holds to every kind: a kind a
+     * caller was not asked about is a kind it passes over without knowing, which is how a {@code .sou}
+     * that was a directory was left out of a tree of sources.
+     */
+    public sealed interface Reached {
 
-        /** Every entry the walk visits, before it is looked at further. */
-        default void visited() {}
+        String relative();
 
-        /** A regular file, named relative to the root with {@code /} between components. */
-        void regularFile(String relative);
+        /** A regular file. */
+        record RegularFile(String relative) implements Reached {}
+
+        /** A directory, reported before what is in it; one the depth stops at is not gone into. */
+        record Directory(String relative) implements Reached {}
 
         /** A link, which the walk did not go through. */
-        default void link(String relative) {}
+        record Link(String relative) implements Reached {}
+
+        /** What is none of those: a pipe, a socket, a device. */
+        record Other(String relative) implements Reached {}
     }
 
     /**
-     * Walks the whole tree without following a link, visiting at most {@code mostEntries} entries.
-     * An entry that cannot be read is skipped.
+     * What a walk reports. A link is reported and not followed.
      *
-     * @return whether the walk reached the end of the tree rather than the limit
+     * <p>A walk that did not see the whole tree says so, and by default says so by throwing: a
+     * caller that answers "everything under the root" from a walk that skipped a directory it could
+     * not open answers with less than there is and does not know it. A caller for whom part of a tree
+     * is still an answer says so by overriding {@link #unreadable} or {@link #limitReached}, where
+     * the reader of that caller can see it.
      */
-    public boolean walk(long mostEntries, Entries entries) throws IOException {
-        boolean[] complete = {true};
-        long[] visited = {0};
+    public interface Entries {
+
+        /**
+         * Every entry the walk reaches, before it is looked at further — one it could not read
+         * among them. Where a caller is asked to stop, or runs out of what it may spend, this is
+         * where it says so.
+         */
+        default void visited() throws IOException {}
+
+        /** An entry the walk reached and could read. */
+        void reached(Reached entry) throws IOException;
+
+        /**
+         * An entry the walk could not look at or into, or a directory it stopped reading part way
+         * through, so whatever is below it was not all seen. The root itself is {@code ""}. Throws
+         * {@code cause} unless overridden; returning goes on with the rest of the tree.
+         */
+        default void unreadable(String relative, IOException cause) throws IOException {
+            throw cause;
+        }
+
+        /**
+         * The walk reached as many entries as it was allowed and stops there, so the rest of the
+         * tree was not seen. Throws {@code cause} unless overridden; returning ends the walk with
+         * what was reported.
+         */
+        default void limitReached(LimitExceededException cause) throws IOException {
+            throw cause;
+        }
+    }
+
+    /** As {@link #walk(long, int, Entries)}, to any depth. */
+    public void walk(long mostEntries, Entries entries) throws IOException {
+        walk(mostEntries, Integer.MAX_VALUE, entries);
+    }
+
+    /**
+     * Walks the tree without following a link, reaching at most {@code mostEntries} entries and
+     * going at most {@code deepest} directories down. An entry it could not read, a directory it
+     * could not read to the end, and reaching the limit are reported to {@code entries}, which
+     * throws for each unless it says otherwise.
+     *
+     * @throws NoSuchFileException when the root is not there, or is a link to nothing
+     * @throws NotDirectoryException when the root is not a directory
+     */
+    public void walk(long mostEntries, int deepest, Entries entries) throws IOException {
         // The root is the caller's own, so a link in the way to it is walked through; the walk
-        // starts from what it resolves to, which is the one place a link is followed.
-        Path start = Files.exists(root) ? root.toRealPath() : root;
-        Files.walkFileTree(start, EnumSet.noneOf(FileVisitOption.class), Integer.MAX_VALUE,
-                new SimpleFileVisitor<>() {
-                    @Override
-                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                        return count() ? FileVisitResult.CONTINUE : FileVisitResult.TERMINATE;
-                    }
+        // starts from what it resolves to, which is the one place a link is followed. What it
+        // resolves to is a tree only if it is a directory: a file or nothing at all is not an empty
+        // tree, and walked as one it would answer with nothing found.
+        Path start = root.toRealPath();
+        if (!Files.readAttributes(start, BasicFileAttributes.class).isDirectory()) {
+            throw new NotDirectoryException(root.toString());
+        }
+        Files.walkFileTree(start, EnumSet.noneOf(FileVisitOption.class), deepest,
+                new Walker(start, mostEntries, entries));
+    }
 
-                    @Override
-                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                        if (!count()) {
-                            return FileVisitResult.TERMINATE;
-                        }
-                        String relative = spelled(start, file);
-                        if (attrs.isSymbolicLink()) {
-                            entries.link(relative);
-                        } else if (attrs.isRegularFile()) {
-                            entries.regularFile(relative);
-                        }
-                        return FileVisitResult.CONTINUE;
-                    }
+    /**
+     * What a walk does at each of the four places {@link Files#walkFileTree} reaches it, every one
+     * written here: inherited, one of them would say nothing of an entry it could not read, or count
+     * none of what it reached.
+     */
+    static final class Walker implements FileVisitor<Path> {
 
-                    @Override
-                    public FileVisitResult visitFileFailed(Path file, IOException e) {
-                        return FileVisitResult.CONTINUE;
-                    }
+        private final Path start;
+        private final long mostEntries;
+        private final Entries entries;
+        private long reached;
 
-                    private boolean count() {
-                        entries.visited();
-                        if (++visited[0] > mostEntries) {
-                            complete[0] = false;
-                            return false;
-                        }
-                        return true;
-                    }
-                });
-        return complete[0];
+        Walker(Path start, long mostEntries, Entries entries) {
+            this.start = start;
+            this.mostEntries = mostEntries;
+            this.entries = entries;
+        }
+
+        @Override
+        public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
+                throws IOException {
+            if (!reach()) {
+                return FileVisitResult.TERMINATE;
+            }
+            entries.reached(new Reached.Directory(spelled(start, dir)));
+            return FileVisitResult.CONTINUE;
+        }
+
+        @Override
+        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+            if (!reach()) {
+                return FileVisitResult.TERMINATE;
+            }
+            String relative = spelled(start, file);
+            entries.reached(attrs.isSymbolicLink() ? new Reached.Link(relative)
+                    : attrs.isRegularFile() ? new Reached.RegularFile(relative)
+                    // One the depth stops at: reached, and not gone into.
+                    : attrs.isDirectory() ? new Reached.Directory(relative)
+                    : new Reached.Other(relative));
+            return FileVisitResult.CONTINUE;
+        }
+
+        @Override
+        public FileVisitResult visitFileFailed(Path file, IOException e) throws IOException {
+            if (!reach()) {
+                return FileVisitResult.TERMINATE;
+            }
+            entries.unreadable(spelled(start, file),
+                    new IOException("could not read " + file + ": " + e, e));
+            return FileVisitResult.CONTINUE;
+        }
+
+        @Override
+        public FileVisitResult postVisitDirectory(Path dir, IOException e) throws IOException {
+            // Reached already, on the way in. An error here is one met while reading what the
+            // directory holds, so what came after it in the directory was not seen.
+            if (e != null) {
+                entries.unreadable(spelled(start, dir),
+                        new IOException("could not read all of " + dir + ": " + e, e));
+            }
+            return FileVisitResult.CONTINUE;
+        }
+
+        private boolean reach() throws IOException {
+            entries.visited();
+            if (++reached > mostEntries) {
+                entries.limitReached(new LimitExceededException(
+                        "more than " + mostEntries + " entries under " + start));
+                return false;
+            }
+            return true;
+        }
     }
 
     private static String spelled(Path start, Path file) {

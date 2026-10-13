@@ -4,10 +4,10 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import souther.compiler.io.BoundedRead;
 import souther.compiler.io.ConfinedTree;
+import souther.compiler.io.LimitExceededException;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Abandonment;
 import java.util.ArrayList;
@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * The Souther sources of a workspace: the {@code .sou} files under the roots the client announced at
@@ -208,22 +207,47 @@ public final class Workspace {
             if (!Files.isDirectory(root)) {
                 continue;
             }
-            try (Stream<Path> walk = Files.walk(root, PROJECT_DEPTH)) {
-                // Asked of every path the walk reaches, and not of the ones that turn out to be
-                // projects. What costs time is the walk, and a root with no project in it is a root
-                // this would read to the end after being told to stop.
-                walk.forEach(project -> {
-                    abandonment.stopIfAsked();
-                    // A link is not a project, and a class output that is one is not read: the
-                    // repository is somebody else's, and where a link leads is not part of it.
-                    if (!Files.isDirectory(project, LinkOption.NOFOLLOW_LINKS)) {
-                        return;
+            ConfinedTree walked = ConfinedTree.at(root);
+            try {
+                walked.walk(BoundedRead.MOST_ENTRIES, PROJECT_DEPTH, new ConfinedTree.Entries() {
+                    // Asked of every entry the walk reaches, and not of the ones that turn out to
+                    // be projects. What costs time is the walk, and a root with no project in it
+                    // is a root this would read to the end after being told to stop.
+                    @Override
+                    public void visited() {
+                        abandonment.stopIfAsked();
                     }
-                    ConfinedTree tree = ConfinedTree.at(project);
-                    for (Path layout : CLASS_OUTPUTS) {
-                        if (tree.isDirectory(layout.toString())) {
-                            outputs.add(project.resolve(layout));
+
+                    // A project is a directory. A link is not one, and a class output that is one
+                    // is not read: the repository is somebody else's, and where a link leads is
+                    // not part of it.
+                    @Override
+                    public void reached(ConfinedTree.Reached entry) {
+                        switch (entry) {
+                            case ConfinedTree.Reached.Directory directory -> {
+                                Path project = walked.root().resolve(directory.relative());
+                                ConfinedTree tree = ConfinedTree.at(project);
+                                for (Path layout : CLASS_OUTPUTS) {
+                                    if (tree.isDirectory(layout.toString())) {
+                                        outputs.add(project.resolve(layout));
+                                    }
+                                }
+                            }
+                            case ConfinedTree.Reached.RegularFile _, ConfinedTree.Reached.Link _,
+                                 ConfinedTree.Reached.Other _ -> {
+                            }
                         }
+                    }
+
+                    // A directory the editor cannot open holds no project it could read, and the
+                    // rest of the workspace is still worth analysing; so is the part of one too
+                    // large to look through.
+                    @Override
+                    public void unreadable(String relative, IOException cause) {
+                    }
+
+                    @Override
+                    public void limitReached(LimitExceededException cause) {
                     }
                 });
             } catch (IOException _) {
@@ -260,12 +284,33 @@ public final class Workspace {
                         abandonment.stopIfAsked();
                     }
 
+                    // A source the editor reads is a regular file. One that is a link is not
+                    // followed out of the workspace, and one that is a directory or a pipe has no
+                    // text to analyse; an editor open on the rest is still worth more than none.
                     @Override
-                    public void regularFile(String relative) {
-                        if (relative.endsWith(SUFFIX)) {
-                            sources.put(tree.root().resolve(relative).toUri().toString(),
-                                    readOrEmpty(tree, relative));
+                    public void reached(ConfinedTree.Reached entry) {
+                        switch (entry) {
+                            case ConfinedTree.Reached.RegularFile file -> {
+                                if (file.relative().endsWith(SUFFIX)) {
+                                    sources.put(tree.root().resolve(file.relative()).toUri().toString(),
+                                            readOrEmpty(tree, file.relative()));
+                                }
+                            }
+                            case ConfinedTree.Reached.Directory _, ConfinedTree.Reached.Link _,
+                                 ConfinedTree.Reached.Other _ -> {
+                            }
                         }
+                    }
+
+                    // An editor is open on what it can read, so a directory it cannot open, or a
+                    // workspace beyond the bound, leaves the rest of it to be analysed rather than
+                    // none of it.
+                    @Override
+                    public void unreadable(String relative, IOException cause) {
+                    }
+
+                    @Override
+                    public void limitReached(LimitExceededException cause) {
                     }
                 });
             } catch (IOException e) {

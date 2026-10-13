@@ -4,6 +4,7 @@ import souther.compiler.io.BoundedRead;
 import souther.compiler.io.ConfinedTree;
 import souther.compiler.io.ConfinementException;
 import souther.compiler.io.LimitExceededException;
+import souther.compiler.io.Listing;
 import souther.compiler.io.WorkBudget;
 import souther.compiler.jvm.JvmClassName;
 import souther.compiler.check.Suggest;
@@ -102,6 +103,15 @@ public final class JapiCommand {
                 throw new ConfinementException("is not under " + root);
             }
             return absolute.equals(root) ? root : confinedTo.resolve(root.relativize(absolute).toString());
+        }
+
+        /**
+         * Whether {@code link}, a link found under an entry, leads to a file this disk reads: a run
+         * the caller opened reads through a link as any program would, and a confined one reads no
+         * link at all.
+         */
+        boolean readsThrough(Path link) {
+            return confinedTo == null && Files.isRegularFile(link);
         }
 
         byte[] read(Path file) throws IOException {
@@ -288,15 +298,36 @@ public final class JapiCommand {
             try {
                 Path at = entry.file();
                 if (Files.isDirectory(at)) {
-                    try (var files = Files.walk(at, DEEPEST_WALK)) {
-                        for (Iterator<Path> walked = files.iterator(); walked.hasNext();) {
-                            Path f = walked.next();
+                    ConfinedTree.at(at).walk(Long.MAX_VALUE, DEEPEST_WALK, new ConfinedTree.Entries() {
+                        @Override
+                        public void visited() throws LimitExceededException {
                             entry.work().spend(1);
-                            if (Files.isRegularFile(f)) {
-                                add(names, at.relativize(f).toString().replace(java.io.File.separatorChar, '/'));
+                        }
+
+                        // A name to suggest is one findClass would answer: a regular file, and a
+                        // link where this run's disk reads through one.
+                        @Override
+                        public void reached(ConfinedTree.Reached reached) {
+                            switch (reached) {
+                                case ConfinedTree.Reached.RegularFile file -> add(names, file.relative());
+                                case ConfinedTree.Reached.Link link -> {
+                                    if (entry.disk().readsThrough(at.resolve(link.relative()))) {
+                                        add(names, link.relative());
+                                    }
+                                }
+                                case ConfinedTree.Reached.Directory _, ConfinedTree.Reached.Other _ -> {
+                                }
                             }
                         }
-                    }
+
+                        // A directory below the entry that cannot be read is said, and the rest
+                        // is walked: a name to suggest may be among them, and looking for one is
+                        // not what may end the run. The work spent is what bounds the walk.
+                        @Override
+                        public void unreadable(String relative, IOException cause) {
+                            skipped.report(entry, cause);
+                        }
+                    });
                 } else if (Files.isRegularFile(at)) {
                     try (JarFile jar = openJar(entry, at); var all = jar.versionedStream()) {
                         for (Iterator<JarEntry> listed = all.iterator(); listed.hasNext();) {
@@ -307,12 +338,6 @@ public final class JapiCommand {
                 }
             } catch (IOException e) {
                 skipped.report(entry, e);
-            } catch (UncheckedIOException e) {
-                // A walk opens the directory it was handed straight away and every directory under
-                // it only on reaching it, so a failure below the entry arrives here rather than
-                // above. What was walked before it is kept: a name to suggest may already be among
-                // them, and looking for one is not what may end the run.
-                skipped.report(entry, e.getCause());
             }
         }
         return names.stream().distinct().toList();
@@ -412,12 +437,10 @@ public final class JapiCommand {
                     Path dir = entry.below(packageDirectory);
                     if (Files.isDirectory(dir)) {
                         List<String> names = new ArrayList<>();
-                        try (var files = Files.list(dir)) {
-                            for (Iterator<Path> listed = files.iterator(); listed.hasNext();) {
-                                entry.work().spend(1);
-                                names.add(listed.next().getFileName().toString());
-                            }
-                        }
+                        Listing.each(dir, listed -> {
+                            entry.work().spend(1);
+                            names.add(listed.getFileName().toString());
+                        });
                         for (String fileName : names) {
                             String simple = topLevelName(fileName);
                             if (simple != null
@@ -534,17 +557,15 @@ public final class JapiCommand {
                 if (!Files.isDirectory(dir)) {
                     return held;
                 }
-                try (var files = Files.list(dir)) {
-                    for (Iterator<Path> listed = files.iterator(); listed.hasNext();) {
-                        entry.work().spend(1);
-                        String name = listed.next().getFileName().toString();
-                        if (isClassFile(name)) {
-                            String relative = directory.isEmpty() ? name : directory + "/" + name;
-                            held.add(new Held(binaryNameOf(packageName, name),
-                                    () -> entry.disk().read(entry.below(relative))));
-                        }
+                Listing.each(dir, listed -> {
+                    entry.work().spend(1);
+                    String name = listed.getFileName().toString();
+                    if (isClassFile(name)) {
+                        String relative = directory.isEmpty() ? name : directory + "/" + name;
+                        held.add(new Held(binaryNameOf(packageName, name),
+                                () -> entry.disk().read(entry.below(relative))));
                     }
-                }
+                });
             } else if (Files.isRegularFile(at)) {
                 for (String name : indexOf(entry, at).getOrDefault(directory, List.of())) {
                     String resource = directory.isEmpty() ? name : directory + "/" + name;

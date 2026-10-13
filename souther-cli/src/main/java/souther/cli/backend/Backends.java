@@ -1,5 +1,7 @@
 package souther.cli.backend;
 
+import souther.compiler.io.Listing;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -136,10 +138,14 @@ public final class Backends {
             }
             return List.of();
         }
-        List<Path> entries;
-        try (var listing = Files.list(directory)) {
-            entries = listing.filter(entry -> entry.getFileName().toString().endsWith(".jar"))
-                    .sorted().toList();
+        List<Path> entries = new ArrayList<>();
+        try {
+            Listing.each(directory, entry -> {
+                if (entry.getFileName().toString().endsWith(".jar")) {
+                    entries.add(entry);
+                }
+            });
+            entries.sort(null);
         } catch (IOException e) {
             throw new Refused("cli.backend.directory", directory, e.getMessage());
         }
@@ -149,9 +155,12 @@ public final class Backends {
                 // Only a link can be here and name nothing; a regular file exists.
                 throw new Refused("cli.backend.link", entry);
             }
-            if (Files.isRegularFile(entry)) {
-                found.add(describe(entry));
+            if (!Files.isRegularFile(entry)) {
+                // Named as a backend and not a file: a directory or a pipe is a backend that is
+                // not what it was meant to be, as a file that is not a jar is, and is said.
+                throw new Refused("cli.backend.descriptor", entry);
             }
+            found.add(describe(entry));
         }
         return found;
     }
