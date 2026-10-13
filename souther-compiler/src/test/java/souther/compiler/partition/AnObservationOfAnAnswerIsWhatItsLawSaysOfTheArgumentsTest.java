@@ -333,6 +333,48 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
     }
 
     /**
+     * Characters of a string an operation made hold a code point that is not whitespace where
+     * that string does, and so where the string the operation was handed does, wherever the
+     * operation keeping that stands: before the string is taken into characters, or between
+     * putting them back together and cutting that into words.
+     */
+    @Test
+    void charactersOfAStringAnOperationMadeHoldWhatTheOperationKeeps() {
+        Proposition words = stated("if String.length(String.join(\"-\", String.words(String.concat("
+                + "String.characters(b.s))))) >= 1 then 1 else 0");
+        assertNull(Proposition.firstStopIn(words), words.toString());
+        for (String made : List.of("String.lowercase", "String.uppercase", "String.trim")) {
+            assertEquals(words, stated("if String.length(String.join(\"-\", String.words("
+                    + "String.concat(String.characters(" + made + "(b.s)))))) >= 1 then 1 else 0"),
+                    made + " before the characters");
+            assertEquals(words, stated("if String.length(String.join(\"-\", String.words("
+                    + made + "(String.concat(String.characters(b.s)))))) >= 1 then 1 else 0"),
+                    made + " after the characters");
+        }
+    }
+
+    /**
+     * Some character of a string an operation made meeting what every code point meets is that
+     * string holding something, read as the operation's law says it: a string lowercased or
+     * uppercased holds something where the string does, though it is not as long, and one trimmed
+     * where the string holds something that is not whitespace.
+     */
+    @Test
+    void someCharacterOfAStringAnOperationMadeIsThatStringHoldingSomething() {
+        String anyCharacter = "if List.any(c -> String.matches(\"[^a]\", c)"
+                + " || String.matches(\"a\", c), String.characters(%s)) then 1 else 0";
+        Proposition ofTheString = stated(anyCharacter.formatted("b.s"));
+        assertNull(Proposition.firstStopIn(ofTheString), ofTheString.toString());
+        for (String made : List.of("String.lowercase", "String.uppercase")) {
+            assertEquals(ofTheString, stated(anyCharacter.formatted(made + "(b.s)")), made);
+        }
+        Proposition trimmed = stated(anyCharacter.formatted("String.trim(b.s)"));
+        assertNull(Proposition.firstStopIn(trimmed), trimmed.toString());
+        assertEquals(stated("if Bool.not(String.isEmpty(String.trim(b.s))) then 1 else 0"),
+                trimmed);
+    }
+
+    /**
      * Characters of a string lowercased are not characters of a string at a position: the case
      * mapping, and the composition after it, can take a letter the pattern accepts into one it
      * does not — {@code J} before a combining caron is {@code ǰ} once lowercased — so which code
