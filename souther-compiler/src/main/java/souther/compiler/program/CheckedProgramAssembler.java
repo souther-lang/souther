@@ -1,5 +1,7 @@
 package souther.compiler.program;
 
+import souther.compiler.CompilationSources;
+import souther.compiler.Compiler;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
@@ -39,7 +41,6 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
 import souther.compiler.observe.StoodIn;
 import souther.compiler.observe.ValueTypes;
-import souther.compiler.query.Acceptance;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Compositions;
@@ -79,12 +80,13 @@ final class CheckedProgramAssembler {
 
     private CheckedProgramAssembler() {}
 
-    static CheckedProgram of(List<String> sources, ModulePath path) {
-        Compilation compilation = Compilation.ofSources(sources, path);
-        // The language's verdict, asked where a batch compile asks it. Stopping at the check would
-        // make this the one reading that accepts a program with a row that disagrees — and an
-        // output built on it would ship an artifact for what another output refuses to build.
-        Acceptance.of(compilation);
+    static CheckedProgram of(CompilationSources sources, ModulePath path) {
+        // The language's verdict, asked by the batch compile itself rather than restated here.
+        // Stopping at the check would make this the one reading that accepts a program with a row
+        // that disagrees, and building the compilation apart from it would make this the one that
+        // names a lone file differently — and an output built on either would ship an artifact for
+        // what another output refuses to build.
+        Compilation compilation = Compiler.compiled(sources, path, new ArrayList<>());
         Db db = compilation.db();
         List<CheckedData> language = languageDataOf(db);
         List<CheckedData> onThePath = declaredOnThePath(db);

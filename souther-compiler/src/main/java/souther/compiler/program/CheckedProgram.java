@@ -1,5 +1,6 @@
 package souther.compiler.program;
 
+import souther.compiler.CompilationSources;
 import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.AbortSites;
 import souther.compiler.core.Core;
@@ -236,6 +237,21 @@ public final class CheckedProgram {
      * @throws souther.compiler.diag.CompileException where the program did not check
      */
     public static CheckedProgram of(List<String> sources, ModulePath path) {
+        return of(CompilationSources.modules(sources), path);
+    }
+
+    /**
+     * Checks {@code sources} as a command handed them over, resolving an import that names none of
+     * them against {@code path}.
+     *
+     * <p>The sources are what a lone header-less file is named by and what a report about one is
+     * quoted from, so a caller that compiles files hands over the files: a lone one with no header
+     * is the module its file names, as it is to {@code souther compile}, and a refusal is quoted with
+     * {@link CompilationSources#contexts()} from the texts that were checked.
+     *
+     * @throws souther.compiler.diag.CompileException where the program did not check
+     */
+    public static CheckedProgram of(CompilationSources sources, ModulePath path) {
         return CheckedProgramAssembler.of(sources, path);
     }
 
