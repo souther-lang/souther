@@ -95,9 +95,14 @@ public record Settlements(List<ObligationIdentity> requested,
      * ({@link ItemAssessment.Attempt.Unverified}), so a walk that took its input from the reading
      * alone had nothing to name for exactly the rows the second half of {@code offers} keeps.
      *
-     * <p>The row composed for the line first, where the reduction kept it, and otherwise whichever
-     * kept row settles it — in the order the rows are offered, which is the order a person reads
-     * them in.
+     * <p><b>A kept row shown to settle the line first, and the row composed for it only where none
+     * is.</b> Which row a line was composed for is how the row came to be asked for, and never what
+     * it was read back to do: several rows are composed for one line, one of them may come back
+     * unread or arrive somewhere that settles nothing and be kept for another item, and shown first
+     * for that it would name an input that does not rule the line out while the row that does is
+     * handed over beside it. So the order is the one {@link #offers} keeps — a row that settles the
+     * item, and the row composed for it where nothing settles it — and of the rows that settle it,
+     * the one composed for it before the rest, then the rest in the order a person reads them.
      *
      * <p>Empty for a line no kept row is offered for, which is a line the block says nothing offers
      * a row for. What is shown then is what the measurement saw, and that is the measurement's to
@@ -107,8 +112,9 @@ public record Settlements(List<ObligationIdentity> requested,
         Map<ObligationIdentity, InputOfARowForALine> out = new LinkedHashMap<>();
         for (ObligationIdentity item : requested) {
             RowKey composed = composedFor.get(item);
+            boolean composedKept = composed != null && kept.contains(composed);
             InputOfARowForALine at = null;
-            if (composed != null && kept.contains(composed)) {
+            if (composedKept && byRow.get(composed).get(item).settles()) {
                 at = composedAt.get(item);
             } else {
                 for (RowKey rowKey : byRow.keySet()) {
@@ -116,6 +122,12 @@ public record Settlements(List<ObligationIdentity> requested,
                         at = standsAt.getOrDefault(rowKey, Map.of()).get(item);
                         break;
                     }
+                }
+                // Nothing kept is shown to settle it, and the row composed for it is what a person
+                // was offered there — the one piece of work anybody was handed, whether or not its
+                // reading could tell.
+                if (at == null && composedKept) {
+                    at = composedAt.get(item);
                 }
             }
             if (at != null) {
