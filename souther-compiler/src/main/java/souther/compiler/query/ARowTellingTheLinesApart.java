@@ -26,7 +26,8 @@ import java.util.Optional;
  * <p>Beside the points of the border rather than among them. A row at a point shows the line has
  * not moved; this one shows it has not turned, which takes an input the two lines answer
  * differently at — so it is looked for under a condition the points know nothing about
- * ({@link AnotherLineTheRowsAllow.OneDoes#tellingThemApart}) and comes back as its own answer.
+ * ({@link AnotherLineTheRowsAllow.Stands#onTheRefusedSide},
+ * {@link AnotherLineTheRowsAllow.Stands#onTheKeptSide}) and comes back as its own answer.
  *
  * <p><b>One answer per line of the family standing, at each reading.</b> A row ruling one of them
  * out need not rule out another, so each is looked for on its own and kept under the line it is for

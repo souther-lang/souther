@@ -120,7 +120,8 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
     }
 
     /**
-     * Whether a row whose positions read as {@code values} satisfies the rule that drew this.
+     * Whether a row whose positions read as {@code values} satisfies the rule that drew this, or why
+     * its sum could not be worked out.
      *
      * <p>Asked of the numbers rather than of the row, so that the same question can be put to a
      * direction nobody wrote. Where a row's value falls is the seam's answer and which side satisfies
@@ -128,15 +129,11 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
      * {@code n <= 100} and {@code n > 100} part the values in one place and are satisfied on
      * opposite sides of it.
      */
-    public boolean satisfiedBy(Map<NumericTerm, Place> values) {
-        ExactRatio at = along(direction().direction(), values).orNull();
-        // A row whose sum this cannot hold satisfies nothing this can tell, and this method has no
-        // word of its own for that — every caller that reads a boundary as satisfied or not is
-        // reading a question that answers with less than a boolean where the sum could not be worked
-        // out, and this is the one shape here without room to say so. Read false, which is the answer
-        // that keeps the row out of the part it would have been sorted into, rather than one this
-        // compiler is not entitled to.
-        return at != null && seam.sideOf(at) == satisfiedOn;
+    public ExactAnswer<Boolean> satisfies(Map<NumericTerm, Place> values) {
+        // Three answers and not two. A row whose sum the exact arithmetic cannot hold is neither
+        // kept nor refused as far as this can tell, and read as either it is evidence nobody
+        // established: read as refused, a row the model keeps would rule out a line beside this one.
+        return along(direction().direction(), values).map(at -> seam.sideOf(at) == satisfiedOn);
     }
 
     /**

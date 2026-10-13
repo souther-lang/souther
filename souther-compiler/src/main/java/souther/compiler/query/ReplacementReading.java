@@ -111,8 +111,9 @@ public final class ReplacementReading {
     /**
      * Every rewrite of {@code behavior}'s body {@code plan} can put to a row, and what {@code rows}
      * came to about each: the siblings of each arm a row stating its answer went through, by
-     * {@code wentThrough}, in the order the plan numbered the arms, or, where the body has no arm,
-     * the body answering each value a row stating its answer came to.
+     * {@code wentThrough}, in the order the plan numbered the arms, or, where no arm of the body has
+     * a rewrite that is another program, the body answering each value a row stating its answer
+     * came to.
      *
      * <p>Only the arms a row reaches. What a rewrite of an arm asks is whether a row going through
      * it depends on what it answers, which is a question about the rows that go through it. The arms
@@ -148,25 +149,28 @@ public final class ReplacementReading {
         }
         List<Account> out = new ArrayList<>();
         Map<Replacement.OfAnArm, Occurrences> occurrences = new LinkedHashMap<>();
+        // Whether some arm of the body has a rewrite that is another program, which is what makes
+        // the body one with a fork as far as a rewrite goes: a fork every rewrite of which the
+        // source and the rules prove is the body under another spelling invites none, and the body
+        // is then asked about as one with no fork. Settled by the body and the rules, and never by
+        // which arms the rows stating an answer reached.
+        boolean forked = false;
         for (CoverageSites.ArmSite site : plan.arms(behavior)) {
-            if (site.place().probe().isEmpty() || !reached.contains(site.place().probe().get())) {
+            if (site.place().probe().isEmpty()) {
                 continue;
             }
-            ArmProbe probe = site.place().probe().get();
-            ReplacementReportAnchor reportAt = ReplacementReportAnchor.ofAnArm(site.anchor());
             List<ArmReplacements.AtSite> sites =
                     carried.ofArm(site.obligation().origin(), site.obligation().part());
-            Set<Integer> withs = new TreeSet<>();
-            sites.forEach(at -> withs.addAll(at.siblings().keySet()));
+            List<Integer> withs = otherPrograms(sites, unreached);
+            forked = forked || !withs.isEmpty();
+            ArmProbe probe = site.place().probe().get();
+            if (!reached.contains(probe)) {
+                continue;
+            }
+            ReplacementReportAnchor reportAt = ReplacementReportAnchor.ofAnArm(site.anchor());
             for (int with : withs) {
                 Replacement.OfAnArm replaced = new Replacement.OfAnArm(
                         site.obligation().origin(), site.obligation().part(), with);
-                // The rewrite stands at every site of the arm at once, so it is the body under
-                // another spelling only where it is at each of them.
-                if (sites.stream().allMatch(at -> !at.siblings().containsKey(with)
-                        || at.siblings().get(with).differs().provenAway(unreached))) {
-                    continue;
-                }
                 Occurrences at = occurrences.computeIfAbsent(replaced,
                         _ -> new Occurrences(reportAt, new ArrayList<>()));
                 // One fork is in a source this compilation holds or it is not, whichever call
@@ -181,17 +185,39 @@ public final class ReplacementReading {
         }
         occurrences.forEach((replaced, at) -> out.add(new Account(replaced, at.reportAt(),
                 armStanding(replaced, at.probes(), carried, stated, wentThrough))));
-        // One answer only where the body has no arm. Which family a body invites is the body's:
-        // one with a fork is asked about the fork, arm by arm, whichever of its arms the rows
-        // stating an answer happen to reach — read off what they reached instead, a body every row
-        // of which is waiting for its answer would be asked as though it had no fork, and its
-        // answers so far would be called rewrites. And not where the body answers one value
-        // already: every way to an answer that reads something, or that is another answer, closed
-        // by the rules.
-        if (plan.arms(behavior).isEmpty() && !plan.fromOneValue(behavior).provenAway(unreached)) {
+        // One answer only where no arm has a rewrite that is another program. Which family a body
+        // invites is the body's: one with a fork is asked about the fork, arm by arm, whichever of
+        // its arms the rows stating an answer happen to reach — read off what they reached
+        // instead, a body every row of which is waiting for its answer would be asked as though it
+        // had no fork, and its answers so far would be called rewrites. And not where the body
+        // answers one value already: every way to an answer that reads something, or that is
+        // another answer, closed by the rules.
+        if (!forked && !plan.fromOneValue(behavior).provenAway(unreached)) {
             out.addAll(oneAnswerAccounts(stated, comparing));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The siblings an arm at {@code sites} can be rewritten as that are other programs, in the
+     * order of their parts.
+     *
+     * <p>A rewrite stands at every site of the arm at once, so it is the body under another
+     * spelling only where it is at each of them: where every site either lacks the sibling or has
+     * it proven to part from the arm only on ways {@code unreached} answers for.
+     */
+    private static List<Integer> otherPrograms(List<ArmReplacements.AtSite> sites,
+                                               Predicate<ControlPlace.Arm> unreached) {
+        Set<Integer> withs = new TreeSet<>();
+        sites.forEach(at -> withs.addAll(at.siblings().keySet()));
+        List<Integer> out = new ArrayList<>();
+        for (int with : withs) {
+            if (!sites.stream().allMatch(at -> !at.siblings().containsKey(with)
+                    || at.siblings().get(with).differs().provenAway(unreached))) {
+                out.add(with);
+            }
+        }
+        return out;
     }
 
     /**

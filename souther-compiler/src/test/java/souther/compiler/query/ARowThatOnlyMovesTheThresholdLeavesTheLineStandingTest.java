@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.partition.Border;
@@ -22,7 +23,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -68,9 +68,9 @@ class ARowThatOnlyMovesTheThresholdLeavesTheLineStandingTest {
 
         // Kept by the model, and one step past the near end along the line beside it.
         Map<NumericTerm, Place> inside = at(border, -1, -2);
-        assertTrue(drawn(border).satisfiedBy(inside), "the model keeps it");
+        assertTrue(keeps(drawn(border), inside), "the model keeps it");
 
-        assertFalse(before.ruledOutBy(true, inside),
+        assertEquals(ExactAnswer.held(false), before.ruledOutBy(drawn(border), inside),
                 () -> "a kept row inside the range does not rule the line out: " + inside);
         // And the measurement says the same with the row written: the line still stands, at the
         // row it was moved to, as the same obligation.
@@ -88,8 +88,8 @@ class ARowThatOnlyMovesTheThresholdLeavesTheLineStandingTest {
 
         // Kept by the model and at 5 along the line beside it, which is where the refused row is.
         Map<NumericTerm, Place> atTheFarEnd = at(border, -5, -10);
-        assertTrue(drawn(border).satisfiedBy(atTheFarEnd), "the model keeps it");
-        assertTrue(before.ruledOutBy(true, atTheFarEnd),
+        assertTrue(keeps(drawn(border), atTheFarEnd), "the model keeps it");
+        assertEquals(ExactAnswer.held(true), before.ruledOutBy(drawn(border), atTheFarEnd),
                 () -> "no threshold keeps it and refuses the row at the same place: " + atTheFarEnd);
         assertInstanceOf(AnotherLineTheRowsAllow.RuledOut.class,
                 line(border, with(border, KEPT_BELOW, atTheFarEnd)),
@@ -120,6 +120,42 @@ class ARowThatOnlyMovesTheThresholdLeavesTheLineStandingTest {
                 open.why(), "and what stopped it is the arithmetic");
     }
 
+    /**
+     * A row whose sum on the model's own line the arithmetic cannot hold is on neither side of it,
+     * and so rules no line out — however well its sum along the line beside it is held.
+     *
+     * <p>{@code -x} is the line of the family weighing {@code y} one less, so it reads nothing of
+     * {@code y}. The rows leave it standing: along it the rows the model keeps reach {@code 0} and
+     * the one it refuses is at {@code 1}. The row added holds a tenth to a power near the end of
+     * the range at {@code y}: the model keeps it, since {@code -2 + y} is below nought, and no sum
+     * the arithmetic holds says so. Along {@code -x} it is at {@code -1}, within reach of the rows
+     * the model keeps — so read as refused, as a yes-or-no reading of the model's side reads a sum
+     * it cannot hold, it would rule the line out.
+     */
+    @Test
+    void aRowWhoseSideOfTheModelsLineCannotBeHeldRulesNothingOut() {
+        Border border = TheLinesBesideABorder.aLineOverTwoPositions();
+        int[][] rows = {{0, 0}, {2, 4}, {-1, 5}};
+        AnotherLineTheRowsAllow.Direction before = line(border, rowsOf(border, rows), "-x");
+        AnotherLineTheRowsAllow.Stands standing = assertInstanceOf(
+                AnotherLineTheRowsAllow.Stands.class, before, "the rows leave -x standing");
+
+        Map<NumericTerm, Place> unplaced = at(border, 1, 0);
+        unplaced.replaceAll((term, place) -> term.toString().equals(lastTerm(border))
+                ? Count.of(new BigDecimal(BigInteger.ONE, 1 << 30)) : place);
+        assertInstanceOf(ExactAnswer.Unheld.class, drawn(border).satisfies(unplaced),
+                "which side of the model's line it is on is not held");
+
+        assertInstanceOf(ExactAnswer.Unheld.class, standing.ruledOutBy(drawn(border), unplaced),
+                "an offered row this cannot place is not said to rule the line out");
+        AnotherLineTheRowsAllow.Undecided after = assertInstanceOf(
+                AnotherLineTheRowsAllow.Undecided.class,
+                line(border, with(border, rows, unplaced), "-x"),
+                "and with it written the line is undecided, not ruled out");
+        assertInstanceOf(AnotherLineTheRowsAllow.Unsettled.TheLineWasNotWorkedOut.class,
+                after.why(), "for the arithmetic");
+    }
+
     /** One rule, asked by the generation and by the measurement, on either side the line keeps. */
     @Test
     void whatRulesTheLineOutIsWhatTheMeasurementSaysOfTheRowsWithItWritten() {
@@ -135,8 +171,8 @@ class ARowThatOnlyMovesTheThresholdLeavesTheLineStandingTest {
         for (int x = -8; x <= 16; x++) {
             for (int y = -16; y <= 30; y++) {
                 Map<NumericTerm, Place> candidate = at(border, x, y);
-                boolean kept = drawn.satisfiedBy(candidate);
-                boolean says = before.ruledOutBy(kept, candidate);
+                boolean kept = keeps(drawn, candidate);
+                boolean says = before.ruledOutBy(drawn, candidate).orFail("a whole row's sums");
                 boolean measured = line(border, with(border, rows, candidate))
                         instanceof AnotherLineTheRowsAllow.RuledOut;
                 assertEquals(measured, says, () -> "at " + candidate + " beside " + before);
@@ -165,22 +201,41 @@ class ARowThatOnlyMovesTheThresholdLeavesTheLineStandingTest {
     /** What the measurement says about the line of the family weighing {@code x} one more. */
     private static AnotherLineTheRowsAllow.Direction line(Border border,
                                                           List<Map<NumericTerm, Place>> rows) {
+        return line(border, rows, WEIGHING_X_ONE_MORE);
+    }
+
+    /** What the measurement says about the line of the family spelled {@code spelled}. */
+    private static AnotherLineTheRowsAllow.Direction line(Border border,
+                                                          List<Map<NumericTerm, Place>> rows,
+                                                          String spelled) {
         AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(border, true,
                 () -> new StandingAtAPoint.RowsRead(rows, Set.of(),
                         StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
                 List.of(), WayToTheBorder.UNTOUCHED, _ -> false);
         for (AnotherLineTheRowsAllow.Direction each : assertInstanceOf(
                 AnotherLineTheRowsAllow.ByDirection.class, said).each()) {
-            if (OrderedAffineBoundary.spelled(each.direction().direction())
-                    .equals(WEIGHING_X_ONE_MORE)) {
+            if (OrderedAffineBoundary.spelled(each.direction().direction()).equals(spelled)) {
                 return each;
             }
         }
-        throw new AssertionError(WEIGHING_X_ONE_MORE + " is a line of the family: " + said);
+        throw new AssertionError(spelled + " is a line of the family: " + said);
     }
 
     private static OrderedAffineBoundary drawn(Border border) {
         return OrderedAffineBoundary.of(border).orFail("a line worked out").orElseThrow();
+    }
+
+    /** Whether the model's line is shown to keep a row. */
+    private static boolean keeps(OrderedAffineBoundary drawn, Map<NumericTerm, Place> row) {
+        return Boolean.TRUE.equals(drawn.satisfies(row).orNull());
+    }
+
+    /** The name of the second of the two terms the line is over, which is {@code y}. */
+    private static String lastTerm(Border border) {
+        List<NumericTerm> terms = new ArrayList<>(
+                ((LinearQuantity) border.cut().of()).direction().coefs().keySet());
+        terms.sort(Comparator.comparing(NumericTerm::toString));
+        return terms.get(1).toString();
     }
 
     private static List<Map<NumericTerm, Place>> with(Border border, int[][] rows,

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.check.Sig;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.Place;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BorderObligationPoint;
@@ -1094,12 +1095,20 @@ public record Settlements(List<ObligationIdentity> requested,
                                 ? Settlement.Reason.NO_ACCOUNT_OF_THE_RUN
                                 : Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ), null);
             }
+            boolean unheld = false;
             for (Map<NumericTerm, Place> values : read.each()) {
                 // Whether it leaves no threshold on the line standing beside the rows already
                 // read, and not whether it answers the line at its current threshold differently.
                 // A row the model keeps between the two ends of the range does the second and not
                 // the first: the line moves to it, and the next run finds the same line standing.
-                if (one.beside().ruledOutBy(one.drawn().satisfiedBy(values), values)) {
+                // Where the arithmetic could not say, the row is one nothing here can tell about —
+                // neither settling the line nor shown to leave it.
+                ExactAnswer<Boolean> rules = one.beside().ruledOutBy(one.drawn(), values);
+                if (rules instanceof ExactAnswer.Unheld<Boolean>) {
+                    unheld = true;
+                    continue;
+                }
+                if (((ExactAnswer.Held<Boolean>) rules).value()) {
                     // Where it rules the line out, kept beside the answer. What a person is shown
                     // for this line is where the row they are handed stands, and that is this —
                     // worked out again by whoever shows it, it would be a second reading of the
@@ -1108,7 +1117,11 @@ public record Settlements(List<ObligationIdentity> requested,
                             new InputOfARowForALine(one.reading().border(), values));
                 }
             }
-            return new ToldApartAt(new Settlement.DoesNotSettle(), null);
+            // A value the arithmetic could not place is a value read short of where it falls,
+            // which is the word a reading short of a value already answers in.
+            return new ToldApartAt(unheld
+                    ? new Settlement.Undetermined(Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ)
+                    : new Settlement.DoesNotSettle(), null);
         }
 
         /**

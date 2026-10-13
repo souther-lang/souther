@@ -215,7 +215,7 @@ public sealed interface AnotherLineTheRowsAllow {
                     : Collections.unmodifiableMap(new LinkedHashMap<>(tellsApartAt));
         }
 
-        Stands(Ends ends, Map<NumericTerm, Place> tellsApartAt) {
+        private Stands(Ends ends, Map<NumericTerm, Place> tellsApartAt) {
             this(ends.direction(), ends.kept(), ends.refused(), ends.keptOn(), tellsApartAt);
         }
 
@@ -224,17 +224,19 @@ public sealed interface AnotherLineTheRowsAllow {
         }
 
         /**
-         * Whether a row whose positions read as {@code values}, kept by the model where {@code
-         * modelKeeps}, leaves no threshold on this line standing beside the rows already read.
+         * Whether a row whose positions read as {@code values} leaves no threshold on this line
+         * standing beside the rows already read, with {@code drawn} the model's own line — or why
+         * that could not be worked out.
          *
          * <p>The rows already read with this one added, and asked the question they were asked:
          * the same fold, so that a row offered for the line and the rows that left it standing are
-         * held to one rule. A sum the exact arithmetic cannot hold is a row this cannot say rules
-         * the line out, and is read false rather than as a claim this compiler is not entitled to.
+         * held to one rule. Which side of the model's line the row is on is read here and nowhere
+         * else, from the line itself: handed in as a yes or no, a sum the exact arithmetic could not
+         * hold came in as a no, and a row the model keeps ruled the line out as one it refuses.
          */
-        public boolean ruledOutBy(boolean modelKeeps, Map<NumericTerm, Place> values) {
-            return ends().with(modelKeeps, values) instanceof ExactAnswer.Held<Ends> held
-                    && !held.value().apart();
+        public ExactAnswer<Boolean> ruledOutBy(OrderedAffineBoundary drawn,
+                                               Map<NumericTerm, Place> values) {
+            return ends().with(drawn, values).map(after -> !after.apart());
         }
 
         /**
@@ -327,11 +329,19 @@ public sealed interface AnotherLineTheRowsAllow {
                 return new Ends(direction, keptOn, null, null);
             }
 
-            /** These ends with a row whose positions read as {@code values} folded in, or why its
-             *  sum along the line could not be held. */
-            ExactAnswer<Ends> with(boolean modelKeeps, Map<NumericTerm, Place> values) {
-                return OrderedAffineBoundary.along(direction.direction(), values)
-                        .map(at -> withAt(modelKeeps, at));
+            /**
+             * These ends with a row whose positions read as {@code values} folded in, on the side
+             * of {@code drawn} — the model's own line — that it falls; or why either sum, the
+             * model's or this line's, could not be held.
+             *
+             * <p>Both read here. Which side of the model's line a row is on is half of what the row
+             * says about this one, and a fold handed that half by its caller is a fold that takes
+             * whatever the caller made of a sum it could not hold.
+             */
+            ExactAnswer<Ends> with(OrderedAffineBoundary drawn, Map<NumericTerm, Place> values) {
+                return drawn.satisfies(values).flatMap(modelKeeps ->
+                        OrderedAffineBoundary.along(direction.direction(), values)
+                                .map(at -> withAt(modelKeeps, at)));
             }
 
             /** The same, for a row already read as how far along the line it is. */
@@ -714,18 +724,29 @@ public sealed interface AnotherLineTheRowsAllow {
         // every question above is about the line alone — so a border with no line beside it, which
         // is every bound on a position, pays nothing for being asked.
         StandingAtAPoint.RowsRead rows = read.get();
+        // The rows on each side, for the steps an input is named by. A row whose sum on the model's
+        // own line could not be held is on neither: the fold below meets it again and says what it
+        // leaves undecided.
         List<Map<NumericTerm, Place>> satisfying = new ArrayList<>();
         List<Map<NumericTerm, Place>> refusing = new ArrayList<>();
+        UnheldNumber sideNotHeld = null;
         for (Map<NumericTerm, Place> values : rows.each()) {
-            (boundary.satisfiedBy(values) ? satisfying : refusing).add(values);
+            switch (boundary.satisfies(values)) {
+                case ExactAnswer.Held<Boolean> side ->
+                        (side.value() ? satisfying : refusing).add(values);
+                case ExactAnswer.Unheld<Boolean> unheld -> sideNotHeld = unheld.why();
+            }
         }
         // No row the rule keeps, so there is nothing a threshold on any other line has to keep, and
         // the tightest one there is falls below every row instead of at one of them — which is a
         // place this cannot name without a step of the other line's own. Where the rows are all on
         // the kept side the tightest threshold is the furthest of them, so that side is answered
-        // below like any other.
+        // below like any other. And where a row this could not place may be the one the rule keeps,
+        // that is what is not known.
         if (satisfying.isEmpty()) {
-            return new CouldNotTell(new Unsettled.TheRowsAreAllOnOneSide());
+            return new CouldNotTell(sideNotHeld != null
+                    ? new Unsettled.TheLineWasNotWorkedOut(sideNotHeld)
+                    : new Unsettled.TheRowsAreAllOnOneSide());
         }
         List<Direction> each = new ArrayList<>();
         for (QuantityKey other : family) {
@@ -771,10 +792,10 @@ public sealed interface AnotherLineTheRowsAllow {
      * has to be refused, so the threshold is short of the nearest of those. Where the first is not
      * short of the second there is nowhere to put it, and the rows have told the two lines apart.
      *
-     * <p>A row whose sum along the line the exact arithmetic cannot hold is left out of the fold and
-     * remembered. Ruled out without it, the line is ruled out — a row read leaves fewer lines
-     * standing, never more — and otherwise that row is what leaves the line undecided, and never
-     * what rules it out.
+     * <p>A row the exact arithmetic cannot hold — its sum on the model's own line, which says which
+     * side it is on, or its sum along this one — is left out of the fold and remembered. Ruled out
+     * without it, the line is ruled out — a row read leaves fewer lines standing, never more — and
+     * otherwise that row is what leaves the line undecided, and never what rules it out.
      */
     private static Direction assessed(OrderedAffineBoundary boundary, QuantityKey other,
                                       StandingAtAPoint.RowsRead rows,
@@ -785,14 +806,8 @@ public sealed interface AnotherLineTheRowsAllow {
                                       Predicate<Map<NumericTerm, Place>> refused) {
         Stands.Ends ends = Stands.Ends.none(other, boundary.satisfiedOn());
         UnheldNumber notHeld = null;
-        for (Map<NumericTerm, Place> values : satisfying) {
-            switch (ends.with(true, values)) {
-                case ExactAnswer.Held<Stands.Ends> held -> ends = held.value();
-                case ExactAnswer.Unheld<Stands.Ends> unheld -> notHeld = unheld.why();
-            }
-        }
-        for (Map<NumericTerm, Place> values : refusing) {
-            switch (ends.with(false, values)) {
+        for (Map<NumericTerm, Place> values : rows.each()) {
+            switch (ends.with(boundary, values)) {
                 case ExactAnswer.Held<Stands.Ends> held -> ends = held.value();
                 case ExactAnswer.Unheld<Stands.Ends> unheld -> notHeld = unheld.why();
             }
@@ -977,13 +992,14 @@ public sealed interface AnotherLineTheRowsAllow {
      * behavior answers there, so an author writing the row sees the two lines part company; where
      * they are not, the two still part company at the line and a rule that has already decided
      * covers it over. Both are inputs the two lines answer differently at, which is what the
-     * sentence says — this only decides which of them is worth naming.
+     * sentence says — this only decides which of them is worth naming. So a line whose sum at the
+     * input could not be held is one not shown to keep it, and the input is merely not preferred.
      */
     private static boolean keptByTheOthers(List<OrderedAffineBoundary> elsewhere,
                                            Map<NumericTerm, Place> at) {
         for (OrderedAffineBoundary each : elsewhere) {
             if (at.keySet().containsAll(each.direction().direction().keySet())
-                    && !each.satisfiedBy(at)) {
+                    && !Boolean.TRUE.equals(each.satisfies(at).orNull())) {
                 return false;
             }
         }

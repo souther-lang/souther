@@ -9,8 +9,10 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -126,10 +128,15 @@ class ALineWhoseRefusedSideTheRulesLeaveEmptyIsOwedNoLineBesideItTest {
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    /** Each model measured once, whichever of its document and its report is read. */
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+
     private static Compilation measured(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return MEASURED.computeIfAbsent(model, source -> {
+            Compilation compilation = Compilation.ofSource(source, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            return compilation;
+        });
     }
 }

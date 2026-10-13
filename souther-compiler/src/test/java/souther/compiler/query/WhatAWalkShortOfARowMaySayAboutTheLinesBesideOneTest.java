@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.Place;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Demand;
@@ -22,7 +23,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -186,12 +186,12 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
                 line(of(ALIKE_UNDER_BOTH, everyOne()), WEIGHING_X_ONE_MORE));
 
         for (Map<NumericTerm, Place> row : rowsOf(border, ALIKE_UNDER_BOTH)) {
-            assertFalse(named.ruledOutBy(drawn.satisfiedBy(row), row),
+            assertEquals(ExactAnswer.held(false), named.ruledOutBy(drawn, row),
                     () -> "a row already read is one the line was left standing beside: " + row);
         }
         Map<NumericTerm, Place> apart = named.tellsApartAt();
         assertNotNull(apart, "an input is named");
-        assertTrue(named.ruledOutBy(drawn.satisfiedBy(apart), apart),
+        assertEquals(ExactAnswer.held(true), named.ruledOutBy(drawn, apart),
                 () -> "and the input the answer names rules the line out: " + apart);
     }
 

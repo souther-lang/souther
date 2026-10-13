@@ -9,8 +9,10 @@ import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -217,10 +219,15 @@ class EveryLineBesideABorderIsAskedForInTheRunAfterItsPointsTest {
                 .human(SourceRendering.namedByIdentity(measured.texts()));
     }
 
+    /** Each model measured once, however many times its block and its report are read. */
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+
     private static Compilation measured(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return MEASURED.computeIfAbsent(model, source -> {
+            Compilation compilation = Compilation.ofSource(source, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            return compilation;
+        });
     }
 }
