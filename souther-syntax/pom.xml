@@ -24,7 +24,6 @@
         <dependency>
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>3.2.2</version>
         </dependency>
         <!-- The White_Space set a rule of the grammar reads string literals by, which is the one
              the runtime's trim and words read. -->

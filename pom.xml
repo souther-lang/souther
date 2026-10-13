@@ -60,6 +60,8 @@
         <souther.jvm.stack>4m</souther.jvm.stack>
         <maven.compiler.release>${souther.java.minimum}</maven.compiler.release>
         <raoh.version>0.9.0</raoh.version>
+        <!-- Raoh takes Jackson as provided, so the version on every classpath is this one. -->
+        <jackson.version>3.2.3</jackson.version>
         <!-- The text rules the language shares with Raoh: case conversion, normalization, white
              space, the temporal grammar and the pattern language. Which strings these accept is a
              rule of the specification, so a version that changes an answer is a change to the
@@ -76,8 +78,8 @@
              into. A build that is not the hook leaves it at the root module's sources, which do
              not exist, so the goal has nothing to read. -->
         <checkstyle.staged.dir>${project.basedir}/src/main/java</checkstyle.staged.dir>
-        <checkstyle.version>14.1.0</checkstyle.version>
-        <nullaway.version>0.14.1</nullaway.version>
+        <checkstyle.version>14.3.0</checkstyle.version>
+        <nullaway.version>0.14.2</nullaway.version>
         <!-- What NullAway is asked for, written once. The gate below and the `lint` profile both
              ask, and a gate configured differently in each is a gate whose answer depends on which
              build asked. -->
@@ -195,6 +197,11 @@
                 <groupId>net.unit8.raoh</groupId>
                 <artifactId>raoh-jooq</artifactId>
                 <version>${raoh.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>tools.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
             </dependency>
             <!-- Without its JSpecify, which it declares at compile scope: souther-runtime keeps the
                  annotations off every downstream classpath (see its pom), and this is how they
