@@ -5593,20 +5593,31 @@ public final class Generator {
         Map<OnTheWay.TakenIn, ElementBound> boundsOnTheElements = boundsOnTheElements(cuts,
                 fixing.keySet());
         List<ElementBound> bounds = List.copyOf(boundsOnTheElements.values());
-        // The counts the way asks for that hold against no number of the row, each at the least
-        // of what the conditions on it leave: where they will stand is settled before any
+        // The counts the way asks for that are settled by nothing a condition places, each at the
+        // least of what the conditions on it leave: where they will stand is known before any
         // condition is placed, so a condition whose numbers are written at the same container is
-        // composed beside them rather than finding out once they are placed.
+        // composed beside them rather than finding out once they are placed. Not a count held
+        // against numbers of the row, nor one whose statement reads a number of anything but the
+        // container's own elements — another position, or the elements of another container:
+        // which elements meet it turns on where those are put, which is decided after, and
+        // composed before them it would be composed for none of them.
         Map<CountedElements.Identity, CountedElements> countedBefore = new LinkedHashMap<>();
+        Set<CountedElements.Identity> readingOutside = new HashSet<>();
         for (OnTheWay.TakenIn cut : cuts) {
             if (cut.demand() instanceof RowDemand.SoMany many && !many.againstNumbers()) {
                 CountedElements count = CountedElements.of(subject.behavior(), many.count(),
                         subject.quantities(), many.anElementMeeting());
-                if (!itemCounts.containsKey(count.identity())) {
-                    countedBefore.merge(count.identity(), count, CountedElements::and);
+                if (itemCounts.containsKey(count.identity())) {
+                    continue;
                 }
+                if (count.numbers().stream().anyMatch(
+                        term -> !term.subjectPath().isAtOrUnder(count.container().element()))) {
+                    readingOutside.add(count.identity());
+                }
+                countedBefore.merge(count.identity(), count, CountedElements::and);
             }
         }
+        countedBefore.keySet().removeAll(readingOutside);
         Map<RealizationTarget, Place> countsToCome = new LinkedHashMap<>();
         Map<RealizationTarget, NumbersAskedFor> countsAsked = new LinkedHashMap<>();
         countedBefore.forEach((identity, count) -> {
