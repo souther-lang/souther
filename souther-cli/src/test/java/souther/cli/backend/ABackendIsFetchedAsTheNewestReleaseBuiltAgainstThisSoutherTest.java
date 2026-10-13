@@ -541,15 +541,17 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
 
     @Test
     void aProxyThisCannotSendThroughIsRefusedForWhatItIs() {
-        for (Map.Entry<String, Central.Failure.Misread> named : Map.of(
-                "http://alice:secret@proxy:8080", Central.Failure.Misread.CREDENTIALS,
-                "https://proxy:8443", Central.Failure.Misread.SCHEME,
-                "socks5://proxy:1080", Central.Failure.Misread.SCHEME,
-                "http://", Central.Failure.Misread.NOT_AN_ADDRESS).entrySet()) {
+        for (Map.Entry<String, Class<? extends Central.Failure.Misread>> named : Map
+                .<String, Class<? extends Central.Failure.Misread>>of(
+                "http://alice:secret@proxy:8080", Central.Failure.Misread.Credentials.class,
+                "https://proxy:8443", Central.Failure.Misread.Scheme.class,
+                "socks5://proxy:1080", Central.Failure.Misread.Scheme.class,
+                "http://alice:se/cret@proxy:8080", Central.Failure.Misread.NotAnAddress.class,
+                "http://", Central.Failure.Misread.NotAnAddress.class).entrySet()) {
             Configured configured = Repository.configured(Map.of("HTTPS_PROXY", named.getKey()));
 
-            assertEquals(named.getValue(), assertInstanceOf(Configured.Unusable.class, configured)
-                    .why().why(), named.getKey());
+            assertInstanceOf(named.getValue(), assertInstanceOf(Configured.Unusable.class,
+                    configured).why().why(), named.getKey());
         }
         assertInstanceOf(Repository.class,
                 Repository.configured(Map.of("HTTPS_PROXY", "proxy:3128")));
@@ -559,13 +561,10 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
     }
 
     @Test
-    void credentialsAreLeftOutOfWhatIsShownAndAnAddressCarryingThemIsNotAsked() throws Exception {
-        assertEquals("http://***@proxy:8080", Shown.setting("http://alice:pw@proxy:8080"));
-        assertEquals("***@proxy:8080", Shown.setting("alice:pw@proxy:8080"));
-        assertEquals("https://nexus.example/a@b", Shown.setting("https://nexus.example/a@b"));
-        assertEquals("proxy:3128", Shown.setting("proxy:3128"));
-        assertEquals("https://***@nexus.example/x",
-                Shown.address(URI.create("https://bob:pw@nexus.example/x")));
+    void anAddressIsShownAsItWasReadAndAnAddressCarryingCredentialsIsNotAsked() throws Exception {
+        assertEquals("https://nexus.example/x",
+                Shown.address(URI.create("https://bob:pw@nexus.example/x?token=pw#pw")));
+        assertEquals("http://proxy:8080", Shown.address(URI.create("http://a:b@proxy:8080")));
 
         repository.metadata(WASM, "0.1.0");
         repository.release(WASM, "0.1.0", "cli", HERE, jar("a", "wasm", HERE));
@@ -578,6 +577,32 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
         assertFalse(Unavailable.repository(failure, "repository").toString()
                 .contains("pw-in-location"), failure.toString());
         assertFalse(Repository.admits(URI.create("https://bob:pw@nexus.example/")));
+    }
+
+    @Test
+    void whatTheRepositoryServedThatReadAsNothingIsNotRepeated() throws Exception {
+        String served = "served-pw";
+        repository.metadata(WASM, "0.1.0", "0.2.0 " + served);
+        repository.release(WASM, "0.1.0", "cli", OTHER, jar("a", "wasm", OTHER));
+        Central.Failure none = failed("wasm");
+        assertInstanceOf(Central.Failure.NoneBuilt.class, none);
+
+        repository.metadata(WASM, "0.1.0");
+        repository.release(WASM, "0.1.0", "cli", HERE, jar("b", "wasm", HERE));
+        repository.redirect(LocalRepository.path(WASM, "0.1.0", "cli", "jar"),
+                "https://x/" + served + " ^^");
+        Central.Failure redirect = failed("wasm");
+
+        repository.put("org/souther-lang/" + WASM + "/maven-metadata.xml",
+                "<metadata><" + served);
+        Central.Failure unreadable = failed("wasm");
+
+        assertInstanceOf(Central.Failure.Unreadable.class, redirect);
+        assertInstanceOf(Central.Failure.Unreadable.class, unreadable);
+        for (Central.Failure failure : List.of(none, redirect, unreadable)) {
+            assertFalse(Unavailable.repository(failure, "repository").toString()
+                    .contains("served-pw"), failure.toString());
+        }
     }
 
     @Test

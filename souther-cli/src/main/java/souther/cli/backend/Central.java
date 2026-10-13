@@ -173,17 +173,29 @@ public final class Central implements BackendFetch.Source {
         /** No artifact is known for the target, so there is nothing to ask for. */
         record Unregistered(String target) implements Unasked {}
 
-        /** A setting this reads names nothing it can use, for the reason {@code why} says. */
-        record Misconfigured(String setting, String value, Misread why) implements Unasked {}
+        /**
+         * The setting {@code setting} names nothing this can use, for the reason {@code why} says.
+         * What it was set to is not kept: only what it was read as, where it was read as anything.
+         */
+        record Misconfigured(String setting, Misread why) implements Unasked {}
 
-        /** Why a setting names nothing this can use. */
-        enum Misread {
+        /**
+         * Why a setting names nothing this can use, with the address it was read as where it was
+         * read as one. A value that was not is said to be none, and is not repeated.
+         */
+        sealed interface Misread {
+
             /** It is not an address, or not one a repository may be asked at. */
-            NOT_AN_ADDRESS,
-            /** It carries credentials, and none is ever sent, to a repository or a proxy. */
-            CREDENTIALS,
-            /** It names a proxy by a scheme other than {@code http}, the one a proxy is asked by. */
-            SCHEME
+            record NotAnAddress() implements Misread {}
+
+            /** It names {@code named} with credentials, and none is ever sent to anything. */
+            record Credentials(URI named) implements Misread {}
+
+            /** It names a repository at {@code named}, which is not reached over HTTPS. */
+            record Insecure(URI named) implements Misread {}
+
+            /** It names a proxy at {@code named} by a scheme other than {@code http}. */
+            record Scheme(URI named) implements Misread {}
         }
 
         /** Asking for {@code uri} did not get an answer. */
@@ -206,6 +218,8 @@ public final class Central implements BackendFetch.Source {
          * {@code unstated} are the releases among them whose pom did not say what they were built
          * against, and {@code notVersions} what the metadata lists that is not a version at all:
          * two different things the repository got wrong, kept apart so each is said as what it is.
+         * What is not a version is kept for what it is and never shown: it is text a repository
+         * served that did not read as anything.
          */
         record NoneBuilt(String southerVersion, List<String> releases, List<String> unstated,
                          List<String> notVersions) implements Declined {
@@ -654,8 +668,9 @@ public final class Central implements BackendFetch.Source {
             try {
                 next = at.resolve(location.get());
             } catch (IllegalArgumentException e) {
+                // What the header says is not repeated: it is what failed to read as an address.
                 throw new Stop(new Failure.Unreadable(at,
-                        "it sends the request on to `" + location.get() + "`"));
+                        "it sends the request on to something that is not an address"));
             }
             if (!Repository.admits(next)) {
                 throw new Stop(new Failure.Redirected(uri, next));
@@ -688,12 +703,16 @@ public final class Central implements BackendFetch.Source {
         return artifactRoot(group, artifactId).resolve(version + "/" + name);
     }
 
-    /** The metadata's root element, or a stop that says the repository served something else. */
+    /**
+     * The metadata's root element, or a stop that says the repository served something else. The
+     * parser's own account is not passed on: it quotes what was served, and what a repository
+     * serves is not repeated to a terminal.
+     */
     private static Element parse(URI uri, byte[] served) throws Stop {
         try {
             return document(served);
         } catch (SAXException | IOException e) {
-            throw new Stop(new Failure.Unreadable(uri, e.getMessage()));
+            throw new Stop(new Failure.Unreadable(uri, "it is not a well-formed XML document"));
         }
     }
 

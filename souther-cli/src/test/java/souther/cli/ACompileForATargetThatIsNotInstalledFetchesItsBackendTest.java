@@ -12,6 +12,7 @@ import souther.compiler.meta.ModuleMetadata;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -139,7 +140,7 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
     }
 
     @Test
-    void aRepositoryNamedOverPlainHttpElsewhereIsNotAskedAndNamedAsItWasSet() throws Exception {
+    void aRepositoryNamedOverPlainHttpElsewhereIsNotAskedAndNamedAsItWasRead() throws Exception {
         String named = "http://repository.example/maven2/";
 
         Ran ran = CliProcess.run(scratch, work, Map.of(), List.of("-Dsouther.repository=" + named),
@@ -151,34 +152,44 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
         assertFalse(Files.exists(fetchedTo()), "a fetch that could ask nothing made " + fetchedTo());
     }
 
+    /** A setting written one way, as a run is given it. */
+    private record Written(String setting, Map<String, String> environment,
+                           List<String> properties) {}
+
     @Test
-    void aPasswordInASettingIsNeverRepeatedAndTheSettingIsRefused() throws Exception {
+    void aPasswordInASettingIsNeverRepeatedHoweverTheSettingIsWritten() throws Exception {
         String password = "s3cret-pw";
-        List<List<String>> lines = List.of(List.of("compile", "--target", "wasm"),
-                List.of("backend", "fetch", "wasm"));
-        Map<String, List<String>> settings = Map.of(
-                "HTTPS_PROXY", List.of(),
-                "souther.repository", List.of(
-                        "-Dsouther.repository=https://bob:" + password + "@nexus.example/maven2/"));
-        for (Map.Entry<String, List<String>> setting : settings.entrySet()) {
-            Map<String, String> environment = setting.getKey().equals("HTTPS_PROXY")
-                    ? Map.of("HTTPS_PROXY", "http://alice:" + password + "@proxy.example:8080")
-                    : Map.of();
-            for (List<String> line : lines) {
-                for (String lang : List.of("en", "ja")) {
-                    Map<String, String> run = new HashMap<>(environment);
-                    run.put("SOUTHER_LANG", lang);
-
-                    Ran ran = CliProcess.run(scratch, work, run, setting.getValue(), "",
-                            line.toArray(String[]::new));
-
-                    String said = ran.out() + ran.err();
-                    assertEquals(2, ran.code(), said);
-                    assertFalse(said.contains(password), setting.getKey() + " " + line + said);
-                    assertTrue(said.contains(setting.getKey()), said);
-                }
-            }
+        // Well formed and not: no masking of what was written could be relied on for the last
+        // three, so what is shown has to be what was read and never what was written.
+        List<String> values = List.of("http://alice:" + password + "@proxy.example:8080",
+                "http://alice:se/" + password + "@proxy.example:8080",
+                "http://alice:pa@" + password + "@proxy.example:8080",
+                "alice:" + password + "@proxy.example:8080");
+        List<Written> settings = new ArrayList<>();
+        for (String value : values) {
+            settings.add(new Written("HTTPS_PROXY", Map.of("HTTPS_PROXY", value), List.of()));
+            settings.add(new Written("souther.repository", Map.of(), List.of("-Dsouther.repository="
+                    + value.replace("proxy.example:8080", "nexus.example/maven2/"))));
         }
+        for (Written written : settings) {
+            assertRefusedWithout(password, written, "en", "compile", "--target", "wasm");
+        }
+        // The other command, and the other language, say it through the same lines; once each.
+        assertRefusedWithout(password, settings.get(0), "ja", "backend", "fetch", "wasm");
+        assertRefusedWithout(password, settings.get(1), "en", "backend", "fetch", "wasm");
+    }
+
+    private void assertRefusedWithout(String password, Written written, String lang,
+                                      String... args) throws Exception {
+        Map<String, String> environment = new HashMap<>(written.environment());
+        environment.put("SOUTHER_LANG", lang);
+
+        Ran ran = CliProcess.run(scratch, work, environment, written.properties(), "", args);
+
+        String said = ran.out() + ran.err();
+        assertEquals(2, ran.code(), said);
+        assertFalse(said.contains(password), written + " " + List.of(args) + said);
+        assertTrue(said.contains(written.setting()), said);
     }
 
     @Test

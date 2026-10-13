@@ -61,16 +61,18 @@ public final class Repository implements Configured {
     public static Configured configured(Map<String, String> environment) {
         String named = System.getProperty(SETTING);
         boolean central = named == null || named.isBlank();
-        // Shown, as everything a reader is told is, so a password in the setting is not repeated.
-        String name = central ? "Maven Central" : Shown.setting(named);
         URI at;
         switch (central ? new Named.At<>(MAVEN_CENTRAL) : root(named)) {
             case Named.At<URI>(URI value) -> at = value;
             case Named.Not<URI>(Central.Failure.Misread why) -> {
-                return new Configured.Unusable(name,
-                        new Central.Failure.Misconfigured(SETTING, named, why));
+                // Called by the setting, since what it was set to read as no repository and is
+                // not repeated.
+                return new Configured.Unusable(SETTING,
+                        new Central.Failure.Misconfigured(SETTING, why));
             }
         }
+        // Called by what the setting was read as, rebuilt, and never by what it was written as.
+        String name = central ? "Maven Central" : Shown.address(at);
         if (loopback(at) || bypassed(at.getHost(),
                 either(environment, "NO_PROXY", "no_proxy").orElse(""))) {
             return new Repository(at, name, new Route.Direct());
@@ -84,7 +86,7 @@ public final class Repository implements Configured {
                     new Repository(at, name, new Route.Through(through));
             case Named.Not<InetSocketAddress>(Central.Failure.Misread why) ->
                     new Configured.Unusable(name,
-                            new Central.Failure.Misconfigured("HTTPS_PROXY", proxy.get(), why));
+                            new Central.Failure.Misconfigured("HTTPS_PROXY", why));
         };
     }
 
@@ -154,13 +156,29 @@ public final class Repository implements Configured {
         try {
             uri = new URI(named.endsWith("/") ? named : named + "/");
         } catch (URISyntaxException e) {
-            return new Named.Not<>(Central.Failure.Misread.NOT_AN_ADDRESS);
+            return new Named.Not<>(new Central.Failure.Misread.NotAnAddress());
         }
         if (uri.getRawUserInfo() != null) {
-            return new Named.Not<>(Central.Failure.Misread.CREDENTIALS);
+            return credentials(uri);
         }
-        return admits(uri) ? new Named.At<>(uri)
-                : new Named.Not<>(Central.Failure.Misread.NOT_AN_ADDRESS);
+        if (admits(uri)) {
+            return new Named.At<>(uri);
+        }
+        // Read as an address, and one that would be asked over plain HTTP elsewhere than this
+        // machine: said as that, and shown as read.
+        boolean addressed = uri.isAbsolute() && !uri.isOpaque() && uri.getHost() != null;
+        return new Named.Not<>(addressed && "http".equals(uri.getScheme())
+                ? new Central.Failure.Misread.Insecure(uri)
+                : new Central.Failure.Misread.NotAnAddress());
+    }
+
+    /**
+     * An address that carries credentials, refused as that where it has a host to show it by, and
+     * as no address where it has none: what was written is never what is shown.
+     */
+    private static <T> Named<T> credentials(URI uri) {
+        return new Named.Not<>(uri.getHost() == null ? new Central.Failure.Misread.NotAnAddress()
+                : new Central.Failure.Misread.Credentials(uri));
     }
 
     /** Whether the host is this machine's loopback, as a name or an address, asking no resolver. */
@@ -210,16 +228,16 @@ public final class Repository implements Configured {
         try {
             uri = new URI(proxy.contains("://") ? proxy : "http://" + proxy);
         } catch (URISyntaxException e) {
-            return new Named.Not<>(Central.Failure.Misread.NOT_AN_ADDRESS);
+            return new Named.Not<>(new Central.Failure.Misread.NotAnAddress());
         }
         if (uri.getRawUserInfo() != null) {
-            return new Named.Not<>(Central.Failure.Misread.CREDENTIALS);
+            return credentials(uri);
         }
         if (uri.getHost() == null) {
-            return new Named.Not<>(Central.Failure.Misread.NOT_AN_ADDRESS);
+            return new Named.Not<>(new Central.Failure.Misread.NotAnAddress());
         }
         if (!"http".equals(uri.getScheme())) {
-            return new Named.Not<>(Central.Failure.Misread.SCHEME);
+            return new Named.Not<>(new Central.Failure.Misread.Scheme(uri));
         }
         return new Named.At<>(InetSocketAddress.createUnresolved(uri.getHost(),
                 uri.getPort() >= 0 ? uri.getPort() : 80));

@@ -99,8 +99,8 @@ public final class Unavailable {
                     String.join(", ", none.unstated())));
         }
         if (!none.notVersions().isEmpty()) {
-            lines.add(line("cli.backend.central.notversions", repository,
-                    String.join(", ", none.notVersions())));
+            // Said, and not repeated: it is served text that did not read as a version.
+            lines.add(line("cli.backend.central.notversions", repository));
         }
         return lines;
     }
@@ -131,11 +131,20 @@ public final class Unavailable {
             case Central.Failure.NotTheBackend not ->
                     line("cli.backend.central.notthebackend", repository, not.uri(),
                             not.target(), not.southerVersion());
-            case Central.Failure.Misconfigured misconfigured -> line(switch (misconfigured.why()) {
-                case NOT_AN_ADDRESS -> "cli.backend.central.misconfigured";
-                case CREDENTIALS -> "cli.backend.central.misconfigured.credentials";
-                case SCHEME -> "cli.backend.central.misconfigured.scheme";
-            }, repository, misconfigured.setting(), Shown.setting(misconfigured.value()));
+            case Central.Failure.Misconfigured misconfigured -> switch (misconfigured.why()) {
+                case Central.Failure.Misread.NotAnAddress _ ->
+                        line("cli.backend.central.misconfigured", repository,
+                                misconfigured.setting());
+                case Central.Failure.Misread.Credentials credentials ->
+                        line("cli.backend.central.misconfigured.credentials", repository,
+                                misconfigured.setting(), credentials.named());
+                case Central.Failure.Misread.Insecure insecure ->
+                        line("cli.backend.central.misconfigured.insecure", repository,
+                                misconfigured.setting(), insecure.named());
+                case Central.Failure.Misread.Scheme scheme ->
+                        line("cli.backend.central.misconfigured.scheme", repository,
+                                misconfigured.setting(), scheme.named());
+            };
             case Central.Failure.Unwritable unwritable ->
                     line("cli.backend.unwritable", unwritable.directory(), unwritable.reason());
         };
