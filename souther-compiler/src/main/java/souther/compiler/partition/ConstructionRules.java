@@ -41,11 +41,11 @@ import java.util.Map;
  * one of them admits. What it does not do is reason across two values' clauses at once, which no
  * reading here is asked to.
  *
- * <p>Two ways of taking what is fixed in, because the searches that ask differ in when it is fixed.
- * What the caller settled before anything was chosen is read in with the rules
- * ({@link #valuesAt}, {@link #heldAt}); what a search fixes one position at a time is taken onto
- * the rules read with nothing settled ({@link #limitsAt}), which is what lets one reading serve every
- * branch of it.
+ * <p>What is fixed is taken onto the rules read with nothing settled, whoever fixed it: the caller
+ * before anything was chosen ({@link #valuesAt}, {@link #heldAt}) or a search one position at a
+ * time ({@link #limitsAt}). Taking a number onto a reading states the same equality the reading
+ * states when it is handed one ({@link FieldDomains#composing}), so the declaration is read once
+ * whatever values a search goes on to fix, and not once for each of them.
  *
  * <p>One of these per value composed. What it keeps is true under the parameter and the caller's
  * settling, and both are fixed when it is made.
@@ -55,9 +55,7 @@ final class ConstructionRules {
     private final MeasuredInput subject;
     private final RuleReadingContext reading;
     private final Map<TermPath, Place> settled;
-    /** Each value's rules with the caller's settling read in, by where the value stands. */
-    private final Map<TermPath, FieldDomains> readSettled = new HashMap<>();
-    /** Each value's rules with nothing settled, which a search's settling is taken onto. */
+    /** Each value's rules with nothing settled, which every settling is taken onto. */
     private final Map<TermPath, FieldDomains> readBare = new HashMap<>();
     private final Map<Taken, FieldDomains.Composing> composed = new HashMap<>();
 
@@ -82,11 +80,7 @@ final class ConstructionRules {
      * none of them stops it.
      */
     NumericDomain.Bounds valuesAt(TermPath path) {
-        NumericDomain.Bounds out = null;
-        for (RuleRoots.Naming each : namingOf(path)) {
-            out = meet(out, settledRead(each).at(each.address().key()).bounds());
-        }
-        return out;
+        return limitsAt(path, settlingAt(path, settled)).values();
     }
 
     /**
@@ -94,11 +88,7 @@ final class ConstructionRules {
      * where none of them does.
      */
     FieldDomains.Held heldAt(TermPath path) {
-        FieldDomains.Held out = null;
-        for (RuleRoots.Naming each : namingOf(path)) {
-            out = meet(out, settledRead(each).heldAt(each.address().key()));
-        }
-        return out;
+        return limitsAt(path, settlingAt(path, settled)).held();
     }
 
     /**
@@ -151,14 +141,10 @@ final class ConstructionRules {
      * what is left for a position two levels down, and a reading rebuilt at the inner record has
      * never seen it.
      *
-     * <p>Read with what the walk that read the inputs has already made of these declarations.
-     * Settling a coordinate is what makes each of these a reading of its own, but what the
-     * declaration's string rules come to is settled by the rules and not by what is fixed beside
-     * them, so a reading here that borrowed nothing would build every one of those machines again
-     * for each value probed.
+     * <p>With nothing settled, which is the declaration's own reading and the one the walk that read
+     * the inputs has already made: asked again here, it is borrowed rather than read.
      */
-    private static FieldDomains rulesOf(Type type, RuleReadingContext reading,
-                                        Map<RuleKey, Count> settled) {
+    private static FieldDomains rulesOf(Type type, RuleReadingContext reading) {
         RuleReadingSource source = reading.source();
         // Whether the position is a record, and which record, are one answer and it is the
         // reading's. The rules are then read on the name the value is written under where it wraps
@@ -169,17 +155,11 @@ final class ConstructionRules {
                 instanceof Shape.Product(TypeSymbol.AtModule declared, Map<String, Type> _))) {
             return FieldDomains.NONE;
         }
-        return FieldDomains.of(Partitions.rulesOver(type, declared, source), reading, settled);
+        return FieldDomains.of(Partitions.rulesOver(type, declared, source), reading);
     }
 
     private List<RuleRoots.Naming> namingOf(TermPath path) {
         return subject.rulesNaming(path);
-    }
-
-    private FieldDomains settledRead(RuleRoots.Naming value) {
-        TermPath root = value.address().root();
-        return readSettled.computeIfAbsent(root,
-                at -> rulesOf(value.value(), reading, fixedUnder(at, settled)));
     }
 
     private FieldDomains.Composing composedUnder(RuleRoots.Naming value,
@@ -187,7 +167,7 @@ final class ConstructionRules {
         TermPath root = value.address().root();
         return composed.computeIfAbsent(new Taken(root, fixed),
                 taken -> readBare.computeIfAbsent(root,
-                                at -> rulesOf(value.value(), reading, Map.of()))
+                                at -> rulesOf(value.value(), reading))
                         .composing(FieldDomains.atValues(fixed)));
     }
 
