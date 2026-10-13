@@ -26,9 +26,11 @@ import java.util.zip.ZipEntry;
  *
  * <p>A backend is identified by the pair, so jars for different Souther versions of one target may
  * stand side by side and only the one built against this Souther is chosen. The directories are
- * searched in the order given and the first that holds the target at all decides: a development
- * build that stands in for a packaged one is the answer even when it is built for another Souther,
- * and is not passed over for a jar further down the list.
+ * searched in the order given and the first that holds the pair decides, so a development build
+ * stands in for a packaged one of the same pair. A jar for the target built against another Souther
+ * is not the backend for this one wherever it stands, so it hides nothing further down the list: a
+ * backend fetched for an earlier Souther does not stand in front of the one a package manager
+ * installed for this one.
  *
  * <p>The first directory is also where a backend fetched from a repository is written, so a fetched
  * one is found by the same search and the same descriptor as one put there by hand.
@@ -50,10 +52,7 @@ public final class Backends {
     /** The backend for the pair. */
     public record Found(Backend backend) implements Lookup {}
 
-    /**
-     * No directory holds the pair. {@code searched} is each directory looked in, in order, up to and
-     * including the one that held the target for other Southers, where one did.
-     */
+    /** No directory holds the pair. {@code searched} is what each directory held, in order. */
     public record Absent(String target, String southerVersion, List<Searched> searched)
             implements Lookup {
 
@@ -150,6 +149,11 @@ public final class Backends {
         return directories.getFirst();
     }
 
+    /** The name a fetched backend for the pair is written under. */
+    Path fetchedAs(String target, String southerVersion) {
+        return fetched().resolve(target + "-" + southerVersion + ".jar");
+    }
+
     /**
      * The backend for {@code target} that was built against {@code southerVersion}, or what each
      * directory held instead.
@@ -182,38 +186,51 @@ public final class Backends {
             }
             searched.add(new Searched.OtherVersions(directory,
                     named.stream().map(Backend::southerVersion).toList()));
-            return new Absent(target, southerVersion, searched);
         }
         return new Absent(target, southerVersion, searched);
     }
 
     /**
-     * Puts the jar at {@code downloaded}, in the directory a fetched backend goes to, as the backend
-     * for its pair, and answers with it as it is found there.
+     * Refuses a fetch for the pair that would replace or stand beside a jar someone else put in the
+     * directory a fetched backend goes to.
      *
-     * <p>The jar is written under a name that is the pair's — {@code <target>-<version>.jar} — and
-     * replaces what is under that name, which is what a fetch for the same pair wrote before. A
-     * backend for the pair under any other name was put there by someone else, and is neither
-     * replaced nor stood beside. The move is atomic, so a search running at the same time sees the
-     * old jar or the new one and nothing between them; {@code downloaded} has to be in the same
-     * directory, and named so that a search does not read it as a backend.
+     * <p>A fetched jar is written under the pair's name, {@code <target>-<version>.jar}, and
+     * replaces what is there only where a fetch wrote it, which {@code fetchedThere} says. A jar
+     * under that name that no fetch wrote was put there by hand, whatever it describes, and so is
+     * a jar for the pair under any other name. Asked before anything is downloaded, since the answer
+     * is the directory's and not the release's. Something under the name that is not a backend at
+     * all is refused as such, as every search refuses it.
      *
-     * @throws Refused where the directory holds the pair under another name, or cannot be listed
+     * @throws Refused where the directory holds such a jar, or cannot be listed
+     */
+    void clearToFetch(String target, String southerVersion, boolean fetchedThere)
+            throws Refused {
+        Path name = fetchedAs(target, southerVersion);
+        for (Backend backend : scan(fetched())) {
+            boolean ours = backend.jar().equals(name) && fetchedThere;
+            boolean pair = backend.name().equals(target)
+                    && backend.southerVersion().equals(southerVersion);
+            if (!ours && (pair || backend.jar().equals(name))) {
+                throw new Refused("cli.backend.fetch.held", target, southerVersion,
+                        backend.jar());
+            }
+        }
+    }
+
+    /**
+     * Puts the jar at {@code downloaded}, in the directory a fetched backend goes to, under the
+     * pair's name, replacing what a fetch wrote there before, and answers with it as it is found
+     * there. {@link #clearToFetch} is asked first.
+     *
+     * <p>The move is atomic, so a search running at the same time sees the old jar or the new one
+     * and nothing between them; {@code downloaded} has to be in the same directory, and named so
+     * that a search does not read it as a backend.
+     *
      * @throws IOException where the move fails, the jar is left where it was
      */
-    Backend install(Path downloaded, Backend described) throws Refused, IOException {
+    Backend install(Path downloaded, Backend described) throws IOException {
         Path directory = fetched();
-        Path target = directory.resolve(
-                described.name() + "-" + described.southerVersion() + ".jar");
-        List<Backend> held = scan(directory).stream()
-                .filter(backend -> backend.name().equals(described.name())
-                        && backend.southerVersion().equals(described.southerVersion())
-                        && !backend.jar().equals(target))
-                .toList();
-        if (!held.isEmpty()) {
-            throw new Refused("cli.backend.fetch.held", described.name(),
-                    described.southerVersion(), held.getFirst().jar());
-        }
+        Path target = fetchedAs(described.name(), described.southerVersion());
         try {
             Files.move(downloaded, target, StandardCopyOption.ATOMIC_MOVE,
                     StandardCopyOption.REPLACE_EXISTING);

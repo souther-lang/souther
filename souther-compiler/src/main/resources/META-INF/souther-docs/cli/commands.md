@@ -128,13 +128,14 @@ where `SOUTHER_HOME` is not set — or in the directory a package manager's laun
 `META-INF/souther/backend.properties`, which has two keys and no others: `name`, the target it answers
 to, and `souther.version`, the Souther it was built against. This command chooses the jar whose pair
 is this Souther's, so jars for several versions can stand side by side; two of one pair in a directory
-are refused. The first directory that holds the target at all decides, so a development build in
-`$SOUTHER_HOME` stands in for a packaged one, and is not passed over for a jar further down the list.
-Which backend release that jar is has no part in the choice.
+are refused. The first directory that holds the pair decides, so a development build in
+`$SOUTHER_HOME` stands in for a packaged one of the same pair. A jar built against another Souther is
+not this one's backend wherever it stands, so it hides nothing further down the list. Which backend
+release that jar is has no part in the choice.
 
 Where no directory holds the pair, the backend is fetched from Maven Central into the first directory,
-as `souther backend fetch` does, and then run. That is also what happens where the deciding directory
-holds the target for other Southers only: the fetched jar stands beside the old one. Fetching is said
+as `souther backend fetch` does, and then run; a jar for the target built against another Souther is
+left where it is, and the fetched one stands beside it. Fetching is said
 on standard error. `SOUTHER_BACKEND_OFFLINE`, set to anything, tells a compile to fetch nothing; it is
 not an option, since from the target's name on the line is the backend's. It reaches this command's
 fetching and nothing else, so a backend that fetches tools of its own when it runs does so as before.
@@ -159,19 +160,25 @@ Central, and compiles nothing. It is for a machine that will not reach the netwo
 and for taking a release newer than the one fetched before. Which releases there are is read from the
 artifact's `maven-metadata.xml`, and the Souther each was built against from its pom's
 `souther.version`, or the parent pom's where the pom does not state it. Which release is newest is the
-backend's own numbering, and plays no part in which Souther a release is for.
+backend's own numbering, and plays no part in which Souther a release is for. A release whose pom is
+missing or does not say what it was built against is passed over, and named where nothing else was
+found.
 
 The jar is written to `$SOUTHER_HOME/backends`, or `~/.souther/backends`, as `<target>-<version>.jar`,
-replacing what an earlier fetch wrote there. A backend for the pair under any other name in that
-directory was put there by hand, and is refused rather than replaced. The jar is written under another
-name first, held to its descriptor, and moved into place in one step, so a fetch that stops part way
-leaves nothing that is read as a backend. Two runs fetching into one directory take turns.
+and where it came from is written beside it. A fetch replaces only what an earlier fetch wrote under
+that name, and a release fetched before and still in place is not fetched again. A jar under that
+name that no fetch wrote, or one for the pair under any other name, was put there by hand, and the
+fetch is refused before anything is downloaded. The jar is written under another name first, held to
+its descriptor, and moved into place in one step, so a fetch that stops part way leaves nothing that
+is read as a backend. Two runs fetching into one directory take turns.
 
 The jar is what Maven Central serves over HTTPS, with no checksum or key to hold it to: a backend is
 released after the Souther it is built against, so nothing about it is known to this one. The proxy is
-the one Java's `https.proxyHost` names, and `HTTPS_PROXY` where that is not set.
-`-Dsouther.repository=<url>` fetches from another Maven repository in Central's layout; it is reached
-over HTTPS, or over plain HTTP on this machine's loopback address. A target Maven Central does not
+the one Java's `https.proxyHost` names, and `HTTPS_PROXY` where that is not set, except for a host
+`NO_PROXY` names. `-Dsouther.repository=<url>` fetches from another Maven repository in Central's
+layout, and is what the messages name in Central's place; it is reached over HTTPS, or over plain HTTP
+on this machine's loopback address, and a redirect is followed only to an address reached the same
+way. A target Maven Central does not
 release, `jvm` among them, is refused with exit status 2, as is a fetch that finds no release built
 against this Souther or cannot reach the repository, which is named with what it answered. This
 command is not held to `.souther-version`: what it fetches is for the Souther that runs it.

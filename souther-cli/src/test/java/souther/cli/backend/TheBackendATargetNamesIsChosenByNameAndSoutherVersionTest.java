@@ -49,16 +49,27 @@ class TheBackendATargetNamesIsChosenByNameAndSoutherVersionTest {
     }
 
     @Test
-    void theFirstDirectoryHoldingTheTargetDecidesEvenWhenItsJarIsForAnotherSouther(
-            @TempDir Path home, @TempDir Path packaged) throws Exception {
+    void aJarForAnotherSoutherHidesNothingFurtherDownTheList(@TempDir Path home,
+                                                             @TempDir Path packaged)
+            throws Exception {
+        FakeBackend.write(home.resolve("wasm.jar"), "wasm", OLDER, "stale");
+        Path built = FakeBackend.write(packaged.resolve("wasm.jar"), "wasm", HERE, "packaged");
+
+        assertEquals(built, chosen(new Backends(List.of(home, packaged)), "wasm").jar());
+    }
+
+    @Test
+    void whereNoDirectoryHoldsThePairEachSaysWhatItHolds(@TempDir Path home,
+                                                         @TempDir Path packaged)
+            throws Exception {
         FakeBackend.write(home.resolve("wasm.jar"), "wasm", OLDER, "stale");
         FakeBackend.write(home.resolve("wasm-older.jar"), "wasm", "9.9.7", "staler");
-        FakeBackend.write(packaged.resolve("wasm.jar"), "wasm", HERE, "packaged");
+        FakeBackend.write(packaged.resolve("wasm.jar"), "wasm", "9.9.6", "packaged");
 
         List<Backends.Searched> searched = absent(new Backends(List.of(home, packaged)), "wasm");
 
-        assertEquals(List.of(new Backends.Searched.OtherVersions(home, List.of("9.9.7", OLDER))),
-                searched);
+        assertEquals(List.of(new Backends.Searched.OtherVersions(home, List.of("9.9.7", OLDER)),
+                new Backends.Searched.OtherVersions(packaged, List.of("9.9.6"))), searched);
     }
 
     @Test

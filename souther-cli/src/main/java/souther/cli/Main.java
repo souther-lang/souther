@@ -251,10 +251,13 @@ public final class Main {
                 case BackendFetch.Present present -> {
                     return Optional.of(present.backend());
                 }
+                case BackendFetch.Current current -> {
+                    return Optional.of(current.backend());
+                }
                 case BackendFetch.Failed failed -> failure = failed.failure();
             }
         }
-        List<Unavailable.Line> lines = Unavailable.of(absent, failure);
+        List<Unavailable.Line> lines = Unavailable.of(absent, failure, Central.named());
         for (int i = 0; i < lines.size(); i++) {
             System.err.println((i == 0 ? "" : "  ")
                     + Messages.get(lines.get(i).key(), locale, lines.get(i).array()));
@@ -306,8 +309,15 @@ public final class Main {
                     yield 0;
                 }
                 case BackendFetch.Present _ -> 0;
+                case BackendFetch.Current current -> {
+                    System.out.println(Messages.get("cli.backend.fetch.current", locale,
+                            current.release().artifactId(), current.release().version(),
+                            current.backend().jar()));
+                    yield 0;
+                }
                 case BackendFetch.Failed failed -> {
-                    Unavailable.Line line = Unavailable.repository(failed.failure());
+                    Unavailable.Line line = Unavailable.repository(failed.failure(),
+                            Central.named());
                     System.err.println(Messages.get("cli.backend.fetch.failed", locale, target,
                             version));
                     System.err.println("  " + Messages.get(line.key(), locale, line.array()));

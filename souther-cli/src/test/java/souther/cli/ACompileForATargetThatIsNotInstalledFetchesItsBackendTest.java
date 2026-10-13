@@ -160,6 +160,13 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
         assertTrue(ran.out().contains(WASM) && ran.out().contains("0.1.0"), ran.out());
         assertFalse(ran.out().contains("marker="), ran.out());
         assertTrue(Files.isRegularFile(fetchedTo().resolve("wasm-" + HERE + ".jar")));
+
+        Ran again = cli(Map.of(), "backend", "fetch", "wasm");
+        String jar = "/maven2/" + LocalRepository.path(WASM, "0.1.0", "cli", "jar");
+
+        assertEquals(0, again.code(), again.err());
+        assertTrue(again.out().contains("already installed"), again.out());
+        assertEquals(1, repository.asked().stream().filter(jar::equals).count());
     }
 
     @Test

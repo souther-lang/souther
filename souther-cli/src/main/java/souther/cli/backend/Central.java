@@ -27,11 +27,16 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The backends released to a Maven repository, Maven Central unless {@code souther.repository}
@@ -59,9 +64,19 @@ public final class Central {
 
     private static final String GROUP = "org.souther-lang";
 
+    private static final String REPOSITORY = "souther.repository";
+
     private static final Duration CONNECT = Duration.ofSeconds(15);
     private static final Duration ANSWER = Duration.ofSeconds(60);
     private static final Duration STALL = Duration.ofSeconds(30);
+
+    /** How many releases' poms are asked for at once. */
+    private static final int WINDOW = 8;
+
+    /** How many times one request is followed where it is sent on. */
+    private static final int REDIRECTS = 5;
+
+    private static final Set<Integer> REDIRECTING = Set.of(301, 302, 303, 307, 308);
 
     private static final Set<String> LOOPBACK = Set.of("localhost", "127.0.0.1", "[::1]");
 
@@ -91,11 +106,17 @@ public final class Central {
         /** The repository has no release of the target's artifact at all. */
         record Unpublished(String target, URI metadata) implements Failure {}
 
-        /** The target is released, and none of {@code releases} is built against the Souther. */
-        record NoneBuilt(String southerVersion, List<String> releases) implements Failure {
+        /**
+         * The target is released, and none of {@code releases} is built against the Souther.
+         * {@code unreadable} are the releases among them, or listed beside them, whose pom could
+         * not be read for the Souther it was built against.
+         */
+        record NoneBuilt(String southerVersion, List<String> releases, List<String> unreadable)
+                implements Failure {
 
             public NoneBuilt {
                 releases = List.copyOf(releases);
+                unreadable = List.copyOf(unreadable);
             }
         }
 
@@ -107,6 +128,9 @@ public final class Central {
 
         /** What {@code uri} served is not what a repository serves there. */
         record Unreadable(URI uri, String reason) implements Failure {}
+
+        /** Asking for {@code uri} was sent on to {@code reached}, which is not reached securely. */
+        record Redirected(URI uri, URI reached) implements Failure {}
 
         /** The jar at {@code uri} does not say it is the backend it was released as. */
         record NotTheBackend(URI uri, String target, String southerVersion) implements Failure {}
@@ -155,26 +179,27 @@ public final class Central {
      *
      * <p>The proxy is Java's {@code https.proxyHost} where that is set, and otherwise the one
      * {@code HTTPS_PROXY} names, which is how a proxy is told to every other tool on the machine.
-     * A repository on this machine's loopback address is reached directly. A setting that cannot be
+     * A repository on this machine's loopback address, or on a host {@code NO_PROXY} names, is
+     * reached directly. A setting that cannot be
      * read is not passed over: every question is answered with what it was set to.
      */
     public static Central configured(Map<String, String> environment) {
-        String named = System.getProperty("souther.repository");
+        String named = System.getProperty(REPOSITORY);
         URI repository = MAVEN_CENTRAL;
         if (named != null && !named.isBlank()) {
             repository = repository(named);
             if (repository == null) {
                 return new Central(MAVEN_CENTRAL, null,
-                        new Failure.Misconfigured("souther.repository", named));
+                        new Failure.Misconfigured(REPOSITORY, named));
             }
         }
         HttpClient.Builder builder = client();
-        if (loopback(repository)) {
+        if (loopback(repository) || bypassed(repository.getHost(), either(environment,
+                "NO_PROXY", "no_proxy"))) {
             builder.proxy(HttpClient.Builder.NO_PROXY);
         } else if (System.getProperty("https.proxyHost") == null) {
-            String proxy = environment.getOrDefault("HTTPS_PROXY",
-                    environment.get("https_proxy"));
-            if (proxy != null && !proxy.isBlank()) {
+            String proxy = either(environment, "HTTPS_PROXY", "https_proxy");
+            if (proxy != null) {
                 InetSocketAddress address = proxyAddress(proxy);
                 if (address == null) {
                     return new Central(repository, null,
@@ -187,6 +212,47 @@ public final class Central {
     }
 
     /**
+     * What the repository is called where it is named to a reader: Maven Central, or the address
+     * {@code souther.repository} gives in its place, since a reader told Central answered would look
+     * for the fault somewhere it is not.
+     */
+    public static String named() {
+        String named = System.getProperty(REPOSITORY);
+        return named == null || named.isBlank() ? "Maven Central" : named;
+    }
+
+    /** The first of the two spellings a variable is set under that is not blank, or null. */
+    private static String either(Map<String, String> environment, String upper, String lower) {
+        for (String name : List.of(upper, lower)) {
+            String value = environment.get(name);
+            if (value != null && !value.isBlank()) {
+                return value.strip();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Whether {@code NO_PROXY} names the host: a list split at commas, each a host, a domain that
+     * covers its subdomains with or without a leading dot, or {@code *} for every host.
+     */
+    static boolean bypassed(String host, String noProxy) {
+        if (host == null || noProxy == null) {
+            return false;
+        }
+        String asked = host.toLowerCase(Locale.ROOT);
+        for (String entry : noProxy.split(",")) {
+            String named = entry.strip().toLowerCase(Locale.ROOT);
+            String domain = named.startsWith(".") ? named.substring(1) : named;
+            if (named.equals("*") || (!domain.isEmpty()
+                    && (asked.equals(domain) || asked.endsWith("." + domain)))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * The repository at {@code repository}, reached with no proxy, where a download that has had
      * nothing for {@code stall} has stopped.
      */
@@ -195,13 +261,10 @@ public final class Central {
                 stall);
     }
 
-    /**
-     * A client that follows a redirect except from HTTPS to plain HTTP, so a repository reached over
-     * HTTPS is never left for one that is not.
-     */
+    /** A client that follows no redirect itself: {@link #following} does, and holds where to. */
     private static HttpClient.Builder client() {
         return HttpClient.newBuilder().connectTimeout(CONNECT)
-                .followRedirects(HttpClient.Redirect.NORMAL);
+                .followRedirects(HttpClient.Redirect.NEVER);
     }
 
     /** The repository a setting names, or null where it names none that may be fetched from. */
@@ -215,9 +278,7 @@ public final class Central {
         if (!uri.isAbsolute() || uri.getHost() == null) {
             return null;
         }
-        boolean secure = "https".equals(uri.getScheme());
-        boolean local = "http".equals(uri.getScheme()) && loopback(uri);
-        return secure || local ? uri : null;
+        return secure(uri) ? uri : null;
     }
 
     /** Whether the host is this machine's loopback, as a name or an address, asking no resolver. */
@@ -241,15 +302,24 @@ public final class Central {
         return InetSocketAddress.createUnresolved(uri.getHost(), port);
     }
 
-    /** The newest release of {@code target} built against {@code southerVersion}, or why none is. */
-    public Answer release(String target, String southerVersion) throws InterruptedException {
+    /**
+     * Why {@code target} cannot be asked about at all, or null where it can: no artifact is known
+     * for it, or a setting names nothing to ask. Answered without asking anything.
+     */
+    public Failure unaskable(String target) {
         if (misconfigured != null) {
             return misconfigured;
         }
-        Artifact artifact = ARTIFACTS.get(target);
-        if (artifact == null) {
-            return new Failure.Unregistered(target);
+        return ARTIFACTS.containsKey(target) ? null : new Failure.Unregistered(target);
+    }
+
+    /** The newest release of {@code target} built against {@code southerVersion}, or why none is. */
+    public Answer release(String target, String southerVersion) throws InterruptedException {
+        Failure unasked = unaskable(target);
+        if (unasked != null) {
+            return unasked;
         }
+        Artifact artifact = ARTIFACTS.get(target);
         try {
             URI metadata = artifactRoot(GROUP, artifact.artifactId()).resolve("maven-metadata.xml");
             HttpResponse<byte[]> listed = ask(metadata);
@@ -257,27 +327,99 @@ public final class Central {
                 return new Failure.Unpublished(target, metadata);
             }
             List<String> releases = new ArrayList<>();
+            List<String> unreadable = new ArrayList<>();
             for (String version : texts(child(parse(metadata, served(metadata, listed)),
                     "versioning", "versions"), "version")) {
-                if (!version.endsWith("-SNAPSHOT")) {
+                if (!coordinate(version)) {
+                    unreadable.add(version);
+                } else if (!version.endsWith("-SNAPSHOT")) {
                     releases.add(version);
                 }
             }
-            if (releases.isEmpty()) {
+            if (releases.isEmpty() && unreadable.isEmpty()) {
                 return new Failure.Unpublished(target, metadata);
             }
             releases.sort(RELEASE_ORDER);
-            for (String version : releases.reversed()) {
-                URI pom = file(GROUP, artifact.artifactId(), version, null, "pom");
-                if (builtAgainst(pom).equals(southerVersion)) {
-                    return new Release(target, artifact.artifactId(), version,
-                            file(GROUP, artifact.artifactId(), version, artifact.classifier(),
+            String built = newestBuiltAgainst(artifact, releases.reversed(), southerVersion,
+                    unreadable);
+            return built == null ? new Failure.NoneBuilt(southerVersion, releases, unreadable)
+                    : new Release(target, artifact.artifactId(), built,
+                            file(GROUP, artifact.artifactId(), built, artifact.classifier(),
                                     "jar"));
-                }
-            }
-            return new Failure.NoneBuilt(southerVersion, releases);
         } catch (Stop stop) {
             return stop.failure();
+        }
+    }
+
+    /**
+     * Whether a version, group or artifact read from the repository is one a path can be built
+     * from: what Maven coordinates are written in, and nothing a path or a URI reads otherwise.
+     */
+    private static boolean coordinate(String value) {
+        return !value.isEmpty() && Character.isLetterOrDigit(value.charAt(0))
+                && value.chars().allMatch(c -> c < 128 && (Character.isLetterOrDigit(c)
+                        || c == '.' || c == '-' || c == '_'));
+    }
+
+    /**
+     * The first of {@code newestFirst} whose pom says it was built against {@code southerVersion},
+     * or null. A release whose pom is not there or says nothing that can be read is added to
+     * {@code unreadable} and passed over: it is one release that cannot be told apart, and says
+     * nothing about the others. A repository that cannot be reached, or that answers with an error,
+     * ends the search, since it is the same repository the next pom would be asked of.
+     *
+     * <p>Each answer is a round trip, two where the Souther is in a parent pom, and a Souther a few
+     * releases behind the backend's newest would wait for each in turn. So the poms are asked for
+     * {@value #WINDOW} at a time and their answers read in order, newest first: the release taken,
+     * and the failure said where one is, are the ones asking one at a time would come to.
+     */
+    private String newestBuiltAgainst(Artifact artifact, List<String> newestFirst,
+                                      String southerVersion, List<String> unreadable)
+            throws Stop, InterruptedException {
+        try (ExecutorService asking = Executors.newVirtualThreadPerTaskExecutor()) {
+            try {
+                for (int from = 0; from < newestFirst.size(); from += WINDOW) {
+                    List<String> window = newestFirst.subList(from,
+                            Math.min(from + WINDOW, newestFirst.size()));
+                    List<Future<String>> stated = new ArrayList<>();
+                    for (String version : window) {
+                        URI pom = file(GROUP, artifact.artifactId(), version, null, "pom");
+                        stated.add(asking.submit(() -> builtAgainst(pom)));
+                    }
+                    for (int i = 0; i < window.size(); i++) {
+                        String said = answer(stated.get(i));
+                        if (said == null) {
+                            unreadable.add(window.get(i));
+                        } else if (said.equals(southerVersion)) {
+                            return window.get(i);
+                        }
+                    }
+                }
+                return null;
+            } finally {
+                // What is still being asked once the answer is known is ended, not waited for.
+                asking.shutdownNow();
+            }
+        }
+    }
+
+    /** What one pom said, or null where it said nothing that can be read. */
+    private static String answer(Future<String> stated) throws Stop, InterruptedException {
+        try {
+            return stated.get();
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof Stop stop) {
+                boolean missing = stop.failure() instanceof Failure.Answered answered
+                        && answered.status() == 404;
+                if (missing || stop.failure() instanceof Failure.Unreadable) {
+                    return null;
+                }
+                throw stop;
+            }
+            if (e.getCause() instanceof InterruptedException interrupted) {
+                throw interrupted;
+            }
+            throw new IllegalStateException(e.getCause());
         }
     }
 
@@ -290,23 +432,33 @@ public final class Central {
      * otherwise wait for ever.
      */
     void download(Release release, Path to) throws Stop, InterruptedException {
-        CompletableFuture<HttpResponse<Path>> answer =
-                client.sendAsync(request(release.jar()), HttpResponse.BodyHandlers.ofFile(to));
+        HttpResponse<Path> done = following(release.jar(), at -> downloadOnce(at, to));
+        if (done.statusCode() != 200) {
+            throw new Stop(new Failure.Answered(release.jar(), done.statusCode()));
+        }
+    }
+
+    private HttpResponse<Path> downloadOnce(URI at, Path to) throws Stop, InterruptedException {
+        // Until the answer begins, the request's own timeout is what is waited on.
+        AtomicBoolean began = new AtomicBoolean();
+        CompletableFuture<HttpResponse<Path>> answer = client.sendAsync(request(at), begun -> {
+            began.set(true);
+            return HttpResponse.BodySubscribers.ofFile(to);
+        });
         long had = -1;
         while (true) {
             try {
-                HttpResponse<Path> done = answer.get(stall.toMillis(), TimeUnit.MILLISECONDS);
-                if (done.statusCode() != 200) {
-                    throw new Stop(new Failure.Answered(release.jar(), done.statusCode()));
-                }
-                return;
+                return answer.get(stall.toMillis(), TimeUnit.MILLISECONDS);
             } catch (ExecutionException e) {
-                throw new Stop(new Failure.Unreachable(release.jar(), reason(e.getCause())));
+                throw new Stop(new Failure.Unreachable(at, reason(e.getCause())));
             } catch (TimeoutException e) {
+                if (!began.get()) {
+                    continue;
+                }
                 long has = to.toFile().length();
                 if (has == had) {
                     answer.cancel(true);
-                    throw new Stop(new Failure.Unreachable(release.jar(),
+                    throw new Stop(new Failure.Unreachable(at,
                             "nothing arrived for " + stall.toSeconds() + "s"));
                 }
                 had = has;
@@ -315,6 +467,45 @@ public final class Central {
                 throw e;
             }
         }
+    }
+
+    /** One request, with what is waited for and how. */
+    @FunctionalInterface
+    private interface Exchange<T> {
+        HttpResponse<T> at(URI uri) throws Stop, InterruptedException;
+    }
+
+    /**
+     * The answer for {@code uri}, following where a redirect sends it.
+     *
+     * <p>Followed here rather than by the client, so where a redirect points is held to what a
+     * repository is reached over — HTTPS, or plain HTTP on the loopback address — before anything is
+     * asked of it. The client's own following refuses only HTTPS to plain HTTP, and would take a
+     * repository on the loopback address to plain HTTP anywhere.
+     */
+    private static <T> HttpResponse<T> following(URI uri, Exchange<T> exchange)
+            throws Stop, InterruptedException {
+        URI at = uri;
+        for (int hops = 0; hops <= REDIRECTS; hops++) {
+            HttpResponse<T> answer = exchange.at(at);
+            Optional<String> location = answer.headers().firstValue("Location");
+            if (!REDIRECTING.contains(answer.statusCode()) || location.isEmpty()) {
+                return answer;
+            }
+            URI next;
+            try {
+                next = at.resolve(location.get());
+            } catch (IllegalArgumentException e) {
+                throw new Stop(new Failure.Unreadable(at,
+                        "it sends the request on to `" + location.get() + "`"));
+            }
+            if (!secure(next)) {
+                throw new Stop(new Failure.Redirected(uri, next));
+            }
+            at = next;
+        }
+        throw new Stop(new Failure.Unreadable(uri,
+                "it was sent on more than " + REDIRECTS + " times"));
     }
 
     /**
@@ -346,6 +537,10 @@ public final class Central {
             if (group == null || artifactId == null || version == null) {
                 throw new Stop(new Failure.Unreadable(at, "the parent is not named"));
             }
+            if (!coordinate(group) || !coordinate(artifactId) || !coordinate(version)) {
+                throw new Stop(new Failure.Unreadable(at, "the parent is named as `" + group
+                        + ":" + artifactId + ":" + version + "`"));
+            }
             at = file(group, artifactId, version, null, "pom");
         }
         throw new Stop(new Failure.Unreadable(pom, "its parents name each other"));
@@ -353,20 +548,29 @@ public final class Central {
 
     /** The answer for a small file, which has {@link #ANSWER} to arrive whole. */
     private HttpResponse<byte[]> ask(URI uri) throws Stop, InterruptedException {
+        return following(uri, this::askOnce);
+    }
+
+    private HttpResponse<byte[]> askOnce(URI at) throws Stop, InterruptedException {
         CompletableFuture<HttpResponse<byte[]>> answer =
-                client.sendAsync(request(uri), HttpResponse.BodyHandlers.ofByteArray());
+                client.sendAsync(request(at), HttpResponse.BodyHandlers.ofByteArray());
         try {
             return answer.get(ANSWER.toMillis(), TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
-            throw new Stop(new Failure.Unreachable(uri, reason(e.getCause())));
+            throw new Stop(new Failure.Unreachable(at, reason(e.getCause())));
         } catch (TimeoutException e) {
             answer.cancel(true);
-            throw new Stop(new Failure.Unreachable(uri,
+            throw new Stop(new Failure.Unreachable(at,
                     "it did not arrive in " + ANSWER.toSeconds() + "s"));
         } catch (InterruptedException e) {
             answer.cancel(true);
             throw e;
         }
+    }
+
+    private static boolean secure(URI uri) {
+        return "https".equals(uri.getScheme())
+                || ("http".equals(uri.getScheme()) && loopback(uri));
     }
 
     private static byte[] served(URI uri, HttpResponse<byte[]> answer) throws Stop {

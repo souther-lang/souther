@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFileAttributeView;
@@ -20,6 +21,7 @@ import java.util.stream.Stream;
 
 import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -59,9 +61,8 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
                 name);
     }
 
-    /** The repository, where a download with nothing arriving for a second has stopped. */
     private Central central() {
-        return Central.at(repository.uri(), Duration.ofSeconds(1));
+        return Central.at(repository.uri(), Duration.ofSeconds(30));
     }
 
     private BackendFetch.Outcome fetch(String target) throws Exception {
@@ -69,16 +70,25 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
                 release -> { });
     }
 
+    private BackendFetch.Outcome again(String target) throws Exception {
+        return BackendFetch.again(backends, central(), target, HERE, release -> { });
+    }
+
     private Central.Failure failed(String target) throws Exception {
         return assertInstanceOf(BackendFetch.Failed.class, fetch(target)).failure();
     }
 
-    /** What the directory holds besides the lock, by name. */
+    /** What the directory holds besides the lock and the records of what was fetched, by name. */
     private List<String> held() throws IOException {
         try (Stream<Path> listed = Files.list(home)) {
             return listed.map(path -> path.getFileName().toString())
-                    .filter(name -> !name.equals(".fetching.lock")).sorted().toList();
+                    .filter(name -> !name.equals(".fetching.lock") && !name.endsWith(".fetched"))
+                    .sorted().toList();
         }
+    }
+
+    private long askedFor(String path) {
+        return repository.asked().stream().filter(("/maven2/" + path)::equals).count();
     }
 
     @Test
@@ -129,21 +139,80 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
     }
 
     @Test
-    void aPomThatStatesNoSoutherAndNamesNoParentIsUnreadable() throws Exception {
-        repository.metadata(WASM, "0.1.0");
-        repository.put(LocalRepository.path(WASM, "0.1.0", null, "pom"),
+    void aReleaseWhosePomCannotBeReadIsPassedOverAndNamedWhereNothingElseIsFound()
+            throws Exception {
+        repository.metadata(WASM, "0.1.0", "0.2.0", "0.3.0", "0.4.0", "0.5.0", "0.6.0",
+                "0.7.0{x}");
+        repository.release(WASM, "0.1.0", "cli", HERE, jar("oldest", "wasm", HERE));
+        repository.put(LocalRepository.path(WASM, "0.2.0", null, "pom"),
                 "<project><artifactId>x</artifactId></project>");
+        repository.pom(WASM, "0.3.0",
+                LocalRepository.builtAgainst(WASM, "0.3.0", "${project.version}"));
+        repository.pom(WASM, "0.4.0", LocalRepository.inheriting(WASM, "0.4.0",
+                "souther-native-parent", "${revision}"));
+        repository.put(LocalRepository.path(WASM, "0.5.0", null, "pom"), "<project><prop");
+        // 0.6.0 is listed and has no pom at all.
 
-        assertInstanceOf(Central.Failure.Unreadable.class, failed("wasm"));
+        BackendFetch.Fetched fetched = assertInstanceOf(BackendFetch.Fetched.class,
+                fetch("wasm"));
+
+        assertEquals("0.1.0", fetched.release().version());
+
+        repository.release(WASM, "0.1.0", "cli", OTHER, jar("oldest", "wasm", OTHER));
+        Files.delete(fetched.backend().jar());
+        assertEquals(new Central.Failure.NoneBuilt(HERE,
+                        List.of("0.1.0", "0.2.0", "0.3.0", "0.4.0", "0.5.0", "0.6.0"),
+                        List.of("0.7.0{x}", "0.6.0", "0.5.0", "0.4.0", "0.3.0", "0.2.0")),
+                failed("wasm"));
     }
 
     @Test
-    void aSoutherVersionLeftAsAnExpressionIsUnreadable() throws Exception {
-        repository.metadata(WASM, "0.1.0");
-        repository.pom(WASM, "0.1.0",
-                LocalRepository.builtAgainst(WASM, "0.1.0", "${project.version}"));
+    void releasesAreAskedForSeveralAtATimeAndTheNewestBuiltAgainstThisSoutherIsTaken()
+            throws Exception {
+        List<String> versions = new ArrayList<>();
+        for (int i = 0; i < 16; i++) {
+            versions.add("0." + i + ".0");
+            repository.pom(WASM, "0." + i + ".0", LocalRepository.builtAgainst(WASM,
+                    "0." + i + ".0", i == 3 || i == 1 ? HERE : OTHER));
+        }
+        repository.metadata(WASM, versions.toArray(String[]::new));
+        repository.jar(WASM, "0.3.0", "cli", jar("third", "wasm", HERE));
+        repository.slowPoms(300);
 
-        assertInstanceOf(Central.Failure.Unreadable.class, failed("wasm"));
+        long started = System.nanoTime();
+        BackendFetch.Fetched fetched = assertInstanceOf(BackendFetch.Fetched.class,
+                fetch("wasm"));
+        Duration took = Duration.ofNanos(System.nanoTime() - started);
+
+        assertEquals("0.3.0", fetched.release().version());
+        // Thirteen poms one at a time would be thirteen waits; two windows of them are two.
+        assertTrue(took.compareTo(Duration.ofMillis(300L * 13 / 2)) < 0, took.toString());
+    }
+
+    @Test
+    void aRedirectIsFollowedOnlyToWhereARepositoryMayBeReached() throws Exception {
+        repository.metadata(WASM, "0.1.0");
+        repository.release(WASM, "0.1.0", "cli", HERE, jar("moved", "wasm", HERE));
+        String jar = LocalRepository.path(WASM, "0.1.0", "cli", "jar");
+        repository.jar("moved", "0.1.0", null, work.resolve("served/moved.jar"));
+        repository.redirect(jar, "/maven2/" + LocalRepository.path("moved", "0.1.0", null, "jar"));
+
+        assertInstanceOf(BackendFetch.Fetched.class, fetch("wasm"));
+
+        Files.delete(home.resolve("wasm-" + HERE + ".jar"));
+        repository.redirect(jar, "http://repository.example/elsewhere.jar");
+        Central.Failure failure = failed("wasm");
+
+        assertEquals(new Central.Failure.Redirected(repository.uri().resolve(jar),
+                URI.create("http://repository.example/elsewhere.jar")), failure);
+        assertEquals(List.of(), held());
+    }
+
+    @Test
+    void aTargetNothingCanBeAskedAboutTouchesNoDirectory() throws Exception {
+        assertEquals(new Central.Failure.Unregistered("llvm"), failed("llvm"));
+
+        assertTrue(Files.notExists(home), "the directory was made for a fetch that asked nothing");
     }
 
     @Test
@@ -152,7 +221,7 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
         repository.release(WASM, "0.1.0", "cli", OTHER, jar("a", "wasm", OTHER));
         repository.release(WASM, "0.2.0", "cli", OTHER, jar("b", "wasm", OTHER));
 
-        assertEquals(new Central.Failure.NoneBuilt(HERE, List.of("0.1.0", "0.2.0")),
+        assertEquals(new Central.Failure.NoneBuilt(HERE, List.of("0.1.0", "0.2.0"), List.of()),
                 failed("wasm"));
         assertEquals(List.of(), held());
     }
@@ -213,7 +282,12 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
         repository.release(WASM, "0.1.0", "cli", HERE, jar("a", "wasm", HERE));
         repository.cut(WASM, "0.1.0", "cli");
 
-        Central.Failure failure = failed("wasm");
+        // A tenth of a second is short of what a download would be given, and long enough here:
+        // this one has stopped, so taking it to have stopped sooner changes nothing about it.
+        Central.Failure failure = assertInstanceOf(BackendFetch.Failed.class,
+                BackendFetch.whereAbsent(backends,
+                        Central.at(repository.uri(), Duration.ofMillis(100)), "wasm", HERE,
+                        release -> { })).failure();
 
         assertTrue(assertInstanceOf(Central.Failure.Unreachable.class, failure).reason()
                 .startsWith("nothing arrived"), failure.toString());
@@ -284,6 +358,46 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
     }
 
     @Test
+    void fetchingAgainTheReleaseFetchedBeforeDownloadsNothing() throws Exception {
+        repository.metadata(WASM, "0.1.0");
+        repository.release(WASM, "0.1.0", "cli", HERE, jar("first", "wasm", HERE));
+        String jar = LocalRepository.path(WASM, "0.1.0", "cli", "jar");
+        BackendFetch.Fetched first = assertInstanceOf(BackendFetch.Fetched.class, again("wasm"));
+
+        BackendFetch.Current current = assertInstanceOf(BackendFetch.Current.class,
+                again("wasm"));
+
+        assertEquals(first.backend(), current.backend());
+        assertEquals(1, askedFor(jar));
+
+        // What a run ended between moving the jar and saying which release it is leaves.
+        Path record = home.resolve(".wasm-" + HERE + ".jar.fetched");
+        Files.writeString(record, "");
+        assertInstanceOf(BackendFetch.Fetched.class, again("wasm"));
+        assertEquals(2, askedFor(jar));
+
+        Files.delete(record);
+        Backends.Refused refused = assertThrows(Backends.Refused.class, () -> again("wasm"));
+        assertEquals("cli.backend.fetch.held", refused.key());
+        assertEquals(2, askedFor(jar));
+    }
+
+    @Test
+    void aJarPutByHandUnderTheNameAFetchWritesIsRefusedBeforeAnythingIsDownloaded()
+            throws Exception {
+        repository.metadata(WASM, "0.1.0");
+        repository.release(WASM, "0.1.0", "cli", HERE, jar("served", "wasm", HERE));
+        Path byHand = FakeBackend.write(home.resolve("wasm-" + HERE + ".jar"), "wasm", OTHER,
+                "mine");
+
+        Backends.Refused refused = assertThrows(Backends.Refused.class, () -> again("wasm"));
+
+        assertEquals("cli.backend.fetch.held", refused.key());
+        assertEquals(0, askedFor(LocalRepository.path(WASM, "0.1.0", "cli", "jar")));
+        assertEquals(OTHER, Backends.describe(byHand).southerVersion());
+    }
+
+    @Test
     void twoRunsFetchingTheSamePairFetchItOnce() throws Exception {
         repository.metadata(WASM, "0.1.0");
         repository.release(WASM, "0.1.0", "cli", HERE, jar("a", "wasm", HERE));
@@ -307,6 +421,18 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
         assertEquals(1, repository.asked().stream().filter(jar::equals).count(),
                 repository.asked().toString());
         assertEquals(List.of("wasm-" + HERE + ".jar"), held());
+    }
+
+    @Test
+    void noProxyNamesAHostADomainOrEveryHost() {
+        assertTrue(Central.bypassed("nexus.corp", "localhost, nexus.corp"));
+        assertTrue(Central.bypassed("repo.nexus.corp", "nexus.corp"));
+        assertTrue(Central.bypassed("repo.nexus.corp", ".nexus.corp"));
+        assertTrue(Central.bypassed("NEXUS.corp", "nexus.CORP"));
+        assertTrue(Central.bypassed("repo.maven.apache.org", "*"));
+        assertFalse(Central.bypassed("repo.maven.apache.org", "nexus.corp,,apache"));
+        assertFalse(Central.bypassed("notnexus.corp", "nexus.corp"));
+        assertFalse(Central.bypassed("repo.maven.apache.org", null));
     }
 
     @Test

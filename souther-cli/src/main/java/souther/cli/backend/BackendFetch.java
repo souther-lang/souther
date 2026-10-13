@@ -37,13 +37,19 @@ public final class BackendFetch {
             PosixFilePermissions.fromString("rw-r--r--");
 
     /** What came of a fetch. */
-    public sealed interface Outcome permits Fetched, Present, Failed {}
+    public sealed interface Outcome permits Fetched, Present, Current, Failed {}
 
     /** The release was fetched, and is the backend for the pair. */
     public record Fetched(Backends.Backend backend, Central.Release release) implements Outcome {}
 
     /** The pair was there when it was looked for again, so nothing was fetched. */
     public record Present(Backends.Backend backend) implements Outcome {}
+
+    /**
+     * The newest release is the one fetched before and is still in place, so it was not fetched
+     * again.
+     */
+    public record Current(Backends.Backend backend, Central.Release release) implements Outcome {}
 
     /** Nothing was fetched, for the reason the repository gave. */
     public record Failed(Central.Failure failure) implements Outcome {}
@@ -72,6 +78,12 @@ public final class BackendFetch {
                                  String southerVersion, Consumer<Central.Release> starting,
                                  boolean onlyWhereAbsent)
             throws Backends.Refused, IOException, InterruptedException {
+        // Before the directory is made or locked: a target with nothing to ask for, or a setting
+        // that names nothing to ask, is answered without touching the disk.
+        Central.Failure unasked = central.unaskable(target);
+        if (unasked != null) {
+            return new Failed(unasked);
+        }
         Path directory = Files.createDirectories(backends.fetched());
         synchronized (FETCHING) {
             try (FileChannel channel = FileChannel.open(directory.resolve(LOCK),
@@ -84,12 +96,50 @@ public final class BackendFetch {
                 return switch (central.release(target, southerVersion)) {
                     case Central.Failure failure -> new Failed(failure);
                     case Central.Release release -> {
+                        Backends.Backend held = heldAs(backends, release, southerVersion);
+                        if (held != null) {
+                            yield new Current(held, release);
+                        }
+                        Path name = backends.fetchedAs(release.target(), southerVersion);
+                        backends.clearToFetch(release.target(), southerVersion,
+                                Files.isRegularFile(record(name)));
                         starting.accept(release);
                         yield install(backends, central, release, southerVersion, directory);
                     }
                 };
             }
         }
+    }
+
+    /**
+     * The backend the release was fetched as before, where it is still what the directories
+     * choose for the pair, or null.
+     *
+     * <p>A released file does not change, so a jar fetched from the release's address is that
+     * release for as long as it stands under the name it was fetched as. Which address that was is
+     * written beside it, after it is in place; a record that names no release or another one asks
+     * for the jar again, which costs a download and nothing else. A name with no record at all was
+     * not written by a fetch, and is refused before this is asked.
+     */
+    private static Backends.Backend heldAs(Backends backends, Central.Release release,
+                                           String southerVersion)
+            throws Backends.Refused, IOException {
+        Path jar = backends.fetchedAs(release.target(), southerVersion);
+        Path record = record(jar);
+        if (!Files.isRegularFile(record)
+                || !Files.readString(record).equals(release.jar().toString())) {
+            return null;
+        }
+        return backends.find(release.target(), southerVersion) instanceof Backends.Found found
+                && found.backend().jar().equals(jar) ? found.backend() : null;
+    }
+
+    /**
+     * Where the address a fetched jar came from is written: beside it, under a name no search
+     * reads.
+     */
+    private static Path record(Path jar) {
+        return jar.resolveSibling("." + jar.getFileName() + ".fetched");
     }
 
     private static Outcome install(Backends backends, Central central, Central.Release release,
@@ -113,7 +163,15 @@ public final class BackendFetch {
             if (Files.getFileStore(part).supportsFileAttributeView(PosixFileAttributeView.class)) {
                 Files.setPosixFilePermissions(part, READABLE);
             }
-            return new Fetched(backends.install(part, described), release);
+            // The record says two things: that the name is a fetch's, by being there, and which
+            // release stands under it, by what it holds. It is emptied before the move and filled
+            // after, so a run ended between the two leaves a name that is still a fetch's to
+            // replace, and that names no release, so the next fetch downloads it again.
+            Path record = record(backends.fetchedAs(described.name(), southerVersion));
+            Files.writeString(record, "");
+            Backends.Backend installed = backends.install(part, described);
+            Files.writeString(record, release.jar().toString());
+            return new Fetched(installed, release);
         } catch (Central.Stop stop) {
             return new Failed(stop.failure());
         } finally {

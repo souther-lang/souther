@@ -33,14 +33,18 @@ public final class Unavailable {
         return new Line(key, Arrays.asList(arguments));
     }
 
-    /** The heading, then a line for each directory searched and one for the repository. */
-    public static List<Line> of(Backends.Absent absent, Central.Failure failure) {
+    /**
+     * The heading, then a line for each directory searched and one for the repository, which is
+     * called {@code repository} there.
+     */
+    public static List<Line> of(Backends.Absent absent, Central.Failure failure,
+                                String repository) {
         List<Line> lines = new ArrayList<>();
         lines.add(line("cli.backend.unavailable", absent.target(), absent.southerVersion()));
         for (Backends.Searched searched : absent.searched()) {
             lines.add(searched(absent.target(), searched));
         }
-        lines.add(repository(failure));
+        lines.add(repository(failure, repository));
         if (failure instanceof Central.Failure.NotAsked
                 || failure instanceof Central.Failure.Unreachable) {
             lines.add(line("cli.backend.fetch.later", absent.target()));
@@ -62,33 +66,39 @@ public final class Unavailable {
         };
     }
 
-    /** What the repository answered, as the line that says it. */
-    public static Line repository(Central.Failure failure) {
+    /** What the repository, called {@code repository}, answered, as the line that says it. */
+    public static Line repository(Central.Failure failure, String repository) {
         return switch (failure) {
-            case Central.Failure.NotAsked _ -> line("cli.backend.central.notasked");
+            case Central.Failure.NotAsked _ -> line("cli.backend.central.notasked", repository);
             case Central.Failure.Unregistered unregistered ->
-                    line("cli.backend.central.unregistered", unregistered.target());
+                    line("cli.backend.central.unregistered", repository, unregistered.target());
             case Central.Failure.Unpublished unpublished ->
-                    line("cli.backend.central.unpublished", unpublished.target(),
+                    line("cli.backend.central.unpublished", repository, unpublished.target(),
                             unpublished.metadata());
-            case Central.Failure.NoneBuilt none ->
-                    line("cli.backend.central.none", none.southerVersion(),
-                            String.join(", ", none.releases()));
+            case Central.Failure.NoneBuilt none -> none.unreadable().isEmpty()
+                    ? line("cli.backend.central.none", repository, none.southerVersion(),
+                            String.join(", ", none.releases()))
+                    : line("cli.backend.central.none.unreadable", repository,
+                            none.southerVersion(), String.join(", ", none.releases()),
+                            String.join(", ", none.unreadable()));
             case Central.Failure.Unreachable unreachable ->
-                    line("cli.backend.central.unreachable", unreachable.uri(),
+                    line("cli.backend.central.unreachable", repository, unreachable.uri(),
                             unreachable.reason());
             case Central.Failure.Answered answered ->
-                    line("cli.backend.central.status", answered.uri(),
+                    line("cli.backend.central.status", repository, answered.uri(),
                             String.valueOf(answered.status()));
             case Central.Failure.Unreadable unreadable ->
-                    line("cli.backend.central.unreadable", unreadable.uri(),
+                    line("cli.backend.central.unreadable", repository, unreadable.uri(),
                             unreadable.reason());
+            case Central.Failure.Redirected redirected ->
+                    line("cli.backend.central.redirected", repository, redirected.uri(),
+                            redirected.reached());
             case Central.Failure.NotTheBackend not ->
-                    line("cli.backend.central.notthebackend", not.uri(), not.target(),
-                            not.southerVersion());
+                    line("cli.backend.central.notthebackend", repository, not.uri(),
+                            not.target(), not.southerVersion());
             case Central.Failure.Misconfigured misconfigured ->
-                    line("cli.backend.central.misconfigured", misconfigured.setting(),
-                            misconfigured.value());
+                    line("cli.backend.central.misconfigured", repository,
+                            misconfigured.setting(), misconfigured.value());
         };
     }
 }

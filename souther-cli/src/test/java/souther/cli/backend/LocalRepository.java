@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 
 /**
  * A Maven repository in Central's layout, served over HTTP on the loopback address for the length of
@@ -33,6 +34,8 @@ public final class LocalRepository implements AutoCloseable {
     private final Set<String> cut = ConcurrentHashMap.newKeySet();
     private final List<String> asked = new CopyOnWriteArrayList<>();
     private final CountDownLatch closed = new CountDownLatch(1);
+    private final Map<String, String> redirects = new ConcurrentHashMap<>();
+    private volatile long pomDelay;
 
     private LocalRepository(HttpServer server) {
         this.server = server;
@@ -43,6 +46,8 @@ public final class LocalRepository implements AutoCloseable {
                 new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         LocalRepository repository = new LocalRepository(server);
         server.createContext("/", repository::serve);
+        // A thread for each exchange, as a real repository answers requests at once.
+        server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         server.start();
         return repository;
     }
@@ -153,13 +158,36 @@ public final class LocalRepository implements AutoCloseable {
                 + (classifier == null ? "" : "-" + classifier) + "." + extension;
     }
 
+    /** Answers {@code path} by sending the request on to {@code location}. */
+    public void redirect(String path, String location) {
+        redirects.put(path, location);
+    }
+
+    /** Answers every pom only after {@code millis}, as a repository far away does. */
+    public void slowPoms(long millis) {
+        pomDelay = millis;
+    }
+
     private void serve(HttpExchange exchange) throws IOException {
         String path = exchange.getRequestURI().getPath();
         asked.add(path);
         String file = path.startsWith(ROOT) ? path.substring(ROOT.length()) : path;
         Integer status = statuses.get(file);
         byte[] content = files.get(file);
+        if (file.endsWith(".pom") && pomDelay > 0) {
+            try {
+                Thread.sleep(pomDelay);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
         try (exchange) {
+            String location = redirects.get(file);
+            if (location != null) {
+                exchange.getResponseHeaders().add("Location", location);
+                exchange.sendResponseHeaders(302, -1);
+                return;
+            }
             if (status != null || content == null) {
                 exchange.sendResponseHeaders(status != null ? status : 404, -1);
                 return;
