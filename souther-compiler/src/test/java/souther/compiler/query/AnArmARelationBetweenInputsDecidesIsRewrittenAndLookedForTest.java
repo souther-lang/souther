@@ -22,9 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A rewrite of an arm a comparison between two inputs decides is looked for where the comparison
- * comes out the arm's way, and the row found there is one writing its answer down tells the
- * rewrite apart with.
+ * A rewrite of an arm a comparison between two inputs decides is looked for from the rows seen
+ * going through the arm, and the row found there is one writing its answer down tells the rewrite
+ * apart with.
  *
  * <p>The comparison is of how many days lie between two dates, so no class of either date stands
  * for a side of it. The rows hold the amount at nothing, which every arm answers alike; a row that

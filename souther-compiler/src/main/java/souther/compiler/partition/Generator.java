@@ -723,9 +723,9 @@ public final class Generator {
              * the word, so what somebody would raise is the same either way.
              */
             public static Reason wordFor(java.util.Collection<CompositionBudget> budgets) {
-                Reason word = null;
+                HowFar farthest = null;
                 for (CompositionBudget each : budgets) {
-                    Reason here = switch (each) {
+                    HowFar here = switch (each) {
                         case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS,
                              PLACES_A_PAIR_IS_TRIED_AT,
                              // Beside the figure it was split off, because the word is the walk's
@@ -733,7 +733,7 @@ public final class Generator {
                              // one walk would say two things depending on which of its own numbers
                              // ran out first — and an answer carrying the word and the budget could
                              // not be assembled at all ({@link CompositionBudget#splitFrom}).
-                             PLACES_A_PAIR_IS_LOOKED_AT -> NOTHING_COMPOSES_ONE;
+                             PLACES_A_PAIR_IS_LOOKED_AT -> HowFar.TO_THE_END;
                         case PAIRINGS_BUILT_AT_ONCE, ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
                              // The pairs past it were never composed for, so what the search came
                              // to is about the pairs it tried.
@@ -755,8 +755,7 @@ public final class Generator {
                              // The counts a string is written for past this one, and the lengths
                              // past the ones looked at, were never asked for either.
                              CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
-                             CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR ->
-                                    THE_SEARCH_LEFT_SOMETHING_UNTRIED;
+                             CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR -> HowFar.CUT_SHORT;
                         // Reaching these stops no composing, so no search comes back from one of
                         // them and there is no word to give. Asked for one all the same, this says
                         // so rather than lending a word from a budget that does stop something.
@@ -785,31 +784,33 @@ public final class Generator {
                              RUNS_REPAIRING_A_ROW -> throw new IllegalArgumentException(
                                 "no search comes back from this budget, so it has no word: " + each);
                     };
-                    word = word == null ? here : togetherWith(word, here);
+                    farthest = farthest == null || here.compareTo(farthest) > 0 ? here : farthest;
                 }
-                if (word == null) {
+                if (farthest == null) {
                     throw new IllegalArgumentException(
                             "a search nothing stopped has no word to read off what stopped it");
                 }
-                return word;
+                return farthest.word;
             }
 
             /**
-             * What two walks of one search came to together, each said in the word its budget comes
-             * back with: the word for a walk cut short where either was, since the search then left
-             * something untried. Only those two words come back from a budget, so another pair is
-             * a budget given a word this has not been told how to put beside the others.
+             * How far a walk a budget stopped got, which is what its word says; in the order the
+             * walks of one search are put together in, a later one taking in an earlier.
              */
-            private static Reason togetherWith(Reason one, Reason other) {
-                if (one == other) {
-                    return one;
+            private enum HowFar {
+
+                /** To the end of what it was handed, with nothing composed there. */
+                TO_THE_END(NOTHING_COMPOSES_ONE),
+
+                /** Stopped in front of something it did not try, which a search any walk of which
+                 *  stopped has left untried whatever the others came to. */
+                CUT_SHORT(THE_SEARCH_LEFT_SOMETHING_UNTRIED);
+
+                private final Reason word;
+
+                HowFar(Reason word) {
+                    this.word = word;
                 }
-                Set<Reason> both = EnumSet.of(one, other);
-                if (both.equals(EnumSet.of(NOTHING_COMPOSES_ONE, THE_SEARCH_LEFT_SOMETHING_UNTRIED))) {
-                    return THE_SEARCH_LEFT_SOMETHING_UNTRIED;
-                }
-                throw new IllegalStateException("budgets came back with " + one + " and " + other
-                        + ", and nothing says what the two come to together");
             }
 
             /**
@@ -1919,15 +1920,10 @@ public final class Generator {
                             break;
                         }
                     }
-                    // And held to what takes a run down a way into the arm, which is where to look
-                    // for an arm no class places a row at: one decided by a relation between
-                    // inputs is reached by values no class of either input holds.
-                    for (int at = 0; seen == null && at < arm.occurrences().size(); at++) {
-                        seen = heldOnAWayInto(arm.occurrences().get(at), read, goingOn.holding(),
-                                axes, purposes, looking, check, answers);
-                    }
                     // And from the rows seen going through it, which is where a run through the
-                    // arm is known to start whatever a reading of the way in could state.
+                    // arm is known to start whatever a reading of the way in could state — an arm
+                    // decided by a relation between inputs, which no class of either holds a side
+                    // of, among them.
                     for (int at = 0; seen == null && at < arm.seenThrough().size(); at++) {
                         seen = movedFrom(arm.seenThrough().get(at), axes, purposes, looking,
                                 check, answers);
@@ -1982,49 +1978,6 @@ public final class Generator {
             }
         }
         return new FillResult(composed, unresolved, reasons, Discharge.of(plan, discharged));
-    }
-
-    /**
-     * A row the rewrite {@code looking} asks about answers differently on, composed holding the
-     * last condition on a way into arm {@code probe} to coming out as that way takes it — or null
-     * where none was.
-     *
-     * <p>What gets a row down the way is what gets a row past a guard ({@link HeldOutcome}), and
-     * it is a demand on the row and not a class of a position: a comparison relating two inputs
-     * comes out a way at values no class of either input holds, so this looks where the classes
-     * leave nowhere to. The last condition only, because what holds it is held under the way to
-     * it, which takes in every condition before it; held besides, each of those would pin the row
-     * at a point of its own border, and two points of one position are a row nothing composes.
-     * Every other position is chosen as a row is composed with nothing pinned, values passed over
-     * moving it to the next its rules leave. Where the row went is what running it says: a row the
-     * rewrite answers differently on went through the arm, since the rewrite changes nothing else.
-     *
-     * <p>A way whose last condition nothing holds a row to is not looked down here. That is a
-     * reading short of the way and not the arm out of reach, which is why the rows seen going
-     * through the arm are looked from as well ({@link #movedFrom}).
-     */
-    private static GeneratedRow heldOnAWayInto(ArmProbe probe, CoverageRead.Read read,
-                                               HeldOutcome.Of holding,
-                                               MeasuredInput.MeasuredAxes axes,
-                                               List<Purpose> purposes, ReplacementWitness looking,
-                                               CandidateCheck check, List<StoodInAnswer> answers) {
-        for (WayIn way : waysNoClassPlaces(probe, read, axes)) {
-            if (way.decisions().isEmpty()) {
-                continue;
-            }
-            Optional<HeldOutcome> holds = holding.at(way.decisions().getLast().claims().at());
-            if (holds.isEmpty()) {
-                continue;
-            }
-            List<FixtureTemplate> inputs = looking.tookFromComposing(() -> composed(axes,
-                    composes(axes.axes()),
-                    heldTogether(axes.subject(), List.of(holds.get()), check), check, Map.of(),
-                    witnessedBy(looking, purposes, answers)));
-            if (inputs != null) {
-                return new GeneratedRow(purposes, inputs, answers);
-            }
-        }
-        return null;
     }
 
     /**
@@ -2087,42 +2040,6 @@ public final class Generator {
                                          List<StoodInAnswer> answers) {
         return atMost(MOST_REPAIRS, looking::composingStopped,
                 inputs -> looking.of(new GeneratedRow(purposes, inputs, answers), null));
-    }
-
-    /**
-     * The ways into arm {@code probe} no class places a row down: of every way, where the reading
-     * wrote them all down, the ones {@link InteractionCells#at} places nowhere — the rest are where
-     * {@link #whereToLookFor} already looked — and otherwise the ways it read some run taking that
-     * end at the arm.
-     *
-     * <p>The second is not every way in, and is not offered as one. What it is used for is where
-     * to look, and a row found down one of them is a row; that none was found down them says
-     * nothing about the ways not written.
-     */
-    private static List<WayIn> waysNoClassPlaces(ArmProbe probe, CoverageRead.Read read,
-                                                 MeasuredInput.MeasuredAxes axes) {
-        List<WayIn> out = new ArrayList<>();
-        if (read.armAt(probe) instanceof PathAccess.Ways ways) {
-            for (WayIn way : ways.ways()) {
-                if (InteractionCells.at(way, ways.arrivesAt(), axes) == null) {
-                    out.add(way);
-                }
-            }
-            return out;
-        }
-        for (WayIn way : read.taken()) {
-            if (armItEndsAt(way).equals(Optional.of(probe))) {
-                out.add(way);
-            }
-        }
-        return out;
-    }
-
-    /** The arm a way ends at, where it ends at one the plan numbered. */
-    private static Optional<ArmProbe> armItEndsAt(WayIn way) {
-        return !way.decisions().isEmpty()
-                && way.decisions().getLast().claims().at() instanceof ControlPlace.Arm arm
-                ? arm.probe() : Optional.empty();
     }
 
     /**
@@ -2332,9 +2249,10 @@ public final class Generator {
                                                             ArmsNamed named) {
         Map<ArmProbe, List<WayIn>> out = new HashMap<>();
         for (WayIn way : read.taken()) {
-            Optional<ArmProbe> endsAt = armItEndsAt(way);
-            if (endsAt.isEmpty()
-                    || !(read.arms().get(endsAt.get())
+            if (way.decisions().isEmpty()
+                    || !(way.decisions().getLast().claims().at() instanceof ControlPlace.Arm arm)
+                    || arm.probe().isEmpty()
+                    || !(read.arms().get(arm.probe().get())
                             instanceof PathAccess.Unsupported(var why))
                     || why != PathAccess.Unsupported.Why.RUNS_WHERE_SOMETHING_CALLS_IT) {
                 continue;
@@ -2348,7 +2266,7 @@ public final class Generator {
                         ? new Decision(taken, decision.claims())
                         : decision);
             }
-            out.computeIfAbsent(endsAt.get(), _ -> new ArrayList<>()).add(new WayIn(asCases));
+            out.computeIfAbsent(arm.probe().get(), _ -> new ArrayList<>()).add(new WayIn(asCases));
         }
         return out;
     }
