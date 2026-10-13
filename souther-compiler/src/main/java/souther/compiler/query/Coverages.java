@@ -59,6 +59,7 @@ import souther.compiler.partition.Reachability;
 import souther.compiler.partition.WayToTheBorder;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -644,15 +645,22 @@ final class Coverages {
         PartitionEvidence.PairSpace.Between between =
                 new PartitionEvidence.PairSpace.Between(ones.id(), others.id());
         SequencedSet<PartitionEvidence.PairSpace.Cell> cells = new LinkedHashSet<>();
+        List<String> oneClasses = ones.classes().stream().map(PartitionClass::id).toList();
+        List<String> otherClasses = others.classes().stream().map(PartitionClass::id).toList();
+        // A class of the first at a time, so that what is made to answer is one row of the
+        // combinations and not all of them.
+        ReadTogether.Between read = together.between(ones.id(), oneClasses, others.id(),
+                otherClasses);
         long count = 0;
-        for (int here = 0; here < ones.classes().size(); here++) {
-            String oneClass = ones.classes().get(here).id();
-            for (int there = 0; there < others.classes().size(); there++) {
-                String otherClass = others.classes().get(there).id();
-                if (!among.canHoldTogether(one, here, other, there)
-                        || !together.reads(ones.id(), oneClass, others.id(), otherClass)) {
+        for (int here = 0; here < oneClasses.size(); here++) {
+            BitSet readWith = read.readWith(here);
+            for (int there = readWith.nextSetBit(0); there >= 0;
+                    there = readWith.nextSetBit(there + 1)) {
+                if (!among.canHoldTogether(one, here, other, there)) {
                     continue;
                 }
+                String oneClass = oneClasses.get(here);
+                String otherClass = otherClasses.get(there);
                 count++;
                 if (count <= room) {
                     cells.add(new PartitionEvidence.PairSpace.Cell(between, oneClass,

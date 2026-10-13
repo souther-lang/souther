@@ -2,6 +2,9 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.partition.AdequacyPolicy;
+import souther.compiler.partition.Budgets;
+import souther.compiler.regex.PatternPlan;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.LinkedHashSet;
@@ -460,6 +463,75 @@ class ACombinationIsOwedWhereARunReadsBothTest {
 
         assertEquals(Set.of("Flat × usage/0 <= x <= 100", "Flat × usage/100 < x"),
                 helper.owed(), "only Flat hands the usage to the helpers");
+    }
+
+    /**
+     * Past what the compilation counts off the rows, the combinations owed are counted and not
+     * listed, and the count is still the one the ways make.
+     */
+    @Test
+    void pastTheBudgetWhatIsOwedIsCountedAndNotListed() {
+        Compilation compilation = Compilation.ofSource(CHARGE, "Main")
+                .withAdequacyPolicy(new AdequacyPolicy(
+                        new AdequacyPolicy.OfTheMeasures(1, Budgets.measures().cellsPerGroup(),
+                                PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS,
+                                Budgets.measures().rewriteRuns()),
+                        Budgets.generation()));
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        PartitionEvidence.PairSpace pairs = compilation.db()
+                .ask(new Adequacy.Coverage("probe.charge")).value().get("charge").pairs();
+
+        assertEquals(2, pairs.total(), "Metered with each usage class, whatever was listed");
+        assertInstanceOf(PartitionEvidence.PairSpace.Owed.Counted.class,
+                pairs.space().getFirst().owed(), () -> "not listed past the budget: " + pairs);
+        assertInstanceOf(Measurement.FailedToMeasure.class, pairs.counted(),
+                "and not counted off the rows, which is said");
+        assertEquals(List.of(), pairs.left("charge"), "a space nobody walked leaves no gap");
+    }
+
+    /**
+     * A way read in part beside conditions under the cases of a sum reads every position in every
+     * class a row taking it may hold — not only in the classes the choices of case that read a
+     * position read it in.
+     */
+    @Test
+    void aWayReadInPartUnderTheCasesOfASumNarrowsNothing() {
+        Measured cases = measured("""
+                module probe.partcases
+
+                data Sized = { amount: Int }
+                    invariant amount >= 0 && amount <= 1000
+                data Small = { ...Sized }
+                    invariant amount <= 10
+                data Large = { ...Sized }
+                    invariant amount >= 100
+                data Kind = Small | Large
+                data Order = { kind: Kind, n: Int }
+                data Positive = Int
+                    invariant value > 0
+
+                behavior both : (o: Order) -> String
+                    constructs Positive
+
+                let both (o) = {
+                    guard Positive(o.n) as p else "none"
+                    if o.kind.amount <= 5 then
+                        if o.n <= 50 then "a" else "b"
+                    else "c"
+                }
+
+                example both
+                    | (Order { kind = Small { amount = 1 }, n = 1 }) -> "a"
+                """, "both");
+
+        assertEquals(Set.of(
+                        "o.kind@Small.amount/0 <= x <= 5 × o.n/x <= 50",
+                        "o.kind@Small.amount/0 <= x <= 5 × o.n/50 < x",
+                        "o.kind@Small.amount/5 < x <= 10 × o.n/x <= 50",
+                        "o.kind@Small.amount/5 < x <= 10 × o.n/50 < x"),
+                cases.owedBetween("o.kind@Small.amount", "o.n"),
+                "a decision past the construction may read either, whichever side of the line");
     }
 
     private record Measured(String behavior, Compilation compilation,

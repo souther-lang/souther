@@ -25,6 +25,7 @@ import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -32,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -80,10 +82,8 @@ final class WhatABodyTellsApart {
     private final ClassCoexistence coexistence;
     /** Which position each condition is about and what it admits there, asked once of each. */
     private final Map<souther.compiler.reading.Condition, Placed> placed = new HashMap<>();
-    /** For each two positions, the first before the second, which classes of the first some way
-     *  read so far reads with which of the second ({@link ReadTogether.Read}); null where none
-     *  has. */
-    private final boolean[][] readTogether;
+    /** What each way read so far reads together, each once. */
+    private final Set<ReadTogether.Way> readTogether = new LinkedHashSet<>();
 
     private WhatABodyTellsApart(MeasuredInput.MeasuredAxes measured,
                                 List<RuleWithoutALine> noLine, ArmsNamed armsNamed,
@@ -97,7 +97,6 @@ final class WhatABodyTellsApart {
         this.arrives = arrives;
         this.coexistence = ClassCoexistence.among(axes);
         this.unread = new boolean[axes.size()];
-        this.readTogether = new boolean[axes.size() * axes.size()][];
         for (int at = 0; at < axes.size(); at++) {
             splits.add(new ArrayList<>());
             comparisonsRead.add(new LinkedHashSet<>());
@@ -140,7 +139,7 @@ final class WhatABodyTellsApart {
             }
         }
         Map<AxisId, BodyDistinction> out = new LinkedHashMap<>();
-        boolean[] everyOneWith = new boolean[axes.size()];
+        List<AxisId> everyOneWith = new ArrayList<>();
         List<AxisId> ids = new ArrayList<>();
         List<List<String>> classes = new ArrayList<>();
         for (int at = 0; at < axes.size(); at++) {
@@ -148,13 +147,16 @@ final class WhatABodyTellsApart {
             // shows it, and what it reads beside it is not known — whether or not what the ways
             // did read already tells every class apart, which is all the position's own answer
             // asks.
-            everyOneWith[at] = reading.ruleNoDecisionRead(at);
-            out.put(axes.get(at).id(), reading.at(at, everyOneWith[at]));
+            boolean ruleNoDecisionRead = reading.ruleNoDecisionRead(at);
+            if (ruleNoDecisionRead) {
+                everyOneWith.add(axes.get(at).id());
+            }
+            out.put(axes.get(at).id(), reading.at(at, ruleNoDecisionRead));
             ids.add(axes.get(at).id());
             classes.add(axes.get(at).classes().stream().map(PartitionClass::id).toList());
         }
-        return new BodyInputReading(out,
-                new ReadTogether.Read(ids, classes, reading.readTogether, everyOneWith));
+        return new BodyInputReading(out, new ReadTogether.Read(ids, classes,
+                List.copyOf(reading.readTogether), everyOneWith));
     }
 
     /**
@@ -643,8 +645,12 @@ final class WhatABodyTellsApart {
      *
      * <p>A way written without something that holds on it, or holding a decision nothing could name
      * the subject of, may read any position besides the ones it names. So every position is read on
-     * it, in whatever it admits there: what it does say still holds, and what it does not leaves
-     * every class.
+     * it, in the classes a row taking it may hold there ({@link #mayHold}) — which is a different
+     * question from which classes the choices that read a position read it in, and is answered on
+     * its own.
+     *
+     * <p>Held as ways and never as the combinations they make, which are as many as the product of
+     * the positions' classes ({@link ReadTogether.Way}).
      */
     private void readTogether(Admitted direct, List<Chosen> chosen, boolean saidInPart) {
         int size = axes.size();
@@ -657,81 +663,118 @@ final class WhatABodyTellsApart {
                 group[at] = group[at] == -1 ? g : -2;
             }
         }
-        boolean[] read = new boolean[size];
-        boolean[][] in = new boolean[size][];
+        List<Integer> noneApart = Collections.nCopies(size, -1);
+        if (saidInPart) {
+            List<BitSet> classes = new ArrayList<>();
+            for (int at = 0; at < size; at++) {
+                classes.add(classesOf(at, mayHold(at, direct, chosen, group)));
+            }
+            remember(new ReadTogether.Way(classes, noneApart));
+            return;
+        }
+        // The way whole: each position in the classes the choices that read it read it in, two
+        // positions of one group apart.
+        List<BitSet> whole = new ArrayList<>();
+        List<Integer> apart = new ArrayList<>();
         for (int at = 0; at < size; at++) {
-            if (group[at] == -1) {
-                read[at] = reads(direct, at);
-                in[at] = direct.here[at];
+            whole.add(group[at] == -1
+                    ? (reads(direct, at) ? classesOf(at, direct.here[at]) : null)
+                    : readUnderTheChoices(at, chosen));
+            apart.add(Math.max(group[at], -1));
+        }
+        remember(new ReadTogether.Way(whole, apart));
+        // And each choice of a group over the positions only that group is measured at, which is
+        // where two positions of the group are read together.
+        for (int g = 0; g < chosen.size(); g++) {
+            for (Admitted way : chosen.get(g).ways()) {
+                List<BitSet> classes = new ArrayList<>();
+                for (int at = 0; at < size; at++) {
+                    classes.add(group[at] == g && reads(way, at)
+                            ? classesOf(at, way.here[at]) : null);
+                }
+                remember(new ReadTogether.Way(classes, noneApart));
+            }
+        }
+    }
+
+    /** That {@code way} is read, where it reads two positions or more. */
+    private void remember(ReadTogether.Way way) {
+        if (way.classes().stream().filter(Objects::nonNull).count() > 1) {
+            readTogether.add(way);
+        }
+    }
+
+    /**
+     * The classes the choices of case that read the {@code at}th position read it in, or null
+     * where none does.
+     */
+    private BitSet readUnderTheChoices(int at, List<Chosen> chosen) {
+        BitSet out = null;
+        for (Chosen each : chosen) {
+            if (!each.touched().contains(at)) {
                 continue;
             }
-            boolean everyClass = false;
-            boolean[] some = new boolean[axes.get(at).classes().size()];
-            for (Chosen each : chosen) {
-                if (!each.touched().contains(at)) {
-                    continue;
-                }
-                for (Admitted way : each.ways()) {
-                    if (!reads(way, at)) {
-                        continue;
+            for (Admitted way : each.ways()) {
+                if (reads(way, at)) {
+                    if (out == null) {
+                        out = new BitSet();
                     }
-                    read[at] = true;
-                    if (way.here[at] == null) {
-                        everyClass = true;
-                    } else {
-                        for (int c = 0; c < some.length; c++) {
-                            some[c] |= way.here[at][c];
-                        }
-                    }
-                }
-            }
-            // A position no choice reads is one the way says nothing of, which leaves it every
-            // class and not none: a way read in part reads it in all of them.
-            in[at] = everyClass || !read[at] ? null : some;
-        }
-        if (saidInPart) {
-            Arrays.fill(read, true);
-        }
-        for (int one = 0; one < size; one++) {
-            for (int other = one + 1; other < size; other++) {
-                if (!saidInPart && group[one] >= 0 && group[one] == group[other]) {
-                    for (Admitted way : chosen.get(group[one]).ways()) {
-                        if (reads(way, one) && reads(way, other)) {
-                            readTogether(one, way.here[one], other, way.here[other]);
-                        }
-                    }
-                } else if (read[one] && read[other]) {
-                    readTogether(one, in[one], other, in[other]);
+                    out.or(classesOf(at, way.here[at]));
                 }
             }
         }
+        return out;
+    }
+
+    /**
+     * The classes a row taking the way may hold at the {@code at}th position, null for every class.
+     *
+     * <p>What the way admits there under each choice of case that is left, and every class under a
+     * choice that says nothing of the position: a choice that does not read it leaves it as the row
+     * has it. Not which choices read it, which is what a way that says all it holds is read for —
+     * one that holds more than it says may read the position under any choice.
+     */
+    private static boolean[] mayHold(int at, Admitted direct, List<Chosen> chosen, int[] group) {
+        if (group[at] == -1) {
+            return direct.here[at];
+        }
+        boolean[] some = null;
+        for (Chosen each : chosen) {
+            if (!each.touched().contains(at)) {
+                continue;
+            }
+            for (Admitted way : each.ways()) {
+                if (!reads(way, at) || way.here[at] == null) {
+                    return null;
+                }
+                if (some == null) {
+                    some = new boolean[way.here[at].length];
+                }
+                for (int c = 0; c < some.length; c++) {
+                    some[c] |= way.here[at][c];
+                }
+            }
+        }
+        return some;
+    }
+
+    /** The classes {@code admitted} names of the {@code at}th position, every class where it is
+     *  null. */
+    private BitSet classesOf(int at, boolean[] admitted) {
+        BitSet out = new BitSet();
+        if (admitted == null) {
+            out.set(0, axes.get(at).classes().size());
+            return out;
+        }
+        for (int c = 0; c < admitted.length; c++) {
+            out.set(c, admitted[c]);
+        }
+        return out;
     }
 
     /** Whether a decision on {@code way} is about the {@code at}th position. */
     private static boolean reads(Admitted way, int at) {
         return way.stands[at] || way.unread[at];
-    }
-
-    /** That the classes {@code here} of the {@code one}th position are read together with the
-     *  classes {@code there} of the {@code other}th, each null for every class. */
-    private void readTogether(int one, boolean[] here, int other, boolean[] there) {
-        int ones = axes.get(one).classes().size();
-        int others = axes.get(other).classes().size();
-        int pair = ReadTogether.Read.pair(one, other, axes.size());
-        if (readTogether[pair] == null) {
-            readTogether[pair] = new boolean[ones * others];
-        }
-        boolean[] table = readTogether[pair];
-        for (int i = 0; i < ones; i++) {
-            if (here != null && !here[i]) {
-                continue;
-            }
-            for (int j = 0; j < others; j++) {
-                if (there == null || there[j]) {
-                    table[i * others + j] = true;
-                }
-            }
-        }
     }
 
     /**
@@ -879,19 +922,28 @@ final class WhatABodyTellsApart {
         /**
          * This, with what the choices of case {@code ways} admit at the positions {@code touched}
          * they are measured at: a position is admitted in the classes some choice standing there
-         * admits it in. Every other position is as this has it, since the choices say nothing of
-         * it a case of theirs decides.
+         * admits it in, and every class where a choice standing there admits every one. Every other
+         * position is as this has it, since the choices say nothing of it a case of theirs decides.
+         *
+         * <p>Where the way stands is not joined. No choice stands at two positions under two cases,
+         * and a way standing at both would be read as one no value takes; whether a value takes a
+         * choice is asked of the choice ({@link Admitted#under}).
          */
         Admitted joinedWith(List<Admitted> ways, Set<Integer> touched) {
             Admitted out = new Admitted(copied(here), unread.clone(), copiedSets(stated),
                     stands.clone(), taken);
             for (int at : touched) {
                 boolean[] some = null;
+                boolean everyClass = false;
                 for (Admitted way : ways) {
                     if (!way.stands[at]) {
                         continue;
                     }
-                    if (way.here[at] != null) {
+                    // A row of a choice standing here is here, in the classes the choice admits —
+                    // every class where it puts none of them aside.
+                    if (way.here[at] == null) {
+                        everyClass = true;
+                    } else {
                         if (some == null) {
                             some = new boolean[way.here[at].length];
                         }
@@ -902,7 +954,7 @@ final class WhatABodyTellsApart {
                     out.unread[at] |= way.unread[at];
                     out.stated.get(at).addAll(way.stated.get(at));
                 }
-                if (some != null) {
+                if (some != null && !everyClass) {
                     out.here[at] = some;
                 }
             }
