@@ -247,11 +247,13 @@ public final class InitCommand {
      */
     private static String cannotBeAddedTo(BuildSystem build, Path at) {
         try {
-            String text = Files.readString(build.fileIn(at));
+            Path file = build.fileIn(at);
+            String text = Files.readString(file);
             if (build == BuildSystem.MAVEN) {
                 return MavenBuild.canBeAddedTo(text) ? null : "cli.init.pom.unreadable";
             }
-            return switch (GradleBuild.appliedIn(text)) {
+            return switch (GradleBuild.appliedIn(text,
+                    GradleBuild.isKotlin(file.getFileName().toString()))) {
                 case SOMEWHERE_ELSE -> "cli.init.gradle.elsewhere";
                 case UNTOLD -> "cli.init.gradle.unversioned";
                 case ALREADY, NOT_YET -> null;
@@ -332,12 +334,12 @@ public final class InitCommand {
             throws IOException {
         Path file = build.fileIn(at);
         String was = Files.readString(file);
+        boolean kotlin = GradleBuild.isKotlin(file.getFileName().toString());
         String now = build == BuildSystem.MAVEN
                 ? MavenBuild.withSoutherDeclared(was, project.southerVersion())
-                : switch (GradleBuild.appliedIn(was)) {
+                : switch (GradleBuild.appliedIn(was, kotlin)) {
                     case ALREADY -> was;
-                    case NOT_YET -> GradleBuild.withThePluginApplied(was,
-                            GradleBuild.isKotlin(file.getFileName().toString()),
+                    case NOT_YET -> GradleBuild.withThePluginApplied(was, kotlin,
                             project.southerVersion());
                     // Refused before anything was written (cannotBeAddedTo), so a script read as
                     // either here changed under this command.

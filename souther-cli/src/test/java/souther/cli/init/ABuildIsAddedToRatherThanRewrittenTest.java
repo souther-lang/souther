@@ -139,7 +139,7 @@ class ABuildIsAddedToRatherThanRewrittenTest {
         assertTrue(edited.contains("id(\"org.souther-lang.souther\") version"));
         assertEquals(1, edited.split("plugins \\{", -1).length - 1,
                 "a second plugins block, which Gradle refuses:\n" + edited);
-        assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(edited));
+        assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(edited, true));
         assertEquals("com.acme", GradleBuild.groupOf(edited));
         assertTrue(edited.endsWith("souther {\n    southerVersion = \"9.9.9\"\n}\n"),
                 "the plugin is not told which Souther to compile with:\n" + edited);
@@ -170,7 +170,7 @@ class ABuildIsAddedToRatherThanRewrittenTest {
 
         assertTrue(edited.indexOf("org.souther-lang.souther") > edited.indexOf("*/"),
                 "the line landed inside the comment:\n" + edited);
-        assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(edited),
+        assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(edited, true),
                 "the script does not apply the plugin after being edited:\n" + edited);
     }
 
@@ -269,7 +269,7 @@ class ABuildIsAddedToRatherThanRewrittenTest {
     @Test
     void aGradleScriptSaysWhetherThePluginIsAppliedOrOnlyNamed() {
         assertEquals(GradleBuild.Applied.NOT_YET,
-                GradleBuild.appliedIn("plugins {\n    java\n}\n"));
+                GradleBuild.appliedIn("plugins {\n    java\n}\n", true));
         assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn("""
                 plugins {
                     id("org.souther-lang.souther") version "0.2.0"
@@ -278,21 +278,41 @@ class ABuildIsAddedToRatherThanRewrittenTest {
                 souther {
                     southerVersion = "0.4.0"
                 }
-                """));
+                """, true));
         // Applied, and nothing in the script says which Souther it compiles with: the plugin has
         // no default, so a model added here would not build.
         assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn("""
                 plugins {
                     id("org.souther-lang.souther") version "0.2.0"
                 }
-                """));
+                """, true));
         assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn("""
                 plugins {
                     id("org.souther-lang.souther") version "0.2.0"
                 }
 
                 // souther { southerVersion = "0.4.0" }
-                """));
+                """, true));
+        assertEquals(GradleBuild.Applied.SOMEWHERE_ELSE, GradleBuild.appliedIn("""
+                plugins {
+                    id("org.souther-lang.souther") version "0.1.0" apply false
+                }
+                """, true));
+        assertEquals(GradleBuild.Applied.NOT_YET, GradleBuild.appliedIn("""
+                // id("org.souther-lang.souther") is what we would write
+                plugins {
+                    java
+                }
+                """, true));
+        assertEquals(GradleBuild.Applied.SOMEWHERE_ELSE, GradleBuild.appliedIn("""
+                plugins {
+                    java
+                }
+
+                subprojects {
+                    apply(plugin = "org.souther-lang.souther")
+                }
+                """, true));
     }
 
     /**
@@ -311,23 +331,25 @@ class ABuildIsAddedToRatherThanRewrittenTest {
 
                 """;
         assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(applied
-                + "souther.southerVersion.set(\"0.4.0\")\n"));
+                + "souther.southerVersion.set(\"0.4.0\")\n", true));
         assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(applied
-                + "souther { southerVersion = \"0.4.0\" }\n"));
+                + "souther { southerVersion = \"0.4.0\" }\n", true));
         assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(applied
-                + "souther {\n    southerVersion.set(\"0.4.0\")\n}\n"));
+                + "souther {\n    southerVersion.set(\"0.4.0\")\n}\n", true));
         assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(
                 "plugins {\n    id 'org.souther-lang.souther' version '0.2.0'\n}\n\n"
-                        + "souther {\n    southerVersion = '0.4.0'\n}\n"));
+                        + "souther {\n    southerVersion = '0.4.0'\n}\n", false));
 
         assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(applied
-                + "val southerVersion = \"0.4.0\"\n"));
+                + "val southerVersion = \"0.4.0\"\n", true));
         assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(applied
-                + "println(\"southerVersion\")\n"));
+                + "println(\"southerVersion\")\n", true));
         assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(applied
-                + "subprojects {\n    souther {\n        southerVersion = \"0.4.0\"\n    }\n}\n"));
+                + "subprojects {\n    souther {\n        southerVersion = \"0.4.0\"\n    }\n}\n",
+                true));
         assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(applied
-                + "souther {\n    sourceDirectory = layout.projectDirectory.dir(\"model\")\n}\n"));
+                + "souther {\n    sourceDirectory = layout.projectDirectory.dir(\"model\")\n}\n",
+                true));
     }
 
     /**
@@ -355,34 +377,70 @@ class ABuildIsAddedToRatherThanRewrittenTest {
         String q3 = "\"\"\"";
 
         assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(kotlin
-                + "val documentation = " + q3 + "\n\"\n" + block + q3 + "\n"));
+                + "val documentation = " + q3 + "\n\"\n" + block + q3 + "\n", true));
         assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(groovy
-                + "def documentation = '''\n'\n" + block + "'''\n"));
+                + "def documentation = '''\n'\n" + block + "'''\n", false));
         assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(groovy
-                + "def documentation = " + q3 + "\n\"\n" + block + q3 + "\n"));
+                + "def documentation = " + q3 + "\n\"\n" + block + q3 + "\n", false));
+        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(groovy
+                + "def documentation = $/\n" + block + "/$\n", false));
         // And a template whose code holds a string with a brace closes at its own brace.
         assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(kotlin
-                + "val note = \"${\"}\"}\"\n\n" + block));
-        assertEquals(GradleBuild.Applied.SOMEWHERE_ELSE, GradleBuild.appliedIn("""
+                + "val note = \"${\"}\"}\"\n\n" + block, true));
+    }
+
+    /**
+     * A block comment ends where its language ends it: a Kotlin one after every comment opened in
+     * it, a Groovy one at the first close.
+     */
+    @Test
+    void aBlockCommentEndsWhereItsLanguageEndsIt() {
+        String block = "souther {\n    southerVersion = \"0.4.0\"\n}\n";
+
+        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn("""
                 plugins {
-                    id("org.souther-lang.souther") version "0.1.0" apply false
-                }
-                """));
-        assertEquals(GradleBuild.Applied.NOT_YET, GradleBuild.appliedIn("""
-                // id("org.souther-lang.souther") is what we would write
-                plugins {
-                    java
-                }
-                """));
-        assertEquals(GradleBuild.Applied.SOMEWHERE_ELSE, GradleBuild.appliedIn("""
-                plugins {
-                    java
+                    id("org.souther-lang.souther") version "0.2.0"
                 }
 
-                subprojects {
-                    apply(plugin = "org.souther-lang.souther")
+                /*
+                    /* what was written before */
+                """ + block + "*/\n", true));
+        assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn("""
+                plugins {
+                    id 'org.souther-lang.souther' version '0.2.0'
                 }
-                """));
+
+                /* an old note /* that Groovy closes here */
+                """ + block, false));
+    }
+
+    /**
+     * Where the walk meets what it cannot place, the answer is no, whatever it read past it.
+     *
+     * <p>In Groovy a {@code /} that is not a comment's opens a string or divides according to what
+     * came before it, which a parser says and this does not; and a string that never closes may
+     * have been meant to close anywhere. Either way a block read after it may be inside it. The
+     * cost is a refusal of a script that did set the version — answered by writing the line the
+     * refusal asks for — and never a project reported ready that does not build.
+     */
+    @Test
+    void whatTheWalkCannotPlaceIsNeverAYes() {
+        String block = "souther {\n    southerVersion = \"0.4.0\"\n}\n";
+        String groovy = "plugins {\n    id 'org.souther-lang.souther' version '0.2.0'\n}\n\n";
+
+        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(groovy
+                + "def pattern = /\n" + block + "/\n", false));
+        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(groovy
+                + "def half = 4 / 2\n\n" + block, false));
+        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(groovy
+                + block + "def note = 'never closed\n", false));
+        // A dollar-slashy string is placed, so the block after one is the script's own.
+        assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(groovy
+                + "def note = $/a $/ in it/$\n\n" + block, false));
+        // Kotlin has no such string, so a division there is read as one.
+        assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(
+                "plugins {\n    id(\"org.souther-lang.souther\") version \"0.2.0\"\n}\n\n"
+                        + "val half = 4 / 2\n\n" + block, true));
     }
 
     /**

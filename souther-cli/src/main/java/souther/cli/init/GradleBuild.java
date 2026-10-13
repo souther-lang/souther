@@ -95,8 +95,8 @@ final class GradleBuild {
      * taken out as well; what the block requests is read off the strings, which is where a plugin
      * id is written.
      */
-    static Applied appliedIn(String script) {
-        Read read = Read.of(script);
+    static Applied appliedIn(String script, boolean kotlin) {
+        Read read = Read.of(script, kotlin);
         Matcher found = PLUGINS.matcher(read.code());
         if (found.find()) {
             int close = closingBrace(read.code(), found.end() - 1);
@@ -108,7 +108,10 @@ final class GradleBuild {
                     if (!applies(block)) {
                         return Applied.SOMEWHERE_ELSE;
                     }
-                    return tellsTheVersion(read.code()) ? Applied.ALREADY : Applied.UNTOLD;
+                    // Yes only where every character was placed: a block read past something the
+                    // walk could not place may be inside it.
+                    return read.certain() && tellsTheVersion(read.code()) ? Applied.ALREADY
+                            : Applied.UNTOLD;
                 }
                 return rest.contains(BuildPlugins.GRADLE_ID) ? Applied.SOMEWHERE_ELSE
                         : Applied.NOT_YET;
@@ -222,32 +225,42 @@ final class GradleBuild {
      * block written inside a string, of whichever kind, is then not a block of the script's to any
      * question asked of it.
      */
-    private record Read(String said, String code) {
+    private record Read(String said, String code, boolean certain) {
 
-        static Read of(String script) {
-            Scan scan = new Scan(script);
+        static Read of(String script, boolean kotlin) {
+            Scan scan = new Scan(script, kotlin);
             scan.walk(0, false);
-            return new Read(scan.said.toString(), scan.code.toString());
+            return new Read(scan.said.toString(), scan.code.toString(), scan.certain);
         }
     }
 
     /**
-     * The one walk over a script's comments and strings.
+     * The one walk over a script's comments and strings, in the script's own language.
      *
-     * <p>Kotlin and Groovy each have four strings: {@code "…"} and {@code """…"""}, where
-     * {@code ${…}} is code — which may hold strings and braces of its own — and {@code '…'} and
-     * {@code '''…'''}, where it is not. A backslash escapes what follows in the two single-quoted
-     * forms; a triple-quoted string ends at the first triple quote. Nothing that does not close is
-     * read as closing: an unterminated string or comment runs to the end of the script.
+     * <p>Both languages have {@code "…"} and {@code """…"""}, where a template is code — which may
+     * hold strings and braces of its own — and {@code '…'}, where it is not; Groovy has
+     * {@code '''…'''} beside it, and {@code $/…/$}, which takes a template too. A backslash escapes
+     * what follows in the single-quoted forms; a triple-quoted string ends at the first triple quote.
+     * A Kotlin block comment holds block comments of its own, and a Groovy one ends at the first
+     * {@code *}{@code /}.
+     *
+     * <p>{@code certain} is whether every character was read as one of those or as code. It is not
+     * where the walk met something it cannot place: a string or a comment that does not close, or,
+     * in Groovy, a {@code /} that is not a comment's, which opens a string or divides according to
+     * what came before it — a question for a parser and not for this. What was read past such a
+     * place is read anyway, and nothing that depends on it being right may be answered yes.
      */
     private static final class Scan {
 
         private final String script;
+        private final boolean kotlin;
         private final StringBuilder said;
         private final StringBuilder code;
+        private boolean certain = true;
 
-        Scan(String script) {
+        Scan(String script, boolean kotlin) {
             this.script = script;
+            this.kotlin = kotlin;
             this.said = new StringBuilder(script);
             this.code = new StringBuilder(script);
         }
@@ -267,19 +280,23 @@ final class GradleBuild {
                     blank(code, i, end);
                     i = end;
                 } else if (script.startsWith("/*", i)) {
-                    int end = script.indexOf("*/", i + 2);
-                    end = end < 0 ? script.length() : end + 2;
+                    int end = endOfComment(i);
                     blank(said, i, end);
                     blank(code, i, end);
                     i = end;
                 } else if (script.startsWith("\"\"\"", i)) {
                     i = string(i, "\"\"\"", true, false);
-                } else if (script.startsWith("'''", i)) {
+                } else if (!kotlin && script.startsWith("'''", i)) {
                     i = string(i, "'''", false, false);
+                } else if (!kotlin && script.startsWith("$/", i)) {
+                    i = dollarSlashy(i);
                 } else if (script.charAt(i) == '"') {
                     i = string(i, "\"", true, true);
                 } else if (script.charAt(i) == '\'') {
                     i = string(i, "'", false, true);
+                } else if (!kotlin && script.charAt(i) == '/') {
+                    certain = false;
+                    i++;
                 } else {
                     char c = script.charAt(i);
                     if (c == '{') {
@@ -292,6 +309,9 @@ final class GradleBuild {
                     }
                     i++;
                 }
+            }
+            if (template) {
+                certain = false;
             }
             return script.length();
         }
@@ -312,6 +332,54 @@ final class GradleBuild {
                     i++;
                 }
             }
+            certain = false;
+            blank(code, open, script.length());
+            return script.length();
+        }
+
+        /**
+         * Where the block comment opened at {@code open} ends: a Kotlin one after every comment
+         * opened inside it has closed, a Groovy one at the first close.
+         */
+        private int endOfComment(int open) {
+            int depth = 0;
+            int i = open;
+            while (i < script.length()) {
+                if (script.startsWith("/*", i)) {
+                    depth = kotlin || depth == 0 ? depth + 1 : depth;
+                    i += 2;
+                } else if (script.startsWith("*/", i)) {
+                    i += 2;
+                    if (--depth == 0) {
+                        return i;
+                    }
+                } else {
+                    i++;
+                }
+            }
+            certain = false;
+            return script.length();
+        }
+
+        /**
+         * The Groovy string opened by {@code $/} at {@code open}, taken out of {@code code}; where it
+         * ends. {@code $$} and {@code $/} inside it are escapes, and a template is code.
+         */
+        private int dollarSlashy(int open) {
+            int i = open + 2;
+            while (i < script.length()) {
+                if (script.startsWith("$$", i) || script.startsWith("$/", i)) {
+                    i += 2;
+                } else if (script.startsWith("${", i)) {
+                    i = walk(i + 2, true) + 1;
+                } else if (script.startsWith("/$", i)) {
+                    blank(code, open, i + 2);
+                    return i + 2;
+                } else {
+                    i++;
+                }
+            }
+            certain = false;
             blank(code, open, script.length());
             return script.length();
         }
@@ -351,7 +419,7 @@ final class GradleBuild {
         // itself. Blanking keeps every other character where it was, so an offset means the same
         // thing in both — and a `plugins {` that is there only because somebody commented an old
         // one out, or wrote one in a string, is not a block this writes into.
-        String code = Read.of(script).code();
+        String code = Read.of(script, kotlin).code();
         Matcher found = PLUGINS.matcher(code);
         if (!found.find()) {
             return "plugins {\n    " + line + "\n}\n\n" + script;
