@@ -981,8 +981,9 @@ final class Coverages {
      * cannot show that: it would run to its budgets while the input that settles the line stands on
      * the other side.
      *
-     * <p>The refused side first, and the kept side only where it composed nothing. Either row
-     * settles the line, and what each search met is kept where neither composed one.
+     * <p>Each side searched on its own and each search kept. What a composed row settles is said
+     * once it is read back, where every offered row is weighed, and that is also where a row another
+     * one already answers for is dropped.
      *
      * <p><b>The run beside this line, and not one point of it.</b> Read as the point
      * <em>against</em> the line instead, two things went wrong at once: a quantity whose order names
@@ -1013,22 +1014,18 @@ final class Coverages {
         // Settlements — which also drops a row another one already answers for.
         List<ARowTellingTheLinesApart.AtOneReading> out = new ArrayList<>();
         for (AnotherLineTheRowsAllow.Stands line : lines.standing()) {
-            SearchOutcomes tried = SearchOutcomes.none();
-            ARowTellingTheLinesApart.AtOneReading found = null;
+            // Both sides, whatever the first came to. A row composed on one side is a candidate and
+            // not yet evidence — it may come back unread, or arrive somewhere that settles nothing
+            // — so it is no reason to leave the other side unlooked at; which of the two the block
+            // keeps is the offering's to say.
             if (refused != null) {
-                found = search.tellingApart(refused, label, line.direction(),
-                        line::onTheRefusedSide);
-                tried = tried.plus(found.searches());
+                out.add(search.tellingApart(refused, label, line.direction(),
+                        line::onTheRefusedSide));
             }
             Optional<UnaryOperator<SearchRegion>> keptSide = line.onTheKeptSide();
-            if ((found == null || found.composedAt() == null) && kept != null
-                    && keptSide.isPresent()) {
-                found = search.tellingApart(kept, label, line.direction(), keptSide.get());
-                tried = tried.plus(found.searches());
+            if (kept != null && keptSide.isPresent()) {
+                out.add(search.tellingApart(kept, label, line.direction(), keptSide.get()));
             }
-            out.add(found != null && found.composedAt() != null ? found
-                    : new ARowTellingTheLinesApart.AtOneReading(border.border(), line.direction(),
-                            null, tried));
         }
         return new ARowTellingTheLinesApart(out);
     }

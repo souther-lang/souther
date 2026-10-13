@@ -127,6 +127,38 @@ class EveryLineBesideABorderIsAskedForInTheRunAfterItsPointsTest {
                         + codes);
     }
 
+    /**
+     * Each line left standing is searched for on both sides of the model's line, whatever either
+     * side came to.
+     *
+     * <p>A row composed on one side is a candidate and not yet evidence: read back, it may be one
+     * nothing could read, or arrive somewhere that settles nothing. So a search on one side that
+     * composed a row is no reason to leave the other side unlooked at — which of the two the block
+     * keeps is said where every offered row is read back.
+     */
+    @Test
+    void eachLineLeftStandingIsSearchedForOnBothSides() {
+        String points = answered(MODEL, rowsOffered(MODEL));
+        List<BorderAssessment> lines = measured(points).db()
+                .ask(new Adequacy.BoundarySearch("example.region", "inside")).value();
+        int standing = 0;
+        for (BorderAssessment line : lines) {
+            if (!(line.beside() instanceof AnotherLineTheRowsAllow.ByDirection family)) {
+                continue;
+            }
+            for (AnotherLineTheRowsAllow.Stands each : family.standing()) {
+                standing++;
+                long searches = line.toldApart().each().stream()
+                        .filter(one -> one.direction().equals(each.direction())).count();
+                assertEquals(2, searches, () -> "a search on each side of " + line.label()
+                        + " for " + each.label() + ": " + line.toldApart());
+            }
+        }
+        int counted = standing;
+        assertEquals(EVERY_LINE_LEFT_STANDING.size(), counted,
+                () -> "every line the report names is one this looked at: " + counted);
+    }
+
     /** The lines the report says no row tells apart. */
     private static Set<String> linesNotToldApart(String human) {
         Set<String> out = new TreeSet<>();

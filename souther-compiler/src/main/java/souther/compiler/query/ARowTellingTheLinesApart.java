@@ -57,14 +57,13 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
     }
 
     /**
-     * What one reading's search for a row ruling out one line of the family came to, and the input
-     * it composed its row at.
+     * What one reading's search for a row ruling out one line of the family came to, on one side of
+     * the model's line, and the input it composed its row at.
      *
-     * <p>Both of the places such a row can stand, said together: a row the model refuses within
-     * reach of the rows it keeps, and a row it keeps at or past the rows it refuses
-     * ({@link AnotherLineTheRowsAllow.Stands}). Where neither composed a row, what each search met is
-     * here, so a line nothing was composed for says what was tried on both sides rather than on the
-     * one tried last.
+     * <p>One entry per side searched: a row the model refuses within reach of the rows it keeps, and
+     * a row it keeps at or past the rows it refuses ({@link AnotherLineTheRowsAllow.Stands}). Each is
+     * kept whatever the other came to, so a line nothing was composed for says what was tried on
+     * both sides, and a line with a candidate on each hands both to the offering.
      *
      * @param reading    the line as that reading met it, which is what says at which positions
      *                   {@code composedAt} is written and where a row is read back
@@ -163,36 +162,34 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
     }
 
     /**
-     * The first reading whose search for a row ruling out {@code direction} composed one, where one
-     * did.
+     * Every search for a row ruling out {@code direction} that composed one, at every reading and on
+     * either side of the line, in the order they were made.
      *
-     * <p><b>A candidate and never what a person is handed.</b> Which row goes out for this line is
-     * settled two stages later — every offered row is asked what it would answer, and a row whose
-     * going costs the offering nothing goes — so another row may end up answering this line and
-     * this one be dropped. What is offered is the offering's answer ({@link Offering#shownAt}), and
-     * a reader taking this for it is reading a choice made before the one that decides.
-     *
-     * <p>The first, in the order the readings were walked, so that an edit elsewhere in the body
-     * does not move which candidate this is. What every reading came to is still here for whoever
-     * asks.
+     * <p><b>Candidates and never what a person is handed.</b> Which row goes out for this line is
+     * settled two stages later — every offered row is read back and asked what it would answer, and
+     * a row whose going costs the offering nothing goes — so one candidate may end up answering this
+     * line and the rest be dropped. What is offered is the offering's answer
+     * ({@link Offering#shownAt}). Narrowed to one here, the choice would be made before the row was
+     * read back: a candidate that comes back unread or settles nothing would stand where another
+     * that does was never offered.
      */
-    public Optional<AtOneReading> firstComposed(QuantityKey direction) {
+    public List<AtOneReading> composed(QuantityKey direction) {
         return each.stream()
                 .filter(one -> one.direction().equals(direction) && one.composed().isPresent())
-                .findFirst();
+                .toList();
     }
 
     /**
      * What a generation can say about one line of the family this was looked for against.
      *
-     * <p>Read off what happened and never off which kind of finding raised it. A reading that
-     * composed a row hands the row over; readings that ran and came back with nothing say what they
-     * met, in the words the searches themselves came back in; and a line nobody looked at is one
-     * this run was not asked about.
+     * <p>Read off what happened and never off which kind of finding raised it. Searches that
+     * composed a row hand every one of those rows over; searches that ran and came back with nothing
+     * say what they met, in the words the searches themselves came back in; and a line nobody looked
+     * at is one this run was not asked about.
      *
-     * <p>Over every reading, because one row settles the line and a reading that composed none has
-     * still said something about its own region. A reader asking what would let the search go
-     * further is owed what each of them met.
+     * <p>Over every reading and both sides, because a search that composed none has still said
+     * something about its own region. A reader asking what would let the search go further is owed
+     * what each of them met.
      *
      * <p>Reachable from the package and no further. What a generation can do about a finding is
      * read where the dispositions are made, and a report asks the reading itself — handed this, a
@@ -200,10 +197,10 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
      * another reason.
      */
     GenerationOutcome outcome(QuantityKey direction) {
-        Optional<AtOneReading> made = firstComposed(direction);
-        if (made.isPresent()) {
-            return new GenerationOutcome.Generated(
-                    List.of(made.orElseThrow().composed().orElseThrow().row()));
+        List<AtOneReading> made = composed(direction);
+        if (!made.isEmpty()) {
+            return new GenerationOutcome.Generated(made.stream()
+                    .map(one -> one.composed().orElseThrow().row()).toList());
         }
         List<CameToNothing> why = new ArrayList<>();
         for (AtOneReading one : each) {
