@@ -15,7 +15,10 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -28,10 +31,13 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Flow;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The backends released to a {@link Repository}, and which release of a target's was built against
@@ -123,19 +129,30 @@ public final class Central implements BackendFetch.Source {
             implements Answer {
 
         public Release {
-            if (!ARTIFACTS.containsKey(target)) {
+            if (artifact(target).isEmpty()) {
                 throw new IllegalArgumentException("no artifact is known for " + target);
             }
         }
     }
 
     /**
-     * Why nothing was fetched, in one of three families: the repository was not asked, it could not
-     * be read, or it was read and holds no backend for the pair. Which family a failure is in is
-     * what decides what is done with it, so it is the failure's type and not a reading of it.
+     * Why nothing was fetched, in one of four families: the repository was not asked, it could not
+     * be read, it was read and holds no backend for the pair, or what it served could not be kept.
+     * Which family a failure is in is what decides what is done with it, so it is the failure's
+     * type and not a reading of it.
      */
     public sealed interface Failure extends Answer permits Failure.Unasked, Failure.Unanswered,
-            Failure.Declined {
+            Failure.Declined, Failure.Unkept {
+
+        /**
+         * What the repository served could not be kept where a fetched backend goes: the
+         * directory could not be made, locked or written. Asking the repository again answers
+         * nothing this does not; the directory is what has to change.
+         */
+        sealed interface Unkept extends Failure permits Unwritable {}
+
+        /** {@code directory} could not be used to keep a fetched backend, for {@code reason}. */
+        record Unwritable(Path directory, String reason) implements Unkept {}
 
         /** Nothing was asked of the repository. */
         sealed interface Unasked extends Failure permits NotAsked, Unregistered, Misconfigured {}
@@ -156,8 +173,18 @@ public final class Central implements BackendFetch.Source {
         /** No artifact is known for the target, so there is nothing to ask for. */
         record Unregistered(String target) implements Unasked {}
 
-        /** A setting this reads names nothing it can use. */
-        record Misconfigured(String setting, String value) implements Unasked {}
+        /** A setting this reads names nothing it can use, for the reason {@code why} says. */
+        record Misconfigured(String setting, String value, Misread why) implements Unasked {}
+
+        /** Why a setting names nothing this can use. */
+        enum Misread {
+            /** It is not an address, or not one a repository may be asked at. */
+            NOT_AN_ADDRESS,
+            /** It carries credentials, which a proxy is not sent. */
+            CREDENTIALS,
+            /** It names a proxy by a scheme other than {@code http}, the one a proxy is asked by. */
+            SCHEME
+        }
 
         /** Asking for {@code uri} did not get an answer. */
         record Unreachable(URI uri, String reason) implements Unanswered {}
@@ -253,16 +280,22 @@ public final class Central implements BackendFetch.Source {
      * asking anything, and so before anything that would be done to ask.
      */
     Optional<Failure.Unregistered> unregistered(String target) {
-        return ARTIFACTS.containsKey(target) ? Optional.empty()
+        return artifact(target).isPresent() ? Optional.empty()
                 : Optional.of(new Failure.Unregistered(target));
+    }
+
+    /** The artifact the table says {@code target} is released as, where it says one. */
+    private static Optional<Artifact> artifact(String target) {
+        return Optional.ofNullable(ARTIFACTS.get(target));
     }
 
     /** The newest release of {@code target} built against {@code southerVersion}, or why none is. */
     public Answer release(String target, String southerVersion) throws InterruptedException {
-        Artifact artifact = ARTIFACTS.get(target);
-        if (artifact == null) {
+        Optional<Artifact> known = artifact(target);
+        if (known.isEmpty()) {
             return new Failure.Unregistered(target);
         }
+        Artifact artifact = known.get();
         URI metadata = artifactRoot(GROUP, artifact.artifactId()).resolve("maven-metadata.xml");
         try {
             HttpResponse<byte[]> listed = small(metadata);
@@ -399,31 +432,37 @@ public final class Central implements BackendFetch.Source {
     }
 
     /**
-     * Writes the release's jar to {@code to}, which is replaced, waiting as {@link Patience} says
-     * a jar is waited for.
+     * Writes the release's jar to {@code to}, waiting as {@link Patience} says a jar is waited
+     * for.
+     *
+     * <p>What is waited for, and what is written, are decided here and not left to the client:
+     * how long a request's timeout lasts differs between the JDKs this runs on, and the client's
+     * own file subscriber writes over a file without shortening it. So the body is received by
+     * {@link Receiving}, which writes it to {@code to} from empty and counts what it has received.
+     *
+     * @throws IOException where {@code to} could not be written, which says nothing about the
+     *         repository
      */
-    void download(Release release, Path to) throws Stop, InterruptedException {
+    void download(Release release, Path to) throws Stop, IOException, InterruptedException {
         long deadline = System.nanoTime() + patience.answer().toNanos();
-        HttpResponse<Path> done = following(release.jar(), at -> downloadOnce(at, to, deadline));
+        HttpResponse<Void> done = following(release.jar(), at -> downloadOnce(at, to, deadline));
         if (done.statusCode() != 200) {
             throw new Stop(new Failure.Answered(release.jar(), done.statusCode()));
         }
     }
 
     /**
-     * One request for a jar. It is sent with no timeout of its own, since the client's timeout
-     * runs until the body has been read whole and a jar has no time it must arrive in. The answer
-     * has until {@code deadline} to begin, and the body is then ended only where the file it is
-     * written to has not grown for {@link Patience#stall}, measured from the last time it did.
+     * One request for a jar. The answer has until {@code deadline} to begin, and the body is then
+     * ended only where nothing more has been received for {@link Patience#stall}, measured from
+     * the last time something was.
+     *
+     * @throws IOException where {@code to} could not be written
      */
-    private HttpResponse<Path> downloadOnce(URI at, Path to, long deadline)
-            throws Stop, InterruptedException {
-        AtomicBoolean began = new AtomicBoolean();
-        CompletableFuture<HttpResponse<Path>> answer = repository.client().sendAsync(
-                HttpRequest.newBuilder(at).GET().build(), begun -> {
-                    began.set(true);
-                    return HttpResponse.BodySubscribers.ofFile(to);
-                });
+    private HttpResponse<Void> downloadOnce(URI at, Path to, long deadline)
+            throws Stop, IOException, InterruptedException {
+        Receiving receiving = new Receiving(to);
+        CompletableFuture<HttpResponse<Void>> answer = repository.client().sendAsync(request(at),
+                _ -> receiving.begin());
         long stall = patience.stall().toNanos();
         // Looked at five times a stall, so a download that stopped is ended within a fifth of a
         // stall of the stall it was given, and not up to a stall late.
@@ -435,17 +474,21 @@ public final class Central implements BackendFetch.Source {
                 try {
                     return answer.get(tick, TimeUnit.MILLISECONDS);
                 } catch (ExecutionException e) {
+                    receiving.throwUnwritten();
                     throw new Stop(new Failure.Unreachable(at, reason(e.getCause())));
                 } catch (TimeoutException e) {
+                    // A body the file could not take is given up on by the subscriber, and the
+                    // answer then never ends: what is waited for has failed here, not there.
+                    receiving.throwUnwritten();
                     long now = System.nanoTime();
-                    if (!began.get()) {
+                    if (!receiving.begun()) {
                         if (now - deadline >= 0) {
                             throw new Stop(new Failure.Unreachable(at, "no answer began in "
                                     + patience.answer().toSeconds() + "s"));
                         }
                         continue;
                     }
-                    long has = to.toFile().length();
+                    long has = receiving.received();
                     if (grew < 0 || has > had) {
                         grew = now;
                         had = has;
@@ -457,6 +500,85 @@ public final class Central implements BackendFetch.Source {
             }
         } finally {
             answer.cancel(true);
+            receiving.close();
+        }
+    }
+
+    /**
+     * The body of an answer, written to a file from empty, with what has been received counted
+     * as it is and a failure to write told apart from a failure to receive.
+     */
+    private static final class Receiving implements Flow.Subscriber<List<ByteBuffer>> {
+
+        private final FileChannel file;
+        private final AtomicLong received = new AtomicLong();
+        private final AtomicBoolean begun = new AtomicBoolean();
+        private final AtomicReference<IOException> unwritten = new AtomicReference<>();
+        private volatile Flow.Subscription subscription;
+
+        Receiving(Path to) throws IOException {
+            this.file = FileChannel.open(to, StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+        }
+
+        /** The subscriber the body is handed to, once the answer has begun. */
+        HttpResponse.BodySubscriber<Void> begin() {
+            begun.set(true);
+            return HttpResponse.BodySubscribers.fromSubscriber(this, receiving -> null);
+        }
+
+        boolean begun() {
+            return begun.get();
+        }
+
+        long received() {
+            return received.get();
+        }
+
+        /** Throws what writing the file failed with, where it did. */
+        void throwUnwritten() throws IOException {
+            IOException failed = unwritten.get();
+            if (failed != null) {
+                throw failed;
+            }
+        }
+
+        @Override
+        public void onSubscribe(Flow.Subscription subscription) {
+            this.subscription = subscription;
+            subscription.request(Long.MAX_VALUE);
+        }
+
+        @Override
+        public void onNext(List<ByteBuffer> buffers) {
+            try {
+                for (ByteBuffer buffer : buffers) {
+                    while (buffer.hasRemaining()) {
+                        received.addAndGet(file.write(buffer));
+                    }
+                }
+            } catch (IOException e) {
+                unwritten.compareAndSet(null, e);
+                subscription.cancel();
+            }
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            close();
+        }
+
+        @Override
+        public void onComplete() {
+            close();
+        }
+
+        void close() {
+            try {
+                file.close();
+            } catch (IOException e) {
+                unwritten.compareAndSet(null, e);
+            }
         }
     }
 
@@ -469,6 +591,11 @@ public final class Central implements BackendFetch.Source {
         return following(uri, at -> smallOnce(at, deadline));
     }
 
+    /**
+     * One request for a small file, waited for until {@code deadline} by this method itself: a
+     * request's own timeout ends the wait for the body on some of the JDKs this runs on and not on
+     * others.
+     */
     private HttpResponse<byte[]> smallOnce(URI at, long deadline)
             throws Stop, InterruptedException {
         long left = deadline - System.nanoTime();
@@ -476,32 +603,46 @@ public final class Central implements BackendFetch.Source {
             throw new Stop(new Failure.Unreachable(at,
                     "it did not arrive in " + patience.answer().toSeconds() + "s"));
         }
-        // The client's timeout runs until the body is read whole, which is the wait wanted here.
-        HttpRequest request = HttpRequest.newBuilder(at).timeout(Duration.ofNanos(left)).GET()
-                .build();
         CompletableFuture<HttpResponse<byte[]>> answer =
-                repository.client().sendAsync(request, HttpResponse.BodyHandlers.ofByteArray());
+                repository.client().sendAsync(request(at), HttpResponse.BodyHandlers.ofByteArray());
         try {
-            return answer.get();
+            return answer.get(left, TimeUnit.NANOSECONDS);
         } catch (ExecutionException e) {
             throw new Stop(new Failure.Unreachable(at, reason(e.getCause())));
+        } catch (TimeoutException e) {
+            throw new Stop(new Failure.Unreachable(at,
+                    "it did not arrive in " + patience.answer().toSeconds() + "s"));
         } finally {
             answer.cancel(true);
         }
     }
 
+    /**
+     * The request for {@code at}, which {@link Repository#admits} has let through: one the client
+     * cannot send all the same is what the repository pointed at, and is said as that.
+     */
+    private static HttpRequest request(URI at) throws Stop {
+        try {
+            return HttpRequest.newBuilder(at).GET().build();
+        } catch (IllegalArgumentException e) {
+            throw new Stop(new Failure.Unreadable(at, "it is not an address that can be asked"));
+        }
+    }
+
     /** One request, with what is waited for and how. */
     @FunctionalInterface
-    private interface Exchange<T> {
-        HttpResponse<T> at(URI uri) throws Stop, InterruptedException;
+    private interface Exchange<T, X extends Exception> {
+        /** Asks {@code uri}; {@code X} is what fails on this side, which a download has. */
+        HttpResponse<T> at(URI uri) throws Stop, X, InterruptedException;
     }
 
     /**
      * The answer for {@code uri}, following where a redirect sends it, each address held to
      * {@link Repository#admits} before anything is asked of it.
      */
-    private static <T> HttpResponse<T> following(URI uri, Exchange<T> exchange)
-            throws Stop, InterruptedException {
+    private static <T, X extends Exception> HttpResponse<T> following(URI uri,
+                                                                     Exchange<T, X> exchange)
+            throws Stop, X, InterruptedException {
         URI at = uri;
         for (int hops = 0; hops <= REDIRECTS; hops++) {
             HttpResponse<T> answer = exchange.at(at);

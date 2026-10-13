@@ -64,8 +64,8 @@ public final class Repository implements Configured {
         Optional<URI> root = named == null || named.isBlank() ? Optional.of(MAVEN_CENTRAL)
                 : root(named);
         if (root.isEmpty()) {
-            return new Configured.Unusable(name,
-                    new Central.Failure.Misconfigured(SETTING, named));
+            return new Configured.Unusable(name, new Central.Failure.Misconfigured(SETTING, named,
+                    Central.Failure.Misread.NOT_AN_ADDRESS));
         }
         URI at = root.get();
         if (loopback(at) || bypassed(at.getHost(),
@@ -76,11 +76,19 @@ public final class Repository implements Configured {
         if (System.getProperty("https.proxyHost") != null || proxy.isEmpty()) {
             return new Repository(at, name, new Route.AsJavaSays());
         }
-        Optional<InetSocketAddress> address = proxyAddress(proxy.get());
-        return address.isEmpty()
-                ? new Configured.Unusable(name,
-                        new Central.Failure.Misconfigured("HTTPS_PROXY", proxy.get()))
-                : new Repository(at, name, new Route.Through(address.get()));
+        return switch (proxyNamed(proxy.get())) {
+            case ProxyNamed.At through -> new Repository(at, name,
+                    new Route.Through(through.address()));
+            case ProxyNamed.Not not -> new Configured.Unusable(name,
+                    new Central.Failure.Misconfigured("HTTPS_PROXY", proxy.get(), not.why()));
+        };
+    }
+
+    /** What {@code HTTPS_PROXY} names: a proxy to send a request through, or why it is not one. */
+    private sealed interface ProxyNamed {
+        record At(InetSocketAddress address) implements ProxyNamed {}
+
+        record Not(Central.Failure.Misread why) implements ProxyNamed {}
     }
 
     /** The repository at {@code root}, reached directly; for a repository a test serves. */
@@ -98,8 +106,15 @@ public final class Repository implements Configured {
         return root;
     }
 
-    /** Whether a request may be sent to {@code uri}: over HTTPS, or plain HTTP on the loopback. */
+    /**
+     * Whether a request may be sent to {@code uri}: an absolute address with a host, over HTTPS, or
+     * over plain HTTP on the loopback. The one place this is decided, for the repository a setting
+     * names and for every address a redirect sends a request to alike.
+     */
     static boolean admits(URI uri) {
+        if (!uri.isAbsolute() || uri.isOpaque() || uri.getHost() == null) {
+            return false;
+        }
         return "https".equals(uri.getScheme())
                 || ("http".equals(uri.getScheme()) && loopback(uri));
     }
@@ -134,8 +149,7 @@ public final class Repository implements Configured {
         } catch (URISyntaxException e) {
             return Optional.empty();
         }
-        return uri.isAbsolute() && uri.getHost() != null && admits(uri) ? Optional.of(uri)
-                : Optional.empty();
+        return admits(uri) ? Optional.of(uri) : Optional.empty();
     }
 
     /** Whether the host is this machine's loopback, as a name or an address, asking no resolver. */
@@ -174,18 +188,29 @@ public final class Repository implements Configured {
         return false;
     }
 
-    /** Where {@code HTTPS_PROXY} says the proxy is, written as a URL or as host and port. */
-    private static Optional<InetSocketAddress> proxyAddress(String proxy) {
+    /**
+     * Where {@code HTTPS_PROXY} says the proxy is, written as an {@code http://} URL or as host and
+     * port. What the client cannot do with what is written is refused as such rather than dropped:
+     * credentials, since it sends a proxy none when it tunnels, and any scheme but {@code http},
+     * since that is the one it asks a proxy by.
+     */
+    private static ProxyNamed proxyNamed(String proxy) {
         URI uri;
         try {
             uri = new URI(proxy.contains("://") ? proxy : "http://" + proxy);
         } catch (URISyntaxException e) {
-            return Optional.empty();
+            return new ProxyNamed.Not(Central.Failure.Misread.NOT_AN_ADDRESS);
         }
         if (uri.getHost() == null) {
-            return Optional.empty();
+            return new ProxyNamed.Not(Central.Failure.Misread.NOT_AN_ADDRESS);
         }
-        int port = uri.getPort() >= 0 ? uri.getPort() : "https".equals(uri.getScheme()) ? 443 : 80;
-        return Optional.of(InetSocketAddress.createUnresolved(uri.getHost(), port));
+        if (uri.getUserInfo() != null) {
+            return new ProxyNamed.Not(Central.Failure.Misread.CREDENTIALS);
+        }
+        if (!"http".equals(uri.getScheme())) {
+            return new ProxyNamed.Not(Central.Failure.Misread.SCHEME);
+        }
+        return new ProxyNamed.At(InetSocketAddress.createUnresolved(uri.getHost(),
+                uri.getPort() >= 0 ? uri.getPort() : 80));
     }
 }

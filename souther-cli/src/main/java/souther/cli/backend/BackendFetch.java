@@ -12,6 +12,7 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Fetches a target's backend from a repository into the directory a fetched backend goes to.
@@ -90,35 +91,17 @@ public final class BackendFetch {
      */
     public static Supplied whereAbsent(Backends backends, Source source, String target,
                                        String southerVersion, Consumer<Central.Release> starting)
-            throws Backends.Refused, IOException, InterruptedException {
-        return switch (source) {
-            case Configured.Unusable unusable -> new Failed(unusable.why());
-            case Central central -> whereAbsent(backends, central, target, southerVersion,
-                    starting);
-        };
-    }
-
-    private static Supplied whereAbsent(Backends backends, Central central, String target,
-                                        String southerVersion, Consumer<Central.Release> starting)
-            throws Backends.Refused, IOException, InterruptedException {
-        Optional<Central.Failure.Unregistered> unregistered = central.unregistered(target);
-        if (unregistered.isPresent()) {
-            return new Failed(unregistered.get());
-        }
-        Path directory = Files.createDirectories(backends.fetched());
-        synchronized (FETCHING) {
-            try (FileChannel channel = lockFile(directory); FileLock _ = channel.lock()) {
-                if (backends.find(target, southerVersion) instanceof Backends.Found found) {
-                    return new Present(found.backend());
-                }
-                return switch (central.release(target, southerVersion)) {
-                    case Central.Failure failure -> new Failed(failure);
-                    case Central.Release release ->
-                            download(backends, central, release, southerVersion, directory,
-                                    starting);
-                };
+            throws Backends.Refused, InterruptedException {
+        return fetching(backends, source, target, failed -> failed, (central, directory) -> {
+            if (backends.find(target, southerVersion) instanceof Backends.Found found) {
+                return new Present(found.backend());
             }
-        }
+            return switch (central.release(target, southerVersion)) {
+                case Central.Failure failure -> new Failed(failure);
+                case Central.Release release ->
+                        download(backends, central, release, southerVersion, directory, starting);
+            };
+        });
     }
 
     /**
@@ -127,24 +110,9 @@ public final class BackendFetch {
      */
     public static Refreshed again(Backends backends, Source source, String target,
                                   String southerVersion, Consumer<Central.Release> starting)
-            throws Backends.Refused, IOException, InterruptedException {
-        return switch (source) {
-            case Configured.Unusable unusable -> new Failed(unusable.why());
-            case Central central -> again(backends, central, target, southerVersion, starting);
-        };
-    }
-
-    private static Refreshed again(Backends backends, Central central, String target,
-                                   String southerVersion, Consumer<Central.Release> starting)
-            throws Backends.Refused, IOException, InterruptedException {
-        Optional<Central.Failure.Unregistered> unregistered = central.unregistered(target);
-        if (unregistered.isPresent()) {
-            return new Failed(unregistered.get());
-        }
-        Path directory = Files.createDirectories(backends.fetched());
-        synchronized (FETCHING) {
-            try (FileChannel channel = lockFile(directory); FileLock _ = channel.lock()) {
-                return switch (central.release(target, southerVersion)) {
+            throws Backends.Refused, InterruptedException {
+        return fetching(backends, source, target, failed -> failed, (central, directory) ->
+                switch (central.release(target, southerVersion)) {
                     case Central.Failure failure -> new Failed(failure);
                     case Central.Release release -> {
                         Optional<Backends.Backend> before =
@@ -153,14 +121,55 @@ public final class BackendFetch {
                                 : download(backends, central, release, southerVersion, directory,
                                         starting);
                     }
-                };
-            }
-        }
+                });
     }
 
-    private static FileChannel lockFile(Path directory) throws IOException {
-        return FileChannel.open(directory.resolve(LOCK), StandardOpenOption.CREATE,
-                StandardOpenOption.WRITE);
+    /** What a fetch does once the directory is its own. */
+    @FunctionalInterface
+    private interface Held<T> {
+        T run(Central central, Path directory)
+                throws Backends.Refused, IOException, InterruptedException;
+    }
+
+    /**
+     * Runs {@code held} with the directory a fetched backend goes to made and to this run alone,
+     * once what needs no asking has not already answered.
+     *
+     * <p>The one prologue both fetches have, so what is decided before the directory is touched,
+     * and how the directory is taken, are written once. A failure to make, lock, write or move
+     * anything in the directory ends the fetch as {@link Central.Failure.Unwritable}: it is said
+     * with the directories searched, as every other reason nothing was fetched is.
+     */
+    private static <T> T fetching(Backends backends, Source source, String target,
+                                  Function<Failed, T> failing, Held<T> held)
+            throws Backends.Refused, InterruptedException {
+        return switch (source) {
+            case Configured.Unusable unusable -> failing.apply(new Failed(unusable.why()));
+            case Central central -> fetching(backends, central, target, failing, held);
+        };
+    }
+
+    private static <T> T fetching(Backends backends, Central central, String target,
+                                  Function<Failed, T> failing, Held<T> held)
+            throws Backends.Refused, InterruptedException {
+        Optional<Central.Failure.Unregistered> unregistered = central.unregistered(target);
+        if (unregistered.isPresent()) {
+            return failing.apply(new Failed(unregistered.get()));
+        }
+        Path directory = backends.fetched();
+        try {
+            Files.createDirectories(directory);
+            synchronized (FETCHING) {
+                try (FileChannel channel = FileChannel.open(directory.resolve(LOCK),
+                        StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                     FileLock _ = channel.lock()) {
+                    return held.run(central, directory);
+                }
+            }
+        } catch (IOException e) {
+            return failing.apply(new Failed(new Central.Failure.Unwritable(directory,
+                    e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage())));
+        }
     }
 
     /** Downloads the release, once the directory has said a fetch may write the pair's name. */

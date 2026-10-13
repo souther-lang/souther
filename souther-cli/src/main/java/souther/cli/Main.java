@@ -230,8 +230,9 @@ public final class Main {
      *
      * <p>Fetching is said on standard error, which is the backend's too once it runs: standard
      * output is what the backend writes, and a line of this command's there would be read as one.
-     * {@value #OFFLINE} set to anything tells a compile to fetch nothing; it is not an argument,
-     * since from the target's name on the line is the backend's.
+     * {@value #OFFLINE} set to anything but the empty string tells a compile to fetch nothing, as
+     * {@code NO_COLOR} is read; it is not an argument, since from the target's name on the line is
+     * the backend's.
      */
     private static Optional<Backends.Backend> fetchedFor(Backends backends,
                                                          Backends.Absent absent, Locale locale)
@@ -325,9 +326,6 @@ public final class Main {
         } catch (Backends.Refused e) {
             System.err.println(Messages.get(e.key(), locale, e.arguments()));
             return 2;
-        } catch (IOException e) {
-            System.err.println("io error: " + e.getMessage());
-            return 1;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return 1;

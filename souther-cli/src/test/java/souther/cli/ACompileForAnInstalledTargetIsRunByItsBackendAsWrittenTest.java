@@ -26,10 +26,12 @@ class ACompileForAnInstalledTargetIsRunByItsBackendAsWrittenTest {
 
     private static final String HERE = ModuleMetadata.compilerVersion();
 
-    private static Ran cli(Path workingDirectory, Map<String, String> environment,
-                           List<String> jvmProperties, String stdin, String... args)
-            throws Exception {
-        return CliProcess.run(workingDirectory, environment, jvmProperties, stdin, args);
+    @TempDir
+    Path scratch;
+
+    private Ran cli(Path workingDirectory, Map<String, String> environment,
+                    List<String> jvmProperties, String stdin, String... args) throws Exception {
+        return CliProcess.run(scratch, workingDirectory, environment, jvmProperties, stdin, args);
     }
 
     private static Map<String, String> home(Path home) {

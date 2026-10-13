@@ -14,6 +14,7 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -25,6 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Which release of a target's backend is fetched, where it is put, and what is said where none is.
@@ -471,6 +474,88 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
         // would be two. What lies between leaves a loaded machine room on either side.
         assertTrue(took.compareTo(stall) >= 0 && took.compareTo(stall.multipliedBy(17)
                 .dividedBy(10)) < 0, took.toString());
+    }
+
+    @Test
+    void metadataWhoseBodyStopsAfterItBeganIsGivenUpAtTheDeadlineOnEveryJdk() throws Exception {
+        repository.metadata(WASM, "0.1.0");
+        repository.silence("org/souther-lang/" + WASM + "/maven-metadata.xml");
+
+        long started = System.nanoTime();
+        Central.Failure failure = failedWaiting(Duration.ofMillis(400), Duration.ofSeconds(60));
+        Duration took = Duration.ofNanos(System.nanoTime() - started);
+
+        assertTrue(assertInstanceOf(Central.Failure.Unreachable.class, failure).reason()
+                .startsWith("it did not arrive"), failure.toString());
+        assertTrue(took.compareTo(Duration.ofSeconds(5)) < 0, took.toString());
+    }
+
+    @Test
+    void aJarReachedThroughARedirectWithALongBodyIsTheJarAndNothingOfTheBody() throws Exception {
+        repository.metadata(WASM, "0.1.0");
+        Path served = jar("moved", "wasm", HERE);
+        repository.release(WASM, "0.1.0", "cli", HERE, served);
+        repository.jar("moved", "0.1.0", null, served);
+        repository.redirect(LocalRepository.path(WASM, "0.1.0", "cli", "jar"),
+                "/maven2/" + LocalRepository.path("moved", "0.1.0", null, "jar"),
+                (int) Files.size(served) * 4);
+
+        BackendFetch.Fetched fetched = assertInstanceOf(BackendFetch.Fetched.class,
+                fetch("wasm"));
+
+        assertEquals(Files.size(served), Files.size(fetched.backend().jar()));
+    }
+
+    @Test
+    void aRedirectToAnAddressWithNoHostIsNotFollowed() throws Exception {
+        repository.metadata(WASM, "0.1.0");
+        repository.release(WASM, "0.1.0", "cli", HERE, jar("a", "wasm", HERE));
+        String jar = LocalRepository.path(WASM, "0.1.0", "cli", "jar");
+
+        for (String location : List.of("https:/missing-host", "https:opaque", "https:///x.jar")) {
+            repository.redirect(jar, location);
+
+            assertInstanceOf(Central.Failure.Redirected.class, failed("wasm"), location);
+        }
+        assertEquals(List.of(), held());
+    }
+
+    @Test
+    void aDirectoryThatCannotBeWrittenIsSaidAsSuchAndNotAsTheRepository() throws Exception {
+        repository.metadata(WASM, "0.1.0");
+        repository.release(WASM, "0.1.0", "cli", HERE, jar("a", "wasm", HERE));
+        Files.createDirectories(home);
+        assumeTrue(Files.getFileStore(home).supportsFileAttributeView(PosixFileAttributeView.class));
+        Files.setPosixFilePermissions(home, PosixFilePermissions.fromString("r-xr-xr-x"));
+        try {
+            assumeFalse(Files.isWritable(home), "this user writes where permissions say not");
+
+            Central.Failure failure = failed("wasm");
+
+            assertEquals(home, assertInstanceOf(Central.Failure.Unwritable.class, failure)
+                    .directory());
+        } finally {
+            Files.setPosixFilePermissions(home, PosixFilePermissions.fromString("rwxr-xr-x"));
+        }
+    }
+
+    @Test
+    void aProxyThisCannotSendThroughIsRefusedForWhatItIs() {
+        for (Map.Entry<String, Central.Failure.Misread> named : Map.of(
+                "http://alice:secret@proxy:8080", Central.Failure.Misread.CREDENTIALS,
+                "https://proxy:8443", Central.Failure.Misread.SCHEME,
+                "socks5://proxy:1080", Central.Failure.Misread.SCHEME,
+                "http://", Central.Failure.Misread.NOT_AN_ADDRESS).entrySet()) {
+            Configured configured = Repository.configured(Map.of("HTTPS_PROXY", named.getKey()));
+
+            assertEquals(named.getValue(), assertInstanceOf(Configured.Unusable.class, configured)
+                    .why().why(), named.getKey());
+        }
+        assertInstanceOf(Repository.class,
+                Repository.configured(Map.of("HTTPS_PROXY", "proxy:3128")));
+        assertInstanceOf(Repository.class,
+                Repository.configured(Map.of("HTTPS_PROXY", "http://alice:secret@proxy:8080",
+                        "NO_PROXY", "repo.maven.apache.org")));
     }
 
     @Test

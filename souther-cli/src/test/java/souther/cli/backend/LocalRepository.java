@@ -40,8 +40,8 @@ public final class LocalRepository implements AutoCloseable {
         /** This status, and nothing else. */
         record Status(int status) implements Serving {}
 
-        /** The request sent on to {@code location}. */
-        record Redirect(String location) implements Serving {}
+        /** The request sent on to {@code location}, with a body of {@code length} bytes. */
+        record Redirect(String location, int length) implements Serving {}
 
         /** The file, a {@code pieces}th at a time, {@code millis} apart. */
         record Trickle(int pieces, long millis) implements Serving {}
@@ -184,7 +184,12 @@ public final class LocalRepository implements AutoCloseable {
 
     /** Answers {@code path} by sending the request on to {@code location}. */
     public void redirect(String path, String location) {
-        serving.put(path, new Serving.Redirect(location));
+        redirect(path, location, 0);
+    }
+
+    /** As {@link #redirect(String, String)}, with a body of {@code length} bytes as well. */
+    public void redirect(String path, String location, int length) {
+        serving.put(path, new Serving.Redirect(location, length));
     }
 
     /** Begins the answer for {@code path}, however it is served, only after {@code millis}. */
@@ -218,7 +223,14 @@ public final class LocalRepository implements AutoCloseable {
                 case Serving.Status status -> exchange.sendResponseHeaders(status.status(), -1);
                 case Serving.Redirect redirect -> {
                     exchange.getResponseHeaders().add("Location", redirect.location());
-                    exchange.sendResponseHeaders(302, -1);
+                    if (redirect.length() == 0) {
+                        exchange.sendResponseHeaders(302, -1);
+                    } else {
+                        exchange.sendResponseHeaders(302, redirect.length());
+                        try (OutputStream body = exchange.getResponseBody()) {
+                            body.write(new byte[redirect.length()]);
+                        }
+                    }
                 }
                 case Serving.Whole _ -> {
                     if (content == null) {

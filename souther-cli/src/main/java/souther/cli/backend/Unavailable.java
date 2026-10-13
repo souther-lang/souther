@@ -61,7 +61,7 @@ public final class Unavailable {
         return switch (failure) {
             case Central.Failure.Unasked unasked -> unasked instanceof Central.Failure.NotAsked;
             case Central.Failure.Unanswered _ -> true;
-            case Central.Failure.Declined _ -> false;
+            case Central.Failure.Declined _, Central.Failure.Unkept _ -> false;
         };
     }
 
@@ -127,9 +127,13 @@ public final class Unavailable {
             case Central.Failure.NotTheBackend not ->
                     line("cli.backend.central.notthebackend", repository, not.uri(),
                             not.target(), not.southerVersion());
-            case Central.Failure.Misconfigured misconfigured ->
-                    line("cli.backend.central.misconfigured", repository,
-                            misconfigured.setting(), misconfigured.value());
+            case Central.Failure.Misconfigured misconfigured -> line(switch (misconfigured.why()) {
+                case NOT_AN_ADDRESS -> "cli.backend.central.misconfigured";
+                case CREDENTIALS -> "cli.backend.central.misconfigured.credentials";
+                case SCHEME -> "cli.backend.central.misconfigured.scheme";
+            }, repository, misconfigured.setting(), misconfigured.value());
+            case Central.Failure.Unwritable unwritable ->
+                    line("cli.backend.unwritable", unwritable.directory(), unwritable.reason());
         };
     }
 }

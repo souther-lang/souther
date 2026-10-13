@@ -136,7 +136,7 @@ release that jar is has no part in the choice.
 Where no directory holds the pair, the backend is fetched from Maven Central into the first directory,
 as `souther backend fetch` does, and then run; a jar for the target built against another Souther is
 left where it is, and the fetched one stands beside it. Fetching is said
-on standard error. `SOUTHER_BACKEND_OFFLINE`, set to anything, tells a compile to fetch nothing; it is
+on standard error. `SOUTHER_BACKEND_OFFLINE`, set to anything but the empty string, tells a compile to fetch nothing; it is
 not an option, since from the target's name on the line is the backend's. It reaches this command's
 fetching and nothing else, so a backend that fetches tools of its own when it runs does so as before.
 

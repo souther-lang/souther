@@ -33,13 +33,14 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
     @TempDir
     Path work;
 
+    @TempDir
+    Path scratch;
+
     private LocalRepository repository;
-    private Path userHome;
 
     @BeforeEach
     void start() throws IOException {
         repository = LocalRepository.start();
-        userHome = Files.createDirectories(work.resolve("user"));
     }
 
     @AfterEach
@@ -48,13 +49,12 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
     }
 
     private Path fetchedTo() {
-        return userHome.resolve(".souther/backends");
+        return CliProcess.userHome(scratch).resolve(".souther/backends");
     }
 
     private Ran cli(Map<String, String> environment, String... args) throws Exception {
-        return CliProcess.run(work, environment,
-                List.of("-Duser.home=" + userHome, "-Dsouther.repository=" + repository.uri()),
-                "", args);
+        return CliProcess.run(scratch, work, environment,
+                List.of("-Dsouther.repository=" + repository.uri()), "", args);
     }
 
     private void released(String marker) throws IOException {
@@ -115,14 +115,14 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
             throws Exception {
         Path packaged = Files.createDirectories(work.resolve("packaged"));
         FakeBackend.write(packaged.resolve("native.jar"), "native", HERE, "never");
-        List<String> properties = List.of("-Duser.home=" + userHome,
-                "-Dsouther.repository=" + repository.uri(), "-Dsouther.backends=" + packaged);
+        List<String> properties = List.of("-Dsouther.repository=" + repository.uri(),
+                "-Dsouther.backends=" + packaged);
         String metadata = repository.uri().resolve(
                 "org/souther-lang/" + WASM + "/maven-metadata.xml").toString();
 
-        Ran english = CliProcess.run(work, Map.of(), properties, "", "compile", "--target",
-                "wasm");
-        Ran japanese = CliProcess.run(work, Map.of("SOUTHER_LANG", "ja"), properties, "",
+        Ran english = CliProcess.run(scratch, work, Map.of(), properties, "", "compile",
+                "--target", "wasm");
+        Ran japanese = CliProcess.run(scratch, work, Map.of("SOUTHER_LANG", "ja"), properties, "",
                 "compile", "--target", "wasm");
 
         for (Ran ran : List.of(english, japanese)) {
@@ -141,8 +141,8 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
     void aRepositoryNamedOverPlainHttpElsewhereIsNotAskedAndNamedAsItWasSet() throws Exception {
         String named = "http://repository.example/maven2/";
 
-        Ran ran = CliProcess.run(work, Map.of(), List.of("-Duser.home=" + userHome,
-                "-Dsouther.repository=" + named), "", "compile", "--target", "wasm");
+        Ran ran = CliProcess.run(scratch, work, Map.of(), List.of("-Dsouther.repository=" + named),
+                "", "compile", "--target", "wasm");
 
         assertEquals(2, ran.code());
         assertTrue(ran.err().contains("souther.repository") && ran.err().contains(named),
