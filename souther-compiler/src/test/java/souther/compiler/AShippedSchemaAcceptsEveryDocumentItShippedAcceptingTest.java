@@ -68,7 +68,7 @@ class AShippedSchemaAcceptsEveryDocumentItShippedAcceptingTest {
         for (Shipped each : shipped) {
             JsonNode current = read("/souther/adequacy-schema-" + each.schemaVersion() + ".json");
             assertNotNull(current,
-                    () -> "the schema of a shipped version is still shipped: " + each);
+                    () -> "the schema of a shipped version is still kept: " + each);
             SchemaEvolution.narrowings(read(each.resource()), current)
                     .forEach(at -> narrowed.add(each.release() + " (schemaVersion "
                             + each.schemaVersion() + ") " + at));
@@ -76,6 +76,28 @@ class AShippedSchemaAcceptsEveryDocumentItShippedAcceptingTest {
         assertEquals(List.of(), narrowed,
                 "a shipped schemaVersion accepts fewer documents than a release shipped it"
                         + " accepting; a narrowing raises the version instead");
+    }
+
+    /**
+     * The compiler carries the schema it writes and no other.
+     *
+     * <p>It reads only the one {@link AdequacyReport#SCHEMA_VERSION} names. The schema of every
+     * earlier version is kept beside this test, where the question above reads it, and a copy of
+     * one among the compiler's resources would ship in every jar for nobody to read.
+     */
+    @Test
+    void theCompilerCarriesOnlyTheSchemaItWrites() {
+        String writes = "adequacy-schema-" + AdequacyReport.SCHEMA_VERSION + ".json";
+        URL at = AdequacyReport.class.getResource("/souther/" + writes);
+        assertNotNull(at, writes + " is among the compiler's resources");
+        try (Stream<Path> files = Files.list(Path.of(at.toURI()).getParent())) {
+            assertEquals(List.of(writes), files
+                    .map(file -> file.getFileName().toString())
+                    .filter(name -> A_COPY.matcher(name).matches())
+                    .toList());
+        } catch (IOException | URISyntaxException e) {
+            throw new AssertionError(e);
+        }
     }
 
     /** A build of a release has a copy of the schema it writes, and the copy is that schema. */

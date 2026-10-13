@@ -404,6 +404,19 @@
                         <arg>100000</arg>
                     </compilerArgs>
                 </configuration>
+                <executions>
+                    <!-- What ships keeps the lines a stack trace names and drops the names of local
+                         variables, which only a debugger reads: the table of them is the largest
+                         part of a class file that is not its code, and the CLI jar carries every
+                         class this reactor compiles. The tests keep them, since a test is what
+                         gets stepped through. -->
+                    <execution>
+                        <id>default-compile</id>
+                        <configuration>
+                            <debuglevel>lines,source</debuglevel>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <!-- The commit being built, read from git by the build rather than passed in. Only the
                  full id is taken: branch, user and time would differ between two builds of the
