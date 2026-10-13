@@ -333,6 +333,27 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
     }
 
     /**
+     * Characters of a string an operation made hold a code point that is not whitespace where
+     * that string does, and so where the string the operation was handed does, wherever the
+     * operation keeping that stands: before the string is taken into characters, or between
+     * putting them back together and cutting that into words.
+     */
+    @Test
+    void charactersOfAStringAnOperationMadeHoldWhatTheOperationKeeps() {
+        Proposition words = stated("if String.length(String.join(\"-\", String.words(String.concat("
+                + "String.characters(b.s))))) >= 1 then 1 else 0");
+        assertNull(Proposition.firstStopIn(words), words.toString());
+        for (String made : List.of("String.lowercase", "String.uppercase", "String.trim")) {
+            assertEquals(words, stated("if String.length(String.join(\"-\", String.words("
+                    + "String.concat(String.characters(" + made + "(b.s)))))) >= 1 then 1 else 0"),
+                    made + " before the characters");
+            assertEquals(words, stated("if String.length(String.join(\"-\", String.words("
+                    + made + "(String.concat(String.characters(b.s)))))) >= 1 then 1 else 0"),
+                    made + " after the characters");
+        }
+    }
+
+    /**
      * Characters of a string lowercased are not characters of a string at a position: the case
      * mapping, and the composition after it, can take a letter the pattern accepts into one it
      * does not — {@code J} before a combining caron is {@code ǰ} once lowercased — so which code
