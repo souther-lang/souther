@@ -254,7 +254,7 @@ final class GradleBuild {
 
         /**
          * Code from {@code from}: to the end of the script, or, where {@code template}, to the brace
-         * closing the {@code ${} it is inside, whose index is returned.
+         * closing the template it is the code of, whose index is returned.
          */
         int walk(int from, boolean template) {
             int depth = 0;
