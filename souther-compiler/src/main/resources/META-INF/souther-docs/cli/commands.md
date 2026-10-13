@@ -122,20 +122,68 @@ reads none of it, `--help` included: `souther compile --target wasm --help` is t
 asking itself what it takes. Written anywhere but first, `--target` is an option `compile` does not
 have.
 
-A backend is an executable jar, or a link to one, in `$SOUTHER_HOME/backends` or in the directory a
-package manager's launcher names with `-Dsouther.backends`. It says what it is in
+A backend is an executable jar, or a link to one, in `$SOUTHER_HOME/backends` — `~/.souther/backends`
+where `SOUTHER_HOME` is not set — or in the directory a package manager's launcher names with
+`-Dsouther.backends`, searched in that order. It says what it is in
 `META-INF/souther/backend.properties`, which has two keys and no others: `name`, the target it answers
 to, and `souther.version`, the Souther it was built against. This command chooses the jar whose pair
 is this Souther's, so jars for several versions can stand side by side; two of one pair in a directory
-are refused. The first directory that holds the target at all decides, so a development build in
-`$SOUTHER_HOME` stands in for a packaged one, and a stale one is refused rather than passed over.
-Which backend release that jar is has no part in the choice.
+are refused. The first directory that holds the pair decides, so a development build in
+`$SOUTHER_HOME` stands in for a packaged one of the same pair. A jar built against another Souther is
+not this one's backend wherever it stands, so it hides nothing further down the list. Which backend
+release that jar is has no part in the choice.
+
+Where no directory holds the pair, the backend is fetched from Maven Central into the first directory,
+as `souther backend fetch` does, and then run; a jar for the target built against another Souther is
+left where it is, and the fetched one stands beside it. Fetching is said
+on standard error. `SOUTHER_BACKEND_OFFLINE`, set to anything but the empty string, tells a compile to fetch nothing; it is
+not an option, since from the target's name on the line is the backend's. It reaches this command's
+fetching and nothing else, so a backend that fetches tools of its own when it runs does so as before.
 
 The backend runs as a process of its own, under this command's `java`, with the JVM arguments this
 Souther requires — the ones `souther tooling` lists. Its arguments, working directory, environment and
-standard streams are the command's own, and the exit status is the backend's. A target that is not
-installed, a backend built for another Souther, a jar that is not a backend and a link to a jar that
-is not there are each refused with exit status 2 before anything runs.
+standard streams are the command's own, and the exit status is the backend's. A target that is
+neither installed nor fetched is refused with exit status 2, naming each directory searched and what
+it held, and what Maven Central answered. Two jars of one pair, a jar that is not a backend and a link
+to a jar that is not there are refused with exit status 2 too, and nothing is fetched in their place.
+Nothing runs before either.
+
+<!-- souther-section: backend -->
+## backend
+
+```
+souther backend fetch <target>
+```
+
+Fetches the newest release of the target's backend that was built against this Souther from Maven
+Central, and compiles nothing. It is for a machine that will not reach the network when it compiles,
+and for taking a release newer than the one fetched before. Which releases there are is read from the
+artifact's `maven-metadata.xml`, and the Souther each was built against from its pom's
+`souther.version`, or the parent pom's where the pom does not state it. Which release is newest is the
+backend's own numbering, and plays no part in which Souther a release is for. A release whose pom is
+missing or does not say what it was built against is passed over, and named where nothing else was
+found.
+
+The jar is written to `$SOUTHER_HOME/backends`, or `~/.souther/backends`, as `<target>-<version>.jar`,
+and where it came from is written beside it. A fetch replaces only what an earlier fetch wrote under
+that name, and a release fetched before and still in place is not fetched again. A jar under that
+name that no fetch wrote, or one for the pair under any other name, was put there by hand, and the
+fetch is refused before anything is downloaded. The jar is written under another name first, held to
+its descriptor, and moved into place in one step, so a fetch that stops part way leaves nothing that
+is read as a backend. Two runs fetching into one directory take turns. The metadata and each pom have
+a minute to arrive; a jar has a minute for its answer to begin, and is then given as long as it
+takes, ending only where nothing more has arrived for half a minute.
+
+The jar is what Maven Central serves over HTTPS, with no checksum or key to hold it to: a backend is
+released after the Souther it is built against, so nothing about it is known to this one. The proxy is
+the one Java's `https.proxyHost` names, and `HTTPS_PROXY` where that is not set, except for a host
+`NO_PROXY` names. `-Dsouther.repository=<url>` fetches from another Maven repository in Central's
+layout, and is what the messages name in Central's place; it is reached over HTTPS, or over plain HTTP
+on this machine's loopback address, and a redirect is followed only to an address reached the same
+way. A target Maven Central does not
+release, `jvm` among them, is refused with exit status 2, as is a fetch that finds no release built
+against this Souther or cannot reach the repository, which is named with what it answered. This
+command is not held to `.souther-version`: what it fetches is for the Souther that runs it.
 
 <!-- souther-section: project-version -->
 ## .souther-version
@@ -144,7 +192,7 @@ A file of this name holds one line: an exact Souther version, compared as text, 
 alias. It says which Souther a project's direct use of this command line requires, and chooses none:
 under one naming another version, `compile` (whatever its target), `run`, `fmt` and `examples` are
 refused with both versions named, and exit status 2. The file is looked for from the working directory
-upwards, and the nearest one wins. `init`, `doc`, `api`, `japi`, `tooling`, `help` and `version` are
+upwards, and the nearest one wins. `init`, `backend`, `doc`, `api`, `japi`, `tooling`, `help` and `version` are
 not held to it, nor are `lsp` and `mcp` for now, since an editor or an agent starts those and a
 refusal at start-up would show its reader nothing. A `--help` or `--version` this command line reads
 is answered before the file is. One written after an installed target's name is the backend's and is

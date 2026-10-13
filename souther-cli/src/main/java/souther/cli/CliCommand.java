@@ -43,6 +43,8 @@ enum CliCommand {
                             + " installed backend, and everything after its name is the"
                             + " backend's own: `souther compile --target <target> --help` asks"
                             + " it what it takes."))),
+    BACKEND("backend", "fetch <target>",
+            "fetch a target's backend from Maven Central, ahead of a compile", Scope.INDEPENDENT),
     RUN("run", "<file.sou>", "run one behavior and print its output", Scope.PROJECT,
             Map.of(CliOption.BEHAVIOR, "which behavior to run (default: the only one)")),
     FMT("fmt", "<file.sou>...", "format source, to stdout or in place", Scope.PROJECT),

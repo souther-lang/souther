@@ -2,14 +2,13 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import souther.cli.CliProcess.Ran;
 import souther.cli.backend.FakeBackend;
 import souther.compiler.meta.ModuleMetadata;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -27,29 +26,12 @@ class ACompileForAnInstalledTargetIsRunByItsBackendAsWrittenTest {
 
     private static final String HERE = ModuleMetadata.compilerVersion();
 
-    private record Ran(int code, String out, String err) {}
+    @TempDir
+    Path scratch;
 
-    private static Ran cli(Path workingDirectory, Map<String, String> environment,
-                           List<String> jvmProperties, String stdin, String... args)
-            throws Exception {
-        List<String> command = new ArrayList<>();
-        command.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
-        command.addAll(jvmProperties);
-        command.addAll(List.of("-cp", System.getProperty("java.class.path"), "souther.cli.Main"));
-        command.addAll(List.of(args));
-        Path out = Files.createTempFile("cli", ".out");
-        Path err = Files.createTempFile("cli", ".err");
-        ProcessBuilder builder = new ProcessBuilder(command).directory(workingDirectory.toFile())
-                .redirectOutput(out.toFile()).redirectError(err.toFile());
-        builder.environment().remove("SOUTHER_HOME");
-        builder.environment().remove("SOUTHER_LANG");
-        builder.environment().putAll(environment);
-        Process process = builder.start();
-        try (var in = process.getOutputStream()) {
-            in.write(stdin.getBytes(StandardCharsets.UTF_8));
-        }
-        int code = process.waitFor();
-        return new Ran(code, Files.readString(out), Files.readString(err));
+    private Ran cli(Path workingDirectory, Map<String, String> environment,
+                    List<String> jvmProperties, String stdin, String... args) throws Exception {
+        return CliProcess.run(scratch, workingDirectory, environment, jvmProperties, stdin, args);
     }
 
     private static Map<String, String> home(Path home) {

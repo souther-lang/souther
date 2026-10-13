@@ -35,18 +35,24 @@ import souther.compiler.report.GeneratedRows;
 import souther.compiler.report.UnifiedDiff;
 import souther.lsp.LspServer;
 import souther.lsp.ToolingMetadata;
+import souther.cli.backend.BackendFetch;
 import souther.cli.backend.BackendProcess;
 import souther.cli.backend.Backends;
+import souther.cli.backend.Central;
+import souther.cli.backend.Shown;
+import souther.cli.backend.Unavailable;
 import souther.cli.init.InitCommand;
 
 import java.io.Console;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The command line's entry point: it resolves the command a line names, holds the line against what
@@ -185,8 +191,8 @@ public final class Main {
     }
 
     /**
-     * {@code souther compile --target <target> <arguments>...}: runs the installed backend that
-     * answers to the target, and answers with its exit status.
+     * {@code souther compile --target <target> <arguments>...}: runs the backend that answers to the
+     * target, fetching it where it is not installed, and answers with its exit status.
      *
      * <p>Held to the project's version like every compile, and to nothing else the CLI reads: the
      * backend's arguments, {@code --help} among them, are its own.
@@ -196,16 +202,131 @@ public final class Main {
         if (refusedByProject(workingDirectory, render)) {
             return 2;
         }
+        Locale locale = render.locale();
+        Backends backends = Backends.installed();
         try {
-            Backends.Backend backend = Backends.installed()
-                    .choose(target.name(), ModuleMetadata.compilerVersion());
-            return BackendProcess.run(backend, target.arguments());
+            Optional<Backends.Backend> backend = switch (backends.find(target.name(),
+                    ModuleMetadata.compilerVersion())) {
+                case Backends.Found found -> Optional.of(found.backend());
+                case Backends.Absent absent -> fetchedFor(backends, absent, locale);
+            };
+            if (backend.isEmpty()) {
+                return 2;
+            }
+            return BackendProcess.run(backend.get(), target.arguments());
         } catch (Backends.Refused e) {
-            System.err.println(Messages.get(e.key(), render.locale(), e.arguments()));
+            System.err.println(Messages.get(e.key(), locale, e.arguments()));
             return 2;
         } catch (IOException e) {
             System.err.println("io error: " + e.getMessage());
             return 1;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return 1;
+        }
+    }
+
+    /**
+     * The backend fetched for a pair no directory holds, or none once it is said why none was.
+     *
+     * <p>Fetching is said on standard error, which is the backend's too once it runs: standard
+     * output is what the backend writes, and a line of this command's there would be read as one.
+     * {@value #OFFLINE} set to anything but the empty string tells a compile to fetch nothing, as
+     * {@code NO_COLOR} is read; it is not an argument, since from the target's name on the line is
+     * the backend's.
+     */
+    private static Optional<Backends.Backend> fetchedFor(Backends backends,
+                                                         Backends.Absent absent, Locale locale)
+            throws Backends.Refused, IOException, InterruptedException {
+        BackendFetch.Source source = Central.configured(System.getenv());
+        Central.Failure failure;
+        String offline = System.getenv(OFFLINE);
+        if (offline != null && !offline.isEmpty()) {
+            failure = new Central.Failure.NotAsked();
+        } else {
+            switch (BackendFetch.whereAbsent(backends, source, absent.target(),
+                    absent.southerVersion(),
+                    release -> fetching(System.err, locale, release))) {
+                case BackendFetch.Fetched fetched -> {
+                    System.err.println(fetched(locale, fetched));
+                    return Optional.of(fetched.backend());
+                }
+                case BackendFetch.Present present -> {
+                    return Optional.of(present.backend());
+                }
+                case BackendFetch.Failed failed -> failure = failed.failure();
+            }
+        }
+        List<Unavailable.Line> lines = Unavailable.of(absent, failure, source.name());
+        for (int i = 0; i < lines.size(); i++) {
+            System.err.println((i == 0 ? "" : "  ")
+                    + Messages.get(lines.get(i).key(), locale, lines.get(i).array()));
+        }
+        return Optional.empty();
+    }
+
+    /** What tells a compile for a target to fetch no backend. */
+    static final String OFFLINE = "SOUTHER_BACKEND_OFFLINE";
+
+    private static void fetching(PrintStream to, Locale locale, Central.Release release) {
+        to.println(Messages.get("cli.backend.fetching", locale, release.artifactId(),
+                release.version(), Shown.address(release.jar())));
+    }
+
+    private static String fetched(Locale locale, BackendFetch.Fetched fetched) {
+        return Messages.get("cli.backend.fetched", locale, fetched.release().artifactId(),
+                fetched.release().version(), fetched.backend().jar());
+    }
+
+    /**
+     * {@code souther backend fetch <target>}: fetches the newest release of the target's backend
+     * built against this Souther, compiling nothing.
+     *
+     * <p>For a machine that will not reach the repository when it compiles, and for taking a newer
+     * release than the one fetched before. It is held to no project's version: what it fetches is
+     * for the Souther that runs it.
+     */
+    private static int backendSubcommand(String[] args) {
+        Locale locale = RenderOptions.asking(null).locale();
+        if (args.length != 2 || !args[0].equals("fetch") || args[1].startsWith("-")) {
+            System.err.println(Messages.get("cli.backend.arguments", locale,
+                    String.join(" ", args)));
+            System.err.println(Usage.of(CliCommand.BACKEND));
+            return 2;
+        }
+        String target = args[1];
+        if (target.equals("jvm")) {
+            System.err.println(Messages.get("cli.backend.jvm", locale));
+            return 2;
+        }
+        String version = ModuleMetadata.compilerVersion();
+        BackendFetch.Source source = Central.configured(System.getenv());
+        try {
+            return switch (BackendFetch.again(Backends.installed(), source, target, version,
+                    release -> fetching(System.out, locale, release))) {
+                case BackendFetch.Fetched fetched -> {
+                    System.out.println(fetched(locale, fetched));
+                    yield 0;
+                }
+                case BackendFetch.Current current -> {
+                    System.out.println(Messages.get("cli.backend.fetch.current", locale,
+                            current.release().artifactId(), current.release().version(),
+                            current.backend().jar()));
+                    yield 0;
+                }
+                case BackendFetch.Failed failed -> {
+                    System.err.println(Messages.get("cli.backend.fetch.failed", locale, target,
+                            version));
+                    for (Unavailable.Line line : Unavailable.repository(failed.failure(),
+                            source.name())) {
+                        System.err.println("  " + Messages.get(line.key(), locale, line.array()));
+                    }
+                    yield 2;
+                }
+            };
+        } catch (Backends.Refused e) {
+            System.err.println(Messages.get(e.key(), locale, e.arguments()));
+            return 2;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return 1;
@@ -256,6 +377,7 @@ public final class Main {
             case INIT -> () -> initSubcommand(rest);
             case RUN -> () -> runSubcommand(rest);
             case COMPILE -> () -> compileSubcommand(rest);
+            case BACKEND -> () -> backendSubcommand(rest);
             case FMT -> () -> fmtSubcommand(rest);
             case EXAMPLES -> () -> examplesSubcommand(rest);
             case DOC -> () -> DocCommand.run(rest, System.out, System.err);
