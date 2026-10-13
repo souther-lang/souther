@@ -31,8 +31,8 @@ class ACutIsProvedEmptyOnlyWhereEveryWayOfWritingItIsTest {
     private static final ReachabilityGap PROVED = new ReachabilityGap.ProvedImpossible(CUT);
 
     private static final ReachabilityGap STOPPED = new ReachabilityGap.Uncomposed(CUT,
-            ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(
-                    Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT), Set.of()));
+            ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(CompositionShortfall.of(
+                    Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT))));
 
     private static final ReachabilityGap FOUND_NOTHING = new ReachabilityGap.Uncomposed(CUT,
             new ReachabilityGap.Why.NoValueComposedForItsPositions());

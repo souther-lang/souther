@@ -10,6 +10,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.AnswerDemand;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.ConditionGap;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.ConditionReportAnchor;
@@ -116,7 +117,7 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
                 ofTheInput(new ReachabilityGap.Why.NoValueComposedForItsPositions()));
         out.put(ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.class,
                 ofTheInput(ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(
-                        Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED), Set.of())));
+                        CompositionShortfall.of(Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)))));
         out.put(ReachabilityGap.Why.TwoNumbersAtOneLocation.class,
                 ofTheInput(new ReachabilityGap.Why.TwoNumbersAtOneLocation()));
         out.put(ReachabilityGap.Why.NoComposerWritesIt.class,

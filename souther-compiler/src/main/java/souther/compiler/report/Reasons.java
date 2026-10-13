@@ -186,6 +186,8 @@ final class Reasons {
                         "how many values a position on the way is tried at";
                 case PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT ->
                         "how many places of a position on the way are looked at";
+                case ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR ->
+                        "how many values of the numbers on the way a row is composed for";
                 case VALUES_A_POINT_IS_TRIED_WITH -> "how many values a point is tried with";
                 case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> "how deep a value is built";
                 case PATHS_OF_A_DECISION_READ ->
