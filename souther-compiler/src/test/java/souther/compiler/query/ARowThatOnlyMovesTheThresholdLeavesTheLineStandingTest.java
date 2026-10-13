@@ -10,6 +10,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.OrderedAffineBoundary;
+import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.WayToTheBorder;
 
@@ -116,8 +117,8 @@ class ARowThatOnlyMovesTheThresholdLeavesTheLineStandingTest {
         AnotherLineTheRowsAllow.Undecided open = assertInstanceOf(
                 AnotherLineTheRowsAllow.Undecided.class, line(border, rows),
                 "the row could have been the one that rules it out, or not");
-        assertInstanceOf(AnotherLineTheRowsAllow.Unsettled.TheLineWasNotWorkedOut.class,
-                open.why(), "and what stopped it is the arithmetic");
+        assertTrue(aRowNotWorkedOut(open), () -> "and what stopped it is a row whose number the"
+                + " arithmetic could not hold, in the words a reading answers in: " + open);
     }
 
     /**
@@ -152,8 +153,14 @@ class ARowThatOnlyMovesTheThresholdLeavesTheLineStandingTest {
                 AnotherLineTheRowsAllow.Undecided.class,
                 line(border, with(border, rows, unplaced), "-x"),
                 "and with it written the line is undecided, not ruled out");
-        assertInstanceOf(AnotherLineTheRowsAllow.Unsettled.TheLineWasNotWorkedOut.class,
-                after.why(), "for the arithmetic");
+        assertTrue(aRowNotWorkedOut(after), () -> "for the arithmetic on that row: " + after);
+    }
+
+    /** Whether a line was left undecided by a row read in part because its number was not held. */
+    private static boolean aRowNotWorkedOut(AnotherLineTheRowsAllow.Undecided line) {
+        return line.why() instanceof AnotherLineTheRowsAllow.Unsettled.RowsIncomplete(var met)
+                && met.eachKindOnce().written().stream()
+                        .anyMatch(ReadingGap.CouldNotWorkOut.class::isInstance);
     }
 
     /** One rule, asked by the generation and by the measurement, on either side the line keeps. */

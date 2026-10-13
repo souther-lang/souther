@@ -1117,8 +1117,9 @@ public record Settlements(List<ObligationIdentity> requested,
                             new InputOfARowForALine(one.reading().border(), values));
                 }
             }
-            // A value the arithmetic could not place is a value read short of where it falls,
-            // which is the word a reading short of a value already answers in.
+            // A row whose sum could not be held is a row read in part (a reading's own
+            // ReadingGap.CouldNotWorkOut), and a row read short of a value is what this answers
+            // in that word wherever else a row is put to a line.
             return new ToldApartAt(unheld
                     ? new Settlement.Undetermined(Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ)
                     : new Settlement.DoesNotSettle(), null);

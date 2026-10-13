@@ -22,6 +22,7 @@ import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.partition.QuantityKey;
+import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.RowDemand;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.TakenConstraint;
@@ -510,16 +511,13 @@ public sealed interface AnotherLineTheRowsAllow {
 
         /**
          * The values beside this line were not worked out, so there is no inequality to hold
-         * against the lines beside it — or, said of one line of the family, a row's sum along that
-         * line was not, so where the rows leave it is not known.
+         * against the lines beside it.
          *
          * <p>Not {@link NoStrategyForIt}, which is a rule that names a value and orders nothing: this
          * rule orders the values, and what stopped the reading is the exact arithmetic on the numbers
-         * beside its line.
-         *
-         * <p>Of one line of the family it is said only where the rows that were held did not rule
-         * the line out. A row read leaves fewer lines standing and never more, so a line the rest
-         * of the rows rule out is ruled out whatever the one this could not hold would have said.
+         * beside its line. And not a row whose sum could not be held, on this line or on one beside
+         * it: that is a row read in part ({@link RowsIncomplete}), and is said in the words a
+         * reading short of a number answers in.
          *
          * @param why which of the two ways the number was not held
          */
@@ -729,12 +727,13 @@ public sealed interface AnotherLineTheRowsAllow {
         // leaves undecided.
         List<Map<NumericTerm, Place>> satisfying = new ArrayList<>();
         List<Map<NumericTerm, Place>> refusing = new ArrayList<>();
-        UnheldNumber sideNotHeld = null;
+        Set<ReadingGap> sideNotHeld = new LinkedHashSet<>();
         for (Map<NumericTerm, Place> values : rows.each()) {
             switch (boundary.satisfies(values)) {
                 case ExactAnswer.Held<Boolean> side ->
                         (side.value() ? satisfying : refusing).add(values);
-                case ExactAnswer.Unheld<Boolean> unheld -> sideNotHeld = unheld.why();
+                case ExactAnswer.Unheld<Boolean> unheld ->
+                        sideNotHeld.add(new ReadingGap.CouldNotWorkOut(unheld.why()));
             }
         }
         // No row the rule keeps, so there is nothing a threshold on any other line has to keep, and
@@ -742,11 +741,15 @@ public sealed interface AnotherLineTheRowsAllow {
         // place this cannot name without a step of the other line's own. Where the rows are all on
         // the kept side the tightest threshold is the furthest of them, so that side is answered
         // below like any other. And where a row this could not place may be the one the rule keeps,
-        // that is what is not known.
+        // the rows were read in part, in the words a reading short of a number answers in.
         if (satisfying.isEmpty()) {
-            return new CouldNotTell(sideNotHeld != null
-                    ? new Unsettled.TheLineWasNotWorkedOut(sideNotHeld)
-                    : new Unsettled.TheRowsAreAllOnOneSide());
+            if (!sideNotHeld.isEmpty()) {
+                Set<ReadingGap> met = new LinkedHashSet<>(rows.why());
+                met.addAll(sideNotHeld);
+                return new CouldNotTell(new Unsettled.RowsIncomplete(
+                        ReadingReasons.of(met, rows.tried())));
+            }
+            return new CouldNotTell(new Unsettled.TheRowsAreAllOnOneSide());
         }
         List<Direction> each = new ArrayList<>();
         for (QuantityKey other : family) {
@@ -793,9 +796,10 @@ public sealed interface AnotherLineTheRowsAllow {
      * short of the second there is nowhere to put it, and the rows have told the two lines apart.
      *
      * <p>A row the exact arithmetic cannot hold — its sum on the model's own line, which says which
-     * side it is on, or its sum along this one — is left out of the fold and remembered. Ruled out
-     * without it, the line is ruled out — a row read leaves fewer lines standing, never more — and
-     * otherwise that row is what leaves the line undecided, and never what rules it out.
+     * side it is on, or its sum along this one — is left out of the fold and remembered as a row
+     * read in part. Ruled out without it, the line is ruled out — a row read leaves fewer lines
+     * standing, never more — and otherwise that row is what leaves the line undecided, and never
+     * what rules it out.
      */
     private static Direction assessed(OrderedAffineBoundary boundary, QuantityKey other,
                                       StandingAtAPoint.RowsRead rows,
@@ -805,21 +809,16 @@ public sealed interface AnotherLineTheRowsAllow {
                                       WayToTheBorder way,
                                       Predicate<Map<NumericTerm, Place>> refused) {
         Stands.Ends ends = Stands.Ends.none(other, boundary.satisfiedOn());
-        UnheldNumber notHeld = null;
+        Set<ReadingGap> notHeld = new LinkedHashSet<>();
         for (Map<NumericTerm, Place> values : rows.each()) {
             switch (ends.with(boundary, values)) {
                 case ExactAnswer.Held<Stands.Ends> held -> ends = held.value();
-                case ExactAnswer.Unheld<Stands.Ends> unheld -> notHeld = unheld.why();
+                case ExactAnswer.Unheld<Stands.Ends> unheld ->
+                        notHeld.add(new ReadingGap.CouldNotWorkOut(unheld.why()));
             }
         }
         if (!ends.apart()) {
             return new RuledOut(other);
-        }
-        // Some row the model keeps is in the fold or was left out of it here, which the caller
-        // settled before asking: so a line not ruled out has a threshold the rows pin, or a row
-        // this could not hold to say why it has none.
-        if (notHeld != null) {
-            return new Undecided(other, new Unsettled.TheLineWasNotWorkedOut(notHeld));
         }
         // What was gone without, in the words of the thing that went without it. A row nothing
         // watched and a reading that came to nothing are two different things to do about, so
@@ -828,9 +827,14 @@ public sealed interface AnotherLineTheRowsAllow {
         if (rows.unwatched()) {
             return new Undecided(other, new Unsettled.TheRunsWereNotWatched());
         }
-        if (!rows.everyOne()) {
+        // A row this could not hold is a row read in part: every value came back and the number
+        // they come to did not, which is a reason a reading answers in already. Said beside the
+        // reasons the walk over the rows met, as one account of what the rows went without.
+        if (!notHeld.isEmpty() || !rows.everyOne()) {
+            Set<ReadingGap> met = new LinkedHashSet<>(rows.why());
+            met.addAll(notHeld);
             return new Undecided(other, new Unsettled.RowsIncomplete(
-                    ReadingReasons.of(rows.why(), rows.tried())));
+                    ReadingReasons.of(met, rows.tried())));
         }
         // And an input that rules the line out and that the rules do send a row to. Where nothing
         // could show one, the question stands rather than being answered by whichever way it fell.
