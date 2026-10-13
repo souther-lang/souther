@@ -7007,6 +7007,10 @@ public final class Generator {
             // And each count to come at a container these numbers are written at, where one value
             // answers it beside them. One nothing composes beside them is refused where it is
             // placed, and composed beside them here it would refuse every assignment instead.
+            // Each at the least of the counts left, which is a count this chose and not one the
+            // rules force — so what composing beside it shows is about that count, and never the
+            // model's answer.
+            Set<RealizationTarget> countsChosenHere = new HashSet<>();
             countsToCome.forEach((count, least) -> {
                 if (standing.containsKey(count)) {
                     return;
@@ -7016,6 +7020,7 @@ public final class Generator {
                 if (!Collections.disjoint(beside, owing.keySet())
                         && writtenTogether(beside, count, someElement)) {
                     standing.put(count, least);
+                    countsChosenHere.add(count);
                 }
             });
             Map<RealizationTarget, AskedAt> numbers = atThoseNumbers(standing, asked);
@@ -7032,6 +7037,7 @@ public final class Generator {
                 // composing met.
                 if (edge.values().isEmpty()) {
                     return edge.settlesTheQuestion() && chosen.isEmpty()
+                            && Collections.disjoint(group.getValue().keySet(), countsChosenHere)
                             ? new NumericWitness.Composed.Refuted()
                             : new NumericWitness.Composed.NotBuilt(edge.met());
                 }

@@ -128,30 +128,89 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
             }
             """;
 
+    /** That every element is at least five, and then that some element is: a list of one element
+     *  of five meets both, and the list holding none meets the first alone. */
+    private static final String EVERY_ELEMENT_THEN_HOW_MANY_MEET = """
+            module p
+            data Line = { q: Int }
+            behavior pick : (ls: List<Line>, n: Int) -> Int
+            let pick (ls, n) = {
+                guard List.all(l -> l.q >= 5, ls) else 0
+                guard List.length(List.filter(l -> l.q >= 5, ls)) >= 1 else 1
+                if n > 3 then 2 else 3
+            }
+            """;
+
+    /** The same two the other way round. */
+    private static final String HOW_MANY_MEET_THEN_EVERY_ELEMENT = """
+            module p
+            data Line = { q: Int }
+            behavior pick : (ls: List<Line>, n: Int) -> Int
+            let pick (ls, n) = {
+                guard List.length(List.filter(l -> l.q >= 5, ls)) >= 1 else 1
+                guard List.all(l -> l.q >= 5, ls) else 0
+                if n > 3 then 2 else 3
+            }
+            """;
+
+    /** That every element is at least five as one part of a condition, which is no statement a
+     *  count is of, beside how many meet it. */
+    private static final String EVERY_ELEMENT_AS_A_PART = """
+            module p
+            data Line = { q: Int }
+            behavior pick : (ls: List<Line>, m: Int, n: Int) -> Int
+            let pick (ls, m, n) = {
+                guard List.all(l -> l.q >= 5, ls) && m >= 0 else 0
+                guard List.length(List.filter(l -> l.q >= 5, ls)) >= 1 else 1
+                if n > 3 then 2 else 3
+            }
+            """;
+
     /** Each model, with what its body answers over the inputs a row holds and the answers of the
      *  rules some row of it is composed for. */
-    private static final Map<String, Answered> ANSWERED = Map.of(
-            A_TOTAL_THEN_EVERY_ELEMENT, new Answered(row -> total(row.get(0), "q") < 10 ? 0
-                    : !every(row.get(0), "q", 5) ? 1 : number(row.get(1)) > 3 ? 2 : 3,
-                    Set.of(0, 1, 2, 3)),
-            EVERY_ELEMENT_THEN_A_TOTAL, new Answered(row -> !every(row.get(0), "q", 5) ? 1
-                    : total(row.get(0), "q") < 10 ? 0 : number(row.get(1)) > 3 ? 2 : 3,
-                    Set.of(1, 2, 3)),
-            EVERY_ELEMENT_OF_NONE, new Answered(row -> total(row.get(0), "q") > 3 ? 0
-                    : !every(row.get(0), "q", 5) ? 1 : number(row.get(1)) > 3 ? 2 : 3,
-                    Set.of(0, 1, 2, 3)),
-            A_TOTAL_BESIDE_ANOTHER_NUMBER, new Answered(row ->
+    private static final Map<String, Answered> ANSWERED = Map.ofEntries(
+            Map.entry(A_TOTAL_THEN_EVERY_ELEMENT, new Answered(row ->
+                    total(row.get(0), "q") < 10 ? 0
+                            : !every(row.get(0), "q", 5) ? 1 : number(row.get(1)) > 3 ? 2 : 3,
+                    Set.of(0, 1, 2, 3))),
+            Map.entry(EVERY_ELEMENT_THEN_A_TOTAL, new Answered(row ->
+                    !every(row.get(0), "q", 5) ? 1
+                            : total(row.get(0), "q") < 10 ? 0 : number(row.get(1)) > 3 ? 2 : 3,
+                    Set.of(1, 2, 3))),
+            Map.entry(EVERY_ELEMENT_OF_NONE, new Answered(row ->
+                    total(row.get(0), "q") > 3 ? 0
+                            : !every(row.get(0), "q", 5) ? 1 : number(row.get(1)) > 3 ? 2 : 3,
+                    Set.of(0, 1, 2, 3))),
+            Map.entry(A_TOTAL_BESIDE_ANOTHER_NUMBER, new Answered(row ->
                     total(row.get(0), "q") + number(row.get(1)) < 10 ? 0
                             : number(row.get(1)) > 3 ? 1
                             : elementsOf(row.get(0)).size() < 3 ? 2
                             : number(row.get(2)) > 3 ? 3 : 4,
-                    Set.of(0, 1, 2, 3, 4)),
-            HOW_MANY_THEN_A_TOTAL, new Answered(row -> elementsOf(row.get(0)).isEmpty() ? 0
-                    : total(row.get(0), "a") < 8 ? 1 : number(row.get(1)) > 3 ? 2 : 3,
-                    Set.of(0, 1, 2, 3)),
-            A_TOTAL_AND_HOW_MANY_MEET, new Answered(row -> total(row.get(0), "q") < 10 ? 0
-                    : meeting(row.get(0), "q", 5) < 3 ? 1 : number(row.get(1)) > 3 ? 2 : 3,
-                    Set.of(0, 2, 3)));
+                    Set.of(0, 1, 2, 3, 4))),
+            Map.entry(HOW_MANY_THEN_A_TOTAL, new Answered(row ->
+                    elementsOf(row.get(0)).isEmpty() ? 0
+                            : total(row.get(0), "a") < 8 ? 1 : number(row.get(1)) > 3 ? 2 : 3,
+                    Set.of(0, 1, 2, 3))),
+            Map.entry(A_TOTAL_AND_HOW_MANY_MEET, new Answered(row ->
+                    total(row.get(0), "q") < 10 ? 0
+                            : meeting(row.get(0), "q", 5) < 3 ? 1
+                            : number(row.get(1)) > 3 ? 2 : 3,
+                    Set.of(0, 2, 3))),
+            Map.entry(EVERY_ELEMENT_THEN_HOW_MANY_MEET, new Answered(row ->
+                    !every(row.get(0), "q", 5) ? 0
+                            : meeting(row.get(0), "q", 5) < 1 ? 1
+                            : number(row.get(1)) > 3 ? 2 : 3,
+                    Set.of(0, 1, 2, 3))),
+            Map.entry(HOW_MANY_MEET_THEN_EVERY_ELEMENT, new Answered(row ->
+                    meeting(row.get(0), "q", 5) < 1 ? 1
+                            : !every(row.get(0), "q", 5) ? 0
+                            : number(row.get(1)) > 3 ? 2 : 3,
+                    Set.of(0, 1, 2, 3))),
+            Map.entry(EVERY_ELEMENT_AS_A_PART, new Answered(row ->
+                    !every(row.get(0), "q", 5) || number(row.get(1)) < 0 ? 0
+                            : meeting(row.get(0), "q", 5) < 1 ? 1
+                            : number(row.get(2)) > 3 ? 2 : 3,
+                    Set.of(0, 1, 2, 3))));
 
     /** What a model's body works out to over a row's inputs, and the answers of the rules a row is
      *  composed for. */
@@ -195,6 +254,41 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
         assertEquals(1, said.size(), () -> report);
         assertTrue(said.getFirst().contains("a condition on another number taken where this row"
                 + " is already being written for one"), () -> said.getFirst());
+    }
+
+    /**
+     * A count the way leaves several of is composed beside a condition's numbers at the least of
+     * them, which is a count this chose: that nothing composes at it says nothing of the counts
+     * above it, and no point past it is said to be one the rules leave no value at.
+     *
+     * <p>Every element at least five and at most three of them, so how many meet "at least five"
+     * is how many there are: none of them is no list holding one, and one of them is.
+     */
+    @Test
+    void theLeastOfACountsLeftIsNoProofTheRulesLeaveNothing() {
+        String report = report(measured("""
+                module p
+                data Line = { q: Int }
+                    invariant big = q >= 5
+                data Lines = List<Line>
+                    invariant few = List.length(value) <= 3
+                behavior pick : (ls: Lines, n: Int) -> Int
+                let pick (ls, n) = {
+                    guard List.length(List.filter(l -> l.q >= 5, ls.value)) <= 3 else 0
+                    guard List.length(ls.value) >= 1 else 1
+                    if n > 3 then 2 else 3
+                }
+                """));
+        List<String> past = report.lines()
+                .filter(line -> line.contains("read as pick/n:")
+                        || line.contains("decision rule"))
+                .toList();
+
+        assertTrue(!past.isEmpty(), () -> report);
+        for (String line : past) {
+            assertTrue(!line.contains("the rules leave no value"),
+                    () -> "nothing past the count is said to be what the rules leave: " + line);
+        }
     }
 
     /** The rows composed for the decision rules no row takes, each as its inputs. */
