@@ -39,6 +39,7 @@ import souther.cli.backend.BackendFetch;
 import souther.cli.backend.BackendProcess;
 import souther.cli.backend.Backends;
 import souther.cli.backend.Central;
+import souther.cli.backend.Shown;
 import souther.cli.backend.Unavailable;
 import souther.cli.init.InitCommand;
 
@@ -269,7 +270,7 @@ public final class Main {
 
     private static void fetching(PrintStream to, Locale locale, Central.Release release) {
         to.println(Messages.get("cli.backend.fetching", locale, release.artifactId(),
-                release.version(), release.jar()));
+                release.version(), Shown.address(release.jar())));
     }
 
     private static String fetched(Locale locale, BackendFetch.Fetched fetched) {

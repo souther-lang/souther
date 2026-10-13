@@ -559,6 +559,28 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
     }
 
     @Test
+    void credentialsAreLeftOutOfWhatIsShownAndAnAddressCarryingThemIsNotAsked() throws Exception {
+        assertEquals("http://***@proxy:8080", Shown.setting("http://alice:pw@proxy:8080"));
+        assertEquals("***@proxy:8080", Shown.setting("alice:pw@proxy:8080"));
+        assertEquals("https://nexus.example/a@b", Shown.setting("https://nexus.example/a@b"));
+        assertEquals("proxy:3128", Shown.setting("proxy:3128"));
+        assertEquals("https://***@nexus.example/x",
+                Shown.address(URI.create("https://bob:pw@nexus.example/x")));
+
+        repository.metadata(WASM, "0.1.0");
+        repository.release(WASM, "0.1.0", "cli", HERE, jar("a", "wasm", HERE));
+        repository.redirect(LocalRepository.path(WASM, "0.1.0", "cli", "jar"),
+                "https://carol:pw-in-location@elsewhere.example/x.jar");
+
+        Central.Failure failure = failed("wasm");
+
+        assertInstanceOf(Central.Failure.Redirected.class, failure);
+        assertFalse(Unavailable.repository(failure, "repository").toString()
+                .contains("pw-in-location"), failure.toString());
+        assertFalse(Repository.admits(URI.create("https://bob:pw@nexus.example/")));
+    }
+
+    @Test
     void noProxyNamesAHostADomainOrEveryHost() {
         assertTrue(Repository.bypassed("nexus.corp", "localhost, nexus.corp"));
         assertTrue(Repository.bypassed("repo.nexus.corp", "nexus.corp"));

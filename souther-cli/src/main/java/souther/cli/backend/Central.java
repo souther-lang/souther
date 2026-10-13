@@ -180,7 +180,7 @@ public final class Central implements BackendFetch.Source {
         enum Misread {
             /** It is not an address, or not one a repository may be asked at. */
             NOT_AN_ADDRESS,
-            /** It carries credentials, which a proxy is not sent. */
+            /** It carries credentials, and none is ever sent, to a repository or a proxy. */
             CREDENTIALS,
             /** It names a proxy by a scheme other than {@code http}, the one a proxy is asked by. */
             SCHEME

@@ -1,5 +1,6 @@
 package souther.cli.backend;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -29,8 +30,11 @@ public final class Unavailable {
         }
     }
 
+    /** A line, with every address in it shown as {@link Shown} shows one. */
     private static Line line(String key, Object... arguments) {
-        return new Line(key, Arrays.asList(arguments));
+        return new Line(key, Arrays.stream(arguments)
+                .map(argument -> argument instanceof URI uri ? Shown.address(uri) : argument)
+                .toList());
     }
 
     /**
@@ -131,7 +135,7 @@ public final class Unavailable {
                 case NOT_AN_ADDRESS -> "cli.backend.central.misconfigured";
                 case CREDENTIALS -> "cli.backend.central.misconfigured.credentials";
                 case SCHEME -> "cli.backend.central.misconfigured.scheme";
-            }, repository, misconfigured.setting(), misconfigured.value());
+            }, repository, misconfigured.setting(), Shown.setting(misconfigured.value()));
             case Central.Failure.Unwritable unwritable ->
                     line("cli.backend.unwritable", unwritable.directory(), unwritable.reason());
         };

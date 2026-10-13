@@ -12,6 +12,7 @@ import souther.compiler.meta.ModuleMetadata;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -148,6 +149,36 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
         assertTrue(ran.err().contains("souther.repository") && ran.err().contains(named),
                 ran.err());
         assertFalse(Files.exists(fetchedTo()), "a fetch that could ask nothing made " + fetchedTo());
+    }
+
+    @Test
+    void aPasswordInASettingIsNeverRepeatedAndTheSettingIsRefused() throws Exception {
+        String password = "s3cret-pw";
+        List<List<String>> lines = List.of(List.of("compile", "--target", "wasm"),
+                List.of("backend", "fetch", "wasm"));
+        Map<String, List<String>> settings = Map.of(
+                "HTTPS_PROXY", List.of(),
+                "souther.repository", List.of(
+                        "-Dsouther.repository=https://bob:" + password + "@nexus.example/maven2/"));
+        for (Map.Entry<String, List<String>> setting : settings.entrySet()) {
+            Map<String, String> environment = setting.getKey().equals("HTTPS_PROXY")
+                    ? Map.of("HTTPS_PROXY", "http://alice:" + password + "@proxy.example:8080")
+                    : Map.of();
+            for (List<String> line : lines) {
+                for (String lang : List.of("en", "ja")) {
+                    Map<String, String> run = new HashMap<>(environment);
+                    run.put("SOUTHER_LANG", lang);
+
+                    Ran ran = CliProcess.run(scratch, work, run, setting.getValue(), "",
+                            line.toArray(String[]::new));
+
+                    String said = ran.out() + ran.err();
+                    assertEquals(2, ran.code(), said);
+                    assertFalse(said.contains(password), setting.getKey() + " " + line + said);
+                    assertTrue(said.contains(setting.getKey()), said);
+                }
+            }
+        }
     }
 
     @Test
