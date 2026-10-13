@@ -234,7 +234,7 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
                         // saying it of a value that may have been asked nothing.
                         "souther.compiler.query.Adequacy$Finding#by("
                                 + "Lsouther/compiler/query/FindingSubject;"
-                                + "Lsouther/compiler/query/AnotherLineTheRowsAllow$OneDoes;"
+                                + "Lsouther/compiler/query/AnotherLineTheRowsAllow$Stands;"
                                 + "Lsouther/compiler/query/About;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;",
                         // And a measure together with what is open about the obligation itself,

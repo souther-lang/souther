@@ -10,6 +10,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
+import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.WayToTheBorder;
@@ -19,8 +20,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Two readings of one line each keep what their own search for a distinguishing row came to.
@@ -43,7 +45,7 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
     private static final NumericTerm.ValueOf Y = new NumericTerm.ValueOf(TermPath.of("y"));
 
     /** The line the rows leave standing beside the one the fixture draws. */
-    private static final AnotherLineTheRowsAllow.OneDoes BESIDE = beside();
+    private static final AnotherLineTheRowsAllow.Stands BESIDE = beside();
 
     @Test
     void whatEachReadingSearchedSurvivesTheMerge() {
@@ -64,8 +66,10 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
         BorderAssessment merged = Coverages.merged(new LineReadings(List.of(
                 reading(line, lookedAndComposedNothing()), reading(line, made)))).getFirst();
 
-        ARowTellingTheLinesApart.AtOneReading candidate =
-                merged.toldApart().firstComposed().orElseThrow();
+        List<ARowTellingTheLinesApart.AtOneReading> candidates =
+                merged.toldApart().composed(BESIDE.direction());
+        assertEquals(1, candidates.size(), () -> "one search composed a row: " + candidates);
+        ARowTellingTheLinesApart.AtOneReading candidate = candidates.getFirst();
         assertSame(made.each().getFirst().reading(), candidate.reading(),
                 "the row is held beside the reading that composed it, and not beside whichever"
                         + " reading the merge kept");
@@ -81,9 +85,31 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
                 reading(line, composedAt(1, 3)),
                 reading(line, lookedAndComposedNothing())))).getFirst();
 
-        assertTrue(merged.toldApart().firstComposed().isPresent(),
+        assertFalse(merged.toldApart().composed(BESIDE.direction()).isEmpty(),
                 "a reading that found nowhere to compose does not take away the row another one"
                         + " composed: the two looked in two regions");
+    }
+
+    /**
+     * Two searches that each composed a row hand both rows to the offering, and neither is chosen
+     * here.
+     *
+     * <p>A row composed is a candidate: it may come back unread, or arrive somewhere that settles
+     * nothing. Which of the two answers the line is said once each is read back, where every offered
+     * row is weighed — so a generation handed only the first would have made that choice before the
+     * rows were read, and a line the second row settles would go without it.
+     */
+    @Test
+    void everyRowComposedForTheLineIsACandidateTheOfferingWeighs() {
+        Border line = TheLinesBesideABorder.aLineOverTwoPositions();
+        BorderAssessment merged = Coverages.merged(new LineReadings(List.of(
+                reading(line, composedAt(1, 3)), reading(line, composedAt(2, 7))))).getFirst();
+
+        assertInstanceOf(GenerationOutcome.Generated.class,
+                merged.toldApart().outcome(BESIDE.direction()));
+        assertEquals(2, ((GenerationOutcome.Generated) merged.toldApart()
+                        .outcome(BESIDE.direction())).candidates().size(),
+                "both rows go to the offering, which keeps whichever of them it needs");
     }
 
     /** One reading of the line, with what a search for a distinguishing row came to at it. */
@@ -97,13 +123,14 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
                                         ItemAssessment.Coverage.NotAsked.NO_ROWS),
                                 ItemAssessment.WritabilityProjection.NOT_COMPUTED,
                                 SearchOutcomes.none())));
-        return new BorderAssessment(line, items, BESIDE, toldApart);
+        return new BorderAssessment(line, items,
+                new AnotherLineTheRowsAllow.ByDirection(List.of(BESIDE)), toldApart);
     }
 
     /** A search of one reading that composed a row standing at {@code x, y}. */
     private static ARowTellingTheLinesApart composedAt(int x, int y) {
         return new ARowTellingTheLinesApart(List.of(new ARowTellingTheLinesApart.AtOneReading(
-                TheLinesBesideABorder.aLineOverTwoPositions(), at(x, y),
+                TheLinesBesideABorder.aLineOverTwoPositions(), BESIDE.direction(), at(x, y),
                 SearchOutcomes.of(ItemAssessment.Attempt.Built.certified(
                         new Generator.GeneratedRow(new Generator.Purpose.Unstated(), List.of()),
                         WayToTheBorder.UNTOUCHED)))));
@@ -112,7 +139,7 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
     /** A search of one reading that ran and had nowhere to compose. */
     private static ARowTellingTheLinesApart lookedAndComposedNothing() {
         return new ARowTellingTheLinesApart(List.of(new ARowTellingTheLinesApart.AtOneReading(
-                TheLinesBesideABorder.aLineOverTwoPositions(), null,
+                TheLinesBesideABorder.aLineOverTwoPositions(), BESIDE.direction(), null,
                 SearchOutcomes.of(new ItemAssessment.Attempt.Unresolved(
                         new Generator.UnresolvedCombination(List.of("-2 * x + y = 0"),
                                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
@@ -127,12 +154,11 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
     }
 
     /** {@code y <= 3 * x}, which is the line the fixture's rows leave standing beside its own. */
-    private static AnotherLineTheRowsAllow.OneDoes beside() {
+    private static AnotherLineTheRowsAllow.Stands beside() {
         Map<NumericTerm, ExactRatio> direction = new LinkedHashMap<>();
         direction.put(X, ExactRatio.of(-3));
         direction.put(Y, ExactRatio.ONE);
-        return new AnotherLineTheRowsAllow.OneDoes(new QuantityKey(direction),
-                ExactRatio.ZERO,
-                Towards.BELOW, at(1, 3));
+        return new AnotherLineTheRowsAllow.Stands(new QuantityKey(direction),
+                ExactRatio.ZERO, null, Towards.BELOW, at(1, 3));
     }
 }

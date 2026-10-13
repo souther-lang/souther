@@ -7,6 +7,7 @@ import souther.compiler.partition.Border;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.GenerationOutcome;
+import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.Realization;
 import souther.compiler.partition.RealizationTarget;
 
@@ -25,7 +26,12 @@ import java.util.Optional;
  * <p>Beside the points of the border rather than among them. A row at a point shows the line has
  * not moved; this one shows it has not turned, which takes an input the two lines answer
  * differently at — so it is looked for under a condition the points know nothing about
- * ({@link AnotherLineTheRowsAllow.OneDoes#tellingThemApart}) and comes back as its own answer.
+ * ({@link AnotherLineTheRowsAllow.Stands#onTheRefusedSide},
+ * {@link AnotherLineTheRowsAllow.Stands#onTheKeptSide}) and comes back as its own answer.
+ *
+ * <p><b>One answer per line of the family standing, at each reading.</b> A row ruling one of them
+ * out need not rule out another, so each is looked for on its own and kept under the line it is for
+ * ({@link AtOneReading#direction}).
  *
  * <p><b>One answer per reading, and never one for the line.</b> Which lines the rows leave standing
  * beside this one is about the line and the rows, and two readings of it agree or one of them is
@@ -51,25 +57,33 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
     }
 
     /**
-     * What one reading's search came to, and the input it composed its row at.
+     * What one reading's search for a row ruling out one line of the family came to, on one side of
+     * the model's line, and the input it composed its row at.
+     *
+     * <p>One entry per side searched: a row the model refuses within reach of the rows it keeps, and
+     * a row it keeps at or past the rows it refuses ({@link AnotherLineTheRowsAllow.Stands}). Each is
+     * kept whatever the other came to, so a line nothing was composed for says what was tried on
+     * both sides, and a line with a candidate on each hands both to the offering.
      *
      * @param reading    the line as that reading met it, which is what says at which positions
      *                   {@code composedAt} is written and where a row is read back
+     * @param direction  the line of the family the row is for
      * @param composedAt the input this search composed a row at, in the positions the line is drawn
      *                   on at this reading, or null where nothing was composed. What the realizer
      *                   asked for, which is what the row was built from — and so the one thing
      *                   there is to name for a row nothing read back
      * @param searches   what each search made at this reading came to
      */
-    public record AtOneReading(Border reading, Map<NumericTerm, Place> composedAt,
-                               SearchOutcomes searches) {
+    public record AtOneReading(Border reading, QuantityKey direction,
+                               Map<NumericTerm, Place> composedAt, SearchOutcomes searches) {
 
         public AtOneReading {
             composedAt = composedAt == null ? null
                     : Collections.unmodifiableMap(new LinkedHashMap<>(composedAt));
-            if (reading == null || searches == null) {
+            if (reading == null || direction == null || searches == null) {
                 throw new IllegalArgumentException(
-                        "a search is of a line, and says what it came to: " + reading);
+                        "a search is of a line against a line beside it, and says what it came to: "
+                                + reading + " " + direction);
             }
             // Both ways round, so that neither can be read as the other's absence. An input with no
             // row built from it is a place nothing composed; a row with nowhere named is one a
@@ -97,16 +111,16 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
     }
 
     /**
-     * One reading's search, with the place it composed at where it composed one.
+     * One reading's search for one line of the family, with the place it composed at where it
+     * composed one.
      *
      * <p>The realization and the outcomes together, because they are one answer. Taken apart, a
      * caller could hand over the place one asking reached beside the row another one composed.
      */
-    static ARowTellingTheLinesApart of(Border reading, Realization.Found composed,
-                                       SearchOutcomes searches) {
+    static AtOneReading of(Border reading, QuantityKey direction, Realization.Found composed,
+                           SearchOutcomes searches) {
         if (composed == null || searches.rowToOffer().isEmpty()) {
-            return new ARowTellingTheLinesApart(
-                    List.of(new AtOneReading(reading, null, searches)));
+            return new AtOneReading(reading, direction, null, searches);
         }
         Map<NumericTerm, Place> byTerm = new HashMap<>();
         composed.fixing().forEach((target, place) -> {
@@ -124,7 +138,7 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
         for (Map.Entry<NumericTerm, Place> each : NumericTerms.entriesInOrder(byTerm)) {
             at.put(each.getKey(), each.getValue());
         }
-        return new ARowTellingTheLinesApart(List.of(new AtOneReading(reading, at, searches)));
+        return new AtOneReading(reading, direction, at, searches);
     }
 
     /**
@@ -148,47 +162,51 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
     }
 
     /**
-     * The first reading whose search composed a row, where one did.
+     * Every search for a row ruling out {@code direction} that composed one, at every reading and on
+     * either side of the line, in the order they were made.
      *
-     * <p><b>A candidate and never what a person is handed.</b> Which row goes out for this line is
-     * settled two stages later — every offered row is asked what it would answer, and a row whose
-     * going costs the offering nothing goes — so another row may end up answering this line and
-     * this one be dropped. What is offered is the offering's answer ({@link Offering#shownAt}), and
-     * a reader taking this for it is reading a choice made before the one that decides.
-     *
-     * <p>The first, in the order the readings were walked, so that an edit elsewhere in the body
-     * does not move which candidate this is. What every reading came to is still here for whoever
-     * asks.
+     * <p><b>Candidates and never what a person is handed.</b> Which row goes out for this line is
+     * settled two stages later — every offered row is read back and asked what it would answer, and
+     * a row whose going costs the offering nothing goes — so one candidate may end up answering this
+     * line and the rest be dropped. What is offered is the offering's answer
+     * ({@link Offering#shownAt}). Narrowed to one here, the choice would be made before the row was
+     * read back: a candidate that comes back unread or settles nothing would stand where another
+     * that does was never offered.
      */
-    public Optional<AtOneReading> firstComposed() {
-        return each.stream().filter(one -> one.composed().isPresent()).findFirst();
+    public List<AtOneReading> composed(QuantityKey direction) {
+        return each.stream()
+                .filter(one -> one.direction().equals(direction) && one.composed().isPresent())
+                .toList();
     }
 
     /**
-     * What a generation can say about the line this was looked for at.
+     * What a generation can say about one line of the family this was looked for against.
      *
-     * <p>Read off what happened and never off which kind of finding raised it. A reading that
-     * composed a row hands the row over; readings that ran and came back with nothing say what they
-     * met, in the words the searches themselves came back in; and a line nobody looked at is one
-     * this run was not asked about.
+     * <p>Read off what happened and never off which kind of finding raised it. Searches that
+     * composed a row hand every one of those rows over; searches that ran and came back with nothing
+     * say what they met, in the words the searches themselves came back in; and a line nobody looked
+     * at is one this run was not asked about.
      *
-     * <p>Over every reading, because one row settles the line and a reading that composed none has
-     * still said something about its own region. A reader asking what would let the search go
-     * further is owed what each of them met.
+     * <p>Over every reading and both sides, because a search that composed none has still said
+     * something about its own region. A reader asking what would let the search go further is owed
+     * what each of them met.
      *
      * <p>Reachable from the package and no further. What a generation can do about a finding is
      * read where the dispositions are made, and a report asks the reading itself — handed this, a
      * report would reach every word a generation has for a finding through a value it holds for
      * another reason.
      */
-    GenerationOutcome outcome() {
-        Optional<AtOneReading> made = firstComposed();
-        if (made.isPresent()) {
-            return new GenerationOutcome.Generated(
-                    List.of(made.orElseThrow().composed().orElseThrow().row()));
+    GenerationOutcome outcome(QuantityKey direction) {
+        List<AtOneReading> made = composed(direction);
+        if (!made.isEmpty()) {
+            return new GenerationOutcome.Generated(made.stream()
+                    .map(one -> one.composed().orElseThrow().row()).toList());
         }
         List<CameToNothing> why = new ArrayList<>();
         for (AtOneReading one : each) {
+            if (!one.direction().equals(direction)) {
+                continue;
+            }
             for (ItemAssessment.Attempt attempt : one.searches().each()) {
                 CameToNothing came = cameToNothing(attempt);
                 if (came != null) {

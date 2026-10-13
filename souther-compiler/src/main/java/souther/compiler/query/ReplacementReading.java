@@ -111,8 +111,9 @@ public final class ReplacementReading {
     /**
      * Every rewrite of {@code behavior}'s body {@code plan} can put to a row, and what {@code rows}
      * came to about each: the siblings of each arm a row stating its answer went through, by
-     * {@code wentThrough}, in the order the plan numbered the arms, or, where there are none, the
-     * body answering each value a row came to.
+     * {@code wentThrough}, in the order the plan numbered the arms, or, where no arm of the body has
+     * a rewrite that is another program, the body answering each value a row stating its answer
+     * came to.
      *
      * <p>Only the arms a row reaches. What a rewrite of an arm asks is whether a row going through
      * it depends on what it answers, which is a question about the rows that go through it. The arms
@@ -133,36 +134,43 @@ public final class ReplacementReading {
                                    Function<RowOutcome, Set<ArmProbe>> wentThrough,
                                    Predicate<ControlPlace.Arm> unreached,
                                    List<RowOutcome> rows, Comparing comparing) {
+        // The rows that state their answer, which are the only evidence about a rewrite there is.
+        // A row whose answer is owed ran, and what it ran to is an observation and not what the
+        // model owes there — so it is evidence for neither the body nor the rewrite, on either side
+        // of the comparison. What it is owed is its answer, which the account of rows asks for.
+        List<RowOutcome> stated = rows.stream()
+                .filter(row -> row.expectation() == ExpectationState.NOT_OWED).toList();
         // The arms a row stating its answer went through. An arm no row reaches is owed a row under
         // its own code, and one only a row waiting for its answer reaches is too; a rewrite of
         // either is one no row could notice, and saying so would be the same gap said twice.
         Set<ArmProbe> reached = new HashSet<>();
-        for (RowOutcome row : rows) {
-            if (row.expectation() != ExpectationState.OWED) {
-                reached.addAll(wentThrough.apply(row));
-            }
+        for (RowOutcome row : stated) {
+            reached.addAll(wentThrough.apply(row));
         }
         List<Account> out = new ArrayList<>();
         Map<Replacement.OfAnArm, Occurrences> occurrences = new LinkedHashMap<>();
+        // Whether some arm of the body has a rewrite that is another program, which is what makes
+        // the body one with a fork as far as a rewrite goes: a fork every rewrite of which the
+        // source and the rules prove is the body under another spelling invites none, and the body
+        // is then asked about as one with no fork. Settled by the body and the rules, and never by
+        // which arms the rows stating an answer reached.
+        boolean forked = false;
         for (CoverageSites.ArmSite site : plan.arms(behavior)) {
-            if (site.place().probe().isEmpty() || !reached.contains(site.place().probe().get())) {
+            if (site.place().probe().isEmpty()) {
                 continue;
             }
-            ArmProbe probe = site.place().probe().get();
-            ReplacementReportAnchor reportAt = ReplacementReportAnchor.ofAnArm(site.anchor());
             List<ArmReplacements.AtSite> sites =
                     carried.ofArm(site.obligation().origin(), site.obligation().part());
-            Set<Integer> withs = new TreeSet<>();
-            sites.forEach(at -> withs.addAll(at.siblings().keySet()));
+            List<Integer> withs = otherPrograms(sites, unreached);
+            forked = forked || !withs.isEmpty();
+            ArmProbe probe = site.place().probe().get();
+            if (!reached.contains(probe)) {
+                continue;
+            }
+            ReplacementReportAnchor reportAt = ReplacementReportAnchor.ofAnArm(site.anchor());
             for (int with : withs) {
                 Replacement.OfAnArm replaced = new Replacement.OfAnArm(
                         site.obligation().origin(), site.obligation().part(), with);
-                // The rewrite stands at every site of the arm at once, so it is the body under
-                // another spelling only where it is at each of them.
-                if (sites.stream().allMatch(at -> !at.siblings().containsKey(with)
-                        || at.siblings().get(with).differs().provenAway(unreached))) {
-                    continue;
-                }
                 Occurrences at = occurrences.computeIfAbsent(replaced,
                         _ -> new Occurrences(reportAt, new ArrayList<>()));
                 // One fork is in a source this compilation holds or it is not, whichever call
@@ -176,14 +184,40 @@ public final class ReplacementReading {
             }
         }
         occurrences.forEach((replaced, at) -> out.add(new Account(replaced, at.reportAt(),
-                armStanding(replaced, at.probes(), carried, rows, wentThrough))));
-        // One answer only where no arm is rewritten. A body the rows go through a fork of is asked
-        // about the fork, arm by arm. And not where the body answers one value already: every way
-        // to an answer that reads something, or that is another answer, closed by the rules.
-        if (occurrences.isEmpty() && !plan.fromOneValue(behavior).provenAway(unreached)) {
-            out.addAll(oneAnswerAccounts(rows, comparing));
+                armStanding(replaced, at.probes(), carried, stated, wentThrough))));
+        // One answer only where no arm has a rewrite that is another program. Which family a body
+        // invites is the body's: one with a fork is asked about the fork, arm by arm, whichever of
+        // its arms the rows stating an answer happen to reach — read off what they reached
+        // instead, a body every row of which is waiting for its answer would be asked as though it
+        // had no fork, and its answers so far would be called rewrites. And not where the body
+        // answers one value already: every way to an answer that reads something, or that is
+        // another answer, closed by the rules.
+        if (!forked && !plan.fromOneValue(behavior).provenAway(unreached)) {
+            out.addAll(oneAnswerAccounts(stated, comparing));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The siblings an arm at {@code sites} can be rewritten as that are other programs, in the
+     * order of their parts.
+     *
+     * <p>A rewrite stands at every site of the arm at once, so it is the body under another
+     * spelling only where it is at each of them: where every site either lacks the sibling or has
+     * it proven to part from the arm only on ways {@code unreached} answers for.
+     */
+    private static List<Integer> otherPrograms(List<ArmReplacements.AtSite> sites,
+                                               Predicate<ControlPlace.Arm> unreached) {
+        Set<Integer> withs = new TreeSet<>();
+        sites.forEach(at -> withs.addAll(at.siblings().keySet()));
+        List<Integer> out = new ArrayList<>();
+        for (int with : withs) {
+            if (!sites.stream().allMatch(at -> !at.siblings().containsKey(with)
+                    || at.siblings().get(with).differs().provenAway(unreached))) {
+                out.add(with);
+            }
+        }
+        return out;
     }
 
     /**
@@ -207,8 +241,7 @@ public final class ReplacementReading {
         RowIdentity shownBy = null;
         boolean unknown = false;
         for (RowOutcome row : rows) {
-            if (row.expectation() == ExpectationState.OWED
-                    || where.stream().noneMatch(wentThrough.apply(row)::contains)) {
+            if (where.stream().noneMatch(wentThrough.apply(row)::contains)) {
                 continue;
             }
             // A row that neither held nor failed of the body as written ran out or was given up
@@ -248,9 +281,14 @@ public final class ReplacementReading {
     }
 
     /**
-     * The body answering one value, once for each value a row answered: each is a program the body
-     * could be rewritten as, and two of them are two programs. Told apart by a row that comes out
-     * the other way against the value than it did against its own answer.
+     * The body answering one value, once for each value a row stating its answer answered: each is
+     * a program the body could be rewritten as, and two of them are two programs. Told apart by a
+     * row that comes out the other way against the value than it did against its own answer.
+     *
+     * <p>{@code rows} are the rows stating an answer and no others. A row waiting for its answer
+     * ran to a value, and a rewrite built from that value — or held unnoticed because that row
+     * answered something else — would be asking for a row the account of rows already asks for, at
+     * the input of a row already written.
      *
      * <p>A value a row answered in full is one of these, and nothing else is: a value cut short
      * anywhere inside is not one a body could be rewritten to answer, since nothing here knows what
@@ -289,11 +327,7 @@ public final class ReplacementReading {
         ObservedValue always = rewrite.answer();
         boolean unread = false;
         for (RowOutcome row : rows) {
-            // A row whose answer is owed states nothing to fail.
-            if (row.expectation() == ExpectationState.OWED) {
-                continue;
-            }
-            // One whose statement was not carried states something, and nothing here can read
+            // A row whose statement was not carried states something, and nothing here can read
             // what. Nor can one that neither held nor failed of the body as written.
             if (!(row.statement() instanceof RowStatement.Stated stated)
                     || !(stated.expects() instanceof Expectation.Asserts asserts)

@@ -32,12 +32,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ARowThatTellsALineFromTheOneBesideItIsComposedTest {
 
-    /** The lines the rows of this model leave standing beside the ones it draws. */
+    /**
+     * Every line the rows of this model leave standing beside the ones it draws, each with the
+     * input of the row offered for it. Two lines beside one border can share a row, and where they
+     * do both sentences name it.
+     */
     private static final List<String> STANDING = List.of(
             "no row tells `-2 * x + y = 0` from `-3 * x + y = 0`,"
                     + " and a row at `x = 1, y = 3` would",
-            "no row tells `y = x` from `y = 0`, and a row at `x = 1, y = 0` would",
-            "no row tells `x + 2 * y = 60` from `y = 23`, and a row at `x = 14, y = 23` would");
+            "no row tells `y = x` from `y = 0`, and a row at `x = 2, y = 1` would",
+            "no row tells `y = x` from `-x + 2 * y = 0`, and a row at `x = 2, y = 1` would",
+            "no row tells `x + 2 * y = 60` from `y = 23`, and a row at `x = 16, y = 22` would",
+            "no row tells `x + 2 * y = 60` from `x + 3 * y = 82`,"
+                    + " and a row at `x = 16, y = 22` would");
 
     /** Rows at every point of every line this model draws, and at nothing else. */
     private static final String ROWS = """
@@ -57,32 +64,32 @@ class ARowThatTellsALineFromTheOneBesideItIsComposedTest {
         String report = run(over(ROWS));
 
         assertEquals(STANDING, findings(report),
-                () -> "every point of every line is met and three lines beside them still"
+                () -> "every point of every line is met and five lines beside them still"
                         + " stand:\n" + report);
         // The same inputs, and in the same words the sentences above use. A row offered at a place
         // the sentence does not name is a person shown one input and handed another.
-        assertEquals(List.of("(1, 3)", "(1, 0)", "(14, 23)"), offered(report),
+        assertEquals(List.of("(1, 3)", "(2, 1)", "(16, 22)"), offered(report),
                 () -> "and a row is offered at each of the inputs those sentences name:\n"
                         + report);
     }
 
+    /**
+     * Written with their answers, the rows offered leave no line standing — and no line is held
+     * back for the run after, which is where a block naming one line per border would leave the
+     * rest.
+     */
     @Test
-    void andWritingWhatWasOfferedTellsThoseLinesApart() {
+    void andWritingWhatWasOfferedTellsEveryOneOfThoseLinesApart() {
         String report = run(over(ROWS + """
 
                   | (1, 3)   -> false
-                  | (1, 0)   -> false
-                  | (14, 23) -> false"""));
+                  | (2, 1)   -> false
+                  | (16, 22) -> false"""));
 
-        assertEquals(List.of("no row tells `y = x` from `-x + 2 * y = 0`,"
-                                + " and a row at `x = 2, y = 1` would",
-                        "no row tells `x + 2 * y = 60` from `x + 3 * y = 82`,"
-                                + " and a row at `x = 16, y = 22` would"), findings(report),
-                () -> "the three rows tell the three lines from the ones that stood beside them,"
-                        + " and what is left is the next line the family puts beside `y = x`"
-                        + " and the one beside `x + 2 * y = 60`:\n" + report);
-        assertEquals(List.of("(2, 1)", "(16, 22)"), offered(report),
-                () -> "each of which is offered a row of its own:\n" + report);
+        assertEquals(List.of(), findings(report),
+                () -> "the three rows rule out all five lines:\n" + report);
+        assertEquals(List.of(), offered(report),
+                () -> "and nothing further is offered:\n" + report);
         assertTrue(report.contains("obligations 12/12"),
                 () -> "and the points the rows were already at are where they were:\n" + report);
     }

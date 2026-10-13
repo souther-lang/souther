@@ -63,6 +63,12 @@ final class TheLinesBesideABorder {
         return over(ordered(), form());
     }
 
+    /** {@code y >= 2 * x}: the same quantity kept on the other side, so that what is further along
+     *  it runs the other way. */
+    static Border aLineOverTwoPositionsKeptAbove() {
+        return over(new LineFacts(new ComparisonClaim.Cut(Towards.ABOVE, true)), form());
+    }
+
     /** The same quantity, cut by a rule that names a value instead of ordering the values. */
     static Border aBorderThatNamesAValue() {
         return over(new LineFacts(new ComparisonClaim.Singled(true)), form());

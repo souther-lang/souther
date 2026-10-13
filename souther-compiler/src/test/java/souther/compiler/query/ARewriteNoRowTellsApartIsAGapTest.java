@@ -228,6 +228,48 @@ class ARewriteNoRowTellsApartIsAGapTest {
                 "each told apart by the other row: " + oneAnswer);
     }
 
+    /**
+     * A fork whose every rewrite is the body under another spelling invites none, so the body is
+     * asked about as one with no fork; a fork with a rewrite that is another program is asked about
+     * arm by arm and never as one value.
+     *
+     * <p>Which family a body is asked about is the body's and the rules', and these two differ in
+     * the body and in nothing the rows reach: the same inputs go down the same arms in both.
+     */
+    @Test
+    void aForkWhoseArmsAreOneProgramIsAskedAboutAsABodyWithNone() {
+        Map<Replacement, ReplacementEvidence.Outcome> same = rewritesOf("""
+                module example.same
+
+                behavior pass : (a: Int) -> Int
+                let pass (a) = if a > 0 then a else a
+
+                example pass
+                  | (1)  -> 1
+                  | (-1) -> -1
+                """, "pass");
+        assertEquals(2, oneAnswers(same).size(),
+                () -> "a rewrite per value the rows came to, as though there were no fork: "
+                        + same);
+        assertTrue(same.keySet().stream().noneMatch(Replacement.OfAnArm.class::isInstance),
+                () -> "and no arm rewritten as its sibling, which is the same program: " + same);
+
+        Map<Replacement, ReplacementEvidence.Outcome> apart = rewritesOf("""
+                module example.same
+
+                behavior pass : (a: Int) -> Int
+                let pass (a) = if a > 0 then a else 0 - a
+
+                example pass
+                  | (1)  -> 1
+                  | (-1) -> 1
+                """, "pass");
+        assertTrue(apart.keySet().stream().anyMatch(Replacement.OfAnArm.class::isInstance),
+                () -> "a fork whose arms are two programs is asked about arm by arm: " + apart);
+        assertEquals(List.of(), oneAnswers(apart),
+                () -> "and not as one value: " + apart);
+    }
+
     /** The rewrites of a body answering one value, in the order the values were first answered. */
     private static List<ReplacementEvidence.Outcome> oneAnswers(
             Map<Replacement, ReplacementEvidence.Outcome> rewrites) {

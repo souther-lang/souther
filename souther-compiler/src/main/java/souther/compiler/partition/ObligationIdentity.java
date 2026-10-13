@@ -62,20 +62,32 @@ public sealed interface ObligationIdentity
     }
 
     /**
-     * A whole line, which is what the lines beside it are asked of.
+     * A whole line held against one line of its fault family, which is what a row telling the two
+     * apart is owed for.
      *
-     * <p>Beside {@link OfALine} and one grain coarser. That one is a place on a line and there are
+     * <p>Beside {@link OfALine} and on another grain. That one is a place on a line and there are
      * four of them; this is the line itself, because what a row shows here is which of two lines the
      * model draws and a line is what two lines are two of. Keyed on a point, the same question would
      * be owed four times over and a row answering it would leave three of them open.
      *
+     * <p>One per line of the family ({@code FaultFamily}), because a row ruling one of them out need
+     * not rule out the next: keyed on the border alone, a row for one line would leave the
+     * obligation open under another and the next run would be the first to say so. The direction
+     * and never a threshold
+     * along it — where the rows leave the threshold moves with every row written, and an obligation
+     * whose identity moved with the rows would be a new obligation every run.
+     *
      * <p>The line a debt is owed at and not the reading that met it, for the reason a point's is:
      * one authored line read at several positions is one row to write.
+     *
+     * @param direction the line of the family this is held against, which the model's own line and
+     *                  weights settle and no row moves
      */
-    record OfABorder(BorderObligationId line) implements ObligationIdentity {
+    record OfABorder(BorderObligationId line, QuantityKey direction) implements ObligationIdentity {
 
         public OfABorder {
             Objects.requireNonNull(line, "an obligation is told apart by something");
+            Objects.requireNonNull(direction, "a line is held against some line beside it");
         }
     }
 

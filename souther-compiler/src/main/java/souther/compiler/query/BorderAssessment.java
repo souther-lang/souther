@@ -92,7 +92,8 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
     }
 
     /**
-     * What holding this line against the lines beside it went without, where it came back unsettled.
+     * What holding this line against the lines beside it went without, where it or one line of its
+     * family came back unsettled.
      *
      * <p>Empty for every settled answer, whichever way it settled and however few rows it took. A
      * walk short of a row that left no line standing has established that, because reading more
@@ -105,9 +106,25 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
      * questions over these rows went without them.
      */
     public WeakeningSet besideWeakening() {
-        if (!(beside instanceof AnotherLineTheRowsAllow.CouldNotTell(var why))) {
-            return WeakeningSet.none();
-        }
+        return switch (beside) {
+            case AnotherLineTheRowsAllow.CouldNotTell(var why) -> weakeningOf(why);
+            // Each line of the family left undecided, which is as much a question that came back
+            // unsettled as the border's own: a line ruled out beside it settles nothing about it.
+            case AnotherLineTheRowsAllow.ByDirection lines -> {
+                WeakeningSet out = WeakeningSet.none();
+                for (AnotherLineTheRowsAllow.Undecided line : lines.undecided()) {
+                    out = out.union(weakeningOf(line.why()));
+                }
+                yield out;
+            }
+            case AnotherLineTheRowsAllow.NotDueYet _, AnotherLineTheRowsAllow.NoSuchQuestion _,
+                 AnotherLineTheRowsAllow.NotApplicable _ -> WeakeningSet.none();
+        };
+    }
+
+    /** What a question about the lines beside this one went without, in the words a reader is
+     *  told it in. */
+    private WeakeningSet weakeningOf(AnotherLineTheRowsAllow.Unsettled why) {
         return switch (why) {
             case AnotherLineTheRowsAllow.Unsettled.RowsIncomplete(ReadingReasons met) -> {
                 WeakeningSet out = WeakeningSet.none();
