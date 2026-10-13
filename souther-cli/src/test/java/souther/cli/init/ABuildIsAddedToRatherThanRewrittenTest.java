@@ -328,6 +328,41 @@ class ABuildIsAddedToRatherThanRewrittenTest {
                 + "subprojects {\n    souther {\n        southerVersion = \"0.4.0\"\n    }\n}\n"));
         assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(applied
                 + "souther {\n    sourceDirectory = layout.projectDirectory.dir(\"model\")\n}\n"));
+    }
+
+    /**
+     * A block written inside a string of any kind is text, and sets nothing.
+     *
+     * <p>Each of these opens with a quote a reader of single-quoted strings would take as closing
+     * at the next one, leaving the block outside it. A template is code, and what it holds closes
+     * where it closes rather than at the first quote in it.
+     */
+    @Test
+    void aBlockInsideAStringOfAnyKindSetsNothing() {
+        String kotlin = """
+                plugins {
+                    id("org.souther-lang.souther") version "0.2.0"
+                }
+
+                """;
+        String groovy = """
+                plugins {
+                    id 'org.souther-lang.souther' version '0.2.0'
+                }
+
+                """;
+        String block = "souther {\n    southerVersion = \"0.4.0\"\n}\n";
+        String q3 = "\"\"\"";
+
+        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(kotlin
+                + "val documentation = " + q3 + "\n\"\n" + block + q3 + "\n"));
+        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(groovy
+                + "def documentation = '''\n'\n" + block + "'''\n"));
+        assertEquals(GradleBuild.Applied.UNTOLD, GradleBuild.appliedIn(groovy
+                + "def documentation = " + q3 + "\n\"\n" + block + q3 + "\n"));
+        // And a template whose code holds a string with a brace closes at its own brace.
+        assertEquals(GradleBuild.Applied.ALREADY, GradleBuild.appliedIn(kotlin
+                + "val note = \"${\"}\"}\"\n\n" + block));
         assertEquals(GradleBuild.Applied.SOMEWHERE_ELSE, GradleBuild.appliedIn("""
                 plugins {
                     id("org.souther-lang.souther") version "0.1.0" apply false

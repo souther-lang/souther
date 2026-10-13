@@ -91,27 +91,31 @@ final class GradleBuild {
      *
      * <p>Read off the {@code plugins} block with the comments taken out, rather than off the text.
      * A search of the text called `id("…") apply false` an applied plugin, and a comment naming it
-     * one too.
+     * one too. Where the block is, and where it closes, is read off the script with its strings
+     * taken out as well; what the block requests is read off the strings, which is where a plugin
+     * id is written.
      */
     static Applied appliedIn(String script) {
-        String said = withoutComments(script);
-        Matcher found = PLUGINS.matcher(said);
+        Read read = Read.of(script);
+        Matcher found = PLUGINS.matcher(read.code());
         if (found.find()) {
-            int close = closingBrace(said, found.end() - 1);
+            int close = closingBrace(read.code(), found.end() - 1);
             if (close >= 0) {
-                String block = said.substring(found.end(), close);
-                String rest = said.substring(0, found.start()) + said.substring(close + 1);
+                String block = read.said().substring(found.end(), close);
+                String rest = read.said().substring(0, found.start())
+                        + read.said().substring(close + 1);
                 if (requestsIt(block)) {
                     if (!applies(block)) {
                         return Applied.SOMEWHERE_ELSE;
                     }
-                    return tellsTheVersion(said) ? Applied.ALREADY : Applied.UNTOLD;
+                    return tellsTheVersion(read.code()) ? Applied.ALREADY : Applied.UNTOLD;
                 }
                 return rest.contains(BuildPlugins.GRADLE_ID) ? Applied.SOMEWHERE_ELSE
                         : Applied.NOT_YET;
             }
         }
-        return said.contains(BuildPlugins.GRADLE_ID) ? Applied.SOMEWHERE_ELSE : Applied.NOT_YET;
+        return read.said().contains(BuildPlugins.GRADLE_ID) ? Applied.SOMEWHERE_ELSE
+                : Applied.NOT_YET;
     }
 
     /** Whether the block asks for the plugin at all. */
@@ -150,34 +154,37 @@ final class GradleBuild {
             Pattern.compile("(?m)^[ \\t]*souther\\.southerVersion\\s*(?:=|\\.set\\s*\\()");
 
     /**
-     * Whether the script, with its comments taken out, sets the extension's version in one of the
-     * two forms this reads: {@code southerVersion = …} or {@code southerVersion.set(…)} directly in a
-     * top-level {@code souther} block, or {@code souther.southerVersion} assigned or set at the top
-     * level.
+     * Whether the script sets the extension's version in one of the two forms this reads:
+     * {@code southerVersion = …} or {@code southerVersion.set(…)} directly in a top-level
+     * {@code souther} block, or {@code souther.southerVersion} assigned or set at the top level.
      *
      * <p>Only those, because a yes here is what lets a model be written into the project, and a yes
      * this could not stand behind leaves a project that stops at {@code compileSouther}. A name that
-     * merely reads the same — a local {@code val southerVersion}, the word inside a string, a block
-     * inside {@code subprojects} that configures some other project — sets nothing here. A version
-     * given in a form this does not read is answered no, and the refusal says what to write.
+     * merely reads the same — a local {@code val southerVersion}, the words inside a string of any
+     * kind, a block inside {@code subprojects} that configures some other project — sets nothing
+     * here. A version given in a form this does not read is answered no, and the refusal says what
+     * to write.
+     *
+     * @param code the script as {@code Read.code} has it, so that nothing a match lands on is inside
+     *             a string or a comment
      */
-    private static boolean tellsTheVersion(String said) {
-        Matcher through = SETS_THROUGH_THE_EXTENSION.matcher(said);
+    private static boolean tellsTheVersion(String code) {
+        Matcher through = SETS_THROUGH_THE_EXTENSION.matcher(code);
         while (through.find()) {
-            if (atTopLevel(said, through.start())) {
+            if (atTopLevel(code, through.start())) {
                 return true;
             }
         }
-        Matcher block = EXTENSION_BLOCK.matcher(said);
+        Matcher block = EXTENSION_BLOCK.matcher(code);
         while (block.find()) {
-            if (!atTopLevel(said, block.start())) {
+            if (!atTopLevel(code, block.start())) {
                 continue;
             }
-            int close = closingBrace(said, block.end() - 1);
+            int close = closingBrace(code, block.end() - 1);
             if (close < 0) {
                 continue;
             }
-            String inside = said.substring(block.end(), close);
+            String inside = code.substring(block.end(), close);
             Matcher sets = SETS_IN_THE_BLOCK.matcher(inside);
             while (sets.find()) {
                 if (atTopLevel(inside, sets.start())) {
@@ -188,17 +195,12 @@ final class GradleBuild {
         return false;
     }
 
-    /** Whether {@code index} is outside every string and every brace of {@code script}. */
-    private static boolean atTopLevel(String script, int index) {
+    /** Whether {@code index} is inside no brace of {@code code}, which holds no strings. */
+    private static boolean atTopLevel(String code, int index) {
         int depth = 0;
         for (int i = 0; i < index; i++) {
-            char c = script.charAt(i);
-            if (c == '"' || c == '\'') {
-                i = endOfString(script, i);
-                if (i >= index) {
-                    return false;
-                }
-            } else if (c == '{') {
+            char c = code.charAt(i);
+            if (c == '{') {
                 depth++;
             } else if (c == '}') {
                 depth--;
@@ -208,39 +210,119 @@ final class GradleBuild {
     }
 
     /**
-     * The script with its comments taken out, so that what is read is what the build runs.
+     * A script, read once, as the two texts the questions above are asked of.
      *
-     * <p>Replaced with spaces rather than removed, so nothing that was on two lines becomes one.
+     * <p>Both are the script with some of it replaced by spaces, the line breaks kept, so an offset in
+     * one is the same place in the other and in the script. {@code said} has its comments taken out:
+     * it is what the build runs, strings and all, and a plugin id is a string. {@code code} has its
+     * strings taken out as well: what is left is where a block opens and closes and where a line
+     * begins, which no text inside a string is.
+     *
+     * <p>One reading for both, so that what is a string is decided in one place. A {@code souther}
+     * block written inside a string, of whichever kind, is then not a block of the script's to any
+     * question asked of it.
      */
-    private static String withoutComments(String script) {
-        StringBuilder out = new StringBuilder(script.length());
-        for (int i = 0; i < script.length(); i++) {
-            char c = script.charAt(i);
-            if (c == '/' && i + 1 < script.length() && script.charAt(i + 1) == '/') {
-                int end = script.indexOf('\n', i);
-                end = end < 0 ? script.length() : end;
-                blank(out, script, i, end);
-                i = end - 1;
-            } else if (c == '/' && i + 1 < script.length() && script.charAt(i + 1) == '*') {
-                int end = script.indexOf("*/", i);
-                end = end < 0 ? script.length() : end + 2;
-                blank(out, script, i, end);
-                i = end - 1;
-            } else if (c == '"' || c == '\'') {
-                int end = endOfString(script, i);
-                out.append(script, i, Math.min(end + 1, script.length()));
-                i = end;
-            } else {
-                out.append(c);
-            }
+    private record Read(String said, String code) {
+
+        static Read of(String script) {
+            Scan scan = new Scan(script);
+            scan.walk(0, false);
+            return new Read(scan.said.toString(), scan.code.toString());
         }
-        return out.toString();
     }
 
-    /** {@code from}..{@code to} as spaces, keeping the line breaks that were in it. */
-    private static void blank(StringBuilder out, String script, int from, int to) {
-        for (int i = from; i < to; i++) {
-            out.append(script.charAt(i) == '\n' ? '\n' : ' ');
+    /**
+     * The one walk over a script's comments and strings.
+     *
+     * <p>Kotlin and Groovy each have four strings: {@code "…"} and {@code """…"""}, where
+     * {@code ${…}} is code — which may hold strings and braces of its own — and {@code '…'} and
+     * {@code '''…'''}, where it is not. A backslash escapes what follows in the two single-quoted
+     * forms; a triple-quoted string ends at the first triple quote. Nothing that does not close is
+     * read as closing: an unterminated string or comment runs to the end of the script.
+     */
+    private static final class Scan {
+
+        private final String script;
+        private final StringBuilder said;
+        private final StringBuilder code;
+
+        Scan(String script) {
+            this.script = script;
+            this.said = new StringBuilder(script);
+            this.code = new StringBuilder(script);
+        }
+
+        /**
+         * Code from {@code from}: to the end of the script, or, where {@code template}, to the brace
+         * closing the {@code ${} it is inside, whose index is returned.
+         */
+        int walk(int from, boolean template) {
+            int depth = 0;
+            int i = from;
+            while (i < script.length()) {
+                if (script.startsWith("//", i)) {
+                    int end = script.indexOf('\n', i);
+                    end = end < 0 ? script.length() : end;
+                    blank(said, i, end);
+                    blank(code, i, end);
+                    i = end;
+                } else if (script.startsWith("/*", i)) {
+                    int end = script.indexOf("*/", i + 2);
+                    end = end < 0 ? script.length() : end + 2;
+                    blank(said, i, end);
+                    blank(code, i, end);
+                    i = end;
+                } else if (script.startsWith("\"\"\"", i)) {
+                    i = string(i, "\"\"\"", true, false);
+                } else if (script.startsWith("'''", i)) {
+                    i = string(i, "'''", false, false);
+                } else if (script.charAt(i) == '"') {
+                    i = string(i, "\"", true, true);
+                } else if (script.charAt(i) == '\'') {
+                    i = string(i, "'", false, true);
+                } else {
+                    char c = script.charAt(i);
+                    if (c == '{') {
+                        depth++;
+                    } else if (c == '}') {
+                        if (template && depth == 0) {
+                            return i;
+                        }
+                        depth--;
+                    }
+                    i++;
+                }
+            }
+            return script.length();
+        }
+
+        /** The string opened at {@code open}, taken out of {@code code}; where it ends. */
+        private int string(int open, String quote, boolean templates, boolean escapes) {
+            int i = open + quote.length();
+            while (i < script.length()) {
+                if (escapes && script.charAt(i) == '\\') {
+                    i += 2;
+                } else if (templates && script.startsWith("${", i)) {
+                    i = walk(i + 2, true) + 1;
+                } else if (script.startsWith(quote, i)) {
+                    int end = i + quote.length();
+                    blank(code, open, end);
+                    return end;
+                } else {
+                    i++;
+                }
+            }
+            blank(code, open, script.length());
+            return script.length();
+        }
+
+        /** {@code from}..{@code to} of {@code text} as spaces, keeping the line breaks. */
+        private void blank(StringBuilder text, int from, int to) {
+            for (int i = from; i < Math.min(to, text.length()); i++) {
+                if (text.charAt(i) != '\n') {
+                    text.setCharAt(i, ' ');
+                }
+            }
         }
     }
 
@@ -265,17 +347,16 @@ final class GradleBuild {
      */
     private static String withThePluginLine(String script, boolean kotlin) {
         String line = kotlin ? KOTLIN_LINE : GROOVY_LINE;
-        // Found in the script with its comments taken out, and written into the script itself.
-        // Blanking a comment keeps every other character where it was, so an offset means the same
+        // Found in the script with its comments and strings taken out, and written into the script
+        // itself. Blanking keeps every other character where it was, so an offset means the same
         // thing in both — and a `plugins {` that is there only because somebody commented an old
-        // one out is not a block this writes into. It had written the line inside the comment and
-        // reported the build edited.
-        String said = withoutComments(script);
-        Matcher found = PLUGINS.matcher(said);
+        // one out, or wrote one in a string, is not a block this writes into.
+        String code = Read.of(script).code();
+        Matcher found = PLUGINS.matcher(code);
         if (!found.find()) {
             return "plugins {\n    " + line + "\n}\n\n" + script;
         }
-        int close = closingBrace(said, found.end() - 1);
+        int close = closingBrace(code, found.end() - 1);
         if (close < 0) {
             return "plugins {\n    " + line + "\n}\n\n" + script;
         }
@@ -297,22 +378,14 @@ final class GradleBuild {
     /**
      * Where the block opened at {@code open} closes, or -1 where nothing closes it.
      *
-     * <p>Braces are counted outside strings and comments, so a {@code "}"} inside a string is not
-     * read as the end of the block it sits in.
+     * <p>Counted over {@code Read.code}, which has no strings or comments in it, so a {@code "}"}
+     * inside a string is not read as the end of the block it sits in.
      */
-    private static int closingBrace(String script, int open) {
+    private static int closingBrace(String code, int open) {
         int depth = 0;
-        for (int i = open; i < script.length(); i++) {
-            char c = script.charAt(i);
-            if (c == '/' && i + 1 < script.length() && script.charAt(i + 1) == '/') {
-                int end = script.indexOf('\n', i);
-                i = end < 0 ? script.length() : end;
-            } else if (c == '/' && i + 1 < script.length() && script.charAt(i + 1) == '*') {
-                int end = script.indexOf("*/", i);
-                i = end < 0 ? script.length() : end + 1;
-            } else if (c == '"' || c == '\'') {
-                i = endOfString(script, i);
-            } else if (c == '{') {
+        for (int i = open; i < code.length(); i++) {
+            char c = code.charAt(i);
+            if (c == '{') {
                 depth++;
             } else if (c == '}') {
                 if (--depth == 0) {
@@ -321,19 +394,5 @@ final class GradleBuild {
             }
         }
         return -1;
-    }
-
-    /** Where the string opened at {@code quote} ends, taking a backslash as escaping what follows. */
-    private static int endOfString(String script, int quote) {
-        char q = script.charAt(quote);
-        for (int i = quote + 1; i < script.length(); i++) {
-            char c = script.charAt(i);
-            if (c == '\\') {
-                i++;
-            } else if (c == q) {
-                return i;
-            }
-        }
-        return script.length();
     }
 }
