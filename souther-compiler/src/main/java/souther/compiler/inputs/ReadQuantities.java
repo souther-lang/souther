@@ -26,6 +26,7 @@ import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.ValueSet;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -1951,6 +1952,19 @@ final class ReadQuantities implements Quantities {
      */
     public Congruences valueClassAt(NumericTerm.ValueOf place) {
         return residuesFixedAt(place, true);
+    }
+
+    /**
+     * The values the position at {@code place} was read to admit, or every value where no position
+     * is there.
+     *
+     * <p>The position's own answer, as {@link #ownOf} is for where its numbers stop: what its rules
+     * admit was worked out where the position was read, and read again here it would be a second
+     * reading free to disagree with the first.
+     */
+    public ValueSet admittedAt(NumericTerm.ValueOf place) {
+        Position at = byPath.get(place.position());
+        return at == null ? ValueSet.ANY : at.admitted().approximation();
     }
 
     /**

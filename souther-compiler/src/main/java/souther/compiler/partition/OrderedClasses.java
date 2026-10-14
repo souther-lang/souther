@@ -74,11 +74,12 @@ final class OrderedClasses {
         }
         Endpoint min = within == null ? null : within.min();
         Endpoint max = within == null ? null : within.max();
+        HeldValues held = HeldValues.of(reading.region(), orders);
         List<PartitionClass> classes = new ArrayList<>();
         if (runs.isEmpty()) {
             if (!values.isEmpty()) {
                 classes.addAll(singledOut(values, orders, type, reading, ruleReading, within,
-                        admits, perWitness));
+                        admits, perWitness, held));
             }
         } else {
             // Every value singled out is in one run. The runs divide what the position holds and
@@ -94,9 +95,11 @@ final class OrderedClasses {
                 }
                 // The rest of the run, where there is a rest. A run the values taken out of it
                 // leave nothing of is those values, and a class beside them holding nothing is one
-                // no row is ever counted at.
-                if (taken.isEmpty() || anythingLeft(new NumericSet.InARunExcept(run, taken),
-                        carrier, min, max)) {
+                // no row is ever counted at — and so is a run with nothing taken out of it that the
+                // declarations leave nothing in.
+                NumericSet rest = taken.isEmpty() ? new NumericSet.InARun(run)
+                        : new NumericSet.InARunExcept(run, taken);
+                if (anythingLeft(rest, carrier, min, max, held)) {
                     classes.add(Intervals.classOf(run, taken, term, type, reading, ruleReading,
                             min, max));
                 }
@@ -112,18 +115,19 @@ final class OrderedClasses {
     }
 
     /**
-     * Whether {@code rest} holds a value of the position, asked of the order.
+     * Whether {@code rest} holds a value of the position, asked of what the declarations hold it to
+     * and of the order.
      *
-     * <p>Kept where the order could not say: a class nobody can show is empty is one the rows are
-     * still owed at, and dropped on a guess it would be a distinction gone missing from the
-     * denominator.
+     * <p>Kept where neither could say: a class nobody can show is empty is one the rows are still
+     * owed at, and dropped on a guess it would be a distinction gone missing from the denominator.
      */
     private static boolean anythingLeft(NumericSet rest, Carrier carrier, Endpoint min,
-                                        Endpoint max) {
+                                        Endpoint max, HeldValues held) {
         LevelSpace space = LevelSpace.onACarrier(carrier);
         for (LevelInterval part : Criterion.Within.runsInside(rest.region(carrier), carrier,
                 min, max)) {
-            if (!(space.inspect(part) instanceof Occupancy.Empty)) {
+            if (!held.leaveNothingIn(part, new NumericDomain.Bounds(min, max))
+                    && !(space.inspect(part) instanceof Occupancy.Empty)) {
                 return true;
             }
         }
@@ -134,17 +138,25 @@ final class OrderedClasses {
      * Each value singled out of a position no line divides, and everything else.
      *
      * <p>The last of those is not an interval and is not asked to be. What a class needs is a way to
-     * say whether a value is in it and a value that stands for it, and a complement has both.
+     * say whether a value is in it and a value that stands for it, and a complement has both. And it
+     * is no class where the values singled out are every value the position may take: what is left
+     * of a position held to one, two and three once one and three are singled out is a two the
+     * declarations refuse, and a class there is one no row is ever counted at.
      */
     private static List<PartitionClass> singledOut(List<Place> values, TermOrders orders,
                                                    Type type, Quantities reading,
                                                    RuleReadingContext ruleReading,
                                                    NumericDomain.Bounds within, ValueSet admits,
-                                                   Supplier<Meter> perWitness) {
+                                                   Supplier<Meter> perWitness, HeldValues held) {
         Carrier carrier = orders.answered();
         List<PartitionClass> classes = new ArrayList<>();
         for (Place value : values) {
             classes.add(theValue(value, orders, type, reading, ruleReading));
+        }
+        NumericSet rest = new NumericSet.AwayFrom(values);
+        if (!anythingLeft(rest, carrier, within == null ? null : within.min(),
+                within == null ? null : within.max(), held)) {
+            return classes;
         }
         // Out of what writing one value costs, as every witness for a row is. Which number beside
         // the ones singled out to write is chosen here; what a value standing at that number looks
@@ -155,7 +167,7 @@ final class OrderedClasses {
         String label = "/= " + String.join(", ",
                 values.stream().map(carrier::written).toList());
         classes.add(classAt(orders.term().atOnePosition() + "/" + label, label,
-                orders, new NumericSet.AwayFrom(values), other, type, reading, ruleReading));
+                orders, rest, other, type, reading, ruleReading));
         return classes;
     }
 
