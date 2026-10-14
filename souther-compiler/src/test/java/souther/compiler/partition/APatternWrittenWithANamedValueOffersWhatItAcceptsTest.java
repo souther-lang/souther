@@ -8,6 +8,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
@@ -127,8 +128,10 @@ class APatternWrittenWithANamedValueOffersWhatItAcceptsTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs, "the model did not compile");
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        InputDomain domain = InputDomain.of(sigs.get("take"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), Membership.none());
+        RuleReadingContext context =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+        InputDomain domain = InputDomain.of(sigs.get("take"), context,
+                TypeCardinality.Counts.workedOutIn(context), Membership.none());
         Partitions.Partitioning partitioning =
                 Partitions.of("take", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
         MeasuredInput subject = MeasuredInput.of("take", domain.reading(rules), partitioning);

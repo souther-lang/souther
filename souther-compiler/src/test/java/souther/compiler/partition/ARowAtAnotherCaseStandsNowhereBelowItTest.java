@@ -6,6 +6,7 @@ import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
@@ -83,8 +84,10 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
                 .ask(Output.Examples.asked(compilation.db(), module,
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
         souther.compiler.inputs.InputDomain domain = souther.compiler.inputs.InputDomain.of(
-                sigs.get("read"), RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                sigs.get("read"), reading, TypeCardinality.Counts.workedOutIn(reading),
                 Membership.none());
         Partitions.Partitioning partitioning = Partitions.of("read", domain.reading(rules),
                 ReadAs.THE_COMPILATION_DOES);

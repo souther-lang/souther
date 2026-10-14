@@ -287,12 +287,15 @@ public final class InputDomain {
      *
      * <p>What a row stands in for is asked of every caller and supplied by none: an input read
      * without its behavior's own account of its dependencies would read a fork on one of their
-     * answers as a value the model computes, and nothing would say so.
+     * answers as a value the model computes, and nothing would say so. And where the counts of the
+     * declarations it reaches are asked for, which is the caller's to say for the reason the
+     * reading closed over a demand gives.
      */
     public static InputDomain of(
             List<Parameter> parameters, RuleReadingContext reading,
+            TypeCardinality.Counts counted,
             souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
-        return of(parameters, reading, InputDemand.NONE, dependencies);
+        return of(parameters, reading, counted, InputDemand.NONE, dependencies);
     }
 
     /**
@@ -315,23 +318,17 @@ public final class InputDomain {
      * is the policy and the lender alone, kept here for the readers of those same declarations
      * that come after the walk ({@link #machines}).
      *
+     * <p>{@code counted} is where how many values each declaration the reading reaches has is
+     * asked, which is what a set's or a map's size is bounded by
+     * ({@link TypeCardinality#mostItHoldsApart}). Asked of the caller and supplied by nobody: a
+     * caller holding a compilation hands over the counts it keeps, so a declaration is counted
+     * once for the compilation and this reading depends on the count it read; one with nowhere to
+     * ask says so ({@link TypeCardinality.Counts#workedOutIn}). Supplied here instead, a caller
+     * holding a compilation could leave it out and read bounds that no edit to the declarations
+     * moves.
+     *
      * @param dependencies the behaviors a row of this behavior stands in for ({@link
      *                     #dependencies()})
-     */
-    public static InputDomain of(
-            List<Parameter> parameters, RuleReadingContext reading, InputDemand demand,
-            souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
-        return of(parameters, reading, TypeCardinality.Counts.workedOutIn(reading), demand,
-                dependencies);
-    }
-
-    /**
-     * The same, asking {@code counted} how many values each declaration the reading reaches has.
-     *
-     * <p>Those counts are what a set's or a map's size is bounded by
-     * ({@link TypeCardinality#mostItHoldsApart}). A caller holding a compilation hands over the
-     * counts it keeps, so a declaration is counted once for the compilation and this reading
-     * depends on the count it read; the overloads without one work the same counts out here.
      */
     public static InputDomain of(
             List<Parameter> parameters, RuleReadingContext reading,
@@ -460,10 +457,9 @@ public final class InputDomain {
      * for is still the caller's to say, as it is for every reading of an input.
      */
     public static InputDomain of(
-            DeclaredSig declared, RuleReadingContext reading,
+            DeclaredSig declared, RuleReadingContext reading, TypeCardinality.Counts counted,
             souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
-        return of(declared, List.of(), reading, TypeCardinality.Counts.workedOutIn(reading),
-                InputDemand.NONE, dependencies);
+        return of(declared, List.of(), reading, counted, InputDemand.NONE, dependencies);
     }
 
     /** The positions, in the order they were read. */

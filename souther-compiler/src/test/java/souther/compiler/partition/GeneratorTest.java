@@ -8,12 +8,14 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Classification;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -103,8 +105,10 @@ class GeneratorTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         assertNotNull(sigs);
-        InputDomain domain = InputDomain.of(sigs.get(behavior), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES), Membership.none());
+        RuleReadingContext reading = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
+        InputDomain domain = InputDomain.of(sigs.get(behavior), reading,
+                TypeCardinality.Counts.workedOutIn(reading), Membership.none());
         Partitions.Partitioning partitioning = Partitions.of(behavior, domain.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return new Model(
                 MeasuredInput.of(behavior, domain.reading(rules), partitioning),
@@ -210,8 +214,10 @@ class GeneratorTest {
         for (String each : parameters) {
             declared.add(new souther.compiler.inputs.InputDomain.Parameter(each, null, Type.INT));
         }
-        return souther.compiler.inputs.InputDomain.of(declared, RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES), Membership.none())
+        RuleReadingContext reading = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
+        return InputDomain.of(declared, reading,
+                TypeCardinality.Counts.workedOutIn(reading), Membership.none())
                 .reading(rules);
     }
 

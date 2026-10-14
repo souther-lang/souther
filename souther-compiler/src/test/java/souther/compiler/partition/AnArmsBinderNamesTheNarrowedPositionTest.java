@@ -8,6 +8,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
@@ -71,8 +72,10 @@ class AnArmsBinderNamesTheNarrowedPositionTest {
                 checked.analysisBodies().get("read"), body,
                 checked.plan(),
                 inputs, rules);
-        InputDomain read = InputDomain.of(sigs.get("read"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), Membership.none());
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+        InputDomain read = InputDomain.of(sigs.get("read"), reading,
+                TypeCardinality.Counts.workedOutIn(reading), Membership.none());
         Partitions.Partitioning base = Partitions.of("read", read.reading(rules),
                 ReadAs.THE_COMPILATION_DOES);
         return ThresholdFixtures.withThresholds(base, read.quantities(rules), guards.thresholds(),

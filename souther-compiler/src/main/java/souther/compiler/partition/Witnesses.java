@@ -1229,8 +1229,8 @@ final class Witnesses {
     /**
      * Every content of a collection of {@code shape} the count range leaves, smallest first,
      * handed to {@code offer} until it answers false: each few of the element's values a set can
-     * hold, each run of them a list can, and each few of the keys with each run of values for a
-     * map.
+     * hold, each run of them a list can — each few, where its elements are apart — and each few
+     * of the keys with each run of values for a map.
      *
      * <p>Arranged from the first {@code many} values of what it holds, which is enough to tell
      * {@code many} contents apart. Proposals and not built values: a rule over what the collection
@@ -1248,7 +1248,7 @@ final class Witnesses {
                 List<FixtureTemplate> values = distinctValuesOf(element, many, reading, inside);
                 boolean once = apart || kind == Shape.Sequence.Kind.SET;
                 for (int size = least; size <= range.most(); size++) {
-                    if (once && size > values.size() || values.isEmpty() && size > 0) {
+                    if ((once && size > values.size()) || (values.isEmpty() && size > 0)) {
                         return;
                     }
                     int[] at = first(size, once);
@@ -1256,16 +1256,14 @@ final class Witnesses {
                         if (!offer.test(FixtureTemplate.collection(picked(values, at)))) {
                             return;
                         }
-                    } while (kind == Shape.Sequence.Kind.SET
-                            ? nextFew(at, values.size())
-                            : nextRun(at, values.size(), once));
+                    } while (next(at, values.size(), once));
                 }
             }
             case Shape.Mapping(Type key, Type value) -> {
                 List<FixtureTemplate> keys = distinctValuesOf(key, many, reading, inside);
                 List<FixtureTemplate> values = distinctValuesOf(value, many, reading, inside);
                 for (int size = least; size <= range.most() && size <= keys.size(); size++) {
-                    if (values.isEmpty() && size > 0 || apart && size > values.size()) {
+                    if ((values.isEmpty() && size > 0) || (apart && size > values.size())) {
                         return;
                     }
                     int[] which = first(size, true);
@@ -1281,7 +1279,7 @@ final class Witnesses {
                             if (!offer.test(FixtureTemplate.collection(entries))) {
                                 return;
                             }
-                        } while (nextRun(to, values.size(), apart));
+                        } while (next(to, values.size(), apart));
                     } while (nextFew(which, keys.size()));
                 }
             }
@@ -1312,8 +1310,7 @@ final class Witnesses {
 
     /**
      * {@code at} moved on to the next few of {@code n} values in order, each taken once and in
-     * the order the values come, or false where it was the last. Starts at {@code first(size,
-     * true)}.
+     * the order the values come, or false where it was the last.
      */
     private static boolean nextFew(int[] at, int n) {
         for (int i = at.length - 1; i >= 0; i--) {
@@ -1329,35 +1326,32 @@ final class Witnesses {
     }
 
     /**
-     * {@code at} moved on to the next run of {@code n} values, counting as a number does, or false
-     * where it was the last; a run naming a value twice is passed over where {@code once}. Starts
+     * {@code at} moved on to the next of its kind, or false where it was the last: the next few
+     * where no value is said twice, and otherwise the next run, counting as a number does. Starts
      * at {@code first(size, once)}.
+     *
+     * <p>A few and not every order of them where no value is said twice. Two orders of one few
+     * are two lists, but the few alone are as many contents as are asked for, and walking every
+     * run to pass over the ones that say a value twice walks more of them the longer they are.
      */
-    private static boolean nextRun(int[] at, int n, boolean once) {
-        while (true) {
-            int i = at.length - 1;
-            while (i >= 0 && at[i] == n - 1) {
-                at[i] = 0;
-                i--;
-            }
-            if (i < 0) {
-                return false;
-            }
-            at[i]++;
-            if (!once || allApart(at)) {
-                return true;
-            }
-        }
+    private static boolean next(int[] at, int n, boolean once) {
+        return once ? nextFew(at, n) : nextRun(at, n);
     }
 
-    private static boolean allApart(int[] at) {
-        for (int i = 0; i < at.length; i++) {
-            for (int j = i + 1; j < at.length; j++) {
-                if (at[i] == at[j]) {
-                    return false;
-                }
-            }
+    /**
+     * {@code at} moved on to the next run of {@code n} values, counting as a number does, or false
+     * where it was the last.
+     */
+    private static boolean nextRun(int[] at, int n) {
+        int i = at.length - 1;
+        while (i >= 0 && at[i] == n - 1) {
+            at[i] = 0;
+            i--;
         }
+        if (i < 0) {
+            return false;
+        }
+        at[i]++;
         return true;
     }
 

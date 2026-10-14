@@ -8,6 +8,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -280,7 +281,8 @@ class APatternIsCompiledOnceHoweverOftenASearchAsksForItsPositionTest {
                 ? RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)
                 : RuleReadingContext.of(rules, ReadAs.THE_COMPILATION_DOES, asked == null
                         ? compilation.db().readings() : asked.over(compilation.db().readings()));
-        InputDomain domain = InputDomain.of(sigs.get("grade"), world, Membership.none());
+        InputDomain domain = InputDomain.of(sigs.get("grade"), world,
+                TypeCardinality.Counts.workedOutIn(world), Membership.none());
         Partitions.Partitioning partitioning =
                 Partitions.of("grade", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
         return MeasuredInput.of("grade", domain.reading(rules), partitioning);

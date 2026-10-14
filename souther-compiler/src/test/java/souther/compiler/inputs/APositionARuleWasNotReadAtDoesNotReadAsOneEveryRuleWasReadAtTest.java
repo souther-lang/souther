@@ -7,6 +7,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
@@ -165,8 +166,10 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
                     compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
             RuleReadingSource rules = RuleReadings.of(compilation, module);
             for (DeclaredSig declared : sigs.values()) {
-                out.add(InputDomain.of(declared, RuleReadingContext.of(rules,
-                        ReadAs.THE_COMPILATION_DOES, RepositoryModels.knownTo(compilation)),
+                RuleReadingContext reading = RuleReadingContext.of(rules,
+                        ReadAs.THE_COMPILATION_DOES, RepositoryModels.knownTo(compilation));
+                out.add(InputDomain.of(declared, reading,
+                        TypeCardinality.Counts.workedOutIn(reading),
                         souther.compiler.carrier.Membership.none()));
             }
         }

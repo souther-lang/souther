@@ -8,11 +8,13 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.numeric.Count;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
@@ -158,7 +160,10 @@ class ALineIsNamedByTheClauseThatDrewItTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return Partitions.of("price", InputDomain.of(sigs.get("price"), RuleReadingContext.unshared(rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+        RuleReadingContext context = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
+        return Partitions.of("price", InputDomain.of(sigs.get("price"), context,
+                TypeCardinality.Counts.workedOutIn(context),
                 Membership.none()).reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .axes().stream().filter(a -> a.path().toString().equals("length"))
                 .findFirst().orElseThrow();

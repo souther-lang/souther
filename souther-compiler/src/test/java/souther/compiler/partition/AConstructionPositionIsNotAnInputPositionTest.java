@@ -9,6 +9,7 @@ import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Position;
@@ -92,8 +93,9 @@ class AConstructionPositionIsNotAnInputPositionTest {
     }
 
     private static InputDomain reading(Read read) {
-        return InputDomain.of(read.sig(),
-                RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES),
+        RuleReadingContext context =
+                RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES);
+        return InputDomain.of(read.sig(), context, TypeCardinality.Counts.workedOutIn(context),
                 Membership.none());
     }
 

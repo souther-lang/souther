@@ -6,6 +6,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.TypeView;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
@@ -312,9 +313,11 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
         return new Read(
-                InputDomain.of(sigs.get("visit"),
-                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                InputDomain.of(sigs.get("visit"), reading,
+                        TypeCardinality.Counts.workedOutIn(reading),
                         souther.compiler.carrier.Membership.none()),
                 checked.behaviorBodies().get("visit"), rules);
     }
