@@ -518,6 +518,17 @@ under `adequacy` is how many are marked. In the JSON each behavior carries `find
 one of them says its `kind` and what a build does about it under `disposition` — `refused`,
 `reported`, or `undecided` where the measure behind it came to no answer.
 
+`adequacy` does not say whether the rows hold. A row that states the wrong answer is an error the
+command exits non-zero on, `--strict` or not, and it still ran: what it went through it went through,
+so the arms, classes, points and rules it reached count as met. The report says both. Under the
+verdict it lists the rows that do not hold, and where such rows are all that covers something
+counted as met, that line is marked `~` under its measure with the rows named — what correcting or
+deleting them takes out of the count. Something another row covers as well is not marked, and that
+other row need not be one that holds: a row waiting for its answer counts. The last line says how
+many are marked, which is the one sign a report narrowed with `--behavior` gives that a row of a
+behavior it does not show is all that covers something it does. In the JSON each behavior carries
+`rowsThatDoNotHold`, and an obligation covered only by such rows carries `onlyWitnessedBy`.
+
 How many rows are waiting for a `let` is reported and never gated on:
 waiting is the normal state of a model being written, and an injected behavior's recorded row is the
 record of what that behavior owes.

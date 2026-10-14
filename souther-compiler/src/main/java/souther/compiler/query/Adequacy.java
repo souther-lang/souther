@@ -1452,9 +1452,9 @@ public final class Adequacy {
                         InteractionEvidence.Unreadable.NO_ROW_CAME_BACK,
                         observed.measured().weakening()), unanswered);
             }
-            List<Generator.Watched> watched = new ArrayList<>();
+            List<WitnessedRow> watched = new ArrayList<>();
             for (RowOutcome row : rows) {
-                watched.add(ObservedInputs.of(row, numbering).watched());
+                watched.add(WitnessedRow.of(row, numbering));
             }
             return InteractionEvidence.of(behavior, asked, watched, observed.measured().weakening(),
                     unanswered);
@@ -1614,9 +1614,9 @@ public final class Adequacy {
             // One entry per row, whether or not anything watched it. Taking only the accounts would
             // leave a row nothing watched out of every number the reading answers with, which is a
             // reading that went without something and does not say so.
-            List<ObservedInputs> watched = new ArrayList<>();
+            List<WitnessedRow> watched = new ArrayList<>();
             for (RowOutcome row : rows) {
-                watched.add(ObservedInputs.of(row, numbering));
+                watched.add(WitnessedRow.of(row, numbering));
             }
             return DecisionEvidence.of(rules.behavior(), against, watched,
                     observed.measured().weakening());
@@ -3990,7 +3990,7 @@ public final class Adequacy {
          */
         public static BranchEvidence measured(String behavior,
                                               List<CoverageSites.ArmSite> all,
-                                              Set<ArmProbe> covered,
+                                              Map<ArmProbe, RowWitnesses> covered,
                                               Set<ArmProbe> awaiting,
                                               souther.compiler.check.PathReachability.Answers.AsRun reachable,
                                               WeakeningSet weakenings,
@@ -4115,11 +4115,20 @@ public final class Adequacy {
             // through them and asserts nothing about them, and the two arrive here as one set only
             // if this is the place that forgets which was which. Read off what each row states,
             // which is where a row's own text was read, rather than by going back to the source.
-            Set<ArmProbe> lit = new LinkedHashSet<>();
+            // A lit arm keeps which rows lit it, as far as whether they are all rows that do not
+            // hold, whichever behavior those rows are written for.
+            Map<ArmProbe, RowWitnesses> lit = new LinkedHashMap<>();
             Set<ArmProbe> awaiting = new LinkedHashSet<>();
             for (RowReading observed : byTarget.values()) {
                 for (RowOutcome row : observed.rowsSeen()) {
-                    (awaitsItsAnswer(row) ? awaiting : lit).addAll(armsSeenIn(row, numbering));
+                    if (awaitsItsAnswer(row)) {
+                        awaiting.addAll(armsSeenIn(row, numbering));
+                        continue;
+                    }
+                    RowWitnesses by = RowWitnesses.of(row);
+                    for (ArmProbe arm : armsSeenIn(row, numbering)) {
+                        lit.merge(arm, by, RowWitnesses::and);
+                    }
                 }
             }
 
@@ -4144,8 +4153,13 @@ public final class Adequacy {
                     return absent;
                 }
                 List<ArmProbe> here = arms.stream().map(CoverageSites.ArmSite::index).toList();
-                Set<ArmProbe> covered = new LinkedHashSet<>(lit);
-                covered.retainAll(here);
+                Map<ArmProbe, RowWitnesses> covered = new LinkedHashMap<>();
+                for (ArmProbe arm : here) {
+                    RowWitnesses by = lit.get(arm);
+                    if (by != null) {
+                        covered.put(arm, by);
+                    }
+                }
                 Set<ArmProbe> awaited = new LinkedHashSet<>(awaiting);
                 awaited.retainAll(here);
                 // The positions the arms' ways are placed on, asked only where some part of the

@@ -314,8 +314,15 @@ public sealed interface ItemAssessment {
     sealed interface Coverage {
 
         /** A row is at the point, and — where a fork drew the line — went through the comparison.
-         * Found is found: a row settles this whatever else went unread. */
-        record Hit() implements Coverage {}
+         * Found is found: a row settles this whatever else went unread.
+         *
+         * @param by which rows are, as far as whether they are all rows that do not hold */
+        record Hit(RowWitnesses by) implements Coverage {
+
+            public Hit {
+                Objects.requireNonNull(by, "a row at the point is some row");
+            }
+        }
 
         /**
          * No row that could be read is at the point.

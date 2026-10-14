@@ -21,8 +21,18 @@ import java.util.Optional;
  */
 public sealed interface ObligationCoverage {
 
-    /** A row this compilation observed stands at the point. */
-    record Witnessed() implements ObligationCoverage {}
+    /**
+     * A row this compilation observed stands at the point.
+     *
+     * @param by which rows do, at every reading that found one: a point met only by a row that does
+     *           not hold at one reading and by another row at the next is met by another row
+     */
+    record Witnessed(RowWitnesses by) implements ObligationCoverage {
+
+        public Witnessed {
+            Objects.requireNonNull(by, "a row at the point is some row");
+        }
+    }
 
     /** Every reading ran to the end, and no row is at the point. */
     record Missed() implements ObligationCoverage {}
@@ -145,11 +155,21 @@ public sealed interface ObligationCoverage {
         WeakeningSet unread = WeakeningSet.none();
         List<ItemAssessment.Coverage.NotAsked> unasked = new ArrayList<>();
         boolean missed = false;
+        RowWitnesses found = null;
         for (Measurement<ItemAssessment.Coverage> reading : readings) {
-            // Found is found. Said before anything else is looked at, so that no accounting of what
-            // went unread can weaken a row somebody wrote.
-            if (reading.made().map(ItemAssessment.Coverage::hit).orElse(false)) {
-                return new Witnessed();
+            // Found is found, and no accounting of what went unread can weaken a row somebody wrote.
+            // The readings after it are still asked who they found, until one found a row that is
+            // not one that does not hold: whether the point would be met without those rows is a
+            // question about every reading that met it.
+            if (reading.made().orElse(null) instanceof ItemAssessment.Coverage.Hit(RowWitnesses by)) {
+                found = found == null ? by : found.and(by);
+                if (found.anotherRow()) {
+                    return new Witnessed(found);
+                }
+                continue;
+            }
+            if (found != null) {
+                continue;
             }
             switch (reading) {
                 // A reading of this line that did not run out. Whatever it could not read may be
@@ -171,6 +191,9 @@ public sealed interface ObligationCoverage {
                 // Read to the end and no row is at the point, which is what a miss is.
                 case Measurement.Complete<ItemAssessment.Coverage> _ -> missed = true;
             }
+        }
+        if (found != null) {
+            return new Witnessed(found);
         }
         if (!unread.isEmpty()) {
             return new Undecided(unread);
@@ -218,11 +241,11 @@ public sealed interface ObligationCoverage {
             // went without. Kept as whichever of the two saw it, the answer turned on which was
             // walked first — the one that saw a row and read everything, and the one that saw a row
             // and could not, are one reading here, and what it could not read is a fact of its own.
-            case Witnessed _ -> {
+            case Witnessed(RowWitnesses by) -> {
                 WeakeningSet went = wentWithout(a).union(wentWithout(b));
                 yield went.isEmpty()
-                        ? new Measurement.Complete<>(new ItemAssessment.Coverage.Hit())
-                        : new Measurement.Partial<>(new ItemAssessment.Coverage.Hit(), went);
+                        ? new Measurement.Complete<>(new ItemAssessment.Coverage.Hit(by))
+                        : new Measurement.Partial<>(new ItemAssessment.Coverage.Hit(by), went);
             }
             case Undecided it -> new Measurement.Partial<>(new ItemAssessment.Coverage.NoHit(),
                     it.weakening());

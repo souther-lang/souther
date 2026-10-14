@@ -345,12 +345,13 @@ final class Coverages {
          * again with a measure in hand would be putting a question to this reading about something
          * it holds, which is what an axis from another measurement gets a wrong answer out of.
          */
-        record AxisReading(Axis axis, int at, Set<String> covered, int couldNotSay,
+        record AxisReading(Axis axis, int at, Map<String, RowWitnesses> covered, int couldNotSay,
                            List<Incompleteness> stopped) {}
 
-        /** Where one row was placed at each measure, in the order the measures are walked. Null at
-         *  a measure the row is not placed by, which is one the model only bounds. */
-        record WhereARowSat(List<Classification> at) {}
+        /** Where one row was placed at each measure, in the order the measures are walked, and what
+         *  the row is as a witness of the classes it was placed in. Null at a measure the row is not
+         *  placed by, which is one the model only bounds. */
+        record WhereARowSat(List<Classification> at, RowWitnesses by) {}
 
         static Readings of(List<RowOutcome> rows,
                            souther.compiler.partition.MeasuredInput subject,
@@ -361,7 +362,8 @@ final class Coverages {
             souther.compiler.partition.MeasuredInput.MeasuredAxes walked = subject.partitionAxes();
             List<WhereARowSat> read = new ArrayList<>(rows.size());
             for (RowOutcome row : rows) {
-                read.add(new WhereARowSat(InputClassifications.placedAt(row.inputs(), walked)));
+                read.add(new WhereARowSat(InputClassifications.placedAt(row.inputs(), walked),
+                        RowWitnesses.of(row)));
             }
             // And the same run of measures cut where the locations cut it, which is what the walk
             // above is the flattening of.
@@ -387,13 +389,15 @@ final class Coverages {
          * one position are — how many there were is the count beside it.
          */
         static AxisReading readingOf(Axis axis, int at, List<WhereARowSat> rows) {
-            Set<String> covered = new LinkedHashSet<>();
+            Map<String, RowWitnesses> covered = new LinkedHashMap<>();
             Map<Object, Incompleteness> byKind = new LinkedHashMap<>();
             int couldNotSay = 0;
             for (WhereARowSat row : rows) {
                 Classification said = row.at().get(at);
                 if (said instanceof Classification.Classified in) {
-                    covered.addAll(in.classIds());
+                    for (String id : in.classIds()) {
+                        covered.merge(id, row.by(), RowWitnesses::and);
+                    }
                 }
                 if (said != null && said.stopped() != null) {
                     couldNotSay++;
@@ -547,8 +551,8 @@ final class Coverages {
         // One set of combinations per relation, in the order the relations were worked out. What is
         // counted is the same as it was; where the count goes is what changed.
         SequencedMap<PartitionEvidence.PairSpace.Between,
-                Set<PartitionEvidence.PairSpace.Cell>> reached = new LinkedHashMap<>();
-        space.forEach(pair -> reached.put(pair.between(), new LinkedHashSet<>()));
+                Map<PartitionEvidence.PairSpace.Cell, RowWitnesses>> reached = new LinkedHashMap<>();
+        space.forEach(pair -> reached.put(pair.between(), new LinkedHashMap<>()));
         // Which relation each pair of positions is, worked out once. Which two positions they are
         // does not turn on the row, and made inside the walk over the rows it is a name built and
         // thrown away for every row the behavior has.
@@ -557,7 +561,7 @@ final class Coverages {
             for (int j = i + 1; j < axes.size(); j++) {
                 PartitionEvidence.PairSpace.Between relation =
                         new PartitionEvidence.PairSpace.Between(axes.get(i).id(), axes.get(j).id());
-                Set<PartitionEvidence.PairSpace.Cell> here = reached.get(relation);
+                Map<PartitionEvidence.PairSpace.Cell, RowWitnesses> here = reached.get(relation);
                 if (here != null) {
                     byPositions.put((long) i * axes.size() + j,
                             new ReachedBetween(relation, here));
@@ -582,8 +586,9 @@ final class Coverages {
                         // key above and a class id is unique within its axis, so what is written
                         // here needs to tell two combinations of these two positions apart and no
                         // more.
-                        at.cells().add(new PartitionEvidence.PairSpace.Cell(
-                                at.between(), pair.getKey(), pair.getValue()));
+                        at.cells().merge(new PartitionEvidence.PairSpace.Cell(
+                                at.between(), pair.getKey(), pair.getValue()), where.by(),
+                                RowWitnesses::and);
                     }
                 }
             }
@@ -640,7 +645,7 @@ final class Coverages {
      * relation is fetched again for every combination every row is in.
      */
     private record ReachedBetween(PartitionEvidence.PairSpace.Between between,
-                                  Set<PartitionEvidence.PairSpace.Cell> cells) {
+                                  Map<PartitionEvidence.PairSpace.Cell, RowWitnesses> cells) {
     }
 
     /**
@@ -1161,8 +1166,9 @@ final class Coverages {
         // The rows as the values they hold and what running them recorded, which is the whole of
         // what a point is met by. Read once for the border: what a row is stays the same however
         // many of the four points it is put to.
-        List<ObservedInputs> rows = observed.rowsSeen().stream()
-                .map(row -> ObservedInputs.of(row, numbering)).toList();
+        List<WitnessedRow> witnessed = observed.rowsSeen().stream()
+                .map(row -> WitnessedRow.of(row, numbering)).toList();
+        List<ObservedInputs> rows = witnessed.stream().map(WitnessedRow::observed).toList();
 
         java.util.Map<DomainPoint, ItemAssessment> items = new java.util.LinkedHashMap<>();
         for (DomainPoint point : border.answers().keySet()) {
@@ -1171,8 +1177,9 @@ final class Coverages {
                 case Demand.NotWorkedOut not -> new ItemAssessment.NotWorkedOut(not.why());
                 case Demand.Owed owed -> {
                     Measurement<ItemAssessment.Coverage> coverage = absent != null ? absent
-                            : verdictOf(shape.met(owed.criterion(), rows), guard,
-                                    border, observed);
+                            : verdictOf(shape.met(owed.criterion(), rows),
+                                    () -> whoStandsThere(shape, owed.criterion(), witnessed),
+                                    guard, border, observed);
                     // No search. Nothing was searched for here, and that is said by there being no
                     // search rather than by a search saying nobody asked: whether a value was
                     // composed is a fact about who asked for one, and a measurement that carried it
@@ -1189,6 +1196,45 @@ final class Coverages {
                 ? new AnotherLineTheRowsAllow.CouldNotTell(
                         new AnotherLineTheRowsAllow.Unsettled.TheRowsWereNotRead(absent))
                 : shape.beside(everyPointMet(items), rows));
+    }
+
+    /**
+     * Which rows stand at a point {@code rows} were found to meet, as far as whether they are all
+     * rows that do not hold.
+     *
+     * <p>Asked of the same walk the point was met by, put to fewer rows. Meeting a point is one row
+     * standing there, so the rows that are not ones that do not hold meet it exactly where one of
+     * them stands there — and only where none does are the others put to it one at a time, to say
+     * which of them it rests on. Rows with none of those among them were answered by the walk that
+     * met the point, and are not walked again.
+     */
+    private static RowWitnesses whoStandsThere(OneShapeOfBorder shape, Criterion criterion,
+                                               List<WitnessedRow> rows) {
+        List<ObservedInputs> others = new ArrayList<>();
+        List<WitnessedRow> notHolding = new ArrayList<>();
+        for (WitnessedRow row : rows) {
+            if (row.by().anotherRow()) {
+                others.add(row.observed());
+            } else {
+                notHolding.add(row);
+            }
+        }
+        if (notHolding.isEmpty()
+                || shape.met(criterion, others) instanceof StandingAtAPoint.Met.Reached) {
+            return RowWitnesses.ANOTHER_ROW;
+        }
+        RowWitnesses found = null;
+        for (WitnessedRow row : notHolding) {
+            if (shape.met(criterion, List.of(row.observed()))
+                    instanceof StandingAtAPoint.Met.Reached) {
+                found = found == null ? row.by() : found.and(row.by());
+            }
+        }
+        if (found == null) {
+            throw new IllegalStateException("a point the rows meet is met by one of them, and none"
+                    + " of them meets it on its own");
+        }
+        return found;
     }
 
     /**
@@ -2086,11 +2132,12 @@ final class Coverages {
      * comparison, and everything else is answered by how whole the reading was.
      */
     private static Measurement<ItemAssessment.Coverage> verdictOf(
-            StandingAtAPoint.Met met, boolean guard, souther.compiler.partition.Border border,
+            StandingAtAPoint.Met met, Supplier<RowWitnesses> whoStandsThere, boolean guard,
+            souther.compiler.partition.Border border,
             souther.compiler.query.Adequacy.RowReading observed) {
         if (met instanceof StandingAtAPoint.Met.Reached) {
             // Found is found: a row settles this whatever else went unread, so nothing weakens it.
-            return new Measurement.Complete<>(new ItemAssessment.Coverage.Hit());
+            return new Measurement.Complete<>(new ItemAssessment.Coverage.Hit(whoStandsThere.get()));
         }
         // What is not found is undecided rather than absent, wherever the reading behind it was not
         // whole — and now says which reading it was. A row whose value here could not be read; a row

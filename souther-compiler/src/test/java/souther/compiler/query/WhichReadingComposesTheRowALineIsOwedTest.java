@@ -276,7 +276,7 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     void aPointARowAlreadyStandsAtIsNotSearchedFor() {
         PointResolution resolved = PointResolver.resolveAt(
                 new ObligationAssessment(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)),
-                        new ObligationCoverage.Witnessed(),
+                        new ObligationCoverage.Witnessed(RowWitnesses.ANOTHER_ROW),
                         ItemAssessment.WritabilityProjection.PROVEN, SearchOutcomes.none(),
                         ObligationDisposition.openOn(List.of())),
                 List.of(at("anywhere")), _ -> {

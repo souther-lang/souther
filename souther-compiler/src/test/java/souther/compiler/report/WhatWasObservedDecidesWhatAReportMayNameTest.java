@@ -18,6 +18,7 @@ import souther.compiler.coverage.DecidedBy;
 import souther.compiler.coverage.Numberings;
 import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.RowWitnesses;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 
@@ -67,7 +68,8 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
                         souther.compiler.query.Adequacy.RowReading.NONE,
                         null, null, null, null, read(), null, null, null),
                 new souther.compiler.query.RowSummary(List.of()),
-                null, List.of(), shown(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+                null, List.of(), shown(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(),
+                Map.of());
     }
 
     /** Where this report shows each of the two forks. A place per fork and not per arm: the arms of
@@ -90,7 +92,8 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
                         arm(SETTLED, 1, DecidedBy.THE_DECLARATION),
                         arm(UNSETTLED, 2, DecidedBy.NOT_SAID),
                         arm(UNSETTLED, 3, DecidedBy.NOT_SAID)),
-                Set.of(PLACES.get(0)), Set.of(), souther.compiler.query.Adequacy.NOTHING_PROVEN,
+                Map.of(PLACES.get(0), RowWitnesses.ANOTHER_ROW), Set.of(),
+                souther.compiler.query.Adequacy.NOTHING_PROVEN,
                 WeakeningSet.none(), _ -> List.of());
     }
 

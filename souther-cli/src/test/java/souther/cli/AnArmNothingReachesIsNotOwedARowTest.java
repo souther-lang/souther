@@ -12,6 +12,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.ArmCensus;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.RowWitnesses;
 import souther.compiler.query.Weakening;
 import souther.compiler.reach.Reachability;
 
@@ -22,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -394,7 +396,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
     @Test
     void aProvenArmLeavesTheDenominator() {
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
-                List.of(UNREACHED_ARM, TAKEN_ARM), Set.of(TAKEN), Set.of(),
+                List.of(UNREACHED_ARM, TAKEN_ARM), Map.of(TAKEN, RowWitnesses.ANOTHER_ROW),
+                Set.of(),
                 proving().asRunWith(Set.of(TAKEN)), WeakeningSet.none(), _ -> List.of());
 
         assertEquals(List.of(TAKEN), probesOf(measured));
@@ -424,7 +427,9 @@ class AnArmNothingReachesIsNotOwedARowTest {
         // fold the measures read, so what a run does to a proof is decided in one place.
         PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED, TAKEN));
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
-                List.of(UNREACHED_ARM, TAKEN_ARM), Set.of(UNREACHED, TAKEN), Set.of(), asRun,
+                List.of(UNREACHED_ARM, TAKEN_ARM),
+                Map.of(UNREACHED, RowWitnesses.ANOTHER_ROW, TAKEN, RowWitnesses.ANOTHER_ROW),
+                Set.of(), asRun,
                 WeakeningSet.none(), _ -> List.of());
 
         // What a disproved proof bears on is the set of arms and not any one of them. Which arms
@@ -458,7 +463,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
     void andAnArmIsStillAnsweredForBesideADisprovedProof() {
         PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED));
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
-                List.of(UNREACHED_ARM, TAKEN_ARM), Set.of(UNREACHED), Set.of(), asRun,
+                List.of(UNREACHED_ARM, TAKEN_ARM), Map.of(UNREACHED, RowWitnesses.ANOTHER_ROW),
+                Set.of(), asRun,
                 WeakeningSet.none(), _ -> List.of());
 
         assertEquals(1, measured.arms().covered(), "the row went through the arm it went through");

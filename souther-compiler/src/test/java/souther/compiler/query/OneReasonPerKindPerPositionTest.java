@@ -54,7 +54,8 @@ class OneReasonPerKindPerPositionTest {
 
     /** One row, with what it said at the two measures the walk reaches in this order. */
     private static Coverages.Readings.WhereARowSat row(Classification kind, Classification urgent) {
-        return new Coverages.Readings.WhereARowSat(java.util.Arrays.asList(kind, urgent));
+        return new Coverages.Readings.WhereARowSat(java.util.Arrays.asList(kind, urgent),
+                RowWitnesses.ANOTHER_ROW);
     }
 
     private static List<Incompleteness> of(Coverages.Readings.WhereARowSat... rows) {

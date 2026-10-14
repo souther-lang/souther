@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import java.util.Objects;
+
 /**
  * Whether a row went through one arm.
  *
@@ -16,9 +18,19 @@ package souther.compiler.query;
  */
 public sealed interface ArmCoverage {
 
-    /** A row this compilation observed went through the arm. Found is found: it went through it
-     *  whatever became of the rows beside it. */
-    record Hit() implements ArmCoverage {}
+    /**
+     * A row this compilation observed went through the arm. Found is found: it went through it
+     * whatever became of the rows beside it.
+     *
+     * @param by which rows did, as far as whether they are all rows that do not hold. A row written
+     *           for another behavior that went through this arm is among them
+     */
+    record Hit(RowWitnesses by) implements ArmCoverage {
+
+        public Hit {
+            Objects.requireNonNull(by, "a row through the arm is some row");
+        }
+    }
 
     /** No row that could be read went through the arm. */
     record NoHit() implements ArmCoverage {}

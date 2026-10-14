@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Set;
 
@@ -681,13 +682,24 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * outside — so {@link PairSpace#unknown()} answers that, and nothing here keeps a second
          * copy of the sizes to answer it from.
          */
-        public record CoveredBetween(SequencedMap<Between, java.util.Set<Cell>> byPair) {
+        public record CoveredBetween(SequencedMap<Between, Map<Cell, RowWitnesses>> byPair) {
 
             public CoveredBetween {
-                SequencedMap<Between, java.util.Set<Cell>> copy = new LinkedHashMap<>();
+                SequencedMap<Between, Map<Cell, RowWitnesses>> copy = new LinkedHashMap<>();
                 byPair.forEach((between, in) ->
-                        copy.put(between, Collections.unmodifiableSet(new LinkedHashSet<>(in))));
+                        copy.put(between, Collections.unmodifiableMap(new LinkedHashMap<>(in))));
                 byPair = Collections.unmodifiableSequencedMap(copy);
+            }
+
+            /** Which combinations of one relation the rows reach, and which rows do as far as
+             *  whether they are all rows that do not hold. */
+            public Map<Cell, RowWitnesses> witnessed(Between between) {
+                Map<Cell, RowWitnesses> said = byPair.get(between);
+                if (said == null) {
+                    throw new IllegalArgumentException(
+                            "a relation this count is not over was read for its count: " + between);
+                }
+                return said;
             }
 
             /**
@@ -697,13 +709,8 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
              * count cannot be subtracted from a space to say which ones those are — which is what
              * this measure used to hold, and why nothing could be asked for at a combination.
              */
-            public java.util.Set<Cell> reached(Between between) {
-                java.util.Set<Cell> said = byPair.get(between);
-                if (said == null) {
-                    throw new IllegalArgumentException(
-                            "a relation this count is not over was read for its count: " + between);
-                }
-                return said;
+            public Set<Cell> reached(Between between) {
+                return witnessed(between).keySet();
             }
 
             /** How many combinations the rows reach of one relation. */
@@ -713,7 +720,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
 
             /** And of all of them, which is the one number the whole space is spoken of by. */
             public int covered() {
-                return byPair.values().stream().mapToInt(java.util.Set::size).sum();
+                return byPair.values().stream().mapToInt(Map::size).sum();
             }
         }
 
@@ -890,14 +897,21 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         /**
          * What the rows reached at one position.
          *
+         * @param witnessed        the classes some row is in, and which rows are as far as whether
+         *                         they are all rows that do not hold
          * @param unclassifiedRows rows whose value at this position could not be read. Above zero,
          *                         an unreached class is undecided rather than unreached — and what
          *                         made them unreadable is what the measurement is weakened by
          */
-        public record Reached(Set<String> covered, int unclassifiedRows) {
+        public record Reached(Map<String, RowWitnesses> witnessed, int unclassifiedRows) {
 
             public Reached {
-                covered = Set.copyOf(covered);
+                witnessed = Collections.unmodifiableMap(new LinkedHashMap<>(witnessed));
+            }
+
+            /** The classes some row is in. */
+            public Set<String> covered() {
+                return witnessed.keySet();
             }
         }
 

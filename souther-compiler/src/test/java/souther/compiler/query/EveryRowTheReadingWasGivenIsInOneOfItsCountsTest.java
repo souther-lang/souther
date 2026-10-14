@@ -72,8 +72,9 @@ class EveryRowTheReadingWasGivenIsInOneOfItsCountsTest {
     @Test
     void andARowNothingWatchedIsCountedAsOne() {
         DecisionEvidence.RowsPlaced read = DecisionEvidence.of("classify", rulesTakenOf(compiled()),
-                        List.of(new ObservedInputs(List.of(), new Generator.Watched.NoAccount(),
-                                new AnswerObservation.NotAnswered())),
+                        List.of(new WitnessedRow(new ObservedInputs(List.of(),
+                                new Generator.Watched.NoAccount(),
+                                new AnswerObservation.NotAnswered()), RowWitnesses.ANOTHER_ROW)),
                         WeakeningSet.none())
                 .made().orElseThrow(
                         () -> new AssertionError("a row is read whether or not anything watched it"));

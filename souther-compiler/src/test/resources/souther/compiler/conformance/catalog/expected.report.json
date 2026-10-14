@@ -634,6 +634,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "rule_unread" ],
       "signature" : {
@@ -1436,6 +1437,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -1808,6 +1810,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "rule_unread" ],
       "signature" : {
@@ -2721,6 +2724,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "rule_unread" ],
       "signature" : {
@@ -4018,6 +4022,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "complete",
@@ -4579,6 +4584,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "rule_unread", "rewrite_undecided" ],
       "signature" : {
@@ -6564,6 +6570,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -8095,6 +8102,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "complete",
@@ -8705,6 +8713,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "rewrite_undecided" ],
       "signature" : {
@@ -9403,6 +9412,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "position_not_read" ],
       "signature" : {
@@ -9628,6 +9638,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "position_not_read" ],
       "signature" : {
