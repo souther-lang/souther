@@ -84,9 +84,10 @@ public record SearchOutcomes(List<Made> made) {
     }
 
     /**
-     * The same searches, as made by a reading read at {@code copies}: the reading of a point a
-     * search was made for is what says where it was read, so this is said where the readings of a
-     * point are put together.
+     * The same searches, as made by a reading read at {@code copies}: the reading a search was
+     * made for is what says where it was read, so this is said where the search is handed to that
+     * reading and before readings of one line are put together — after that, the copies are every
+     * reading's and no longer the one that searched.
      */
     public SearchOutcomes readAt(List<ModelOccurrence> copies) {
         return new SearchOutcomes(made.stream()

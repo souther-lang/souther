@@ -403,7 +403,8 @@ public sealed interface StandingQuestion {
             }
             Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
             both.addAll(it.reachedBy);
-            return new NothingClassifiesIt(new Filed(filed.rule(), filed.at(),
+            return new NothingClassifiesIt(
+                    new NothingClassifiesIt.Filed(filed.rule(), filed.at(),
                     BlockReason.together(filed.why(), it.filed.why())),
                     both, together(readAt, it.readAt));
         }
@@ -523,7 +524,8 @@ public sealed interface StandingQuestion {
             }
             Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
             both.addAll(it.reachedBy);
-            return new BoundaryUndetermined(new Filed(filed.rule(), filed.at(),
+            return new BoundaryUndetermined(
+                    new BoundaryUndetermined.Filed(filed.rule(), filed.at(),
                     BlockReason.together(filed.why(), it.filed.why())),
                     both, together(readAt, it.readAt));
         }

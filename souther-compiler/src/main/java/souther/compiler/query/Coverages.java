@@ -977,9 +977,13 @@ final class Coverages {
             java.util.Map<DomainPoint, ItemAssessment> items = new java.util.LinkedHashMap<>();
             for (DomainPoint point : border.items().keySet()) {
                 ItemAssessment item = border.at(point);
+                // Each search with the copies the reading it was made for was read at, said here
+                // because this is the last place one reading's searches are that reading's alone:
+                // the readings of one line are put together next, searches and copies both, and a
+                // search stopped at one call would come out stopped at every call of the line.
                 items.put(point, item instanceof ItemAssessment.Owed owed && owed.worthSearching()
                         ? owed.settledBy(search.search(owed.criterion(),
-                                border.border().label(point)))
+                                border.border().label(point)).readAt(border.readAt()))
                         : item);
             }
             // And who put on the way what the search went along, which is what says at which calls
