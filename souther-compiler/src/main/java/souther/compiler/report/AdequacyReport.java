@@ -7305,7 +7305,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /** What a reader does next with one thing holding the verdict open. */
     private static String next(ReaderDisposition disposition) {
         return switch (disposition) {
-            case ReaderDisposition.WidenTheRun _ -> "run this again allowing more";
+            // The figure is named where the entry is said, and nothing a run is given sets it.
+            case ReaderDisposition.StoppedAtAFigure it -> it.aRowThereSettlesIt()
+                    ? "a figure of this compiler's stopped the search, and no option sets it:"
+                            + " write a row there, or a rule that leaves no value there"
+                    : "a figure of this compiler's stopped it, and no option sets it:"
+                            + " read which figure where it is said";
             case ReaderDisposition.LookAtTheRule _ -> "read the rule and what stopped it";
             // Without the word for it. What the document calls a weakening is for a consumer keyed
             // on this report; a person reading a line is owed a sentence, and the words a build

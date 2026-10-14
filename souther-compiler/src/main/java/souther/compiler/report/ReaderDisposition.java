@@ -35,13 +35,23 @@ import java.util.List;
 public sealed interface ReaderDisposition {
 
     /**
-     * A run of this compiler allowing more would answer it.
+     * A figure of this compiler's stopped it.
      *
      * <p>Asked first, and of the entry rather than of what it is about. The one thing a reader of an
      * undetermined verdict wants to know is whether measuring again reaches any of it, and a space
      * too large to walk is a number away while a rule this compiler has no reading for is not.
+     *
+     * <p><b>Not an instruction to measure again.</b> That a wider run need not stop there is a fact
+     * about the stop ({@link RunSensitivity}), and no option of this compiler sets the figures it
+     * stops at, so a reader told to allow more has nothing to allow it with. What a reader can do
+     * is in the model, and there is something to say of it only where the entry is a point: a row
+     * written at it settles it, and so does a rule leaving no value there.
+     *
+     * @param aRowThereSettlesIt whether the entry is about one point, which a row written at it or
+     *                           a rule refusing it answers whatever stopped the search
      */
-    record WidenTheRun(Subject subject) implements ReaderDisposition {}
+    record StoppedAtAFigure(Subject subject, boolean aRowThereSettlesIt)
+            implements ReaderDisposition {}
 
     /** The rule that could not be read, and what stopped the reading of it. */
     record LookAtTheRule(Subject subject) implements ReaderDisposition {}
@@ -113,9 +123,9 @@ public sealed interface ReaderDisposition {
      * place either way — which is why this is asked of the assessment rather than of what a
      * verdict is willing to show ({@link AdequacyAssessment}).
      *
-     * <p>The sensitivity first, then the entry, then what it is about. A wider run reaching it is an
-     * operation this compiler knows is appropriate, and it is the same answer whatever the entry is
-     * about — so it is asked once, above, rather than repeated below it.
+     * <p>The sensitivity first, then the entry, then what it is about. A figure of this compiler's
+     * having stopped it is the same answer whatever the entry is about — so it is asked once,
+     * above, rather than repeated below it.
      *
      * <p>Then the entry, because what went unanswered about a place is the entry's answer and not
      * the place's: one point is named both by a measurement nobody made and by a showing that came to
@@ -127,7 +137,14 @@ public sealed interface ReaderDisposition {
     static ReaderDisposition of(AdequacyUncertainty unanswered) {
         Subject subject = unanswered.subject();
         if (unanswered.runSensitivity() == RunSensitivity.MAY_CHANGE) {
-            return new WidenTheRun(subject);
+            return new StoppedAtAFigure(subject, switch (subject) {
+                case Subject.AtAPoint _ -> true;
+                case Subject.OfAModule _, Subject.OfABehavior _, Subject.OfASource _,
+                     Subject.OfARow _, Subject.AtASpelledPosition _, Subject.AtAPosition _,
+                     Subject.AtAnInput _, Subject.AtABorder _, Subject.OfAMeasure _,
+                     Subject.OfAnAxisMeasure _, Subject.AtARule _, Subject.AtAFork _,
+                     Subject.AtAnArm _ -> false;
+            });
         }
         return switch (unanswered) {
             case AdequacyUncertainty.NotMeasured it ->
