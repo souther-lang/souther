@@ -95,11 +95,12 @@ public final class DeclaredThresholds {
         // agree about how many coordinates a quantity is over. They are two readings of one
         // question and neither is asked of the other.
         //
-        // And only an order. A declaration holding the quantity at one value leaves every value of
-        // it beside that one refused, so a line there is owed no row on either side and adds
-        // nothing to what the declaration's values already are.
-        if (assessed instanceof ComparisonAssessment.AcrossPositions over && over.drawsABorder()
-                && over.cutting().ordering() != null) {
+        // And only an order. A line a declaration draws is an end of what it admits, and a clause
+        // naming one value of the quantity, held equal or apart, keeps no end of it
+        // ({@link #originOf}). What such a clause admits is the declaration's values themselves,
+        // which is not a border a body's rule is measured against.
+        if (assessed instanceof ComparisonAssessment.AcrossPositions over
+                && over.places() == ComparisonAssessment.Places.ACROSS_THE_VALUE) {
             out.add(new LineDrawn(over.cutting(), originOf(clause, over.cutting())));
         }
     }

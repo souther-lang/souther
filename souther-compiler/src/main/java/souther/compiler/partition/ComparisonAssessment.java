@@ -82,7 +82,8 @@ sealed interface ComparisonAssessment {
         ACROSS_THE_VALUE,
 
         /** One value singled out: on a position a class of its own, whose values either side are
-         *  one class, and on a quantity over positions a line with the values either side of it. */
+         *  one class, and on a quantity over positions that counts, a line with the values either
+         *  side of it. */
         AT_THE_VALUE,
 
         /** A value the quantity does not hold, which puts nothing in a class of its own. */
@@ -1123,15 +1124,18 @@ sealed interface ComparisonAssessment {
      * singled out is a class of its own there, and the values either side of it are one class, so
      * there is nothing for a border to owe a row away from.
      *
-     * <p>On a quantity over positions, a value singled out as well. No position holds it as a class,
-     * so the line is the only place the rule is measured at: the rows where the quantity comes to
-     * the value, and the nearest ones where it comes to the values either side of it. A rule that
-     * names a value the quantity does not hold names no place at all, on either.
+     * <p>On a quantity over positions, a value singled out as well, where the quantity has values
+     * beside it ({@link BorderQuantity#singlesWithSides}). No position holds it as a class, so the
+     * line is the only place the rule is measured at: the rows where the quantity comes to the
+     * value, and the nearest ones where it comes to the values either side of it. A rule that names
+     * a value the quantity does not hold names no place at all, on either.
      */
     default boolean drawsABorder() {
         return switch (this) {
             case AtAPosition at -> at.places() == Places.ACROSS_THE_VALUE;
-            case AcrossPositions over -> over.places() != Places.AT_NO_VALUE;
+            case AcrossPositions over -> over.places() == Places.ACROSS_THE_VALUE
+                    || (over.places() == Places.AT_THE_VALUE
+                            && over.cutting().of().singlesWithSides());
             case Several several -> several.parts().stream()
                     .anyMatch(part -> part.line().drawsABorder());
             case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _,

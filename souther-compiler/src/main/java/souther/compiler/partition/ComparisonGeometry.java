@@ -77,8 +77,8 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between) 
                                               Function<Cutting, LineOrigin> originOf) {
         return switch (assessed) {
             case ComparisonAssessment.AtAPosition at -> atAPosition(at, originOf.apply(at.cutting()));
-            // A value singled out on such a quantity is a line as an order is: no position holds
-            // it as a class, so the line is where the rule is measured.
+            // A value singled out on such a quantity is a line as an order is, where the quantity
+            // counts: no position holds it as a class, so the line is where the rule is measured.
             case ComparisonAssessment.AcrossPositions over -> over.drawsABorder()
                     ? new ComparisonGeometry(List.of(),
                             List.of(new LineDrawn(over.cutting(), originOf.apply(over.cutting()))))

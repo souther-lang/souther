@@ -1325,6 +1325,25 @@ public sealed interface BorderQuantity
     }
 
     /**
+     * Whether a value a rule singles out on this quantity, where no position is divided to hold it
+     * as a class, still has values beside it a row can be owed at.
+     *
+     * <p>Where the quantity counts to a number. A count, a remainder and a form over several
+     * positions do, and so does how far two counting positions stand apart: the values one step
+     * either side of the one named are the nearest rows that do not meet it. Two strings stand no
+     * number apart, and the only value their distance takes is where they meet
+     * ({@link LevelSpace#onlyWhereTheyMeet}), so a rule holding them equal names that one value and
+     * no order, and a row where one sorts below the other is beside nothing the rule wrote.
+     */
+    default boolean singlesWithSides() {
+        return switch (this) {
+            case Apart apart -> apart.counts();
+            case OfACoordinate coordinate -> coordinate.of().answered().counts();
+            case OverAForm _, HowMany _, RemainderOfAForm _ -> true;
+        };
+    }
+
+    /**
      * Why a rule drawn on this quantity divides none of the positions it is made of, in the word
      * that is true of what the quantity is.
      *

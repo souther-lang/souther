@@ -27,6 +27,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the runs past those. Which of them a row can be written at is what the positions reach, read
  * against the quantity as a whole — two sets of a three-case element each hold three at most, so
  * their sizes come to six only where both hold every case, and to nothing above six at all.
+ *
+ * <p>Only where the quantity counts. Two strings stand no number apart, so a rule holding them
+ * equal has no value beside the one it names, and is no line.
  */
 class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
 
@@ -56,7 +59,7 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
             let both (r) = if %s then 1 else 0
             """;
 
-    /** The issue's own rule: six only where both sets hold every case, and nothing above it. */
+    /** Six only where both sets hold every case, and nothing above it. */
     @Test
     void theSizesOfTwoSetsComeToTheValueOnlyWhereBothHoldEveryCase() {
         Map<DomainPoint, String> points = atEachPoint(SETS, "Set.size(a) + Set.size(b) == 6",
@@ -129,6 +132,26 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
     }
 
     /**
+     * Two strings held equal are no line, where the same two held in an order are one: they stand
+     * no number apart, and the only value their distance takes is where they meet.
+     */
+    @Test
+    void twoStringsHeldEqualAreNoLine() {
+        String model = """
+                module m
+
+                data Id = String
+                  invariant String.length(value) >= 1
+
+                behavior both : (a: Id, b: Id) -> Int
+                let both (a, b) = if %s then 1 else 0
+                """;
+        assertEquals(List.of(), ofTheComparison(model, "a == b"));
+        assertEquals(List.of(), ofTheComparison(model, "a /= b"));
+        assertEquals(1, ofTheComparison(model, "a < b").size());
+    }
+
+    /**
      * Whether the quantity comes to the value is asked of the positions together. Each of these
      * reaches six on its own, and the declaration keeps the two at four between them.
      */
@@ -144,8 +167,9 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
     }
 
     /**
-     * A declaration holding the quantity at one value is no line. Every value of it beside that one
-     * is refused, so there is no row either side to owe, and only the body's own rule is measured.
+     * A declaration naming one value of the quantity, held equal or apart, is no line. A line a
+     * declaration draws is an end of what it admits, and such a clause keeps no end, so only the
+     * body's own rule is measured.
      */
     @Test
     void aDeclarationHoldingTheQuantityAtOneValueDrawsNoLine() {
@@ -178,11 +202,16 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
 
     /** The same, of the comparison's line among the declaration's. */
     private static Map<DomainPoint, String> comparisonPoints(String model, String condition) {
-        List<BorderAssessment> ofTheComparison = lines(model, condition).stream()
+        List<BorderAssessment> lines = ofTheComparison(model, condition);
+        assertEquals(1, lines.size(), () -> condition + ": " + lines);
+        return points(lines.get(0), inputs -> String.join(", ", inputs));
+    }
+
+    /** The lines the body's comparison draws, leaving out those of the declarations. */
+    private static List<BorderAssessment> ofTheComparison(String model, String condition) {
+        return lines(model, condition).stream()
                 .filter(each -> each.border().origin() instanceof LineOrigin.ComparisonOrigin)
                 .toList();
-        assertEquals(1, ofTheComparison.size(), () -> condition + ": " + ofTheComparison);
-        return points(ofTheComparison.get(0), inputs -> String.join(", ", inputs));
     }
 
     private static Map<DomainPoint, String> points(BorderAssessment line,
@@ -215,7 +244,10 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
         return String.valueOf(Integer.parseInt(inputs.get(0)) - Integer.parseInt(inputs.get(1)));
     }
 
+    /** What the sizes {@link #sizes} read add up to, failing where the point held no row. */
     private static int sum(String sizes) {
+        assertTrue(sizes != null && sizes.matches("\\d+( \\+ \\d+)*"),
+                () -> "a row of two sizes, where the point is owed one: " + sizes);
         int out = 0;
         for (String each : sizes.split(" \\+ ")) {
             out += Integer.parseInt(each);

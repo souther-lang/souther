@@ -151,17 +151,15 @@ class AValueSingledOutIsNotABorderTest {
     }
 
     /**
-     * An equality over two positions singles one out of neither, and is a line over the two.
+     * An equality over two positions singles one out of neither.
      *
-     * <p>No position holds the value as a class of its own, so what the rule is measured at is the
-     * quantity the two make: the rows where they meet and the nearest ones either side. Read off
-     * the operator alone, {@code a == b} raised a question about a value singled out at {@code a}
-     * that no rule wrote; the classes stay empty for that.
+     * <p>Read off the operator alone, {@code a == b} raised a question about a value singled out at
+     * {@code a} that no rule wrote. Where the two meet is a line on how far apart they stand, which
+     * is the quantity's and no position's ({@code AValueSingledOutOnAQuantityOverPositionsIsALineTest}).
      */
     @Test
-    void anEqualityBetweenTwoPositionsSinglesNothingOutAndIsALine() {
+    void anEqualityBetweenTwoPositionsSinglesNothingOut() {
         assertEquals(List.of(), classes("r.a == r.other"));
-        assertEquals(1, borders("r.a == r.other"));
-        assertEquals(1, borders("r.a /= r.other"));
+        assertEquals(List.of(), classes("r.a /= r.other"));
     }
 }
