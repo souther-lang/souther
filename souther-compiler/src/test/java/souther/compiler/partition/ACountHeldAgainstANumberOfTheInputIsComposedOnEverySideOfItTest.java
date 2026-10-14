@@ -124,8 +124,8 @@ class ACountHeldAgainstANumberOfTheInputIsComposedOnEverySideOfItTest {
                     if List.length(List.filter(y -> y == "a", xs)) >= n + 3
                         then (if k > 0 then High else Low) else Low
                 """);
-        // At each point of k's line, and not every row with k past it: a row for the count's own
-        // line does not read k, so k there is whatever tells the arms apart and may be past it too.
+        // The rows k's line is owed are found by its points. A row for the count's own line does not
+        // read k, so k there is whatever tells the arms apart, on either side of k's line.
         for (int k : List.of(-1, 0, 1, 2)) {
             assertTrue(rows.stream().anyMatch(row -> row.numbers().get(1) == k
                             && row.meeting(IS_A) >= row.numbers().getFirst() + 3),

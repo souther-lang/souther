@@ -8348,6 +8348,8 @@ public final class Generator {
         private final List<StoodInAnswer> answers;
         /** Where the first row offered went: the arms it passed and how its conditions came out. */
         private AlignedObservation way;
+        /** The rewrites of the arms on that way, which every row compared is asked. */
+        private List<ArmReplacements.Rewrite> rewrites = List.of();
         /** The row taken so far, and how many rewrites were told apart on it. */
         private FixtureTemplate[] best;
         private int bestTold = -1;
@@ -8375,10 +8377,15 @@ public final class Generator {
             RowToRun row = new RowToRun(List.of(composed), answers);
             ObservedRun ran = trial.run(row);
             if (!(ran.watched() instanceof Watched.Ran(AlignedObservation seen))) {
-                // Nothing can say which arms it went through, and no other row of this point will
-                // say more.
-                keep(composed, 0);
-                said = Acceptance.TAKEN;
+                // The first row with nothing to say which arms it went through is a point nothing
+                // here can tell rows apart at, and it is the row. A later one is a row this cannot
+                // compare, and the walk goes on.
+                if (offered == 1) {
+                    keep(composed, 0);
+                    said = Acceptance.TAKEN;
+                } else {
+                    said = onward();
+                }
                 return;
             }
             // Only a row that goes the way the first one did, through the same arms with every
@@ -8387,15 +8394,14 @@ public final class Generator {
             // have, and the one thing that differs is which rewrites it tells apart.
             if (way == null) {
                 way = seen;
+                rewrites = trial.rewritesThrough(seen);
             } else if (!seen.equals(way)) {
-                said = offered < MOST_ROWS_OFFERED_FOR_THE_ARMS ? Acceptance.PASSED
-                        : Acceptance.STOPPED;
+                said = onward();
                 return;
             }
             // One way is one set of arms, so every row offered here is asked the same rewrites, and
             // a row after the first is taken over it only by telling more of them apart. Where the
             // rewrites left could not bring it past the row kept, they are not run.
-            List<ArmReplacements.Rewrite> rewrites = trial.rewritesThrough(seen);
             int told = 0;
             for (int i = 0; i < rewrites.size() && told + rewrites.size() - i > bestTold; i++) {
                 Optional<AnswerObservation> now =
@@ -8410,9 +8416,14 @@ public final class Generator {
                 best = composed.clone();
                 said = Acceptance.TAKEN;
             } else {
-                said = offered < MOST_ROWS_OFFERED_FOR_THE_ARMS ? Acceptance.PASSED
-                        : Acceptance.STOPPED;
+                said = onward();
             }
+        }
+
+        /** The walk going on to the next row, or stopping where the figure is reached. */
+        private Acceptance onward() {
+            return offered < MOST_ROWS_OFFERED_FOR_THE_ARMS ? Acceptance.PASSED
+                    : Acceptance.STOPPED;
         }
 
         private void keep(FixtureTemplate[] composed, int told) {
