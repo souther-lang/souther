@@ -464,11 +464,11 @@ final class DemandReading {
             // asks, and any other comparison is the relation it states.
             case Condition.Compares one -> {
                 Pullback.Pulled pulled = pulledOf(one, read, conditions);
-                yield statedOff(one, pulled, holding, read, conditions);
+                yield statedOff(one, pulled, holding, read);
             }
             case Condition.Truth truth -> {
                 Pullback.Pulled pulled = pulledOf(truth, read, conditions);
-                yield statedOff(truth, pulled, holding, read, conditions);
+                yield statedOff(truth, pulled, holding, read);
             }
         };
     }
@@ -476,8 +476,7 @@ final class DemandReading {
     /** What {@code pulled}, the statement of {@code where}, coming out {@code holding} asks, each
      *  read off the parts it turns on. */
     private static List<Stated> statedOff(Condition where, Pullback.Pulled pulled,
-                                          boolean holding, InputReading read,
-                                          WhatConditionsState conditions) {
+                                          boolean holding, InputReading read) {
         Projected made = projectedOff(pulled, holdingAs(pulled.proposition(), holding), read,
                 own(where));
         return made.reads().stream().map(each -> new Stated(where, each, made.readOff()))
