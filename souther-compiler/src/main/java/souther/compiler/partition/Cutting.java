@@ -320,7 +320,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case ClosureApplications.Outside _, ClosureApplications.NotSaid _ -> null;
         };
         if (each == null) {
-            return readOnce(behavior, comparison, read, reads, answering, conditions);
+            return readOnce(behavior, comparison, read, reads, answering,
+                    conditions.comparison(comparison, reads, read));
         }
         Read drawn = onEachApplication(behavior, comparison, read, each, answering, conditions);
         // Where an application is made, and where a line decides on it, is part of what the line
@@ -378,7 +379,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             if (one.reached() instanceof Proposition.Always(boolean made) && !made) {
                 continue;
             }
-            switch (readOnce(behavior, comparison, read, one.reads(), answering, conditions)) {
+            Pullback.OnTheInput onTheInput = conditions.comparison(comparison, one.reads(), read);
+            switch (readOnce(behavior, comparison, read, one.reads(), answering, onTheInput)) {
                 case Read.Stopped alone -> alone.why().forEach(stopped::putIfAbsent);
                 case Read.StatesNoRelation _ -> {
                     if (statingNoRelation == null) {
@@ -403,9 +405,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                 _ -> new ArrayList<>())
                         .add(new WhereAnApplicationIsMade.OnOne(part.cases(), one.reached())));
                 case Read line -> lines.computeIfAbsent(new ALineRead(
-                                PartOfAComparison.ofTheStatement(conditions.comparison(
-                                        comparison, one.reads(), read).stated().proposition()),
-                                line), _ -> new ArrayList<>())
+                                PartOfAComparison.ofTheStatement(
+                                        onTheInput.stated().proposition()), line),
+                                _ -> new ArrayList<>())
                         .add(WhereAnApplicationIsMade.OnOne.wherever(one.reached()));
             }
         }
@@ -575,11 +577,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return drawn == null ? null : cutsOrRefused(drawn);
     }
 
-    /** What {@code comparison} states read once, in {@code reads}. */
+    /**
+     * What {@code comparison} states read once, in {@code reads}.
+     *
+     * @param onTheInput what the comparison states there, put on the input, handed in by a caller
+     *                   that names a line by it
+     */
     private static Read readOnce(String behavior, StatedComparison comparison,
                                  InputReading read, InputReads reads, Arrivals answering,
-                                 WhatConditionsState conditions) {
-        Pullback.OnTheInput onTheInput = conditions.comparison(comparison, reads, read);
+                                 Pullback.OnTheInput onTheInput) {
         Pullback.Pulled stated = onTheInput.stated();
         // A form put on the input's numbers, where what is stated is one over them.
         LinearForm<NumericTerm> overTheInput =
