@@ -85,14 +85,14 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
      * needs no more.
      */
     static ComparedNumber of(Core.Binary binary, InputReading read, InputReads reads) {
-        OnASide side = sideOf(binary.left(), binary.right(), read, reads);
+        ComparisonPlacement placed = ComparisonPlacement.of(binary.op());
+        OnASide side = sideOf(binary.left(), binary.right(), placed, read, reads);
         if (side == null) {
             return null;
         }
         // Turned round as what it states and not as the operator it would have been written with:
         // which side a number stands on is how the source was spelled, and what the rule places is
         // read off the operator once.
-        ComparisonPlacement placed = ComparisonPlacement.of(binary.op());
         return new ComparedNumber(side.named().term(), side.named().orders(),
                 side.turned() ? placed.turned() : placed, side.at());
     }
@@ -112,7 +112,8 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
      */
     public static DrawnLine lineOf(StatedComparison comparison, InputReading read,
                                    InputReads reads) {
-        OnASide side = sideOf(comparison.left(), comparison.right(), read, reads);
+        OnASide side = sideOf(comparison.left(), comparison.right(), comparison.claim(), read,
+                reads);
         NumericTerm.FromOnePosition position =
                 side == null ? null : side.named().term().atOnePosition();
         if (position == null || side.at() == null || side.named().orders() == null) {
@@ -131,12 +132,13 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
      * about, unless the right is a number the left is a value of — then the line is on that one,
      * and the comparison is read turned round.
      */
-    private static OnASide sideOf(Core one, Core other, InputReading read, InputReads reads) {
-        OnASide left = onOneSide(one, other, false, read, reads);
+    private static OnASide sideOf(Core one, Core other, ComparisonPlacement placed,
+                                  InputReading read, InputReads reads) {
+        OnASide left = onOneSide(one, other, false, placed, read, reads);
         if (left != null && left.at() != null) {
             return left;
         }
-        OnASide right = onOneSide(other, one, true, read, reads);
+        OnASide right = onOneSide(other, one, true, placed, read, reads);
         return right != null && right.at() != null ? right : left != null ? left : right;
     }
 
@@ -148,17 +150,26 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
      * a helper was handed, a value the module declares — before the order is asked where it falls.
      * Read as written, a value behind a name would place no line where the same value written out
      * places one.
+     *
+     * <p>A case of an enumeration held equal to the value, or not, places nothing on the order the
+     * cases are declared in: it asks which case the value is ({@link CaseCompared}), and the case
+     * declared after it is no nearer to it than any other. The order is what an order relation
+     * asks, and only that places a case on it.
      */
-    private static OnASide onOneSide(Core side, Core other, boolean turned, InputReading read,
+    private static OnASide onOneSide(Core side, Core other, boolean turned,
+                                     ComparisonPlacement placed, InputReading read,
                                      InputReads reads) {
         Named named = namedBy(side, read, reads);
         if (named == null) {
             return null;
         }
         Carrier order = named.orders() == null ? null : named.orders().answered();
-        return new OnASide(named, order == null ? null
-                : order.literalOf(reads.standingValue(other, read.symbols(), read.newtypes()),
-                        read.symbols()),
+        boolean placesOnTheOrder = order != null
+                && !(order instanceof Carrier.Ordinal && placed instanceof ComparisonClaim.Singled);
+        return new OnASide(named, placesOnTheOrder
+                ? order.literalOf(reads.standingValue(other, read.symbols(), read.newtypes()),
+                        read.symbols())
+                : null,
                 turned);
     }
 

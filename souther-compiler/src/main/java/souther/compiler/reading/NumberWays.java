@@ -133,13 +133,36 @@ final class NumberWays implements ComparisonWays {
 
     @Override
     public boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
-        ComparedNumber said =
-                Core.withoutStanding(e) instanceof Core.Binary binary
-                        ? numbers.of(binary, reads) : null;
+        Core.Binary binary = Core.withoutStanding(e) instanceof Core.Binary it ? it : null;
+        // A case of a sum, which the value either is or is not: no number places it, and what the
+        // declarations leave of it is asked of what it states, as a fork's condition is.
+        if (binary != null && numbers.caseOf(binary, reads) != null) {
+            return !ruledOutAsStated(binary, want);
+        }
+        ComparedNumber said = binary != null ? numbers.of(binary, reads) : null;
         ComparedNumber.DrawnLine drawn = said == null ? null : said.line();
-        return drawn == null
-                ? ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy)
+        return drawn == null ? ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy)
                 : !ruledOut(drawn, want);
+    }
+
+    /**
+     * Whether the declarations prove {@code comparison} never comes out {@code want}, asked of what
+     * the body's meanings say it states — and nothing proved where they say nothing of it.
+     *
+     * <p>The statement a rule concluded and the body's meanings filed, as a fork's condition is
+     * asked ({@link #stated}), so what a comparison states is the one rule's answer and what the
+     * declarations leave of it is the one table's.
+     */
+    private boolean ruledOutAsStated(Core.Binary comparison, boolean want) {
+        if (meanings == MeaningsOfABody.NONE || comparison.occurrence() == null) {
+            return false;
+        }
+        return ModelOccurrence.statedAt(comparison.occurrence())
+                .flatMap(construct -> meanings.at(new MeaningsOfABody.Site(construct,
+                        MeaningsOfABody.Part.Asked.ITSELF)))
+                .map(proposition -> WhatTheDeclarationsLeave.whetherRuledOut(proposition, want,
+                        numbers.reading()) instanceof AWayThrough.RuledOut)
+                .orElse(false);
     }
 
     /**
