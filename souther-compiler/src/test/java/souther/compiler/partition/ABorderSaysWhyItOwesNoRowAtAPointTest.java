@@ -4,6 +4,7 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ARuleNoReadingTakesIn;
 import souther.compiler.numeric.Towards;
 import souther.compiler.query.Adequacy;
 import souther.compiler.partition.FixtureTemplate;
@@ -105,6 +106,119 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
                 bordersOf(model("Decimal", ">= 0m", "<= 100m", "50m")).get("h.a = 100")
                         .at(PointRole.OFF),
                 "and a decimal has none, so the point one step over is not named at all");
+    }
+
+    /**
+     * A position whose rules name its values refuses every point that is none of them, though the
+     * order has a value there and the range runs past it.
+     *
+     * <p>Against the same rules naming the value as well, which owe the row: what refuses the point
+     * is that the value is not named, and not the shape of the rule.
+     */
+    @Test
+    void theRulesNamingTheValuesRefuseAPointThatIsNoneOfThem() {
+        String named = " == 1 || value == 3 || value == 7";
+        assertEquals(NOT_OWED, bordersOf(model("Int", named, "< 3", "1")).get("h.a = 3")
+                .at(PointRole.ON), "two is no value of the three");
+        assertEquals("2", bordersOf(model("Int", " == 1 || value == 2 || value == 3 || value == 7",
+                "< 3", "1")).get("h.a = 3").against(PointRole.ON), "and is one of the four");
+        // A value left out of a run is refused the same way, by the one value left out.
+        assertEquals(NOT_OWED, bordersOf(model("Int", " >= 1 && value <= 5 && value /= 2", "< 3",
+                "1")).get("h.a = 3").at(PointRole.ON));
+    }
+
+    /**
+     * The same of a run: one between two lines that holds none of the values named is refused, and
+     * one holding a single one of them is owed a row at it.
+     *
+     * <p>{@code "a"} and {@code "b"} have {@code "a0"} and {@code "a1"} between them on the order of
+     * the strings, and the run between those two holds no value of a position holding one of the
+     * two. Of a position holding {@code "a05"} besides, it holds that one.
+     *
+     * <p>And of every place the position stands: an element of a list holds what the element's
+     * rules name, and a rule nothing reads beside the ones that name the values may refuse some of
+     * them and admits no other — so what it leaves is still none of the run.
+     */
+    @Test
+    void theRulesNamingTheValuesRefuseARunHoldingNoneOfThem() {
+        for (String type : List.of("Code", "List<Code>", "Loose")) {
+            Map<String, BorderAssessment> borders = bordersOf(twoLines(type,
+                    "value == \"a\" || value == \"b\""));
+            assertEquals(NOT_OWED, borders.get(on(type) + " = a0").at(PointRole.OUT), type);
+            assertEquals(NOT_OWED, borders.get(on(type) + " = a1").at(PointRole.IN), type);
+            assertEquals(NOT_OWED, borders.get(on(type) + " = a0").at(PointRole.OFF), type);
+            assertEquals(NOT_OWED, borders.get(on(type) + " = a1").at(PointRole.OFF), type);
+        }
+        Map<String, BorderAssessment> held = bordersOf(twoLines("Code",
+                "value == \"a\" || value == \"a05\" || value == \"b\""));
+        assertTrue(held.get("c = a0").at(PointRole.OUT) instanceof ItemAssessment.Owed,
+                () -> held.get("c = a0").toString());
+        assertTrue(held.get("c = a1").at(PointRole.IN) instanceof ItemAssessment.Owed,
+                () -> held.get("c = a1").toString());
+    }
+
+    /**
+     * What the rules name are values of the position and not of a number taken of it.
+     *
+     * <p>A string held to {@code "a"} or {@code "b"} is one character long, and a point at a length
+     * of one is owed a row. Put to the set of strings, a length of one is no string the set names
+     * and the point would be refused.
+     */
+    @Test
+    void theValuesNamedSayNothingOfANumberTakenOfThem() {
+        Map<String, BorderAssessment> borders = bordersOf("""
+                module example.owed
+
+                data Code = String
+                    invariant value == "a" || value == "b"
+
+                data Ok
+                data No
+                data Verdict = Ok | No
+
+                behavior take : (c: Code) -> Verdict
+                let take (c) = if String.length(c.value) < 2 then No else Ok
+
+                example take
+                    | "one" : (Code("a")) -> No
+                """);
+        BorderAssessment length = borders.get("String.length(c) = 2");
+        assertNotNull(length, borders.keySet().toString());
+        assertEquals("1", length.against(PointRole.ON));
+    }
+
+    private static final ItemAssessment.NotOwed NOT_OWED =
+            new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE);
+
+    /** Where the lines of {@link #twoLines} stand: the position, or each element of it. */
+    private static String on(String type) {
+        return type.startsWith("List") ? "c[*]" : "c";
+    }
+
+    /**
+     * Lines at {@code "a0"} and {@code "a1"} on a position of {@code type}, a string or a list of
+     * strings held to what {@code named} names.
+     */
+    private static String twoLines(String type, String named) {
+        String below = type.startsWith("List") ? "List.any(x -> x.value < \"%s\", c)"
+                : "c.value < \"%s\"";
+        String read = below.formatted("a0") + " then Ok else if " + below.formatted("a1");
+        return """
+                module example.owed
+
+                data Code = String
+                    invariant %s
+
+                data Loose = String
+                    invariant (%s) && %s
+
+                data Ok
+                data No
+                data Verdict = Ok | No
+
+                behavior take : (c: %s) -> Verdict
+                let take (c) = if %s then No else Ok
+                """.formatted(named, named, ARuleNoReadingTakesIn.about("value"), type, read);
     }
 
     /**

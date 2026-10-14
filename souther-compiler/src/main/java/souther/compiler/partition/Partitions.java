@@ -427,7 +427,6 @@ public final class Partitions {
         // a selection made now would be made where the least is known about what it selects
         // (see this package's documentation).
         List<PositionAccount> positions = drawn.stream().map(Drawn::at).toList();
-        List<Axis> kept = drawn.stream().flatMap(each -> each.axes().stream()).toList();
         // A position undivided because a rule about it drew no line says that here, without waiting
         // for a body: a type bounded by a rule this cannot read is one whether or not any behavior
         // compares it, and so is one bounded by a rule read to the end that divides nothing. What
@@ -458,7 +457,7 @@ public final class Partitions {
         // that relates two positions draws a line on neither of them, and every line on no position
         // is arranged with the others where they are all in hand, which this phase is not.
         LinesRead read = new LinesRead();
-        java.util.Map<AxisId, List<Border>> lines = linesAlong(kept, quantities, read);
+        java.util.Map<AxisId, List<Border>> lines = linesAlong(settled, quantities, read);
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         MeasureClosure.Both closed = MeasureClosure.of(positions, standing, read);
         return new Partitioning(List.copyOf(settled), standing, uncertain,
@@ -1031,7 +1030,7 @@ public final class Partitions {
         // the position and a line between two leaves its border beside them; they are the same
         // reading, and an accounting over one of them says nothing about the other.
         LinesRead read = new LinesRead();
-        java.util.Map<AxisId, List<Border>> lines = linesAlong(out, reading, read);
+        java.util.Map<AxisId, List<Border>> lines = linesAlong(measurements, reading, read);
         List<Border> across = Border.allOf(between, partedByQuantity(out), read);
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         read.returning(across);
@@ -1081,14 +1080,21 @@ public final class Partitions {
      * has no line to draw, and an entry saying so would be a list of nothings per behavior. Nor
      * does one no value can stand at, though the input has values: the elements of a container
      * the rules hold to none. A row puts nothing there, so nothing there is owed one.
+     *
+     * <p>Walked by position, because what a position's rules admit is the position's and every
+     * axis of it reads it from there.
      */
     private static java.util.Map<AxisId, List<Border>> linesAlong(
-            List<Axis> axes, Quantities reading, LinesRead read) {
+            List<PositionMeasurements> measured, Quantities reading, LinesRead read) {
         Map<AxisId, List<Border>> out = new LinkedHashMap<>();
-        for (Axis axis : axes) {
-            if (axis.asksForARow() && reading.projectionOfTheDeclarations(axis.term())
-                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)) {
-                out.put(axis.id(), bordersOf(axis, reading, within, read));
+        for (PositionMeasurements at : measured) {
+            for (Axis axis : at.axes()) {
+                if (axis.asksForARow() && reading.projectionOfTheDeclarations(axis.term())
+                        instanceof NumericDomain.FormProjection.Within(
+                                NumericDomain.Bounds within)) {
+                    out.put(axis.id(), bordersOf(axis, reading, within,
+                            at.position().admits(), read));
+                }
             }
         }
         return out;
@@ -1185,7 +1191,7 @@ public final class Partitions {
      * assemble them would be deciding, from a reading of its own, which lines exist to be measured.
      */
     static List<Border> bordersOf(Axis axis, Quantities reading, NumericDomain.Bounds within,
-                                  LinesRead read) {
+                                  ValueSet admits, LinesRead read) {
         // Both orders of the number this axis measures, as the reading has them. A pair put
         // together here out of the position's order and the carrier a cut was drawn on is a pair
         // whose two halves came from two places, and the day they part is the day a row is decoded
@@ -1195,6 +1201,9 @@ public final class Partitions {
         // inside the range that is not of the class is one the rules refuse.
         Congruences valueClass = axis.term() instanceof NumericTerm.ValueOf place
                 ? reading.region().valueClassAt(place) : null;
+        // And the values the position's rules name, which is about the value and about no number
+        // taken of it: a string held to two values has lengths nobody named.
+        ValueSet values = axis.term() instanceof NumericTerm.ValueOf ? admits : ValueSet.ANY;
         List<Border> out = new ArrayList<>();
         // Every place the rules part this position's values, collected before any border is built.
         // What a comparison's border owes away from its line is a run of the arrangement they make
@@ -1246,7 +1255,7 @@ public final class Partitions {
                 // The line is written down as it is met and the border where it lands, so that the
                 // day something is written between the two the reading is held to having lost one.
                 read.found(target, origin);
-                out.add(read.drew(Border.at(target, origin, within, valueClass, parted,
+                out.add(read.drew(Border.at(target, origin, within, valueClass, values, parted,
                         axis.narrowed())));
             }
         }

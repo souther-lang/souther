@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.numeric.Congruences;
@@ -9,11 +10,13 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
+import souther.compiler.values.ValueSet;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -666,21 +669,28 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      */
     public static Border at(BoundaryTarget target, LineOrigin origin, NumericDomain.Bounds within,
                             ExactAnswer<List<Parting>> parted, NarrowedBounds narrowed) {
-        return at(target, origin, within, null, parted, narrowed);
+        return at(target, origin, within, null, ValueSet.ANY, parted, narrowed);
     }
 
     /**
      * The same, told the class of whole numbers the declarations leave the quantity's value in, or
-     * null where they leave it no class.
+     * null where they leave it no class, and the values the position's rules admit.
      *
-     * <p>The ends of a range say nothing of the numbers between them, so a point inside the range
-     * that is not of the class is one the rules refuse all the same.
+     * <p>The ends of a range say nothing of the values between them, so a point inside the range
+     * that is not of the class, or not among the values the rules name, is one the rules refuse all
+     * the same — and so is a run holding none of those values. {@code "a"} and {@code "b"} have
+     * {@code "aa"} between them on the order of the strings, and none of a position holding one of
+     * the two.
+     *
+     * @param admits what the position's rules leave its value, where the quantity is that value;
+     *               every value where it is anything else, since a set of a position's values says
+     *               nothing about a number taken of them
      */
     public static Border at(BoundaryTarget target, LineOrigin origin, NumericDomain.Bounds within,
-                            Congruences class_, ExactAnswer<List<Parting>> parted,
-                            NarrowedBounds narrowed) {
+                            Congruences class_, ValueSet admits,
+                            ExactAnswer<List<Parting>> parted, NarrowedBounds narrowed) {
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
-        Admissible admissible = new Admissible(reach, class_);
+        Admissible admissible = new Admissible(reach, class_, admits);
         LevelSpace space = target.levels();
         Level cut = target.at();
         if (!reaches(cut, () -> seamOf(space, cut, origin), origin.lineFacts().claim(),
@@ -733,7 +743,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                 case ExactAnswer.Held<Arranged> held ->
                         runOf(space, runBeside(held.value().arrangement(), held.value().mine(), side),
                                 held.value().arrangement().emptyBeside(held.value().mine(), side),
-                                levelAgainstTheLineOn(demands, origin, side), side);
+                                levelAgainstTheLineOn(demands, origin, side), side, admissible);
             });
         }
         return new Border(target, origin, demands, leftNothing(space, cut, origin, ends));
@@ -1212,16 +1222,24 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * in is not among the runs ({@code emptyRun} is it); where there is not even that, nothing but
      * the line is there to have settled it.
      *
+     * <p>The order is asked after the values the rules name. A run the order has values in can hold
+     * none the position takes, and that is the rules refusing it as they refuse a point.
+     *
      * @param run      the run on this side the rules leave something in, or null
      * @param emptyRun the run on this side the rules leave nothing in, or null
      */
     private static PointAnswer runOf(LevelSpace space, QuantityArrangement.Run run,
-                                     QuantityArrangement.Run emptyRun, Level except, Towards away) {
+                                     QuantityArrangement.Run emptyRun, Level except, Towards away,
+                                     Admissible reach) {
         if (run == null) {
             return new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE,
                     emptyRun == null ? List.of() : emptyRun.endsAt(away));
         }
         Criterion.Within inside = new Criterion.Within(run.values(), except, away);
+        if (inside.region().parts().stream().allMatch(reach::admitsNothingIn)) {
+            return new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE,
+                    run.endsAt(away));
+        }
         // What the run is owed to, from the same reading that said what it asks: the line this point
         // is named for is the border's own, and the far side is where the run stops — which is the
         // end lying the way the run does.
@@ -1349,26 +1367,54 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     /**
-     * What the rules leave a quantity's value, as far as they were read: the range it runs in and
-     * the class of whole numbers it is held to.
+     * What the rules leave a quantity's value, as far as they were read: the range it runs in, the
+     * class of whole numbers it is held to, and the values they name.
      *
-     * <p>Both are consequences of the declarations, so a number outside either is one the rules
-     * refuse. A number inside both is not shown to be a value the rules leave — another rule may
-     * refuse it — which is why this is asked only for the refusal ({@link #admits}) and never read
-     * as the presence of a row.
+     * <p>All three are consequences of the declarations, so a value outside any of them is one the
+     * rules refuse. A value inside all three is not shown to be a value the rules leave — another
+     * rule may refuse it, and the values named are only what the rules that were read name — which
+     * is why this is asked only for the refusal ({@link #admits}, {@link #admitsNothingIn}) and
+     * never read as the presence of a row.
      *
      * @param bounds the range the value runs in
      * @param necessary the class every value is of, or null where none is known
+     * @param values the values the position's rules admit
      */
-    private record Admissible(NumericDomain.Bounds bounds, Congruences necessary) {
+    private record Admissible(NumericDomain.Bounds bounds, Congruences necessary,
+                              ValueSet values) {
 
-        /** Whether a row may be written at {@code level} as far as these two say. */
+        /** Whether a row may be written at {@code level} as far as these three say. */
         boolean admits(Level level) {
+            if (level instanceof Level.OnACarrier on && !on.of().admitted(values, on.at())) {
+                return false;
+            }
             ExactRatio number = level.asANumber();
             if (number == null) {
                 return bounds.admits(level.asAPlace());
             }
             return bounds.admits(number) && inTheClass(number);
+        }
+
+        /**
+         * Whether the values named leave nothing in {@code part}, so far as that is said without
+         * building anything.
+         *
+         * <p>Asked of the order the run's ends are on, and of nothing where neither end is on one: a
+         * run with no end holds every value there is, and the rules naming none is a declaration
+         * refused before anything here reads it.
+         */
+        boolean admitsNothingIn(LevelInterval part) {
+            Carrier carrier = carrierOf(part.low());
+            if (carrier == null) {
+                carrier = carrierOf(part.high());
+            }
+            OrderedInterval run = carrier == null ? null : LevelRealizer.runOf(part, carrier);
+            return run != null && carrier.admitsNothingIn(values, run);
+        }
+
+        private static Carrier carrierOf(Bound end) {
+            return end != null && end.at().written() instanceof Level.OnACarrier on ? on.of()
+                    : null;
         }
 
         private boolean inTheClass(ExactRatio number) {
@@ -1452,7 +1498,8 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // arrangement at all and the row away from its line came back refused.
         Level against = against(on) != null ? against(on) : cut;
         demands.put(new DomainPoint.InTheRegion(kept),
-                runOf(space, leaves.endmost(kept), leaves.emptyEndmost(kept), against, kept));
+                runOf(space, leaves.endmost(kept), leaves.emptyEndmost(kept), against, kept,
+                        admissible));
         demands.put(new DomainPoint.InTheRegion(kept.opposite()),
                 new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE, List.of()));
     }

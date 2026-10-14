@@ -16,6 +16,7 @@ import souther.compiler.numeric.DateTimes;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
+import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -223,7 +224,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return p.axes().stream()
                 .flatMap(axis -> Partitions.bordersOf(axis, reading,
-                        reading.runsBetween(axis.term()), new LinesRead()).stream())
+                        reading.runsBetween(axis.term()), ValueSet.ANY, new LinesRead()).stream())
                 .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                         .filter(role -> border.demand(role).criterion() != null)
                         .map(role -> role + " "
