@@ -4915,6 +4915,7 @@
               "axis",
               "path",
               "classes",
+              "use",
               "status"
             ],
             "additionalProperties": false,
@@ -4979,6 +4980,14 @@
                   "type": "string"
                 },
                 "description": "The classes a row can be written at: what the model divides this position into, less what its own rules refuse."
+              },
+              "use": {
+                "enum": [
+                  "read",
+                  "not_read",
+                  "not_known"
+                ],
+                "description": "Whether anything the behavior states — its body or a clause of it — reads the value at this position. `not_read` only where every one of them was read and none reads the value, a field beside it being read off the value it sits under not reading it. A row is owed at each of `classes` unless this is `not_read`, where a row at one class gives the answer a row at any other gives. `classes` and `covered` are the same either way. Not whether the body tells the classes apart: a value copied into the answer is `read`."
               },
               "covered": {
                 "type": "array",

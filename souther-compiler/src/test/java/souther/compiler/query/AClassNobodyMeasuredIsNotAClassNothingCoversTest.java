@@ -41,7 +41,9 @@ class AClassNobodyMeasuredIsNotAClassNothingCoversTest {
 
             behavior pick : (c: Colour) -> Ok
 
-            let pick (c) = Ok
+            let pick (c) =
+                match c with
+                    | Red | Green | Blue -> Ok
 
             example pick
                 | "red" : (Red) -> Ok
@@ -60,7 +62,9 @@ class AClassNobodyMeasuredIsNotAClassNothingCoversTest {
 
             behavior pick : (c: Colour) -> Ok
 
-            let pick (c) = Ok
+            let pick (c) =
+                match c with
+                    | Red | Green | Blue -> Ok
             """;
 
     /**

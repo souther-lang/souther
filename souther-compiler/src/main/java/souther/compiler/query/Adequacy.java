@@ -69,7 +69,6 @@ import souther.compiler.check.StatedContract;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.DerivedSymbols;
-import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
@@ -100,9 +99,14 @@ import souther.compiler.partition.WhereACaseOfAnInputIsOwed;
 import souther.compiler.partition.PointRole;
 import souther.compiler.inputs.AnInputRead;
 import souther.compiler.inputs.DeclaredInput;
+import souther.compiler.inputs.InputDemand;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.InputUses;
+import souther.compiler.core.Contract;
+import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.types.BindingId;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.FixtureTemplate;
@@ -816,29 +820,29 @@ public final class Adequacy {
             Answer<Hir.FnDef> fn = db.ask(new Bodies.SettledFn(module, behavior));
             SpecImplementation.Implemented implemented = fn.present()
                     ? SpecImplementation.align(spec.value(), fn.value()) : null;
-            // What this behavior states about its own answer, which names locations of an input as
-            // readily as a body does and reaches them by the same paths.
-            Answer<StatedContract> stated = db.ask(new Bodies.Stated(module, behavior));
+            // What this behavior's body and clauses name, so the reading is closed over the paths
+            // its measurement names as well as the ones the enumeration finds. Asked as the reading
+            // is made and never after it: one that grew a position when somebody looked one up
+            // would answer a question differently depending on what had been asked before it.
+            Answer<InputUses.Walked> named = db.ask(new ReadsOf(module, behavior));
+            if (!named.present()) {
+                return Answer.absent();
+            }
             return Answer.of(InputDomain.of(declared.value(),
                     implemented == null ? List.of() : implemented.declaredInputs(),
                     RuleReadingContext.of(reading.value(), db.ask(new Front.Reading()).value(),
                             db.readings()),
-                    // What this behavior's body reads, so the reading is closed over the paths its
-                    // measurement names as well as the ones the enumeration finds. Asked as the
-                    // reading is made and never after it: one that grew a position when somebody
-                    // looked one up would answer a question differently depending on what had been
-                    // asked before it.
-                    demandOf(db, module, spec.value(), implemented, scope.value(), stated.value(),
-                            DeclaredInput.of(declared.value(), reading.value())),
+                    named.value().demand(),
                     dependenciesOf(spec.value())));
         }
     }
 
     /**
-     * The finite input paths one behavior's measurement is going to name.
+     * The finite input paths one behavior's measurement is going to name, and which positions of
+     * its input what it states reads ({@link InputUses}).
      *
      * <p>Read off the body with a path environment and nothing else — no reading of the input, which
-     * is what is being built. Which location a name stands for is settled by the parameters, the
+     * is what the paths are for. Which location a name stands for is settled by the parameters, the
      * bindings on the way and the case an arm selects; whether a row is ever written there is the
      * reading's answer, asked of the reading afterwards about the path this produced.
      *
@@ -850,38 +854,99 @@ public final class Adequacy {
      * <p>Spelled the way the reading spells the same locations, which is what the declarations put
      * under the parameters says ({@link DeclaredInput}). A path the reading would not spell is one it
      * holds no position under, whatever position it means.
+     *
+     * <p>One walk of each tree for both answers, so every node is placed once. What is read is not
+     * known where a tree is missing: a behavior nothing implements reads what its implementation
+     * will, and a clause not made into an expression may read anything. The paths are named all the
+     * same, off the trees there are.
      */
-    private static souther.compiler.inputs.InputDemand demandOf(
-            Db db, String module, Hir.SpecBehavior spec,
-            SpecImplementation.Implemented implemented, Symbols symbols,
-            souther.compiler.check.StatedContract stated, DeclaredInput declared) {
-        return statedIn(stated, symbols, Shapes.declarationNewtypes(db), declared,
-                bodyIn(db, module, spec, implemented, symbols, declared));
+    public record ReadsOf(String module, String behavior) implements Key<InputUses.Walked> {
+
+        @Override
+        public Answer<InputUses.Walked> compute(Db db) {
+            Answer<Hir.SpecBehavior> spec = db.ask(new Bodies.Spec(module, behavior));
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
+            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, module);
+            Answer<DeclaredSig> declared = db.ask(new Bodies.DeclaredSignature(module, behavior));
+            if (!spec.present() || !scope.present() || !declared.present() || !reading.present()) {
+                return Answer.absent();
+            }
+            Answer<Hir.FnDef> fn = db.ask(new Bodies.SettledFn(module, behavior));
+            SpecImplementation.Implemented implemented = fn.present()
+                    ? SpecImplementation.align(spec.value(), fn.value()) : null;
+            // What this behavior states about its own answer, which names locations of an input as
+            // readily as a body does and reaches them by the same paths.
+            StatedTrees trees = treesOf(db, module, spec.value(), implemented,
+                    db.ask(new Bodies.Stated(module, behavior)).value(),
+                    DeclaredInput.of(declared.value(), reading.value()));
+            DeclarationNewtypes newtypes = Shapes.declarationNewtypes(db);
+            InputDemand demand = InputDemand.NONE;
+            InputUses uses = InputUses.NOTHING;
+            for (StatedTree each : trees.trees()) {
+                InputUses.Walked walked = InputUses.of(each.expression(), each.names(),
+                        each.parameters(), scope.value(), newtypes);
+                demand = demand.and(walked.demand().paths());
+                uses = uses.and(walked.uses());
+            }
+            return Answer.of(new InputUses.Walked(demand,
+                    trees.all() ? uses : InputUses.NOT_KNOWN));
+        }
     }
 
-    /** The locations the implementation reads, or none where nothing implements the behavior. */
-    private static souther.compiler.inputs.InputDemand bodyIn(
+    /**
+     * One tree a behavior states, with the names it is read under and the bindings a value of the
+     * input enters it by.
+     */
+    private record StatedTree(Core expression, InputReads names, Set<BindingId> parameters) {}
+
+    /**
+     * The trees a behavior states: its body first, then each clause.
+     *
+     * @param all whether every tree there is to state was made: false where nothing implements the
+     *            behavior or a clause was not made into an expression
+     */
+    private record StatedTrees(List<StatedTree> trees, boolean all) {}
+
+    /** {@link StatedTrees} of one behavior. */
+    private static StatedTrees treesOf(
             Db db, String module, Hir.SpecBehavior spec,
-            SpecImplementation.Implemented implemented, Symbols symbols, DeclaredInput declared) {
+            SpecImplementation.Implemented implemented,
+            StatedContract stated, DeclaredInput declared) {
+        List<StatedTree> trees = new ArrayList<>();
+        StatedTree body = bodyIn(db, module, spec, implemented, declared);
+        if (body != null) {
+            trees.add(body);
+        }
+        // No contract is a behavior that states no clause, or one whose clauses could not be read,
+        // and only the first has every tree it states in hand.
+        boolean every = stated == null ? spec.ensures().isEmpty()
+                : statedIn(stated, declared, trees);
+        return new StatedTrees(List.copyOf(trees), body != null && every);
+    }
+
+    /** The implementation's tree, or null where nothing implements the behavior. */
+    private static StatedTree bodyIn(
+            Db db, String module, Hir.SpecBehavior spec,
+            SpecImplementation.Implemented implemented, DeclaredInput declared) {
         Bodies.CheckedBody checked = implemented == null ? null
                 : db.ask(new Bodies.CheckedBehavior(module, spec.name())).value();
         if (checked == null) {
-            return souther.compiler.inputs.InputDemand.NONE;
+            return null;
         }
         // Which declared input each binder stands for, asked of the reading that divides an
         // implementation's parameters rather than measured off the front of its list.
-        Map<souther.compiler.types.BindingId, String> parameters = new LinkedHashMap<>();
+        Map<BindingId, String> parameters = new LinkedHashMap<>();
         for (SpecImplementation.ParameterBinding.AnInput input : implemented.declaredInputs()) {
-            souther.compiler.types.BindingId binding = input.written().binder().binding();
+            BindingId binding = input.written().binder().binding();
             if (binding != null) {
                 parameters.put(binding, input.declared().name());
             }
         }
-        return souther.compiler.inputs.InputDemand.of(checked.body(),
+        return new StatedTree(checked.body(),
                 InputReads.ofParameters(parameters, declared, checked.elements(),
                         ValueDefinitions.of(checked.analysis(), Shapes.declarationNewtypes(db)),
                         dependenciesOf(spec)),
-                symbols, Shapes.declarationNewtypes(db));
+                parameters.keySet());
     }
 
     /** The behaviors a row of {@code spec} stands in for, which are the ones it declares it
@@ -901,30 +966,31 @@ public final class Adequacy {
      *
      * <p>The parameters under the bindings the declaration gave them, which is not what a body binds:
      * a clause names them where it was written.
+     *
+     * @return whether every clause was made into an expression
      */
-    private static souther.compiler.inputs.InputDemand statedIn(
-            souther.compiler.check.StatedContract stated, Symbols symbols,
-            souther.compiler.check.DeclarationNewtypes newtypes, DeclaredInput declared,
-            souther.compiler.inputs.InputDemand demand) {
-        if (stated == null || stated.isEmpty()) {
-            return demand;
+    private static boolean statedIn(StatedContract stated, DeclaredInput declared,
+                                    List<StatedTree> out) {
+        if (stated.isEmpty()) {
+            return true;
         }
-        Map<souther.compiler.types.BindingId, String> parameters = new LinkedHashMap<>();
-        for (souther.compiler.core.Contract.Param param : stated.params()) {
+        Map<BindingId, String> parameters = new LinkedHashMap<>();
+        for (Contract.Param param : stated.params()) {
             parameters.putIfAbsent(param.binding(), param.name());
         }
         InputReads names = InputReads.ofWhatIsDeclared(parameters, declared);
-        souther.compiler.inputs.InputDemand out = demand;
-        for (souther.compiler.check.StatedContract.StatedRule rule : stated.rules()) {
-            for (souther.compiler.check.StatedContract.Conjunct conjunct : rule.conjuncts()) {
-                souther.compiler.core.Core said = conjunct.stated().orNull();
-                if (said != null) {
-                    out = out.and(souther.compiler.inputs.InputDemand
-                            .of(said, names, symbols, newtypes).paths());
+        boolean every = true;
+        for (StatedContract.StatedRule rule : stated.rules()) {
+            for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
+                Core said = conjunct.stated().orNull();
+                if (said == null) {
+                    every = false;
+                } else {
+                    out.add(new StatedTree(said, names, parameters.keySet()));
                 }
             }
         }
-        return out;
+        return every;
     }
 
     /**
@@ -2190,8 +2256,13 @@ public final class Adequacy {
             } else {
                 body = BodyInputReading.withoutABody(subject.axes().axes());
             }
+            // And whether anything the behavior states reads each position, which is what says
+            // whether a row at each of its classes checks anything. Not known where it was not
+            // read, and owed then as a read position is.
+            InputUses.Walked read = db.ask(new ReadsOf(name, spec.name())).value();
             return Coverages.of(subject, seen,
-                    db.ask(new Front.Adequacy()).value().measures(), body);
+                    db.ask(new Front.Adequacy()).value().measures(), body,
+                    read == null ? InputUses.NOT_KNOWN : read.uses());
         }
     }
 
@@ -7339,7 +7410,7 @@ public final class Adequacy {
                         db.ask(new Unanswered(name, behavior.name())).value();
                 signatureFindings(behavior.name(),
                         signatures == null ? null : signatures.get(behavior.name()),
-                        answersNothing, out);
+                        divided, answersNothing, out);
                 partitionFindings(behavior, divided,
                         accounts == null ? null : accounts.get(behavior.name()),
                         readings == null ? List.of()
@@ -7537,9 +7608,12 @@ public final class Adequacy {
          * <p>Where a case of an input is owed is the evidence's own answer and is asked of it. The
          * measure knows both halves — which input it is of, and whether the behavior has a position
          * of its own — so a finding worked out here would be the second reading of one rule.
+         *
+         * <p>And where it has one, whether that position is owed a row per class is the classes
+         * measure's ({@code divided}), which is null where there is none to ask.
          */
         static void signatureFindings(String behavior,
-                                      SignatureEvidence signature,
+                                      SignatureEvidence signature, PartitionEvidence divided,
                                       WhereNothingIsAnswered answersNothing, List<Finding> out) {
             if (signature == null || signature.counted().made().isEmpty()) {
                 return;
@@ -7594,6 +7668,10 @@ public final class Adequacy {
                     // the body answers nothing at is one every row of which is refused.
                     WhereACaseOfAnInputIsOwed owed =
                             signature.owedAt(behavior, input.at(), missing);
+                    if (divided != null && owed instanceof ObligationIdentity.OfAClass(var at)
+                            && !divided.owesARowPerClassAt(at.at())) {
+                        continue;
+                    }
                     About about = new About.ACaseNoRowAppliesItTo(input, missing, owed);
                     out.add(owed instanceof ObligationIdentity.OfAClass(var at)
                             ? Finding.by(behavior, input.cases(), about, ObligationDisposition
@@ -7643,7 +7721,10 @@ public final class Adequacy {
                 if (axis.reached().made().isEmpty()) {
                     continue;
                 }
-                for (PartitionEvidence.AxisClass missing : axis.uncovered()) {
+                // What is owed and not only what no row is in: a class at a position nothing
+                // reads is owed no row, and the report says beside the count why it is not asked
+                // for. Over a measurement that was made these are the classes no row is in.
+                for (PartitionEvidence.AxisClass missing : axis.owed()) {
                     out.add(Finding.by(behavior.name(), axis.reached(),
                             new About.AClassNoRowIsIn(missing),
                             ObligationDisposition.openOn(answersNothing.everyRowAt(

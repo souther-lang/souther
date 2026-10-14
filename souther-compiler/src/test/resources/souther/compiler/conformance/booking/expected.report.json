@@ -1521,6 +1521,7 @@
             "extent" : "complete"
           },
           "classes" : [ "voucher/= spring", "voucher//= spring" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "unavailable",
@@ -1532,6 +1533,7 @@
             "extent" : "complete"
           },
           "classes" : [ "party/1 <= x <= 4", "party/4 < x <= 8" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "unavailable",
@@ -3076,6 +3078,7 @@
             "extent" : "complete"
           },
           "classes" : [ "ticket/String.startsWith(\"w-\", x)", "ticket/not String.startsWith(\"w-\", x)" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "unavailable",
@@ -3087,6 +3090,7 @@
             "extent" : "complete"
           },
           "classes" : [ "party/1 <= x <= 4", "party/4 < x <= 8" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "unavailable",

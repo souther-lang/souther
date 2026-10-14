@@ -526,12 +526,18 @@ input or an expectation that could not be built. Where such rows are all that co
 counted as met, that line is marked `~` under its measure with the rows named: the count has it
 only through them. Correcting only the answer a row states leaves where it goes as it was, so a mark
 is what the rows contribute and not always what fixing them costs. Something another row covers as
-well is not marked, and that
-other row need not be one that holds: a row waiting for its answer counts. The last line says how
-many are marked, which is the one sign a report narrowed with `--behavior` gives that a row of a
-behavior it does not show is all that covers something it does. In the JSON each behavior carries
-`rowsThatDoNotHold`, each row with its `failedAt`, and an obligation covered only by such rows
-carries `onlyWitnessedBy`.
+well is not marked, and that other row need not be one that holds: a row waiting for its answer
+counts. The last line says how many are marked, which is the one sign a report narrowed with
+`--behavior` gives that a row of a behavior it does not show is all that covers something it does.
+In the JSON each behavior carries `rowsThatDoNotHold`, each row with its `failedAt`, and an
+obligation covered only by such rows carries `onlyWitnessedBy`.
+
+A position nothing the behavior states reads — not its body and not a clause of it — is owed no row
+at any of its classes, since a row at one of them gives the answer a row at any other gives. Its
+classes stay in the count, and a `·` line says why none of them is asked for; in the JSON the
+position's `use` is `not_read`. A value the body reads without deciding anything on it, such as one
+copied into the answer, is read, and each of its classes is owed a row. So is a position whose
+reading this compiler could not settle.
 
 How many rows are waiting for a `let` is reported and never gated on:
 waiting is the normal state of a model being written, and an injected behavior's recorded row is the

@@ -40,7 +40,8 @@ class ACollectionWithNoRoomHasNoPositionInsideItTest {
             behavior only : (box: Box) -> Count
                 constructs Count
             let only (box) =
-                Count(List.length(List.filter(n -> n >= 5, box.xs.value)))
+                if box.flag then Count(List.length(List.filter(n -> n >= 5, box.xs.value)))
+                else Count(List.length(List.filter(n -> n >= 5, box.xs.value)))
             """;
 
     private static Adequacy.Filling generated() {

@@ -688,6 +688,7 @@
             "extent" : "complete"
           },
           "classes" : [ "None", "Some" ],
+          "use" : "not_read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -1864,6 +1865,7 @@
             "extent" : "partial"
           },
           "classes" : [ "among/0 <= x < 1", "among/1 <= x" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -2778,6 +2780,7 @@
             "extent" : "partial"
           },
           "classes" : [ "among/0 <= x < 1", "among/1 <= x" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -4067,6 +4070,7 @@
             "extent" : "complete"
           },
           "classes" : [ "通常", "速達", "冷蔵" ],
+          "use" : "not_known",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -4637,6 +4641,7 @@
             "extent" : "complete"
           },
           "classes" : [ "指示.重量/1 <= x <= 30000", "指示.重量/30000 < x" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -4649,6 +4654,7 @@
             "extent" : "complete"
           },
           "classes" : [ "通常", "速達", "冷蔵" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -4661,6 +4667,7 @@
             "extent" : "complete"
           },
           "classes" : [ "Time.hour(指示.集荷時刻)/0 <= x < 12", "Time.hour(指示.集荷時刻)/12 <= x <= 23" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -6588,6 +6595,7 @@
             "extent" : "complete"
           },
           "classes" : [ "通常", "速達", "冷蔵" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -6600,6 +6608,7 @@
             "extent" : "complete"
           },
           "classes" : [ "Time.hour(指示.集荷時刻)/0 <= x < 12", "Time.hour(指示.集荷時刻)/12 <= x <= 23" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -8132,6 +8141,7 @@
             "extent" : "complete"
           },
           "classes" : [ "shelf.counts[*]/x < 3", "shelf.counts[*]/3 <= x" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -8744,6 +8754,7 @@
             "extent" : "complete"
           },
           "classes" : [ "shelf.counts[*]/x < 3", "shelf.counts[*]/3 <= x" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",

@@ -49,7 +49,9 @@ class CompileAdequacyWarningTest {
 
             let submit (kind, cost) = {
                 guard cost.value <= 100 else Waiting { cost = cost }
-                Submitted { cost = cost }
+                match kind with
+                    | Domestic -> Submitted { cost = cost }
+                    | Overseas -> Submitted { cost = cost }
             }
 
             example submit
