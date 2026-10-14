@@ -49,9 +49,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * meaning this compiler did not read, unless a part of it was one.
  *
  * <p>Three readers: what a row is asked ({@link DemandReading#asked}), the column of a decision
- * a condition is ({@link DecisionMeanings#columnOf}), and whether the rules of the input leave a
- * way through it ({@link WhatTheDeclarationsLeave#admits}). What none of them may do is say "not
- * read" of a statement that was read to the end: that would be a reader's shortfall passed off as
+ * a condition is ({@link DecisionMeanings#columnOf}), and whether the declarations of the input
+ * prove no way through it ({@link WhatTheDeclarationsLeave#whetherRuledOut}). What none of them may
+ * do is say "not read" of a statement that was read to the end: that would be a reader's shortfall passed off as
  * the reading's, and a statement read to the end is the reading's whole answer.
  *
  * <p>The partition is the fourth, and is held to the same where it reads: off the constructs a

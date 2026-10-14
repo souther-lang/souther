@@ -40,8 +40,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * knows — and a fact about a domain is one a model can run into. So each has a behavior here that
  * the reader whose domain it is declines for it: the readers of what a row is asked
  * ({@link DemandReading#asked}, {@link DecisionMeanings#columnOf},
- * {@link WhatTheDeclarationsLeave#admits}) for the input's words, and the walk of a path, through
- * what it answers about the arms past a condition, for what a path knows.
+ * {@link WhatTheDeclarationsLeave#whetherRuledOut}) for the input's words, and the walk of a path,
+ * through what it answers about the arms past a condition, for what a path knows.
  *
  * <p><b>Total over the limits, by the enum and not by a list here.</b> A limit added without a model
  * is a failure, which is the question put to whoever added it: a limit no model reaches is one to
