@@ -661,15 +661,22 @@ final class Witnesses {
         List<FixtureTemplate> keys = keyProposals.values();
         List<FixtureTemplate> values = valueProposals.values();
         List<Step> out = new ArrayList<>();
-        // In front of every pair, because every key proposal is put beside every value proposal:
-        // a proposal a figure kept out is one each map would have been built around.
-        CompositionShortfall proposed = keyProposals.met().and(valueProposals.met());
-        if (!proposed.nothing()) {
-            out.add(new Halted(proposed));
-        }
+        // Where each side's proposals were stopped, by the proposal they stand in front of: met
+        // where the walk first comes to a pair holding that proposal, which is the pair a proposal
+        // a figure kept out would have stood in.
+        List<CompositionShortfall> keysStopped = stopsBefore(keyProposals);
+        List<CompositionShortfall> valuesStopped = stopsBefore(valueProposals);
         if (keys.isEmpty() || values.isEmpty()) {
+            // Nothing to pair, so every proposal either side would have had is one no map is
+            // built of.
+            CompositionShortfall met = keyProposals.met().and(valueProposals.met());
+            if (!met.nothing()) {
+                out.add(new Halted(met));
+            }
             return new Built(out);
         }
+        boolean[] keyReached = new boolean[keys.size()];
+        boolean[] valueReached = new boolean[values.size()];
         int pairs = 0;
         // Every pair, nearest first. A key's rules and a value's are answered together or not at all —
         // the pair is inside one position, so no search outside can put a key's second proposal beside
@@ -699,6 +706,14 @@ final class Witnesses {
                 if (keysFrom.get(i) == null) {
                     keysFrom.set(i, distinctFrom(keys.get(i), keyValues, least));
                 }
+                if (!keyReached[i]) {
+                    keyReached[i] = true;
+                    halt(out, keysStopped.get(i));
+                }
+                if (!valueReached[apart - i]) {
+                    valueReached[apart - i] = true;
+                    halt(out, valuesStopped.get(apart - i));
+                }
                 FixtureTemplate value = values.get(apart - i);
                 List<FixtureTemplate> entries = new ArrayList<>();
                 for (FixtureTemplate key : keysFrom.get(i).values()) {
@@ -715,8 +730,40 @@ final class Witnesses {
         if (stopped) {
             out.add(new Halted(CompositionShortfall.of(
                     List.of(CompositionBudget.PAIRINGS_BUILT_AT_ONCE))));
+        } else {
+            // Every pair walked, so a proposal stopped past the last of either side is one the walk
+            // would have gone on to.
+            halt(out, keysStopped.getLast());
+            halt(out, valuesStopped.getLast());
         }
         return new Built(out);
+    }
+
+    /** A step stopped by {@code met}, where it met something. */
+    private static void halt(List<Step> out, CompositionShortfall met) {
+        if (!met.nothing()) {
+            out.add(new Halted(met));
+        }
+    }
+
+    /**
+     * What stopped {@code proposals} in front of each of its values, by the value's place, and
+     * last what stopped it past the last of them.
+     */
+    private static List<CompositionShortfall> stopsBefore(Proposals proposals) {
+        List<CompositionShortfall> out = new ArrayList<>();
+        CompositionShortfall here = CompositionShortfall.NONE;
+        for (Proposals.Entry entry : proposals.entries()) {
+            switch (entry) {
+                case Proposals.Stopped(CompositionShortfall met) -> here = here.and(met);
+                case Proposals.Offered _ -> {
+                    out.add(here);
+                    here = CompositionShortfall.NONE;
+                }
+            }
+        }
+        out.add(here);
+        return out;
     }
 
     /**

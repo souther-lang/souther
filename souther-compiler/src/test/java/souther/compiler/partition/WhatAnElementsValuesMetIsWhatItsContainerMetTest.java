@@ -88,17 +88,19 @@ class WhatAnElementsValuesMetIsWhatItsContainerMetTest {
     }
 
     /**
-     * One element short of the figure is built.
+     * One element short of the figure is built — and says the figure met in front of its second
+     * element.
      *
-     * <p>What it met is not nothing, and says so: the values of {@code Near} walked one after
-     * another are a list of sixty-four and then one of sixty-five, which the figure stops, so the
-     * second element is one taken in place of the value the figure kept out.
+     * <p>The values of {@code Near} walked one after another are a list of sixty-four and then one
+     * of sixty-five, which the figure stops, so the second element is one taken in place of the
+     * value the figure kept out. Built, and not built of everything the walk would have offered.
      */
     @Test
-    void aSetOfValuesAtTheFigureIsBuilt() {
+    void aSetOfValuesAtTheFigureIsBuiltAndSaysWhatItsSecondElementStoodIn() {
         Proposals made = ofSize(new Type.SetOf(named("Near")), 2);
 
         assertFalse(made.values().isEmpty(), "two lists of sixty-four are two values");
+        assertEquals(ELEMENTS, made.met().figures());
     }
 
     /** A type with too few values is the model's answer, and nothing of this compiler's. */
