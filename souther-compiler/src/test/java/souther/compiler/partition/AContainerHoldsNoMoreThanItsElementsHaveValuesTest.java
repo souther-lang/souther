@@ -48,7 +48,34 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
             data Payload = Plain | Tagged
             data Short = List<Bool>
               invariant List.length(value) <= 2
+            data Basket = { choices: List<Service> }
+              invariant List.length(choices) == 3
+              invariant List.allDistinctBy(x -> x, choices)
+            data Order = List<Service>
+              invariant List.length(value) == 3
+              invariant List.allDistinctBy(x -> x, value)
             """;
+
+    /**
+     * A list kept apart is told apart by its order as well, so the lists of the three cases each
+     * once are every order of them, and a set of all of them is built.
+     *
+     * <p>Whether the list is kept apart by the record holding it or by a name it wears is one
+     * question, read the same way as the list built at a count reads it.
+     */
+    @Test
+    void aSetOfListsKeptApartIsBuiltFromEveryOrderOfThem() {
+        for (String type : List.of("Basket", "Order")) {
+            BorderAssessment line = lineOf(MODEL.formatted(TYPES, "Set<" + type + ">",
+                    "Set.size(s)", 6), "p", "6");
+
+            assertTrue(line.items().get(new DomainPoint.AtTheLine())
+                    instanceof ItemAssessment.Owed owed
+                    && owed.searches().each().stream()
+                            .anyMatch(ItemAssessment.Attempt.Certified.class::isInstance),
+                    () -> type + " " + line.items().get(new DomainPoint.AtTheLine()));
+        }
+    }
 
     private static final String MODEL = """
             module p

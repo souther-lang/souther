@@ -1122,10 +1122,14 @@ final class Witnesses {
                 // Then every other content, where the elements are apart as wholes or not at all.
                 // One kept apart at a field of its elements holds a few its rules choose, and an
                 // arrangement of the element's values would offer some that share the field.
-                if (out.size() < many && apart.stream().allMatch(List::isEmpty)) {
+                // Read with the rules of the names the collection wears, as the value built at
+                // each size reads them: a list a newtype keeps apart is apart here too.
+                List<List<String>> keptApart = view.shape() instanceof Shape.Sequence
+                        ? ElementsKeptApart.at(view, apart, reading) : apart;
+                if (out.size() < many && keptApart.stream().allMatch(List::isEmpty)) {
                     Set<String> written = new HashSet<>();
                     out.forEach(each -> written.add(each.text()));
-                    arrange(view.shape(), !apart.isEmpty(), range, many, reading, inside,
+                    arrange(view.shape(), !keptApart.isEmpty(), range, many, reading, inside,
                             content -> {
                                 FixtureTemplate each =
                                         WornNames.under(view.wrappers(), content, source);
@@ -1241,8 +1245,8 @@ final class Witnesses {
     /**
      * Every content of a collection of {@code shape} the count range leaves, smallest first,
      * handed to {@code offer} until it answers false: each few of the element's values a set can
-     * hold, each run of them a list can — each few, where its elements are apart — and each few
-     * of the keys with each run of values for a map.
+     * hold, each run of them a list can, and each few of the keys with each run of values for a
+     * map — where a list's elements or a map's values are apart, each order of each few.
      *
      * <p>Arranged from the first {@code many} values of what it holds, which is enough to tell
      * {@code many} contents apart. Proposals and not built values: a rule over what the collection
@@ -1255,35 +1259,38 @@ final class Witnesses {
                                 int many, RuleReadingContext reading, Set<TypeSymbol> inside,
                                 Predicate<FixtureTemplate> offer) {
         int least = Math.max(range.least(), 0);
+        // What tells two contents apart is the shape's: a set is the few it holds, and a list or
+        // what a map files under its keys is in an order as well.
+        Picking runs = apart ? Picking.AN_ORDER_OF_A_FEW : Picking.A_RUN;
         switch (shape) {
             case Shape.Sequence(Shape.Sequence.Kind kind, Type element) -> {
                 List<FixtureTemplate> values = distinctValuesOf(element, many, reading, inside);
-                boolean once = apart || kind == Shape.Sequence.Kind.SET;
+                Picking picking = kind == Shape.Sequence.Kind.SET ? Picking.A_FEW : runs;
                 for (int size = least; size <= range.most(); size++) {
-                    if ((once && size > values.size()) || (values.isEmpty() && size > 0)
-                            || pastTheElements(size) != null) {
+                    if (!picking.fits(size, values.size()) || pastTheElements(size) != null) {
                         return;
                     }
-                    int[] at = first(size, once);
+                    int[] at = picking.first(size);
                     do {
                         if (!offer.test(FixtureTemplate.collection(picked(values, at)))) {
                             return;
                         }
-                    } while (next(at, values.size(), once));
+                    } while (picking.next(at, values.size()));
                 }
             }
             case Shape.Mapping(Type key, Type value) -> {
                 List<FixtureTemplate> keys = distinctValuesOf(key, many, reading, inside);
                 List<FixtureTemplate> values = distinctValuesOf(value, many, reading, inside);
-                for (int size = least; size <= range.most() && size <= keys.size(); size++) {
-                    if ((values.isEmpty() && size > 0) || (apart && size > values.size())
+                for (int size = least; size <= range.most(); size++) {
+                    if (!Picking.A_FEW.fits(size, keys.size())
+                            || !runs.fits(size, values.size())
                             || pastTheElements(size) != null) {
                         return;
                     }
-                    int[] which = first(size, true);
+                    int[] which = Picking.A_FEW.first(size);
                     do {
                         List<FixtureTemplate> held = picked(keys, which);
-                        int[] to = first(size, apart);
+                        int[] to = runs.first(size);
                         do {
                             List<FixtureTemplate> entries = new ArrayList<>();
                             for (int i = 0; i < size; i++) {
@@ -1293,8 +1300,8 @@ final class Witnesses {
                             if (!offer.test(FixtureTemplate.collection(entries))) {
                                 return;
                             }
-                        } while (next(to, values.size(), apart));
-                    } while (nextFew(which, keys.size()));
+                        } while (runs.next(to, values.size()));
+                    } while (Picking.A_FEW.next(which, keys.size()));
                 }
             }
             case Shape.Scalar _, Shape.Product _, Shape.Sum _, Shape.Unit _, Shape.Optional _,
@@ -1312,61 +1319,123 @@ final class Witnesses {
         return out;
     }
 
-    /** The first of {@code size} places: nought upwards where no value is said twice, and nought
-     *  everywhere where one may be. */
-    private static int[] first(int size, boolean once) {
-        int[] at = new int[size];
-        for (int i = 0; once && i < size; i++) {
-            at[i] = i;
-        }
-        return at;
-    }
-
     /**
-     * {@code at} moved on to the next few of {@code n} values in order, each taken once and in
-     * the order the values come, or false where it was the last.
-     */
-    private static boolean nextFew(int[] at, int n) {
-        for (int i = at.length - 1; i >= 0; i--) {
-            if (at[i] < n - at.length + i) {
-                at[i]++;
-                for (int j = i + 1; j < at.length; j++) {
-                    at[j] = at[j - 1] + 1;
-                }
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * {@code at} moved on to the next of its kind, or false where it was the last: the next few
-     * where no value is said twice, and otherwise the next run, counting as a number does. Starts
-     * at {@code first(size, once)}.
+     * Which places of {@code n} values a content of {@code size} names, walked one after another.
      *
-     * <p>A few and not every order of them where no value is said twice. Two orders of one few
-     * are two lists, but the few alone are as many contents as are asked for, and walking every
-     * run to pass over the ones that say a value twice walks more of them the longer they are.
+     * <p>Two questions and not one: whether a value may be named twice, and whether the order
+     * they are named in tells two contents apart. A set answers no to both, a list free to repeat
+     * yes to both, and a list or a map's values kept apart no and yes — so each order of each few.
+     * Answered as one, a list kept apart would be walked as a set is, and of three values held
+     * three apart would offer one list where there are six.
+     *
+     * <p>Each step is as long as the content and passes nothing over, so a walk stopped at a
+     * number of contents costs that number of steps.
      */
-    private static boolean next(int[] at, int n, boolean once) {
-        return once ? nextFew(at, n) : nextRun(at, n);
-    }
+    private enum Picking {
 
-    /**
-     * {@code at} moved on to the next run of {@code n} values, counting as a number does, or false
-     * where it was the last.
-     */
-    private static boolean nextRun(int[] at, int n) {
-        int i = at.length - 1;
-        while (i >= 0 && at[i] == n - 1) {
-            at[i] = 0;
-            i--;
+        /** Each few, in the order the values come: a set's contents. */
+        A_FEW,
+
+        /** Each order of each few: a list's, or a map's values, kept apart. */
+        AN_ORDER_OF_A_FEW,
+
+        /** Each run, a value as often as it comes, counting as a number does: a list's. */
+        A_RUN;
+
+        /** Whether {@code size} places can be named among {@code n} values this way. */
+        boolean fits(int size, int n) {
+            return size == 0 || (n > 0 && (this == A_RUN || size <= n));
         }
-        if (i < 0) {
+
+        /** The first of {@code size} places: nought upwards where no value is named twice, and
+         *  nought everywhere where one may be. */
+        int[] first(int size) {
+            int[] at = new int[size];
+            for (int i = 0; this != A_RUN && i < size; i++) {
+                at[i] = i;
+            }
+            return at;
+        }
+
+        /** {@code at} moved on to the next of its kind among {@code n} values, or false where it
+         *  was the last. */
+        boolean next(int[] at, int n) {
+            return switch (this) {
+                case A_FEW -> nextFew(at, n);
+                // The next order of the same few, and past the last of them — which is the few
+                // the other way round — the first order of the next few.
+                case AN_ORDER_OF_A_FEW -> {
+                    if (nextOrder(at)) {
+                        yield true;
+                    }
+                    reverse(at);
+                    yield nextFew(at, n);
+                }
+                case A_RUN -> nextRun(at, n);
+            };
+        }
+
+        /** {@code at}, a few in the order the values come, moved on to the next few. */
+        private static boolean nextFew(int[] at, int n) {
+            for (int i = at.length - 1; i >= 0; i--) {
+                if (at[i] < n - at.length + i) {
+                    at[i]++;
+                    for (int j = i + 1; j < at.length; j++) {
+                        at[j] = at[j - 1] + 1;
+                    }
+                    return true;
+                }
+            }
             return false;
         }
-        at[i]++;
-        return true;
+
+        /** {@code at} moved on to the next order of the values it names, or false where it was
+         *  the last of them, which leaves them the other way round from the first. */
+        private static boolean nextOrder(int[] at) {
+            int i = at.length - 2;
+            while (i >= 0 && at[i] > at[i + 1]) {
+                i--;
+            }
+            if (i < 0) {
+                return false;
+            }
+            int j = at.length - 1;
+            while (at[j] < at[i]) {
+                j--;
+            }
+            swap(at, i, j);
+            for (int left = i + 1, right = at.length - 1; left < right; left++, right--) {
+                swap(at, left, right);
+            }
+            return true;
+        }
+
+        /** {@code at} the other way round. */
+        private static void reverse(int[] at) {
+            for (int left = 0, right = at.length - 1; left < right; left++, right--) {
+                swap(at, left, right);
+            }
+        }
+
+        private static void swap(int[] at, int i, int j) {
+            int held = at[i];
+            at[i] = at[j];
+            at[j] = held;
+        }
+
+        /** {@code at} moved on to the next run of {@code n} values. */
+        private static boolean nextRun(int[] at, int n) {
+            int i = at.length - 1;
+            while (i >= 0 && at[i] == n - 1) {
+                at[i] = 0;
+                i--;
+            }
+            if (i < 0) {
+                return false;
+            }
+            at[i]++;
+            return true;
+        }
     }
 
     /**
