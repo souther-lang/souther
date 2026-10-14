@@ -5558,12 +5558,14 @@
                     {
                       "description": "A point no row is owed at carries which point it is and why, and nothing else. Closed rather than listing what it may not have: the list was the keys of the owed side written a second time, and a field added to that side was a field somebody had to remember to forbid here. Two went unforbidden that way — `weakening`, which no measurement of a point owing no row can produce, and `writableBecause`, which is evidence about a row nobody is owed.",
                       "required": [
-                        "notOwed"
+                        "notOwed",
+                        "stops"
                       ],
                       "properties": {
                         "point": {},
                         "location": {},
-                        "notOwed": {}
+                        "notOwed": {},
+                        "stops": {}
                       },
                       "additionalProperties": false
                     },
@@ -5684,6 +5686,13 @@
                         "the_carrier_names_no_neighbour"
                       ],
                       "description": "Why no row is owed here, present exactly when one is not. `no_value_can_stand_there` is the model's own answer — nothing outside an invariant's bound can be constructed, so the points out there are excluded and counted out, a side one value wide has no `in` point for the same reason, and a count of a `Set<Bool>` past two has no value with no rule written. The word says that no value stands at the point and not what showed it: a type with few values, a rule on the type, a rule on a container's size and how many of an element's values meet a statement each show it, and two of them may show one point alike. `the_carrier_names_no_neighbour` is this language having no name for the value one step from the line, which a `Decimal`, a `DateTime` and a `String` do not — at a place, and at the difference two terms of a line between them stand at. The two ask different things of a reader — one is the model having settled the point and the other is a limit of this language — which is why the key is a word and not a flag."
+                    },
+                    "stops": {
+                      "type": "array",
+                      "description": "Where else the point was settled, present exactly when `notOwed` is: the far end of the empty run beside the line, or an end the rules leave the position at that refuses the value, each written as an obligation's `stops` is. Empty where the line alone settled it. With the line and `location` it is what tells this point from the same place of the same line left out elsewhere, and what a consumer joins it to `declarations[].excluded[].pointId` by. A set: the order carries no meaning.",
+                      "items": {
+                        "$ref": "#/$defs/obligationId/properties/stops"
+                      }
                     },
                     "relation": {
                       "type": "string",

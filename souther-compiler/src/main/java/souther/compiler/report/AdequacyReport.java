@@ -7052,7 +7052,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 switch (point.item()) {
                     // Why no row is owed, in the one word that says which of the two settled it.
                     // Absent, neither of them reads as anything but the report being short.
-                    case ItemAssessment.NotOwed not -> i.put("notOwed", word(not.reason()));
+                    case ItemAssessment.NotOwed not -> {
+                        i.put("notOwed", word(not.reason()));
+                        // And where else it was settled, which with the line and the location is
+                        // what tells this point from the same place left out elsewhere: written
+                        // from the point the border issues, as `declarations[].excluded` is.
+                        ArrayNode stops = i.putArray("stops");
+                        boundary.border().leftOutAt(point.at()).ifPresent(left -> left.point()
+                                .stops().forEach(end -> farEnd(stops.addObject(), end)));
+                    }
                     // Neither owed nor refused: the exact arithmetic could not hold what settling
                     // this point needed, so nothing here says which of the two it would have been.
                     case ItemAssessment.NotWorkedOut not -> i.put("notWorkedOut", word(not.why()));

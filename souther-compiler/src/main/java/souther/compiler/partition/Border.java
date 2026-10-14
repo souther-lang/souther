@@ -23,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -394,10 +395,12 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * holding one line twice. Neither is asking whether everything about the two values matches —
      * they are asking whether it is the same border, met in the same place, owing the same things.
      *
-     * <p><b>The demands and what they are owed for, and not what is written beside them.</b> Two
-     * readings can ask a row for the same values and owe them to different things — the run below a
-     * line the rules already stop the quantity at is owed to the line as well as to that end — so
-     * the demands alone would call two borders one. What settles where a run stops, on the other
+     * <p><b>The demands and the points they are told apart by, and not what is written beside
+     * them.</b> Two readings can ask a row for the same values and owe them to different things —
+     * the run below a line the rules already stop the quantity at is owed to the line as well as to
+     * that end — so the demands alone would call two borders one; and two can owe no row at one
+     * place for one reason and be settled in different places, which are two points no row is owed
+     * at ({@link NotOwedPoint}). What settles where a run stops, on the other
      * hand, is settled by the model, while who can move it is a fact about the reading's
      * surroundings and is no part of which border this is.
      *
@@ -416,20 +419,29 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             return false;
         }
         for (DomainPoint point : answers.keySet()) {
-            PointAnswer mine = answer(point);
-            PointAnswer also = other.answer(point);
-            // What a row here is owed for, as the set it is. Which of them a reading listed first is
-            // the order its arrangement was walked in, and reading that as part of the answer would
-            // put an accident of the derivation into the identity — which is the thing this method
-            // exists to keep out of it. One entry per basis is the answer's own invariant, so the
-            // set loses nothing.
-            if (!mine.demand().sameAs(also.demand())
-                    || !java.util.Set.copyOf(mine.bases()).equals(
-                            java.util.Set.copyOf(also.bases()))) {
+            if (!answer(point).demand().sameAs(other.answer(point).demand())) {
                 return false;
             }
         }
-        return true;
+        // And the points it is told apart by, as this border issues them: what a row is owed for
+        // and what no row is owed at, each the value the accounts are made of. Asked of the points
+        // rather than worked out again from the answers' parts, so the identity is written once —
+        // a second statement of it here is what a point added to the identity there is missing
+        // from. As sets, because which of them a reading met first is the order its arrangement
+        // was walked in; and without whose each is, which is a fact about the reading's
+        // surroundings and no part of which border this is.
+        return Set.copyOf(pointsOwed()).equals(Set.copyOf(other.pointsOwed()))
+                && Set.copyOf(pointsLeftOut()).equals(Set.copyOf(other.pointsLeftOut()));
+    }
+
+    /** The points a row is owed at, without whose each is. */
+    private List<BorderObligationPoint> pointsOwed() {
+        return owes().stream().map(OwedPoint::point).toList();
+    }
+
+    /** The points no row is owed at, without whose each is. */
+    private List<NotOwedPoint> pointsLeftOut() {
+        return leavesOut().stream().map(LeftOutPoint::point).toList();
     }
 
     /**
@@ -458,6 +470,12 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             }
         });
         return List.copyOf(out);
+    }
+
+    /** The one point at {@code point} no row is owed at, where no row is owed there
+     *  ({@link #leavesOut}). */
+    public Optional<LeftOutPoint> leftOutAt(DomainPoint point) {
+        return leavesOut().stream().filter(each -> each.point().point().equals(point)).findFirst();
     }
 
     /** The same over every point this line has, in the order the points are in. */

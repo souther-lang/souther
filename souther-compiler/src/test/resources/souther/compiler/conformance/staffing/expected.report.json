@@ -1791,7 +1791,8 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -1810,7 +1811,8 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
           "besides" : [ ],
@@ -1887,7 +1889,8 @@
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -1906,7 +1909,8 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
           "besides" : [ ],
@@ -2086,7 +2090,8 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -2105,7 +2110,8 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
           "besides" : [ ],
@@ -2182,7 +2188,8 @@
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -2201,7 +2208,8 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
           "besides" : [ ],
@@ -2275,7 +2283,8 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "the_carrier_names_no_neighbour"
+            "notOwed" : "the_carrier_names_no_neighbour",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -3008,7 +3017,8 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -3027,7 +3037,8 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
           "besides" : [ ],
@@ -3104,7 +3115,8 @@
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -3123,7 +3135,8 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
           "besides" : [ ],
@@ -4152,7 +4165,8 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -4171,7 +4185,8 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
           "besides" : [ ],
@@ -4248,7 +4263,8 @@
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -4267,7 +4283,8 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         } ],
         "obligations" : [ ],
