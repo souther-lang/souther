@@ -1786,18 +1786,24 @@ public final class Partitions {
      * Values of {@code record} no two of which are alike, up to {@code many} of them, or none
      * where no field of it has two values to differ at.
      *
-     * <p>Alike everywhere but one field, which is the first whose values are more than one. A
-     * record is apart from another wherever one field is, so a field is all a list kept apart as
-     * records needs — and the values there are what the record's rules leave the field
-     * ({@link FieldDomains.Held}), each written in and the rest composed against the rules as they
-     * then stand ({@link #composed}).
+     * <p>Alike everywhere but the first field whose values are more than one, where that field has
+     * as many as were asked for. A record is apart from another wherever one field is, so a field
+     * is all a list kept apart as records needs — and the values there are what the record's rules
+     * leave the field ({@link FieldDomains.Held}), each written in and the rest composed against
+     * the rules as they then stand ({@link #composed}).
+     *
+     * <p>Where it has fewer, every value found so far is taken on to the next field and written
+     * again with each of that field's values beside what it already holds. A record of a two-valued
+     * field and a three-valued one has six values, and stopping at the first field offered two of
+     * them, which a set of three such records could not be built from. Taken on only while fewer
+     * than {@code many} are found, so a record whose first field has enough is answered as before.
      *
      * @param rulesOn the name whose rules the fields are chosen against ({@link #rulesOver})
      */
-    static List<FixtureTemplate> differingAtAField(TypeSymbol.AtModule record,
-                                                   TypeSymbol.AtModule rulesOn, int many,
-                                                   RuleReadingContext reading,
-                                                   java.util.Set<TypeSymbol> expanding) {
+    static List<FixtureTemplate> differingAtItsFields(TypeSymbol.AtModule record,
+                                                      TypeSymbol.AtModule rulesOn, int many,
+                                                      RuleReadingContext reading,
+                                                      java.util.Set<TypeSymbol> expanding) {
         RuleReadingSource ruleSource = reading.source();
         if (expanding.contains(record)
                 || !(TypeView.shapeOf(Type.ref(record), ruleSource.inners(), ruleSource.symbols(),
@@ -1809,6 +1815,9 @@ public final class Partitions {
         java.util.Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
         inside.add(record);
         FieldDomains.Composing left = FieldDomains.of(rulesOn, reading).composing(Map.of());
+        // What each value found was written with, in the order found, keyed by how it is written.
+        Map<String, Map<String, FixtureTemplate>> found = new LinkedHashMap<>();
+        List<FixtureTemplate> out = new ArrayList<>();
         for (Map.Entry<String, Type> field : fields.entrySet()) {
             FieldDomains.ConstructionLimits limits = left.at(RuleKey.of(field.getKey()));
             List<FixtureTemplate> values = Witnesses.distinctValuesOf(field.getValue(), many,
@@ -1816,16 +1825,28 @@ public final class Partitions {
             if (values.size() < 2) {
                 continue;
             }
-            List<FixtureTemplate> out = new ArrayList<>();
-            for (FixtureTemplate value : values) {
-                out.addAll(composed(record, rulesOn, reading, expanding,
-                        Map.of(field.getKey(), value)));
+            List<Map<String, FixtureTemplate>> bases = found.isEmpty()
+                    ? List.of(Map.of()) : List.copyOf(found.values());
+            for (Map<String, FixtureTemplate> base : bases) {
+                for (FixtureTemplate value : values) {
+                    if (out.size() >= many) {
+                        return out;
+                    }
+                    Map<String, FixtureTemplate> given = new LinkedHashMap<>(base);
+                    given.put(field.getKey(), value);
+                    for (FixtureTemplate each : composed(record, rulesOn, reading, expanding,
+                            given)) {
+                        if (found.putIfAbsent(each.text(), given) == null) {
+                            out.add(each);
+                        }
+                    }
+                }
             }
-            if (out.size() > 1) {
+            if (out.size() >= many) {
                 return out;
             }
         }
-        return List.of();
+        return out.size() > 1 ? out : List.of();
     }
 
     /**

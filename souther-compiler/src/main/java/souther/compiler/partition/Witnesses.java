@@ -19,6 +19,7 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -1051,12 +1052,19 @@ final class Witnesses {
 
     /**
      * Values of {@code type} that differ in what they hold, up to {@code many} of them, under every
-     * name it wears: a record's at one of its fields ({@link Partitions#differingAtAField}) and a
+     * name it wears: a record's at its fields ({@link Partitions#differingAtItsFields}) and a
      * collection's in how many it holds, from the fewest its rules and {@code held} leave. Nothing
      * for a type that holds nothing of its own, whose values were asked for above.
      *
      * <p>Each built as a value of its position is, under the rules there, so what differs is a
      * value of the type and not a shape that carries a difference.
+     *
+     * <p>And what a value of the type may be beyond the one each of its kinds stands for: an
+     * optional's every value of what it holds, a sum's every value of each of its cases, and a set
+     * holding a different few of its element's values at one size. A set of such values is built
+     * from as many of them as it holds, and the one per kind the type divides into ran out at the
+     * number of kinds. Those for a set are proposals and not built values — a rule over what the
+     * set holds is the decoder's to apply — so they come after every size was built once.
      */
     private static List<FixtureTemplate> differing(Type type, int many, FieldDomains.Held held,
                                                    RuleReadingContext reading,
@@ -1076,7 +1084,7 @@ final class Witnesses {
                     yield List.of();
                 }
                 List<FixtureTemplate> out = new ArrayList<>();
-                for (FixtureTemplate each : Partitions.differingAtAField(named,
+                for (FixtureTemplate each : Partitions.differingAtItsFields(named,
                         Partitions.rulesOver(view.wrappers(), named, source), many, reading,
                         inside)) {
                     out.add(WornNames.under(view.wrappers(), each, source));
@@ -1098,12 +1106,101 @@ final class Witnesses {
                     }
                     out.add(one.values().getFirst());
                 }
+                if (view.shape() instanceof Shape.Sequence(Shape.Sequence.Kind kind, Type element)
+                        && kind == Shape.Sequence.Kind.SET) {
+                    for (FixtureTemplate each
+                            : setsBeside(out, element, range, many, reading, inside)) {
+                        out.add(WornNames.under(view.wrappers(), each, source));
+                    }
+                }
                 yield out;
             }
-            case Shape.Scalar _, Shape.Optional _, Shape.Unit _, Shape.Sum _, Shape.Cases _,
-                 Shape.Unresolved _, Shape.Tuple _, Shape.Function _, Shape.Uninhabited _,
-                 Shape.Bottom _, Shape.Erroneous _, Shape.Undecided _ -> List.of();
+            // Nothing, and every value of what it holds. What it holds is written as itself.
+            case Shape.Optional optional -> {
+                List<FixtureTemplate> out = new ArrayList<>();
+                out.add(FixtureTemplate.none());
+                for (FixtureTemplate each
+                        : distinctValuesOf(optional.element(), many - 1, reading, inside)) {
+                    out.add(WornNames.under(view.wrappers(), each, source));
+                }
+                yield out;
+            }
+            // A value of a sum is a value of one of its cases, written as that case is.
+            case Shape.Sum sum -> ofEachCase(sum.reaches().cases(), sum.name(), view, many,
+                    reading, inside);
+            // In an order of their own, since a union's members are a set and come in none.
+            case Shape.Cases cases -> ofEachCase(cases.members().stream()
+                            .sorted(Comparator.comparing(TypeSymbol::toString)).toList(),
+                    null, view, many, reading, inside);
+            case Shape.Scalar _, Shape.Unit _, Shape.Unresolved _, Shape.Tuple _,
+                 Shape.Function _, Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _,
+                 Shape.Undecided _ -> List.of();
         };
+    }
+
+    /**
+     * Up to {@code many} values of the cases of a sum, taking each case's values in turn and one
+     * from each before a second from any, so that a few of them are not all of one case.
+     *
+     * @param sum the sum's own name, which a case reached from inside it does not open again; null
+     *            for a union, which has none
+     */
+    private static List<FixtureTemplate> ofEachCase(List<TypeSymbol> cases, TypeSymbol sum,
+                                                    TypeView view, int many,
+                                                    RuleReadingContext reading,
+                                                    Set<TypeSymbol> inside) {
+        Set<TypeSymbol> within = new LinkedHashSet<>(inside);
+        if (sum != null && !within.add(sum)) {
+            return List.of();
+        }
+        List<List<FixtureTemplate>> each = new ArrayList<>();
+        for (TypeSymbol leaf : cases) {
+            each.add(within.contains(leaf) ? List.of()
+                    : distinctValuesOf(Type.ref(leaf), many, reading, within));
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (int i = 0; out.size() < many; i++) {
+            boolean more = false;
+            for (List<FixtureTemplate> values : each) {
+                if (i < values.size() && out.size() < many) {
+                    out.add(WornNames.under(view.wrappers(), values.get(i), reading.source()));
+                    more = true;
+                }
+            }
+            if (!more) {
+                break;
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Sets of {@code element} beside the ones {@code built} holds, up to {@code many} in all: at
+     * each size the range leaves, a run of the element's values starting one further along each
+     * time, so no two of them hold the same few.
+     *
+     * <p>Proposals. The one set built at each size is made against the rules, and these are not —
+     * where a rule over what the set holds refuses one, the decoder says so.
+     */
+    private static List<FixtureTemplate> setsBeside(List<FixtureTemplate> built, Type element,
+                                                    DeclaredBounds.CountRange range, int many,
+                                                    RuleReadingContext reading,
+                                                    Set<TypeSymbol> inside) {
+        List<FixtureTemplate> out = new ArrayList<>();
+        if (built.size() >= many) {
+            return out;
+        }
+        List<FixtureTemplate> values = distinctValuesOf(element, many, reading, inside);
+        for (int size = Math.max(range.least(), 1);
+             size <= range.most() && size < values.size(); size++) {
+            for (int from = 1; from + size <= values.size(); from++) {
+                if (built.size() + out.size() >= many) {
+                    return out;
+                }
+                out.add(FixtureTemplate.collection(values.subList(from, from + size)));
+            }
+        }
+        return out;
     }
 
     /**
