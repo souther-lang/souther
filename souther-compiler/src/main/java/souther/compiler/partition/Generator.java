@@ -5240,10 +5240,11 @@ public final class Generator {
         // container is handed a value of does not turn on the case it is written under. And what a
         // count composed above hands on for each element it counts, at the counts it was asked.
         ContentsAsked asked = ContentsAsked.of(reaching.boundedOnTheWay(), numbers);
+        List<RowDemand.OneValueAtBoth> related = oneValueAtBoth(reaching.boundedOnTheWay());
         CompositionOrder order;
         switch (CompositionOrder.of(parametersOf(subject), asked)) {
             case CompositionOrder.Result.Ordered(CompositionOrder ordered) ->
-                    order = ordered.relating(oneValueAtBoth(reaching.boundedOnTheWay()));
+                    order = ordered.relating(related);
             case CompositionOrder.Result.Circular circular -> {
                 return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
                         UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
@@ -5321,7 +5322,7 @@ public final class Generator {
                             ? new Reachability.Ways.Whole(unsplit, figure, List.of())
                             : Reachability.Ways.ONE, reaching.declined());
             WalkedInOrder came = new InOrder(subject, order, composed, standing, writes,
-                    settled, thisWay, check, way.contents(), taking)
+                    settled, thisWay, check, way.contents(), related, taking)
                     .from(0, ValuesHandedOn.NONE);
             switch (came) {
                 case WalkedInOrder.CameToNothingAt(ParameterCameToNothing why) -> {
@@ -5670,12 +5671,15 @@ public final class Generator {
      * assignment the way a value a later parameter came to nothing under does.
      *
      * @param composed each parameter's value, by its declared position, filled as the walk goes
+     * @param related  what the way asks two positions to hold one value at, or two — read off it
+     *                 once, since every value of a parameter walks the parameters after it again
      * @param taking   what the caller makes of each whole row
      */
     private record InOrder(MeasuredInput subject, CompositionOrder order, FixtureTemplate[] composed,
                            Map<RealizationTarget, Place> standing, LocationWrites decided,
                            Map<TermPath, Place> settled, Reachability.Reaching reaching,
-                           CandidateCheck check, ContentsAsked contents, RowTaking taking) {
+                           CandidateCheck check, ContentsAsked contents,
+                           List<RowDemand.OneValueAtBoth> related, RowTaking taking) {
 
         /**
          * What the parameters from the {@code next}-th in the order on came to.
@@ -5705,8 +5709,8 @@ public final class Generator {
             // for.
             FoundOut found = new FoundOut();
             CandidateCheck certified = certifying(check, subject, p, standing, found);
-            OneValueAtBothHeld held = new OneValueAtBothHeld(subject, p,
-                    oneValueAtBoth(reaching.boundedOnTheWay()), composedBefore(next));
+            OneValueAtBothHeld held = related.isEmpty() ? null
+                    : new OneValueAtBothHeld(subject, p, related, composedBefore(next));
             Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
             // Every location the row has been asked to write, and not only the ones a number
             // stands at: a truth the way asks for is written and stands at no place.
@@ -5730,11 +5734,13 @@ public final class Generator {
             WalkedInOrder[] after = {null};
             List<ParameterCameToNothing> cameToNothing = new ArrayList<>();
             boolean[] passed = {false};
+            boolean[] heldApart = {false};
             ValueTaking taking = value -> {
                 // A value two positions are asked to hold one value at, or two, and this one does
                 // not: passed over for the next, which is what a value to look further for is.
-                String apart = held.notHeldBy(value.value());
+                String apart = held == null ? null : held.notHeldBy(value.value());
                 if (apart != null) {
+                    heldApart[0] = true;
                     cameToNothing.add(new ParameterCameToNothing(p, new Outcome.Unresolved(
                             UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, apart),
                             SearchShortfall.NONE, Map.of()));
@@ -5764,12 +5770,13 @@ public final class Generator {
             Outcome tried = valueAt(subject, p, here, sizesUnder(decided,
                             TermPath.of(head)), settled, reaching.requirements(),
                     new Handed(contents, elsewhere), certified, found, taking);
-            // Where every value offered was passed over for not holding what two positions are
-            // asked to hold, once more with the position offered values of its own type apart
+            // Where every value offered was passed over, some for not holding what two positions
+            // are asked to hold, once more with the position offered values of its own type apart
             // from one another — or, to be one with a whole value composed before, that value. A
             // position whose type has no order to step along is offered one value ordinarily,
-            // and one value is never two.
-            if (tried instanceof Outcome.PassedOver && !passed[0]) {
+            // and one value is never two. Not where it was only the parameters after this one
+            // coming to nothing that passed them over: another value here is nothing those asked.
+            if (heldApart[0] && tried instanceof Outcome.PassedOver && !passed[0]) {
                 Map<TermPath, List<FixtureTemplate>> offered = held.offering(here);
                 if (offered != null) {
                     tried = valueAt(subject, p, offered, sizesUnder(decided, TermPath.of(head)),
@@ -7593,7 +7600,7 @@ public final class Generator {
                 TermPath mine = isThis(both.other()) ? both.other()
                         : isThis(both.one()) ? both.one() : null;
                 TermPath theirs = mine == null ? null : both.besides(mine);
-                List<String> run = mine == null ? null : fieldsOf(mine);
+                List<String> run = mine == null ? null : RowDemand.OneValueAtBoth.fieldsTo(mine);
                 if (run == null || out.containsKey(mine)
                         || (!isThis(theirs) && valueOf(theirs, null) == null)) {
                     continue;
@@ -7621,22 +7628,9 @@ public final class Generator {
         private Hir.Expr valueOf(TermPath at, FixtureTemplate candidate) {
             int of = subject.parameters().indexOf(at.head());
             FixtureTemplate value = isThis(at) ? candidate : of < 0 ? null : before.get(of);
-            List<String> run = fieldsOf(at);
+            List<String> run = RowDemand.OneValueAtBoth.fieldsTo(at);
             return value == null || run == null ? null : Witnesses.valueAt(value.value(), run);
         }
-    }
-
-    /** The fields {@code at} steps through from its parameter, or null where it takes any other
-     *  step. */
-    private static List<String> fieldsOf(TermPath at) {
-        List<String> out = new ArrayList<>();
-        for (TermPath.Step step : at.steps()) {
-            if (!(step instanceof TermPath.Step.Field(var name))) {
-                return null;
-            }
-            out.add(name);
-        }
-        return out;
     }
 
     /**

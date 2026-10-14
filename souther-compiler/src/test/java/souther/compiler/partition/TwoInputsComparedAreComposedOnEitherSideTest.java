@@ -98,6 +98,29 @@ class TwoInputsComparedAreComposedOnEitherSideTest {
     }
 
     /**
+     * A value read under a case of a sum is read off that case's record, so two values one of them
+     * is read under a case are composed the same way.
+     */
+    @Test
+    void aValueReadUnderACaseIsComposedAsOneReadBare() {
+        assertEveryRuleTaken("""
+                module example.undercase
+
+                data P = { n: Int }
+                data Circle = { p: P }
+                data Square = { s: Int }
+                data Shape = Circle | Square
+
+                behavior f : (a: Shape, b: P) -> Int
+
+                let f (a, b) =
+                    match a with
+                        | Circle as c -> if c.p /= b then 1 else 2
+                        | Square -> 3
+                """);
+    }
+
+    /**
      * The arm a comparison of two strings leads into is one a way in is read for: the comparison
      * coming out that way, said of the strings it compares. Not the arm itself as the only way in,
      * which is what a reading falls back on where the ways into an arm cannot all be written down

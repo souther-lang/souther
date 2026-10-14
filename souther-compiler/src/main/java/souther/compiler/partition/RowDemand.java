@@ -211,10 +211,39 @@ public sealed interface RowDemand {
             }
         }
 
-        /** The two in the order paths are held in, whichever order they come in. */
+        /**
+         * The two in the order paths are held in, whichever order they come in — or null where
+         * either is a position a row's value is not read at down to its fields
+         * ({@link #fieldsTo}), so that a composer could not tell what it wrote there.
+         */
         static OneValueAtBoth of(TermPath a, TermPath b, boolean same) {
+            if (a.equals(b) || fieldsTo(a) == null || fieldsTo(b) == null) {
+                return null;
+            }
             return TermPath.structuralOrder().compare(a, b) < 0 ? new OneValueAtBoth(a, b, same)
                     : new OneValueAtBoth(b, a, same);
+        }
+
+        /**
+         * The fields {@code at} steps through from its parameter, or null where it steps into an
+         * element or a key.
+         *
+         * <p>A case it steps under is no field: a value written under the case is that case's
+         * record, and its fields are read off it as they stand. One written under another case has
+         * no such field, and nothing is read there.
+         */
+        static List<String> fieldsTo(TermPath at) {
+            List<String> out = new ArrayList<>();
+            for (TermPath.Step step : at.steps()) {
+                switch (step) {
+                    case TermPath.Step.Field(var name) -> out.add(name);
+                    case TermPath.Step.Refine _ -> { }
+                    case TermPath.Step.Element _, TermPath.Step.Key _ -> {
+                        return null;
+                    }
+                }
+            }
+            return out;
         }
 
         /** The position across from {@code at}, which is one of the two. */

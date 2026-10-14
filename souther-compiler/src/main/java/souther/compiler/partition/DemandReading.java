@@ -823,7 +823,8 @@ final class DemandReading {
             // them.
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
                                        DecisionSubject.AnInput(TermPath other), boolean holds,
-                                       var _) when !one.equals(other) ->
+                                       var _)
+                    when RowDemand.OneValueAtBoth.of(one, other, holds) != null ->
                     List.of(new Read.Demands(RowDemand.OneValueAtBoth.of(one, other, holds)));
             case Proposition.SameValue _ ->
                     List.of(forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
@@ -1695,7 +1696,7 @@ final class DemandReading {
             at.add(position);
             sum = added;
         }
-        return sum.signum() == 0 && !at.get(0).equals(at.get(1))
+        return sum.signum() == 0
                 ? RowDemand.OneValueAtBoth.of(at.get(0), at.get(1), met == Rel.EQ) : null;
     }
 
