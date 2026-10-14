@@ -81,7 +81,7 @@ final class ConstructionRules {
      * none of them stops it.
      */
     NumericDomain.Bounds valuesAt(TermPath path) {
-        return limitsAt(path, settlingAt(path, settled)).values();
+        return limitsAt(path).values();
     }
 
     /**
@@ -89,7 +89,16 @@ final class ConstructionRules {
      * where none of them does.
      */
     FieldDomains.Held heldAt(TermPath path) {
-        return limitsAt(path, settlingAt(path, settled)).held();
+        return limitsAt(path).held();
+    }
+
+    /**
+     * Everything the rules leave the value at {@code path} with what the caller settled read in,
+     * as one answer: a caller wanting both where the value stops and how many it holds asks once,
+     * since each is a reading of every rule naming the position.
+     */
+    FieldDomains.ConstructionLimits limitsAt(TermPath path) {
+        return limitsAt(path, settlingAt(path, settled));
     }
 
     /**

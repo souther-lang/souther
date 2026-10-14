@@ -43,7 +43,7 @@ class APositionIsProposedForAlikeWhetherOrNotItWearsANameTest {
         return Partitions.representativesOf(type,
                         RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES),
                         null, Set.of())
-                .stream().map(FixtureTemplate::text).toList();
+                .values().stream().map(FixtureTemplate::text).toList();
     }
 
     private static Type named(String type) {

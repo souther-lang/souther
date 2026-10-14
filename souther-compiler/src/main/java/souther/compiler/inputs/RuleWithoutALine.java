@@ -120,6 +120,15 @@ public record RuleWithoutALine(Fact fact, Set<RuleReportAnchor> reachedBy,
                         + " reason");
             }
         }
+
+        /**
+         * What tells two findings apart: all of this, with the figures its reason was met at left
+         * out. One rule refused at one limit by one reading and at another by the next is one
+         * finding, met at both ({@link BlockReason#factOf}).
+         */
+        public Object key() {
+            return List.of(rule, at, sentTo, BlockReason.factOf(why));
+        }
     }
 
     /** Which rule of the model this is about. */
@@ -154,14 +163,14 @@ public record RuleWithoutALine(Fact fact, Set<RuleReportAnchor> reachedBy,
     }
 
     /**
-     * Both readers' findings, as one: the rule, with every place either of them reached it at.
+     * Both readers' findings, as one: the rule, with every place either of them reached it at and
+     * every figure either met its reason at.
      *
-     * <p>Of one rule, and it says so rather than taking the caller's word. What comes out carries
-     * this one's fact, so two that are not one fact would come out as one of them reached where the
-     * other was.
+     * <p>Of one rule, and it says so rather than taking the caller's word. Two that are not one
+     * fact would come out as one of them reached where the other was.
      */
     public RuleWithoutALine mergedWith(RuleWithoutALine other) {
-        if (!fact.equals(other.fact)) {
+        if (!fact.key().equals(other.fact.key())) {
             throw new IllegalArgumentException("two findings put together are one rule with no"
                     + " line: " + fact + " and " + other.fact);
         }
@@ -169,7 +178,8 @@ public record RuleWithoutALine(Fact fact, Set<RuleReportAnchor> reachedBy,
         both.addAll(other.reachedBy);
         List<ModelOccurrence> copies = new ArrayList<>(readAt);
         other.readAt.stream().filter(copy -> !copies.contains(copy)).forEach(copies::add);
-        return new RuleWithoutALine(fact, both, copies);
+        return new RuleWithoutALine(new Fact(fact.rule(), fact.at(), fact.sentTo(),
+                BlockReason.together(fact.why(), other.fact.why())), both, copies);
     }
 
 }

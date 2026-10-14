@@ -2,12 +2,16 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
+import souther.compiler.regex.PatternPlan;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.StoppedReading;
+import souther.compiler.values.UnreadReason;
 
 import java.util.List;
 
@@ -125,9 +129,15 @@ class ABranchNobodyCouldWorkOutIsNotOneAnybodyReadTest {
         assertTrue(assertInstanceOf(AdmissibleSet.Completeness.Wider.class,
                         read.admits(RuleKey.THE_VALUE).completeness(),
                         "a pattern this will not make a machine of leaves the position short")
-                        .why().contains(new AdmissibleSet.Widening.RuleUnread(
-                                souther.compiler.values.UnreadReason.PATTERN_TOO_COSTLY)),
-                "and says which of the two ways of running out it was");
+                        .why().contains(new AdmissibleSet.Widening.RuleUnread(new StoppedReading(
+                                UnreadReason.PATTERN_TOO_COSTLY,
+                                WorkFigure.ADMITTED_VALUES_ONE_MACHINE.at(
+                                        PatternPlan.Budget.OF_ADMITTED_VALUES.mostStates()
+                                                + " states or "
+                                                + PatternPlan.Budget.OF_ADMITTED_VALUES.mostWork()
+                                                + " looked at")))),
+                "and says which of the two ways of running out it was, at the figure it ran out"
+                        + " at");
         // The one position the declaration has. Counted rather than named, since what a question is
         // filed under prints itself and a test that pinned the printing would be about that.
         assertEquals(1, unanswered(read).size(),

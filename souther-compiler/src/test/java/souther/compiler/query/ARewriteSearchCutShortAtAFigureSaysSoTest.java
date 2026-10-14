@@ -72,7 +72,7 @@ class ARewriteSearchCutShortAtAFigureSaysSoTest {
         assertEquals(1, rewrites.size(), "the body answering what every row answers: " + rewrites);
         ReplacementEvidence.Undecided open = assertInstanceOf(ReplacementEvidence.Undecided.class,
                 rewrites.getFirst().outcome(), "no row composed tells it apart: " + rewrites);
-        List<ReplacementEvidence.Undecided.Why> why = open.why().written();
+        List<ReplacementEvidence.Undecided.Why> why = open.why().reasons().written();
         assertTrue(why.contains(ReplacementEvidence.Undecided.Why.A_COMPOSING_FIGURE_REACHED),
                 "and composing stopped at a figure of its own on the way: " + why);
     }

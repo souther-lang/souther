@@ -4,7 +4,10 @@ import net.unit8.notation199x.pattern.Automaton;
 import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
 import net.unit8.notation199x.pattern.PatternMeaning;
+import souther.compiler.observe.Figure;
+import souther.compiler.observe.WorkFigure;
 
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -54,6 +57,23 @@ public final class PatternPlan {
         /** A meter that allows this much and has spent none of it. */
         public Meter meter() {
             return new Meter(mostStates, mostBuilt, mostWork);
+        }
+
+        /**
+         * Which of this budget's limits {@code meter} refused at, for a meter this budget made and
+         * a construction out of it that just came back with nothing.
+         *
+         * <p>Read off the meter and never guessed: a meter that came back with nothing and names no
+         * limit is this compiler having lost the reason on the way, and saying a figure there would
+         * be saying one nothing was compared against.
+         */
+        public Refused refusedBy(Meter meter) {
+            Meter.Stopped by = meter.stoppedBy();
+            if (by == null) {
+                throw new IllegalStateException(
+                        "a machine was not built and the allowance refused nothing");
+            }
+            return new Refused(this, by);
         }
 
         /**
@@ -218,6 +238,41 @@ public final class PatternPlan {
          * <p>The same numbers as the others today, and a coincidence rather than a fact.
          */
         public static final Budget OF_A_FOLD = new Budget(50_000, 200_000, 50_000_000);
+    }
+
+    /**
+     * Which limit of which budget refused a machine, carried from the meter that refused it.
+     *
+     * <p>The budget is the one the meter was made from, so a run whose policy handed it other
+     * numbers names the numbers it used. What it was spent on is not here: the same budget bounds
+     * different questions for different callers, and which figure a refusal is, is said by the one
+     * that knows what it was building ({@link #as}).
+     *
+     * @param budget what the meter that refused allowed
+     * @param by     which of its limits refused
+     */
+    public record Refused(Budget budget, Meter.Stopped by) {
+
+        public Refused {
+            Objects.requireNonNull(budget, "a refusal was made under some budget");
+            Objects.requireNonNull(by, "a refusal was made by one of the limits");
+        }
+
+        /**
+         * The figure this was, said as one of the two figures of what the budget was spent on:
+         * {@code oneMachine} where one machine came to more than a machine may — more states, or
+         * more looked at in making it, which the meter refuses as one limit and does not tell
+         * apart — and {@code inAll} where what everything built for the answer made and looked at
+         * came to more than it may.
+         */
+        public Figure as(WorkFigure oneMachine, WorkFigure inAll) {
+            return switch (by) {
+                case ONE_MACHINE -> oneMachine.at(budget.mostStates() + " states or "
+                        + budget.mostWork() + " looked at");
+                case THE_ANSWER -> inAll.at(budget.mostBuilt() + " states built and "
+                        + budget.mostWork() + " looked at");
+            };
+        }
     }
 
     /** What one step of a plan does. */

@@ -325,6 +325,16 @@ final class ContainersAddingUp {
             return Set.copyOf(unheld);
         }
 
+        /**
+         * What building a piece met before it could be put in front of a walk — a value beside
+         * the number past what a proposal holds — in whichever of the vocabularies it is.
+         */
+        void met(CompositionShortfall shortfall) {
+            refused.addAll(shortfall.figures());
+            notAllOf.addAll(shortfall.populations());
+            unheld.addAll(shortfall.unheld());
+        }
+
         /** All of it, as the one shortfall a realization carries on. */
         CompositionShortfall shortfall() {
             return CompositionShortfall.of(refused, notAllOf, unheld);
@@ -618,7 +628,10 @@ final class ContainersAddingUp {
             return () -> makings.ways().filled().stream()
                     .map(each -> filled(split, makings.holding(), makings.container(), each,
                             makings.apart(), makings.elements(), makings.reading()))
-                    .filter(Objects::nonNull)
+                    .<FixtureTemplate>mapMulti((built, out) -> {
+                        left.met(built.met());
+                        built.values().forEach(out);
+                    })
                     .iterator();
         }
 
@@ -1070,7 +1083,9 @@ final class ContainersAddingUp {
     }
 
     /**
-     * The container holding an element for each number, or null where one of them cannot be built.
+     * The container holding an element for each number, or nothing where one of them cannot be
+     * built — with what of this compiler's building them met, which a walk keeps beside what it
+     * was left ({@link WhatWasLeft#met}).
      *
      * <p>Whole elements, each composed under its own type's rules with the number written where the
      * total reads it. What the rest of an element holds is that type's question and is asked of the
@@ -1087,33 +1102,37 @@ final class ContainersAddingUp {
      * number ({@link KeptApart#besideFor}), and the caller's where it fixed the same position: what
      * the caller asked every element to hold is asked of every element.
      */
-    static FixtureTemplate filled(List<BigDecimal> split, Shape.Sequence holding,
-                                          TypeView container, Filling filling, KeptApart apart,
-                                          Carrier elements, RuleReadingContext reading) {
+    static Proposals filled(List<BigDecimal> split, Shape.Sequence holding, TypeView container,
+                            Filling filling, KeptApart apart, Carrier elements,
+                            RuleReadingContext reading) {
         if (holding.kind() != Shape.Sequence.Kind.LIST) {
-            return null;
+            return Proposals.NONE;
         }
         RuleReadingSource ruleSource = reading.source();
         List<FixtureTemplate> values = new ArrayList<>();
+        CompositionShortfall met = CompositionShortfall.NONE;
         for (int i = 0; i < split.size(); i++) {
             Map<TermPath, FixtureTemplate> own = apart.besideFor(i, split.size());
             if (own == null) {
-                return null;
+                return Proposals.NONE.meeting(met.and(apart.met()));
             }
             Map<TermPath, FixtureTemplate> beside = new LinkedHashMap<>(own);
             beside.putAll(filling.beside());
-            FixtureTemplate one = PlanComposer.compose(filling.plan().root(),
+            Proposals one = PlanComposer.compose(filling.plan().root(),
                     new ValuesCarryingANumber(filling.fixed(),
                             FixtureTemplate.on(elements, Count.of(split.get(i)),
                                     ruleSource.symbols().scope()::reach),
                             beside, filling.narrowed(), reading),
                     reading);
-            if (one == null) {
-                return null;
+            met = met.and(one.met());
+            if (one.isEmpty()) {
+                return Proposals.NONE.meeting(met);
             }
-            values.add(one);
+            values.add(one.values().getFirst());
         }
-        return WornNames.under(container.wrappers(), FixtureTemplate.collection(values), ruleSource);
+        FixtureTemplate written =
+                WornNames.under(container.wrappers(), FixtureTemplate.collection(values), ruleSource);
+        return Proposals.ofNullable(written).meeting(met);
     }
 
     /**
@@ -1166,6 +1185,10 @@ final class ContainersAddingUp {
         private List<List<FixtureTemplate>> values;
 
         private int readFor;
+
+        /** What of this compiler's reading those values met, which is why a run's values may
+         *  give out before a container has an element for each of them. */
+        private CompositionShortfall met = CompositionShortfall.NONE;
 
         private KeptApart(Type element, List<List<String>> runs, List<List<String>> beside,
                           List<TermPath> decided, boolean numbersApart,
@@ -1239,12 +1262,15 @@ final class ContainersAddingUp {
             if (many > readFor) {
                 int upTo = Math.max(many, 2 * readFor);
                 List<List<FixtureTemplate>> read = new ArrayList<>();
+                CompositionShortfall reached = CompositionShortfall.NONE;
                 for (List<String> run : beside) {
-                    List<FixtureTemplate> at = Witnesses.valuesApartAt(element, run, upTo, reading);
-                    read.add(at == null ? List.of() : at);
+                    Proposals at = Witnesses.valuesApartAt(element, run, upTo, reading);
+                    read.add(at.values());
+                    reached = reached.and(at.met());
                 }
                 values = read;
                 readFor = upTo;
+                met = reached;
             }
             Map<TermPath, FixtureTemplate> out = new LinkedHashMap<>();
             for (int r = 0; r < beside.size(); r++) {
@@ -1255,6 +1281,11 @@ final class ContainersAddingUp {
                 out.put(decided.get(r), at.get(i));
             }
             return out;
+        }
+
+        /** What of this compiler's the values {@link #besideFor} hands out met, as last read. */
+        CompositionShortfall met() {
+            return met;
         }
     }
 

@@ -9,6 +9,7 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
@@ -119,7 +120,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      *  what stopped the reading short of them. */
     private static void asFarAsRead(ValueSet values, UnreadReason why, FieldDomains read,
                                     RuleKey path) {
-        assertEquals(AdmissibleSet.partial(values, why), read.admits(path));
+        assertEquals(AdmissibleSet.partial(values, StoppedReading.of(why)), read.admits(path));
     }
 
     /** The same, of the field the record's own rules call {@code field}. */
@@ -371,7 +372,8 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         // for `Int.abs`, and one wants the alternatives of the choice kept apart. Said together
         // rather than by a precedence, so an author looking for either finds it.
         assertEquals(AdmissibleSet.wider(ValueSet.ANY, Set.of(
-                        new AdmissibleSet.Widening.RuleUnread(UnreadReason.FORM_NOT_READ),
+                        new AdmissibleSet.Widening.RuleUnread(
+                                StoppedReading.of(UnreadReason.FORM_NOT_READ)),
                         new AdmissibleSet.Widening.AlternativesNotSeparated())),
                 read.admits(RuleKey.of("a")));
     }

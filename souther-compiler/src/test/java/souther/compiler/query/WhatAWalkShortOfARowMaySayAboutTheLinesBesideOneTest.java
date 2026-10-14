@@ -6,6 +6,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.Place;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
@@ -167,7 +168,8 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
 
     /** And where it stopped at the figure one point is tried against. */
     private static StandingAtAPoint.ReadingsTried stoppedShort() {
-        return new StandingAtAPoint.ReadingsTried.StoppedAtTheLimit(4);
+        return new StandingAtAPoint.ReadingsTried.StoppedAtTheLimit(
+                WorkFigure.READINGS_OF_A_ROW_AT_A_POINT.at(4));
     }
 
     /**

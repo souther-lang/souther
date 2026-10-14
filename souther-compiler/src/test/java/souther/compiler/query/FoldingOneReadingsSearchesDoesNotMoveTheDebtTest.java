@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.ReadingGap;
 
@@ -411,11 +412,12 @@ class FoldingOneReadingsSearchesDoesNotMoveTheDebtTest {
 
     private static WeakeningSet truncated() {
         return WeakeningSet.of(new Weakening.BorderValueUnreadable(null,
-                ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)));
+                ReadingGap.of(Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED,
+                        Limits.DEFAULT.nodesFigure()))));
     }
 
     private static WeakeningSet unreadable() {
         return WeakeningSet.of(new Weakening.BorderValueUnreadable(null,
-                ReadingGap.of(Incompleteness.Code.VALUE_UNREADABLE)));
+                ReadingGap.of(Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE))));
     }
 }

@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.BodyDistinction;
 import souther.compiler.query.NotMeasuredReason;
@@ -35,23 +36,38 @@ import java.util.List;
 public sealed interface ReaderDisposition {
 
     /**
-     * A figure of this compiler's stopped it.
+     * A figure of this compiler's stopped it, and these are the figures.
      *
      * <p>Asked first, and of the entry rather than of what it is about. The one thing a reader of an
      * undetermined verdict wants to know is whether measuring again reaches any of it, and a space
      * too large to walk is a number away while a rule this compiler has no reading for is not.
      *
-     * <p><b>Not an instruction to measure again.</b> That a wider run need not stop there is a fact
-     * about the stop ({@link RunSensitivity}), and no option of this compiler sets the figures it
-     * stops at, so a reader told to allow more has nothing to allow it with. What a reader can do
-     * is in the model, and there is something to say of it only where the entry is a point: a row
+     * <p>Decided by the figures the entry carries and by its {@link RunSensitivity}, both. That a
+     * wider run need not stop at the same place is one fact; that a figure is here to name is
+     * another, and an entry that has the first without the second sent its reader to a figure no
+     * line named. One that has the second without the first reached a figure and is held by
+     * something beside it, and that something is where a reader goes: told the figure alone, they
+     * would raise it and find the entry standing.
+     *
+     * <p><b>Not an instruction to measure again.</b> No option of this compiler sets the figures it
+     * stops at, so a reader told to allow more has nothing to allow it with. What a reader can do is
+     * in the model, and there is something to say of it only where the entry is a point: a row
      * written at it settles it, and so does a rule leaving no value there.
      *
+     * @param figures            what stopped it, as it carried them, never empty
      * @param aRowThereSettlesIt whether the entry is about one point, which a row written at it or
      *                           a rule refusing it answers whatever stopped the search
      */
-    record StoppedAtAFigure(Subject subject, boolean aRowThereSettlesIt)
-            implements ReaderDisposition {}
+    record StoppedAtAFigure(Subject subject, List<Figure> figures, boolean aRowThereSettlesIt)
+            implements ReaderDisposition {
+
+        public StoppedAtAFigure {
+            figures = List.copyOf(figures);
+            if (figures.isEmpty()) {
+                throw new IllegalArgumentException("a figure stopped it, so there is one to name");
+            }
+        }
+    }
 
     /** The rule that could not be read, and what stopped the reading of it. */
     record LookAtTheRule(Subject subject) implements ReaderDisposition {}
@@ -123,7 +139,7 @@ public sealed interface ReaderDisposition {
      * place either way — which is why this is asked of the assessment rather than of what a
      * verdict is willing to show ({@link AdequacyAssessment}).
      *
-     * <p>The sensitivity first, then the entry, then what it is about. A figure of this compiler's
+     * <p>The figures first, then the entry, then what it is about. A figure of this compiler's
      * having stopped it is the same answer whatever the entry is about — so it is asked once,
      * above, rather than repeated below it.
      *
@@ -136,8 +152,12 @@ public sealed interface ReaderDisposition {
      */
     static ReaderDisposition of(AdequacyUncertainty unanswered) {
         Subject subject = unanswered.subject();
-        if (unanswered.runSensitivity() == RunSensitivity.MAY_CHANGE) {
-            return new StoppedAtAFigure(subject, switch (subject) {
+        List<Figure> figures = unanswered.figures();
+        // Only where the figures are what holds it. One stopped at a figure and at something a run
+        // allowed more meets again is sent to that something, which is what is left once the
+        // figure is raised; the figures it reached are said beside it by whoever writes the line.
+        if (!figures.isEmpty() && unanswered.runSensitivity() == RunSensitivity.MAY_CHANGE) {
+            return new StoppedAtAFigure(subject, figures, switch (subject) {
                 case Subject.AtAPoint _ -> true;
                 case Subject.OfAModule _, Subject.OfABehavior _, Subject.OfASource _,
                      Subject.OfARow _, Subject.AtASpelledPosition _, Subject.AtAPosition _,

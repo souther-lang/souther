@@ -43,9 +43,11 @@ public final class MeaningsOfABodyReading {
     private final DeclarationNewtypes newtypes;
     private InputReading read;
     private final MeaningsOfABody.Filing filed = new MeaningsOfABody.Filing();
-    /** Whether this walk is inside a closure applied more times than a condition is read on
-     *  ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}). */
-    private boolean pastTheFigure;
+    /** The figure this walk is past, where it is inside a closure whose applications are not
+     *  read one by one: applied more times than a condition is read on
+     *  ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}), or handed the elements of a
+     *  container holding more than a walk writes out. Null where it is inside no such closure. */
+    private WhyUnread pastTheFigure;
 
     private MeaningsOfABodyReading(Supplier<InputReading> reading, Symbols symbols,
                                    DeclarationNewtypes newtypes) {
@@ -80,16 +82,26 @@ public final class MeaningsOfABodyReading {
         // A closure applied to each of the values a container was written with is read once per
         // application, each handing its parameter one of them, and what a site in it states is
         // what it states on the application a run meets it on.
-        if (Core.withoutStanding(e) instanceof Core.Block block && !pastTheFigure) {
+        if (Core.withoutStanding(e) instanceof Core.Block block && pastTheFigure == null) {
             InputReads.Applications applied = Pullback.applicationsOf(block, reads, read());
             // Applied to nothing: no condition in the body is met on any run.
             if (applied instanceof InputReads.Applications.NoneMade) {
                 return;
             }
-            // More applications than are read: every condition in the body is filed as one this
-            // compiler declined to read, and none is read on fewer of them than it is on.
-            if (applied instanceof InputReads.Applications.MoreThanAreRead) {
-                MeaningsOfABodyReading inside = inside(true);
+            // More applications than are read, or a container past what is written out: every
+            // condition in the body is filed as one this compiler declined to read, at the figure
+            // that was reached, and none is read on fewer of them than it is on.
+            WhyUnread declinedAt = switch (applied) {
+                case InputReads.Applications.MoreThanAreRead _ ->
+                        new WhyUnread.MoreReadingsThanAreMade();
+                case InputReads.Applications.PastWhatIsWrittenOut _ ->
+                        new WhyUnread.MoreElementsThanAreWrittenOut();
+                case InputReads.Applications.Each _, InputReads.Applications.Unsaid _,
+                     InputReads.Applications.NoneHanded _,
+                     InputReads.Applications.NoneMade _ -> null;
+            };
+            if (declinedAt != null) {
+                MeaningsOfABodyReading inside = inside(declinedAt);
                 inside.walk(block.body(), reads);
                 read = inside.read;
                 inside.filed.filed().stated().forEach(filed::met);
@@ -104,13 +116,14 @@ public final class MeaningsOfABodyReading {
                 case InputReads.Applications.Unsaid(var mayBeMade) ->
                         mayBeMade.stream().map(InputReads.Applications.Made::reads).toList();
                 case InputReads.Applications.MoreThanAreRead _,
+                     InputReads.Applications.PastWhatIsWrittenOut _,
                      InputReads.Applications.NoneHanded _,
                      InputReads.Applications.NoneMade _ -> List.of();
             };
             if (!applications.isEmpty()) {
                 List<MeaningsOfABody> each = new ArrayList<>();
                 for (InputReads application : applications) {
-                    MeaningsOfABodyReading inside = inside(false);
+                    MeaningsOfABodyReading inside = inside(null);
                     inside.walk(block.body(), application);
                     read = inside.read;
                     each.add(inside.filed.filed());
@@ -138,7 +151,7 @@ public final class MeaningsOfABodyReading {
     }
 
     /** A reading of a closure's body, sharing the reading of the input this one has made. */
-    private MeaningsOfABodyReading inside(boolean pastTheFigure) {
+    private MeaningsOfABodyReading inside(WhyUnread pastTheFigure) {
         MeaningsOfABodyReading inside = new MeaningsOfABodyReading(reading, symbols, newtypes);
         inside.read = read;
         inside.pastTheFigure = pastTheFigure;
@@ -152,7 +165,7 @@ public final class MeaningsOfABodyReading {
         if (construct.isEmpty()) {
             return;
         }
-        filed.met(new MeaningsOfABody.Site(construct.get(), part), pastTheFigure
+        filed.met(new MeaningsOfABody.Site(construct.get(), part), pastTheFigure != null
                 ? declined(construct)
                 : Pullback.ofATruth(truth, reads, read(), construct).meaning());
     }
@@ -167,7 +180,7 @@ public final class MeaningsOfABodyReading {
             return;
         }
         // Every arm read off one reading of the fork, since what one states is the whole fork's.
-        List<MeaningsOfABody.Meaning> entered = pastTheFigure
+        List<MeaningsOfABody.Meaning> entered = pastTheFigure != null
                 ? Collections.nCopies(arms, declined(construct))
                 : Pullback.ofTheArms(fork, reads, read(), construct).stream()
                         .map(Pullback.Pulled::meaning).toList();
@@ -177,10 +190,10 @@ public final class MeaningsOfABodyReading {
         }
     }
 
-    /** What a site inside a closure applied more times than a condition is read on states. */
-    private static MeaningsOfABody.Meaning declined(Optional<ModelOccurrence> construct) {
-        return new Conclusion(construct).meaningOf(new Derivation.Stopped(
-                new WhyUnread.MoreReadingsThanAreMade(), false));
+    /** What a site inside a closure whose applications are not read one by one states: that the
+     *  figure this walk is past stopped it. */
+    private MeaningsOfABody.Meaning declined(Optional<ModelOccurrence> construct) {
+        return new Conclusion(construct).meaningOf(new Derivation.Stopped(pastTheFigure, false));
     }
 
     /**

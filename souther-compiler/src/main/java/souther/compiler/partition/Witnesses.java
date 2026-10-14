@@ -30,9 +30,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
-import java.util.function.Predicate;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -73,27 +72,8 @@ final class Witnesses {
             CompositionBudget.PAIRINGS_BUILT_AT_ONCE.maximum();
 
     /**
-     * Values of a count, and whether they are all the values of it there were.
-     *
-     * <p>Two halves of one answer. A caller reading only the first says every value was refused where
-     * some were never built, which is a different thing to tell an author and a different thing for a
-     * measure to record.
-     */
-    record Sized(List<FixtureTemplate> values, Set<CompositionBudget> heldBack) {
-
-        Sized {
-            values = List.copyOf(values);
-            heldBack = Set.copyOf(heldBack);
-        }
-
-        static Sized all(List<FixtureTemplate> values) {
-            return new Sized(values, Set.of());
-        }
-    }
-
-    /**
      * Values of {@code position} whose count is exactly {@code size}, or none where this can build
-     * none.
+     * none, with what of this compiler's the build met.
      *
      * <p>The narrower of the two promises about a count. A caller holding a line drawn on one needs
      * the count itself and not a value that merely clears it: a row at {@code String.length = 5} is a
@@ -113,13 +93,13 @@ final class Witnesses {
      * @param held what the rules of the value holding this one keep its elements apart at
      *             ({@link ElementsKeptApart#heldBy}), nothing where nothing holds it
      */
-    static Sized ofSize(TypeView position, int size, List<List<String>> held,
-                        RuleReadingContext reading, Set<TypeSymbol> expanding) {
+    static Proposals ofSize(TypeView position, int size, List<List<String>> held,
+                            RuleReadingContext reading, Set<TypeSymbol> expanding) {
         Shape carrier = position.shape();
         if (size == 0) {
             // The same shapes {@link #sized} builds for, and for the same reason they are written
             // out: what a value of none looks like is a question about each shape.
-            return Sized.all(switch (carrier) {
+            return Proposals.of(switch (carrier) {
                 case Shape.Scalar scalar when scalar.prim() == Type.Prim.STRING ->
                         List.of(FixtureTemplate.string(""));
                 case Shape.Sequence _, Shape.Mapping _ ->
@@ -130,8 +110,7 @@ final class Witnesses {
                      Shape.Undecided _ -> List.<FixtureTemplate>of();
             });
         }
-        Built built = sized(position, size, held, reading, expanding);
-        return new Sized(built.exactly(size), built.heldBack());
+        return sized(position, size, held, reading, expanding).exactly(size);
     }
 
     /**
@@ -144,18 +123,18 @@ final class Witnesses {
      * silence would be deciding again what this is here to answer.
      *
      * <p>The word and not which budget it was. A budget that stopped this is the build's own answer
-     * ({@link Sized#heldBack()}) and travels as itself; what is here is the word a search comes back
+     * ({@link Proposals#met()}) and travels as itself; what is here is the word a search comes back
      * with, for readers that have only ever wanted that.
      */
     static Generator.UnresolvedCombination.Reason reasonForSize(TypeView position, int size,
                                                                 RuleReadingContext reading) {
-        Sized made = ofSize(position, size, List.of(), reading, Set.of());
-        if (!made.values().isEmpty()) {
+        Proposals made = ofSize(position, size, List.of(), reading, Set.of());
+        if (!made.isEmpty()) {
             return null;
         }
-        return made.heldBack().isEmpty()
+        return made.met().figures().isEmpty()
                 ? Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE
-                : Generator.UnresolvedCombination.Reason.wordFor(made.heldBack());
+                : Generator.UnresolvedCombination.Reason.wordFor(made.met().figures());
     }
 
     /**
@@ -178,32 +157,24 @@ final class Witnesses {
      * too few values for comes back as nothing at all. The two read one build and neither is written
      * in terms of the other, so a cheaper value for a floor cannot move a line.
      *
+     * <p>Not {@link #reasonForSize} for what it met, for the same reason the two are not one method.
+     * A floor nothing was built for is a position offering what it ordinarily offers, and naming a
+     * reason there would put "nothing composes one" under every position that has no floor at all;
+     * what it carries is the figures the build was stopped by, which a reader of the offer weighs.
+     *
      * @param held what the rules of the value holding this one keep its elements apart at, as
      *             {@link #ofSize} takes it
      */
-    static List<FixtureTemplate> holding(TypeView position, int least, List<List<String>> held,
-                                         RuleReadingContext reading, Set<TypeSymbol> expanding) {
-        return least <= 0 ? List.of() : sized(position, least, held, reading, expanding).all();
+    static Proposals holding(TypeView position, int least, List<List<String>> held,
+                             RuleReadingContext reading, Set<TypeSymbol> expanding) {
+        if (least <= 0) {
+            return Proposals.NONE;
+        }
+        return sized(position, least, held, reading, expanding).all();
     }
 
-    /**
-     * Which budgets of this compiler's stopped a value of {@code position} holding {@code least} from
-     * being built in full, and empty where none did.
-     *
-     * <p>The same decision {@link #holding} reads, asked for its other half. Written once because the
-     * two have to agree: a reader was told a search stopped short of pairings nothing had asked to
-     * build, back when this was a second reading of the same conditions.
-     *
-     * <p>Not {@link #reasonForSize}, for the same reason the two halves above are not one method. A
-     * floor nothing was built for is a position offering what it ordinarily offers, and naming a
-     * reason there would put "nothing composes one" under every position that has no floor at all.
-     */
-    static Set<CompositionBudget> heldBackFor(TypeView position, int least,
-                                              List<List<String>> held,
-                                              RuleReadingContext reading) {
-        return least <= 0 ? Set.of()
-                : sized(position, least, held, reading, Set.of()).heldBack();
-    }
+    /** One step of building values at a count: a value made, or one a figure stopped. */
+    private sealed interface Step {}
 
     /**
      * A value that was built, and how many of whatever counts it it turned out to hold.
@@ -213,32 +184,52 @@ final class Witnesses {
      * type may not have five — so what was asked for and what was made are two numbers, and only the
      * caller that needs them equal is entitled to require it.
      */
-    private record Made(FixtureTemplate value, int count) {}
+    private record Made(FixtureTemplate value, int count) implements Step {}
 
-    /** What a value of the position counting {@code size} comes to: what was built, and which
-     * budgets of this compiler's stopped the rest of it being built. */
-    private record Built(List<Made> proposals, Set<CompositionBudget> heldBack) {
+    /** A value not made there, and what of this compiler's stopped it: one of its elements'
+     *  values, or the count itself. */
+    private record Halted(CompositionShortfall met) implements Step {}
 
-        static final Built NONE = new Built(List.of(), Set.of());
+    /** What a value of the position counting {@code size} comes to: what was built and where the
+     * build was stopped, in the order it came to them. */
+    private record Built(List<Step> steps) {
 
-        static Built of(List<Made> proposals) {
-            return new Built(List.copyOf(proposals), Set.of());
+        static final Built NONE = new Built(List.of());
+
+        Built {
+            steps = List.copyOf(steps);
+        }
+
+        static Built of(List<Made> made) {
+            return new Built(List.copyOf(made));
         }
 
         static Built stoppedBy(CompositionBudget budget) {
-            return new Built(List.of(), Set.of(budget));
+            return new Built(List.of(new Halted(CompositionShortfall.of(List.of(budget)))));
         }
 
         /** Those holding exactly {@code size}, which is what a line drawn at a count is met by. */
-        List<FixtureTemplate> exactly(int size) {
-            return proposals.stream().filter(each -> each.count() == size)
-                    .map(Made::value).toList();
+        Proposals exactly(int size) {
+            return kept(size);
         }
 
         /** All of them, which is what a floor to clear is offered: one short of the floor is a value
          * the decoder refuses for the reason the floor was written, and that is an answer. */
-        List<FixtureTemplate> all() {
-            return proposals.stream().map(Made::value).toList();
+        Proposals all() {
+            return kept(-1);
+        }
+
+        /** Those holding {@code size}, or all where it is negative, with the stops where they stood. */
+        private Proposals kept(int size) {
+            Proposals.Gathering out = Proposals.Gathering.inOrder();
+            for (Step each : steps) {
+                switch (each) {
+                    case Made made when size < 0 || made.count() == size -> out.add(made.value());
+                    case Made _ -> { }
+                    case Halted(CompositionShortfall met) -> out.stop(met);
+                }
+            }
+            return out.done();
         }
     }
 
@@ -330,7 +321,7 @@ final class Witnesses {
      */
     private static Built ofSequence(Shape.Sequence carrier, List<List<String>> apart, int least,
                                     RuleReadingContext reading, Set<TypeSymbol> expanding) {
-        List<Made> out = new ArrayList<>();
+        List<Step> out = new ArrayList<>();
         // What the others may be is a question about the element and the count and not about the
         // value they are built around, so it is answered once for every one of them: the values at
         // each run, as many as a container held around one value passes over, and each element
@@ -338,26 +329,39 @@ final class Witnesses {
         ElementsMadeApart others = apart.isEmpty() ? null
                 : ElementsMadeApart.of(carrier.element(), apart, least + 2, reading,
                         expanding);
-        for (FixtureTemplate seed
-                : proposalsFor(carrier.element(), reading, expanding)) {
-            List<FixtureTemplate> elements = new ArrayList<>();
-            if (others == null) {
-                for (int i = 0; i < least; i++) {
-                    elements.add(seed);
+        // One container around each value the element is offered, and where the element's offer
+        // was stopped, a container not built there: a set short of its size because the element's
+        // values were cut at a figure is that figure's doing. And each container says what the
+        // values it was filled from met in front of the ones it took.
+        for (Proposals.Entry entry : proposalsFor(carrier.element(), reading, expanding)
+                .entries()) {
+            switch (entry) {
+                case Proposals.Stopped(CompositionShortfall met) -> out.add(new Halted(met));
+                case Proposals.Offered(FixtureTemplate seed) -> {
+                    List<FixtureTemplate> elements = new ArrayList<>();
+                    if (others == null) {
+                        for (int i = 0; i < least; i++) {
+                            elements.add(seed);
+                        }
+                    } else {
+                        // One value held is equal to no other held, so this always builds.
+                        Around filled = others.around(List.of(seed), Set.of(), least);
+                        if (!filled.met().nothing()) {
+                            out.add(new Halted(filled.met()));
+                        }
+                        elements.addAll(filled.elements());
+                    }
+                    out.add(new Made(FixtureTemplate.collection(elements), elements.size()));
                 }
-            } else {
-                // One value held is equal to no other held, so this always builds.
-                elements.addAll(others.around(List.of(seed), Set.of(), least));
             }
-            out.add(new Made(FixtureTemplate.collection(elements), elements.size()));
         }
-        return Built.of(out);
+        return new Built(out);
     }
 
     /**
      * A list or a set of {@code position} holding exactly {@code size} elements no two of which
      * are equal at the end of {@code fields} — each a run of fields taken from the element, empty
-     * for the element itself — or null where that cannot be built: the values there have too few,
+     * for the element itself — or nothing where that cannot be built: the values there have too few,
      * a field on the way is no field of a record this writes, or it is no list or set.
      *
      * <p>For a caller that needs its elements told apart at what another container is asked about
@@ -370,19 +374,23 @@ final class Witnesses {
      * value holding it ({@link ElementsKeptApart#heldBy}) — since those hold of every container
      * built there whatever a caller needed it for.
      */
-    static FixtureTemplate apart(TypeView position, int size, List<List<String>> fields,
-                                 List<List<String>> held, RuleReadingContext reading) {
+    static Proposals apart(TypeView position, int size, List<List<String>> fields,
+                           List<List<String>> held, RuleReadingContext reading) {
         if (!(position.shape() instanceof Shape.Sequence carrier)) {
-            return null;
+            return Proposals.NONE;
         }
         if (size == 0) {
-            return FixtureTemplate.collection(List.of());
+            return Proposals.of(List.of(FixtureTemplate.collection(List.of())));
         }
         // Nothing held, so nothing is equal to anything held and this always builds.
-        List<FixtureTemplate> elements = ElementsMadeApart.of(carrier.element(),
+        ElementsMadeApart maker = ElementsMadeApart.of(carrier.element(),
                 ElementsApart.meet(fields, ElementsKeptApart.at(position, held, reading)),
-                size + 1, reading, Set.of()).around(List.of(), Set.of(), size);
-        return elements.size() < size ? null : FixtureTemplate.collection(elements);
+                size + 1, reading, Set.of());
+        Around filled = maker.around(List.of(), Set.of(), size);
+        List<FixtureTemplate> elements = filled.elements();
+        return (elements.size() < size ? Proposals.NONE
+                : Proposals.of(List.of(FixtureTemplate.collection(elements))))
+                .meeting(filled.met());
     }
 
     /**
@@ -402,18 +410,17 @@ final class Witnesses {
          *  another starts with ({@link ElementsApart}). */
         private final List<List<String>> at;
 
-        /** The values each run may take, in the order they are reached, or null where a run is no
-         *  run of fields of a record this writes. */
-        private final List<List<FixtureTemplate>> values;
+        /** The values each run may take, in the order they are reached and with where their
+         *  building was stopped, or null where a run is no run of fields of a record this writes. */
+        private final List<Proposals> values;
 
-        /** Each element made, by the texts of the values placed at its runs in their order; empty
-         *  where none could be. */
-        private final Map<List<String>, Optional<FixtureTemplate>> made = new HashMap<>();
+        /** Each element made, by the texts of the values placed at its runs in their order, with
+         *  what making it met; nothing where none could be. */
+        private final Map<List<String>, Proposals> made = new HashMap<>();
 
         private final RuleReadingContext reading;
 
-        private ElementsMadeApart(Type element, List<List<String>> at,
-                                  List<List<FixtureTemplate>> values,
+        private ElementsMadeApart(Type element, List<List<String>> at, List<Proposals> values,
                                   RuleReadingContext reading) {
             this.element = element;
             this.at = at;
@@ -424,7 +431,7 @@ final class Witnesses {
         /** Up to {@code many} values at each run of {@code at}. */
         static ElementsMadeApart of(Type element, List<List<String>> at, int many,
                                     RuleReadingContext reading, Set<TypeSymbol> expanding) {
-            List<List<FixtureTemplate>> values = new ArrayList<>();
+            List<Proposals> values = new ArrayList<>();
             for (List<String> run : at) {
                 Type type = typeAt(element, run, reading);
                 if (type == null) {
@@ -438,75 +445,94 @@ final class Witnesses {
         /**
          * Every one of {@code held}, and others beside them up to {@code needed} in all, no two of
          * them equal at any run and none written as any of {@code keptOut} — fewer where the values
-         * at a run give out, and null where two of {@code held} are equal at one.
+         * at a run give out, and none where two of {@code held} are equal at one.
          *
          * <p>What {@code held} are at each run is read off them, so the others are kept apart from
          * the values they actually hold and not from what they were asked to. A held value whose
          * run this cannot read — one written as a spread over a value the module states — is apart
          * from nothing here, and what comes back is a proposal the decoder answers.
+         *
+         * <p>With what of this compiler's these elements met: a value a figure kept out from in
+         * front of the ones taken at a run, and what making each element met. Of these elements and
+         * not of every container this is asked for, since a value past the ones taken is one this
+         * container never reached for.
          */
-        List<FixtureTemplate> around(List<FixtureTemplate> held, Set<String> keptOut,
-                                     int needed) {
+        Around around(List<FixtureTemplate> held, Set<String> keptOut, int needed) {
             List<Set<Hir.Expr>> taken = new ArrayList<>();
             for (List<String> run : at) {
                 Set<Hir.Expr> here = new HashSet<>();
                 for (FixtureTemplate each : held) {
                     Hir.Expr value = valueAt(each.value(), run);
                     if (value != null && !here.add(value)) {
-                        return null;
+                        return new Around(null, CompositionShortfall.NONE);
                     }
                 }
                 taken.add(here);
             }
             List<FixtureTemplate> out = new ArrayList<>(held);
             if (out.size() >= needed || values == null) {
-                return out;
+                return new Around(out, CompositionShortfall.NONE);
             }
-            List<List<FixtureTemplate>> free = new ArrayList<>();
+            List<Proposals> free = new ArrayList<>();
             for (int r = 0; r < at.size(); r++) {
-                List<FixtureTemplate> left = new ArrayList<>();
-                for (FixtureTemplate each : values.get(r)) {
-                    if (!taken.get(r).contains(bare(each.value()))) {
-                        left.add(each);
-                    }
-                }
-                free.add(left);
+                Set<Hir.Expr> heldHere = taken.get(r);
+                free.add(values.get(r).map(each ->
+                        heldHere.contains(bare(each.value())) ? null : each));
             }
+            List<List<FixtureTemplate>> freeValues = free.stream().map(Proposals::values).toList();
+            CompositionShortfall met = CompositionShortfall.NONE;
+            // How far into the values at every run the walk reached, which is what of them it met.
+            int reached = 0;
             for (int i = 0; out.size() < needed; i++) {
+                reached = i + 1;
                 Map<List<String>, FixtureTemplate> placed = new LinkedHashMap<>();
                 List<String> written = new ArrayList<>();
-                for (int r = 0; r < at.size(); r++) {
-                    if (i >= free.get(r).size()) {
-                        return out;
+                boolean gaveOut = false;
+                for (int r = 0; r < at.size() && !gaveOut; r++) {
+                    if (i >= freeValues.get(r).size()) {
+                        gaveOut = true;
+                    } else {
+                        FixtureTemplate value = freeValues.get(r).get(i);
+                        placed.put(at.get(r), value);
+                        written.add(value.text());
                     }
-                    FixtureTemplate value = free.get(r).get(i);
-                    placed.put(at.get(r), value);
-                    written.add(value.text());
                 }
-                FixtureTemplate one = made.computeIfAbsent(written,
-                        _ -> Optional.ofNullable(holdingAt(element, placed, reading)))
-                        .orElse(null);
-                if (one != null && !keptOut.contains(one.text())) {
-                    out.add(one);
+                if (gaveOut) {
+                    break;
+                }
+                Proposals one = made.computeIfAbsent(written,
+                        _ -> holdingAt(element, placed, reading).firstOf(1));
+                met = met.and(one.met());
+                if (!one.isEmpty() && !keptOut.contains(one.values().getFirst().text())) {
+                    out.add(one.values().getFirst());
                 }
             }
-            return out;
+            for (Proposals run : free) {
+                met = met.and(run.firstOf(reached).met());
+            }
+            return new Around(out, met);
         }
     }
 
     /**
+     * Elements made apart, or null where what they were to be built around was not apart itself,
+     * and what of this compiler's making them met.
+     */
+    private record Around(List<FixtureTemplate> elements, CompositionShortfall met) {}
+
+    /**
      * Up to {@code many} values of what an element of type {@code element} holds at {@code run},
-     * no two alike, in the order a collection reaches for them — or null where the run is no run
+     * no two alike, in the order a collection reaches for them — or none where the run is no run
      * of fields of a record this writes.
      *
      * <p>The values a list built around one number per element puts at a run that does not hold
      * the number, so that its elements are apart there as its rules ask: the same values, in the
      * same order, that elements made apart without a number are given ({@link ElementsMadeApart}).
      */
-    static List<FixtureTemplate> valuesApartAt(Type element, List<String> run, int many,
-                                               RuleReadingContext reading) {
+    static Proposals valuesApartAt(Type element, List<String> run, int many,
+                                   RuleReadingContext reading) {
         Type type = typeAt(element, run, reading);
-        return type == null ? null : distinctValuesOf(type, many, reading, Set.of());
+        return type == null ? Proposals.NONE : distinctValuesOf(type, many, reading, Set.of());
     }
 
     /**
@@ -583,13 +609,15 @@ final class Witnesses {
 
     /**
      * A value of {@code type} holding each of {@code placed} at the run of fields it is placed at,
-     * and whatever the rules admit everywhere else — or null where one of them cannot be.
+     * and whatever the rules admit everywhere else — or nothing where one of them cannot be, with
+     * what composing the rest met.
      */
-    private static FixtureTemplate holdingAt(Type type, Map<List<String>, FixtureTemplate> placed,
-                                             RuleReadingContext reading) {
+    private static Proposals holdingAt(Type type, Map<List<String>, FixtureTemplate> placed,
+                                       RuleReadingContext reading) {
         if (placed.containsKey(List.of())) {
             // The value itself, which two runs cannot both be.
-            return placed.size() == 1 ? placed.get(List.of()) : null;
+            return placed.size() == 1 ? Proposals.of(List.of(placed.get(List.of())))
+                    : Proposals.NONE;
         }
         // Read whole, since the record composed is written under every name the position wears.
         RuleReadingSource source = reading.source();
@@ -597,37 +625,57 @@ final class Witnesses {
                 source.sums());
         if (!(view.shape() instanceof Shape.Product record)
                 || !(record.name() instanceof TypeSymbol.AtModule named)) {
-            return null;
+            return Proposals.NONE;
         }
         Map<String, Map<List<String>, FixtureTemplate>> byField = new LinkedHashMap<>();
         placed.forEach((at, value) -> byField.computeIfAbsent(at.getFirst(),
                 _ -> new LinkedHashMap<>()).put(at.subList(1, at.size()), value));
         Map<String, FixtureTemplate> given = new LinkedHashMap<>();
+        CompositionShortfall met = CompositionShortfall.NONE;
         for (Map.Entry<String, Map<List<String>, FixtureTemplate>> each : byField.entrySet()) {
             Type field = record.fields().get(each.getKey());
-            FixtureTemplate inner = field == null ? null
-                    : holdingAt(field, each.getValue(), reading);
-            if (inner == null) {
-                return null;
+            if (field == null) {
+                return Proposals.NONE.meeting(met);
             }
-            given.put(each.getKey(), inner);
+            Proposals inner = holdingAt(field, each.getValue(), reading);
+            met = met.and(inner.met());
+            if (inner.isEmpty()) {
+                return Proposals.NONE.meeting(met);
+            }
+            given.put(each.getKey(), inner.values().getFirst());
         }
-        List<FixtureTemplate> composed = Partitions.composed(named,
+        Proposals composed = Partitions.composed(named,
                 Partitions.rulesOver(view.wrappers(), named, source), reading, Set.of(), given);
-        return composed.isEmpty() ? null
-                : WornNames.under(view.wrappers(), composed.getFirst(), source);
+        met = met.and(composed.met());
+        FixtureTemplate written = composed.isEmpty() ? null
+                : WornNames.under(view.wrappers(), composed.values().getFirst(), source);
+        return Proposals.ofNullable(written).meeting(met);
     }
 
     /** A map of that many entries, no two of which share a key. The values under the keys are free
      *  to repeat. */
     private static Built ofMapping(Shape.Mapping map, int least, RuleReadingContext reading,
                                    Set<TypeSymbol> expanding) {
-        List<FixtureTemplate> keys = proposalsFor(map.key(), reading, expanding);
-        List<FixtureTemplate> values = proposalsFor(map.value(), reading, expanding);
+        Proposals keyProposals = proposalsFor(map.key(), reading, expanding);
+        Proposals valueProposals = proposalsFor(map.value(), reading, expanding);
+        List<FixtureTemplate> keys = keyProposals.values();
+        List<FixtureTemplate> values = valueProposals.values();
+        List<Step> out = new ArrayList<>();
+        // Where each side's proposals were stopped, met where the walk first comes to a pair
+        // holding the proposal they stand in front of, which is the pair a proposal a figure kept
+        // out would have stood in.
+        Reaching keysStopped = new Reaching(keyProposals);
+        Reaching valuesStopped = new Reaching(valueProposals);
         if (keys.isEmpty() || values.isEmpty()) {
-            return Built.NONE;
+            // Nothing to pair, so every proposal either side would have had is one no map is
+            // built of.
+            CompositionShortfall met = keyProposals.met().and(valueProposals.met());
+            if (!met.nothing()) {
+                out.add(new Halted(met));
+            }
+            return new Built(out);
         }
-        List<Made> out = new ArrayList<>();
+        int pairs = 0;
         // Every pair, nearest first. A key's rules and a value's are answered together or not at all —
         // the pair is inside one position, so no search outside can put a key's second proposal beside
         // a value's first — and taking them in step would offer only the pairs whose two proposals
@@ -642,31 +690,71 @@ final class Witnesses {
         // beside. The question is the key's and the count's — what stands under them is not in it —
         // so a reading per pair is one walk over the element's values run again for every value the
         // other side proposed.
-        List<List<FixtureTemplate>> keysFrom =
-                new ArrayList<>(Collections.nCopies(keys.size(), null));
+        List<Proposals> keysFrom = new ArrayList<>(Collections.nCopies(keys.size(), null));
         // And the key type's values the others are taken from, which are no key proposal's.
-        List<FixtureTemplate> keyValues = distinctValuesOf(map.key(), least + 1, reading, expanding);
+        Proposals keyValues = distinctValuesOf(map.key(), least + 1, reading, expanding);
         pairing:
         for (int apart = 0; apart <= keys.size() + values.size() - 2; apart++) {
             for (int i = Math.max(0, apart - values.size() + 1);
                     i <= Math.min(apart, keys.size() - 1); i++) {
-                if (out.size() == MOST_PAIRINGS) {
+                if (pairs == MOST_PAIRINGS) {
                     stopped = true;
                     break pairing;
                 }
                 if (keysFrom.get(i) == null) {
                     keysFrom.set(i, distinctFrom(keys.get(i), keyValues, least));
                 }
+                halt(out, keysStopped.through(new int[] {i})
+                        .and(valuesStopped.through(new int[] {apart - i})));
                 FixtureTemplate value = values.get(apart - i);
                 List<FixtureTemplate> entries = new ArrayList<>();
-                for (FixtureTemplate key : keysFrom.get(i)) {
+                for (FixtureTemplate key : keysFrom.get(i).values()) {
                     entries.add(FixtureTemplate.entry(key, value));
                 }
+                // What the keys beside this one met in front of the ones it took.
+                if (!keysFrom.get(i).met().nothing()) {
+                    out.add(new Halted(keysFrom.get(i).met()));
+                }
                 out.add(new Made(FixtureTemplate.collection(entries), entries.size()));
+                pairs++;
             }
         }
-        return new Built(out,
-                stopped ? Set.of(CompositionBudget.PAIRINGS_BUILT_AT_ONCE) : Set.of());
+        if (stopped) {
+            out.add(new Halted(CompositionShortfall.of(
+                    List.of(CompositionBudget.PAIRINGS_BUILT_AT_ONCE))));
+        } else {
+            // Every pair walked, so a proposal stopped past the last of either side is one the walk
+            // would have gone on to.
+            halt(out, keysStopped.rest().and(valuesStopped.rest()));
+        }
+        return new Built(out);
+    }
+
+    /** A step stopped by {@code met}, where it met something. */
+    private static void halt(List<Step> out, CompositionShortfall met) {
+        if (!met.nothing()) {
+            out.add(new Halted(met));
+        }
+    }
+
+    /**
+     * What stopped {@code proposals} in front of each of its values, by the value's place, and
+     * last what stopped it past the last of them.
+     */
+    private static List<CompositionShortfall> stopsBefore(Proposals proposals) {
+        List<CompositionShortfall> out = new ArrayList<>();
+        CompositionShortfall here = CompositionShortfall.NONE;
+        for (Proposals.Entry entry : proposals.entries()) {
+            switch (entry) {
+                case Proposals.Stopped(CompositionShortfall met) -> here = here.and(met);
+                case Proposals.Offered _ -> {
+                    out.add(here);
+                    here = CompositionShortfall.NONE;
+                }
+            }
+        }
+        out.add(here);
+        return out;
     }
 
     /**
@@ -678,14 +766,15 @@ final class Witnesses {
      * this list drops a candidate on the strength of how many rules were read before it. The minimum's
      * is added last of those, which is exactly the one such a budget takes away.
      */
-    private static List<FixtureTemplate> proposalsFor(Type type, RuleReadingContext reading,
-                                                      Set<TypeSymbol> expanding) {
+    private static Proposals proposalsFor(Type type, RuleReadingContext reading,
+                                          Set<TypeSymbol> expanding) {
         return Partitions.representativesOf(type, reading, null, expanding);
     }
 
     /**
      * A collection of {@code carrier} holding every one of {@code holding}, nothing equal to any of
-     * {@code keptOut}, and as many as the rules let it hold — or null where none can be built.
+     * {@code keptOut}, and as many as the rules let it hold — or nothing where none can be built,
+     * with what of this compiler's the build met.
      *
      * <p>For a row being built around what it is asked to hold. What the rest are is not what was
      * asked for, and what they may be is: a list may hold the same value again and a set may not,
@@ -702,17 +791,21 @@ final class Witnesses {
      * allow, and never fewer than the values it holds. A container holding nothing asked of it and
      * kept to the rules' floor may hold none at all.
      *
-     * <p>Null where the values cannot all stand together: one value both written in and kept out,
-     * more than the rules leave room for, or a type with too few values to fill the rest with none
-     * kept out. Each of those is a container nothing can build, said as nothing built rather than
-     * as a container of the wrong size or holding what it was to hold none of.
+     * <p>Nothing where the values cannot all stand together: one value both written in and kept
+     * out, more than the rules leave room for, or a type with too few values to fill the rest with
+     * none kept out. Each of those is a container nothing can build, said as nothing built rather
+     * than as a container of the wrong size or holding what it was to hold none of. And nothing,
+     * having met a figure, where it is this compiler that would not build it: more than a proposal
+     * holds, or too few values because the element's were cut short.
      */
-    static FixtureTemplate holding(Shape.Sequence carrier, List<List<String>> apart,
-                                   List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
-                                   DeclaredBounds.CountRange holds, RuleReadingContext reading) {
-        List<FixtureTemplate> elements = elementsHolding(carrier.element(), apart, holding,
-                keptOut, holds, reading);
-        return elements == null ? null : FixtureTemplate.collection(elements);
+    static Proposals holding(Shape.Sequence carrier, List<List<String>> apart,
+                             List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
+                             DeclaredBounds.CountRange holds, RuleReadingContext reading) {
+        Elements elements = elementsHolding(carrier.element(), apart, holding, keptOut, holds,
+                reading);
+        return (elements.held() == null ? Proposals.NONE
+                : Proposals.of(List.of(FixtureTemplate.collection(elements.held()))))
+                .meeting(elements.met());
     }
 
     /**
@@ -730,16 +823,16 @@ final class Witnesses {
      * <p>{@code eachFiled} are keys each asked of an entry of its own, over whatever value the
      * rules admit. A key among them that is {@code filed}'s, or another of them, is one entry.
      */
-    static FixtureTemplate holding(Shape.Mapping map,
-                                   List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
-                                   Filed filed, List<FixtureTemplate> eachFiled,
-                                   List<FixtureTemplate> keysKeptOut,
-                                   DeclaredBounds.CountRange holds,
-                                   RuleReadingContext reading) {
+    static Proposals holding(Shape.Mapping map,
+                             List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
+                             Filed filed, List<FixtureTemplate> eachFiled,
+                             List<FixtureTemplate> keysKeptOut,
+                             DeclaredBounds.CountRange holds,
+                             RuleReadingContext reading) {
         Set<String> out = new LinkedHashSet<>();
         keysKeptOut.forEach(each -> out.add(each.text()));
         if (filed != null && out.contains(filed.key().text())) {
-            return null;
+            return Proposals.NONE;
         }
         Set<String> filedKeys = new LinkedHashSet<>();
         if (filed != null) {
@@ -748,7 +841,7 @@ final class Witnesses {
         List<FixtureTemplate> apart = new ArrayList<>();
         for (FixtureTemplate each : eachFiled) {
             if (out.contains(each.text())) {
-                return null;
+                return Proposals.NONE;
             }
             if (filedKeys.add(each.text())) {
                 apart.add(each);
@@ -760,10 +853,11 @@ final class Witnesses {
         DeclaredBounds.CountRange room = keyed > 0
                 ? new DeclaredBounds.CountRange(Math.max(keyed, holds.least()), holds.most())
                 : holds;
-        List<FixtureTemplate> values =
-                elementsHolding(map.value(), List.of(), holding, keptOut, room, reading);
+        Elements filled = elementsHolding(map.value(), List.of(), holding, keptOut, room, reading);
+        CompositionShortfall met = filled.met();
+        List<FixtureTemplate> values = filled.held();
         if (values == null) {
-            return null;
+            return Proposals.NONE.meeting(met);
         }
         // Where the value the key is chosen for stands among them, asked of the values rather than
         // assumed from the order they were handed in. Any of them, where none was chosen.
@@ -788,17 +882,24 @@ final class Witnesses {
         // still leaves enough beside them, and as many more as are kept out.
         List<FixtureTemplate> others = new ArrayList<>();
         int needed = values.size() - keyed;
-        for (FixtureTemplate each : distinctValuesOf(map.key(),
-                values.size() + keyed + keysKeptOut.size(), reading, Set.of())) {
+        Proposals keys = distinctValuesOf(map.key(), values.size() + keyed + keysKeptOut.size(),
+                reading, Set.of());
+        // What the keys met in front of the ones taken, and all of it where they ran out.
+        for (Proposals.Entry each : keys.entries()) {
             if (others.size() == needed) {
                 break;
             }
-            if (written.add(each.text())) {
-                others.add(each);
+            switch (each) {
+                case Proposals.Stopped(CompositionShortfall stop) -> met = met.and(stop);
+                case Proposals.Offered(FixtureTemplate key) -> {
+                    if (written.add(key.text())) {
+                        others.add(key);
+                    }
+                }
             }
         }
         if (others.size() < needed) {
-            return null;
+            return Proposals.NONE.meeting(met);
         }
         List<FixtureTemplate> entries = new ArrayList<>();
         int nextApart = 0;
@@ -808,7 +909,7 @@ final class Witnesses {
                     : nextApart < apart.size() ? apart.get(nextApart++) : others.get(next++);
             entries.add(FixtureTemplate.entry(key, values.get(i)));
         }
-        return FixtureTemplate.collection(entries);
+        return Proposals.of(List.of(FixtureTemplate.collection(entries))).meeting(met);
     }
 
     /**
@@ -826,44 +927,65 @@ final class Witnesses {
     }
 
     /**
+     * What a container holds, or null where nothing can be built, and what of this compiler's
+     * the filling of it met.
+     *
+     * @param held the elements, which may be none — an empty container is one that was built
+     */
+    private record Elements(List<FixtureTemplate> held, CompositionShortfall met) {
+
+        static final Elements NONE = new Elements(null, CompositionShortfall.NONE);
+    }
+
+    /**
      * What a container of {@code element} holds when it holds every one of {@code holding},
-     * nothing equal to any of {@code keptOut}, and as many as the rules let it — or null where
+     * nothing equal to any of {@code keptOut}, and as many as the rules let it — or nothing where
      * nothing can.
+     *
+     * <p>Two ways of nothing, told apart by what comes with it. More than the rules leave room for
+     * is the model's answer and meets nothing; more than a proposal holds is this compiler's, and
+     * meets the figure — a reader told the first goes looking at the rules, and one told the second
+     * at the figure, so the two cannot be one null.
      *
      * @param apart what the values are to be apart at, as {@link ElementsApart} reads it: nothing
      *              where they may repeat, which a list's elements and a map's values may unless a
      *              rule says otherwise
      */
-    private static List<FixtureTemplate> elementsHolding(Type element, List<List<String>> apart,
-                                                         List<FixtureTemplate> holding,
-                                                         List<FixtureTemplate> keptOut,
-                                                         DeclaredBounds.CountRange holds,
-                                                         RuleReadingContext reading) {
+    private static Elements elementsHolding(Type element, List<List<String>> apart,
+                                            List<FixtureTemplate> holding,
+                                            List<FixtureTemplate> keptOut,
+                                            DeclaredBounds.CountRange holds,
+                                            RuleReadingContext reading) {
         Set<String> out = new LinkedHashSet<>();
         keptOut.forEach(each -> out.add(each.text()));
         Set<String> written = new LinkedHashSet<>();
         List<FixtureTemplate> elements = new ArrayList<>();
         for (FixtureTemplate each : holding) {
             if (out.contains(each.text())) {
-                return null;
+                return Elements.NONE;
             }
             if (written.add(each.text())) {
                 elements.add(each);
             }
         }
         int needed = Math.max(holds.least(), elements.size());
-        if (needed > holds.most() || pastTheElements(needed) != null) {
-            return null;
+        if (needed > holds.most()) {
+            return Elements.NONE;
+        }
+        CompositionBudget past = pastTheElements(needed);
+        if (past != null) {
+            return new Elements(null, CompositionShortfall.of(List.of(past)));
         }
         // Fewer than asked for is a type with too few values, which is a container the rules want
-        // and nothing can build.
+        // and nothing can build — or values cut at a figure, which what they met says.
         if (!apart.isEmpty()) {
             // One more than the values that may be passed over, since each kept out or already
             // held may be among them.
-            List<FixtureTemplate> around = ElementsMadeApart.of(element, apart,
-                    needed + out.size() + elements.size() + 1, reading, Set.of())
-                    .around(elements, out, needed);
-            return around == null || around.size() < needed ? null : around;
+            ElementsMadeApart maker = ElementsMadeApart.of(element, apart,
+                    needed + out.size() + elements.size() + 1, reading, Set.of());
+            Around around = maker.around(elements, out, needed);
+            return new Elements(around.elements() == null || around.elements().size() < needed
+                    ? null : around.elements(), around.met());
         }
         // A container that may say one of its values again says the one it was asked to hold,
         // which is the value that is surely one the element's rules admit.
@@ -871,18 +993,26 @@ final class Witnesses {
             while (elements.size() < needed) {
                 elements.add(elements.getFirst());
             }
-            return elements;
+            return new Elements(elements, CompositionShortfall.NONE);
         }
-        for (FixtureTemplate each
-                : distinctValuesOf(element, needed + out.size() + 1, reading, Set.of())) {
-            if (!out.contains(each.text())) {
-                while (elements.size() < needed) {
-                    elements.add(each);
+        // The first value not kept out, with what was met in front of it — all of it, where every
+        // value is kept out.
+        CompositionShortfall met = CompositionShortfall.NONE;
+        for (Proposals.Entry entry : distinctValuesOf(element, needed + out.size() + 1, reading,
+                Set.of()).entries()) {
+            switch (entry) {
+                case Proposals.Stopped(CompositionShortfall stop) -> met = met.and(stop);
+                case Proposals.Offered(FixtureTemplate each) -> {
+                    if (!out.contains(each.text())) {
+                        while (elements.size() < needed) {
+                            elements.add(each);
+                        }
+                        return new Elements(elements, met);
+                    }
                 }
-                return elements;
             }
         }
-        return needed == 0 ? elements : null;
+        return new Elements(needed == 0 ? elements : null, met);
     }
 
     /**
@@ -893,22 +1023,14 @@ final class Witnesses {
      * <p>Fewer than asked where the type runs out, which is not the same as failing: a set of three
      * booleans is a thing no value satisfies, and offering the two that exist is a proposal the decoder
      * answers the way it answers any other.
+     *
+     * <p>With the stops in front of the values taken, and every stop where the values ran out.
      */
-    private static List<FixtureTemplate> distinctFrom(FixtureTemplate seed,
-                                                      List<FixtureTemplate> values, int least) {
-        Set<String> written = new LinkedHashSet<>();
-        List<FixtureTemplate> out = new ArrayList<>();
-        written.add(seed.text());
+    private static Proposals distinctFrom(FixtureTemplate seed, Proposals values, int least) {
+        Proposals.Gathering out = Proposals.Gathering.distinct();
         out.add(seed);
-        for (FixtureTemplate each : values) {
-            if (out.size() >= least) {
-                break;
-            }
-            if (written.add(each.text())) {
-                out.add(each);
-            }
-        }
-        return List.copyOf(out);
+        out.addAll(values, least);
+        return out.done();
     }
 
     /**
@@ -938,10 +1060,13 @@ final class Witnesses {
      * one of its fields and a collection in how many it holds ({@link #differing}). A list kept
      * apart as records, or as lists, has its elements from here — taken from the proposals alone it
      * had one of them, and a list of two was a list saying one value twice.
+     *
+     * <p>With what of this compiler's each step that ran met. Fewer than {@code many} is a type
+     * with no more values or a build cut at a figure, and only what was met tells the two apart —
+     * a set of two of a value no proposal holds is not a set the type has too few values for.
      */
-    static List<FixtureTemplate> distinctValuesOf(Type type, int many,
-                                                  RuleReadingContext reading,
-                                                  Set<TypeSymbol> expanding) {
+    static Proposals distinctValuesOf(Type type, int many, RuleReadingContext reading,
+                                      Set<TypeSymbol> expanding) {
         return distinctValuesOf(type, many, null, AdmissibleSet.complete(ValueSet.ANY), reading,
                 expanding);
     }
@@ -953,68 +1078,45 @@ final class Witnesses {
      * it, and the values offered first are the ones the field is read as dividing into
      * ({@link #placed}), and the only ones where they are every value it can hold.
      */
-    static List<FixtureTemplate> distinctValuesOf(Type type, int many, FieldDomains.Held held,
-                                                  AdmissibleSet atThePlace,
-                                                  RuleReadingContext reading,
-                                                  Set<TypeSymbol> expanding) {
-        Set<String> written = new LinkedHashSet<>();
-        List<FixtureTemplate> out = new ArrayList<>();
+    static Proposals distinctValuesOf(Type type, int many, FieldDomains.Held held,
+                                      AdmissibleSet atThePlace,
+                                      RuleReadingContext reading,
+                                      Set<TypeSymbol> expanding) {
+        // Each step's values and stops taken in its order until there are as many as asked for, so
+        // a stop is kept where the walk came to it and one past the last value taken is never
+        // reached.
+        Proposals.Gathering out = Proposals.Gathering.distinct();
         Placed placed = placed(type, atThePlace, reading, expanding);
-        for (FixtureTemplate each : placed.values()) {
-            if (out.size() >= many) {
-                return List.copyOf(out);
-            }
-            if (written.add(each.text())) {
-                out.add(each);
-            }
-        }
-        if (placed.everyValue()) {
-            return List.copyOf(out);
+        out.addAll(placed.offered(), many);
+        if (placed.everyValue() || out.size() >= many) {
+            return out.done();
         }
         for (FixtureTemplate each : Partitions.admittedStrings(type, reading, many)) {
             if (out.size() >= many) {
-                return List.copyOf(out);
+                return out.done();
             }
-            if (written.add(each.text())) {
-                out.add(each);
-            }
+            out.add(each);
         }
         for (int i = 0; out.size() < many; i++) {
-            FixtureTemplate each = varied(type, i, reading);
-            if (each == null) {
+            Proposals each = varied(type, i, reading);
+            out.addAll(each, many);
+            if (each.isEmpty()) {
                 break;
             }
-            if (written.add(each.text())) {
-                out.add(each);
-            }
         }
         if (out.size() >= many) {
-            return List.copyOf(out);
+            return out.done();
         }
-        for (FixtureTemplate each : reading.revision().settled(
-                new Differing(type, many, held, reading, expanding))) {
-            if (out.size() >= many) {
-                return List.copyOf(out);
-            }
-            if (written.add(each.text())) {
-                out.add(each);
-            }
-        }
+        out.addAll(reading.revision().settled(new Differing(type, many, held, reading, expanding)),
+                many);
         if (out.size() >= many) {
-            return List.copyOf(out);
+            return out.done();
         }
         // Asked last and only where there is room for what it answers. What a position is offered
         // is a reading of every rule on it and costs what that reading costs, and a loop that asks
         // for the list and then leaves it alone pays for it at every count already filled.
-        for (FixtureTemplate each : Partitions.representativesOf(type, reading, null, expanding)) {
-            if (out.size() >= many) {
-                break;
-            }
-            if (written.add(each.text())) {
-                out.add(each);
-            }
-        }
-        return List.copyOf(out);
+        out.addAll(Partitions.representativesOf(type, reading, null, expanding), many);
+        return out.done();
     }
 
     /**
@@ -1023,9 +1125,11 @@ final class Witnesses {
      * are read under — the source by its origin, as {@link Partitions.ARecordComposed} is keyed.
      *
      * <p>Kept, because each is a record or a collection composed under its rules, and a list kept
-     * apart asks for them at every size and every point a search visits.
+     * apart asks for them at every size and every point a search visits. Kept whole, with what the
+     * build met: a reader handed the values from here and the figure from a second build would
+     * hold two answers that agree only while the two builds do.
      */
-    private static final class Differing implements RevisionWork<List<FixtureTemplate>> {
+    private static final class Differing implements RevisionWork<Proposals> {
 
         private final Type type;
 
@@ -1053,7 +1157,7 @@ final class Witnesses {
         }
 
         @Override
-        public List<FixtureTemplate> workedOut(RevisionKnowledge revision) {
+        public Proposals workedOut(RevisionKnowledge revision) {
             return differing(type, many, held, reading, expanding);
         }
 
@@ -1093,22 +1197,21 @@ final class Witnesses {
      * the one built at each size are proposals and not built values — a rule over what it holds
      * is the decoder's to apply — so they come after every size was built once.
      */
-    private static List<FixtureTemplate> differing(Type type, int many, FieldDomains.Held held,
-                                                   RuleReadingContext reading,
-                                                   Set<TypeSymbol> expanding) {
+    private static Proposals differing(Type type, int many, FieldDomains.Held held,
+                                       RuleReadingContext reading, Set<TypeSymbol> expanding) {
         RuleReadingSource source = reading.source();
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
         Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
         for (TypeSymbol wears : view.wrappers()) {
             if (!inside.add(wears)) {
-                return List.of();
+                return Proposals.NONE;
             }
         }
         return switch (view.shape()) {
             case Shape.Product record -> {
                 if (!(record.name() instanceof TypeSymbol.AtModule named)) {
-                    yield List.of();
+                    yield Proposals.NONE;
                 }
                 yield worn(view, Partitions.differingAtItsFields(named,
                         Partitions.rulesOver(view.wrappers(), named, source), many, reading,
@@ -1117,19 +1220,21 @@ final class Witnesses {
             case Shape.Sequence _, Shape.Mapping _ -> {
                 DeclaredBounds.CountRange range = Partitions.heldRange(type, reading, held);
                 List<List<String>> apart = ElementsKeptApart.heldBy(held);
-                List<FixtureTemplate> out = new ArrayList<>();
+                Proposals.Gathering out = Proposals.Gathering.distinct();
                 // Up to the first size that builds nothing: one holding more is built of what
                 // that one could not have, so the sizes past it are walked for nothing — and
                 // where the rules cap no size, walked as far as a count goes.
                 for (int size = Math.max(range.least(), 0);
                      size <= range.most() && out.size() < many; size++) {
-                    Sized one = ofSize(view, size, apart, reading, inside);
-                    if (one.values().isEmpty()) {
-                        break;
-                    }
+                    // The first value at the size, which is all of it this takes, with what was
+                    // met in front of it — and where there is none, what stopped it.
                     // Built as the collection the names are worn over, so the names are put on
                     // here as they are on every value this answers.
-                    out.addAll(worn(view, List.of(one.values().getFirst()), source));
+                    Proposals one = ofSize(view, size, apart, reading, inside).firstOf(1);
+                    out.addAll(worn(view, one, source), many);
+                    if (one.isEmpty()) {
+                        break;
+                    }
                 }
                 // Then every other content, where the elements are apart as wholes or not at all.
                 // One kept apart at a field of its elements holds a few its rules choose, and an
@@ -1139,26 +1244,17 @@ final class Witnesses {
                 List<List<String>> keptApart = view.shape() instanceof Shape.Sequence
                         ? ElementsKeptApart.at(view, apart, reading) : apart;
                 if (out.size() < many && keptApart.stream().allMatch(List::isEmpty)) {
-                    Set<String> written = new HashSet<>();
-                    out.forEach(each -> written.add(each.text()));
                     arrange(view.shape(), !keptApart.isEmpty(), range, many, reading, inside,
-                            content -> {
-                                FixtureTemplate each =
-                                        WornNames.under(view.wrappers(), content, source);
-                                if (each != null && written.add(each.text())) {
-                                    out.add(each);
-                                }
-                                return out.size() < many;
-                            });
+                            out, content -> WornNames.under(view.wrappers(), content, source));
                 }
-                yield out;
+                yield out.done();
             }
             // Nothing, and every value of what it holds. What it holds is written as itself.
             case Shape.Optional optional -> {
-                List<FixtureTemplate> values = new ArrayList<>();
+                Proposals.Gathering values = Proposals.Gathering.inOrder();
                 values.add(FixtureTemplate.none());
                 values.addAll(distinctValuesOf(optional.element(), many - 1, reading, inside));
-                yield worn(view, values, source);
+                yield worn(view, values.done(), source);
             }
             // A value of a sum is a value of one of its cases, written as that case is.
             case Shape.Sum sum -> worn(view, ofEachCase(sum.reaches().cases(), sum.name(), many,
@@ -1169,24 +1265,16 @@ final class Witnesses {
                     null, many, reading, inside), source);
             case Shape.Scalar _, Shape.Unit _, Shape.Unresolved _, Shape.Tuple _,
                  Shape.Function _, Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _,
-                 Shape.Undecided _ -> List.of();
+                 Shape.Undecided _ -> Proposals.NONE;
         };
     }
 
     /**
      * {@code values} under the names {@code view} wears, leaving out any those names cannot be
-     * written on here ({@link WornNames#under}).
+     * written on here ({@link WornNames#under}), the stops where they stood.
      */
-    private static List<FixtureTemplate> worn(TypeView view, List<FixtureTemplate> values,
-                                              RuleReadingSource source) {
-        List<FixtureTemplate> out = new ArrayList<>();
-        for (FixtureTemplate each : values) {
-            FixtureTemplate written = WornNames.under(view.wrappers(), each, source);
-            if (written != null) {
-                out.add(written);
-            }
-        }
-        return out;
+    private static Proposals worn(TypeView view, Proposals values, RuleReadingSource source) {
+        return values.map(each -> WornNames.under(view.wrappers(), each, source));
     }
 
     /**
@@ -1200,20 +1288,19 @@ final class Witnesses {
      * @param sum the sum's own name, which a case reached from inside it does not open again; null
      *            for a union, which has none
      */
-    private static List<FixtureTemplate> ofEachCase(List<TypeSymbol> cases, TypeSymbol sum,
-                                                    int many,
-                                                    RuleReadingContext reading,
-                                                    Set<TypeSymbol> inside) {
+    private static Proposals ofEachCase(List<TypeSymbol> cases, TypeSymbol sum, int many,
+                                        RuleReadingContext reading, Set<TypeSymbol> inside) {
         Set<TypeSymbol> within = new LinkedHashSet<>(inside);
         if (sum != null && !within.add(sum)) {
-            return List.of();
+            return Proposals.NONE;
         }
         List<TypeSymbol> open = cases.stream().filter(leaf -> !within.contains(leaf)).toList();
         if (open.isEmpty() || many <= 0) {
-            return List.of();
+            return Proposals.NONE;
         }
-        List<List<FixtureTemplate>> each = new ArrayList<>();
-        open.forEach(leaf -> each.add(List.of()));
+        // Each case's values as last read: a case read again at a larger share is the whole answer
+        // for it, with where it was stopped.
+        List<Proposals> each = new ArrayList<>(Collections.nCopies(open.size(), Proposals.NONE));
         boolean[] spent = new boolean[open.size()];
         int share = Math.max(1, (many + open.size() - 1) / open.size());
         while (true) {
@@ -1222,28 +1309,48 @@ final class Witnesses {
                 if (spent[i]) {
                     continue;
                 }
-                List<FixtureTemplate> values =
-                        distinctValuesOf(Type.ref(open.get(i)), share, reading, within);
+                Proposals values = distinctValuesOf(Type.ref(open.get(i)), share, reading, within);
                 each.set(i, values);
-                spent[i] = values.size() < share;
+                spent[i] = values.values().size() < share;
                 anyFilled |= !spent[i];
             }
-            List<FixtureTemplate> out = takenInTurn(each, many);
-            if (out.size() >= many || !anyFilled || share >= many) {
+            Proposals out = takenInTurn(each, many);
+            if (out.values().size() >= many || !anyFilled || share >= many) {
                 return out;
             }
             share = Math.min(many, share * 2);
         }
     }
 
-    /** Up to {@code many} of {@code each}, the first of every list before the second of any. */
-    private static List<FixtureTemplate> takenInTurn(List<List<FixtureTemplate>> each, int many) {
-        List<FixtureTemplate> out = new ArrayList<>();
+    /**
+     * Up to {@code many} of {@code each}, the first of every list before the second of any — and
+     * each stop where its own list put it, in front of the value it stood before, so a case stopped
+     * where it would have given the second value is met where that second value would have been
+     * taken.
+     */
+    private static Proposals takenInTurn(List<Proposals> each, int many) {
+        // Each list cut into turns: the stops in front of a value and the value, and last the stops
+        // after its last value.
+        List<List<List<Proposals.Entry>>> turns = new ArrayList<>();
+        for (Proposals values : each) {
+            List<List<Proposals.Entry>> cut = new ArrayList<>();
+            List<Proposals.Entry> turn = new ArrayList<>();
+            for (Proposals.Entry entry : values.entries()) {
+                turn.add(entry);
+                if (entry instanceof Proposals.Offered) {
+                    cut.add(turn);
+                    turn = new ArrayList<>();
+                }
+            }
+            cut.add(turn);
+            turns.add(cut);
+        }
+        Proposals.Gathering out = Proposals.Gathering.inOrder();
         for (int i = 0; out.size() < many; i++) {
             boolean more = false;
-            for (List<FixtureTemplate> values : each) {
-                if (i < values.size() && out.size() < many) {
-                    out.add(values.get(i));
+            for (List<List<Proposals.Entry>> cut : turns) {
+                if (i < cut.size() && out.size() < many) {
+                    out.addAll(new Proposals(cut.get(i)), many);
                     more = true;
                 }
             }
@@ -1251,7 +1358,7 @@ final class Witnesses {
                 break;
             }
         }
-        return out;
+        return out.done();
     }
 
     /**
@@ -1264,39 +1371,70 @@ final class Witnesses {
      * {@code many} contents apart. Proposals and not built values: a rule over what the collection
      * holds is the decoder's to apply.
      *
-     * @param apart whether the elements are apart as wholes, so that a list or a map's values say
-     *              no value twice; a set's never do
+     * <p>Into {@code out}, each content after what stopped a value of what it holds in front of
+     * the furthest value it takes — a content of values the walk would have reached past one a
+     * figure kept out is a content taken in place of one holding that value — until {@code out}
+     * holds {@code many}. Where the contents run out first, after them every stop the values had
+     * left, and a size past what a proposal holds.
+     *
+     * @param apart   whether the elements are apart as wholes, so that a list or a map's values
+     *                say no value twice; a set's never do
+     * @param written what a content is written as, or null where it is written as nothing
      */
     private static void arrange(Shape shape, boolean apart, DeclaredBounds.CountRange range,
                                 int many, RuleReadingContext reading, Set<TypeSymbol> inside,
-                                Predicate<FixtureTemplate> offer) {
+                                Proposals.Gathering out,
+                                Function<FixtureTemplate, FixtureTemplate> written) {
         int least = Math.max(range.least(), 0);
         // What tells two contents apart is the shape's: a set is the few it holds, and a list or
         // what a map files under its keys is in an order as well.
         Picking runs = apart ? Picking.AN_ORDER_OF_A_FEW : Picking.A_RUN;
         switch (shape) {
             case Shape.Sequence(Shape.Sequence.Kind kind, Type element) -> {
-                List<FixtureTemplate> values = distinctValuesOf(element, many, reading, inside);
+                Reaching elements = new Reaching(distinctValuesOf(element, many, reading, inside));
+                List<FixtureTemplate> values = elements.values();
                 Picking picking = kind == Shape.Sequence.Kind.SET ? Picking.A_FEW : runs;
                 for (int size = least; size <= range.most(); size++) {
-                    if (!picking.fits(size, values.size()) || pastTheElements(size) != null) {
+                    if (!picking.fits(size, values.size())) {
+                        out.stop(elements.rest());
+                        return;
+                    }
+                    CompositionBudget past = pastTheElements(size);
+                    if (past != null) {
+                        out.stop(elements.rest().and(CompositionShortfall.of(List.of(past))));
                         return;
                     }
                     int[] at = picking.first(size);
                     do {
-                        if (!offer.test(FixtureTemplate.collection(picked(values, at)))) {
+                        out.stop(elements.through(at));
+                        FixtureTemplate each =
+                                written.apply(FixtureTemplate.collection(picked(values, at)));
+                        if (each != null) {
+                            out.add(each);
+                        }
+                        if (out.size() >= many) {
                             return;
                         }
                     } while (picking.next(at, values.size()));
                 }
+                out.stop(elements.rest());
             }
             case Shape.Mapping(Type key, Type value) -> {
-                List<FixtureTemplate> keys = distinctValuesOf(key, many, reading, inside);
-                List<FixtureTemplate> values = distinctValuesOf(value, many, reading, inside);
+                Reaching keyValues = new Reaching(distinctValuesOf(key, many, reading, inside));
+                Reaching valueValues = new Reaching(distinctValuesOf(value, many, reading,
+                        inside));
+                List<FixtureTemplate> keys = keyValues.values();
+                List<FixtureTemplate> values = valueValues.values();
                 for (int size = least; size <= range.most(); size++) {
                     if (!Picking.A_FEW.fits(size, keys.size())
-                            || !runs.fits(size, values.size())
-                            || pastTheElements(size) != null) {
+                            || !runs.fits(size, values.size())) {
+                        out.stop(keyValues.rest().and(valueValues.rest()));
+                        return;
+                    }
+                    CompositionBudget past = pastTheElements(size);
+                    if (past != null) {
+                        out.stop(keyValues.rest().and(valueValues.rest())
+                                .and(CompositionShortfall.of(List.of(past))));
                         return;
                     }
                     int[] which = Picking.A_FEW.first(size);
@@ -1309,16 +1447,70 @@ final class Witnesses {
                                 entries.add(FixtureTemplate.entry(held.get(i),
                                         values.get(to[i])));
                             }
-                            if (!offer.test(FixtureTemplate.collection(entries))) {
+                            out.stop(keyValues.through(which).and(valueValues.through(to)));
+                            FixtureTemplate each =
+                                    written.apply(FixtureTemplate.collection(entries));
+                            if (each != null) {
+                                out.add(each);
+                            }
+                            if (out.size() >= many) {
                                 return;
                             }
                         } while (runs.next(to, values.size()));
                     } while (Picking.A_FEW.next(which, keys.size()));
                 }
+                out.stop(keyValues.rest().and(valueValues.rest()));
             }
             case Shape.Scalar _, Shape.Product _, Shape.Sum _, Shape.Unit _, Shape.Optional _,
                  Shape.Unresolved _, Shape.Cases _, Shape.Tuple _, Shape.Function _,
                  Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _, Shape.Undecided _ -> { }
+        }
+    }
+
+    /**
+     * Values arranged into contents, and how far into them the arranging has reached: what
+     * stopped a value in front of the furthest one taken so far is met once, as the arranging
+     * first reaches past it.
+     */
+    private static final class Reaching {
+
+        private final List<FixtureTemplate> values;
+
+        /** What stopped the values in front of each of them by its place, and last past them. */
+        private final List<CompositionShortfall> before;
+
+        /** How many places' stops have been met. */
+        private int reached;
+
+        Reaching(Proposals proposals) {
+            this.values = proposals.values();
+            this.before = stopsBefore(proposals);
+        }
+
+        List<FixtureTemplate> values() {
+            return values;
+        }
+
+        /** What stops in front of the furthest of the places {@code at} names have not been met. */
+        CompositionShortfall through(int[] at) {
+            int furthest = -1;
+            for (int each : at) {
+                furthest = Math.max(furthest, each);
+            }
+            return metUpTo(furthest + 1);
+        }
+
+        /** Every stop not yet met, past the last value as well: the arranging went to the end. */
+        CompositionShortfall rest() {
+            return metUpTo(before.size());
+        }
+
+        private CompositionShortfall metUpTo(int places) {
+            CompositionShortfall out = CompositionShortfall.NONE;
+            for (; reached < places; reached++) {
+                out = out.and(before.get(reached));
+            }
+            return out;
         }
     }
 
@@ -1470,26 +1662,29 @@ final class Witnesses {
         RuleReadingSource source = reading.source();
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
-        List<FixtureTemplate> out = new ArrayList<>();
+        Proposals.Gathering out = Proposals.Gathering.inOrder();
         for (PartitionClass each : PartitionClasses.of(
                 PartitionClasses.casesAt(view, atThePlace, reading), view, reading, expanding)) {
             out.addAll(Partitions.standingFor(each.representatives(), reading, expanding));
         }
-        return new Placed(out, namesFinitelyMany(atThePlace)
+        return new Placed(out.done(), namesFinitelyMany(atThePlace)
                 || namesFinitelyMany(PartitionClasses.admittedByItsNames(view, reading)));
     }
 
     /**
      * What stands at a place, out of the classes it divides into.
      *
-     * @param values     a value for each class, in the order the classes are read
+     * @param offered    a value for each class, in the order the classes are read, and where a
+     *                   class was left with none for a figure, that — so a class with nothing for
+     *                   this compiler's reasons is not read as a class with nothing to have
      * @param everyValue whether those are every value the place can hold, so that nothing else
      *                   is to be offered there
      */
-    record Placed(List<FixtureTemplate> values, boolean everyValue) {
+    record Placed(Proposals offered, boolean everyValue) {
 
-        Placed {
-            values = List.copyOf(values);
+        /** The values alone. */
+        List<FixtureTemplate> values() {
+            return offered.values();
         }
 
         /** These kept to the numbers {@code within} leaves, where a value is a number and a range
@@ -1498,22 +1693,21 @@ final class Witnesses {
             if (within == null) {
                 return this;
             }
-            return new Placed(values.stream()
-                    .filter(each -> !(Counts.writtenIn(each.value()) instanceof Place at)
-                            || within.admits(at))
-                    .toList(), everyValue);
+            return new Placed(offered.map(each ->
+                    !(Counts.writtenIn(each.value()) instanceof Place at) || within.admits(at)
+                            ? each : null), everyValue);
         }
 
         /** These first, and where they are not every value, {@code otherwise} after them, each
          *  value once. */
-        List<FixtureTemplate> before(Supplier<List<FixtureTemplate>> otherwise) {
+        Proposals before(Supplier<Proposals> otherwise) {
             if (everyValue) {
-                return values;
+                return offered;
             }
-            Map<String, FixtureTemplate> once = new LinkedHashMap<>();
-            values.forEach(each -> once.putIfAbsent(each.text(), each));
-            otherwise.get().forEach(each -> once.putIfAbsent(each.text(), each));
-            return List.copyOf(once.values());
+            Proposals.Gathering out = Proposals.Gathering.distinct();
+            out.addAll(offered);
+            out.addAll(otherwise.get());
+            return out.done();
         }
     }
 
@@ -1525,11 +1719,10 @@ final class Witnesses {
      * <p>Only where the place's rules say which values stand there. Where they say nothing, the
      * place divides into what its type does, which is what a builder already offers.
      */
-    static List<FixtureTemplate> firstWhatThePlaceAdmits(Type type,
-                                                         FieldDomains.ConstructionLimits limits,
-                                                         RuleReadingContext reading,
-                                                         Set<TypeSymbol> expanding,
-                                                         Supplier<List<FixtureTemplate>> otherwise) {
+    static Proposals firstWhatThePlaceAdmits(Type type, FieldDomains.ConstructionLimits limits,
+                                             RuleReadingContext reading,
+                                             Set<TypeSymbol> expanding,
+                                             Supplier<Proposals> otherwise) {
         if (limits.admits().approximation().isAny()) {
             return otherwise.get();
         }
@@ -1544,8 +1737,9 @@ final class Witnesses {
     }
 
     /**
-     * The {@code index}th value of {@code type} made by stepping its carrier, or null where the carrier
-     * has no order to step or the step is a string longer than a proposal holds.
+     * The {@code index}th value of {@code type} made by stepping its carrier, or nothing where the
+     * carrier has no order to step — or where the step is a string longer than a proposal holds,
+     * which meets that figure.
      *
      * <p>A string grows by a character from the length its rules ask for, and a whole number steps
      * through the range they leave. Which characters is a question the carrier has no answer to, so
@@ -1556,26 +1750,27 @@ final class Witnesses {
      * position carries, and inventing one would put a value in a row the type's own chooser had reason
      * not to offer — which is what the values a type divides into are for, above.
      */
-    private static FixtureTemplate varied(Type type, int index, RuleReadingContext reading) {
+    private static Proposals varied(Type type, int index, RuleReadingContext reading) {
         RuleReadingSource ruleSource = reading.source();
         TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
         if (view.shape() instanceof Shape.Scalar scalar && scalar.prim() == Type.Prim.STRING) {
             // The floor asked first, so that a floor past the figure is not added to.
             int least = Math.max(1, Partitions.leastHeld(view, reading));
-            return pastTheCharacters(least) != null || pastTheCharacters(least + index) != null
-                    ? null
-                    : WornNames.under(view.wrappers(),
-                            FixtureTemplate.string("x".repeat(least + index)), ruleSource);
+            CompositionBudget past = pastTheCharacters(least) != null
+                    ? pastTheCharacters(least) : pastTheCharacters(least + index);
+            return past != null ? Proposals.stoppedBy(past) : Proposals.ofNullable(WornNames.under(
+                    view.wrappers(), FixtureTemplate.string("x".repeat(least + index)),
+                    ruleSource));
         }
         Place at = Partitions.numberInside(view, reading, index);
         if (at == null) {
-            return null;
+            return Proposals.NONE;
         }
         Carrier carrier = view.shape() instanceof Shape.Scalar scalar
                 && scalar.prim() == Type.Prim.DECIMAL ? Carrier.DENSE : Carrier.WHOLE;
-        return WornNames.under(view.wrappers(), FixtureTemplate.on(
-                carrier, at, ruleSource.symbols().scope()::reach), ruleSource);
+        return Proposals.ofNullable(WornNames.under(view.wrappers(), FixtureTemplate.on(
+                carrier, at, ruleSource.symbols().scope()::reach), ruleSource));
     }
 
     private Witnesses() {}

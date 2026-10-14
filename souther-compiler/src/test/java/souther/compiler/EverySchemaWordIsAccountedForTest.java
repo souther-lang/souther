@@ -802,7 +802,8 @@ class EverySchemaWordIsAccountedForTest {
                 ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
                                 WritabilityKnowledge.Prevented.by(EstablishmentGap.Observation.of(
-                                        Set.of(Incompleteness.Code.VALUE_UNREADABLE)))))),
+                                        Set.of(Incompleteness.Code.VALUE_UNREADABLE),
+                                        List.of()))))),
                 ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty
                                 .WhetherARowCanBeWritten.NothingShowedIt())));

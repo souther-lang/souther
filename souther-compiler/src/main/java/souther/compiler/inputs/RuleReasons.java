@@ -2,8 +2,11 @@ package souther.compiler.inputs;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * What the parts of a rule left a question standing on.
@@ -45,13 +48,39 @@ public record RuleReasons(List<Said> said) {
      * here and two entries in {@link #said()}.
      */
     public List<BlockReason.RuleReadingStopped> reasons() {
-        List<BlockReason.RuleReadingStopped> out = new ArrayList<>();
+        Map<Object, BlockReason.RuleReadingStopped> out = new LinkedHashMap<>();
         for (Said each : said) {
-            if (!out.contains(each.reason())) {
-                out.add(each.reason());
-            }
+            out.merge(BlockReason.factOf(each.reason()), each.reason(), BlockReason::together);
         }
-        return List.copyOf(out);
+        return List.copyOf(out.values());
+    }
+
+    /**
+     * Whether these and {@code other} say one thing: the same reasons about the same things, with
+     * the figures each was met at left out ({@link BlockReason#factOf}).
+     */
+    public boolean sameFactAs(RuleReasons other) {
+        return facts().equals(other.facts());
+    }
+
+    /**
+     * Both, as one, where they say one thing: every figure either met each reason at.
+     *
+     * <p>Refused where they say different things, which {@link #sameFactAs} asks.
+     */
+    public RuleReasons together(RuleReasons other) {
+        if (!sameFactAs(other)) {
+            throw new IllegalArgumentException(
+                    "two accounts put together say one thing: " + this + " and " + other);
+        }
+        List<Said> both = new ArrayList<>(said);
+        both.addAll(other.said);
+        return from(both);
+    }
+
+    /** As a set: the order these are held in is steady and asserted of nothing. */
+    private Set<Object> facts() {
+        return said.stream().map(Said::fact).collect(Collectors.toSet());
     }
 
     /** Whether the question stands on nothing its rule left. */
@@ -86,6 +115,15 @@ public record RuleReasons(List<Said> said) {
                         "a reason is about something, and says where a reader goes about it");
             }
         }
+
+        /** What tells this from another, with the figures its reason was met at left out. */
+        Object fact() {
+            return List.of(about, sentTo, BlockReason.factOf(reason));
+        }
+
+        private Said together(Said other) {
+            return new Said(about, sentTo, BlockReason.together(reason, other.reason));
+        }
     }
 
     /**
@@ -107,9 +145,15 @@ public record RuleReasons(List<Said> said) {
      * ({@link BlockReason.RuleReadingStopped#IN_A_STEADY_ORDER}, {@link RuleSite#IN_A_STEADY_ORDER}).
      * Two of these are left in the order they arrived in only where they are one value, and a set
      * holds one of those.
+     *
+     * <p>Two that say one thing but for the figures their reason was met at are one entry, met at
+     * every one of those figures: a rule refused at one limit by one reading and at another by the
+     * next is one thing for a reader to lift.
      */
     public static RuleReasons from(List<Said> these) {
-        List<Said> sorted = new ArrayList<>(new LinkedHashSet<>(these));
+        Map<Object, Said> once = new LinkedHashMap<>();
+        these.forEach(each -> once.merge(each.fact(), each, Said::together));
+        List<Said> sorted = new ArrayList<>(once.values());
         sorted.sort(Comparator.comparing(Said::reason,
                         BlockReason.RuleReadingStopped.IN_A_STEADY_ORDER)
                 .thenComparing(Said::about, RuleSite.IN_A_STEADY_ORDER)

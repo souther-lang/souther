@@ -146,6 +146,19 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
         assertEquals(List.of(new WhyUnread.MoreReadingsThanAreMade()), whysIn(past));
     }
 
+    /**
+     * A container past what a walk writes out stops a condition at that figure, and not at how many
+     * readings one condition is read in: the two bound different work.
+     */
+    @Test
+    void aContainerPastWhatIsWrittenOutIsSaidToBeAtThatFigure() {
+        String ts = values(11);
+        Proposition stated = stated(("List.any(x -> w.n == x, List.flatMap(a -> List.flatMap(b ->"
+                + " List.map(c -> c, %s), %s), %s))").formatted(ts, ts, ts));
+        assertEquals(new WhyUnread.MoreElementsThanAreWrittenOut(),
+                Proposition.firstStopIn(stated), () -> "past what is written out: " + stated);
+    }
+
     /** {@code [0, 1, ..., count - 1]}. */
     private static String values(int count) {
         return IntStream.range(0, count).mapToObj(String::valueOf)

@@ -7,6 +7,7 @@ import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
 import java.util.Arrays;
@@ -233,7 +234,7 @@ class WhatAStandingQuestionIsAccountedForByTest {
         Arrays.stream(UnreadReason.values())
                 .filter(each -> each.about() == UnreadReason.About.NEITHER)
                 .forEach(each -> assertThrows(IllegalArgumentException.class,
-                        () -> new AnswerShortfalls(Set.of(each)),
+                        () -> new AnswerShortfalls(Set.of(StoppedReading.of(each))),
                         () -> each + " reached no position, so the answer was not short of it"));
     }
 
@@ -255,7 +256,9 @@ class WhatAStandingQuestionIsAccountedForByTest {
                             && unaccounted.why()
                             instanceof RuleAccounting.Why.TheValueReadingSays says) {
                         out.put(accounting.cited().rule().citedName() + " at " + owed,
-                                new StandsOn(says.why(), says.aboutTheAnswer().reasons()));
+                                new StandsOn(says.why(), says.aboutTheAnswer().reasons().stream()
+                                        .map(StoppedReading::why)
+                                        .collect(Collectors.toCollection(LinkedHashSet::new))));
                     }
                 }));
         return out;

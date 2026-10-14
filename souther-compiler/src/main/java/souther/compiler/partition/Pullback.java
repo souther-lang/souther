@@ -1885,7 +1885,7 @@ final class Pullback {
                 return someOf(some, there(each));
             }
             if (whole instanceof WrittenOutElements.Walked.PastTheFigure) {
-                return unread(e, reads, new WhyUnread.MoreReadingsThanAreMade());
+                return unread(e, reads, new WhyUnread.MoreElementsThanAreWrittenOut());
             }
             Denotation container = standing;
             // Another order of the same elements has some element meeting a statement where they
@@ -1900,7 +1900,7 @@ final class Pullback {
             }
             WrittenOutElements.Walked values = beneath == null ? whole : eachValue(container);
             if (values instanceof WrittenOutElements.Walked.PastTheFigure) {
-                return unread(e, reads, new WhyUnread.MoreReadingsThanAreMade());
+                return unread(e, reads, new WhyUnread.MoreElementsThanAreWrittenOut());
             }
             // An element that is a given value and also met what it was kept by is one a row cannot
             // be asked for: the value is written into the container as an element of its own.
@@ -2518,18 +2518,21 @@ final class Pullback {
             }
             // What the closure states on each application a run may make, where which it makes is
             // not said as much as where it is — each where the element it is handed is kept.
-            List<InputReads.Applications.Made> applications = switch (applicationsOf(block,
-                    closure.at(), read)) {
-                case InputReads.Applications.Each(var each, var _) -> each;
-                case InputReads.Applications.Unsaid(var each) -> each;
-                case InputReads.Applications.NoneHanded _ ->
+            List<InputReads.Applications.Made> applications;
+            switch (applicationsOf(block, closure.at(), read)) {
+                case InputReads.Applications.Each(var each, var _) -> applications = each;
+                case InputReads.Applications.Unsaid(var each) -> applications = each;
+                case InputReads.Applications.NoneHanded _ -> applications =
                         List.of(new InputReads.Applications.Made(closure.at(), List.of()));
                 // Applied to nothing, so nothing it states is part of what is read.
-                case InputReads.Applications.NoneMade _ -> List.of();
-                case InputReads.Applications.MoreThanAreRead _ -> null;
-            };
-            if (applications == null) {
-                return new WrittenOutRead.Stops(new WhyUnread.MoreReadingsThanAreMade());
+                case InputReads.Applications.NoneMade _ -> applications = List.of();
+                case InputReads.Applications.MoreThanAreRead _ -> {
+                    return new WrittenOutRead.Stops(new WhyUnread.MoreReadingsThanAreMade());
+                }
+                case InputReads.Applications.PastWhatIsWrittenOut _ -> {
+                    return new WrittenOutRead.Stops(
+                            new WhyUnread.MoreElementsThanAreWrittenOut());
+                }
             }
             InputReads outer = application;
             try {
@@ -3080,7 +3083,7 @@ final class Pullback {
             switch (eachValue(container)) {
                 case WrittenOutElements.Walked.Each each -> occurrences = there(each);
                 case WrittenOutElements.Walked.PastTheFigure _ -> {
-                    return new Sized.NotSized(new WhyUnread.MoreReadingsThanAreMade());
+                    return new Sized.NotSized(new WhyUnread.MoreElementsThanAreWrittenOut());
                 }
                 case WrittenOutElements.Walked.NotWrittenOut _ -> {
                     return null;
@@ -3166,7 +3169,7 @@ final class Pullback {
             }
             switch (written) {
                 case WrittenOutElements.Walked.PastTheFigure _ -> {
-                    return new Sized.NotSized(new WhyUnread.MoreReadingsThanAreMade());
+                    return new Sized.NotSized(new WhyUnread.MoreElementsThanAreWrittenOut());
                 }
                 case WrittenOutElements.Walked.Each each -> {
                     List<ReadMeaning.Occurrence> occurrences = there(each);
@@ -3297,7 +3300,7 @@ final class Pullback {
             InputReads in = beneath == null ? reads : beneath.at().at();
             List<Kept> kept = beneath == null ? List.of() : beneath.kept();
             if (values instanceof WrittenOutElements.Walked.PastTheFigure) {
-                return new Sized.NotSized(new WhyUnread.MoreReadingsThanAreMade());
+                return new Sized.NotSized(new WhyUnread.MoreElementsThanAreWrittenOut());
             }
             // Of values written out, how many meet the statement is how many of the statements
             // about each of them hold: a number where each of them settles whether it does, and
@@ -5537,11 +5540,11 @@ final class Pullback {
             case AffineForms.Halt.NotHeld<Quantity, InputReads>(UnheldNumber why) ->
                     new WhyUnread.ANumberNotHeld(why);
             // Several values a name stands for, which only values written out are: a closure's
-            // parameter applied to each of them. The reading reads a number through such a name
-            // once for each value ({@link #aWayInto}), so one met here is past how many readings of
-            // one condition are made.
+            // parameter applied to each of them. A reading goes into such a name once for each
+            // value ({@link #aWayInto}); this rule does not, and that is all it can say of why it
+            // stopped — nothing was counted against a figure here.
             case AffineForms.Halt.ValuesDisagree<Quantity, InputReads> _ ->
-                    new WhyUnread.MoreReadingsThanAreMade();
+                    new WhyUnread.SeveralValuesNotGoneInto();
             case AffineForms.Halt.AnArgumentStopped<Quantity, InputReads>(var argument) ->
                     noFormOf(argument);
         };
@@ -5590,11 +5593,14 @@ final class Pullback {
                 // none, stands at no position.
                 case ReadMeaning.Element _, ReadMeaning.NoneHeld _ ->
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER);
-                // Read once for each value it can be handed ({@link #aWayInto}), so one met here is
-                // past how many readings of one condition are made; and one of a container holding
-                // more than is written out is past it before any is.
-                case ReadMeaning.OneOf _, ReadMeaning.MoreThanAreWrittenOut _ ->
-                        new WhyUnread.MoreReadingsThanAreMade();
+                // Read once for each value it can be handed where a reading goes into it
+                // ({@link #aWayInto}), and counted against the figure there; this reading did not
+                // go in.
+                case ReadMeaning.OneOf _ -> new WhyUnread.SeveralValuesNotGoneInto();
+                // One of a container holding more than a walk writes out, which no reading goes
+                // into one value at a time.
+                case ReadMeaning.MoreThanAreWrittenOut _ ->
+                        new WhyUnread.MoreElementsThanAreWrittenOut();
                 // A name read through is followed above to what it was given, so one that stands
                 // here came round to itself.
                 case ReadMeaning.Through _, ReadMeaning.Unknown _, ReadMeaning.Position _ ->
@@ -5607,10 +5613,11 @@ final class Pullback {
                 return new WhyUnread.NotArithmetic();
             }
             // A choice between values, where what is chosen is one of the arms. A number is read
-            // through a choice once for each arm ({@link #throughWhatItStopsAt}), so one met here
-            // is past how many readings of one condition are made.
+            // through a choice once for each arm where a reading goes into it
+            // ({@link #throughWhatItStopsAt}), and counted against the figure there; this reading
+            // did not go in.
             case Core.If _, Core.IfConstructed _, Core.Match _ -> {
-                return new WhyUnread.MoreReadingsThanAreMade();
+                return new WhyUnread.SeveralValuesNotGoneInto();
             }
             default -> { }
         }
@@ -5625,7 +5632,7 @@ final class Pullback {
             case ValueName.Stdlib operation -> {
                 // The same, of an operation the library defines by cases.
                 if (!facts.isDefinedByCases(operation).isEmpty()) {
-                    yield new WhyUnread.MoreReadingsThanAreMade();
+                    yield new WhyUnread.SeveralValuesNotGoneInto();
                 }
                 if (facts.takenAs(operation) != null && !applied.args().isEmpty()) {
                     yield noNumberOf(operation, applied.args().getFirst(), in);

@@ -64,7 +64,7 @@ class WhatAPositionIsOfferedDoesNotTurnOnHowTheRuleWasSpeltTest {
             return Partitions.representativesOf(
                             new Type.Ref(TypeSymbols.declared(new TypeKey(module, type))),
                             reading())
-                    .stream().map(FixtureTemplate::text).toList();
+                    .values().stream().map(FixtureTemplate::text).toList();
         }
     }
 

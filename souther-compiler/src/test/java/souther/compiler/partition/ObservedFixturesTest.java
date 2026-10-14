@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -86,9 +87,9 @@ class ObservedFixturesTest {
     @Test
     void aValueNothingReadIsNotWritten() {
         notWritable(new ObservedValue.Unknown("unreadable"), Type.INT);
-        notWritable(new ObservedValue.Truncated(), Type.list(Type.INT));
+        notWritable(new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()), Type.list(Type.INT));
         notWritable(new ObservedValue.Constructed(declared("Point"),
-                Map.of("x", new ObservedValue.Integer(1), "y", new ObservedValue.Truncated())),
+                Map.of("x", new ObservedValue.Integer(1), "y", new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()))),
                 Type.ref(declared("Point")));
     }
 

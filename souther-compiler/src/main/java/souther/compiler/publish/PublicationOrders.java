@@ -240,13 +240,19 @@ public final class PublicationOrders {
      * that was refused is nearer than a row that never came.
      */
     public static final CanonicalSelection.Order<ReadingGap> READING_GAPS =
-            CanonicalSelection.Order.overValues(everyReadingGap());
+            CanonicalSelection.Order.overPlaces(everyPlaceOfAReadingGap(),
+                    PublicationOrders::placeOf);
 
-    private static List<ReadingGap> everyReadingGap() {
-        List<ReadingGap> out = new ArrayList<>();
-        for (Incompleteness.Code code : OBSERVATION_CODES_IN_ORDER) {
-            out.add(ReadingGap.of(code));
-        }
+    /**
+     * Where a reading gap sits: an observation at its code, since the figures it carries are what
+     * it was met at and not a reason of their own, and every other gap at itself.
+     */
+    private static Object placeOf(ReadingGap gap) {
+        return gap instanceof ReadingGap.Observation it ? it.code() : gap;
+    }
+
+    private static List<Object> everyPlaceOfAReadingGap() {
+        List<Object> out = new ArrayList<>(OBSERVATION_CODES_IN_ORDER);
         for (UnheldNumber why : UnheldNumber.values()) {
             out.add(ReadingGap.of(why));
         }

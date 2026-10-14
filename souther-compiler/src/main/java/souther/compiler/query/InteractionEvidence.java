@@ -1,7 +1,9 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.InteractionCells;
 import souther.compiler.partition.InteractionRequirements;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.WhereNothingIsAnswered;
@@ -10,6 +12,7 @@ import souther.compiler.publish.CanonicalSelection;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -221,8 +224,12 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
         // on the measure and not kept beside it: what a behavior went without is asked of its
         // measures, and a shortfall held anywhere else reaches none of them.
         if (!asked.notMeasured().isEmpty()) {
+            Set<Figure> limits = new LinkedHashSet<>();
+            for (InteractionCells.NotOffered held : asked.notMeasured()) {
+                limits.add(held.limit());
+            }
             went = went.union(WeakeningSet.of(new Weakening.MeetingsNotWalked(
-                    behavior, asked.notMeasured().size())));
+                    behavior, asked.notMeasured().size(), List.copyOf(limits))));
         }
         return new InteractionEvidence(asked, went.isEmpty()
                 ? new Measurement.Complete<>(rows) : new Measurement.Partial<>(rows, went),

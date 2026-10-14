@@ -220,6 +220,12 @@ public final class ConjoinedAdmissibleValues<A> {
         return names == null ? List.of() : names.whyUnread(subject);
     }
 
+    /** The same, each with the figure it stopped at where a figure is what stopped it. */
+    public List<StoppedReading> stoppedAt(A subject) {
+        AdmissibleValues<A> names = naming.get(subject);
+        return names == null ? List.of() : names.stoppedAt(subject);
+    }
+
     /**
      * Which positions one subject is held as one value with, which is the coordinate its answer is
      * in.

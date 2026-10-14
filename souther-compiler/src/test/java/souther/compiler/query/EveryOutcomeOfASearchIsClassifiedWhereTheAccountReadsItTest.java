@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.Generator;
@@ -12,6 +13,11 @@ import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.publish.PublicationOrders;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -155,15 +161,14 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                         unverified());
 
         WritabilityKnowledge forward = WritabilityKnowledge.of(nothingShown(),
-                new SearchOutcomes(made));
+                SearchOutcomes.each(made));
         WritabilityKnowledge backward = WritabilityKnowledge.of(nothingShown(),
-                new SearchOutcomes(made.reversed()));
+                SearchOutcomes.each(made.reversed()));
 
         assertEquals(forward, backward, "the searches of one point are a set of facts about it");
         WritabilityKnowledge.Prevented held = assertInstanceOf(
                 WritabilityKnowledge.Prevented.class, forward);
-        assertEquals(List.of(EstablishmentGap.Observation.of(
-                        EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)),
+        assertEquals(List.of(EstablishmentGap.Observation.of(List.of(A_LIMIT)),
                         EstablishmentGap.Composition.of(EnumSet.of(
                                 CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS,
                                 CompositionBudget.STEPS_A_SEARCH_MAY_TAKE))),
@@ -181,14 +186,42 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
     @Test
     void howTheGapsWereSplitOnTheWayIsNotSomethingAnAccountHolds() {
         WritabilityKnowledge apart = WritabilityKnowledge.Prevented.of(Set.of(
-                EstablishmentGap.Observation.of(EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)),
-                EstablishmentGap.Observation.of(EnumSet.of(Incompleteness.Code.VALUE_UNREADABLE))));
+                EstablishmentGap.Observation.of(List.of(A_LIMIT)),
+                EstablishmentGap.Observation.of(List.of(NOTHING_READ_IT))));
         WritabilityKnowledge together = WritabilityKnowledge.Prevented.by(
-                EstablishmentGap.Observation.of(EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED,
-                        Incompleteness.Code.VALUE_UNREADABLE)));
+                EstablishmentGap.Observation.of(List.of(A_LIMIT, NOTHING_READ_IT)));
 
         assertEquals(together, apart,
                 "two observations naming one cause each are one observation naming both");
+    }
+
+    /**
+     * A showing stopped is said where the readings it stopped were read, and not where the other
+     * readings of the point were.
+     *
+     * <p>One point, read at two calls of a helper: the search made for the reading at one call was
+     * stopped at a figure, and the one at the other call composed nothing. The gap is the first
+     * call's; told every call the point was read at, a reader would look for the stop at a call
+     * where there was none.
+     */
+    @Test
+    void aStoppedShowingIsSaidWhereTheReadingsItStoppedWereRead() {
+        ModelOccurrence oneCall = new ModelOccurrence(SourceConstructOrigin.written(
+                new WrittenOwner.Body("m", "f"), 1, SourceConstruct.CALL),
+                ExpansionLineage.ORIGINAL);
+        ModelOccurrence otherCall = new ModelOccurrence(SourceConstructOrigin.written(
+                new WrittenOwner.Body("m", "f"), 2, SourceConstruct.CALL),
+                ExpansionLineage.ORIGINAL);
+
+        WritabilityKnowledge.Prevented held = assertInstanceOf(
+                WritabilityKnowledge.Prevented.class,
+                WritabilityKnowledge.of(nothingShown(),
+                        SearchOutcomes.of(stopped()).readAt(List.of(oneCall))
+                                .plus(SearchOutcomes.of(unresolved())
+                                        .readAt(List.of(otherCall)))));
+
+        EstablishmentGap gap = held.by().written().getFirst();
+        assertEquals(List.of(oneCall), held.readAt(gap));
     }
 
     /** A row read back is grounds, and grounds outrank nothing — they answer a different question. */
@@ -199,7 +232,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                         souther.compiler.partition.Level.OfTheQuantity.of(1)),
                 new Measurement.Complete<>(new ItemAssessment.Coverage.NoHit()),
                 ItemAssessment.WritabilityProjection.UNPROVEN,
-                new SearchOutcomes(List.of(stopped(), certified())));
+                SearchOutcomes.each(List.of(stopped(), certified())));
 
         assertTrue(owed.writabilityEvidence().has(
                         ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT),
@@ -223,8 +256,16 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
         return new ItemAssessment.Attempt.Unverified(
                 new Generator.GeneratedRow(new Generator.Purpose.ForAPoint("p.x = 11"), List.of()),
                 WAY, NOTHING_LEFT_OUT,
-                EstablishmentGap.Observation.of(EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)));
+                EstablishmentGap.Observation.of(List.of(A_LIMIT)));
     }
+
+    /** A value a limit kept short of whole, at the figure it stopped at. */
+    private static final Incompleteness.Cause A_LIMIT = Incompleteness.Cause.at(
+            Incompleteness.Code.VALUE_TRUNCATED, Limits.DEFAULT.nodesFigure());
+
+    /** A value nothing could read back, which no figure decides. */
+    private static final Incompleteness.Cause NOTHING_READ_IT =
+            Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE);
 
     private static ItemAssessment.Attempt stopped() {
         return stoppedBy(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS);

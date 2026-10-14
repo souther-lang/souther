@@ -15,11 +15,13 @@ import java.util.Objects;
  * Why part of a condition was read as nothing.
  *
  * <p>Kept apart by what they are owed. Most say what the domain the reading is over has no words for
- * at the place it stopped, and nothing written in this reading would read the part. Two say the
+ * at the place it stopped, and nothing written in this reading would read the part. Three say the
  * opposite, each of what this compiler holds itself to and not of the model: that what is stated
  * of a library operation is not proved against its body yet ({@link NotProvedOfItsBody}), which is
  * lifted by a proof; and that the part could be read and this compiler declined the work at a figure
- * it holds itself to ({@link MoreReadingsThanAreMade}), which is lifted by raising the figure. Where
+ * it holds itself to — how many readings of a condition are made
+ * ({@link MoreReadingsThanAreMade}), or how far a container is written out
+ * ({@link MoreElementsThanAreWrittenOut}) — which is lifted by raising that figure. Where
  * a part follows from what the language and the library already say, the reading takes it: no part
  * is left for a step this reading does not take.
  *
@@ -228,8 +230,31 @@ public sealed interface WhyUnread {
      * A part that would be read once for each application of the closures it is in, or each case
      * of what it compares, more times than the reading of what a condition means makes. A figure
      * of this compiler's work was reached, and nothing is said of the model.
+     *
+     * <p>Said only where the readings were counted against that figure and came out past it. A
+     * value the reading has to go into is not past it for being one: whether going in is past it
+     * is the count's answer, made where the reading goes in.
      */
     record MoreReadingsThanAreMade() implements WhyUnread {}
+
+    /**
+     * A part about a container holding more occurrences than a walk writes out, counted at every
+     * level the walk passes. A figure of this compiler's work was reached — the one bounding how
+     * far a container is written out, and not how many times a condition is read — and nothing is
+     * said of the model.
+     */
+    record MoreElementsThanAreWrittenOut() implements WhyUnread {}
+
+    /**
+     * A part whose number is one of several — the answer of a case of a choice, a value a closure
+     * is handed, a case of the definition a library operation is written in — that the reading did
+     * not go into and read on each of them: it had gone into it already on the way here, or it
+     * stands where no way in reaches.
+     *
+     * <p>No figure: nothing was counted. Whether going in is past a figure is answered where a
+     * reading goes in, and said there as {@link MoreReadingsThanAreMade}.
+     */
+    record SeveralValuesNotGoneInto() implements WhyUnread {}
 
     /**
      * A construct met in several copies — a helper's, wherever the helper is written — whose copies

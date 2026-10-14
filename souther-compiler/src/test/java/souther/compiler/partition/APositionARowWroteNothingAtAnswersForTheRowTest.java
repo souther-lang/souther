@@ -9,6 +9,7 @@ import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.LinkedHashMap;
@@ -92,7 +93,8 @@ class APositionARowWroteNothingAtAnswersForTheRowTest {
     @Test
     void aQuantityStoppedAndNothingElseIsUndecided() {
         BorderQuantity.Stands undecided = BorderQuantity.Stands.couldNotTell(
-                ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED));
+                ReadingGap.of(Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED,
+                        Limits.DEFAULT.nodesFigure())));
 
         assertEquals(undecided,
                 stands(form(AT_THE_STOPPED, AT_THE_STOPPED), AT_A_HUNDRED, oneOfEach()),
@@ -138,7 +140,8 @@ class APositionARowWroteNothingAtAnswersForTheRowTest {
                 asked.add(path);
                 return WalkResult.reached(NOTHING_WRITTEN.equals(path)
                         ? ObservationAtPoint.WROTE_NOTHING
-                        : new ObservationAtPoint.Value(new ObservedValue.Truncated()));
+                        : new ObservationAtPoint.Value(
+                                new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure())));
             }
 
             @Override

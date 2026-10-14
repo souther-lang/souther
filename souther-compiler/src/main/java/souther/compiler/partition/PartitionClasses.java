@@ -218,14 +218,27 @@ final class PartitionClasses {
         Type element = optional.element();
         // Under what is already being built: what stands for `Some` is what stands at the element,
         // and the walk that got here is the walk that is building it.
-        List<FixtureTemplate> some =
-                Partitions.representativesOf(element, reading, null, expanding);
+        Proposals some = Partitions.representativesOf(element, reading, null, expanding);
         Recognition is = Recognition.Under.of(worn, new Recognition.Held(true));
         return some.isEmpty()
-                ? PartitionClass.ungeneratable("Some", "Some", is,
+                ? nothingFor("Some", "Some", is, some.met(),
                         "nothing here composed a value of " + Type.show(element))
                 : PartitionClass.of("Some", "Some", is,
                         RepresentativeSource.under(writes, RepresentativeSource.of(some)));
+    }
+
+    /**
+     * A class nothing was composed for: one nothing can produce a value for, or — where building
+     * its values met something of this compiler's — one this did not arrive at a value of.
+     *
+     * <p>Told apart because a reader is owed different sentences. The first is about the model;
+     * the second is about this compiler, and said as the first it is a class the model leaves
+     * empty where it is one this compiler would not build.
+     */
+    private static PartitionClass nothingFor(String id, String label, Recognition is,
+                                             CompositionShortfall met, String why) {
+        return met.nothing() ? PartitionClass.ungeneratable(id, label, is, why)
+                : PartitionClass.of(id, label, is, new RepresentativeSource.NotArrivedAt(met, why));
     }
 
     private static PartitionClass caseClass(Case.SumCase one, Type of, List<TypeSymbol> worn,
@@ -284,13 +297,14 @@ final class PartitionClasses {
             // Values of the case, which is a position of its own: it is read like any other, and
             // what comes back already wears the case's own name. Under the position's names as well,
             // since a case of a `data DecisionN = Decision` is written inside that name too.
-            List<FixtureTemplate> values = Partitions.representativesOf(
+            Proposals values = Partitions.representativesOf(
                     Type.ref(declared), reading, null, expanding);
             return values.isEmpty()
-                    ? PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is,
+                    ? nothingFor(idOfCase(leaf), leaf.name(), is, values.met(),
                             "nothing here composed a value of `" + leaf.name() + "`")
                     : PartitionClass.of(idOfCase(leaf), leaf.name(), is,
-                            RepresentativeSource.under(writes, RepresentativeSource.of(values)));
+                            RepresentativeSource.under(writes,
+                                    RepresentativeSource.of(values)));
         }
         // A record case is written field by field, which is the generator's composition. So the class
         // names the constructor and the generator does the composing — the same walk every other

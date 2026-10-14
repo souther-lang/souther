@@ -47,7 +47,7 @@ class WhichNamesRulesAreReadWhenAValueIsProposedTest {
         return Partitions.representativesOf(Type.ref(at),
                         RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
                         null, Set.of())
-                .stream().map(FixtureTemplate::text).toList();
+                .values().stream().map(FixtureTemplate::text).toList();
     }
 
     /** A rule on the name the string is directly under is read, and proposes what it asks for. */

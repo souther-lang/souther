@@ -90,9 +90,11 @@ class ARowBuiltAtAPointIsNotUnbuiltByWhatTheObservationKeptTest {
         assertNotNull(unverified.row(),
                 "and the row is offered, since composing it is what happened");
         assertEquals(EstablishmentGap.Observation.of(
-                        Set.of(Incompleteness.Code.VALUE_TRUNCATED)),
+                        Set.of(Incompleteness.Code.VALUE_TRUNCATED),
+                        Set.of(Limits.DEFAULT.textFigure())),
                 unverified.why(),
-                "what stopped the placing is the observation, and it says which way");
+                "what stopped the placing is the observation, and it says which way and at which"
+                        + " figure: the text, at the length the reading back keeps");
     }
 
     /**

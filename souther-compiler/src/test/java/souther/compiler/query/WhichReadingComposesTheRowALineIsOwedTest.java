@@ -7,6 +7,8 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.Criterion;
@@ -18,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -335,9 +338,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
         return new ItemAssessment.Attempt.Unverified(new Generator.GeneratedRow(
                 new Generator.Purpose.ForAPoint(carrier + ": " + SAID), List.of()), null,
                 souther.compiler.partition.CompositionAccount.NOTHING,
-                EstablishmentGap.Observation.of(
-                        java.util.Set.of(souther.compiler.observe.Incompleteness.Code
-                                .VALUE_TRUNCATED)));
+                EstablishmentGap.Observation.of(Set.of(Incompleteness.Cause.at(
+                        Incompleteness.Code.VALUE_TRUNCATED, Limits.DEFAULT.nodesFigure()))));
     }
 
     /** The same, as what a reading holds at the point. */

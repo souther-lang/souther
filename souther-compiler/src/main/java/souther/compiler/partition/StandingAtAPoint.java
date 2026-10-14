@@ -4,7 +4,9 @@ import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ElementsTaken;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.BorderQuantity.Lastness;
 
 import java.util.ArrayList;
@@ -135,12 +137,44 @@ public final class StandingAtAPoint {
         /**
          * The readings ran past what one point is tried against, and the rest were not tried.
          *
-         * @param limit how many readings of one row a point is tried against, which is a figure of
-         *              this compiler's and is what a run allowing more would raise
+         * @param limits how many readings of one row a point is tried against, as each stood where
+         *               a walk stopped, each once and in {@link Figure#inOrder}: a figure of this
+         *               compiler's, and what a run allowing more would raise. More than one where
+         *               the rows of one point were walked under more than one
          */
-        record StoppedAtTheLimit(int limit) implements ReadingsTried {}
+        record StoppedAtTheLimit(List<Figure> limits) implements ReadingsTried {
+
+            public StoppedAtTheLimit {
+                limits = Figure.inOrder(limits);
+                if (limits.isEmpty()) {
+                    throw new IllegalArgumentException("a walk stopped at a limit says which");
+                }
+            }
+
+            /** Stopped at one limit, which is how a walk meets it. */
+            public StoppedAtTheLimit(Figure limit) {
+                this(List.of(limit));
+            }
+        }
 
         ReadingsTried EVERY_ONE = new EveryOne();
+
+        /**
+         * What two walks over the rows of one point tried between them: every reading where both
+         * tried every one, and otherwise every limit either stopped at — a row stopped at one is
+         * not read past it because another row was not.
+         */
+        default ReadingsTried and(ReadingsTried other) {
+            if (!(this instanceof StoppedAtTheLimit mine)) {
+                return other;
+            }
+            if (!(other instanceof StoppedAtTheLimit theirs)) {
+                return this;
+            }
+            List<Figure> both = new ArrayList<>(mine.limits());
+            both.addAll(theirs.limits());
+            return new StoppedAtTheLimit(both);
+        }
     }
 
     /**
@@ -217,7 +251,7 @@ public final class StandingAtAPoint {
         BehaviorInputs where = line.subject().inputs();
         Set<ReadingGap> unreadable = new LinkedHashSet<>();
         boolean unwatched = false;
-        boolean stoppedShort = false;
+        ReadingsTried readTo = ReadingsTried.EVERY_ONE;
         for (ObservedInputs one : observed) {
             // A row has more than one value at a position inside a container, and standing at a point
             // is one element standing there. Asked for one value, such a row answered with none and
@@ -283,18 +317,16 @@ public final class StandingAtAPoint {
             // And where none of them stood there, whether there were others to try. Asked of the
             // rows that came to nothing and of no others: a row that stood at the point was answered
             // by the reading that stood, and the readings after it are not ones this went without.
-            if (!stands && readings.whether() instanceof ReadingsTried.StoppedAtTheLimit) {
-                stoppedShort = true;
+            if (!stands) {
+                readTo = readTo.and(readings.whether());
             }
             unreadable.addAll(stopped);
         }
         // Every reason any row met, the way one reading collects every reason its terms met. A
         // point tried against several rows is one this could not tell about for whatever stopped
         // any of them, and taking the strongest would say which row this walk began with.
-        if (!unreadable.isEmpty() || stoppedShort) {
-            return new Met.CouldNotTell(unreadable, stoppedShort
-                    ? new ReadingsTried.StoppedAtTheLimit(MOST_READINGS)
-                    : ReadingsTried.EVERY_ONE);
+        if (!unreadable.isEmpty() || readTo instanceof ReadingsTried.StoppedAtTheLimit) {
+            return new Met.CouldNotTell(unreadable, readTo);
         }
         return unwatched ? Met.NOT_WATCHED : Met.NOT_AT_POINT;
     }
@@ -351,7 +383,7 @@ public final class StandingAtAPoint {
         List<Map<souther.compiler.inputs.NumericTerm, souther.compiler.numeric.Place>> read =
                 new ArrayList<>();
         Set<ReadingGap> unreadable = new LinkedHashSet<>();
-        boolean stoppedShort = false;
+        ReadingsTried readTo = ReadingsTried.EVERY_ONE;
         boolean unwatched = false;
         for (ObservedInputs one : observed) {
             if (!watched.isEmpty()) {
@@ -406,13 +438,9 @@ public final class StandingAtAPoint {
                     case ValuesAtARow.CouldNotTell it -> unreadable.addAll(it.why());
                 }
             }
-            if (readings.whether() instanceof ReadingsTried.StoppedAtTheLimit) {
-                stoppedShort = true;
-            }
+            readTo = readTo.and(readings.whether());
         }
-        return new RowsRead(read, unreadable, stoppedShort
-                ? new ReadingsTried.StoppedAtTheLimit(MOST_READINGS) : ReadingsTried.EVERY_ONE,
-                unwatched);
+        return new RowsRead(read, unreadable, readTo, unwatched);
     }
 
     /**
@@ -895,7 +923,8 @@ public final class StandingAtAPoint {
         // containers never had more than are one answer, and whichever word is chosen for the pair
         // is wrong about the other.
         return new Readings(out, containersAllowMoreThan(containers, MOST_READINGS)
-                ? new ReadingsTried.StoppedAtTheLimit(MOST_READINGS)
+                ? new ReadingsTried.StoppedAtTheLimit(
+                        WorkFigure.READINGS_OF_A_ROW_AT_A_POINT.at(MOST_READINGS))
                 : ReadingsTried.EVERY_ONE);
     }
 

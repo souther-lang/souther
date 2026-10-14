@@ -97,17 +97,26 @@ public sealed interface ObservedValue {
      * An observation {@link Limits} stopped. Not the same as a large value: the node budget is one
      * for the whole walk, so a small value observed after a large sibling arrives here too.
      *
-     * <p>Nothing about it but that it happened. It carried the size and a fingerprint, for a rule
-     * over the value's size to read and for telling two of these apart — and a position is divided
-     * by the cases of its type or by where a rule cuts its range, never by how large a value is, so
-     * a size was written only where nothing classifies and was {@code -1} wherever anything did.
-     * Nothing compares two observations either.
+     * <p>Nothing about the value, and which limit it was. A position is divided by the cases of its
+     * type or by where a rule cuts its range, never by how large a value is, so the size of what
+     * was dropped is nothing a reader of the value asks. Which of the limits the walk compared it
+     * against and stopped at is asked, by the report that says an observation was stopped by a
+     * limit, and is known only here: the walk is the one place the depth, the nodes, the elements
+     * and the text are told apart.
      *
-     * <p>Which leaves the case, and the case is read: a row this stands in is one no class holds,
-     * and the report says an observation was stopped by a limit. Two of these being equal is Java
-     * saying they carry the same nothing, and is not two observations being the same value.
+     * <p>Two of these being equal is Java saying they were stopped at one figure, and is not two
+     * observations being the same value.
+     *
+     * @param at the limit the walk stopped at, as it stood on the walk
      */
-    record Truncated() implements ObservedValue {}
+    record Truncated(Figure at) implements ObservedValue {
+
+        public Truncated {
+            if (at == null) {
+                throw new IllegalArgumentException("an observation a limit stopped says which");
+            }
+        }
+    }
 
     /**
      * Why nothing can be read here, or null where there is a value to read.
@@ -127,9 +136,22 @@ public sealed interface ObservedValue {
      * at once, and this can stay the narrow question it is.
      */
     default Incompleteness.Code unread() {
+        Incompleteness.Cause cause = cause();
+        return cause == null ? null : cause.code();
+    }
+
+    /**
+     * The same, with the figure the walk stopped at where a limit stopped it, or null where there
+     * is a value to read.
+     *
+     * <p>For a reader that hands the reason on to where a person is told it: a value a limit
+     * stopped is said with the limit, and only the value knows which.
+     */
+    default Incompleteness.Cause cause() {
         return switch (this) {
-            case Truncated _ -> Incompleteness.Code.VALUE_TRUNCATED;
-            case Unknown _ -> Incompleteness.Code.VALUE_UNREADABLE;
+            case Truncated(Figure at) -> Incompleteness.Cause.at(
+                    Incompleteness.Code.VALUE_TRUNCATED, at);
+            case Unknown _ -> Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE);
             default -> null;
         };
     }

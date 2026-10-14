@@ -88,10 +88,10 @@ class ALimitAdmitsWhatStandsAtItsBoundAndNothingOverItTest {
     /** Neither case is a value, wherever in the value it stands. */
     @Test
     void nothingHoldingAValueThatCouldNotBeReadIsAdmitted() {
-        assertFalse(Limits.DEFAULT.admits(new ObservedValue.Truncated()), "truncated");
+        assertFalse(Limits.DEFAULT.admits(new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure())), "truncated");
         assertFalse(Limits.DEFAULT.admits(new ObservedValue.Unknown("why")), "unreadable");
         assertFalse(Limits.DEFAULT.admits(new ObservedValue.Sequence(
-                List.of(new ObservedValue.Integer(1), new ObservedValue.Truncated()))),
+                List.of(new ObservedValue.Integer(1), new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure())))),
                 "truncated inside a sequence");
         assertFalse(Limits.DEFAULT.admits(new Asserted.Elements(Asserted.Container.LIST,
                 List.of(new Asserted.Value(new ObservedValue.Unknown("why"))))),

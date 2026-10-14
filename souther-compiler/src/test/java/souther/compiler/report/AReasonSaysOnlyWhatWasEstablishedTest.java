@@ -7,8 +7,10 @@ import souther.compiler.source.SourceId;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.RowRef;
+import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.Target;
 
 import java.util.List;
@@ -56,7 +58,7 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
                 Incompleteness.Code.OBSERVATION_ABSENT,
                 new Target.OfRow(new RowRef("take", new SourceId("1"),
                         new RowIdentity.Unnamed(2))),
-                java.util.Optional.empty()).identity(),
+                java.util.Optional.empty(), java.util.Optional.empty()).identity(),
                 new SourceRendering(id -> "trip.sou", SourceLayouts.NONE));
 
         assertEquals("nothing was observed for `take #2 in trip.sou`, so what it covers is unknown",
@@ -80,7 +82,7 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
                 new Target.AtPosition("take", "request.cost"))) {
             Incompleteness.Fact wrong = new Incompleteness(
                     Incompleteness.Code.OBSERVATION_ABSENT, target,
-                    java.util.Optional.empty()).identity();
+                    java.util.Optional.empty(), java.util.Optional.empty()).identity();
 
             IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                     () -> Reasons.said(wrong, naming), () -> "what it says of " + target);
@@ -180,7 +182,10 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     void noCodeIsPrintedAsItsOwnName() {
         for (Incompleteness.Code code : Incompleteness.Code.values()) {
             String said = Reasons.said(new Incompleteness(code, somethingItIsAbout(code),
-                    java.util.Optional.empty()).identity(),
+                    java.util.Optional.empty(),
+                    code.runSensitivity() == RunSensitivity.MAY_CHANGE
+                            ? java.util.Optional.of(Limits.DEFAULT.nodesFigure())
+                            : java.util.Optional.empty()).identity(),
                     SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
             assertNotEquals("submit (" + code.name().toLowerCase(java.util.Locale.ROOT) + ")", said,

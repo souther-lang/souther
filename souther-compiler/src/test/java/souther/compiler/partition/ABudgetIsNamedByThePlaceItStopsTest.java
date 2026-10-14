@@ -70,11 +70,10 @@ class ABudgetIsNamedByThePlaceItStopsTest {
     void aProposalHoldsAsManyElementsAsTheFigureAndNoMore() {
         int most = CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum();
 
-        assertEquals(Set.of(),
-                Witnesses.heldBackFor(position(Type.list(Type.INT)), most, List.of(), READING),
+        assertEquals(Set.of(), metAt(position(Type.list(Type.INT)), most),
                 "a collection of exactly as many as a row carries is one this builds");
         assertEquals(Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS),
-                Witnesses.heldBackFor(position(Type.list(Type.INT)), most + 1, List.of(), READING),
+                metAt(position(Type.list(Type.INT)), most + 1),
                 "and one past it is this compiler declining, said as the figure it declined at");
     }
 
@@ -83,11 +82,16 @@ class ABudgetIsNamedByThePlaceItStopsTest {
     void aProposalHoldsAsManyCharactersAsItsOwnFigure() {
         int most = CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS.maximum();
 
-        assertEquals(Set.of(), Witnesses.heldBackFor(position(Type.STRING), most, List.of(), READING),
+        assertEquals(Set.of(), metAt(position(Type.STRING), most),
                 "a string of exactly as many characters as one is worth building");
         assertEquals(Set.of(CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS),
-                Witnesses.heldBackFor(position(Type.STRING), most + 1, List.of(), READING),
+                metAt(position(Type.STRING), most + 1),
                 "and one past it names the string's figure and not the collection's");
+    }
+
+    /** The figures a value of {@code position} holding {@code least} was stopped by. */
+    private static Set<CompositionBudget> metAt(TypeView position, int least) {
+        return Witnesses.holding(position, least, List.of(), READING, Set.of()).met().figures();
     }
 
     /**

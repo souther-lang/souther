@@ -1,6 +1,7 @@
 package souther.compiler.observe;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * What a run of a behavior answered, as a fact about the run and nothing about what it is held to.
@@ -27,8 +28,17 @@ public sealed interface AnswerObservation {
      * it answered. Apart from {@link NotAnswered} because it says nothing about the program: a run
      * given more might answer, so whether it answers as another run does is not known, where a run
      * that stopped is known to have answered nothing.
+     *
+     * @param limit which figure of this compiler's the run went past, as it stood on the run that
+     *              reached it; none where what ran out was the host's stack, which no figure here
+     *              was compared against
      */
-    record RanOut() implements AnswerObservation {}
+    record RanOut(Optional<Figure> limit) implements AnswerObservation {
+
+        public RanOut {
+            Objects.requireNonNull(limit, "a run that ran out says whether a figure stopped it");
+        }
+    }
 
     /** The run answered, and this is the answer as the compiler owns it. */
     record Answered(ObservedValue value) implements AnswerObservation {

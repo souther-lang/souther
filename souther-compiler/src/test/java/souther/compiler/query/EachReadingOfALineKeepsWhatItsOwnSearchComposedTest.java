@@ -8,16 +8,27 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.partition.Border;
+import souther.compiler.partition.CompositionAccount;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.Demand;
+import souther.compiler.partition.SaidOnTheWay;
+import souther.compiler.publish.PublicationOrders;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.numeric.Towards;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -110,6 +121,77 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
         assertEquals(2, ((GenerationOutcome.Generated) merged.toldApart()
                         .outcome(BESIDE.direction())).candidates().size(),
                 "both rows go to the offering, which keeps whichever of them it needs");
+    }
+
+    /**
+     * A search stopped at one call of a helper is, after the readings of its line are put
+     * together, still stopped at that call and not at the other.
+     *
+     * <p>One authored line at one target, read at two calls: the search made for the first call's
+     * reading stopped at a figure, and the one made for the second ran and composed nothing. Put
+     * together, the point is stopped where the first call read it. Said of the line
+     * after the merge, the stop would be at both calls — and a reader would look at the second for
+     * a figure nothing there met.
+     */
+    @Test
+    void aSearchStoppedAtOneCallIsStoppedAtThatCallAfterTheReadingsArePutTogether() {
+        Border line = TheLinesBesideABorder.aLineOverTwoPositions();
+        ModelOccurrence first = call(1);
+        ModelOccurrence second = call(2);
+        BorderAssessment merged = Coverages.merged(new LineReadings(List.of(
+                searchedAt(line, first, new ItemAssessment.Attempt.Stopped(
+                        new Generator.UnresolvedCombination(List.of("x = 1"),
+                                Generator.UnresolvedCombination.Reason.wordFor(
+                                        Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS))),
+                        WayToTheBorder.UNTOUCHED, CompositionAccount.NOTHING,
+                        PublicationOrders.COMPOSITION_BUDGETS.keep(
+                                EnumSet.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS)),
+                        PublicationOrders.COMPOSITION_REPERTOIRES.keep(List.of()),
+                        PublicationOrders.COMPOSITION_CAPACITIES.keep(List.of()))),
+                searchedAt(line, second, new ItemAssessment.Attempt.Unresolved(
+                        new Generator.UnresolvedCombination(List.of("x = 1"),
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
+                        WayToTheBorder.UNTOUCHED))))).getFirst();
+
+        assertEquals(List.of(first, second), merged.readAt(), "one line, read at both calls");
+        // Through the point the line is owed at, which is where the readings of a point are put
+        // together for a reader.
+        List<BorderObligationPointAssessment> points =
+                BorderObligationPointAssessment.across(List.of(merged), _ -> List.of());
+        assertFalse(points.isEmpty(), "the line owes rows at its points");
+        for (BorderObligationPointAssessment point : points) {
+            WritabilityKnowledge.Prevented stopped = assertInstanceOf(
+                    WritabilityKnowledge.Prevented.class, WritabilityKnowledge.of(
+                            ItemAssessment.WritabilityEvidence.of(Set.of()),
+                            point.owed().searches()));
+            assertEquals(List.of(first), stopped.readAt(stopped.by().written().getFirst()),
+                    "stopped at the call whose search stopped, and only there");
+        }
+    }
+
+    /** One reading of {@code line} read at {@code copy}, whose search at every point it owes came
+     *  to {@code attempt}, said where that reading's searches are its own. */
+    private static BorderAssessment searchedAt(Border line, ModelOccurrence copy,
+                                               ItemAssessment.Attempt attempt) {
+        Map<DomainPoint, ItemAssessment> items = new LinkedHashMap<>();
+        line.answers().keySet().forEach(point -> items.put(point,
+                line.demand(point) instanceof Demand.NotOwed not
+                        ? new ItemAssessment.NotOwed(not.reason())
+                        : new ItemAssessment.Owed(line.demand(point).criterion(),
+                                new Measurement.NotMeasured<>(
+                                        ItemAssessment.Coverage.NotAsked.NO_ROWS),
+                                ItemAssessment.WritabilityProjection.NOT_COMPUTED,
+                                SearchOutcomes.of(attempt).readAt(List.of(copy)))));
+        return new BorderAssessment(line, items,
+                new AnotherLineTheRowsAllow.ByDirection(List.of(BESIDE)),
+                ARowTellingTheLinesApart.notAsked(), List.of(copy), SaidOnTheWay.NONE);
+    }
+
+    /** The {@code n}th call of a helper, as a copy of its code. */
+    private static ModelOccurrence call(int n) {
+        return new ModelOccurrence(SourceConstructOrigin.written(
+                new WrittenOwner.Body("m", "f"), n, SourceConstruct.CALL),
+                ExpansionLineage.ORIGINAL);
     }
 
     /** One reading of the line, with what a search for a distinguishing row came to at it. */

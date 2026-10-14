@@ -1,5 +1,7 @@
 package souther.compiler.values;
 
+import souther.compiler.regex.PatternPlan;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -46,12 +48,25 @@ public sealed interface Realizations {
     /**
      * One of them ran past what the position may build, so none of them is an answer.
      *
-     * <p>Which limit refused is not here. What a caller has is a position that did not answer for
-     * its own rules, and the two things that can be said about that — a machine larger than one may
-     * be, and an allowance run down — are said of the position by whatever built it. Carried here,
-     * the one that ran out on the plan this stopped at would stand for a group of plans, and for a
-     * position that was given up on before this asked anything it would be a limit nothing here
-     * ever reached.
+     * <p>Which limit refused is here, and it is the group's. The plans are built as one answer out
+     * of one allowance and the first refusal stops the rest, so what refused the plan it stopped at
+     * is what refused the group — a machine larger than one may be, or the allowance run down. A
+     * block given up on before this asked anything is refused at the limit it was given up on at,
+     * which this allowance reached then.
+     *
+     * <p>Which figure of this compiler's that is, is not here: the same budget bounds different
+     * questions, and the caller that asked for the group is the one that knows which question it
+     * was.
+     *
+     * @param refused which limit of the allowance refused, of the budget it was made from
      */
-    record NotBuilt() implements Realizations {}
+    record NotBuilt(PatternPlan.Refused refused) implements Realizations {
+
+        public NotBuilt {
+            if (refused == null) {
+                throw new IllegalArgumentException("a group that was not built was refused by a"
+                        + " limit");
+            }
+        }
+    }
 }

@@ -2,6 +2,7 @@ package souther.compiler.values;
 
 import souther.compiler.hash.ValueHash;
 import souther.compiler.reading.StateOfAReading;
+import souther.compiler.regex.PatternPlan;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -323,7 +324,7 @@ public final class AdmissibleValues<A> {
             static <A> Made<A> of(Set<Alternative<A>> boxes, Allowance<A> sets) {
                 Sameness<A> common = commonTo(boxes);
                 Map<Sameness.Block<A>, ValueSet> across = new LinkedHashMap<>();
-                Set<Sameness.Block<A>> gaveUp = new LinkedHashSet<>();
+                Map<Sameness.Block<A>, PatternPlan.Refused> gaveUp = new LinkedHashMap<>();
                 Set<Sameness.Block<A>> named = new LinkedHashSet<>();
                 boxes.forEach(box -> box.positions()
                         .forEach(position -> named.add(common.blockOf(position))));
@@ -343,7 +344,7 @@ public final class AdmissibleValues<A> {
                     // same alternatives would have cost two different things.
                     Allowance.Composed made = sets.joining(block, these);
                     if (made.gaveUp()) {
-                        gaveUp.add(block);
+                        gaveUp.putIfAbsent(block, made.refused());
                     }
                     if (!made.set().isAny()) {
                         across.put(block, made.set());
@@ -352,8 +353,9 @@ public final class AdmissibleValues<A> {
                 return new Made<>(new Alternatives<>(boxes, common, across), gaveUp);
             }
 
-            /** The alternatives, and the blocks the exact answer across them was not built at. */
-            record Made<A>(Alternatives<A> held, Set<Sameness.Block<A>> gaveUp) {}
+            /** The alternatives, and the blocks the exact answer across them was not built at,
+             *  each with the limit that refused it. */
+            record Made<A>(Alternatives<A> held, Map<Sameness.Block<A>, PatternPlan.Refused> gaveUp) {}
 
             public Set<Alternative<A>> boxes() {
                 return boxes;
@@ -485,7 +487,8 @@ public final class AdmissibleValues<A> {
          */
         Map<Sameness.Block<A>, ValueSet> narrowedWith(Box<A> other, Sameness<A> heldAsOne,
                                                       Allowance<A> sets,
-                                                      Set<Sameness.Block<A>> gaveUp) {
+                                                      Map<Sameness.Block<A>, PatternPlan.Refused>
+                                                              gaveUp) {
             Map<Sameness.Block<A>, List<ValueSet>> parts = new LinkedHashMap<>();
             gathering(at, Refinement.of(sameness(), heldAsOne), parts);
             gathering(other.at, Refinement.of(other.sameness(), heldAsOne), parts);
@@ -497,7 +500,7 @@ public final class AdmissibleValues<A> {
                 }
                 Allowance.Composed made = sets.meeting(block, these);
                 if (made.gaveUp()) {
-                    gaveUp.add(block);
+                    gaveUp.putIfAbsent(block, made.refused());
                 }
                 out.put(block, made.set());
             });
@@ -620,7 +623,7 @@ public final class AdmissibleValues<A> {
          * refuse whichever of them was moved second.
          */
         Met<A> narrowedWith(Alternative<A> other, Allowance<A> sets,
-                            Set<Sameness.Block<A>> gaveUp) {
+                            Map<Sameness.Block<A>, PatternPlan.Refused> gaveUp) {
             Sameness<A> heldAsOne = sameness().meet(other.sameness());
             return new Met<>(product.narrowedWith(other.product, heldAsOne, sets, gaveUp),
                     apart.filedIn(Refinement.of(sameness(), heldAsOne))
@@ -1245,6 +1248,22 @@ public final class AdmissibleValues<A> {
      * author's rules, and it is made on what is held rather than on what arrived first.
      */
     public List<UnreadReason> whyUnread(A atom) {
+        List<UnreadReason> out = new ArrayList<>();
+        unreadAffecting(atom).forEach(each -> {
+            if (!out.contains(each.why())) {
+                out.add(each.why());
+            }
+        });
+        return Collections.unmodifiableList(out);
+    }
+
+    /**
+     * The same, each with the figure it stopped at where a figure is what stopped it.
+     *
+     * <p>For a caller that hands the reasons on to whoever says what stopped a reading. Told only
+     * the reasons, that caller would be naming an allowance without the number it ran out at.
+     */
+    public List<StoppedReading> stoppedAt(A atom) {
         return unreadAffecting(atom);
     }
 
@@ -1269,7 +1288,7 @@ public final class AdmissibleValues<A> {
      * author's. Filed by position instead, that order survives only inside one place, and a reader
      * shown two places would be shown them in an order this compiler invented.
      */
-    private List<UnreadReason> unreadAffecting(A atom) {
+    private List<StoppedReading> unreadAffecting(A atom) {
         // The two ends meet, so every value reported is one this reading can promise and there is
         // nothing between them for an unread rule to have been. Asked of the block, which is what
         // both ends answer for.
@@ -1557,7 +1576,7 @@ public final class AdmissibleValues<A> {
         // at once, and met they would promise a combination neither reading has — so the
         // conjunction promises nothing. See {@link #guaranteedAt}.
         boolean apart = !guaranteedTogether() || !other.guaranteedTogether();
-        Set<Sameness.Block<A>> gaveUp = new LinkedHashSet<>();
+        Map<Sameness.Block<A>, PatternPlan.Refused> gaveUp = new LinkedHashMap<>();
         Held<A> both = met(other, sets, gaveUp);
         // The coordinates the conjunction answers in, which are the two readings' equalities
         // conjoined and closed. Everything said about a block of either side is said about the
@@ -1596,7 +1615,7 @@ public final class AdmissibleValues<A> {
                 // meet of a product is exact at each of its places, so those blocks keep what
                 // they had.
                 both(mapped(both(both(widened(), other.widened()), both(tangled(), other.tangled())),
-                        heldAsOne), gaveUp)));
+                        heldAsOne), gaveUp.keySet())));
     }
 
     /**
@@ -1607,14 +1626,15 @@ public final class AdmissibleValues<A> {
      * the two have to arrive together or a reading says a rule admits everything and means that it
      * stopped counting.
      */
-    private static <A> Standing<A> alsoStanding(Standing<A> standing,
-                                                Set<Sameness.Block<A>> gaveUp) {
+    private static <A> Standing<A> alsoStanding(
+            Standing<A> standing, Map<Sameness.Block<A>, PatternPlan.Refused> gaveUp) {
         Standing<A> out = standing;
         // One entry per block, naming every position of it. What was not built is the one answer
         // those positions share, so the widening is every one of theirs and a reader asking about
-        // any of them is asking about the machine that was not made.
-        for (Sameness.Block<A> block : gaveUp) {
-            out = out.alsoAt(block.members(), UnreadReason.EXACT_VALUES_TOO_COSTLY);
+        // any of them is asking about the machine that was not made — at the limit that refused it.
+        for (Map.Entry<Sameness.Block<A>, PatternPlan.Refused> each : gaveUp.entrySet()) {
+            out = out.alsoAt(each.getKey().members(), StoppedReading.ofTheValues(
+                    UnreadReason.EXACT_VALUES_TOO_COSTLY, each.getValue()));
         }
         return out;
     }
@@ -1634,7 +1654,7 @@ public final class AdmissibleValues<A> {
      * nothing an alternative said survives the alternative being one nobody can take.
      */
     private Held<A> met(AdmissibleValues<A> other, Allowance<A> sets,
-                        Set<Sameness.Block<A>> gaveUp) {
+                        Map<Sameness.Block<A>, PatternPlan.Refused> gaveUp) {
         if (isBottom() || other.isBottom()) {
             // Emptied by whatever emptied the side that was empty. A conjunction with a side
             // nothing satisfies is empty for that side's reason, and working it out again from
@@ -1659,7 +1679,7 @@ public final class AdmissibleValues<A> {
             return new Held.Nothing<>(dropped == null ? Refusal.nowhere() : dropped);
         }
         Held.Alternatives.Made<A> made = Held.Alternatives.of(live, sets);
-        gaveUp.addAll(made.gaveUp());
+        made.gaveUp().forEach(gaveUp::putIfAbsent);
         return made.held();
     }
 
@@ -1672,13 +1692,14 @@ public final class AdmissibleValues<A> {
      */
     private static <A> Map<A, ValueSet> narrowed(Map<A, ValueSet> these, Map<A, ValueSet> those,
                                                  Allowance<A> sets, Sameness<A> heldAsOne,
-                                                 Set<Sameness.Block<A>> gaveUp) {
+                                                 Map<Sameness.Block<A>, PatternPlan.Refused>
+                                                         gaveUp) {
         Map<A, ValueSet> out = new LinkedHashMap<>(these);
         those.forEach((atom, set) -> out.merge(atom, set, (here, there) -> {
             Sameness.Block<A> block = heldAsOne.blockOf(atom);
             Allowance.Composed made = sets.meet(block, here, there);
             if (made.gaveUp()) {
-                gaveUp.add(block);
+                gaveUp.putIfAbsent(block, made.refused());
             }
             return made.set();
         }));

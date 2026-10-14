@@ -2,6 +2,7 @@ package souther.compiler.observe;
 
 import souther.compiler.types.SourceConstructOrigin;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -26,15 +27,24 @@ import java.util.Objects;
  *                row, which is what shows the replacement matters on this input whatever the row
  *                states
  * @param noticed whether what the row states told the replaced program from the written one
+ * @param untoldAt where {@code noticed} could not tell, the figures of this compiler's that stopped
+ *                 the replaced run, each as it stood where the run was compared against it; none
+ *                 where nothing that stopped it was a figure, and none where it could tell
  */
 public record ReplacedRun(SourceConstructOrigin fork, int part, int with,
-                          AnswerObservation answer, AnswerChange changed, Noticed noticed) {
+                          AnswerObservation answer, AnswerChange changed, Noticed noticed,
+                          List<Figure> untoldAt) {
 
     public ReplacedRun {
         Objects.requireNonNull(fork, "an arm is an arm of some fork");
         Objects.requireNonNull(answer, "a run says what it answered, or that it answered nothing");
         Objects.requireNonNull(changed, "a run says whether its answer changed, or that it cannot");
         Objects.requireNonNull(noticed, "a run says whether the row noticed, or why it cannot");
+        untoldAt = Figure.inOrder(untoldAt);
+        if (!untoldAt.isEmpty() && noticed != Noticed.COULD_NOT_TELL) {
+            throw new IllegalArgumentException("a figure stopped a run the row was told by: "
+                    + untoldAt);
+        }
         if (part == with) {
             throw new IllegalArgumentException("an arm replaced by itself is the arm: part " + part
                     + " of " + fork);

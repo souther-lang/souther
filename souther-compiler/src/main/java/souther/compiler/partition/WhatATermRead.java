@@ -186,8 +186,8 @@ sealed interface WhatATermRead {
     private static WhatATermRead of(NumericTerm.Reading read) {
         return switch (read) {
             case NumericTerm.Reading.Number(Place value) -> new Number(value);
-            case NumericTerm.Reading.Missing(Incompleteness.Code code) ->
-                    new CameToNothing(ReadingGap.of(code));
+            case NumericTerm.Reading.Missing(Incompleteness.Cause cause) ->
+                    new CameToNothing(ReadingGap.of(cause));
             case NumericTerm.Reading.NotNumber _ -> new NoNumberOfTheValue();
             case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
                     new CameToNothing(ReadingGap.of(why));

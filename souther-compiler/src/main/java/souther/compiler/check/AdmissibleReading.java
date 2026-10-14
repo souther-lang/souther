@@ -8,6 +8,7 @@ import souther.compiler.types.Type;
 import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.PlannedValues;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
@@ -336,7 +337,7 @@ final class AdmissibleReading {
             // was shown one. Where a reader goes about it is another question and is the whole rule
             // either way ({@code RuleAccounting.Why}); this is what tells two of them apart.
             ReadingShortfall one = new ReadingShortfall(part.at(), wroteIt(part.of()),
-                    RuleShortfall.Kind.LEAF, why, each);
+                    RuleShortfall.Kind.LEAF, StoppedReading.of(why), each);
             if (!mine.contains(one)) {
                 mine.add(one);
             }

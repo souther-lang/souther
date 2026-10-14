@@ -9,6 +9,7 @@ import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.WrittenOwner;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
 import java.util.LinkedHashSet;
@@ -113,13 +114,14 @@ class WhatARuleIsAnswerableForIsToldApartByThePartItsAuthorWroteTest {
     }
 
     private static RuleShortfall shortfall(RuleSite site, UnreadReason why, FactSubject at) {
-        return new RuleShortfall(wrote(3), site, RuleShortfall.Kind.CHOICE, why, at);
+        return new RuleShortfall(wrote(3), site, RuleShortfall.Kind.CHOICE,
+                StoppedReading.of(why), at);
     }
 
     /** One position left open by a choice, met at {@code at} and written as {@code writtenAs}. */
     private static ReadingShortfall met(ClauseOccurrence at, ConstructOccurrence writtenAs) {
         return new ReadingShortfall(at, writtenAs, RuleShortfall.Kind.CHOICE,
-                UnreadReason.ALTERNATIVE_NOT_READ, POSITION);
+                StoppedReading.of(UnreadReason.ALTERNATIVE_NOT_READ), POSITION);
     }
 
     /** One operator of the declaration, counted where its author wrote it. */

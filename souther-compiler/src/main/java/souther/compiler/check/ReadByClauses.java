@@ -1,8 +1,13 @@
 package souther.compiler.check;
 
 import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.StoppedReading;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -164,26 +169,21 @@ record ReadByClauses(Confinement.Worked<FactSubject> confinement,
     }
 
     /** Both maps, each position saying what either of them said of it. */
-    static java.util.Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>>
-            alsoSaying(java.util.Map<FactSubject,
-                    java.util.List<souther.compiler.values.UnreadReason>> these,
-                    java.util.Map<FactSubject,
-                            java.util.List<souther.compiler.values.UnreadReason>> those) {
+    static Map<FactSubject, List<StoppedReading>> alsoSaying(
+            Map<FactSubject, List<StoppedReading>> these,
+            Map<FactSubject, List<StoppedReading>> those) {
         if (those.isEmpty()) {
             return these;
         }
-        java.util.Map<FactSubject,
-                java.util.List<souther.compiler.values.UnreadReason>> out =
-                new java.util.LinkedHashMap<>(these);
+        Map<FactSubject, List<StoppedReading>> out = new LinkedHashMap<>(these);
         those.forEach((position, why) -> out.merge(position, why, ReadByClauses::alsoSaying));
         return out;
     }
 
     /** Both lists, the second's entries after the first's, each reason once. */
-    static java.util.List<souther.compiler.values.UnreadReason> alsoSaying(
-            java.util.List<souther.compiler.values.UnreadReason> these,
-            java.util.List<souther.compiler.values.UnreadReason> those) {
-        java.util.List<souther.compiler.values.UnreadReason> out = new java.util.ArrayList<>(these);
+    static List<StoppedReading> alsoSaying(List<StoppedReading> these,
+                                           List<StoppedReading> those) {
+        List<StoppedReading> out = new ArrayList<>(these);
         those.forEach(each -> {
             if (!out.contains(each)) {
                 out.add(each);

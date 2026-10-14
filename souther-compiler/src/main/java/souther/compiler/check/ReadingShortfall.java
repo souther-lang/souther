@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
 /**
@@ -25,11 +26,11 @@ import souther.compiler.values.UnreadReason;
  *                  whole so that the copy is dropped where this crosses and never before — two
  *                  readings of one expansion are two of these and one fact
  * @param kind      what kind of decision it was
- * @param why       what the reading was short of
+ * @param why       what the reading was short of, and the figure it stopped at where one did
  * @param position  what it was left unable to say the values of
  */
 record ReadingShortfall(ClauseOccurrence at, ConstructOccurrence writtenAs,
-                        RuleShortfall.Kind kind, UnreadReason why, FactSubject position) {
+                        RuleShortfall.Kind kind, StoppedReading why, FactSubject position) {
 
     ReadingShortfall {
         if (at == null || writtenAs == null || kind == null || why == null || position == null) {
@@ -37,9 +38,9 @@ record ReadingShortfall(ClauseOccurrence at, ConstructOccurrence writtenAs,
                     "a shortfall met in a reading says where in it, what kind, what, and about"
                             + " which position");
         }
-        if (why.about() != UnreadReason.About.A_RULE) {
+        if (why.why().about() != UnreadReason.About.A_RULE) {
             throw new IllegalArgumentException(
-                    "a reason about " + why.about() + " names no rule to be about: " + why);
+                    "a reason about " + why.why().about() + " names no rule to be about: " + why);
         }
     }
 

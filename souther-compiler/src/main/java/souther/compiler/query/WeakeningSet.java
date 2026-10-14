@@ -1,8 +1,12 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.partition.Border;
 import souther.compiler.partition.ClosureGap;
+import souther.compiler.partition.ReadingGap;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -157,22 +161,48 @@ public final class WeakeningSet {
             // together — what a measure's reading came to, and this — and a quotient written at
             // each would be two answers to one question.
             case Weakening.ModelReadingIncomplete it -> it.cause().fact();
+            // A value of a border's rows an observation stopped is the border and what stopped
+            // it; the figures it was stopped at are what evidenced that, gathered and not told
+            // apart, so two lines of one border cut short at two figures are one fact.
+            case Weakening.BorderValueUnreadable it -> it.why() instanceof ReadingGap.Observation seen
+                    ? new AnObservationAtABorder(it.border(), seen.code()) : it;
+            // A walk that stopped at a limit is what it stopped short of; the limits it stopped at
+            // are what evidenced that, gathered from every walk that stopped there.
+            case Weakening.BorderReadingsNotExhausted it ->
+                    new StoppedAtALimit(Weakening.BorderReadingsNotExhausted.class,
+                            List.of(it.border()));
+            case Weakening.PairSpaceTruncated it ->
+                    new StoppedAtALimit(Weakening.PairSpaceTruncated.class,
+                            List.of(it.behavior(), it.total()));
+            case Weakening.MeetingsNotWalked it ->
+                    new StoppedAtALimit(Weakening.MeetingsNotWalked.class,
+                            List.of(it.behavior(), it.groups()));
+            // A rewrite left open is which rewrite and the reasons it was left open for; the
+            // figures each reason was met at are what evidenced them.
+            case Weakening.RewriteUndecided it ->
+                    new StoppedAtALimit(Weakening.RewriteUndecided.class,
+                            List.of(it.behavior(), it.replacement(), it.why().reasons()));
             // The rest are their own fact: every value they hold is what a reader is told, and two
-            // of them that are equal are one thing that went wrong.
+            // of them that are equal are one thing that went wrong. A decision's reading among
+            // them: one reading is made of a body, and it stops at one figure.
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
-                 Weakening.BorderValueUnreadable _, Weakening.BorderReadingsNotExhausted _,
                  Weakening.ABorderNotHeldAgainstTheLinesBesideIt _,
                  Weakening.ItemsPlaceNotWorkedOut _,
                  Weakening.BodyNotInEvaluation _,
                  Weakening.BoundaryNotDerived _, Weakening.InputNotRead _,
-                 Weakening.PairSpaceTruncated _, Weakening.ProofContradicted _,
+                 Weakening.ProofContradicted _,
                  Weakening.ArmsUnsettled _, Weakening.DecisionOfRowUnreadable _,
-                 Weakening.DecisionRunNotWatched _, Weakening.MeetingsNotWalked _,
+                 Weakening.DecisionRunNotWatched _,
                  Weakening.DecisionReadingIncomplete _, Weakening.DecisionRuleReadShort _,
-                 Weakening.KeyedOverwriteCasesUnmeasured _,
-                 Weakening.RewriteUndecided _ -> one;
+                 Weakening.KeyedOverwriteCasesUnmeasured _ -> one;
         };
     }
+
+    /** The fact a border's value stopped by an observation is: which border, and what stopped it. */
+    private record AnObservationAtABorder(Border border, Incompleteness.Code code) {}
+
+    /** The fact an arm that stopped at figures is: which arm, and what it holds but the figures. */
+    private record StoppedAtALimit(Class<? extends Weakening> arm, List<Object> about) {}
 
     /** Two occurrences of one fact, as one. Commutative, so which was met first decides nothing. */
     private static Weakening merged(Weakening had, Weakening also) {
@@ -182,20 +212,42 @@ public final class WeakeningSet {
             case Weakening.ModelReadingIncomplete it -> new Weakening.ModelReadingIncomplete(
                     ClosureGap.merged(it.cause(),
                             alsoA(Weakening.ModelReadingIncomplete.class, also).cause()));
+            // One code at one border, met at every figure either was stopped at.
+            case Weakening.BorderValueUnreadable it -> new Weakening.BorderValueUnreadable(
+                    it.border(), ReadingGap.eachObservationOnce(List.of(it.why(),
+                            alsoA(Weakening.BorderValueUnreadable.class, also).why())).getFirst());
+            // One walk's stop, met at every limit any walk of it stopped at.
+            case Weakening.BorderReadingsNotExhausted it -> new Weakening.BorderReadingsNotExhausted(
+                    it.border(), both(it.limits(),
+                            alsoA(Weakening.BorderReadingsNotExhausted.class, also).limits()));
+            case Weakening.PairSpaceTruncated it -> new Weakening.PairSpaceTruncated(
+                    it.behavior(), it.total(), both(it.limits(),
+                            alsoA(Weakening.PairSpaceTruncated.class, also).limits()));
+            case Weakening.MeetingsNotWalked it -> new Weakening.MeetingsNotWalked(
+                    it.behavior(), it.groups(), both(it.limits(),
+                            alsoA(Weakening.MeetingsNotWalked.class, also).limits()));
+            // One rewrite left open for the same reasons, each met at every figure either met it.
+            case Weakening.RewriteUndecided it -> new Weakening.RewriteUndecided(
+                    it.behavior(), it.replacement(),
+                    it.why().together(alsoA(Weakening.RewriteUndecided.class, also).why()));
             // Equal under the key and holding nothing but the fact, so both are the same value.
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
-                 Weakening.BorderValueUnreadable _, Weakening.BorderReadingsNotExhausted _,
                  Weakening.ABorderNotHeldAgainstTheLinesBesideIt _,
                  Weakening.ItemsPlaceNotWorkedOut _,
                  Weakening.BodyNotInEvaluation _,
                  Weakening.BoundaryNotDerived _, Weakening.InputNotRead _,
-                 Weakening.PairSpaceTruncated _, Weakening.ProofContradicted _,
+                 Weakening.ProofContradicted _,
                  Weakening.ArmsUnsettled _, Weakening.DecisionOfRowUnreadable _,
-                 Weakening.DecisionRunNotWatched _, Weakening.MeetingsNotWalked _,
+                 Weakening.DecisionRunNotWatched _,
                  Weakening.DecisionReadingIncomplete _, Weakening.DecisionRuleReadShort _,
-                 Weakening.KeyedOverwriteCasesUnmeasured _,
-                 Weakening.RewriteUndecided _ -> had;
+                 Weakening.KeyedOverwriteCasesUnmeasured _ -> had;
         };
+    }
+
+    private static List<Figure> both(List<Figure> one, List<Figure> other) {
+        List<Figure> out = new ArrayList<>(one);
+        out.addAll(other);
+        return out;
     }
 
     /**

@@ -224,6 +224,10 @@ sealed interface ClosureApplications {
                     return new NotSaid(around.metOn().notSaidAnywhere(new ReadingGap.ReachNotRead(
                             ReadingGap.ReachNotRead.Why.MORE_READINGS_THAN_ARE_MADE)));
                 }
+                case InputReads.Applications.PastWhatIsWrittenOut _ -> {
+                    return new NotSaid(around.metOn().notSaidAnywhere(new ReadingGap.ReachNotRead(
+                            ReadingGap.ReachNotRead.Why.MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT)));
+                }
             }
         }
         if (out.isEmpty()) {

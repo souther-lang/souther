@@ -1,8 +1,10 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.AdequacyPolicy;
 import souther.compiler.partition.Budgets;
 import souther.compiler.regex.PatternPlan;
+import souther.compiler.report.AdequacyReport;
 
 import org.junit.jupiter.api.Test;
 
@@ -59,6 +61,24 @@ class ASpaceTooLargeToWalkAsksForNothingInItTest {
         assertTrue(pick == null || pick.composed().plan().pairsOwed().isEmpty(),
                 () -> "a row is not owed at a combination nobody established anything about: "
                         + (pick == null ? "nothing was asked" : pick.composed().plan().pairsOwed()));
+    }
+
+    /**
+     * And the measurement it went without names the limit the walk stopped at, at the number this
+     * run was handed rather than the one a policy usually hands.
+     */
+    @Test
+    void theWalkThatStoppedNamesTheLimitItStoppedAt() {
+        List<AdequacyReport.BehaviorReport> behaviors =
+                AdequacyReport.of(compiled(3)).modules().getFirst().behaviors();
+
+        assertEquals(List.of(List.of(WorkFigure.PAIRS_OF_CLASSES_COUNTED.at(3))),
+                behaviors.getFirst().weakenedBy().causes().stream()
+                        .filter(Weakening.PairSpaceTruncated.class::isInstance)
+                        .map(Weakening::figures)
+                        .toList(),
+                () -> "the walk stopped says what it was held to: "
+                        + behaviors.getFirst().weakenedBy());
     }
 
     private static List<Adequacy.Finding> gapsUnder(int pairSpace) {

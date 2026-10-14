@@ -4,6 +4,7 @@ import net.unit8.notation199x.pattern.PatternParser;
 import net.unit8.notation199x.pattern.PatternRead;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.regex.PatternPlan;
@@ -11,6 +12,7 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
 import java.util.LinkedHashMap;
@@ -163,6 +165,9 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
     private static final FactSubject CONSTRAINED = FactSubject.of(NAMES.written("constrained"));
     private static final FactSubject SETTLED = FactSubject.of(NAMES.written("settled"));
     private static final FactSubject UNREAD = FactSubject.of(NAMES.written("unread"));
+    /** A machine refused at the figure of how many states one may have. */
+    private static final StoppedReading REFUSED = new StoppedReading(
+            UnreadReason.PATTERN_TOO_COSTLY, WorkFigure.ADMITTED_VALUES_ONE_MACHINE.at(300));
 
     /**
      * What a rule is answerable for says which choice left the constraint open.
@@ -184,7 +189,7 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
 
         assertEquals(java.util.Set.of(new ReadingShortfall(choice.writtenIn(),
                         choice.writtenAs(), RuleShortfall.Kind.CHOICE,
-                        UnreadReason.ALTERNATIVE_NOT_READ, CONSTRAINED)),
+                        StoppedReading.of(UnreadReason.ALTERNATIVE_NOT_READ), CONSTRAINED)),
                 theBranchRead(java.util.Set.of())
                         .either(choice, opened(choice), NEITHER_HOLDS_A_POSITION_DOWN,
                                 theBranchNothingRead(java.util.Set.of()))
@@ -198,7 +203,7 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
     void aShortfallOnlyTheUnreadBranchHoldsAnswersForThePosition() {
         ReadingShortfall inside = new ReadingShortfall(aChoice().writtenIn(),
                 aChoice().writtenAs(), RuleShortfall.Kind.CHOICE,
-                UnreadReason.ALTERNATIVE_NOT_READ, CONSTRAINED);
+                StoppedReading.of(UnreadReason.ALTERNATIVE_NOT_READ), CONSTRAINED);
         ChoiceMet choice = aChoice();
 
         assertEquals(java.util.Set.of(inside),
@@ -221,7 +226,7 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
     void andWhichOfTheTwoIsNotAskedOfWhereItWasWritten() {
         ReadingShortfall form = new ReadingShortfall(new ClauseOccurrence(0),
                 ConstructOccurrence.unwritten(), RuleShortfall.Kind.LEAF,
-                UnreadReason.FORM_NOT_READ, CONSTRAINED);
+                StoppedReading.of(UnreadReason.FORM_NOT_READ), CONSTRAINED);
         ChoiceMet choice = aChoice();
 
         assertEquals(java.util.Set.of(form),
@@ -441,10 +446,10 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
         assertEquals(2, java.util.Set.of(
                         new ReadingShortfall(one.writtenIn(), one.writtenAs(),
                                 RuleShortfall.Kind.CHOICE,
-                                UnreadReason.ALTERNATIVE_NOT_READ, CONSTRAINED),
+                                StoppedReading.of(UnreadReason.ALTERNATIVE_NOT_READ), CONSTRAINED),
                         new ReadingShortfall(other.writtenIn(), other.writtenAs(),
                                 RuleShortfall.Kind.CHOICE,
-                                UnreadReason.ALTERNATIVE_NOT_READ, CONSTRAINED)).size(),
+                                StoppedReading.of(UnreadReason.ALTERNATIVE_NOT_READ), CONSTRAINED)).size(),
                 "the position is open twice and there are two clauses to look at; held as reasons"
                         + " at the position they were one, and which of them a reader was sent to"
                         + " was whichever the walk met first");
@@ -468,12 +473,12 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
         Settlement.Sided one = new Settlement.Sided(
                 Confinement.Admission.left(souther.compiler.values.Emptiness.UNDECIDED), Map.of(),
                 java.util.Set.of(new souther.compiler.values.Unbuilt.RuleShortfall<>(UNREAD,
-                        aPattern("a{300}"), UnreadReason.PATTERN_TOO_COSTLY)),
+                        aPattern("a{300}"), REFUSED)),
                 java.util.Set.of());
         Settlement.Sided other = new Settlement.Sided(
                 Confinement.Admission.left(souther.compiler.values.Emptiness.UNDECIDED), Map.of(),
                 java.util.Set.of(new souther.compiler.values.Unbuilt.RuleShortfall<>(UNREAD,
-                        aPattern("b{300}"), UnreadReason.PATTERN_TOO_COSTLY)),
+                        aPattern("b{300}"), REFUSED)),
                 java.util.Set.of());
 
         assertEquals(one.alsoSeen(other), other.alsoSeen(one),

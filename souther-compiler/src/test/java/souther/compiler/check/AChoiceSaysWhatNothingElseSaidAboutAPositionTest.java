@@ -376,7 +376,7 @@ class AChoiceSaysWhatNothingElseSaidAboutAPositionTest {
     /** What a rule of the declaration is answerable for at {@code field}. */
     private static Set<UnreadReason> whatARuleIsAnswerableFor(String source, String field) {
         Set<UnreadReason> out = new LinkedHashSet<>();
-        shortfallsAt(source, field).forEach(each -> out.add(each.why()));
+        shortfallsAt(source, field).forEach(each -> out.add(each.why().why()));
         return out;
     }
 

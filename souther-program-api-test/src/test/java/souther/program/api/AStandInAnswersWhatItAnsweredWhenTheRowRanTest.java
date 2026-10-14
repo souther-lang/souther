@@ -1,5 +1,6 @@
 package souther.program.api;
 
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.Verdict;
 import souther.compiler.program.CheckedBehavior;
@@ -127,9 +128,9 @@ class AStandInAnswersWhatItAnsweredWhenTheRowRanTest {
                 .standsIn().get(0);
 
         for (ObservedValue nothing : List.of(new ObservedValue.Unknown("nothing read it"),
-                new ObservedValue.Truncated(),
+                new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()),
                 priceHolding(new ObservedValue.Unknown("nothing read it")),
-                priceHolding(new ObservedValue.Truncated()))) {
+                priceHolding(new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure())))) {
             assertThrows(IllegalArgumentException.class, () -> standsIn.answering(List.of(nothing)),
                     () -> "asked with " + nothing);
         }

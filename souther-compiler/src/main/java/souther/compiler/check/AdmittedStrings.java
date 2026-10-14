@@ -62,6 +62,20 @@ sealed interface AdmittedStrings {
      * told nothing more because there is nothing about this rule to tell. The rule beside it may
      * have been affordable — one of them was not, and which is not something either of them
      * answers for.
+     *
+     * <p>What it does carry is the position's word, so that it can name the figure: the one the
+     * group of sets was refused at, or, where the position's own answer stopped first and nothing
+     * was asked for, the figures that answer stopped at, and whether anything else stopped it.
+     *
+     * @param why the position's account of why its sets were not handed on
      */
-    record NotPublished() implements AdmittedStrings {}
+    record NotPublished(BlockReason.RulesNotHandedOnAsSets why) implements AdmittedStrings {
+
+        public NotPublished {
+            if (why == null) {
+                throw new IllegalArgumentException("sets not handed on were not handed on for"
+                        + " a reason");
+            }
+        }
+    }
 }

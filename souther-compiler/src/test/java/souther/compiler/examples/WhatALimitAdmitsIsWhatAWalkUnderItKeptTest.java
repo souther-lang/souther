@@ -123,7 +123,8 @@ class WhatALimitAdmitsIsWhatAWalkUnderItKeptTest {
         while (at instanceof ObservedValue.Sequence s) {
             at = s.elements().get(0);
         }
-        assertEquals(new ObservedValue.Truncated(), at, "the walk stops rather than reading on");
+        assertEquals(new ObservedValue.Truncated(FixtureReader.WHOLE.depthFigure()), at,
+                "the walk stops rather than reading on, at the depth");
     }
 
     /**

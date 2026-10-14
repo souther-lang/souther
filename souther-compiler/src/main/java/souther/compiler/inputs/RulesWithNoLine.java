@@ -137,7 +137,7 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
      */
     public static final class Gathered {
 
-        private final Map<RuleWithoutALine.Fact, RuleWithoutALine> reported = new LinkedHashMap<>();
+        private final Map<Object, RuleWithoutALine> reported = new LinkedHashMap<>();
         private final Map<Object, StandingQuestion.Unclassified> unclassified = new LinkedHashMap<>();
 
         /** One more finding, which is what a report says about the rule at that place. */
@@ -190,7 +190,7 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
 
         /** One a reader already made, which is how the findings of two readings meet. */
         public void add(RuleWithoutALine one) {
-            reported.merge(one.fact(), one, RuleWithoutALine::mergedWith);
+            reported.merge(one.fact().key(), one, RuleWithoutALine::mergedWith);
         }
 
         /** The same, for a rule nothing worked out what it raises. */
