@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The values a behavior's own {@code ensures} compares its inputs against.
@@ -214,7 +215,7 @@ public final class EnsuresThresholds {
         ComparisonAssessment whole = ComparisonAssessment.of(out.behavior(), comparison.stated(),
                 Citation.of(e.pos()), read,
                 reads, ClosureApplications.OUTSIDE, rule.value(), answering, false,
-                WhatConditionsState.of(read));
+                WhatConditionsState.of(read), Optional.empty());
         // A statement of several relations holds a line for each only where the statement turns
         // on it, and a clause has nowhere to hold that: no way leads to it for a condition to be
         // carried on. So its lines are said not to be drawn, rather than drawn and owed rows the
@@ -231,7 +232,7 @@ public final class EnsuresThresholds {
         // where a line's origin comes from is this reader's own — a clause's is which conjunct
         // stated it, not a place a run met.
         ComparisonGeometry geometry = ComparisonGeometry.of(assessed,
-                (cutting, _) -> originOf(said, cutting));
+                (cutting, _, _) -> originOf(said, cutting));
         out.evidence().addAll(geometry.evidence());
         out.between().addAll(geometry.between());
     }

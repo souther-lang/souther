@@ -14,6 +14,7 @@ import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.MeaningsOfABodyReading;
+import souther.compiler.partition.ReadingSeat;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.RulesTaken;
@@ -3464,7 +3465,7 @@ public final class Adequacy {
                                     RuleReadingContext.of(ruleReading, policy, db.readings()))
                             : null,
                     PointResolver.resolveAt(debt.owed(), List.copyOf(debt.met().keySet()),
-                            reading -> readingOf(db, module, scope, debt, debt.at(), reading))));
+                            reading -> readingOf(db, module, scope, debt, reading))));
         }
         return new BorderAccount(module, scope, resolved);
     }
@@ -3565,10 +3566,16 @@ public final class Adequacy {
      */
     static PointResolver.ReadingEvidence readingOf(
             Db db, String module, GenerationScope scope, BorderObligationPointAssessment debt,
-            DomainPoint role,
             BorderObligationPointAssessment.Reading reading) {
         if (!scope.admits(reading.behavior())) {
             return new PointResolver.ReadingEvidence.OutOfScope();
+        }
+        // A reading not tied to the point has nothing to say about a row there: a row its own
+        // search found stands where a caller's choice turns, which is not shown to be the point.
+        // Each other reading is searched at its own place, which is the point as that reading has
+        // it.
+        if (!(debt.seatOf(reading) instanceof ReadingSeat.At(DomainPoint role))) {
+            return new PointResolver.ReadingEvidence.NoAnswer();
         }
         List<BorderAssessment> searched =
                 db.ask(new BoundarySearch(module, reading.behavior())).value();

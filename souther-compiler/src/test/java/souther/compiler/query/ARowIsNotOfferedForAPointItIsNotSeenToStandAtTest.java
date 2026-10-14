@@ -154,7 +154,7 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
         List<ItemAssessment> out = new java.util.ArrayList<>();
         for (BorderAssessment each : edges) {
             if (each.border().origin().comparisonAt().isEmpty()
-                    || !isAt(each.border().obligation().at(), BEHIND_THE_PRODUCT)) {
+                    || !isAt(each.border().cut().at(), BEHIND_THE_PRODUCT)) {
                 continue;
             }
             for (PointRole role : PointRole.values()) {

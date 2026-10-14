@@ -65,7 +65,7 @@ class ASignOfAnOrderIsReadAsTheOrderOfItsArgumentsTest {
     void aComparisonOfTheSignStatesWhatTheComparisonOfTheArgumentsStates() {
         for (Same each : CONDITIONS) {
             Pullback.Pulled written = pulled("if %s then 1 else 0".formatted(each.written()));
-            assertInstanceOf(Derivation.AnOrderOfItsArguments.class, written.meaning().how(),
+            assertInstanceOf(Derivation.AnOrderOfItsArguments.class, readAs(written),
                     () -> each.written() + " is read by the order its operation answers");
             assertEquals(pulled("if %s then 1 else 0".formatted(each.asTheOrder())).proposition(),
                     written.proposition(), () -> each.written() + " states " + each.asTheOrder());
@@ -87,7 +87,7 @@ class ASignOfAnOrderIsReadAsTheOrderOfItsArgumentsTest {
     @Test
     void aComparisonTheSignsBoundsSettleIsTheSameWhateverTheArguments() {
         Pullback.Pulled always = pulled("if Decimal.compare(p.x, p.y) > -2 then 1 else 0");
-        assertInstanceOf(Derivation.ASignItsBoundsSettle.class, always.meaning().how());
+        assertInstanceOf(Derivation.ASignItsBoundsSettle.class, readAs(always));
         assertEquals(new Proposition.Always(true), always.proposition());
         assertEquals(new Proposition.Always(false),
                 pulled("if Decimal.compare(p.x, p.y) > 1 then 1 else 0").proposition());
@@ -117,6 +117,13 @@ class ASignOfAnOrderIsReadAsTheOrderOfItsArgumentsTest {
     }
 
     private record Fork(Core condition, InputReads reads, InputReading read) {}
+
+    /** How the comparison {@code pulled} is of was read, inside the step that says it is that
+     *  comparison's. */
+    private static Derivation readAs(Pullback.Pulled pulled) {
+        Derivation how = pulled.meaning().how();
+        return how instanceof Derivation.AComparisonAt(var _, var read) ? read : how;
+    }
 
     /** What the condition of the one fork of a body written {@code body} states. */
     private static Pullback.Pulled pulled(String body) {

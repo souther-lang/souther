@@ -1245,7 +1245,11 @@ class EverySchemaWordIsAccountedForTest {
             // document carries for this is `items_place_not_worked_out`, a `weakening` word held as
             // one above; this reason is `weakeningSource()`'s own, for a reader asking one point's
             // status directly rather than reading a border's weakening set.
-            souther.compiler.query.ItemAssessment.PlaceCouldNotBeWorkedOut.class);
+            souther.compiler.query.ItemAssessment.PlaceCouldNotBeWorkedOut.class,
+            // A reading of a point's line that could not be tied to the point. What a document
+            // carries for this is `a_reading_not_tied_to_its_line`, a `weakening` word held as one
+            // above; this reason is `weakeningSource()`'s own.
+            souther.compiler.query.ItemAssessment.NotTiedToTheAuthorsLine.class);
     }
 
     /**

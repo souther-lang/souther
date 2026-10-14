@@ -229,6 +229,7 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
         out.put("InputCasesUnreadable", new Weakening.InputCasesUnreadable("b", 0));
         out.put("ItemsPlaceNotWorkedOut", new Weakening.ItemsPlaceNotWorkedOut(border(),
                 UnheldNumber.MORE_ROOM_COULD_ANSWER));
+        out.put("AReadingNotTiedToItsLine", new Weakening.AReadingNotTiedToItsLine(border()));
         out.put("BorderReadingsNotExhausted", new Weakening.BorderReadingsNotExhausted(border(),
                 WorkFigure.READINGS_OF_A_ROW_AT_A_POINT.at(256)));
         for (Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why why

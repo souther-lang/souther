@@ -9,7 +9,6 @@ import souther.compiler.query.HowALineIsRead;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.query.Composition;
 import souther.compiler.query.OfferingRequest;
-import souther.compiler.query.RowKey;
 import souther.compiler.query.Settlements;
 import souther.compiler.partition.BorderObligationPoint;
 
@@ -26,17 +25,16 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Two things owed at one point are two items, however many rows they take.
+ * Everything owed at a point is one item of the offering, and a point is the author's.
  *
- * <p>A region is stopped by whatever reaches the position, and where two rules stop it in two places
- * the line is owed a row in that role twice — two obligations at one point of one line. One value
- * answers both, which is why the search composes one row for them; the account is what says there
- * are two.
+ * <p>A region beside a comparison a body wrote is one of the four points of the author's line,
+ * however many places what reaches the position stops each reading's run: the author wrote one
+ * guard, and the region beside it is one row to write. What stopped the run is where that reading
+ * looks for the row, and is no part of which point it is.
  *
- * <p><b>Those are two questions and only one of them is about rows.</b> Read as the places a row is
- * composed at, the second obligation is in no item universe: nothing counts a row as settling it,
- * nothing can say it is answered, and a note saying no row is offered for it prints over the row
- * standing at it. That is the shape this whole change is against, arriving from the inside.
+ * <p><b>And the items are the points and nothing else.</b> Read as the places a row is composed at,
+ * an obligation could fall in no item universe: nothing counts a row as settling it, nothing can say
+ * it is answered, and a note saying no row is offered for it prints over the row standing at it.
  */
 class EveryThingOwedAtAPointIsAnItemOfItsOwnTest {
 
@@ -62,14 +60,14 @@ class EveryThingOwedAtAPointIsAnItemOfItsOwnTest {
             """;
 
     /**
-     * A point of one line owed twice is two items, and what tells them apart is the far side.
+     * The region beside a body's line is one item, wherever the run is stopped.
      *
      * <p>The line at four is owed a run above it, and the run stops at whichever helper's line
-     * reaches the position — two of them, at one value. Same line, same role, two things to be told
-     * about, which is what {@link souther.compiler.partition.RegionBasis} carries.
+     * reaches the position — two of them, at one value. One guard the author wrote and one region
+     * beside it: one thing to be told about.
      */
     @Test
-    void aPointOwedTwiceIsTwoItemsOfTheOffering() {
+    void aRegionBesideABodysLineStoppedInTwoPlacesIsOneItem() {
         Compilation compilation = compiled();
         Settlements table = Settlements.of(compilation.db(), composed(compilation));
 
@@ -78,8 +76,11 @@ class EveryThingOwedAtAPointIsAnItemOfItsOwnTest {
             byLineAndRole.computeIfAbsent(point.line() + " " + point.role(),
                     _ -> new LinkedHashSet<>()).add(point);
         }
-        assertTrue(byLineAndRole.values().stream().anyMatch(at -> at.size() > 1),
-                "a point of this model is owed more than once: " + byLineAndRole);
+        assertTrue(byLineAndRole.values().stream().allMatch(at -> at.size() == 1),
+                "no point of this model is owed more than once: " + byLineAndRole);
+        assertTrue(pointsOf(table).stream().anyMatch(point -> point.line().at().isEmpty()
+                        && point instanceof BorderObligationPoint.InRegion),
+                "and the region beside the body's line is among them: " + byLineAndRole);
     }
 
     /**
@@ -127,37 +128,6 @@ class EveryThingOwedAtAPointIsAnItemOfItsOwnTest {
             }
         }
         return asked;
-    }
-
-    @Test
-    void theTwoOfThemAreAnsweredByTheOneRowComposedThere() {
-        Compilation compilation = compiled();
-        Settlements table = Settlements.of(compilation.db(), composed(compilation));
-
-        // The obligations that share a point, which is what a row there answers at once.
-        Map<String, Set<ObligationIdentity>> byPoint = new LinkedHashMap<>();
-        for (ObligationIdentity item : table.requested()) {
-            if (item instanceof ObligationIdentity.OfALine(var point)) {
-                byPoint.computeIfAbsent(point.line() + " " + point.role(),
-                        _ -> new LinkedHashSet<>()).add(item);
-            }
-        }
-        List<Set<ObligationIdentity>> shared = byPoint.values().stream().filter(at -> at.size() > 1).toList();
-        assertFalse(shared.isEmpty(), "a point of this model is owed more than once: " + byPoint);
-
-        for (Set<ObligationIdentity> at : shared) {
-            Set<RowKey> composedThere = new LinkedHashSet<>();
-            at.forEach(item -> composedThere.add(table.composedFor().get(item)));
-            assertEquals(1, composedThere.size(),
-                    "one row is composed for everything owed at one point: " + at + " -> "
-                            + composedThere);
-            // And it answers all of them, so a reduction counts it once for each.
-            RowKey row = composedThere.iterator().next();
-            if (row != null) {
-                at.forEach(item -> assertTrue(table.at(row, item).settles(),
-                        "the row composed there settles " + item));
-            }
-        }
     }
 
     private static Compilation compiled() {

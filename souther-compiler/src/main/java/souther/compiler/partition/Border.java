@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NarrowedBounds;
+import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -151,9 +152,14 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * rule's answer and no part of which point it is.
      */
     public static List<DomainPoint> pointsOf(LineOrigin origin) {
+        return pointsOf(origin.lineFacts());
+    }
+
+    /** The same, of a line that claims {@code facts}. */
+    static List<DomainPoint> pointsOf(LineFacts facts) {
         List<DomainPoint> points = new ArrayList<>();
         points.add(new DomainPoint.AtTheLine());
-        switch (origin.lineFacts().claim()) {
+        switch (facts.claim()) {
             case ComparisonClaim.Cut order -> points.add(new DomainPoint.BesideTheLine(
                     order.valueBelongs().opposite()));
             case ComparisonClaim.Singled _ -> {
@@ -170,8 +176,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // Answered as a set, two orders of these points were one value and nothing downstream
         // could have disagreed with a walk that had them the other way round.
         points.sort(Comparator
-                .comparing((DomainPoint point) ->
-                        PointRole.of(point, origin.lineFacts().holdsAt(point)))
+                .comparing((DomainPoint point) -> PointRole.of(point, facts.holdsAt(point)))
                 .thenComparingInt(point -> point.side() == Towards.BELOW ? 0 : 1));
         return List.copyOf(points);
     }
@@ -372,16 +377,148 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // it: it is the line a row here stands at or beside, and an author moving it moves the
         // point.
         PointContributions own = PointContributions.by(origin.authoredLine());
+        if (line.at().isEmpty() && origin instanceof LineOrigin.ComparisonOrigin comparison) {
+            return ofTheAuthorsLine(point, line, own, comparison.authored());
+        }
+        ReadingSeat here = new ReadingSeat.At(point);
         return switch (answer(point)) {
             case PointAnswer.NotOwed _, PointAnswer.NotWorkedOut _ -> List.of();
             case PointAnswer.AtLine _ -> List.of(
                     new OwedPoint(new BorderObligationPoint.AtLine(line, point),
-                            PointAttribution.of(own)));
+                            PointAttribution.of(own), here));
             case PointAnswer.InRegion in -> in.claims().stream()
-                    .map(claim -> new OwedPoint(
-                            new BorderObligationPoint.InRegion(line, point, claim.basis()),
-                            PointAttribution.of(own.and(claim.contributions()))))
+                    .map(claim -> new OwedPoint(new BorderObligationPoint.InRegion(line, point,
+                            Optional.of(claim.basis())),
+                            PointAttribution.of(own.and(claim.contributions())), here))
                     .toList();
+        };
+    }
+
+    /**
+     * What a comparison a body wrote owes at {@code point} of this reading: the points of its
+     * author's line this point is, as {@code authored} says the reading stands to that line.
+     *
+     * <p>The author's points, because the debt is the author's: two calls put one line on two
+     * quantities, and the row owed beside it is owed once. Where on its own quantity each reading
+     * stands for one of those points is the reading's ({@link ReadingSeat}), and so is what stopped
+     * the run beside it — every claim that settled the region here is this reading's account of it,
+     * and none is part of the point.
+     *
+     * <p>A reading shown to stand at the line stands at the matching point of the author's. One
+     * shown to be of the line without being able to tell its sides apart holds what it found about
+     * every point of the line of the same kind as this one without settling any of them; one where
+     * something outside the comparison decides it is held the same way and is no evidence that
+     * those points are owed ({@link ReadingSeat.Unresolved}); one shown to be no place of the line
+     * owes nothing for it.
+     */
+    private List<OwedPoint> ofTheAuthorsLine(DomainPoint point, BorderObligationId line,
+                                             PointContributions own,
+                                             AuthoredPointMapping authored) {
+        PointContributions settled = switch (answer(point)) {
+            case PointAnswer.NotOwed _, PointAnswer.NotWorkedOut _ -> null;
+            case PointAnswer.AtLine _ -> own;
+            case PointAnswer.InRegion in -> {
+                PointContributions all = own;
+                for (RegionClaim claim : in.claims()) {
+                    all = all.and(claim.contributions());
+                }
+                yield all;
+            }
+        };
+        if (settled == null || authored instanceof AuthoredPointMapping.NotAnAuthoredBoundary) {
+            return List.of();
+        }
+        List<DomainPoint> ofTheLine = pointsOf(line.line().facts());
+        Optional<DomainPoint> tied = authored instanceof AuthoredPointMapping.Proven proven
+                ? theAuthorsPoint(point, proven).filter(ofTheLine::contains) : Optional.empty();
+        List<OwedPoint> out = new ArrayList<>();
+        if (tied.isPresent()) {
+            out.add(owedAt(line, tied.get(), settled, new ReadingSeat.At(point)));
+        } else {
+            ReadingSeat seat = authored instanceof AuthoredPointMapping.Proven
+                    ? new ReadingSeat.Untied(point) : new ReadingSeat.Unresolved(point);
+            for (DomainPoint each : ofTheLine) {
+                if (each.againstTheLine() == point.againstTheLine()
+                        && each.getClass() == point.getClass()) {
+                    out.add(owedAt(line, each, settled, seat));
+                }
+            }
+        }
+        return out;
+    }
+
+    private static OwedPoint owedAt(BorderObligationId line, DomainPoint point,
+                                    PointContributions settled, ReadingSeat seat) {
+        return new OwedPoint(point.againstTheLine()
+                ? new BorderObligationPoint.AtLine(line, point)
+                : new BorderObligationPoint.InRegion(line, point, Optional.empty()),
+                PointAttribution.of(settled), seat);
+    }
+
+    /**
+     * Which point of the author's line {@code point} of this reading is, as {@code proven} says the
+     * reading faces it — or nothing where the facing does not say.
+     *
+     * <p>The value the line is at is the author's line's value whichever way it is faced. A side is
+     * told by what the line claims: an order's satisfied side is its satisfied side on any quantity
+     * it is drawn on, so a side of this reading is the author's satisfied side exactly where the
+     * comparison holds there. Where this reading drew the relation the comparison denies — a
+     * statement of several holds each relation one way round, and the comparison may hold where it
+     * fails — the relation's satisfied side is the comparison's other one, and what holds at the
+     * value is what does not. A value singled out holds on neither side, and which side of it is
+     * which is the facing's to say, and nothing's where the facing is not known.
+     *
+     * <p>A reading that cuts where the author singled a value out, or singles one out where the
+     * author cut, is at a line of its own: a count of the elements meeting something written
+     * {@code == 2} is read on an element's number as where that element starts to meet it, which
+     * is where the count arrives at two from one side and not the value two itself. Which of the
+     * author's points such a reading stands at is not known.
+     */
+    private Optional<DomainPoint> theAuthorsPoint(DomainPoint point,
+                                                  AuthoredPointMapping.Proven proven) {
+        if (proven.claims().getClass() != origin.lineFacts().claim().getClass()) {
+            return Optional.empty();
+        }
+        if (point.side() == null) {
+            return Optional.of(point);
+        }
+        // Where the line is the comparison's own relation and this reading's quantity faces the
+        // sides it wrote a known way, a side is a side of the left against the right, whatever the
+        // reading drew it as: the rules can leave one value at an order's end, and the line is
+        // then a value singled out where the author wrote an order. A line something else in the
+        // definition draws has no two sides of the comparison's written for it, and its claim is
+        // what the comparison comes to across it.
+        Optional<Towards> faced = !proven.itsOwn() ? Optional.empty() : switch (proven.facing()) {
+            case AS_WRITTEN -> Optional.of(point.side());
+            case TURNED -> Optional.of(point.side().opposite());
+            case NOTHING_WRITTEN -> Optional.empty();
+        };
+        if (faced.isPresent()) {
+            return faced.map(towards -> sideOf(point, towards));
+        }
+        Optional<Towards> side = switch (proven.claims()) {
+            case ComparisonClaim.Cut authoredCut
+                    when origin.lineFacts().claim() instanceof ComparisonClaim.Cut drawn -> {
+                Towards holds = drawn.holdsAtTheValue() ? drawn.valueBelongs()
+                        : drawn.valueBelongs().opposite();
+                Towards authorsHolds = authoredCut.holdsAtTheValue() ? authoredCut.valueBelongs()
+                        : authoredCut.valueBelongs().opposite();
+                boolean denied = drawn.holdsAtTheValue() != authoredCut.holdsAtTheValue();
+                Towards comparisonHolds = denied ? holds.opposite() : holds;
+                yield Optional.of(point.side() == comparisonHolds ? authorsHolds
+                        : authorsHolds.opposite());
+            }
+            default -> Optional.empty();
+        };
+        return side.map(towards -> sideOf(point, towards));
+    }
+
+    /** {@code point}, on side {@code towards} of the line. */
+    private static DomainPoint sideOf(DomainPoint point, Towards towards) {
+        return switch (point) {
+            case DomainPoint.BesideTheLine _ -> new DomainPoint.BesideTheLine(towards);
+            case DomainPoint.InTheRegion _ -> new DomainPoint.InTheRegion(towards);
+            case DomainPoint.AtTheLine at -> at;
         };
     }
 
@@ -449,7 +586,9 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * of every behavior carrying the type.
      */
     public BorderObligationId obligation() {
-        return new BorderObligationId(origin.authoredLine(), cut.at());
+        AuthoredLine line = origin.authoredLine();
+        return new BorderObligationId(line, BorderObligationId.atNoLevel(line.which())
+                ? Optional.empty() : Optional.of(cut.at()));
     }
 
     /** Where the line is, as a report names it. Not what any one of its points asks for: that is

@@ -154,9 +154,11 @@ class AComparisonOfAChosenValueIsTheChoiceOfItsComparisonsTest {
         return pulled(body).proposition();
     }
 
-    /** How the condition of the one fork of a body written {@code body} was read. */
+    /** How the condition of the one fork of a body written {@code body} was read, inside the step
+     *  that says it is that comparison's. */
     private static Derivation derived(String body) {
-        return pulled(body).meaning().how();
+        Derivation how = pulled(body).meaning().how();
+        return how instanceof Derivation.AComparisonAt(var _, var read) ? read : how;
     }
 
     private static Pullback.Pulled pulled(String body) {

@@ -95,6 +95,9 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         // A coverage item's own place on the order is a question the exact arithmetic answers or
         // does not; a wider run does not change what scale a model's decimals were written at.
         table.put("ItemsPlaceNotWorkedOut", "answers/UNAFFECTED");
+        // Which of the author's points a reading stands at is a question about how the reading
+        // was derived, and a wider run derives it the same way.
+        table.put("AReadingNotTiedToItsLine", "answers/UNAFFECTED");
         // A border nothing held against the lines beside it, which does not answer one way: a
         // strategy nobody wrote and rows all on one side are not allowances, and a run nobody
         // watched is. The row is written with the one that is, so what it shows is the answer
@@ -238,7 +241,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                  Weakening.BodyNotInEvaluation _, Weakening.BoundaryNotDerived _,
                  Weakening.InputNotRead _, Weakening.PairSpaceTruncated _,
                  Weakening.BorderReadingsNotExhausted _,
-                 Weakening.ItemsPlaceNotWorkedOut _,
+                 Weakening.ItemsPlaceNotWorkedOut _, Weakening.AReadingNotTiedToItsLine _,
                  Weakening.ProofContradicted _, Weakening.ArmsUnsettled _,
                  Weakening.DecisionOfRowUnreadable _, Weakening.DecisionRunNotWatched _,
                  Weakening.MeetingsNotWalked _,
@@ -281,6 +284,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                 WorkFigure.READINGS_OF_A_ROW_AT_A_POINT.at(4)));
         out.add(new Weakening.ItemsPlaceNotWorkedOut(border(),
                 souther.compiler.numeric.UnheldNumber.MORE_ROOM_COULD_ANSWER));
+        out.add(new Weakening.AReadingNotTiedToItsLine(border()));
         out.add(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border(),
                 Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why.NOTHING_WATCHED_THE_RUNS));
         out.add(new Weakening.MeetingsNotWalked("b", 1,

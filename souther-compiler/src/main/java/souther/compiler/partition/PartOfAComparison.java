@@ -1,78 +1,58 @@
 package souther.compiler.partition;
 
-import souther.compiler.meaning.Proposition;
-import souther.compiler.meaning.WhyUnread;
+import souther.compiler.meaning.WrittenLine;
+
+import java.util.Objects;
 
 /**
- * Which of the lines one comparison states is this one, as the reading that took the comparison
- * apart named it.
+ * Which of the lines one comparison states is this one: one its author drew.
  *
- * <p>A comparison states one rule, and a rule stating several relations held together draws a line
- * for each of them: {@code Int.max(a, b) <= g} is one rule with a line on {@code a} and one on
- * {@code b}. Which of the two a line is is the answer of the reading that found them, and only
- * that reading makes one — so nothing that meets a line afterwards can number the lines of a
- * comparison by a count of its own, and a reader handed one can only have been handed it.
+ * <p>A comparison states one rule, and its author can draw more than one line with it:
+ * {@code Int.max(a, b) <= g} is one rule with a line on {@code a} and one on {@code b}. Those are
+ * the arms the comparison's definition takes on the way to a relation ({@link WrittenLine}), and
+ * they are the same in every copy of a helper the comparison is read in. What a call hands the
+ * definition puts a line somewhere on the behavior's input, and one line can land in many places —
+ * one for each case of a value the caller chose — so those places are readings of this line and
+ * not lines of their own.
  *
- * <p>The relation the line is, held. A helper's comparison is read once per call, and each call's
- * statement is taken apart on its own; what two calls' lines share is the relation, and where each
- * fell among the relations its own call stated is that call's and nothing the other knows. A name
- * taken from that place makes one relation two lines in two calls and two relations one. Not where
- * the relation was written either: one relation stated twice is one line.
- *
- * <p>Or, where a statement on one application was read as far as a number nothing holds, what it
- * came to there. That reading has no relation to name — the relation is linear and cannot be
- * written down — and it draws no line, so it is told from the others only for being a different
- * part of the comparison.
+ * <p>Named by the reading that took the statement apart, and by nothing that met a line
+ * afterwards.
  */
 public final class PartOfAComparison {
 
-    /** The statement held, as a proposition spells it: one spelling for one relation. */
-    private final String spelled;
+    private final WrittenLine line;
 
-    private PartOfAComparison(String spelled) {
-        this.spelled = spelled;
+    private PartOfAComparison(WrittenLine line) {
+        this.line = line;
     }
 
-    /** The line {@code relation} draws. */
-    public static PartOfAComparison of(Proposition.Compared relation) {
-        if (!relation.holds()) {
-            throw new IllegalArgumentException("a line is the relation held: " + relation);
-        }
-        return new PartOfAComparison(relation.key());
+    /** The line the arms of {@code line} lead to. */
+    public static PartOfAComparison of(WrittenLine line) {
+        return new PartOfAComparison(Objects.requireNonNull(line, "a part is some written line"));
     }
 
-    /**
-     * The line a statement that is one line draws: the relation it states, whichever way round, or
-     * the number nothing holds that it was read as far as.
-     */
-    static PartOfAComparison ofTheStatement(Proposition stated) {
-        return switch (stated) {
-            case Proposition.Compared compared ->
-                    of(compared.holds() ? compared : (Proposition.Compared) compared.denied());
-            case Proposition.Unread unread when unread.why() instanceof WhyUnread.ANumberNotHeld ->
-                    new PartOfAComparison((unread.holds() ? unread : unread.denied()).key());
-            default -> throw new IllegalArgumentException(
-                    "a statement that is one line states a relation: " + stated);
-        };
+    /** Which line of the author's this is. */
+    public WrittenLine line() {
+        return line;
     }
 
-    /** The relation, as the reading spelled it: what tells this line from the comparison's others. */
-    public String spelled() {
-        return spelled;
+    /** Whether this is the comparison itself, which its author drew as one line. */
+    public boolean isTheComparison() {
+        return line.arms().isEmpty();
     }
 
     @Override
     public boolean equals(Object other) {
-        return other instanceof PartOfAComparison that && spelled.equals(that.spelled);
+        return other instanceof PartOfAComparison that && line.equals(that.line);
     }
 
     @Override
     public int hashCode() {
-        return spelled.hashCode();
+        return line.hashCode();
     }
 
     @Override
     public String toString() {
-        return "line " + spelled;
+        return "line " + line.arms();
     }
 }

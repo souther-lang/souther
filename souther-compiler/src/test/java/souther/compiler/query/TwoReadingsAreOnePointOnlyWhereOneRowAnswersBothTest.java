@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.partition.Demand;
 import souther.compiler.partition.PointRole;
 
 import java.util.ArrayList;
@@ -10,22 +11,25 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Two readings of one line are one point where one row answers both, and two where it does not.
+ * A comparison a body wrote owes the points of the line its author wrote, and each reading asks for
+ * them in its own terms.
  *
- * <p>The two points against a line are values of the quantity, and the line settles them wherever it
- * is read: a row at the value is a row at the value, whichever case it was written under. The other
- * two are the regions either side, and a region is settled by the line together with whatever stops
- * it on the far side — so where the cases stop it in different places, a row inside one run says
- * nothing about the other.
+ * <p>The guard below is one line and four points however many cases it is read under. Where a
+ * region beside it stops is the reading's: under {@code P} the run above the line stops at 20 and
+ * under {@code T} at 30, which a declaration put there and the guard did not. So the far end is
+ * part of what a reading asks for at the point and no part of which point it is, and a row in
+ * either run is a row in the author's region — counted for the reading it was written under, and
+ * for that one alone.
  *
- * <p>Which is what {@link souther.compiler.partition.RegionBasis} carries, and this is the model
- * that tells the two apart: one guard, read under each case, with the cases capping the field at
- * different values.
+ * <p>A line a declaration drew is the other way round: its far end is where the type stops it and
+ * the same at every reading, and two far ends there are two points
+ * ({@link souther.compiler.partition.RegionBasis}).
  */
 class TwoReadingsAreOnePointOnlyWhereOneRowAnswersBothTest {
 
@@ -51,39 +55,37 @@ class TwoReadingsAreOnePointOnlyWhereOneRowAnswersBothTest {
             }
             """;
 
-    /**
-     * The points against the line are one each; the run above it is one per case.
-     *
-     * <p>A row at {@code deadline = 11} answers the line under either case. A row inside the run
-     * above it answers a run that stops at 20 or a run that stops at 30, and not both.
-     */
+    /** One point in each of the four, the run above the line too, though it stops in two places. */
     @Test
-    void aRegionStoppedInTwoPlacesIsTwoPointsAndTheLineItselfIsOne() {
+    void aRegionStoppedInTwoPlacesIsOnePointOfTheAuthorsLine() {
         Map<PointRole, List<BorderObligationPointAssessment>> byRole = theGuardsPoints();
 
-        assertEquals(1, byRole.get(PointRole.ON).size(),
-                () -> "one row answers the line: " + byRole.get(PointRole.ON));
-        assertEquals(1, byRole.get(PointRole.OFF).size(),
-                () -> "and one answers the value below it: " + byRole.get(PointRole.OFF));
-        assertEquals(2, byRole.get(PointRole.IN).size(),
-                () -> "the run above the line stops in two places: " + byRole.get(PointRole.IN));
-        assertEquals(1, byRole.get(PointRole.OUT).size(),
-                () -> "and the one below it stops at the end of the order for both: "
-                        + byRole.get(PointRole.OUT));
+        for (PointRole role : PointRole.values()) {
+            assertEquals(1, byRole.get(role).size(),
+                    () -> "the author wrote one line, which owes one " + role + " point: "
+                            + byRole.get(role));
+        }
     }
 
-    /** And what is one point is read under each case, while what is two is read under one. */
+    /**
+     * And every point is read under each case, the run above the line asked for as each case
+     * stops it.
+     */
     @Test
-    void aPointIsReadUnderEveryCaseThatSharesIt() {
+    void aPointIsReadUnderEveryCaseAndAskedForAsThatCaseStopsIt() {
         Map<PointRole, List<BorderObligationPointAssessment>> byRole = theGuardsPoints();
 
-        assertEquals(List.of("r@P.deadline", "r@T.deadline"),
-                readings(byRole.get(PointRole.ON).get(0)),
-                "the line is read under each case");
-        for (BorderObligationPointAssessment each : byRole.get(PointRole.IN)) {
-            assertEquals(1, each.met().size(),
-                    () -> "and a run only one case has is read under that one: " + readings(each));
+        for (PointRole role : PointRole.values()) {
+            assertEquals(List.of("r@P.deadline", "r@T.deadline"),
+                    readings(byRole.get(role).get(0)),
+                    () -> "the " + role + " point is read under each case");
         }
+        BorderObligationPointAssessment above = byRole.get(PointRole.IN).get(0);
+        List<Demand> asked = above.readings().stream()
+                .map(each -> each.border().demand(above.askedAt(each))).toList();
+        assertFalse(asked.get(0).sameAs(asked.get(1)),
+                () -> "a run that stops at 20 and one that stops at 30 ask for different rows: "
+                        + asked);
     }
 
     /**

@@ -28,6 +28,7 @@ import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
+import souther.compiler.meaning.WrittenLines;
 import souther.compiler.types.ValueName;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.OperationLaw;
@@ -500,7 +501,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                 case Stated.AComparison(var comparison) ->
                                         ComparisonAssessment.of(in.behavior(), comparison, where,
                                                 in.read(), reads, applying, null,
-                                                in.answering(), false, in.conditions());
+                                                in.answering(), false, in.conditions(),
+                                                Optional.of(stands.lineage()
+                                                        .expansionProjection()));
                                 case Stated.AnApplication(var _, var answered) ->
                                         ComparisonAssessment.ofAnApplication(answered, where,
                                                 in.read());
@@ -1131,7 +1134,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     return Optional.empty();
                 }
                 return Optional.ofNullable(Cutting.ofAnApplication(behavior, application,
-                        stated.proposition(), standing.read(), standing.reads()));
+                        stated.proposition(), standing.read(), standing.reads(),
+                        WrittenLines.of(stated.meaning().how(),
+                                application.occurrence().lineage().expansionProjection(),
+                                Optional.empty(), Optional.empty())));
             }).orElse(null);
         }
     }

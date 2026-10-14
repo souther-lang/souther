@@ -187,7 +187,7 @@ public final class WeakeningSet {
             // them: one reading is made of a body, and it stops at one figure.
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
                  Weakening.ABorderNotHeldAgainstTheLinesBesideIt _,
-                 Weakening.ItemsPlaceNotWorkedOut _,
+                 Weakening.ItemsPlaceNotWorkedOut _, Weakening.AReadingNotTiedToItsLine _,
                  Weakening.BodyNotInEvaluation _,
                  Weakening.BoundaryNotDerived _, Weakening.InputNotRead _,
                  Weakening.ProofContradicted _,
@@ -233,7 +233,7 @@ public final class WeakeningSet {
             // Equal under the key and holding nothing but the fact, so both are the same value.
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
                  Weakening.ABorderNotHeldAgainstTheLinesBesideIt _,
-                 Weakening.ItemsPlaceNotWorkedOut _,
+                 Weakening.ItemsPlaceNotWorkedOut _, Weakening.AReadingNotTiedToItsLine _,
                  Weakening.BodyNotInEvaluation _,
                  Weakening.BoundaryNotDerived _, Weakening.InputNotRead _,
                  Weakening.ProofContradicted _,

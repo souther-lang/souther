@@ -6,6 +6,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.Place;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BorderObligationPoint;
+import souther.compiler.partition.ReadingSeat;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.GenerationObligation;
@@ -544,9 +545,16 @@ public record Settlements(List<ObligationIdentity> requested,
                     continue;
                 }
                 ObligationIdentity.OfALine item = new ObligationIdentity.OfALine(point.point());
-                point.met().forEach((_, at) -> reads.computeIfAbsent(item, _ -> new ArrayList<>())
-                        .add(AtAPoint.of(subject.at(at.border()),
-                                at.owedAt(point.at()).criterion())));
+                // Each reading at its own place, which is the point as that reading has it: a
+                // comparison a body wrote is a different place on a different quantity at each
+                // call. One not tied to the point says nothing here a row could settle.
+                point.met().forEach((where, at) -> {
+                    if (point.seatOf(where) instanceof ReadingSeat.At(var asked)) {
+                        reads.computeIfAbsent(item, _ -> new ArrayList<>())
+                                .add(AtAPoint.of(subject.at(at.border()),
+                                        at.owedAt(asked).criterion()));
+                    }
+                });
             }
             // And this behavior's readings of the lines the declarations own, which its own rules
             // are owed none of. Read the same way and for the same reason.

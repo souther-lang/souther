@@ -14,6 +14,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
@@ -22,6 +23,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.reach.ComparisonArrival;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ExpansionLineage;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -97,13 +99,14 @@ sealed interface ComparisonAssessment {
      * @param position the position it divides
      * @param value    the value of the position the classes meet at, or null where the position
      *                 holds none there
+     * @param authored how the line stands to the line of its author's it is a place of
      */
     record AtAPosition(Cutting cutting, NumericTerm.FromOnePosition position, Place value,
-                       Places places)
+                       Places places, AuthoredPointMapping authored)
             implements ComparisonAssessment {
 
         public AtAPosition {
-            if (cutting == null || position == null || places == null) {
+            if (cutting == null || position == null || places == null || authored == null) {
                 throw new IllegalArgumentException("a line on a position names the position");
             }
         }
@@ -124,14 +127,16 @@ sealed interface ComparisonAssessment {
      *
      * @param relation  what the line states, as a relation of its terms
      * @param undivided the coordinates {@code relation} is shown to leave undivided
+     * @param authored  how the line stands to the line of its author's it is a place of
      */
     record AcrossPositions(Cutting cutting, Citation at, Places places,
-                           UndividedByARelation relation, Set<FilingCoordinate> undivided)
+                           UndividedByARelation relation, Set<FilingCoordinate> undivided,
+                           AuthoredPointMapping authored)
             implements ComparisonAssessment {
 
         public AcrossPositions {
             if (cutting == null || at == null || places == null || relation == null
-                    || undivided == null) {
+                    || undivided == null || authored == null) {
                 throw new IllegalArgumentException("a line over a form names the form");
             }
             undivided = Set.copyOf(undivided);
@@ -141,14 +146,14 @@ sealed interface ComparisonAssessment {
         AcrossPositions whereRowsArrive(InputReading reading,
                                         List<Reachability.Reaching> ways) {
             return new AcrossPositions(cutting, at, places, relation,
-                    relation.undividedWhereRowsArrive(reading, ways));
+                    relation.undividedWhereRowsArrive(reading, ways), authored);
         }
 
         /** The same, where every row arriving comes out on one side of it: it divides none of the
          *  positions it is filed at. */
         AcrossPositions decided() {
             return new AcrossPositions(cutting, at, places, relation,
-                    Set.copyOf(cutting.of().filedAt()));
+                    Set.copyOf(cutting.of().filedAt()), authored);
         }
 
     }
@@ -340,14 +345,14 @@ sealed interface ComparisonAssessment {
         /**
          * One line of the statement.
          *
-         * @param id    which of the statement's lines it is
+         * @param id    which of the author's lines it is a place of, and which place
          * @param line  what that line comes to, which is what a comparison of one line comes to and
          *              never several again
          * @param cases where the statement turns on it, as cases any one of which is enough: every
          *              case where it was read, and once the way to it is taken in, the cases a row
          *              arriving there can be in
          */
-        public record Part(PartOfAComparison id, ComparisonAssessment line,
+        public record Part(PlaceOfALine id, ComparisonAssessment line,
                            List<Proposition> cases) {
 
             public Part {
@@ -454,6 +459,8 @@ sealed interface ComparisonAssessment {
      * stands inside, on each of which it is read. {@code answer} is the binding a clause calls what
      * the behavior answers, or
      * null where the comparison is written in a body and there is nothing to be the answer.
+     * {@code writtenIn} is the copy of the body a comparison a body wrote stands in, which tells
+     * the lines its author drew from the places a call put them; nothing for a clause.
      *
      * <p><b>The arithmetic answers before anything else is asked.</b> Which positions a rule is
      * about is what the quantity it cuts is over: every atom of a form is a number of a location
@@ -469,7 +476,8 @@ sealed interface ComparisonAssessment {
                                    InputReading read, InputReads reads,
                                    ClosureApplications applying,
                                    BindingId answer, Arrivals answering,
-                                   boolean drawnByAnInvariant, WhatConditionsState conditions) {
+                                   boolean drawnByAnInvariant, WhatConditionsState conditions,
+                                   Optional<ExpansionLineage> writtenIn) {
         // Asked first, and of the whole comparison. A rule that reads the answer anywhere in it is
         // one this reading does not put on the input space, whichever side the answer is on and
         // whatever else stands beside it: `value.n + query.offset <= 20` is about the answer and
@@ -478,7 +486,7 @@ sealed interface ComparisonAssessment {
             return new AnswerDependent();
         }
         Cutting.Read cut = Cutting.read(behavior, comparison, read, reads, applying, answering,
-                conditions);
+                conditions, writtenIn);
         return switch (cut) {
             case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
                  Cutting.Read.NumberNoRatioHolds _ -> aLine(cut, at, read, drawnByAnInvariant,
@@ -529,7 +537,7 @@ sealed interface ComparisonAssessment {
                                               Supplier<ComparisonAssessment> aboutNoPosition) {
         return switch (line) {
             case Cutting.Read.Cuts cuts ->
-                    onTheQuantity(at, cuts.cutting(), read, drawnByAnInvariant);
+                    onTheQuantity(at, cuts.cutting(), cuts.authored(), read, drawnByAnInvariant);
             // And where the quantity was read and stands on no order this counts, the carrier is
             // what a reader is owed — at the quantity's own coordinates, because the quantity is
             // what such a rule is about. The word is what the reading established and not what is
@@ -843,9 +851,14 @@ sealed interface ComparisonAssessment {
         return why.isEmpty() ? new NoInput() : new Unread(why);
     }
 
-    /** What a line comes to on the input space, from the quantity it is on. */
+    /**
+     * What a line comes to on the input space, from the quantity it is on.
+     *
+     * @param authored how the line stands to the line of its author's it is a place of, carried to
+     *                 whatever reads where a row on it would go
+     */
     private static ComparisonAssessment onTheQuantity(
-            Citation at, Cutting cutting, InputReading read,
+            Citation at, Cutting cutting, AuthoredPointMapping authored, InputReading read,
             boolean drawnByAnInvariant) {
         Quantities quantities = read.quantities();
         // Whether there is an input at all, before anything is asked about where its values run.
@@ -882,7 +895,8 @@ sealed interface ComparisonAssessment {
             // compiler can always say exactly. It is on no position, and writing it out would be as
             // much of it as a pretty-printer got.
             UndividedByARelation relation = relationOf(cutting);
-            return new AcrossPositions(cutting, at, kind, relation, relation.undivided(read));
+            return new AcrossPositions(cutting, at, kind, relation, relation.undivided(read),
+                    authored);
         }
         // Read off the one place its value is read at, which is not taken as held: an answer that
         // was not is what the position is told, as for every other side that was not worked out.
@@ -892,7 +906,7 @@ sealed interface ComparisonAssessment {
             case ExactAnswer.Unheld<Optional<Place>> unheld ->
                     sideNotWorkedOut(cutting, unheld.why());
             case ExactAnswer.Held<Optional<Place>> held ->
-                    new AtAPosition(cutting, divided, held.value().orElse(null), kind);
+                    new AtAPosition(cutting, divided, held.value().orElse(null), kind, authored);
         };
     }
 

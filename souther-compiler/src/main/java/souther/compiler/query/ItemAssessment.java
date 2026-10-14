@@ -964,6 +964,17 @@ public sealed interface ItemAssessment {
         };
     }
 
+    /** Why a reading's measurement of a point could not be counted for it: the reading is of the
+     *  point's line and could not be tied to the point ({@link Weakening.AReadingNotTiedToItsLine}). */
+    enum NotTiedToTheAuthorsLine implements FailureReason {
+        NOT_TIED_TO_THE_AUTHORS_LINE;
+
+        @Override
+        public souther.compiler.observe.MeasureReason.About about() {
+            return souther.compiler.observe.MeasureReason.About.THE_BEHAVIOR;
+        }
+    }
+
     /** Why a point's own measurement could not be finished: the exact arithmetic could not hold
      *  what settling its place on the order needed. Which of the two ways is the weakening's own,
      *  not this reason's — a {@link FailureReason} only says that asking stopped, not what stopped

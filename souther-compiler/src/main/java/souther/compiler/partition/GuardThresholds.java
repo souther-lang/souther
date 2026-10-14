@@ -28,6 +28,7 @@ import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RulesWithNoLine;
+import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.BooleanMeaning;
@@ -754,8 +755,8 @@ public final class GuardThresholds {
         // same way a clause does. Only where a line's origin comes from is: a guard's is where
         // the run meets the comparison, which is this reading's own place to say.
         ComparisonGeometry geometry = ComparisonGeometry.of(read,
-                (cutting, part) -> originOf(behavior, stated, at, wrote, anchor, metOn, part,
-                        cutting));
+                (cutting, part, authored) -> originOf(behavior, stated, at, wrote, anchor, metOn,
+                        part, cutting, authored));
         out.addAll(geometry.evidence());
         between.addAll(geometry.between());
     }
@@ -810,7 +811,7 @@ public final class GuardThresholds {
     private static LineOrigin.ComparisonOrigin originOf(
             String behavior, ModelOccurrence stated, EmittedComparisonState.Instrumented at,
             SourceConstructOrigin wrote, RuleReportAnchor anchor, ElementsMetOn metOn,
-            Optional<WhereAPartDecides> part, Cutting cutting) {
+            Optional<WhereAPartDecides> part, Cutting cutting, AuthoredPointMapping authored) {
         // Every place a run through the rule is written down, off the join rather than looked up
         // again: the join already asked the plan which of the rule's materialisations it numbered,
         // and asking a second time is a second answer to how many places there are. Whose rule it
@@ -822,7 +823,7 @@ public final class GuardThresholds {
                         new RuleRef.Comparison(behavior, wrote), stated, anchor,
                         at.observations().stream().map(EmittedComparisonState.Observation::site)
                                 .toList(), metOn),
-                part, new LineFacts(cutting.claim()));
+                part, new LineFacts(cutting.claim()), authored);
     }
 
     /** Whether a line can be drawn on what this type carries, asked of the one place that says so. */

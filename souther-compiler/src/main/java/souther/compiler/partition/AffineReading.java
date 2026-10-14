@@ -63,8 +63,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      */
     sealed interface OfAComparison {
 
-        /** The line the comparison draws. */
-        record Cuts(AffineReading read) implements OfAComparison {
+        /**
+         * The line the comparison draws.
+         *
+         * @param mirrored whether the form is the right side less the left rather than the left
+         *                 less the right, which is how the line is faced to the position the left
+         *                 names first ({@link #facesTheOtherWay}) and is what tells which of the two
+         *                 written sides is above on either side of the line
+         */
+        record Cuts(AffineReading read, boolean mirrored) implements OfAComparison {
 
             public Cuts {
                 java.util.Objects.requireNonNull(read, "a comparison that cuts has a line");
@@ -212,9 +219,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 // rule, and a reader that met the first without turning it round drew its border on
                 // `-3a - 6b` — the same four points under a name no author wrote, and a different
                 // line from the rule written the other way.
-                return new OfAComparison.Cuts(
-                        here.facesTheOtherWay(subjectOf(comparison.left(), left, reads, ruleSource))
-                                ? here.mirrored() : here);
+                boolean mirrored =
+                        here.facesTheOtherWay(subjectOf(comparison.left(), left, reads, ruleSource));
+                return new OfAComparison.Cuts(mirrored ? here.mirrored() : here, mirrored);
             }
         }
         throw new IllegalStateException("a comparison has two sides");

@@ -249,6 +249,11 @@ record ReasonProse(Introduction introduction, String said) {
                 case PLACE_COULD_NOT_BE_WORKED_OUT ->
                         "this point's own place on the order could not be read";
             };
+            case ItemAssessment.NotTiedToTheAuthorsLine it -> switch (it) {
+                case NOT_TIED_TO_THE_AUTHORS_LINE ->
+                        "a reading of this comparison turns where a caller's choice does, and is"
+                                + " not shown to be at this point of the line its author wrote";
+            };
             // One sentence for both measures. What is missing is the reading of the body, which
             // is the same fact whichever of the two was asking — and a reader told it twice in two
             // wordings would go looking for two things.

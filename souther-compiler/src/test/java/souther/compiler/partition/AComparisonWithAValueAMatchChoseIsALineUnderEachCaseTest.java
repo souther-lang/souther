@@ -114,7 +114,7 @@ class AComparisonWithAValueAMatchChoseIsALineUnderEachCaseTest {
                 """);
         List<String> met = new ArrayList<>();
         regions(report, met);
-        assertEquals(List.of("7 below 2 < days < 7"), met,
+        assertEquals(List.of("arm 1 below 2 < days < 7"), met,
                 "the run below the line for Warm, and not the same run above the line for Hot");
     }
 
@@ -156,7 +156,7 @@ class AComparisonWithAValueAMatchChoseIsALineUnderEachCaseTest {
         assertEquals(Set.of(), pointsMetOn(atC6, "chk/days"), "a C6 row meets no line at 17");
         List<String> runsAtC6 = new ArrayList<>();
         regions(atC6, runsAtC6);
-        assertEquals(List.of("20 below 17 < days < 20"), runsAtC6,
+        assertEquals(List.of("arm 6 below 17 < days < 20"), runsAtC6,
                 "and does meet the run below its own");
     }
 
@@ -210,12 +210,16 @@ class AComparisonWithAValueAMatchChoseIsALineUnderEachCaseTest {
                 """), "chk/days"), "and not one it does not");
     }
 
-    /** Each run a row of the examples is in, as the line it is owed to, the side and the run. */
+    /**
+     * Each run a row of the examples is in, as the line it is owed to — which arm of the match
+     * chose the value — the side and the run.
+     */
     private static void regions(JsonNode node, List<String> out) {
         if (node.isObject() && node.has("point") && node.has("readings")
                 && "in_the_region".equals(node.at("/obligationId/location/kind").asString())
                 && node.path("readings").get(0).path("hit").asBoolean()) {
-            out.add(node.at("/obligationId/level/at").asString() + " "
+            JsonNode arms = node.at("/obligationId/line/which/arms");
+            out.add("arm " + arms.get(arms.size() - 1).path("arm").asString() + " "
                     + node.at("/obligationId/location/side").asString() + " "
                     + node.path("readings").get(0).path("against").asString());
         }

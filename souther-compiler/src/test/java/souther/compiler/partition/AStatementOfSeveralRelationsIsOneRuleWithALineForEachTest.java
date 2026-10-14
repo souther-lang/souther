@@ -57,16 +57,17 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
         Set<String> parts = new TreeSet<>();
         Set<String> rules = new TreeSet<>();
         for (JsonNode obligation : obligationsOfParts(report)) {
-            parts.add(obligation.at("/obligationId/line/which/relation").asString());
+            JsonNode arms = obligation.at("/obligationId/line/which/arms");
+            parts.add(arms.get(arms.size() - 1).path("arm").asString() + " "
+                    + obligation.path("readings").get(0).path("axis").asString());
             rules.add(obligation.at("/obligationId/line/which/rule").toString());
         }
         assertEquals(1, rules.size(), () -> "one comparison, one rule: " + rules);
         // And not the line between the two arms of max, which the reading also holds: where a
         // crosses b.v the answer does not jump, so no row on either side of it is in a case where
         // the statement turns.
-        assertEquals(Set.of("Affine[form=LinearForm[constant=-5, coefs={a=1}], proposition=GT]",
-                        "Affine[form=LinearForm[constant=-5, coefs={b.v=1}], proposition=GT]"),
-                parts, "the line on a and the line on b, each named by its relation");
+        assertEquals(Set.of("0 pick/a", "1 pick/b.v"), parts,
+                "a line under each arm of max, each read on the value that arm answers");
         assertTrue(reasonsAt(report, "a").stream()
                         .noneMatch("several_lines_in_one_rule"::equals),
                 "the statement is drawn, not held back");
@@ -225,8 +226,17 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
                     () -> position + " turns the statement beside an element of the other kind: "
                             + reasonsAt(report, position));
         }
-        assertEquals(Set.of("f/xs[*]@A.n", "f/xs[*]@B.n"), axesOfParts(report),
-                "a line through each kind's number is owed rows");
+        Set<String> axes = new TreeSet<>();
+        List<JsonNode> obligations = new ArrayList<>();
+        collect(report, "comparison", obligations);
+        for (JsonNode obligation : obligations) {
+            if (obligation.at("/obligationId/line/which/rule/definition").asString().equals("f")) {
+                obligation.path("readings").forEach(reading ->
+                        axes.add(reading.path("axis").asString()));
+            }
+        }
+        assertEquals(Set.of("f/xs[*]@A.n", "f/xs[*]@B.n"), axes,
+                "the count's line is read through each kind's number");
     }
 
     /** The axes the lines of a statement of several are owed rows on. */
@@ -375,17 +385,17 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
     /** Every obligation owed at a line of a statement of several. */
     private static List<JsonNode> obligationsOfParts(JsonNode report) {
         List<JsonNode> out = new ArrayList<>();
-        collect(report, out);
+        collect(report, "part_of_comparison", out);
         return out;
     }
 
-    private static void collect(JsonNode node, List<JsonNode> out) {
+    /** Every obligation owed at a line of the kind {@code kind}. */
+    private static void collect(JsonNode node, String kind, List<JsonNode> out) {
         if (node.isObject() && node.has("point") && node.has("readings")
-                && "part_of_comparison".equals(
-                        node.at("/obligationId/line/which/kind").asString())) {
+                && kind.equals(node.at("/obligationId/line/which/kind").asString())) {
             out.add(node);
         }
-        node.forEach(child -> collect(child, out));
+        node.forEach(child -> collect(child, kind, out));
     }
 
     /** Every reason a rule was said to leave {@code position} with. */

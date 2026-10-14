@@ -75,9 +75,10 @@ class EveryKindOfSubjectIsWrittenTheWayTheSchemaSaysTest {
         facts.put("holdsAtTheValue", true);
         facts.put("singles", false);
         line.putArray("narrowedWithin");
+        // A point of it carries no level: where each call puts the comparison is the reading's.
         ObjectNode obligationId = JSON.createObjectNode();
         obligationId.set("line", line);
-        ObjectNode level = obligationId.putObject("level");
+        ObjectNode level = JSON.createObjectNode();
         level.put("kind", "on_a_carrier");
         level.putObject("carrier").put("kind", "whole");
         level.put("at", "0");

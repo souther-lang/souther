@@ -1,11 +1,12 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.meaning.AuthoredPointMapping;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 /**
  * What one read comparison adds to the partition's geometry: the evidence a value at or dividing
@@ -43,10 +44,12 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between) 
         /**
          * The origin of the line drawn on {@code cutting}.
          *
-         * @param part which of the comparison's lines this is and the case of where it decides it
-         *             is read in, or empty where the comparison states one
+         * @param part     which of the comparison's lines this is and the case of where it decides
+         *                 it is read in, or empty where the comparison states one
+         * @param authored how the line stands to the line of its author's it is a place of
          */
-        LineOrigin of(Cutting cutting, Optional<WhereAPartDecides> part);
+        LineOrigin of(Cutting cutting, Optional<WhereAPartDecides> part,
+                      AuthoredPointMapping authored);
     }
 
     /**
@@ -55,7 +58,8 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between) 
      */
     static ComparisonGeometry of(ComparisonAssessment assessed, OriginOf originOf) {
         if (!(assessed instanceof ComparisonAssessment.Several several)) {
-            return ofALine(assessed, cutting -> originOf.of(cutting, Optional.empty()));
+            return ofALine(assessed,
+                    (cutting, authored) -> originOf.of(cutting, Optional.empty(), authored));
         }
         // What each of its lines adds, once for each case where it decides — each a reading of the
         // line, whose origin says which line it is and which case it is read in.
@@ -64,7 +68,8 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between) 
         for (ComparisonAssessment.Several.Part part : several.parts()) {
             for (WhereAPartDecides reading : part.readings()) {
                 ComparisonGeometry line = ofALine(part.line(),
-                        cutting -> originOf.of(cutting, Optional.of(reading)));
+                        (cutting, authored) -> originOf.of(cutting, Optional.of(reading),
+                                authored));
                 evidence.addAll(line.evidence());
                 between.addAll(line.between());
             }
@@ -73,15 +78,17 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between) 
     }
 
     /** What one line adds, its origin answered by {@code originOf}. */
-    private static ComparisonGeometry ofALine(ComparisonAssessment assessed,
-                                              Function<Cutting, LineOrigin> originOf) {
+    private static ComparisonGeometry ofALine(
+            ComparisonAssessment assessed,
+            BiFunction<Cutting, AuthoredPointMapping, LineOrigin> originOf) {
         return switch (assessed) {
-            case ComparisonAssessment.AtAPosition at -> atAPosition(at, originOf.apply(at.cutting()));
+            case ComparisonAssessment.AtAPosition at ->
+                    atAPosition(at, originOf.apply(at.cutting(), at.authored()));
             // A value singled out on such a quantity is a line as an order is, where the quantity
             // counts: no position holds it as a class, so the line is where the rule is measured.
             case ComparisonAssessment.AcrossPositions over -> over.drawsABorder()
-                    ? new ComparisonGeometry(List.of(),
-                            List.of(new LineDrawn(over.cutting(), originOf.apply(over.cutting()))))
+                    ? new ComparisonGeometry(List.of(), List.of(new LineDrawn(over.cutting(),
+                            originOf.apply(over.cutting(), over.authored()))))
                     : NONE;
             case ComparisonAssessment.Several _ -> throw new IllegalArgumentException(
                     "a line of a statement is one line: " + assessed);

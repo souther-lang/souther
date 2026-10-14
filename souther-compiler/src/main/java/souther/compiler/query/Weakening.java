@@ -89,7 +89,8 @@ public sealed interface Weakening {
         return switch (this) {
             case ObservationIncomplete it -> it.met().figures();
             case OutputCasesUnreadable _, InputCasesUnreadable _,
-                 ItemsPlaceNotWorkedOut _, ABorderNotHeldAgainstTheLinesBesideIt _,
+                 ItemsPlaceNotWorkedOut _, AReadingNotTiedToItsLine _,
+                 ABorderNotHeldAgainstTheLinesBesideIt _,
                  BodyNotInEvaluation _, BoundaryNotDerived _, InputNotRead _,
                  ProofContradicted _, ArmsUnsettled _, DecisionOfRowUnreadable _,
                  DecisionRunNotWatched _, DecisionRuleReadShort _,
@@ -189,6 +190,32 @@ public sealed interface Weakening {
         @Override
         public RunSensitivity runSensitivity() {
             return why.runSensitivity();
+        }
+    }
+
+    /**
+     * A reading of a comparison a body wrote that this compiler could not tie to the line its author
+     * drew: the comparison turns at the reading's line, and the turn is where a caller's choice turns
+     * rather than anywhere shown to be the author's line.
+     *
+     * <p>A helper's {@code x <= 10} handed {@code if a > 0 then 10 else 11} turns at {@code a = 0},
+     * where {@code x} is eleven. Rows at such a line are evidence about the comparison that this
+     * reading cannot count for or against a point of the author's line, so what they came to for that
+     * point is undecided rather than settled either way.
+     */
+    record AReadingNotTiedToItsLine(souther.compiler.partition.Border border) implements Weakening {
+
+        public AReadingNotTiedToItsLine {
+            if (border == null) {
+                throw new IllegalArgumentException("a reading not tied to its line is some line's");
+            }
+        }
+
+        /** Unaffected either way: what would tie it is a reading this compiler does not make, and
+         *  no allowance of a run reaches it. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
         }
     }
 

@@ -224,7 +224,7 @@ class ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest {
         List<ItemAssessment.Owed> out = new ArrayList<>();
         for (BorderAssessment each : edges) {
             if (each.border().origin().comparisonAt().isEmpty()
-                    || !(each.border().obligation().at() instanceof Level.OnACarrier(_, var at)
+                    || !(each.border().cut().at() instanceof Level.OnACarrier(_, var at)
                             && at instanceof Count count
                             && count.compareTo(BEHIND_THE_FORK) == 0)) {
                 continue;

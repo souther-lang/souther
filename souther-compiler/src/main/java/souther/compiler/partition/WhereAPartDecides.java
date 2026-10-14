@@ -21,13 +21,13 @@ import java.util.Set;
  * <p>One case and not all of them. Where a line decides may be one of several things, and each is
  * somewhere a row can be composed to be; the line is read once in each, and a row meets it in any.
  *
- * @param part    which of the statement's lines this is
+ * @param part    which of the author's lines this is a place of, and which place
  * @param decides the case: parts of the statement that hold together beside the line, where
  *                crossing it turns the statement round. Over the relations the statement holds,
  *                every one of them a relation over the input's own numbers — so a row's values say
  *                whether it holds
  */
-public record WhereAPartDecides(PartOfAComparison part, Proposition decides) {
+public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
 
     public WhereAPartDecides {
         Objects.requireNonNull(part, "a line of a statement is one of its lines");

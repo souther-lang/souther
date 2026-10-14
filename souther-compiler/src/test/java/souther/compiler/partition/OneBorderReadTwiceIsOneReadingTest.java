@@ -3,6 +3,9 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.AReadingOfAPosition;
+import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.WrittenLine;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.coverage.Numberings;
 import souther.compiler.types.ExpansionLineage;
@@ -292,7 +295,10 @@ class OneBorderReadTwiceIsOneReadingTest {
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(Numberings.comparison(1, 0)), ElementsMetOn.EVERY),
                 Optional.empty(),
-                new LineFacts(new ComparisonClaim.Cut(Towards.ABOVE, true)));
+                new LineFacts(new ComparisonClaim.Cut(Towards.ABOVE, true)),
+                new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
+                        new ComparisonClaim.Cut(Towards.ABOVE, true),
+                        Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true));
     }
 
     /** A line of a body, for a place to be parted by something other than the line read. */

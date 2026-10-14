@@ -80,7 +80,7 @@ public sealed interface Relation {
          * Whether the first coefficient, by the atoms' own order, is negative. Taken from the order
          * and not from every coefficient's sign, so a form with one of each sign faces one way too.
          */
-        static <A extends Quantity> boolean facesTheOtherWay(LinearForm<A> form) {
+        public static <A extends Quantity> boolean facesTheOtherWay(LinearForm<A> form) {
             Map<String, A> spelled = new HashMap<>();
             String first = null;
             ExactRatio firstCoefficient = null;
