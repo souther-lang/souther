@@ -53,6 +53,8 @@ final class PartitionClasses {
         if (cases.isEmpty() && view.shape() instanceof Shape.Scalar
                 && !view.wrappers().isEmpty()
                 && view.wrappers().getFirst() instanceof TypeSymbol.AtModule named) {
+            // A declaration whose rules this reading shows to contradict is refused where it is
+            // declared (E1013), so a type reaching here is one the reading has values of.
             cases = Distinctions.ofValues(FieldDomains.of(named, reading)
                     .admits(RuleKey.THE_VALUE).approximation(), type, ruleSource.inners());
         }
