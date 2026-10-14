@@ -263,6 +263,7 @@ public sealed interface OnTheWay {
             return anchor;
         }
 
+        @Override
         public List<List<OnTheWay>> alternatives() {
             return alternatives;
         }
@@ -287,11 +288,6 @@ public sealed interface OnTheWay {
         public String toString() {
             return "OneOf[condition=" + condition + ", anchor=" + anchor + ", alternatives="
                     + alternatives + ", stated=" + stated + "]";
-        }
-
-        @Override
-        public List<List<OnTheWay>> alternatives() {
-            return alternatives;
         }
 
         @Override
