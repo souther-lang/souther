@@ -86,23 +86,6 @@ public record CaseCompared(TermPath at, TypeSymbol named, List<TypeSymbol> leave
         return CasesLeft.of(Refinement.of(new Case.SumCase(named, true)));
     }
 
-    /**
-     * Whether the rules {@code read} reads leave a value at the position that brings the comparison
-     * out {@code want}: some case of {@link #leavesWhere} they do not refuse.
-     *
-     * <p>Refused only on a proof. A case the reading could not settle, or a position it has no
-     * reading of, may still be handed in.
-     */
-    public boolean mayComeOut(boolean want, InputReading read) {
-        Position position = read.domain().at(at);
-        for (TypeSymbol each : leavesWhere(want)) {
-            if (position == null || !(position.admissionOf(each) instanceof Admits.Refused)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /** The cases the value may be where the comparison came out {@code held}; none where no value
      *  at the position comes out that way. */
     public List<TypeSymbol> leavesWhere(boolean held) {

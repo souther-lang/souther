@@ -5,6 +5,7 @@ import souther.compiler.flow.AWayThrough;
 import souther.compiler.flow.WhyRuledOut;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.Case;
+import souther.compiler.inputs.CaseCompared;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.Distinctions;
@@ -84,6 +85,16 @@ public final class WhatTheDeclarationsLeave {
         private record Asked(Proposition stated, boolean want) {}
 
         private final Map<Asked, AWayThrough> filed = new ConcurrentHashMap<>();
+    }
+
+    /**
+     * Whether the declarations prove that no input brings {@code compared} out {@code want}: what
+     * it states is the value being the case or not, which is what an arm selecting the case states.
+     */
+    public static AWayThrough whetherRuledOut(CaseCompared compared, boolean want,
+                                              InputReading read) {
+        return whetherRuledOut(new Proposition.InCases(new DecisionSubject.AnInput(compared.at()),
+                compared.selected(), compared.heldAtTheCase()), want, read);
     }
 
     /**

@@ -4,15 +4,18 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.DecisionRule;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -40,6 +43,13 @@ class HowManyCandidatesFitIsADecisionOverTheCasesTest {
             """;
 
     private static String source(List<String> declared, List<String> candidates, String answer) {
+        return model(declared, candidates)
+                + ROWS.replace("FIRST", candidates.get(0)).replace("SECOND", candidates.get(1))
+                .replace("ANSWER", answer);
+    }
+
+    /** The model and no row of it. */
+    private static String model(List<String> declared, List<String> candidates) {
         String each = String.join(" | ", declared);
         String all = String.join(", ", candidates);
         return """
@@ -70,9 +80,7 @@ class HowManyCandidatesFitIsADecisionOverTheCasesTest {
                         | None   -> NoneFits
                         | Some w -> if length(fitting) == 1 then One else NotOne
                 }
-                """.replace("CANDIDATES", each).replace("SUSPECTS", all)
-                + ROWS.replace("FIRST", candidates.get(0)).replace("SECOND", candidates.get(1))
-                .replace("ANSWER", answer);
+                """.replace("CANDIDATES", each).replace("SUSPECTS", all);
     }
 
     /** With three candidates, clearing one leaves two. */
@@ -122,6 +130,27 @@ class HowManyCandidatesFitIsADecisionOverTheCasesTest {
         String report = report(compilation);
         assertTrue(headed(report, "border").contains("not applicable"), report);
         assertTrue(headed(report, "decision").contains("rules 3   taken 3"), report);
+    }
+
+    /**
+     * With no row written, a row is composed for each way of the fork — none fits, one does, more
+     * than one do — past more candidates than a way is looked along one at a time as well.
+     */
+    @Test
+    void aRowIsComposedForEachWayOfTheFork() {
+        List<String> many = IntStream
+                .rangeClosed(0, CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum())
+                .mapToObj(each -> "W" + each).toList();
+        for (List<String> candidates : List.of(THREE, many)) {
+            Compilation compilation = measured(model(candidates, candidates));
+            Map<DecisionRule, SettledAt> searched = compilation.db()
+                    .ask(new Adequacy.DecisionSearch("probe.clues", "f")).value();
+            assertEquals(3, searched.size(), () -> "each way is searched: " + searched);
+            searched.forEach((rule, settled) -> assertInstanceOf(RuleRequirement.Required.class,
+                    settled.settlement().requirement(),
+                    () -> "a row is composed and seen taking " + rule + " among "
+                            + candidates.size() + " candidates"));
+        }
     }
 
     private static Compilation measured(String source) {

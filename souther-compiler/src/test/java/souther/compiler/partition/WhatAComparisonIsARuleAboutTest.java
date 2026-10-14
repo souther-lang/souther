@@ -10,19 +10,25 @@ import souther.compiler.check.StatedContract;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.diag.Citation;
+import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.BindingId;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a comparison is a rule about, which decides what it raises.
@@ -50,6 +56,18 @@ class WhatAComparisonIsARuleAboutTest {
      * arrives in.
      */
     private static ComparisonAssessment about(String params, String clause) {
+        Read read = read(params, clause);
+        return ComparisonAssessment.of("f", read.comparison().stated(),
+                Citation.of(read.binary().pos()), read.reading(), read.reads(),
+                ClosureApplications.OUTSIDE, read.rule(), Arrivals.inTheTree(read.binary()), false,
+                WhatConditionsState.of(read.reading()));
+    }
+
+    /** The one comparison an {@code ensures} over {@code params} states, and what it is read in. */
+    private record Read(Core.Binary binary, Comparison comparison, InputReading reading,
+                        InputReads reads, BindingId rule) {}
+
+    private static Read read(String params, String clause) {
         String source = """
                 module g
 
@@ -81,13 +99,33 @@ class WhatAComparisonIsARuleAboutTest {
         for (Contract.Param param : stated.params()) {
             roots.putIfAbsent(param.binding(), param.name());
         }
-        InputReading reading = inputs.reading(rules);
-        return ComparisonAssessment.of("f", comparison.stated(), Citation.of(binary.pos()),
-                reading,
-                InputReads.ofWhatIsDeclared(roots, inputs.declared(rules)),
-                ClosureApplications.OUTSIDE, rule.value(),
-                Arrivals.inTheTree(read), false,
-                WhatConditionsState.of(reading));
+        return new Read(binary, comparison, inputs.reading(rules),
+                InputReads.ofWhatIsDeclared(roots, inputs.declared(rules)), rule.value());
+    }
+
+    /**
+     * A case of an enumeration held equal to the value, or not, draws no line on the order the
+     * cases are declared in, whichever reader asks: the one reading of a comparison as a number
+     * places nothing, and no rule that reads it states a relation on the order.
+     *
+     * <p>An order relation on the cases is a line on that order.
+     */
+    @Test
+    void aCaseHeldEqualToAnEnumerationsValueIsNoLineOnItsOrder() {
+        for (String clause : List.of("g == Mid", "g /= Mid", "Mid == g")) {
+            Read read = read("(g: Grade)", clause);
+            assertNull(ComparedNumber.lineOf(read.comparison().stated(), read.reading(),
+                    read.reads()), () -> clause + " places nothing on the order");
+            List<Proposition> stated = Pullback.byEachRule(read.comparison().stated(),
+                    read.reads(), read.reading());
+            assertTrue(stated.stream().anyMatch(Proposition.InCases.class::isInstance),
+                    () -> clause + " is read as which case g is: " + stated);
+            assertTrue(stated.stream().noneMatch(Proposition.Compared.class::isInstance),
+                    () -> clause + " is read by no rule as a relation on the order: " + stated);
+        }
+        Read ordered = read("(g: Grade)", "g < Mid");
+        assertNotNull(ComparedNumber.lineOf(ordered.comparison().stated(), ordered.reading(),
+                ordered.reads()), "an order relation on the cases is a line on that order");
     }
 
     /** The same over two {@code Int} positions, which is what most of the table is written over. */

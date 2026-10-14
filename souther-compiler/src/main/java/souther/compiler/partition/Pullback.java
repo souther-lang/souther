@@ -707,8 +707,6 @@ final class Pullback {
                                                 boolean fixed, InputReads reads,
                                                 Once<AffineReading.OfAComparison> arithmetic) {
         AnEmptinessCheck.Checked checked = AnEmptinessCheck.checked(stated);
-        // Asked by the rule reading it and by the order it keeps from reading it, so read once.
-        Once<CaseCompared> asACase = new Once<>(() -> CaseCompared.of(stated, read, reads));
         return List.of(
                 () -> checked == null ? null : new Derivation.AnEmptinessCheck(at == null
                         ? observe(checked.container(), AnswerAspect.EMPTINESS, reads)
@@ -717,11 +715,9 @@ final class Pullback {
                 () -> partOf(at, truthCompared(stated, reads)),
                 () -> heldAgainstAWrittenTruth(stated, reads),
                 () -> partOf(at, ofTwoValuesWrittenOut(stated, reads)),
-                () -> partOf(at, ofACaseCompared(asACase.get())),
+                () -> partOf(at, ofACaseCompared(CaseCompared.of(stated, read, reads))),
                 () -> partOf(at, asACut(stated, arithmetic.get(), fixed)),
-                // A case held equal to the value asks nothing of the order the cases stand on.
-                () -> asACase.get() != null ? null
-                        : partOf(at, onAnOrder(stated, arithmetic.get(), reads)),
+                () -> partOf(at, onAnOrder(stated, arithmetic.get(), reads)),
                 () -> ofTheYearOfADate(stated, at, fixed, reads),
                 () -> ofACountOfWholeUnits(stated, at, fixed, reads),
                 () -> ofAShiftedRemainder(stated, at, fixed, reads),
@@ -4280,8 +4276,10 @@ final class Pullback {
      * A comparison as a line on an order the arithmetic of the input stopped at, or null where it
      * did not stop or no line is drawn on what it stopped at.
      *
-     * <p>Only where it stopped: a date against a written date and a case of an enumeration are
-     * values it does not count, and the comparison still states a line on their order. A comparison
+     * <p>Only where it stopped: a date against a written date and a case of an enumeration ordered
+     * against the value are values it does not count, and the comparison states a line on their
+     * order. A case held equal to the value or not places nothing on it, so no line comes here,
+     * and is read as which case the value is ({@link #ofACaseCompared}). A comparison
      * the arithmetic read is that arithmetic's, which is the reading a border is drawn by.
      */
     private Derivation onAnOrder(StatedComparison comparison,

@@ -135,11 +135,12 @@ final class NumberWays implements ComparisonWays {
     @Override
     public boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
         Core.Binary binary = Core.withoutStanding(e) instanceof Core.Binary it ? it : null;
-        // A case of a sum, which the value either is or is not: read as the naming reads it, so the
-        // way admitted is the way named, and not off the order an enumeration's cases stand on.
+        // A case of a sum, which the value either is or is not: no number places it, and what the
+        // declarations leave of it is asked of what it states, as a fork's condition is.
         CaseCompared compared = binary != null ? numbers.caseOf(binary, reads) : null;
         if (compared != null) {
-            return compared.mayComeOut(want, numbers.reading());
+            return !(WhatTheDeclarationsLeave.whetherRuledOut(compared, want, numbers.reading())
+                    instanceof AWayThrough.RuledOut);
         }
         ComparedNumber said = binary != null ? numbers.of(binary, reads) : null;
         ComparedNumber.DrawnLine drawn = said == null ? null : said.line();
