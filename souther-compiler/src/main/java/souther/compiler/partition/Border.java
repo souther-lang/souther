@@ -1236,7 +1236,8 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                     emptyRun == null ? List.of() : emptyRun.endsAt(away));
         }
         Criterion.Within inside = new Criterion.Within(run.values(), except, away);
-        if (inside.region().parts().stream().allMatch(reach::admitsNothingIn)) {
+        List<LevelInterval> parts = inside.region().parts();
+        if (parts.stream().allMatch(reach::admitsNothingIn)) {
             return new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE,
                     run.endsAt(away));
         }
@@ -1249,7 +1250,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // shown to hold nothing, and only a part this did find something in settles that a row is
         // owed here without waiting for the rest.
         UnheldNumber notWorkedOut = null;
-        for (LevelInterval part : inside.region().parts()) {
+        for (LevelInterval part : parts) {
             switch (space.inspect(part)) {
                 case Occupancy.Inhabited _ -> {
                     return new PointAnswer.InRegion(inside, run.endsAt(away));
@@ -1385,7 +1386,8 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
 
         /** Whether a row may be written at {@code level} as far as these three say. */
         boolean admits(Level level) {
-            if (level instanceof Level.OnACarrier on && !on.of().admitted(values, on.at())) {
+            if (!values.isAny() && level instanceof Level.OnACarrier on
+                    && !on.of().admitted(values, on.at())) {
                 return false;
             }
             ExactRatio number = level.asANumber();
@@ -1401,9 +1403,13 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
          *
          * <p>Asked of the order the run's ends are on, and of nothing where neither end is on one: a
          * run with no end holds every value there is, and the rules naming none is a declaration
-         * refused before anything here reads it.
+         * refused before anything here reads it. Nor where the rules name nothing, which is most
+         * positions and refuses no run.
          */
         boolean admitsNothingIn(LevelInterval part) {
+            if (values.isAny()) {
+                return false;
+            }
             Carrier carrier = carrierOf(part.low());
             if (carrier == null) {
                 carrier = carrierOf(part.high());
