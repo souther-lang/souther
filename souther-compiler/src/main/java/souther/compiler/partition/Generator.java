@@ -8044,8 +8044,11 @@ public final class Generator {
          *
          * <p>{@code boundsReached} is the bounds of this class's own the walk was compared against
          * and stopped at, as each stood there: none where what cut it short was not one of them.
+         * {@code metARunNothingWatched} is whether a candidate ran and nothing could say what it
+         * did, which cuts a walk short at no figure at all.
          */
-        record Limited(List<String> classes, SearchShortfall found, List<Figure> boundsReached)
+        record Limited(List<String> classes, SearchShortfall found, List<Figure> boundsReached,
+                       boolean metARunNothingWatched)
                 implements Witness {
 
             public Limited {
@@ -8282,6 +8285,11 @@ public final class Generator {
                 case Witness.Limited limited -> {
                     List<Figure> at = new ArrayList<>(limited.boundsReached());
                     at.addAll(asFigures(limited.found().met().figures()));
+                    // Cut short by a run nothing watched and by no figure: rows were composed and
+                    // run, and nothing could say what they answered.
+                    if (at.isEmpty() && limited.metARunNothingWatched() && stops == before) {
+                        ended(ReplacementDisposition.Ended.NOTHING_RAN, List.of());
+                    }
                     composingStoppedUnlessThisStoppedIt(before, at);
                 }
                 case Witness.Exhausted none -> composingStoppedUnlessThisStoppedIt(before,
@@ -8427,6 +8435,10 @@ public final class Generator {
          *  stood there: the readings it may search, and the runs one reading is given. */
         private final Set<Figure> boundsReached = new HashSet<>();
 
+        /** Whether a candidate ran and nothing could say what it did, which stops the search at no
+         *  figure. */
+        private boolean metARunNothingWatched;
+
         /** What the last candidate that composed nothing came to, for a search that tried them
          *  all. */
         private Attempt last;
@@ -8540,7 +8552,8 @@ public final class Generator {
                 // them is a fact about that candidate, and offered as the combination's answer it
                 // stands for a space this never entered.
                 case Completeness.Nothing.SEARCH_STOPPED ->
-                        new Witness.Limited(named, foundOut, Figure.inOrder(boundsReached));
+                        new Witness.Limited(named, foundOut, Figure.inOrder(boundsReached),
+                                metARunNothingWatched);
                 // Every one of these carries what every candidate found out and not what the
                 // candidate whose word is said found out. Rows that went somewhere else are not
                 // every row the readings had where an offer was short of a rule, and the rule is
@@ -8706,6 +8719,7 @@ public final class Generator {
                                 return Acceptance.STOPPED;
                             }
                             if (!(observed.watched() instanceof Watched.Ran ran)) {
+                                metARunNothingWatched = true;
                                 return Acceptance.STOPPED;
                             }
                             // No witness, for the reason one built at once is none.

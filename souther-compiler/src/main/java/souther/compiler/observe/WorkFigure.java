@@ -48,33 +48,37 @@ public enum WorkFigure {
     /** How many candidates a walk repairing a row builds. */
     CANDIDATES_A_REPAIR_BUILDS("how many candidates a walk repairing a row builds"),
 
-    /** States one machine for the values a position admits may have. */
-    ADMITTED_VALUES_ONE_MACHINE(
-            "how many states one machine for the values a position admits may have"),
+    /** States one machine for the values a position admits may have, and what making it may look
+     *  at. */
+    ADMITTED_VALUES_ONE_MACHINE("how many states one machine for the values a position admits may"
+            + " have, and how much making it may look at"),
 
     /** What building the machines for the values a position admits may make and look at. */
     ADMITTED_VALUES_IN_ALL(
             "how much building the machines for the values a position admits may make and look at"),
 
-    /** States one machine for where the strings a rule admits stop may have. */
-    ORDERED_EXTENT_ONE_MACHINE(
-            "how many states one machine for where the strings a rule admits stop may have"),
+    /** States one machine for where the strings a rule admits stop may have, and what making it
+     *  may look at. */
+    ORDERED_EXTENT_ONE_MACHINE("how many states one machine for where the strings a rule admits"
+            + " stop may have, and how much making it may look at"),
 
     /** What building the machines for where the strings a rule admits stop may make and look at. */
     ORDERED_EXTENT_IN_ALL("how much building the machines for where the strings a rule admits"
             + " stop may make and look at"),
 
-    /** States one machine for the strings a behavior tells apart may have. */
-    BEHAVIOR_DISTINCTIONS_ONE_MACHINE(
-            "how many states one machine for the strings a behavior tells apart may have"),
+    /** States one machine for the strings a behavior tells apart may have, and what making it may
+     *  look at. */
+    BEHAVIOR_DISTINCTIONS_ONE_MACHINE("how many states one machine for the strings a behavior"
+            + " tells apart may have, and how much making it may look at"),
 
     /** What building the machines for the strings a behavior tells apart may make and look at. */
     BEHAVIOR_DISTINCTIONS_IN_ALL("how much building the machines for the strings a behavior tells"
             + " apart may make and look at"),
 
-    /** States one machine for the set one rule of a position admits may have. */
-    RULE_SETS_ONE_MACHINE(
-            "how many states one machine for the set one rule of a position admits may have"),
+    /** States one machine for the set one rule of a position admits may have, and what making it
+     *  may look at. */
+    RULE_SETS_ONE_MACHINE("how many states one machine for the set one rule of a position admits"
+            + " may have, and how much making it may look at"),
 
     /** What building the machines for the sets each rule of a position admits may make and look
      *  at. */

@@ -72,7 +72,9 @@ class APatternPastItsFigureNamesTheFigureTest {
                         GuaranteeWalk.FIELDS_SEEDED)),
                 new BlockReason.ValueRulesNotReachedPastDepthLimit().figures());
         assertEquals(List.of(WorkFigure.ORDERED_EXTENT_ONE_MACHINE.at(
-                        PatternPlan.Budget.OF_AN_ORDERED_EXTENT.mostStates())),
+                        PatternPlan.Budget.OF_AN_ORDERED_EXTENT.mostStates() + " states or "
+                                + PatternPlan.Budget.OF_AN_ORDERED_EXTENT.mostWork()
+                                + " looked at")),
                 new BlockReason.OrderedExtentTooCostly(Meter.Stopped.ONE_MACHINE).figures());
         PatternPlan.Budget extent = PatternPlan.Budget.OF_AN_ORDERED_EXTENT;
         assertEquals(List.of(WorkFigure.ORDERED_EXTENT_IN_ALL.at(extent.mostBuilt()
@@ -89,11 +91,11 @@ class APatternPastItsFigureNamesTheFigureTest {
      */
     @Test
     void aPatternRefusedUnderABudgetARunWasHandedNamesThatBudget() {
-        assertEquals(new BlockReason.PatternTooCostly(
-                        WorkFigure.ADMITTED_VALUES_ONE_MACHINE.at(100)),
+        assertEquals(new BlockReason.PatternTooCostly(WorkFigure.ADMITTED_VALUES_ONE_MACHINE
+                        .at("100 states or 1000000000 looked at")),
                 whatStoppedTheReading(new PatternPlan.Budget(100, 1_000_000, 1_000_000_000L)));
-        assertEquals(new BlockReason.PatternTooCostly(
-                        WorkFigure.ADMITTED_VALUES_ONE_MACHINE.at(200)),
+        assertEquals(new BlockReason.PatternTooCostly(WorkFigure.ADMITTED_VALUES_ONE_MACHINE
+                        .at("200 states or 1000000000 looked at")),
                 whatStoppedTheReading(new PatternPlan.Budget(200, 1_000_000, 1_000_000_000L)));
     }
 

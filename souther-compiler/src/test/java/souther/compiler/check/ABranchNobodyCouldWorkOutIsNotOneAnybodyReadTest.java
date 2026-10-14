@@ -131,7 +131,10 @@ class ABranchNobodyCouldWorkOutIsNotOneAnybodyReadTest {
                         .why().contains(new AdmissibleSet.Widening.RuleUnread(
                                 UnreadReason.PATTERN_TOO_COSTLY,
                                 WorkFigure.ADMITTED_VALUES_ONE_MACHINE.at(
-                                        PatternPlan.Budget.OF_ADMITTED_VALUES.mostStates()))),
+                                        PatternPlan.Budget.OF_ADMITTED_VALUES.mostStates()
+                                                + " states or "
+                                                + PatternPlan.Budget.OF_ADMITTED_VALUES.mostWork()
+                                                + " looked at"))),
                 "and says which of the two ways of running out it was, at the figure it ran out"
                         + " at");
         // The one position the declaration has. Counted rather than named, since what a question is

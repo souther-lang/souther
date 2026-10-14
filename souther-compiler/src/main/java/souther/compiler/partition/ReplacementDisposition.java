@@ -81,7 +81,8 @@ public sealed interface ReplacementDisposition {
         /** The block the row would have gone in held as many rows as a block may. Only ever of a
          *  search for the rows handed a person ({@link RewriteSearch.For#THE_BLOCK}). */
         ROWS_A_BLOCK_MAY_HOLD,
-        /** Nothing could run a row, so nothing could say what one answered. */
+        /** Nothing could run a row, or a row ran and nothing recorded what it did, so nothing could
+         *  say what one answered. */
         NOTHING_RAN
     }
 

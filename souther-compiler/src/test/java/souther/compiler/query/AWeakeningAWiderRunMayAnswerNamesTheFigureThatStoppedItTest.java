@@ -119,6 +119,26 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
         }
     }
 
+    /**
+     * Two lines of one border whose values one code stopped at two figures are one fact, met at
+     * both: what told them apart is what evidenced the fact, and a reader is told the fact once.
+     */
+    @Test
+    void oneCodeAtOneBorderIsOneFactAtEveryFigureItWasMetAt() {
+        Figure depth = WorkFigure.OBSERVED_DEPTH.at(12);
+        Figure text = WorkFigure.OBSERVED_TEXT.at(1024);
+        Weakening atTheDepth = new Weakening.BorderValueUnreadable(border(), ReadingGap.of(
+                Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED, depth)));
+        Weakening atTheText = new Weakening.BorderValueUnreadable(border(), ReadingGap.of(
+                Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED, text)));
+
+        WeakeningSet both = WeakeningSet.of(atTheDepth).union(WeakeningSet.of(atTheText));
+
+        assertEquals(1, both.causes().size(), both::toString);
+        assertEquals(Set.copyOf(List.of(depth, text)),
+                Set.copyOf(both.causes().iterator().next().figures()), both::toString);
+    }
+
     /** Every member of the seal is among them, read from the seal rather than from the list. */
     @Test
     void everyArmIsAmongThem() {

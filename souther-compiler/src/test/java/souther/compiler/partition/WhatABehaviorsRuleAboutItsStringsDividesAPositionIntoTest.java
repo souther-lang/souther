@@ -264,7 +264,8 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
         // is refused as a machine, at the one state this run allowed.
         BlockReason.BehaviorDistinctionsTooCostly refused =
                 new BlockReason.BehaviorDistinctionsTooCostly(
-                        WorkFigure.BEHAVIOR_DISTINCTIONS_ONE_MACHINE.at(1));
+                        WorkFigure.BEHAVIOR_DISTINCTIONS_ONE_MACHINE
+                                .at("1 states or 1000000000 looked at"));
         assertEquals(List.of(refused, refused),
                 read.blocked().stream().map(ClassingBlocker::why).toList(),
                 "and both are answered for as the position's distinctions not being built");

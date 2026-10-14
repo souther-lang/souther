@@ -1,7 +1,9 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.partition.Border;
 import souther.compiler.partition.ClosureGap;
+import souther.compiler.partition.ReadingGap;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -157,10 +159,15 @@ public final class WeakeningSet {
             // together — what a measure's reading came to, and this — and a quotient written at
             // each would be two answers to one question.
             case Weakening.ModelReadingIncomplete it -> it.cause().fact();
+            // A value of a border's rows an observation stopped is the border and what stopped
+            // it; the figures it was stopped at are what evidenced that, gathered and not told
+            // apart, so two lines of one border cut short at two figures are one fact.
+            case Weakening.BorderValueUnreadable it -> it.why() instanceof ReadingGap.Observation seen
+                    ? new AnObservationAtABorder(it.border(), seen.code()) : it;
             // The rest are their own fact: every value they hold is what a reader is told, and two
             // of them that are equal are one thing that went wrong.
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
-                 Weakening.BorderValueUnreadable _, Weakening.BorderReadingsNotExhausted _,
+                 Weakening.BorderReadingsNotExhausted _,
                  Weakening.ABorderNotHeldAgainstTheLinesBesideIt _,
                  Weakening.ItemsPlaceNotWorkedOut _,
                  Weakening.BodyNotInEvaluation _,
@@ -174,6 +181,9 @@ public final class WeakeningSet {
         };
     }
 
+    /** The fact a border's value stopped by an observation is: which border, and what stopped it. */
+    private record AnObservationAtABorder(Border border, Incompleteness.Code code) {}
+
     /** Two occurrences of one fact, as one. Commutative, so which was met first decides nothing. */
     private static Weakening merged(Weakening had, Weakening also) {
         return switch (had) {
@@ -182,9 +192,13 @@ public final class WeakeningSet {
             case Weakening.ModelReadingIncomplete it -> new Weakening.ModelReadingIncomplete(
                     ClosureGap.merged(it.cause(),
                             alsoA(Weakening.ModelReadingIncomplete.class, also).cause()));
+            // One code at one border, met at every figure either was stopped at.
+            case Weakening.BorderValueUnreadable it -> new Weakening.BorderValueUnreadable(
+                    it.border(), ReadingGap.eachObservationOnce(List.of(it.why(),
+                            alsoA(Weakening.BorderValueUnreadable.class, also).why())).getFirst());
             // Equal under the key and holding nothing but the fact, so both are the same value.
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
-                 Weakening.BorderValueUnreadable _, Weakening.BorderReadingsNotExhausted _,
+                 Weakening.BorderReadingsNotExhausted _,
                  Weakening.ABorderNotHeldAgainstTheLinesBesideIt _,
                  Weakening.ItemsPlaceNotWorkedOut _,
                  Weakening.BodyNotInEvaluation _,

@@ -260,13 +260,15 @@ public final class PatternPlan {
 
         /**
          * The figure this was, said as one of the two figures of what the budget was spent on:
-         * {@code oneMachine} where one machine came to more states than a machine may have, and
-         * {@code inAll} where what everything built for the answer made and looked at came to more
-         * than it may.
+         * {@code oneMachine} where one machine came to more than a machine may — more states, or
+         * more looked at in making it, which the meter refuses as one limit and does not tell
+         * apart — and {@code inAll} where what everything built for the answer made and looked at
+         * came to more than it may.
          */
         public Figure as(WorkFigure oneMachine, WorkFigure inAll) {
             return switch (by) {
-                case ONE_MACHINE -> oneMachine.at(budget.mostStates());
+                case ONE_MACHINE -> oneMachine.at(budget.mostStates() + " states or "
+                        + budget.mostWork() + " looked at");
                 case THE_ANSWER -> inAll.at(budget.mostBuilt() + " states built and "
                         + budget.mostWork() + " looked at");
             };
