@@ -1083,13 +1083,9 @@ final class Witnesses {
                 if (!(record.name() instanceof TypeSymbol.AtModule named)) {
                     yield List.of();
                 }
-                List<FixtureTemplate> out = new ArrayList<>();
-                for (FixtureTemplate each : Partitions.differingAtItsFields(named,
+                yield worn(view, Partitions.differingAtItsFields(named,
                         Partitions.rulesOver(view.wrappers(), named, source), many, reading,
-                        inside)) {
-                    out.add(WornNames.under(view.wrappers(), each, source));
-                }
-                yield out;
+                        inside), source);
             }
             case Shape.Sequence _, Shape.Mapping _ -> {
                 DeclaredBounds.CountRange range = Partitions.heldRange(type, reading, held);
@@ -1106,36 +1102,51 @@ final class Witnesses {
                     }
                     out.add(one.values().getFirst());
                 }
+                // Only where the elements are apart as wholes, which a set's are. A set kept apart
+                // at a field of its elements is one whose few its rules choose, and a run of the
+                // element's values would offer sets that share the field.
                 if (view.shape() instanceof Shape.Sequence(Shape.Sequence.Kind kind, Type element)
-                        && kind == Shape.Sequence.Kind.SET) {
-                    for (FixtureTemplate each
-                            : setsBeside(out, element, range, many, reading, inside)) {
-                        out.add(WornNames.under(view.wrappers(), each, source));
-                    }
+                        && kind == Shape.Sequence.Kind.SET
+                        && apart.stream().allMatch(List::isEmpty)) {
+                    out.addAll(worn(view, setsBeside(out, element, range, many, reading, inside),
+                            source));
                 }
                 yield out;
             }
             // Nothing, and every value of what it holds. What it holds is written as itself.
             case Shape.Optional optional -> {
-                List<FixtureTemplate> out = new ArrayList<>();
-                out.add(FixtureTemplate.none());
-                for (FixtureTemplate each
-                        : distinctValuesOf(optional.element(), many - 1, reading, inside)) {
-                    out.add(WornNames.under(view.wrappers(), each, source));
-                }
-                yield out;
+                List<FixtureTemplate> values = new ArrayList<>();
+                values.add(FixtureTemplate.none());
+                values.addAll(distinctValuesOf(optional.element(), many - 1, reading, inside));
+                yield worn(view, values, source);
             }
             // A value of a sum is a value of one of its cases, written as that case is.
-            case Shape.Sum sum -> ofEachCase(sum.reaches().cases(), sum.name(), view, many,
-                    reading, inside);
+            case Shape.Sum sum -> worn(view, ofEachCase(sum.reaches().cases(), sum.name(), many,
+                    reading, inside), source);
             // In an order of their own, since a union's members are a set and come in none.
-            case Shape.Cases cases -> ofEachCase(cases.members().stream()
+            case Shape.Cases cases -> worn(view, ofEachCase(cases.members().stream()
                             .sorted(Comparator.comparing(TypeSymbol::toString)).toList(),
-                    null, view, many, reading, inside);
+                    null, many, reading, inside), source);
             case Shape.Scalar _, Shape.Unit _, Shape.Unresolved _, Shape.Tuple _,
                  Shape.Function _, Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _,
                  Shape.Undecided _ -> List.of();
         };
+    }
+
+    /**
+     * {@code values} under the names {@code view} wears, leaving out any those names cannot be
+     * written on here ({@link WornNames#under}).
+     */
+    private static List<FixtureTemplate> worn(TypeView view, List<FixtureTemplate> values,
+                                              RuleReadingSource source) {
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (FixtureTemplate each : values) {
+            FixtureTemplate written = WornNames.under(view.wrappers(), each, source);
+            if (written != null) {
+                out.add(written);
+            }
+        }
+        return out;
     }
 
     /**
@@ -1146,7 +1157,7 @@ final class Witnesses {
      *            for a union, which has none
      */
     private static List<FixtureTemplate> ofEachCase(List<TypeSymbol> cases, TypeSymbol sum,
-                                                    TypeView view, int many,
+                                                    int many,
                                                     RuleReadingContext reading,
                                                     Set<TypeSymbol> inside) {
         Set<TypeSymbol> within = new LinkedHashSet<>(inside);
@@ -1163,7 +1174,7 @@ final class Witnesses {
             boolean more = false;
             for (List<FixtureTemplate> values : each) {
                 if (i < values.size() && out.size() < many) {
-                    out.add(WornNames.under(view.wrappers(), values.get(i), reading.source()));
+                    out.add(values.get(i));
                     more = true;
                 }
             }

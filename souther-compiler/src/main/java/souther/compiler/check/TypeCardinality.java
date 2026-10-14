@@ -107,18 +107,18 @@ public final class TypeCardinality {
          * first time a reading asks for it, for a caller with nowhere to ask.
          *
          * <p>The same answers a compilation hands out one component at a time, which is what
-         * {@link #overTheWholeGraph} is kept to say.
+         * {@link #overTheWholeGraph} is kept to say. Every declaration a walk from one name
+         * reached is kept, so a name reached again from another is not counted again.
          */
         static Counts workedOutIn(RuleReadingContext reading) {
             Premises premises = Premises.read(reading);
             Map<TypeSymbol, Cardinality> counted = new HashMap<>();
             return name -> {
-                Cardinality known = counted.get(name);
-                if (known == null) {
-                    known = overTheWholeGraph(List.of(name), reading, premises).of(name);
-                    counted.put(name, known);
+                if (!counted.containsKey(name)) {
+                    counted.putAll(overTheWholeGraph(List.of(name), reading, premises).all());
+                    counted.putIfAbsent(name, Cardinality.UNKNOWN);
                 }
-                return known;
+                return counted.get(name);
             };
         }
     }
