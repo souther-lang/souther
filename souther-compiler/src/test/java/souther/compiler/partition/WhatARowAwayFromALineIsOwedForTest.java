@@ -112,8 +112,14 @@ class WhatARowAwayFromALineIsOwedForTest {
      */
     @Test
     void aClausesRunIsTheSameAtABehaviorThatDrawsLinesInsideIt() {
+        Border guarded = borderAt(AMOUNT, "example.owed", "guarded", "a = 0").border();
+        Border bare = borderAt(AMOUNT, "example.owed", "bare", "a = 0").border();
+
         assertEquals(new FarEnd.AtTheOrderEnd(Towards.ABOVE),
                 onlyBasis(AMOUNT, "example.owed", "guarded", "a = 0", PointRole.IN));
+        assertEquals(bare.answer(PointRole.IN), guarded.answer(PointRole.IN),
+                "the run and what stops it are one answer at both");
+        assertEquals(bare.owes(), guarded.owes(), "so both readings owe the same points");
     }
 
     /** And where nothing stops it, the run is owed to the line and to the order's own end. */

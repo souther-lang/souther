@@ -609,8 +609,10 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      *
      * <p>A place that was not worked out is not a place with nothing at it: the runs of the
      * arrangement lie between the places, so with one missing none of them is known to be the run
-     * it looks like. Every point read off the arrangement is then answered as not worked out, and
-     * the points at the line, which the order alone answers, are asked as they always are.
+     * it looks like. Every point a comparison reads off the arrangement is then answered as not
+     * worked out, and the points at the line, which the order alone answers, are asked as they
+     * always are. A bound reads nothing off it: its run is what the rules leave, which no other
+     * rule's place moves.
      *
      * @param parted every place the rules part this quantity's values, or the way one of them was
      *               not worked out
@@ -642,10 +644,6 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                     "a border built on a line the quantity does not reach: " + target.left()
                             + " at " + target.right());
         }
-        // Handed over as candidates rather than told apart here. Whether this line is one the
-        // others already hold is a question about where the values part, and the arrangement is
-        // what answers it — asked here as well, this reading kept whichever of two lines at one
-        // place it met first and the other went unsaid.
         DomainEnds ends = DomainEnds.leaving(space, cut, reach, narrowed);
         Map<DomainPoint, PointAnswer> demands = new LinkedHashMap<>();
         if (drawnByAnInvariant(origin)) {
@@ -658,6 +656,10 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                     QuantityArrangement.of(space, List.of(), ends));
             return new Border(target, origin, demands, Sides.NEITHER);
         }
+        // Handed over as candidates rather than told apart here. Whether this line is one the
+        // others already hold is a question about where the values part, and the arrangement is
+        // what answers it — asked here as well, this reading would keep whichever of two lines at
+        // one place it met first and the other would go unsaid.
         ExactAnswer<Arranged> arranged = parted.flatMap(others ->
                 partedBy(target, origin).map(mine -> {
                     List<Parting> all = new ArrayList<>(others);

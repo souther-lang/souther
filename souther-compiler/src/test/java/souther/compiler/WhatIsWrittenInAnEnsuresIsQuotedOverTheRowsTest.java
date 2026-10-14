@@ -107,7 +107,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                     | (TodoId(2)) -> <?>
 
                 example echo
-                // fills a decision rule ()
+                // fills a decision rule
                     | (TodoId(0)) -> <?>
                 """, block(TODO));
     }

@@ -500,11 +500,14 @@ public final class GeneratedRows {
                         case ReplacementReportAnchor.AtTheBehavior _ ->
                                 RewriteVocabulary.outOfSight(rewrite, module);
                     }));
-            case About.ARuleNoRowTakes(var behavior, var ruled) ->
-                    new Called(owed, "a decision rule", Optional.of(said(
-                            AdequacyReport.conditionsOf(db, module,
-                                    AdequacyReport.placesFor(db, module, behavior), ruled),
-                            declaredIn, rendering)), false);
+            // A body that decides nothing has one rule and it turns on no condition, so there is
+            // no place to say it at.
+            case About.ARuleNoRowTakes(var behavior, var ruled) -> {
+                List<AdequacyReport.ShownCondition> way = AdequacyReport.conditionsOf(db, module,
+                        AdequacyReport.placesFor(db, module, behavior), ruled);
+                yield new Called(owed, "a decision rule", way.isEmpty() ? Optional.empty()
+                        : Optional.of(said(way, declaredIn, rendering)), false);
+            }
             // A point of a line is said with the rule that drew it, which is its place; and points
             // coincide, so no row is named for one.
             case About.APointOfABorder _, About.APointOfADeclaredBorder _ ->
