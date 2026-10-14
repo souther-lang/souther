@@ -4,6 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.NumericAnswers;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.numeric.Count;
@@ -179,6 +180,21 @@ public sealed interface NumericTerm
             this.arguments = java.util.Objects.requireNonNull(arguments,
                     "and with whatever it was given beside that value, which is nothing where it"
                             + " was given nothing");
+        }
+
+        /**
+         * The term for how many the value at {@code position} holds, taken by {@code operation} —
+         * or null where the operation takes no such number of it.
+         *
+         * <p>The one way a container's size is named as a term. A rule counting it names the
+         * operation, and a reader with only the type takes the one that counts what the type holds
+         * ({@link NumericMeasures#takenOf}); both come to the same term for
+         * a container, and a reader building it apart could hold one that answers something else.
+         */
+        public static TakenOf howManyHeldAt(ValueName.Stdlib operation, TermPath position,
+                                            Type at, NewtypeInners inners, Symbols symbols) {
+            TakenOf term = asItStands(operation, position, at, inners, symbols);
+            return term != null && term.takenAs() instanceof TakenAs.HowManyItHolds ? term : null;
         }
 
         /**

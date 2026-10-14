@@ -18,7 +18,6 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
-import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
@@ -76,9 +75,6 @@ final class CardinalityComposer {
 
     private static final int MOST_SHARES =
             CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT.maximum();
-
-    private static final int MOST_VALUES =
-            CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.maximum();
 
     /** Every count of elements: what is asked of a thing the values are grouped by and no count
      *  of which is asked. */
@@ -485,21 +481,18 @@ final class CardinalityComposer {
         boolean distinct = !ElementsKeptApart.at(view, keptApart, reading).isEmpty();
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
-        ValuesOfAnElement.Listed listed = ValuesOfAnElement.of(holding.element(),
-                container.element(), reading, MOST_VALUES,
+        ElementValues ofTheElement = ElementValues.of(container, holding.element(), reading,
                 at -> numbersAt(at, asked, measuring, within, distinct ? MOST_ELEMENTS : 1,
                         unheld, unnamed));
-        if (listed == null) {
+        if (ofTheElement == null) {
             return notChosen("an element of `" + container + "` has a part whose values are"
                     + " neither one of so many nor numbers the statements part");
         }
-        // The container read the way a row holding it is read, with nothing else of the row.
-        BehaviorInputs where = new BehaviorInputs(List.of(container.head()), List.of(sourceType),
-                reading.source(), reading.policy());
+        ValuesOfAnElement.Listed listed = ofTheElement.listed();
         Groups<ObservedValue> every = new Groups<>(new ArrayList<>(), new ArrayList<>(),
                 new LinkedHashSet<>());
         for (ObservedValue value : listed.values()) {
-            BorderQuantity.Observation row = aRowHolding(where, List.of(value));
+            BorderQuantity.Observation row = ofTheElement.holding(sourceType, List.of(value));
             every.add(value, i -> ofAnElement.get(i).apply(row), asked.size());
         }
         Groups<ObservedValue> groups = every.keptBy(asked);
@@ -519,7 +512,7 @@ final class CardinalityComposer {
                     return false;
                 }
                 List<ObservedValue> values = groups.drawn(share, distinct);
-                BorderQuantity.Observation whole = aRowHolding(where, values);
+                BorderQuantity.Observation whole = ofTheElement.holding(sourceType, values);
                 for (Asked each : asked) {
                     // A count reads the container through the row and not the values handed it.
                     if (!(each.over(container, List.of(), whole)
@@ -642,14 +635,6 @@ final class CardinalityComposer {
             out.add(carrier.valueOf(place));
         }
         return out;
-    }
-
-    /** A row holding {@code values} as the container {@code where} reads, and nothing else. */
-    private static BorderQuantity.Observation aRowHolding(BehaviorInputs where,
-                                                          List<ObservedValue> values) {
-        return new StandingAtAPoint.DiscoveringRow(where, new ObservedInputs(
-                List.of(new ObservedValue.Sequence(values)), new Generator.Watched.NoAccount(),
-                new AnswerObservation.NotAnswered()));
     }
 
     /**

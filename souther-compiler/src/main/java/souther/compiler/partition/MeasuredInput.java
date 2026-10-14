@@ -7,7 +7,6 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NameReach;
-import souther.compiler.inputs.PositionId;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.RuleRoots;
 import souther.compiler.inputs.TermPath;
@@ -409,12 +408,6 @@ public final class MeasuredInput {
      */
     public RuleReadingContext ruleReading() {
         return RuleReadingContext.of(rules(), written.policy(), machines);
-    }
-
-    /** How many the rules leave the container at {@code at}, or every number where they leave it
-     *  unsaid. */
-    public int mostHeldAt(PositionId at) {
-        return quantities.mostHeldAt(at);
     }
 
     /**

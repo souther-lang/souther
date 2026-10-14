@@ -75,6 +75,11 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
               invariant value == 1 || value == 3 || value == 7
             data Loose = String
               invariant (value == "a" || value == "b") && %s
+            data Flags = { c: Bool, n: Bool }
+            data Bag = { items: Set<Flags> }
+            data Timed = { n: Bool, at: Slot }
+            data Wide = { a: Bool, b: Bool, c: Bool, d: Bool, e: Bool, f: Bool, g: Bool, h: Bool,
+                          i: Bool }
             """.formatted(ARuleNoReadingTakesIn.about("value"));
 
     /**
@@ -191,6 +196,9 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
                 new Case("Set<Code>", "Set.size(s) >= 3", false),
                 new Case("Set<Code>", "Set.size(s) > 2", false),
                 new Case("Set<Bool>", "Set.size(s) >= 3", false),
+                // And a guard asking for more elements meeting a statement than there are values
+                // of the element meeting it.
+                new Case("Set<Flags>", "Set.size(Set.filter(x -> x.n, s)) >= 3", false),
                 new Case("Set<Code>", "Set.size(s) >= 2", true),
                 new Case("Set<Code>", "Set.size(s) <= 2", true),
                 new Case("Set<Code>", "Set.size(s) < 2", true),
@@ -241,6 +249,155 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
                             .anyMatch(ItemAssessment.Attempt.Certified.class::isInstance),
                     () -> each.type() + " " + line.items().get(new DomainPoint.AtTheLine()));
         }
+    }
+
+    private static final String BESIDE = """
+            module p
+            %s
+            behavior f : (s: Set<Flags>, b: %s) -> Int
+            let f (s, b) = if %s == %d then 1 else 2
+            """;
+
+    /**
+     * How many elements of a container meet a statement is no more than the container holds, and
+     * of a set no more than how many values of its element meet it: the points past that are
+     * refused, and the point at it and the ones below are not.
+     *
+     * <p>Each with the most worked out by hand. An end is no claim that a set of that many meeting
+     * the statement is there to be written, so nothing here asks for one.
+     */
+    @Test
+    void aCountOfTheElementsMeetingAStatementEndsWhereTheElementsValuesMeetingItDo() {
+        // Beside a parameter the statement reads, whose value nothing about the element says: an
+        // element meets it where it could, and fails it where it fails whatever that value is.
+        record Beside(String type, String count, int most) {}
+        for (Beside each : List.of(
+                new Beside("Bool", "Set.size(Set.filter(x -> x.n || b, s))", 4),
+                new Beside("Int", "Set.size(Set.filter(x -> x.n || b > 3, s))", 4),
+                new Beside("Bool", "Set.size(Set.filter(x -> x.n && b, s))", 2),
+                new Beside("Int", "Set.size(Set.filter(x -> x.n && b > 3, s))", 2))) {
+            assertEndsAt(BESIDE.formatted(TYPES, each.type(), each.count(), each.most()),
+                    each.most(), each.type() + " " + each.count());
+        }
+        record Held(String type, String count, int most) {}
+        for (Held each : List.of(
+                new Held("Set<Flags>", "Set.size(Set.filter(x -> x.n, s))", 2),
+                new Held("Set<Flags>", "Set.size(Set.filter(x -> Bool.not(x.n), s))", 2),
+                new Held("Set<Flags>", "Set.size(Set.filter(x -> x.c && x.n, s))", 1),
+                new Held("Set<Flags>", "Set.size(Set.filter(x -> x.c || x.n, s))", 3),
+                new Held("Set<Bool>", "Set.size(Set.filter(x -> x, s))", 1),
+                new Held("Set<Item>", "Set.size(Set.filter(x -> x.active, s))", 2),
+                // The values the record's rules leave its field, of which there are two.
+                new Held("Set<Pick>", "Set.size(Set.filter(x -> x.n, s))", 2),
+                // A number among the element's values, each of which is a value the rules name. Its
+                // line is drawn at another value than the count's.
+                new Held("Set<Odd>", "Set.size(Set.filter(x -> x.value >= 3, s))", 2),
+                // A number its rules leave a run of so many whole numbers, every one of them read,
+                // alone and as a part of a record.
+                new Held("Set<Slot>", "Set.size(Set.filter(x -> x.value > 3, s))", 2),
+                new Held("Set<Timed>", "Set.size(Set.filter(x -> x.n, s))", 5),
+                // A set inside a record, read the same way as one at a parameter.
+                new Held("Bag", "Set.size(Set.filter(x -> x.n, s.items))", 2),
+                // A list holds a value over again, and what its rules leave its size is its end.
+                new Held("Short", "List.length(List.filter(x -> x, s.value))", 2))) {
+            assertEndsAt(MODEL.formatted(TYPES, each.type(), each.count(), each.most()),
+                    each.most(), each.type() + " " + each.count());
+        }
+    }
+
+    /**
+     * The line on the count at {@code most} refuses what is past it and owes what is not.
+     *
+     * <p>The line on the count and not any line at that value: a rule capping the container's size
+     * draws one there too, and the element's own numbers may.
+     */
+    private static void assertEndsAt(String model, int most, String said) {
+        BorderAssessment line = countLineOf(model, most, said);
+        assertEquals(new ItemAssessment.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+                line.items().get(new DomainPoint.BesideTheLine(Towards.ABOVE)), said);
+        assertEquals(new ItemAssessment.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+                line.items().get(new DomainPoint.InTheRegion(Towards.ABOVE)), said);
+        assertTrue(line.items().get(new DomainPoint.AtTheLine()) instanceof ItemAssessment.Owed,
+                () -> said + " " + line.items());
+        assertTrue(line.items().get(new DomainPoint.BesideTheLine(Towards.BELOW))
+                instanceof ItemAssessment.Owed, () -> said + " " + line.items());
+    }
+
+    /** The line on the count of {@code f} at {@code value}, and not a line drawn there on
+     *  anything else. */
+    private static BorderAssessment countLineOf(String model, int value, String said) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "p");
+        assertNotNull(read, () -> said + ": the model under test compiles");
+        return read.get("f").stream()
+                .filter(each -> each.shape() == BoundaryTarget.Shape.COUNT_OF_ELEMENTS
+                        && each.value().equals(Integer.toString(value)))
+                .findFirst().orElseThrow(() -> new AssertionError(said + ": no line on the count at "
+                        + value + " among " + read.get("f")));
+    }
+
+    /**
+     * An element with more values than are listed leaves the count the most its set holds, and a
+     * point past how many of its values meet the statement is searched for: what the search comes
+     * back with names the figure the listing stopped at, so a reader is told why the point was not
+     * refused.
+     */
+    @Test
+    void anElementListedOnlyInPartLeavesThePointsBeyondItsValuesSearchedUnderTheFigure() {
+        String model = MODEL.formatted(TYPES, "Set<Wide>",
+                "Set.size(Set.filter(x -> x.a, s))", WIDE_PAST_ITS_VALUES_MEETING);
+        BorderAssessment line = countLineOf(model, WIDE_PAST_ITS_VALUES_MEETING, "Set<Wide>");
+
+        assertTrue(line.items().get(new DomainPoint.AtTheLine())
+                instanceof ItemAssessment.Owed owed
+                && owed.searches().each().stream().anyMatch(each ->
+                        each instanceof ItemAssessment.Attempt.Stopped stopped
+                        && stopped.stoppedBy().written().contains(
+                                CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG)),
+                () -> String.valueOf(line.items().get(new DomainPoint.AtTheLine())));
+    }
+
+    /** Past the values of {@code Wide} meeting {@code x.a}, which are half of its values, and
+     *  short of all of them. */
+    private static final int WIDE_PAST_ITS_VALUES_MEETING =
+            CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.maximum() + 1;
+
+    /**
+     * A set of as many elements as there are values of the element meeting the statement is
+     * built, where those values are what the most was read off: every one of them, once.
+     */
+    @Test
+    void aSetOfEveryValueMeetingTheStatementIsBuilt() {
+        record Case(String type, String count, int most) {}
+        for (Case each : List.of(
+                new Case("Set<Flags>", "Set.size(Set.filter(x -> x.n, s))", 2),
+                new Case("Set<Flags>", "Set.size(Set.filter(x -> x.c || x.n, s))", 3),
+                new Case("Set<Bool>", "Set.size(Set.filter(x -> x, s))", 1),
+                new Case("Set<Pick>", "Set.size(Set.filter(x -> x.n, s))", 2))) {
+            BorderAssessment line = lineOf(MODEL.formatted(TYPES, each.type(), each.count(),
+                    each.most()), "p", Integer.toString(each.most()));
+
+            assertTrue(line.items().get(new DomainPoint.AtTheLine())
+                    instanceof ItemAssessment.Owed owed
+                    && owed.searches().each().stream()
+                            .anyMatch(ItemAssessment.Attempt.Certified.class::isInstance),
+                    () -> each.count() + " " + line.items().get(new DomainPoint.AtTheLine()));
+        }
+    }
+
+    /**
+     * What may repeat has no end at its element's values: a list of records counted for one of
+     * their truths is owed rows past how many records meet it.
+     */
+    @Test
+    void aCountOfAListsElementsHasNoEndAtItsElementsValues() {
+        BorderAssessment line = lineOf(MODEL.formatted(TYPES, "List<Flags>",
+                "List.length(List.filter(x -> x.n, s))", 2), "p", "2");
+
+        assertTrue(line.items().get(new DomainPoint.BesideTheLine(Towards.ABOVE))
+                instanceof ItemAssessment.Owed, () -> String.valueOf(line.items()));
     }
 
     /** Every row offered for {@code f}, with what stopped it where something did. */
