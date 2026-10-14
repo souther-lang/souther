@@ -1114,15 +1114,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 continue;
             }
             List<ShownCondition> shown = new ArrayList<>();
-            // One line per condition, naming every call the way consulted it at.
+            // One line per place the way consulted a condition at, naming every call it was
+            // consulted at there: one condition written twice is consulted at two places, and a
+            // helper's condition met at two calls is one place met twice.
             for (RuleStep step : rule.steps()) {
-                DecisionRuleReading read = DecisionRuleReading.of(step.shown(), plan, behavior);
-                List<List<CallSite>> calls = new ArrayList<>();
+                Map<Optional<Citation>, DecisionRuleReading> readAt = new LinkedHashMap<>();
+                Map<Optional<Citation>, List<List<CallSite>>> callsAt = new LinkedHashMap<>();
                 for (ShownBy each : step.seen()) {
+                    DecisionRuleReading read = DecisionRuleReading.of(each, plan, behavior);
+                    Optional<Citation> at =
+                            Optional.ofNullable(whereItIsWritten(compilation, read));
+                    readAt.putIfAbsent(at, read);
+                    List<List<CallSite>> calls = callsAt.computeIfAbsent(at,
+                            _ -> new ArrayList<>());
                     each.copy().ifPresent(copy ->
                             calls.add(callsOf(compilation, module, copy.lineage())));
                 }
-                shown.add(new ShownCondition(read, whereItIsWritten(compilation, read), calls));
+                readAt.forEach((at, read) ->
+                        shown.add(new ShownCondition(read, at.orElse(null), callsAt.get(at))));
             }
             out.put(rule, List.copyOf(shown));
         }
@@ -1130,48 +1139,64 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
-     * The calls each copy of a helper's code this behavior's page names was made at.
+     * Where each construct this behavior's page names was written and the calls the copy of it
+     * was made at.
      *
      * <p>Every copy anything the page may name was read off or seen at: what each way a rule was
      * searched along and each way to a line was read off ({@link SaidOnTheWay#copies}), every
      * place a rule's way consulted a condition, and the copies each line and each finding was read
-     * at. Asked here because where a call is written is a question of the compilation, and a page
-     * has none. A copy standing where it was written was made at no call, and its entry says so.
+     * at. Asked here because where a construct and a call are written is a question of the
+     * compilation, and a page has none. A copy standing where it was written was made at no call,
+     * and its entry says so.
      *
      * <p>Gathered off each holder through the one account it gives of its copies, and held to it
-     * where it is read ({@link ConditionsShown#callsOf}): a copy something here holds and this does
-     * not is this missing a holder, and is raised rather than shown naming no call.
+     * where it is read ({@link #callsAt}): a copy something here holds and this does not is this
+     * missing a holder, and is raised rather than shown naming no call.
      */
-    private static Map<ExpansionLineage, List<CallSite>> copyCalls(
+    private static Map<ModelOccurrence, CopyShown> copiesShown(
             Compilation compilation, String module, Map<DecisionRule, SettledAt> settled,
             List<BorderAssessment> lines, List<ReportedFinding> reported) {
-        List<ExpansionLineage> copies = new ArrayList<>();
+        List<ModelOccurrence> copies = new ArrayList<>();
         for (SettledAt each : settled.values()) {
-            each.at().saidOnTheWay().copies().forEach(copy -> copies.add(copy.lineage()));
+            copies.addAll(each.at().saidOnTheWay().copies());
             for (RuleStep step : each.at().steps()) {
-                step.seen().forEach(seen ->
-                        seen.copy().ifPresent(copy -> copies.add(copy.lineage())));
+                step.seen().forEach(seen -> seen.copy().ifPresent(copies::add));
             }
         }
         for (BorderAssessment line : lines) {
-            line.readAt().forEach(copy -> copies.add(copy.lineage()));
-            line.saidOnTheWay().copies().forEach(copy -> copies.add(copy.lineage()));
+            copies.addAll(line.readAt());
+            copies.addAll(line.saidOnTheWay().copies());
         }
         // And the copies each rule this page says nothing worked out about was read at.
         for (ReportedFinding each : reported) {
-            List<ModelOccurrence> readAt = switch (each.about()) {
+            copies.addAll(switch (each.about()) {
                 case About.ARuleWithoutALine(var it) -> it.finding().readAt();
                 case About.ARuleNothingClassified(var it) -> it.finding().readAt();
                 case About.AQuestionNothingAnswered(var asked) -> asked.asked().readAt();
                 default -> List.of();
-            };
-            readAt.forEach(copy -> copies.add(copy.lineage()));
+            });
         }
-        Map<ExpansionLineage, List<CallSite>> out = new LinkedHashMap<>();
-        for (ExpansionLineage copy : copies) {
-            out.computeIfAbsent(copy, _ -> callsOf(compilation, module, copy));
+        Map<ModelOccurrence, CopyShown> out = new LinkedHashMap<>();
+        for (ModelOccurrence copy : copies) {
+            out.computeIfAbsent(copy, _ -> new CopyShown(
+                    Sites.placeIfKnown(compilation.db(), copy.origin()),
+                    callsOf(compilation, module, copy.lineage())));
         }
         return out;
+    }
+
+    /**
+     * One copy of a construct of the model, as a page sends a reader to it.
+     *
+     * @param written where the construct is written, or null where nothing places it
+     * @param calls   the calls the copy was made at, innermost first; none for a construct standing
+     *                where it was written
+     */
+    public record CopyShown(Citation written, List<CallSite> calls) {
+
+        public CopyShown {
+            calls = List.copyOf(calls);
+        }
     }
 
     /**
@@ -1224,11 +1249,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * calls is one finding, and a reader sent to it is sent to both.
      */
     private static String inCopies(List<ModelOccurrence> readAt,
-                                   Map<ExpansionLineage, List<CallSite>> copyCalls,
+                                   Map<ModelOccurrence, CopyShown> copies,
                                    SourceRendering rendering, SourceId declaredIn) {
         List<String> calls = new ArrayList<>();
         for (ModelOccurrence copy : readAt) {
-            List<CallSite> through = callsAt(copyCalls, copy);
+            List<CallSite> through = callsAt(copies, copy).calls();
             if (!through.isEmpty()) {
                 calls.add(chain(through, rendering, declaredIn));
             }
@@ -1395,23 +1420,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
         }
         return new ConditionsShown(places,
-                copyCalls(compilation, module, settled, lines, reported));
+                copiesShown(compilation, module, settled, lines, reported));
     }
 
     /**
-     * Where this report shows each condition a sentence names, and each copy of a helper's code it
-     * names.
+     * Where this report shows each condition a sentence names, and each copy of a construct of the
+     * model it names.
      *
      * <p>Both asked where the compilation is in reach, for a page that has none. Which copies a
      * sentence names is not here: that is the way's ({@link SaidOnTheWay}), carried with the way
-     * the sentence is about, and this says only where each of them was called.
+     * the sentence is about, and this says only where each of them is written and was called.
      *
      * @param places where each condition is shown, by the question that places it
-     * @param copies the calls each copy was made at, innermost first, for the copies made at one
+     * @param copies where each copy's construct is written and the calls it was made at
      * @param way    who put what on the one way a sentence is about, where it is about one
      */
     public record ConditionsShown(Map<ConditionReportAnchor, Citation> places,
-                                  Map<ExpansionLineage, List<CallSite>> copies,
+                                  Map<ModelOccurrence, CopyShown> copies,
                                   SaidOnTheWay way) {
 
         /** No condition to point at, for a block nothing was asked about. */
@@ -1425,7 +1450,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
 
         ConditionsShown(Map<ConditionReportAnchor, Citation> places,
-                        Map<ExpansionLineage, List<CallSite>> copies) {
+                        Map<ModelOccurrence, CopyShown> copies) {
             this(places, copies, SaidOnTheWay.NONE);
         }
 
@@ -1434,31 +1459,30 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             return new ConditionsShown(places, copies, way);
         }
 
-        /** The calls of each copy that put on this way what {@code gap} is about, for the copies
-         *  made at one. */
-        List<List<CallSite>> callsOf(ConditionGap gap) {
-            return way.of(gap).stream().map(copy -> callsAt(copies, copy))
-                    .filter(calls -> !calls.isEmpty()).toList();
+        /** Each copy that put on this way what {@code gap} is about, as a reader is sent to it:
+         *  every place it was asked at, and the calls of each. */
+        List<CopyShown> copiesOf(ConditionGap gap) {
+            return way.of(gap).stream().map(copy -> callsAt(copies, copy)).toList();
         }
     }
 
     /**
-     * The calls {@code copy} was made at, out of what this report was assembled with — none for a
-     * copy made at no call.
+     * Where {@code copy}'s construct is written and the calls it was made at, out of what this
+     * report was assembled with.
      *
-     * <p>Raised for a copy it was not assembled with, rather than answered with none: a copy the
+     * <p>Raised for a copy it was not assembled with, rather than answered with nothing: a copy the
      * page names and the assembly did not gather is a holder of copies the gathering missed
-     * ({@link #copyCalls}), and answered with none, the page would name no call where there is
-     * one.
+     * ({@link #copiesShown}), and answered with nothing, the page would name no place or call
+     * where there is one.
      */
-    private static List<CallSite> callsAt(Map<ExpansionLineage, List<CallSite>> copies,
-                                          ModelOccurrence copy) {
-        List<CallSite> calls = copies.get(copy.lineage());
-        if (calls == null) {
+    private static CopyShown callsAt(Map<ModelOccurrence, CopyShown> copies,
+                                     ModelOccurrence copy) {
+        CopyShown shown = copies.get(copy);
+        if (shown == null) {
             throw new IllegalStateException("this report was not assembled with the copy "
-                    + copy.lineage() + " it names");
+                    + copy + " it names");
         }
-        return calls;
+        return shown;
     }
 
     /**
@@ -3104,7 +3128,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static void readings(StringBuilder out, BorderObligationPointAssessment point,
                                  Predicate<BorderAssessment> shown,
                                  Function<BorderAssessment, String> beside,
-                                 Map<ExpansionLineage, List<CallSite>> copyCalls,
+                                 Map<ModelOccurrence, CopyShown> copies,
                                  SourceRendering rendering, SourceId declaredIn) {
         List<BorderObligationPointAssessment.ReadingSaid> said = point.readingsSaid().stream()
                 .filter(each -> shown.test(point.met().get(each.where()))).toList();
@@ -3114,7 +3138,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // that drew it is one place for every call, so two readings of a helper's line read
             // alike but for the calls.
             out.append(String.format("          · read as %s: %s%s%s%n", each.at(), each.asks(),
-                    inCopies(each.readAt(), copyCalls, rendering, declaredIn),
+                    inCopies(each.readAt(), copies, rendering, declaredIn),
                     beside.apply(point.met().get(each.where()))));
         }
         if (said.size() > say) {
@@ -3643,7 +3667,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static List<String> leftOut(SettledAt came, BehaviorReport behavior,
                                         SourceRendering rendering, SourceId declaredIn) {
         ConditionsShown shown = behavior.conditionPlaces().along(came.at().saidOnTheWay());
-        return saidOnce(came.leftOut(), shown::callsOf, shown.places(), rendering, declaredIn);
+        return saidOnce(came.leftOut(), shown::copiesOf, shown.places(), rendering, declaredIn);
     }
 
     /**
@@ -4336,7 +4360,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         return "not every condition on the way to the " + toWhat
                 + " is one the row was composed against: "
-                + String.join(", ", saidOnce(gaps, shown::callsOf, shown.places(), rendering,
+                + String.join(", ", saidOnce(gaps, shown::copiesOf, shown.places(), rendering,
                         declaredIn));
     }
 
@@ -4362,28 +4386,43 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * @param callsOf the calls of a helper each gap was met at, one list per copy
      */
     private static List<String> saidOnce(List<ConditionGap> gaps,
-                                         Function<ConditionGap, List<List<CallSite>>> callsOf,
+                                         Function<ConditionGap, List<CopyShown>> copiesOf,
                                          Map<ConditionReportAnchor, Citation> places,
                                          SourceRendering rendering, SourceId declaredIn) {
-        Map<SaidAlike, Set<String>> calls = new LinkedHashMap<>();
+        // For each sentence, every place it was asked at, the gap's own first, with the calls of
+        // each: one condition consulted at two places is one sentence that sends a reader to both.
+        Map<SaidAlike, Map<String, Set<String>>> where = new LinkedHashMap<>();
         Map<SaidAlike, ConditionGap> first = new LinkedHashMap<>();
         for (ConditionGap gap : gaps) {
             SaidAlike key = SaidAlike.of(gap);
             first.putIfAbsent(key, gap);
-            Set<String> at = calls.computeIfAbsent(key, _ -> new LinkedHashSet<>());
-            callsOf.apply(gap).forEach(copy -> at.add(chain(copy, rendering, declaredIn)));
+            Map<String, Set<String>> at = where.computeIfAbsent(key, _ -> new LinkedHashMap<>());
+            Citation written = places.get(gap.anchor());
+            String own = written == null ? "" : written.said(rendering, declaredIn);
+            at.computeIfAbsent(own, _ -> new LinkedHashSet<>());
+            for (CopyShown copy : copiesOf.apply(gap)) {
+                String place = copy.written() == null ? own
+                        : copy.written().said(rendering, declaredIn);
+                Set<String> calls = at.computeIfAbsent(place, _ -> new LinkedHashSet<>());
+                if (!copy.calls().isEmpty()) {
+                    calls.add(chain(copy.calls(), rendering, declaredIn));
+                }
+            }
         }
         List<String> out = new ArrayList<>();
         first.forEach((key, gap) -> {
-            List<String> where = new ArrayList<>();
-            Citation written = places.get(gap.anchor());
-            if (written != null) {
-                where.add(written.said(rendering, declaredIn));
-            }
-            if (!calls.get(key).isEmpty()) {
-                where.add("in " + String.join(", ", calls.get(key)));
-            }
-            out.add(whyLeftOut(gap) + (where.isEmpty() ? "" : " (" + String.join(" ", where)
+            List<String> said = new ArrayList<>();
+            where.get(key).forEach((place, calls) -> {
+                String in = calls.isEmpty() ? "" : "in " + String.join(", ", calls);
+                if (place.isEmpty() || in.isEmpty()) {
+                    if (!(place + in).isEmpty()) {
+                        said.add(place + in);
+                    }
+                } else {
+                    said.add(place + " " + in);
+                }
+            });
+            out.add(whyLeftOut(gap) + (said.isEmpty() ? "" : " (" + String.join(", ", said)
                     + ")"));
         });
         return out;

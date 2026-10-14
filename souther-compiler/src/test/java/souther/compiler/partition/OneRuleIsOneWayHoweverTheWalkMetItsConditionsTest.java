@@ -77,6 +77,25 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
                 "and read off both calls");
     }
 
+    /**
+     * What a condition consulted again asks is told the call it was asked at, entry for entry,
+     * where the reading named each entry where it met it and the two are different values.
+     */
+    @Test
+    void whatTheSecondConsultationAskedIsToldOfWhatTheFirstAsked() {
+        ModelOccurrence first = comparisonIn(call(1));
+        ModelOccurrence second = comparisonIn(call(2));
+        DecisionPath.Consulted atTheFirst = seenAt(compared("a", 5, true, 0), first);
+        DecisionPath.Consulted atTheSecond = seenAt(compared("a", 5, true, 1), second);
+        assertNotEquals(atTheFirst.states(), atTheSecond.states(),
+                "the two consultations' entries are two values");
+
+        RuleStep step = way(atTheFirst, atTheSecond).steps().getFirst();
+        assertEquals(List.of(first, second),
+                step.said().entries().get(step.states().getFirst()),
+                "what the way asks is read off both calls it was asked at");
+    }
+
     /** {@code consulted}, which comes out holding, seen and read off at the comparison
      *  {@code at}. */
     private static DecisionPath.Consulted seenAt(DecisionPath.Consulted consulted,
@@ -108,6 +127,12 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
 
     /** One comparison of {@code head} against {@code against}, coming out {@code held}. */
     private static DecisionPath.Consulted compared(String head, int against, boolean held) {
+        return compared(head, against, held, against);
+    }
+
+    /** The same, met by the reading as its condition {@code met}. */
+    private static DecisionPath.Consulted compared(String head, int against, boolean held,
+                                                   int met) {
         LinearForm<DecisionAtom> form =
                 LinearForm.<DecisionAtom>atomMinusConstant(
                         new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of(head))),
@@ -116,9 +141,9 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
         return new DecisionPath.Consulted(new DecidedCondition.Compared(column, held),
                 new ShownBy.NothingIsRecorded(column),
                 List.of(new OnTheWay.Declined(
-                        new ConditionOccurrence("b", ConditionOccurrence.Reading.DECIDING, against),
+                        new ConditionOccurrence("b", ConditionOccurrence.Reading.DECIDING, met),
                         new ConditionReportAnchor.WhereTheReadingMetIt("b", new ConditionOccurrence(
-                                "b", ConditionOccurrence.Reading.DECIDING, against)),
+                                "b", ConditionOccurrence.Reading.DECIDING, met)),
                         new WhyNotTaken.OutsideDomain(
                                 WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER))),
                 SaidOnTheWay.NONE);

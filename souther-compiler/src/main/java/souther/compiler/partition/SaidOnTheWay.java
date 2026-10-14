@@ -82,6 +82,55 @@ public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
         return new SaidOnTheWay(entries, asked, declined);
     }
 
+    /**
+     * The same, with what {@code other} says {@code from} was read off told of {@code onto}, entry
+     * for entry: {@code from} is the same condition asked again, and {@code onto} what it asked
+     * the first time.
+     *
+     * <p>By place and not by value. One condition asked twice asks the same things in the same
+     * order, but an entry a reading names where it met it is a different value each time, and
+     * matched by value the second asking would be told of nothing on the way. Where the two do not
+     * line up — different numbers of entries, or one of several things where the other has none —
+     * what the second was read off is kept beside the first by value, which is all that is left.
+     */
+    public SaidOnTheWay retold(List<OnTheWay> onto, List<OnTheWay> from, SaidOnTheWay other) {
+        Map<OnTheWay, List<ModelOccurrence>> told = new LinkedHashMap<>();
+        entries.forEach((key, copies) -> told.put(key, new ArrayList<>(copies)));
+        if (!retoldInto(onto, from, other, told)) {
+            return and(other);
+        }
+        SaidOnTheWay demands = new SaidOnTheWay(Map.of(), other.stated, other.unstated);
+        return new SaidOnTheWay(told, stated, unstated).and(demands);
+    }
+
+    private static boolean retoldInto(List<OnTheWay> onto, List<OnTheWay> from,
+                                      SaidOnTheWay other,
+                                      Map<OnTheWay, List<ModelOccurrence>> into) {
+        if (onto.size() != from.size()) {
+            return false;
+        }
+        for (int at = 0; at < onto.size(); at++) {
+            OnTheWay mine = onto.get(at);
+            OnTheWay theirs = from.get(at);
+            if (mine.getClass() != theirs.getClass()) {
+                return false;
+            }
+            filedAlone(mine, other.entries.getOrDefault(theirs, List.of()), into);
+            if (mine instanceof OnTheWay.OneOf one && theirs instanceof OnTheWay.OneOf two) {
+                if (one.alternatives().size() != two.alternatives().size()) {
+                    return false;
+                }
+                for (int each = 0; each < one.alternatives().size(); each++) {
+                    if (!retoldInto(one.alternatives().get(each), two.alternatives().get(each),
+                            other, into)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
     /** Both, as what put things on a way two ways of reaching one line or rule share. */
     public SaidOnTheWay and(SaidOnTheWay other) {
         return new SaidOnTheWay(together(entries, other.entries), together(stated, other.stated),

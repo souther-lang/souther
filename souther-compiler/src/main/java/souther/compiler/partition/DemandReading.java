@@ -263,13 +263,13 @@ final class DemandReading {
                 }
             }
             if (made instanceof Read.OneOf oneOf) {
+                ReadOff told = new ReadOff(each, own);
                 for (List<Read> kept : oneOf.alternatives()) {
                     for (List<Stated> part : parts) {
                         List<Read> asked = part.stream().map(Stated::read).toList();
                         if (asked.equals(kept)) {
                             for (int at = 0; at < kept.size(); at++) {
-                                List<ModelOccurrence> into = each.get(kept.get(at));
-                                each.get(asked.get(at)).forEach(copy -> once(copy, into));
+                                joinedInto(kept.get(at), told, asked.get(at), told, each);
                             }
                         }
                     }
@@ -397,26 +397,10 @@ final class DemandReading {
 
         /** {@code kept}, which asks what {@code dropped} asks, told what both were read off. */
         private void alike(Read kept, Read dropped) {
-            if (kept == dropped) {
-                return;
+            if (kept != dropped) {
+                ReadOff told = told();
+                ReadOff.joinedInto(kept, told, dropped, told, readIn);
             }
-            List<ModelOccurrence> both = new ArrayList<>(of(kept));
-            of(dropped).forEach(copy -> once(copy, both));
-            readIn.put(kept, both);
-            if (kept instanceof Read.OneOf one && dropped instanceof Read.OneOf other) {
-                for (int each = 0; each < one.alternatives().size(); each++) {
-                    List<Read> mine = one.alternatives().get(each);
-                    List<Read> theirs = other.alternatives().get(each);
-                    for (int at = 0; at < mine.size(); at++) {
-                        alike(mine.get(at), theirs.get(at));
-                    }
-                }
-            }
-        }
-
-        /** What {@code read} was read off, as told so far. */
-        private List<ModelOccurrence> of(Read read) {
-            return told().of(read);
         }
 
         /**

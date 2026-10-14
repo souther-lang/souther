@@ -117,13 +117,15 @@ final class DecisionPath {
          * The same column, consulted again as {@code more} was.
          *
          * <p>What it states is what it states the first time — one column asks one thing — and
-         * what each consultation was read off is told of it, so a gap about it names every call
-         * that asked it.
+         * what each consultation was read off is told of it, entry for the entry it asked the
+         * first time ({@link SaidOnTheWay#retold}), so a gap about it names every call that asked
+         * it.
          */
         Consulted again(Consulted more) {
             List<ShownBy> places = new ArrayList<>(seen);
             more.seen.stream().filter(each -> !places.contains(each)).forEach(places::add);
-            return new Consulted(answer, places, states, said.and(more.said));
+            return new Consulted(answer, places, states,
+                    said.retold(states, more.states, more.said));
         }
 
         /** Where a report about the condition asks for its place, which every entry for it

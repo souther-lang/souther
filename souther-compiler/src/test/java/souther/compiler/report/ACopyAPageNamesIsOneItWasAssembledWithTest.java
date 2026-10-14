@@ -53,10 +53,11 @@ class ACopyAPageNamesIsOneItWasAssembledWithTest {
 
     @Test
     void aCopyThePageWasAssembledWithNamesItsCalls() {
-        AdequacyReport.CallSite call = new AdequacyReport.CallSite("positive", null);
+        AdequacyReport.CopyShown copy = new AdequacyReport.CopyShown(null,
+                List.of(new AdequacyReport.CallSite("positive", null)));
         AdequacyReport.ConditionsShown shown = new AdequacyReport.ConditionsShown(Map.of(),
-                Map.of(IN_THE_CALL.lineage(), List.of(call)), WAY);
-        assertEquals(List.of(List.of(call)), shown.callsOf(GAP),
+                Map.of(IN_THE_CALL, copy), WAY);
+        assertEquals(List.of(copy), shown.copiesOf(GAP),
                 "the gap names the call its copy was made at");
     }
 
@@ -64,7 +65,7 @@ class ACopyAPageNamesIsOneItWasAssembledWithTest {
     void aCopyItWasNotAssembledWithIsRaised() {
         AdequacyReport.ConditionsShown shown =
                 new AdequacyReport.ConditionsShown(Map.of(), Map.of(), WAY);
-        assertThrows(IllegalStateException.class, () -> shown.callsOf(GAP),
+        assertThrows(IllegalStateException.class, () -> shown.copiesOf(GAP),
                 "a copy the gathering missed is raised, not shown naming no call");
     }
 }
