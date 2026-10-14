@@ -100,7 +100,12 @@ class AnEmptyContainerPairsWithNothingInsideItTest {
         }
     }
 
-    /** A class holding a count of one holds a list with an element, so it is kept whole. */
+    /**
+     * A class holding a count of one holds a list with an element, so it is kept whole.
+     *
+     * <p>The elements are asked about first, so every run that asks the length has read them, and
+     * what is left to decide is only whether the classes can be in one value.
+     */
     @Test
     void aClassThatHoldsACountOfOneIsKept() {
         Measured few = measured("""
@@ -116,8 +121,8 @@ class AnEmptyContainerPairsWithNothingInsideItTest {
                     constructs Out
 
                 let few (c) = {
-                    guard length(c.items) <= 1 else Out(0)
                     guard all(i -> i.quantity >= 1, c.items) else Out(1)
+                    guard length(c.items) <= 1 else Out(0)
                     Out(2)
                 }
 

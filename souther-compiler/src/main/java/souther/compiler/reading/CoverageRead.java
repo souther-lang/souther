@@ -139,6 +139,11 @@ public final class CoverageRead {
     /** Every way a run of the body is known to take, in the order the walk met them. */
     private final Set<WayIn> taken = new LinkedHashSet<>();
 
+    /** The parts that answer nothing whose ways in were read where the walk came to them, which
+     *  the walk into them reads no further. Identity and not equality: two parts written the same
+     *  are two places. */
+    private final Set<Core> endsRead = Collections.newSetFromMap(new IdentityHashMap<>());
+
     /** The ways the behavior's answer is settled by, in the order the reading holds them. */
     private final Set<WayIn> answeredBy = new LinkedHashSet<>();
 
@@ -477,8 +482,12 @@ public final class CoverageRead {
             return;
         }
         boolean arrives = observed && reading.arrivesAt(node);
-        if (observed && !arrives && reach instanceof Reach.Ways(var ways)) {
-            answersNothingAt(node, ways.stream().map(WayIn::conditions).toList());
+        if (observed && !arrives) {
+            if (reach instanceof Reach.Ways(var ways)) {
+                answersNothingAt(node, ways.stream().map(WayIn::conditions).toList());
+            } else if (!endsRead.contains(node)) {
+                endsWithoutAllItHeld(reach);
+            }
         }
         if (node instanceof Core.LetIn let) {
             // A name given to a decision is still that decision, and a name given to a position is
@@ -495,6 +504,21 @@ public final class CoverageRead {
     }
 
     /**
+     * That a run reaching a part that answers nothing by {@code reach}, which this reading could
+     * not name whole, ends there having decided more than {@code reach} says.
+     *
+     * <p>Every part a run ends at is read for what the run read on its way, whichever way the part
+     * was reached: the ways to it are already among the ways taken, and are said in part here so
+     * that what they read together is not read off them as all a run there decided. Not left to the
+     * siblings of the part: that another arm of the same fork answers, and says as much, is a fact
+     * about the model this reading has no hold on.
+     */
+    private void endsWithoutAllItHeld(Reach reach) {
+        taken.addAll(reach.known());
+        saidInPart.addAll(reach.known());
+    }
+
+    /**
      * That a run arriving at {@code node} by any of {@code ways} answers nothing.
      *
      * <p>Asked where the walk first finds a value not arriving, so what is recorded is the largest
@@ -508,6 +532,7 @@ public final class CoverageRead {
      * kept off, so it says nothing about which inputs reach this.
      */
     private void answersNothingAt(Core node, List<List<Condition>> ways) {
+        endsRead.add(node);
         if (ways.isEmpty()) {
             return;
         }
@@ -532,10 +557,12 @@ public final class CoverageRead {
     private void answersNothingDown(Core.Match match, int part, CoverageNaming naming,
                                     Reach reach) {
         if (!(reach instanceof Reach.Ways(var ways))) {
+            endsWithoutAllItHeld(reach);
             return;
         }
         Condition.Case taken = naming.caseOf(match, part);
         if (taken == null) {
+            endsWithoutAllItHeld(reach);
             return;
         }
         List<List<Condition>> down = new ArrayList<>();

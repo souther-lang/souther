@@ -104,7 +104,14 @@ class AnElementsCaseMatchedInAClosureIsPairedWithTheListsLengthTest {
                 | (Usage { counts = [] }) -> Out(0)
             """;
 
-    /** A map's keys likewise, beside how many the map holds. */
+    /**
+     * A map's keys likewise, beside how many the map holds.
+     *
+     * <p>The case of a key matched in a closure over {@code Map.keys} is a decision whose subject
+     * the reading of the ways does not name, so which classes a run reads it beside are not read
+     * either and every combination is kept ({@code ReadTogether}). What is asked here is only which
+     * of them a value can hold.
+     */
     @Test
     void theCasesOfAKeyArePairedWithTheSizeThatHoldsOne() {
         PartitionEvidence counted = measured(KEYED.formatted(1), "example.keys", "northern");

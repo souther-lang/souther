@@ -30,6 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>And a class of the length that leaves the list nothing to hold is no class to put beside one
  * inside it. A row about the empty list stands at no class of what the elements hold, rather than
  * at one no empty list can be in.
+ *
+ * <p>The elements are asked about before the length, so every run that asks the length has asked
+ * the elements, and each class of the length is read beside each class inside.
  */
 class ARowAboutAListsLengthIsBuiltAroundWhatTheRowAsksInsideItTest {
 
@@ -49,8 +52,8 @@ class ARowAboutAListsLengthIsBuiltAroundWhatTheRowAsksInsideItTest {
                 constructs Priced, Bad
 
             let quote (c) = {
-                guard %s else Empty
                 guard all(i -> i.quantity >= 1, c.items) else Bad { count = length(filter(i -> i.quantity < 1, c.items)) }
+                guard %s else Empty
                 Priced { total = 0 }
             }
 
