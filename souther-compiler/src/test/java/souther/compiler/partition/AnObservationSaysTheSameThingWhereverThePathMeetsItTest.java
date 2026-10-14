@@ -15,6 +15,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Bodies;
@@ -175,10 +176,10 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         Read read = read();
 
         assertEquals(Incompleteness.Code.VALUE_TRUNCATED,
-                why(read, givingInterval(read, intervalHolding(read, new ObservedValue.Truncated()))),
+                why(read, givingInterval(read, intervalHolding(read, new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure())))),
                 "the limit was reached at the position");
         assertEquals(Incompleteness.Code.VALUE_TRUNCATED,
-                why(read, givingInterval(read, new ObservedValue.Truncated())),
+                why(read, givingInterval(read, new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()))),
                 "the limit was reached one field above the position");
     }
 
@@ -228,11 +229,11 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
 
         assertInstanceOf(ObservedValue.Truncated.class,
                 theOneValueAt(read, givingInterval(read, intervalHolding(read,
-                        new ObservedValue.Truncated())).inputs()),
+                        new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()))).inputs()),
                 "the limit was reached at the position");
         assertInstanceOf(ObservedValue.Truncated.class,
                 theOneValueAt(read,
-                        givingInterval(read, new ObservedValue.Truncated()).inputs()),
+                        givingInterval(read, new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure())).inputs()),
                 "the limit was reached one field above the position");
     }
 

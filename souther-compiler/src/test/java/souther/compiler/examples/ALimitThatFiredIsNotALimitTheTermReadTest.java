@@ -17,6 +17,7 @@ import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.AnObservationOfAForm;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.Criterion;
@@ -79,7 +80,8 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
         ObservedValue observed = observed(FOUR_NODES, longs(6));
 
         assertEquals(BorderQuantity.Stands.couldNotTell(
-                        ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)),
+                        ReadingGap.of(Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED,
+                                WorkFigure.OBSERVED_NODES.at(4)))),
                 QuantityFixtures.stands(form(), atTheLevel(15), run(observed)),
                 "the elements the walk stopped at are the ones the total is over");
     }

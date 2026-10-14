@@ -66,7 +66,7 @@ final class TermReading {
         Objects.requireNonNull(at, "a term is read at a value the walk came to");
         Membership.Incomplete unread = Membership.unread(at);
         if (unread != null) {
-            return new Reading.Missing(unread.code());
+            return new Reading.Missing(unread.cause());
         }
         // A newtype is not a step in a path, so what sits at the position may be the construction and
         // the value one inside it. Asked again of what is inside rather than walked into: a limit
@@ -139,7 +139,7 @@ final class TermReading {
         while (true) {
             Membership.Incomplete unread = Membership.unread(at);
             if (unread != null) {
-                return new Where.Nowhere(new Reading.Missing(unread.code()));
+                return new Where.Nowhere(new Reading.Missing(unread.cause()));
             }
             if (at instanceof ObservedValue.Constructed c && c.field("value") != null) {
                 at = c.field("value");
@@ -149,7 +149,8 @@ final class TermReading {
         }
         Place place = observed == null ? null : observed.placeOf(at);
         return place == null
-                ? new Where.Nowhere(new Reading.Missing(Incompleteness.Code.VALUE_UNREADABLE))
+                ? new Where.Nowhere(new Reading.Missing(
+                        Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE)))
                 : new Where.At(place);
     }
 
@@ -194,7 +195,7 @@ final class TermReading {
             Objects.requireNonNull(each, "every value of a run the walk came to is a value");
             Membership.Incomplete unread = Membership.unread(each);
             if (unread != null) {
-                return new Reading.Missing(unread.code());
+                return new Reading.Missing(unread.cause());
             }
         }
         return switch (term.takenAs()) {
@@ -310,7 +311,7 @@ final class TermReading {
             }
             Membership.Incomplete unread = Membership.unread(at);
             if (unread != null) {
-                stopped = new Reading.Missing(unread.code());
+                stopped = new Reading.Missing(unread.cause());
                 return null;
             }
             return at;
@@ -468,7 +469,7 @@ final class TermReading {
         for (ObservedValue each : values) {
             Membership.Incomplete unread = Membership.unread(each);
             if (unread != null) {
-                return new Reading.Missing(unread.code());
+                return new Reading.Missing(unread.cause());
             }
             // Through the name an element is written under, as the one value a place holds is read
             // through it. A run of a newtype over a whole number holds constructions, and the

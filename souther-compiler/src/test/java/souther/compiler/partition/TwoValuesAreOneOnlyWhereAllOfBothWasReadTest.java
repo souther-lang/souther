@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -60,14 +62,20 @@ class TwoValuesAreOneOnlyWhereAllOfBothWasReadTest {
                 Map.of("code", code));
     }
 
+    /** What the truncated values here say they were stopped at. */
+    private static final Figure STOPPED_AT = Limits.DEFAULT.nodesFigure();
+
     private static AStatementAtARow.Answer couldNotTell(Incompleteness.Code why) {
-        return new AStatementAtARow.Answer.CouldNotTell(Set.of(ReadingGap.of(why)));
+        return new AStatementAtARow.Answer.CouldNotTell(Set.of(ReadingGap.of(
+                why == Incompleteness.Code.VALUE_TRUNCATED
+                        ? Incompleteness.Cause.at(why, STOPPED_AT)
+                        : Incompleteness.Cause.of(why))));
     }
 
     @Test
     void twoRecordsStoppedAlikeAreNotSaidToBeOne() {
         assertEquals(couldNotTell(Incompleteness.Code.VALUE_TRUNCATED),
-                theSameAt(key(new ObservedValue.Truncated()), key(new ObservedValue.Truncated())));
+                theSameAt(key(new ObservedValue.Truncated(STOPPED_AT)), key(new ObservedValue.Truncated(STOPPED_AT))));
         assertEquals(couldNotTell(Incompleteness.Code.VALUE_UNREADABLE),
                 theSameAt(key(new ObservedValue.Text("A")), key(new ObservedValue.Unknown("no"))));
     }
@@ -75,7 +83,7 @@ class TwoValuesAreOneOnlyWhereAllOfBothWasReadTest {
     @Test
     void aValueThatWasNotReadIsNotSaidToBeOneOrTwo() {
         assertEquals(couldNotTell(Incompleteness.Code.VALUE_TRUNCATED),
-                theSameAt(new ObservedValue.Truncated(), new ObservedValue.Text("A")));
+                theSameAt(new ObservedValue.Truncated(STOPPED_AT), new ObservedValue.Text("A")));
     }
 
     /** The control: records read whole are one where they hold the same and two where not. */

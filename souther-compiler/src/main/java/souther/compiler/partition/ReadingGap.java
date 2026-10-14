@@ -1,11 +1,20 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.WrittenOutElements;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.observe.WorkFigure;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Why a reading of a number came to none.
@@ -48,18 +57,55 @@ public sealed interface ReadingGap {
      */
     RunSensitivity runSensitivity();
 
-    /** The observation of a value did not come back whole, and this is what it met. */
-    record Observation(Incompleteness.Code code) implements ReadingGap {
+    /**
+     * The figures of this compiler's that stopped the reading, as each stood where it was compared:
+     * empty exactly where {@link #runSensitivity} is {@link RunSensitivity#UNAFFECTED}.
+     *
+     * <p>Each arm answers, and none from a word: a reader told a wider run may change this is told
+     * which figure to widen, and what a reason cannot carry is not said.
+     */
+    List<Figure> figures();
+
+    /**
+     * The observation of a value did not come back whole, and this is what it met.
+     *
+     * <p>With every figure it was met at, which an observation a limit stopped carries from the
+     * walk that stopped it. Several where one code was met at several figures: what a reader is
+     * told once is the code ({@code ReadingReasons}), and the figures are what each would take to
+     * widen.
+     *
+     * @param figures in {@link Figure#inOrder}, and present exactly where the code is one a wider
+     *                run may change
+     */
+    record Observation(Incompleteness.Code code, List<Figure> figures) implements ReadingGap {
 
         public Observation {
-            if (code == null) {
+            if (code == null || figures == null) {
                 throw new IllegalArgumentException("an observation that stopped says what it met");
+            }
+            figures = Figure.inOrder(figures);
+            boolean decided = code.runSensitivity() == RunSensitivity.MAY_CHANGE;
+            if (decided == figures.isEmpty()) {
+                throw new IllegalArgumentException(decided
+                        ? code + " is decided by a figure, and says which"
+                        : code + " is decided by no figure, and " + figures + " are");
             }
         }
 
         @Override
         public RunSensitivity runSensitivity() {
             return code.runSensitivity();
+        }
+
+        /** This and {@code other}, which met the same code, as one: met at the figures of both. */
+        Observation with(Observation other) {
+            if (code != other.code) {
+                throw new IllegalArgumentException("two observations are one only where they met"
+                        + " one thing: " + code + " and " + other.code);
+            }
+            List<Figure> both = new ArrayList<>(figures);
+            both.addAll(other.figures);
+            return new Observation(code, both);
         }
     }
 
@@ -72,6 +118,11 @@ public sealed interface ReadingGap {
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
+        }
+
+        @Override
+        public List<Figure> figures() {
+            return List.of();
         }
     }
 
@@ -89,6 +140,11 @@ public sealed interface ReadingGap {
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
+        }
+
+        @Override
+        public List<Figure> figures() {
+            return List.of();
         }
     }
 
@@ -108,6 +164,11 @@ public sealed interface ReadingGap {
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
+        }
+
+        @Override
+        public List<Figure> figures() {
+            return List.of();
         }
     }
 
@@ -135,6 +196,11 @@ public sealed interface ReadingGap {
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
+        }
+
+        @Override
+        public List<Figure> figures() {
+            return List.of();
         }
     }
 
@@ -183,6 +249,19 @@ public sealed interface ReadingGap {
             };
         }
 
+        /** The figure each of the two a wider run may read past was declined at. Both are fixed
+         *  where they are declared, so the figure is the one there is. */
+        @Override
+        public List<Figure> figures() {
+            return switch (why) {
+                case MORE_READINGS_THAN_ARE_MADE ->
+                        List.of(CompositionBudget.READINGS_OF_ONE_CONDITION);
+                case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> List.of(
+                        WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(WrittenOutElements.MOST_WALKED));
+                case A_PART_NOT_READ, NO_VALUE_OF_THE_ROW -> List.of();
+            };
+        }
+
         /** Why a statement whose reading stopped at {@code unread} could not be read off a row, or
          *  that it is no value of one where nothing in it stopped. */
         public static ReachNotRead of(WhyUnread unread) {
@@ -205,9 +284,31 @@ public sealed interface ReadingGap {
 
     ReadingGap COULD_NOT_READ_ROW = new CouldNotReadRow();
 
-    /** The gap an observation's code is, for a reader holding one. */
-    static ReadingGap of(Incompleteness.Code code) {
-        return new Observation(code);
+    /** The gap what an observation met is, for a reader holding it: the code, at the figure it
+     *  stopped at where one did. */
+    static ReadingGap of(Incompleteness.Cause cause) {
+        return new Observation(cause.code(), cause.figure().map(List::of).orElseGet(List::of));
+    }
+
+    /**
+     * {@code met}, with the observations that met one code made one.
+     *
+     * <p>What a reader is told once is what an observation met, and two readings of one point
+     * stopped by one code at two figures are that code met at both. Everything else is handed on as
+     * it came, in the order it came.
+     */
+    static List<ReadingGap> eachObservationOnce(Collection<? extends ReadingGap> met) {
+        Map<Incompleteness.Code, Observation> byCode = new EnumMap<>(Incompleteness.Code.class);
+        List<ReadingGap> out = new ArrayList<>();
+        for (ReadingGap each : met) {
+            if (each instanceof Observation it) {
+                byCode.merge(it.code(), it, Observation::with);
+            } else {
+                out.add(each);
+            }
+        }
+        out.addAll(byCode.values());
+        return List.copyOf(out);
     }
 
     /**
@@ -220,7 +321,7 @@ public sealed interface ReadingGap {
      * and what stopped the reading of any part is what is said.
      */
     static ReadingGap ofAComparisonOf(ObservedValue value) {
-        Incompleteness.Code stopped = Limits.UNBOUNDED.stoppedBy(value);
+        Incompleteness.Cause stopped = Limits.UNBOUNDED.stoppedBy(value);
         return stopped == null ? null : of(stopped);
     }
 

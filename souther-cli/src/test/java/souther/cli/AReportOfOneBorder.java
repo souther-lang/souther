@@ -188,7 +188,7 @@ final class AReportOfOneBorder {
                                         new souther.compiler.observe.RowRef("take",
                                                 new souther.compiler.source.SourceId("0"),
                                                 new souther.compiler.observe.RowIdentity.Unnamed(1))),
-                                java.util.Optional.empty()))));
+                                java.util.Optional.empty(), java.util.Optional.empty()))));
     }
 
     /**

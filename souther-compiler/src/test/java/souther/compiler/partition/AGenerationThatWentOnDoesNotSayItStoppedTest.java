@@ -14,6 +14,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -121,7 +122,8 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         Axis second = subject.axes().get(1);
         Lookup<AxisId, Classification> row = Lookup.built(put -> {
             put.put(first.id(), new Classification.Unclassified(Incompleteness.atPosition(
-                    Incompleteness.Code.VALUE_TRUNCATED, first.id().behavior(),
+                    Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED,
+                            Limits.DEFAULT.nodesFigure()), first.id().behavior(),
                     first.id().term())));
             put.put(second.id(), Classification.in(second.classes().get(0).id()));
         });

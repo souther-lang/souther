@@ -14,6 +14,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Membership;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Bodies;
@@ -187,7 +188,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         Read read = read();
 
         assertEquals(Incompleteness.Code.VALUE_TRUNCATED,
-                why(at(read, giving(read, "plain", new ObservedValue.Truncated()), "request.plain")));
+                why(at(read, giving(read, "plain", new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure())), "request.plain")));
     }
 
     @Test
@@ -206,7 +207,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         Read read = read();
 
         assertEquals(Incompleteness.Code.VALUE_TRUNCATED,
-                why(at(read, giving(read, "cost", wrapping(read, new ObservedValue.Truncated())),
+                why(at(read, giving(read, "cost", wrapping(read, new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()))),
                         "request.cost")));
     }
 
@@ -225,7 +226,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         Read read = read();
 
         assertEquals(Incompleteness.Code.VALUE_TRUNCATED,
-                why(at(read, giving(read, "kind", new ObservedValue.Truncated()), "request.kind")));
+                why(at(read, giving(read, "kind", new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure())), "request.kind")));
         assertEquals(Incompleteness.Code.VALUE_UNREADABLE,
                 why(at(read, giving(read, "kind", new ObservedValue.Unknown("gone")),
                         "request.kind")));
@@ -286,7 +287,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
     @Test
     void anUnreadableValueLeavesOnlyItsOwnAxisUndecided() {
         Read read = read();
-        RowOutcome damaged = giving(read, "cost", new ObservedValue.Truncated());
+        RowOutcome damaged = giving(read, "cost", new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()));
 
         assertEquals(Classification.in("Domestic"), at(read, damaged, "request.kind"),
                 "the readable field still answers");
@@ -331,11 +332,17 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
      * the value either. An incompleteness is what is left once nothing has claimed it, so it cannot
      * be acted on before every class has answered.
      */
+    private static final Incompleteness.Cause A_LIMIT = Incompleteness.Cause.at(
+            Incompleteness.Code.VALUE_TRUNCATED, Limits.DEFAULT.nodesFigure());
+
+    private static final Incompleteness.Cause NOTHING_READ_IT =
+            Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE);
+
     @Test
     void aClassThatHoldsTheValueWinsOverOnesThatCouldNotReadIt() {
         assertEquals(Classification.in("c2"), answering(
-                new Membership.Incomplete(Incompleteness.Code.VALUE_TRUNCATED),
-                new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE),
+                new Membership.Incomplete(A_LIMIT),
+                new Membership.Incomplete(NOTHING_READ_IT),
                 Membership.MATCH));
     }
 
@@ -365,8 +372,8 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
     void twoClassesDisagreeingAboutWhyIsNotAnAnswerEither() {
         IllegalStateException thrown = assertThrows(IllegalStateException.class,
                 () -> answering(
-                        new Membership.Incomplete(Incompleteness.Code.VALUE_TRUNCATED),
-                        new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE)));
+                        new Membership.Incomplete(A_LIMIT),
+                        new Membership.Incomplete(NOTHING_READ_IT)));
         assertTrue(thrown.getMessage().contains("disagree about why"), thrown.getMessage());
     }
 }

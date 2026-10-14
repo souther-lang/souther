@@ -97,7 +97,7 @@ public final class Comparisons {
     }
 
     private static void refuseWhatIsNotThere(ObservedValue value, String which) {
-        Incompleteness.Code stopped = Limits.UNBOUNDED.stoppedBy(value);
+        Incompleteness.Cause stopped = Limits.UNBOUNDED.stoppedBy(value);
         if (stopped != null) {
             throw new IllegalArgumentException(which + " of two values being compared is not a"
                     + " value: " + stopped);

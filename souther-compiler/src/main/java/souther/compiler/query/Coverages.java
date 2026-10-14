@@ -27,6 +27,7 @@ import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.observe.Classification;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.partition.ObservedInputs;
@@ -1997,12 +1998,14 @@ final class Coverages {
      */
     private static EstablishmentGap.Observation stopped(StandingAtAPoint.Met.CouldNotTell why) {
         Set<Incompleteness.Code> codes = new LinkedHashSet<>();
+        List<Figure> figures = new ArrayList<>();
         for (souther.compiler.partition.ReadingGap each : why.why()) {
             if (each instanceof souther.compiler.partition.ReadingGap.Observation it) {
                 codes.add(it.code());
+                figures.addAll(it.figures());
             }
         }
-        return EstablishmentGap.Observation.of(codes);
+        return EstablishmentGap.Observation.of(codes, figures);
     }
 
     /** No population written some of, for an answer that met none. One value, since nothing

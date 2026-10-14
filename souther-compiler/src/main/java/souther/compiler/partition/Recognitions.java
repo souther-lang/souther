@@ -154,7 +154,7 @@ public final class Recognitions {
         return switch (count.orders().read(value)) {
             case NumericTerm.Reading.Number number -> Membership.of(
                     count.is().holds(number.value(), count.carrier()));
-            case NumericTerm.Reading.Missing missing -> new Membership.Incomplete(missing.code());
+            case NumericTerm.Reading.Missing missing -> new Membership.Incomplete(missing.cause());
             case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
             case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
                     new Membership.NotWorkedOut(why);

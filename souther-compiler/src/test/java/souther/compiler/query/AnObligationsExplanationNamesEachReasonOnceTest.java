@@ -15,6 +15,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.Target;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderQuantity;
@@ -50,9 +51,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class AnObligationsExplanationNamesEachReasonOnceTest {
 
-    private static final Incompleteness.Code A_LIMIT = Incompleteness.Code.VALUE_TRUNCATED;
-    private static final Incompleteness.Code NOTHING_COULD_READ_IT =
-            Incompleteness.Code.VALUE_UNREADABLE;
+    private static final Incompleteness.Cause A_LIMIT = Incompleteness.Cause.at(
+            Incompleteness.Code.VALUE_TRUNCATED, Limits.DEFAULT.nodesFigure());
+    private static final Incompleteness.Cause NOTHING_COULD_READ_IT =
+            Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE);
 
     /**
      * One reason met at any number of readings is said once.
@@ -179,7 +181,7 @@ class AnObligationsExplanationNamesEachReasonOnceTest {
     void aReasonSaidWhereItHappenedIsNotSaidAgainHere() {
         ReadingReasons met = explanationOf(List.of(Weakening.ObservationIncomplete.of(
                 new Incompleteness(Incompleteness.Code.OBSERVATION_ABSENT,
-                        new Target.OfModule("example"), Optional.empty()))));
+                        new Target.OfModule("example"), Optional.empty(), Optional.empty()))));
 
         assertEquals(List.of(), met.eachKindOnce().written(),
                 "a row that never ran bears on every line, and is said where the row stopped");

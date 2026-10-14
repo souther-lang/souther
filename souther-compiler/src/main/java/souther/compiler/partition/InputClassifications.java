@@ -97,7 +97,8 @@ public final class InputClassifications {
         // rather than one folded into the word for a walk that could not be made.
         return switch (where.occurrencesAt(inputs, axis.path(), views)) {
             case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
-                    Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
+                    Classification.unreadable(
+                            Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE),
                             axis.id().behavior(), axis.id().term());
             case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) ->
                     among(axis, values);
@@ -166,10 +167,10 @@ public final class InputClassifications {
             throw new IllegalArgumentException(
                     "one answer per class: " + ids.size() + " classes, " + answers.size());
         }
-        Incompleteness.Code incomplete = null;
+        Incompleteness.Cause incomplete = null;
         boolean disagreed = false;
         for (int i = 0; i < answers.size(); i++) {
-            Incompleteness.Code code;
+            Incompleteness.Cause code;
             switch (answers.get(i)) {
                 case Membership.Match _ -> {
                     // A class that holds the value settles it, whatever the ones beside it could not
@@ -177,23 +178,25 @@ public final class InputClassifications {
                     // something else could not read it is what is left when there is no answer.
                     return Classification.in(ids.get(i));
                 }
-                case Membership.Incomplete why -> code = why.code();
+                case Membership.Incomplete why -> code = why.cause();
                 case Membership.NoMatch _ -> code = null;
                 // A count's own sum meeting a number the exact arithmetic could not hold is a
                 // different gap from an observation's, but it is the same fact for this measure:
                 // the class could not be settled. Read through the two codes built for exactly
                 // this, which of the two travelling with UnheldNumber.
-                case Membership.NotWorkedOut why -> code = switch (why.why()) {
-                    case NO_REPRESENTATION_EXISTS -> Incompleteness.Code.VALUE_NOT_WORKED_OUT;
-                    case MORE_ROOM_COULD_ANSWER -> Incompleteness.Code.VALUE_ROOM_EXCEEDED;
-                };
+                case Membership.NotWorkedOut why -> code = Incompleteness.Cause.of(
+                        switch (why.why()) {
+                            case NO_REPRESENTATION_EXISTS ->
+                                    Incompleteness.Code.VALUE_NOT_WORKED_OUT;
+                            case MORE_ROOM_COULD_ANSWER -> Incompleteness.Code.VALUE_ROOM_EXCEEDED;
+                        });
             }
             if (code == null) {
                 continue;
             }
             if (incomplete == null) {
                 incomplete = code;
-            } else if (incomplete != code) {
+            } else if (!incomplete.equals(code)) {
                 disagreed = true;
             }
         }

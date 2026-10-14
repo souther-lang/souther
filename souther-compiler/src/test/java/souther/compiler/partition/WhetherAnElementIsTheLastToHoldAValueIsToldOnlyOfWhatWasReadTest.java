@@ -11,6 +11,7 @@ import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -54,7 +55,8 @@ class WhetherAnElementIsTheLastToHoldAValueIsToldOnlyOfWhatWasReadTest {
 
     private static final ObservedValue B = new ObservedValue.Text("B");
 
-    private static final ObservedValue TRUNCATED = new ObservedValue.Truncated();
+    private static final ObservedValue TRUNCATED =
+            new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure());
 
     private static final ObservedValue UNREADABLE = new ObservedValue.Unknown("no");
 
@@ -130,7 +132,10 @@ class WhetherAnElementIsTheLastToHoldAValueIsToldOnlyOfWhatWasReadTest {
     }
 
     private static BorderQuantity.Lastness couldNotTell(Incompleteness.Code why) {
-        return new BorderQuantity.Lastness.CouldNotTell(ReadingGap.of(why));
+        return new BorderQuantity.Lastness.CouldNotTell(ReadingGap.of(
+                why == Incompleteness.Code.VALUE_TRUNCATED
+                        ? Incompleteness.Cause.at(why, Limits.DEFAULT.nodesFigure())
+                        : Incompleteness.Cause.of(why)));
     }
 
     private static final BorderQuantity.Lastness LAST = new BorderQuantity.Lastness.Last();

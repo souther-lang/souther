@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
@@ -116,6 +117,7 @@ public sealed interface WritabilityKnowledge {
          */
         public static Prevented of(Collection<EstablishmentGap> gaps) {
             Set<Incompleteness.Code> observed = EnumSet.noneOf(Incompleteness.Code.class);
+            List<Figure> observedAt = new ArrayList<>();
             Set<CompositionBudget> budgets = EnumSet.noneOf(CompositionBudget.class);
             // Beside the figures and not among them. Two composings that came to nothing for two
             // kinds of reason are one composing gap, which is what a reader of a gap is told; what
@@ -125,7 +127,10 @@ public sealed interface WritabilityKnowledge {
             Set<CompositionCapacity> capacities = new HashSet<>();
             for (EstablishmentGap each : gaps) {
                 switch (each) {
-                    case EstablishmentGap.Observation it -> observed.addAll(it.causes().written());
+                    case EstablishmentGap.Observation it -> {
+                        observed.addAll(it.causes().written());
+                        observedAt.addAll(it.stoppedAt());
+                    }
                     case EstablishmentGap.Composition it -> {
                         budgets.addAll(it.budgets().written());
                         repertoires.addAll(it.repertoires().written());
@@ -135,7 +140,7 @@ public sealed interface WritabilityKnowledge {
             }
             List<EstablishmentGap> kinds = new ArrayList<>();
             if (!observed.isEmpty()) {
-                kinds.add(EstablishmentGap.Observation.of(observed));
+                kinds.add(EstablishmentGap.Observation.of(observed, observedAt));
             }
             if (!budgets.isEmpty() || !repertoires.isEmpty() || !capacities.isEmpty()) {
                 kinds.add(EstablishmentGap.Composition.of(budgets, repertoires, capacities));

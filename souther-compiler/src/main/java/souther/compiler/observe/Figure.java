@@ -1,5 +1,12 @@
 package souther.compiler.observe;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 /**
  * A figure this compiler held a piece of its work to, as it stood where the work was compared
  * against it and stopped.
@@ -23,4 +30,19 @@ public interface Figure {
 
     /** The figure itself as it stood on the run that reached it, in the words of what it counts. */
     String most();
+
+    /**
+     * {@code figures}, each once, in the one order a holder of several keeps them in: by name, and
+     * by what it stood at where one figure was reached at two numbers.
+     *
+     * <p>Here and not where they are collected, because they arrive in whatever order a walk met
+     * them, and two holders that each put them in an order of their own would say the same figures
+     * in two orders.
+     */
+    static List<Figure> inOrder(Collection<? extends Figure> figures) {
+        Set<Figure> once = new HashSet<>(figures);
+        List<Figure> out = new ArrayList<>(once);
+        out.sort(Comparator.comparing(Figure::name).thenComparing(Figure::most));
+        return List.copyOf(out);
+    }
 }

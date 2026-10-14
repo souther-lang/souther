@@ -144,20 +144,20 @@ public final class RowStatements {
                 }
                 List<ObservedValue> arguments = new ArrayList<>();
                 for (Written argument : entry.arguments()) {
-                    Incompleteness.Code stopped = Limits.DEFAULT.stoppedBy(argument.value());
+                    Incompleteness.Cause stopped = Limits.DEFAULT.stoppedBy(argument.value());
                     if (stopped != null) {
                         return unavailable(dependency, argument.at(), stopped);
                     }
                     arguments.add(argument.value());
                 }
-                Incompleteness.Code stopped = Limits.DEFAULT.stoppedBy(entry.answer().value());
+                Incompleteness.Cause stopped = Limits.DEFAULT.stoppedBy(entry.answer().value());
                 if (stopped != null) {
                     return unavailable(dependency, entry.answer().at(), stopped);
                 }
                 carried.add(new StoodIn.Entry(arguments, entry.answer().value(), entry.at()));
             }
             if (otherwise instanceof StoodIn.Otherwise.Answer(ObservedValue value, SourcePos where)) {
-                Incompleteness.Code stopped = Limits.DEFAULT.stoppedBy(value);
+                Incompleteness.Cause stopped = Limits.DEFAULT.stoppedBy(value);
                 if (stopped != null) {
                     return unavailable(dependency, where, stopped);
                 }
@@ -165,10 +165,12 @@ public final class RowStatements {
             return new Available(StoodIn.of(dependency, at, carried, otherwise));
         }
 
+        /** What a statement of a row says is the code alone: what it hands over is a row to run
+         *  again, and nothing it says is a measure a figure left open. */
         private static StandInRead unavailable(ValueName.Behavior dependency, SourcePos at,
-                                               Incompleteness.Code stopped) {
+                                               Incompleteness.Cause stopped) {
             return new Unavailable(dependency, at,
-                    new RowStatement.StandInUnavailable.Why.AValueOfIt(stopped));
+                    new RowStatement.StandInUnavailable.Why.AValueOfIt(stopped.code()));
         }
     }
 
@@ -200,15 +202,16 @@ public final class RowStatements {
             }
         }
         for (int i = 0; i < inputs.size(); i++) {
-            Incompleteness.Code stopped = Limits.DEFAULT.stoppedBy(inputs.get(i));
+            Incompleteness.Cause stopped = Limits.DEFAULT.stoppedBy(inputs.get(i));
             if (stopped != null) {
-                return new RowStatement.Incomplete(new RowStatement.Side.AnInput(i), stopped);
+                return new RowStatement.Incomplete(new RowStatement.Side.AnInput(i),
+                        stopped.code());
             }
         }
         // What the row states of the answer is read whole, so that a comparison is made against what
         // was written; whether it may be carried is asked of the same limits an input is held to, so
         // that one row's halves are held to one size.
-        Incompleteness.Code stopped = switch (expects) {
+        Incompleteness.Cause stopped = switch (expects) {
             case Expectation.TheValue(Asserted value) -> Limits.DEFAULT.stoppedBy(value);
             // A case is a name. Nothing about it can be too large or fail to be read.
             case Expectation.TheCase _ -> null;
@@ -217,7 +220,8 @@ public final class RowStatements {
             case Expectation.Owed _ -> null;
         };
         return stopped != null
-                ? new RowStatement.Incomplete(new RowStatement.Side.TheExpectation(), stopped)
+                ? new RowStatement.Incomplete(new RowStatement.Side.TheExpectation(),
+                        stopped.code())
                 : RowStatement.Stated.of(stood, inputs, expects);
     }
 }

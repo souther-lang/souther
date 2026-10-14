@@ -627,7 +627,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "the order the figures are said in, where a search met more than one"),
             Map.entry("souther.compiler.query.EstablishmentGap$Composition#runSensitivity()"
                             + "Lsouther/compiler/observe/RunSensitivity;",
-                    "asks each figure of a gap whether a wider run goes past it")));
+                    "asks each figure of a gap whether a wider run goes past it"),
+            // The figure a reading declined at, said where the reading says a wider run may read
+            // past it: fixed where it is declared, so the gap names it rather than carrying it.
+            Map.entry("souther.compiler.partition.ReadingGap$ReachNotRead#figures()"
+                            + "Ljava/util/List;",
+                    "names the figure a part was declined at, for a reader told a wider run may"
+                            + " read past it")));
 
     /**
      * The places that read a figure are the places that say they do.

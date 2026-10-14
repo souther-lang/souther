@@ -9,7 +9,9 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.ValueName;
 
@@ -37,6 +39,9 @@ import static souther.compiler.partition.QuantityFixtures.stands;
  * times.
  */
 class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
+
+    /** What the values a limit stopped here say they were stopped at. */
+    private static final Figure STOPPED_AT = Limits.DEFAULT.nodesFigure();
 
     private static final TermPath UNDER = TermPath.of("lines").element().then("amount");
 
@@ -74,9 +79,10 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
     @Test
     void aRunHoldingAValueALimitStoppedIsUnreadableAndSaysSo() {
         assertEquals(BorderQuantity.Stands.couldNotTell(
-                        ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)),
+                        ReadingGap.of(Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED,
+                                STOPPED_AT))),
                 stands(form(), AT_A_HUNDRED,
-                        run(new ObservedValue.Integer(40), new ObservedValue.Truncated())),
+                        run(new ObservedValue.Integer(40), new ObservedValue.Truncated(STOPPED_AT))),
                 "a total over a value the limits stopped is not a total that missed the line");
     }
 
@@ -84,7 +90,8 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
     @Test
     void aRunHoldingAValueNothingCouldDecodeSaysThatInstead() {
         assertEquals(BorderQuantity.Stands.couldNotTell(
-                        ReadingGap.of(Incompleteness.Code.VALUE_UNREADABLE)),
+                        ReadingGap.of(Incompleteness.Cause.of(
+                                Incompleteness.Code.VALUE_UNREADABLE))),
                 stands(form(), AT_A_HUNDRED,
                         run(new ObservedValue.Integer(40), new ObservedValue.Unknown("no"))),
                 "what a limit shortened and what nothing could read are two things to tell a"
@@ -132,13 +139,15 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
                     @Override
                     public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
                         return WalkResult.reached(UNDER.equals(path)
-                                ? List.of(new ObservedValue.Truncated())
+                                ? List.of(new ObservedValue.Truncated(STOPPED_AT))
                                 : List.of(new ObservedValue.Unknown("no")));
                     }
                 });
 
-        assertEquals(Set.of(ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED),
-                        ReadingGap.of(Incompleteness.Code.VALUE_UNREADABLE)),
+        assertEquals(Set.of(ReadingGap.of(Incompleteness.Cause.at(
+                                Incompleteness.Code.VALUE_TRUNCATED, STOPPED_AT)),
+                        ReadingGap.of(Incompleteness.Cause.of(
+                                Incompleteness.Code.VALUE_UNREADABLE))),
                 assertInstanceOf(BorderQuantity.Stands.CouldNotTell.class, met).why(),
                 "a reading stopped in two ways is stopped in both of them");
     }

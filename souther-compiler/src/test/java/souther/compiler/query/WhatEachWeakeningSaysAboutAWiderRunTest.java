@@ -19,6 +19,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.RowRef;
@@ -156,13 +157,15 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
     @Test
     void anArmThatHoldsWhatStoppedItSaysWhatThatSays() {
         for (RunSensitivity each : RunSensitivity.values()) {
-            Incompleteness.Code code = each == RunSensitivity.MAY_CHANGE
-                    ? Incompleteness.Code.VALUE_TRUNCATED : Incompleteness.Code.VALUE_UNREADABLE;
+            Incompleteness.Cause cause = each == RunSensitivity.MAY_CHANGE
+                    ? Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED,
+                            Limits.DEFAULT.nodesFigure())
+                    : Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE);
 
-            assertEquals(each, Weakening.ObservationIncomplete.of(Incompleteness.of(
-                    code, Incompleteness.Scope.BEHAVIOR, "b")).runSensitivity());
+            assertEquals(each, Weakening.ObservationIncomplete.of(Incompleteness.atPosition(
+                    cause, "b", "x")).runSensitivity());
             assertEquals(each, new Weakening.BorderValueUnreadable(
-                    border(), ReadingGap.of(code)).runSensitivity());
+                    border(), ReadingGap.of(cause)).runSensitivity());
             assertEquals(each, new Weakening.ModelReadingIncomplete(
                     new ClosureGap.PositionNotReachedInto("b", new PositionId(TermPath.of("x")),
                             each == RunSensitivity.MAY_CHANGE
@@ -253,10 +256,10 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
      */
     private static List<Weakening> everyWeakening() {
         List<Weakening> out = new ArrayList<>();
-        out.add(Weakening.ObservationIncomplete.of(Incompleteness.of(
-                Incompleteness.Code.VALUE_TRUNCATED, Incompleteness.Scope.BEHAVIOR, "b")));
-        out.add(new Weakening.BorderValueUnreadable(border(),
-                ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)));
+        Incompleteness.Cause aLimit = Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED,
+                Limits.DEFAULT.nodesFigure());
+        out.add(Weakening.ObservationIncomplete.of(Incompleteness.atPosition(aLimit, "b", "x")));
+        out.add(new Weakening.BorderValueUnreadable(border(), ReadingGap.of(aLimit)));
         out.add(new Weakening.ModelReadingIncomplete(new ClosureGap.RulesNotReached(
                 "b", new PositionId(TermPath.of("x")))));
         out.add(new Weakening.OutputCasesUnreadable("b"));

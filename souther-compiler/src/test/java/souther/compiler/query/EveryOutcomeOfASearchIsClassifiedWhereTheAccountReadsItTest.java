@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.Generator;
@@ -162,8 +163,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
         assertEquals(forward, backward, "the searches of one point are a set of facts about it");
         WritabilityKnowledge.Prevented held = assertInstanceOf(
                 WritabilityKnowledge.Prevented.class, forward);
-        assertEquals(List.of(EstablishmentGap.Observation.of(
-                        EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)),
+        assertEquals(List.of(EstablishmentGap.Observation.of(List.of(A_LIMIT)),
                         EstablishmentGap.Composition.of(EnumSet.of(
                                 CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS,
                                 CompositionBudget.STEPS_A_SEARCH_MAY_TAKE))),
@@ -181,11 +181,10 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
     @Test
     void howTheGapsWereSplitOnTheWayIsNotSomethingAnAccountHolds() {
         WritabilityKnowledge apart = WritabilityKnowledge.Prevented.of(Set.of(
-                EstablishmentGap.Observation.of(EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)),
-                EstablishmentGap.Observation.of(EnumSet.of(Incompleteness.Code.VALUE_UNREADABLE))));
+                EstablishmentGap.Observation.of(List.of(A_LIMIT)),
+                EstablishmentGap.Observation.of(List.of(NOTHING_READ_IT))));
         WritabilityKnowledge together = WritabilityKnowledge.Prevented.by(
-                EstablishmentGap.Observation.of(EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED,
-                        Incompleteness.Code.VALUE_UNREADABLE)));
+                EstablishmentGap.Observation.of(List.of(A_LIMIT, NOTHING_READ_IT)));
 
         assertEquals(together, apart,
                 "two observations naming one cause each are one observation naming both");
@@ -223,8 +222,16 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
         return new ItemAssessment.Attempt.Unverified(
                 new Generator.GeneratedRow(new Generator.Purpose.ForAPoint("p.x = 11"), List.of()),
                 WAY, NOTHING_LEFT_OUT,
-                EstablishmentGap.Observation.of(EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)));
+                EstablishmentGap.Observation.of(List.of(A_LIMIT)));
     }
+
+    /** A value a limit kept short of whole, at the figure it stopped at. */
+    private static final Incompleteness.Cause A_LIMIT = Incompleteness.Cause.at(
+            Incompleteness.Code.VALUE_TRUNCATED, Limits.DEFAULT.nodesFigure());
+
+    /** A value nothing could read back, which no figure decides. */
+    private static final Incompleteness.Cause NOTHING_READ_IT =
+            Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE);
 
     private static ItemAssessment.Attempt stopped() {
         return stoppedBy(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS);

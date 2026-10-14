@@ -4316,7 +4316,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     static String atTheBorder(ReadingGap why) {
         return switch (why) {
-            case ReadingGap.Observation(Incompleteness.Code code) -> whatStopped(code);
+            case ReadingGap.Observation(Incompleteness.Code code, List<Figure> _) ->
+                    whatStopped(code);
             // Nothing was observed here, so nothing about an observation is said. What a reader is
             // owed is that no value arrived at all, which no budget would have changed.
             case ReadingGap.NoValue _ -> "the walk reached no value there to read";
@@ -4358,7 +4359,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         List<String> out = new ArrayList<>();
         for (EstablishmentGap each : stopped.by().written()) {
             out.add(switch (each) {
-                case EstablishmentGap.Observation(CanonicalSelection<Incompleteness.Code> causes) ->
+                case EstablishmentGap.Observation(CanonicalSelection<Incompleteness.Code> causes,
+                                                  List<Figure> _) ->
                         "a row was built for it, and " + causes.written().stream()
                                 .map(AdequacyReport::whatStopped)
                                 .collect(Collectors.joining(", and "));

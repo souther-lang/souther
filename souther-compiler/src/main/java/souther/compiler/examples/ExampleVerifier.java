@@ -1,8 +1,10 @@
 package souther.compiler.examples;
 
 import souther.compiler.execute.EvaluationPolicy;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Observations;
 import souther.compiler.observe.WaitShown;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.check.AtomSpace;
@@ -216,7 +218,7 @@ public final class ExampleVerifier {
         for (RowOutcome outcome : rows) {
             if (outcome.disposition() == Disposition.INCOMPLETE) {
                 incompleteness.add(
-                        Incompleteness.ofRow(leftUndecidedBy(outcome.failurePhase()), outcome));
+                        Incompleteness.ofRow(v.leftUndecidedBy(outcome.failurePhase()), outcome));
             }
         }
         return new Observations(failures, rows, incompleteness);
@@ -713,22 +715,37 @@ public final class ExampleVerifier {
      * two they were holding. The stack running out is not among them — nothing here compared
      * anything against it — so it stays with the rest.
      *
+     * <p>Each of the three says which it was, at the number this run held the row to: the steps and
+     * the depth of {@link #policy}, which every row here is begun under, and the wait of
+     * {@link #deadline}, which is what a row that stopped answering was given up on against. One
+     * word for the three is what a measure lost; the figure is what a reader would widen.
+     *
      * @throws IllegalStateException for {@link FailurePhase#NONE}, which is a row that ended
      *         undecided with nothing having gone wrong. This is reached from a row of that
      *         disposition alone, so the state is one nothing produces; admitted into an arm beside
      *         the real causes, it was a word for it all the same
      */
-    private static Incompleteness.Code leftUndecidedBy(FailurePhase phase) {
+    private Incompleteness.Cause leftUndecidedBy(FailurePhase phase) {
         return switch (phase) {
-            case ANSWERER_ESTABLISHMENT -> Incompleteness.Code.ANSWERER_NOT_ESTABLISHED;
-            case IMPLEMENTATION_NOT_MADE -> Incompleteness.Code.IMPLEMENTATION_NOT_MADE;
-            case STEP_LIMIT, DEPTH_LIMIT, TIMEOUT ->
-                    Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED;
+            case ANSWERER_ESTABLISHMENT ->
+                    Incompleteness.Cause.of(Incompleteness.Code.ANSWERER_NOT_ESTABLISHED);
+            case IMPLEMENTATION_NOT_MADE ->
+                    Incompleteness.Cause.of(Incompleteness.Code.IMPLEMENTATION_NOT_MADE);
+            case STEP_LIMIT -> stoppedAt(WorkFigure.EVALUATION_STEPS.at(policy.stepLimit()));
+            case DEPTH_LIMIT ->
+                    stoppedAt(WorkFigure.RECURSION_DEPTH.at(policy.recursionDepthLimit()));
+            case TIMEOUT -> stoppedAt(WorkFigure.COMPILER_TIME.at(within(deadline)));
             case INPUT_FIXTURE, EXPECTED_FIXTURE, ENSURES, FAKE_RESOLUTION, INVOCATION, COMPARISON,
-                 STACK_EXHAUSTED, VALUE_CROSSING -> Incompleteness.Code.ROW_UNDECIDED;
+                 STACK_EXHAUSTED, VALUE_CROSSING ->
+                    Incompleteness.Cause.of(Incompleteness.Code.ROW_UNDECIDED);
             case NONE -> throw new IllegalStateException(
                     "a row that ended undecided says what stopped it, and nothing went wrong here");
         };
+    }
+
+    /** A row this run's limits stopped, at {@code figure}. */
+    private static Incompleteness.Cause stoppedAt(Figure figure) {
+        return Incompleteness.Cause.at(Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED, figure);
     }
 
     private final souther.compiler.check.Prepared.ForExamples module;

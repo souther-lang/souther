@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.CompositionBudget;
@@ -10,7 +11,9 @@ import souther.compiler.publish.PublicationOrders;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * What of this compiler's left the point short of established, where a row can be written at it.
@@ -49,24 +52,85 @@ import java.util.List;
 public sealed interface EstablishmentGap {
 
     /**
+     * Whether measuring again, allowing more, could close the gap. Every part of it has to say so,
+     * and each part is asked rather than answered for.
+     */
+    RunSensitivity runSensitivity();
+
+    /**
+     * The figures of this compiler's a wider run would widen to close the gap, as each stood where
+     * it was compared: empty exactly where {@link #runSensitivity} is
+     * {@link RunSensitivity#UNAFFECTED}.
+     *
+     * <p>A gap something beside a figure holds open is not closed by widening the figure, so a
+     * reader of one is told no figure to widen even where a figure was reached on the way.
+     */
+    List<Figure> figures();
+
+    /**
      * An observation of the value did not come back whole, so where it stands could not be read.
      *
      * <p>The value was built and the module's own decoders took it. What did not happen is the
      * reading back, and {@link Incompleteness.Code} is what says whether a limit shortened the
      * observation or nothing could be made of the value at all.
+     *
+     * @param causes    what the observations met, in the order a document says them
+     * @param stoppedAt every figure a limit stopped one of them at, in {@link Figure#inOrder};
+     *                  present exactly where one of the codes is one a figure decides
      */
-    record Observation(CanonicalSelection<Incompleteness.Code> causes) implements EstablishmentGap {
+    record Observation(CanonicalSelection<Incompleteness.Code> causes, List<Figure> stoppedAt)
+            implements EstablishmentGap {
 
         public Observation {
-            if (causes == null || causes.isEmpty()) {
+            if (causes == null || causes.isEmpty() || stoppedAt == null) {
                 throw new IllegalArgumentException(
                         "an observation that stopped something says what stopped it");
             }
+            stoppedAt = Figure.inOrder(stoppedAt);
+            boolean decided = causes.written().stream()
+                    .anyMatch(code -> code.runSensitivity() == RunSensitivity.MAY_CHANGE);
+            if (decided == stoppedAt.isEmpty()) {
+                throw new IllegalArgumentException(decided
+                        ? causes.written() + " hold a code a figure decides, and say which"
+                        : causes.written() + " hold no code a figure decides, and " + stoppedAt
+                                + " are figures");
+            }
         }
 
-        /** The gap the codes an observation met are, in the order a document says them. */
-        public static Observation of(Collection<Incompleteness.Code> causes) {
-            return new Observation(PublicationOrders.OBSERVATION_CODES.keep(causes));
+        /** The gap the codes an observation met are, in the order a document says them, with the
+         *  figures the ones a limit stopped were stopped at. */
+        public static Observation of(Collection<Incompleteness.Code> causes,
+                                     Collection<? extends Figure> stoppedAt) {
+            return new Observation(PublicationOrders.OBSERVATION_CODES.keep(causes),
+                    List.copyOf(stoppedAt));
+        }
+
+        /** The gap what the observations met is, each code with the figure it stopped at. */
+        public static Observation of(Collection<Incompleteness.Cause> causes) {
+            Set<Incompleteness.Code> codes = EnumSet.noneOf(Incompleteness.Code.class);
+            List<Figure> figures = new ArrayList<>();
+            for (Incompleteness.Cause each : causes) {
+                codes.add(each.code());
+                each.figure().ifPresent(figures::add);
+            }
+            return of(codes, figures);
+        }
+
+        /**
+         * A value a limit shortened is one a run allowed more keeps, and one nothing could read
+         * back is not; it takes all of the codes, since a showing stopped by both is stopped again
+         * after the limit is raised.
+         */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return causes.written().stream()
+                    .allMatch(code -> code.runSensitivity() == RunSensitivity.MAY_CHANGE)
+                    ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
+        }
+
+        @Override
+        public List<Figure> figures() {
+            return runSensitivity() == RunSensitivity.MAY_CHANGE ? stoppedAt : List.of();
         }
     }
 
@@ -150,6 +214,7 @@ public sealed interface EstablishmentGap {
          * compiler writes some of, or a number it could not hold, is not: raising a figure reaches
          * neither, and a gap is closed by nothing short of all of it.
          */
+        @Override
         public RunSensitivity runSensitivity() {
             List<RunSensitivity> parts = new ArrayList<>();
             for (CompositionBudget each : budgets.written()) {
@@ -163,6 +228,14 @@ public sealed interface EstablishmentGap {
             }
             return parts.contains(RunSensitivity.UNAFFECTED)
                     ? RunSensitivity.UNAFFECTED : RunSensitivity.MAY_CHANGE;
+        }
+
+        /** The budgets the search met, each a figure fixed where it is declared, wherever they are
+         *  all that held the point open. */
+        @Override
+        public List<Figure> figures() {
+            return runSensitivity() == RunSensitivity.MAY_CHANGE
+                    ? List.copyOf(budgets.written()) : List.of();
         }
 
         /** The gap the budgets a search met are, where it met nothing else of this compiler's. */

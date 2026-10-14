@@ -752,8 +752,24 @@ public sealed interface NumericTerm
          * never reaches this type: given a code instead, the nearest one is borrowed, and a reader
          * downstream that words a code as what an observation did then says an observation did
          * something that never happened.
+         *
+         * <p>With the figure it stopped at where a limit stopped it, which only the observation
+         * knows and a reader that says a limit stopped it names.
          */
-        record Missing(Incompleteness.Code code) implements Reading {}
+        record Missing(Incompleteness.Cause cause) implements Reading {
+
+            public Missing {
+                if (cause == null) {
+                    throw new IllegalArgumentException("an observation that did not come back"
+                            + " whole says what it met");
+                }
+            }
+
+            /** What the observation met, as the word it writes for it. */
+            public Incompleteness.Code code() {
+                return cause.code();
+            }
+        }
 
         /** The value was read and this term is not a number of it. An answer about the value and not
          * about the observation: a {@code Text} where a number was expected is a class nothing holds,
