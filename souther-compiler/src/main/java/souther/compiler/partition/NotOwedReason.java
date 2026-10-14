@@ -36,8 +36,8 @@ public enum NotOwedReason {
      * <p>The conclusion and not what proved it. A type with few values, a rule on the type, a rule on
      * a container's size and how many of an element's values meet a statement each prove it, two of
      * them can prove one point alike, and what a reader does about the point is the same whichever
-     * did. The point is excluded, which is the word the specification uses for a case no value can
-     * stand at.
+     * did. The point is excluded, the word the specification uses for what is counted out of what
+     * the rows are held to.
      */
     NO_VALUE_CAN_STAND_THERE,
 

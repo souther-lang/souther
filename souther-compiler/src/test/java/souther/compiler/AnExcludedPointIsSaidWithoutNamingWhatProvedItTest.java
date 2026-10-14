@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -66,7 +65,8 @@ class AnExcludedPointIsSaidWithoutNamingWhatProvedItTest {
             assertTrue(page.lines().anyMatch(line -> line.contains("excluded — no value can stand"
                             + " there")),
                     () -> "the points past the end are excluded: " + page);
-            assertFalse(page.contains("the rules leave no value"),
+            assertTrue(page.lines().filter(line -> line.contains("excluded"))
+                            .noneMatch(line -> line.contains("rule")),
                     () -> "what showed it is not named: " + page);
         }
     }
@@ -77,7 +77,8 @@ class AnExcludedPointIsSaidWithoutNamingWhatProvedItTest {
 
         assertTrue(block.contains("no value can go that way, so no row goes this way"),
                 () -> "the way past the guard is one no row goes: " + block);
-        assertFalse(block.contains("the rules leave"),
+        assertTrue(block.lines().filter(line -> line.contains("no row goes this way"))
+                        .noneMatch(line -> line.contains("rule")),
                 () -> "what showed it is not named: " + block);
     }
 

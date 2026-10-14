@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.Generator;
 
 /**
@@ -35,7 +36,7 @@ import souther.compiler.partition.Generator;
  *                    each of them comes back with says only what happened and not what was left out
  */
 public record RuleSettlement(RuleRequirement requirement, RuleSearch search,
-                             souther.compiler.partition.CompositionAccount account) {
+                             CompositionAccount account) {
 
     public RuleSettlement {
         if (requirement == null) {
@@ -83,19 +84,19 @@ public record RuleSettlement(RuleRequirement requirement, RuleSearch search,
     /** A rule the readings settled, which nothing was composed for. */
     public static RuleSettlement read(RuleRequirement.Excluded requirement) {
         return new RuleSettlement(requirement, new RuleSearch.NotMade(),
-                souther.compiler.partition.CompositionAccount.NOTHING);
+                CompositionAccount.NOTHING);
     }
 
     /** A search that had a candidate to try the rule with, whatever it then settled. */
     public static RuleSettlement of(RuleRequirement requirement,
-                                    souther.compiler.partition.CompositionAccount account) {
+                                    CompositionAccount account) {
         return new RuleSettlement(requirement, new RuleSearch.Composed(), account);
     }
 
     /** A search whose composing produced no candidate, in the words the composing came back with. */
     public static RuleSettlement nothingToTryWith(
             Generator.UnresolvedCombination why,
-            souther.compiler.partition.CompositionAccount account) {
+            CompositionAccount account) {
         if (why == null) {
             throw new IllegalArgumentException("a composing that came to nothing says what of");
         }
@@ -113,7 +114,7 @@ public record RuleSettlement(RuleRequirement requirement, RuleSearch search,
      */
     public static RuleSettlement provedNothingTakesIt(RuleSearch.CameToNothing proofs) {
         return new RuleSettlement(new RuleRequirement.Excluded.NoValueCanTakeIt(), proofs,
-                souther.compiler.partition.CompositionAccount.NOTHING);
+                CompositionAccount.NOTHING);
     }
 
     /**

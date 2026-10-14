@@ -4064,7 +4064,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
-     * What a rule the composings proved the rules leave no value for is said as.
+     * What a rule the composings proved no value takes is said as.
      *
      * <p>A clause per word and never one per way. How many ways came back with a word is how many
      * ways of standing the dependencies in there were, which is no part of what the rule says; what

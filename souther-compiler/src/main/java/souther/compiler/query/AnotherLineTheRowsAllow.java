@@ -690,11 +690,11 @@ public sealed interface AnotherLineTheRowsAllow {
             // nothing to be told from, which is the same fact the reasons above are.
             return new NoSuchQuestion(Reason.THE_LINE_IS_ON_ONE_POSITION);
         }
-        // And a side to refuse a row on. Where the rules leave no value on the side the border
-        // refuses, nothing a row is written at could rule a line of the family out, and that is a
-        // proof read off the rules rather than anything the rows or a search came to — so it is
-        // asked before either of them, and whether the points are met is beside the point.
-        if (theRulesRefuseTheFarSide(border)) {
+        // And a side to refuse a row on. Where no value stands on the side the border refuses,
+        // nothing a row is written at could rule a line of the family out, and that is a proof read
+        // off the model rather than anything the rows or a search came to — so it is asked before
+        // either of them, and whether the points are met is beside the point.
+        if (noValueStandsOnTheFarSide(border)) {
             return new NotApplicable(family, NotOwedReason.NO_VALUE_CAN_STAND_THERE);
         }
         // And the rows have met its points. Asked sooner, a border the rows have not caught up with
@@ -760,18 +760,17 @@ public sealed interface AnotherLineTheRowsAllow {
     }
 
     /**
-     * Whether the rules are shown to leave no value at any point the border has on the side it
-     * refuses.
+     * Whether no value is shown to stand at any point the border has on the side it refuses.
      *
      * <p>Every such point, and at least one. The point beside the line out there and the run past it
      * are the whole of that side as far as a row at this border goes: a value past where the run
-     * stops is decided by another rule before it reaches this one, and is no row here. So where both
-     * are refused by the rules there is no row the model refuses at this border. A point owed nothing
+     * stops is decided by another rule before it reaches this one, and is no row here. So where no
+     * value stands at either there is no row the model refuses at this border. A point owed nothing
      * for any other reason — an order naming no value beside the line — is not that proof, and
      * neither is a point whose place could not be worked out: the question is then put as it is
      * everywhere else.
      */
-    private static boolean theRulesRefuseTheFarSide(Border border) {
+    private static boolean noValueStandsOnTheFarSide(Border border) {
         boolean any = false;
         for (DomainPoint point : border.answers().keySet()) {
             if (border.roleOf(point).inside()) {

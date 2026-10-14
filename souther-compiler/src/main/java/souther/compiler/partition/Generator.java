@@ -2933,7 +2933,7 @@ public final class Generator {
         /**
          * One of them.
          *
-         * <p>A part the rules leave no value for bars the way whatever the other parts say, since
+         * <p>A part no value can take bars the way whatever the other parts say, since
          * the way is all of them at once. It is said in place of a part nothing here could hold a
          * row to, which would send an author looking for a row nobody can write.
          */

@@ -58,10 +58,10 @@ import java.util.function.Supplier;
  * @param cut     where the line is: what is cut, and where on it
  * @param origin  the rule that drew it, as this reading met it
  * @param answers one entry per point the line has, and no other
- * @param leftNothing the sides of the line the rules leave no value on, where the rule orders the
- *                    values and a side is where it comes out one way. Neither where none is shown
- *                    to be, which is not a side shown to hold something — see
- *                    {@link #theRulesLeaveNothingWhereItComesOut}
+ * @param leftNothing the sides of the line no value stands on, where the rule orders the values
+ *                    and a side is where it comes out one way. Neither where none is shown to be,
+ *                    which is not a side shown to hold something — see
+ *                    {@link #noValueStandsWhereItComesOut}
  */
 public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, PointAnswer> answers,
                      Sides leftNothing) {
@@ -193,10 +193,11 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     /**
-     * Whether the rules leave no value on the side of this line where its rule comes out
-     * {@code holding}, so that the comparison never comes out that way.
+     * Whether no value stands on the side of this line where its rule comes out {@code holding},
+     * so that the comparison never comes out that way — whether a rule or the type alone ends the
+     * values short of it.
      *
-     * <p>A proof read off where the rules leave off, and not off the points. Every point on a side
+     * <p>A proof read off where the values leave off, and not off the points. Every point on a side
      * can be refused while values lie further out: the run beside the line can be one the order
      * holds nothing in, and the point against it can be outside the class of numbers the values
      * are held to. The range the rules leave has no hole in its middle, so a side starting past
@@ -204,7 +205,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      *
      * <p>False wherever that was not shown, which is not a side shown to hold something.
      */
-    public boolean theRulesLeaveNothingWhereItComesOut(boolean holding) {
+    public boolean noValueStandsWhereItComesOut(boolean holding) {
         for (Towards side : Towards.values()) {
             DomainPoint region = new DomainPoint.InTheRegion(side);
             if (answers.containsKey(region) && roleOf(region).inside() == holding) {
