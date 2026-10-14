@@ -1169,8 +1169,31 @@ public final class Generator {
             return List.of();
         }
 
+        /**
+         * Whether a row handed here can be run at all. False only where nothing runs rows, which
+         * a search says as nothing having run — and not as a run that came back with nothing,
+         * which is a row run and seen to stop.
+         *
+         * <p>Asked of the way to run rows and not of which object it is, so a way wrapped in
+         * another still says it.
+         */
+        default boolean runsRows() {
+            return true;
+        }
+
         /** Nothing runs here — what a caller with no runtime to run against uses. */
-        Trial NOTHING_RUNS = _ -> ObservedRun.nothingRan();
+        Trial NOTHING_RUNS = new Trial() {
+
+            @Override
+            public ObservedRun run(RowToRun row) {
+                return ObservedRun.nothingRan();
+            }
+
+            @Override
+            public boolean runsRows() {
+                return false;
+            }
+        };
     }
 
     /**
@@ -1186,7 +1209,7 @@ public final class Generator {
         return runningOnce(trial);
     }
 
-    private static RunOnce runningOnce(Trial trial) {
+    static RunOnce runningOnce(Trial trial) {
         return trial instanceof RunOnce already ? already : new RunOnce(trial);
     }
 
@@ -1200,9 +1223,12 @@ public final class Generator {
      * the run: a row applied in one environment is not the row applied in another.
      *
      * <p>What a search may spend is counted in the runs it makes, and a row run already costs
-     * nothing, so a search asks {@link #ranAlready} before it counts one.
+     * nothing. So a search with a figure of its own runs through {@link #run(RowToRun, Spend)}
+     * and {@link #runReplacing(RowToRun, Map, Spend)}, which ask it to spend only for a run not
+     * made before: the figure stays the search's, and what is free is decided here, once, for the
+     * row and for the row under a rewrite alike.
      */
-    private static final class RunOnce implements Trial {
+    static final class RunOnce implements Trial {
 
         private final Trial trial;
         private final Map<List<String>, ObservedRun> ran = new ConcurrentHashMap<>();
@@ -1216,9 +1242,36 @@ public final class Generator {
             this.trial = trial;
         }
 
-        /** What running {@code row} came to, where it was run already, or null. */
-        ObservedRun ranAlready(RowToRun row) {
-            return ran.get(writtenAs(row));
+        /**
+         * What running {@code row} came to, where it was run already or {@code spend} allows a
+         * run; null where it needed a run and {@code spend} had none.
+         */
+        ObservedRun run(RowToRun row, Spend spend) {
+            ObservedRun already = ran.get(writtenAs(row));
+            if (already != null) {
+                return already;
+            }
+            return spend.aRun() ? run(row) : null;
+        }
+
+        /**
+         * What running {@code row} with the arms at {@code replacing}'s sites rewritten answered,
+         * where it was run so already or {@code spend} allows a run; null where it needed a run
+         * and {@code spend} had none.
+         */
+        Optional<AnswerObservation> runReplacing(RowToRun row, Map<Integer, Integer> replacing,
+                                                 Spend spend) {
+            Optional<AnswerObservation> already =
+                    replaced.get(new Replaced(writtenAs(row), replacing));
+            if (already != null) {
+                return already;
+            }
+            return spend.aRun() ? runReplacing(row, replacing) : null;
+        }
+
+        @Override
+        public boolean runsRows() {
+            return trial.runsRows();
         }
 
         @Override
@@ -1256,9 +1309,20 @@ public final class Generator {
             return trial.rewritesThrough(ran);
         }
 
-        private static List<String> writtenAs(RowToRun row) {
+        static List<String> writtenAs(RowToRun row) {
             return new ComposedRow(row.inputs(), row.answers()).writtenAs();
         }
+    }
+
+    /**
+     * A search's own figure for the runs it may make, asked only for a run nobody made before
+     * ({@link RunOnce}).
+     */
+    @FunctionalInterface
+    interface Spend {
+
+        /** Whether one more run may be made, counting it where it may. */
+        boolean aRun();
     }
 
     /**
@@ -1992,7 +2056,7 @@ public final class Generator {
                         ReplacementDisposition.Ended.ROWS_A_BLOCK_MAY_HOLD));
                 continue;
             }
-            if (trial == Trial.NOTHING_RUNS) {
+            if (!trial.runsRows()) {
                 replacementAnswers.put(asked, new ReplacementDisposition.NoneFound(
                         ReplacementDisposition.Ended.NOTHING_RAN));
                 continue;
@@ -2910,15 +2974,13 @@ public final class Generator {
          * run and {@code runs} has none left. A row run already costs nothing.
          */
         private Optional<ObservedRun> watched(GeneratedRow row, Runs runs) {
-            ObservedRun already = trial.ranAlready(row.toRun());
-            if (already != null) {
-                return Optional.of(already);
-            }
-            if (runs.left == 0) {
-                return Optional.empty();
-            }
-            runs.left--;
-            return Optional.of(trial.run(row.toRun()));
+            return Optional.ofNullable(trial.run(row.toRun(), () -> {
+                if (runs.left == 0) {
+                    return false;
+                }
+                runs.left--;
+                return true;
+            }));
         }
 
         /**
@@ -2991,7 +3053,7 @@ public final class Generator {
                             CameToNothing came, boolean stoppedShort) {}
 
     /** What a search makes of a row that holds every pin. */
-    private enum Acceptance {
+    enum Acceptance {
 
         /** The row this search is for. */
         TAKEN,
@@ -5173,7 +5235,7 @@ public final class Generator {
         // anything applies.
         TellingArmsApart preferring =
                 stood.outcome() instanceof AnswersStoodIn.Stood(var answers)
-                        ? new TellingArmsApart(once(trial), answers) : null;
+                        ? new TellingArmsApart(trial, answers) : null;
         RowTaking taking = preferring == null ? RowTaking.FIRST
                 : preferring.over(RowTaking.FIRST);
         ContentsAsked.UnderTheCases.Walked walked = under.tryEach(way -> {
@@ -8313,12 +8375,11 @@ public final class Generator {
             AnswerObservation rewritten;
             switch (asked) {
                 case ReplacementOwed.OfAnArm arm -> {
-                    if (runs >= mostRuns) {
+                    Optional<AnswerObservation> answered =
+                            trial.runReplacing(row.toRun(), arm.replacing(), this::spend);
+                    if (answered == null) {
                         return stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE);
                     }
-                    runs++;
-                    Optional<AnswerObservation> answered =
-                            trial.runReplacing(row.toRun(), arm.replacing());
                     if (answered.isEmpty()) {
                         return stop(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK);
                     }
@@ -8344,15 +8405,16 @@ public final class Generator {
 
         /** The body run on {@code row}, once per line, or null where no run is left. */
         private ObservedRun run(GeneratedRow row) {
-            ObservedRun already = trial.ranAlready(row.toRun());
-            if (already != null) {
-                return already;
-            }
+            return trial.run(row.toRun(), this::spend);
+        }
+
+        /** One more run of this search's own, where one is left. */
+        private boolean spend() {
             if (runs >= mostRuns) {
-                return null;
+                return false;
             }
             runs++;
-            return trial.run(row.toRun());
+            return true;
         }
 
         /** This stopping the search, and why. */
@@ -8443,16 +8505,19 @@ public final class Generator {
     }
 
     /**
-     * How many whole rows composed for one requirement are offered {@link TellingArmsApart} before
-     * the best of them is taken.
+     * How many rows meeting one requirement {@link TellingArmsApart} ranks before the best of them
+     * is taken.
      *
-     * <p>Counted in rows and not in runs: each row offered is run once and once more per rewrite of
-     * the arms it went through, which the point reads and this does not choose. Its own figure, and
-     * not the one a search for a rewrite runs under ({@link RewriteSearch}): that one bounds the
-     * search that decides whether a rewrite is a gap, and this bounds a choice among rows that all
-     * meet what they were composed for, which decides nothing.
+     * <p>Counted in rows that meet the requirement, each once, and not in rows composed: a row that
+     * does not meet it is no candidate, and how many of those a walk composes on the way is the
+     * walk's to bound. Counted in rows and not in runs: each row ranked is run once and once more
+     * per rewrite of the arms it went through, which the requirement reads and this does not
+     * choose. Its own figure, and not the one a search for a rewrite runs under
+     * ({@link RewriteSearch}): that one bounds the search that decides whether a rewrite is a gap,
+     * and this bounds a choice among rows that all meet what they were composed for, which decides
+     * nothing.
      */
-    private static final int MOST_ROWS_OFFERED_FOR_THE_ARMS = 4;
+    static final int MOST_ROWS_OFFERED_FOR_THE_ARMS = 4;
 
     /**
      * Which of the rows a search composed for one requirement is handed a person: the first that
@@ -8482,36 +8547,37 @@ public final class Generator {
      * <p>A run that comes back with nothing to read, or a rewrite whose run cannot be told from the
      * body's, tells nothing apart.
      */
-    private static final class TellingArmsApart {
+    static final class TellingArmsApart {
 
-        private final Trial trial;
+        private final RunOnce trial;
         private final List<StoodInAnswer> answers;
-        /** Where the first row taken went: the arms it passed and how its conditions came out. */
+        /** Every row ranked so far, as it is written, so a row composed again is not ranked again. */
+        private final Set<List<String>> ranked = new HashSet<>();
+        /** Where the first row ranked went: the arms it passed and how its conditions came out. */
         private AlignedObservation way;
         /** The rewrites of the arms on that way, which every row compared is asked. */
         private List<ArmReplacements.Rewrite> rewrites = List.of();
         /** The row taken so far, and how many rewrites were told apart on it. */
         private List<FixtureTemplate> best;
         private int bestTold = -1;
-        private int offered;
 
-        private TellingArmsApart(Trial trial, List<StoodInAnswer> answers) {
-            this.trial = trial;
+        TellingArmsApart(Trial trial, List<StoodInAnswer> answers) {
+            this.trial = runningOnce(trial);
             this.answers = List.copyOf(answers);
         }
 
         /**
-         * Every row a walk composes, offered here once {@code meets} takes it as one that meets
-         * the requirement; passed over, or stopped on, where {@code meets} says so.
+         * Every row a walk composes, ranked here once {@code meets} takes it as one that meets the
+         * requirement; passed over, or stopped on, where {@code meets} says so, and passed over
+         * where it was ranked already.
          */
         RowTaking over(RowTaking meets) {
             return inputs -> {
-                offered++;
-                Acceptance met = meets.take(inputs);
-                if (met != Acceptance.TAKEN) {
-                    return met == Acceptance.PASSED ? onward() : met;
+                if (ranked.contains(RunOnce.writtenAs(new RowToRun(inputs, answers)))) {
+                    return Acceptance.PASSED;
                 }
-                return ranked(inputs);
+                Acceptance met = meets.take(inputs);
+                return met == Acceptance.TAKEN ? rank(inputs) : met;
             };
         }
 
@@ -8520,13 +8586,13 @@ public final class Generator {
             return best;
         }
 
-        /** What is made of one row that meets the requirement. */
-        private Acceptance ranked(List<FixtureTemplate> inputs) {
+        /** What is made of one row that meets the requirement, not ranked before. */
+        private Acceptance rank(List<FixtureTemplate> inputs) {
             RowToRun row = new RowToRun(inputs, answers);
+            ranked.add(RunOnce.writtenAs(row));
             ObservedRun ran = trial.run(row);
             if (best == null) {
                 best = List.copyOf(inputs);
-                bestTold = 0;
                 // The first row with nothing to say which arms it went through is a requirement
                 // nothing here can tell rows apart at, and it is the row.
                 if (!(ran.watched() instanceof Watched.Ran(AlignedObservation seen))) {
@@ -8534,7 +8600,6 @@ public final class Generator {
                 }
                 way = seen;
                 rewrites = trial.rewritesThrough(seen);
-                bestTold = -1;
             } else if (!(ran.watched() instanceof Watched.Ran(AlignedObservation seen))
                     || ran.answer() instanceof AnswerObservation.NotAnswered
                     || !seen.equals(way)) {
@@ -8563,7 +8628,7 @@ public final class Generator {
 
         /** The walk going on to the next row, or stopping where the figure is reached. */
         private Acceptance onward() {
-            return offered < MOST_ROWS_OFFERED_FOR_THE_ARMS ? Acceptance.PASSED
+            return ranked.size() < MOST_ROWS_OFFERED_FOR_THE_ARMS ? Acceptance.PASSED
                     : Acceptance.STOPPED;
         }
     }
@@ -8577,6 +8642,12 @@ public final class Generator {
      * budget, and what the row it settled on is held to here is the same requirement read off the
      * way it went — so the search's account of what it looked at and spent is the search's, and
      * this changes only which of the rows meeting it goes out.
+     *
+     * <p>The walk over the candidate's values composes rows that do not meet the requirement as
+     * well, and those are no candidates of the preference's: so how many rows it composes is
+     * bounded as choosing a candidate's values again is ({@link #MOST_REPAIRS}), and where that is
+     * reached the walk stops with the rows it ranked. Nothing is owed for it — every row ranked
+     * meets the requirement, and the first of them is the one the search settled on.
      */
     private static List<FixtureTemplate> tellingArmsApart(
             MeasuredInput.MeasuredAxes axes, int[] where, CandidateCheck check,
@@ -8587,7 +8658,8 @@ public final class Generator {
         if (taking.take(first) == Acceptance.TAKEN) {
             return first;
         }
-        composed(axes, where, HeldTogether.Asked.NOTHING, check, given, taking);
+        composed(axes, where, HeldTogether.Asked.NOTHING, check, given,
+                atMost(MOST_REPAIRS, () -> { }, taking));
         List<FixtureTemplate> kept = preferring.taken();
         return kept == null ? first : kept;
     }
@@ -8895,15 +8967,13 @@ public final class Generator {
              * twice ({@link RunOnce}).
              */
             private ObservedRun ranAs(GeneratedRow named) {
-                ObservedRun observed = trial.ranAlready(named.toRun());
-                if (observed == null) {
+                return trial.run(named.toRun(), () -> {
                     if (runs >= most) {
-                        return null;
+                        return false;
                     }
                     runs++;
-                    observed = trial.run(named.toRun());
-                }
-                return observed;
+                    return true;
+                });
             }
 
             /**
@@ -9304,7 +9374,7 @@ public final class Generator {
      * goes on passing.
      */
     @FunctionalInterface
-    private interface RowTaking {
+    interface RowTaking {
 
         Acceptance take(List<FixtureTemplate> inputs);
 
