@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -73,7 +72,7 @@ class ARewriteThroughAnArmStandsAtEverySiteOfItTest {
     void aRewriteEverySiteCarriesIsAskedAndRunsAtEverySite() {
         assertEquals(List.of(new ArmReplacements.Asked.Runs(new ArmReplacements.Rewrite(FORK, 0, 1,
                         new TreeMap<>(Map.of(3, 1, 7, 1))))),
-                spliced().askedOf(FORK, 0, NOWHERE_UNREACHED));
+                spliced().askedOf(FORK, 0, _ -> false));
     }
 
     /**
@@ -87,7 +86,7 @@ class ARewriteThroughAnArmStandsAtEverySiteOfItTest {
 
         assertEquals(List.of(new ArmReplacements.Asked.NotRun(1,
                         ArmReplacements.Sibling.Why.TOO_LARGE)),
-                partly.askedOf(FORK, 0, NOWHERE_UNREACHED));
+                partly.askedOf(FORK, 0, _ -> false));
     }
 
     /** A sibling that parts from the arm on no way is the arm under another spelling. */
@@ -98,7 +97,7 @@ class ARewriteThroughAnArmStandsAtEverySiteOfItTest {
                 Map.of(1, new ArmReplacements.Sibling.Carried(ArmReplacements.Differs.NEVER))));
 
         assertEquals(List.of(),
-                new ArmReplacements(bySite).askedOf(FORK, 0, NOWHERE_UNREACHED));
+                new ArmReplacements(bySite).askedOf(FORK, 0, _ -> false));
     }
 
     /**
@@ -112,7 +111,7 @@ class ARewriteThroughAnArmStandsAtEverySiteOfItTest {
                 ArmReplacements.AtSite at = carried.bySite().get(site);
                 List<ArmReplacements.Rewrite> run = carried.through(Set.of(site));
                 for (ArmReplacements.Asked each
-                        : carried.askedOf(at.fork(), at.part(), NOWHERE_UNREACHED)) {
+                        : carried.askedOf(at.fork(), at.part(), _ -> false)) {
                     if (each instanceof ArmReplacements.Asked.Runs(var rewrite)) {
                         assertTrue(run.contains(rewrite),
                                 () -> rewrite + " is asked at site " + site + ", run: " + run);
@@ -121,6 +120,4 @@ class ARewriteThroughAnArmStandsAtEverySiteOfItTest {
             }
         }
     }
-
-    private static final Predicate<ControlPlace.Arm> NOWHERE_UNREACHED = _ -> false;
 }
