@@ -7,6 +7,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.flow.AWayThrough;
 import souther.compiler.flow.ComparisonWays;
+import souther.compiler.inputs.CaseCompared;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.ComparedNumbers;
 import souther.compiler.inputs.InputReads;
@@ -139,9 +140,13 @@ final class NumberWays implements ComparisonWays {
                 Core.withoutStanding(e) instanceof Core.Binary binary
                         ? numbers.of(binary, reads) : null;
         ComparedNumber.DrawnLine drawn = said == null ? null : said.line();
-        return drawn == null
-                ? ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy)
-                : leaves(drawn, want);
+        if (drawn != null) {
+            return leaves(drawn, want);
+        }
+        // A case of a sum no order counts, which the value either is or is not.
+        CaseCompared compared = CaseCompared.of(e, numbers.reading(), reads);
+        return compared != null ? compared.mayComeOut(want, numbers.reading())
+                : ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy);
     }
 
     /** Whether the values the rules leave the number include one the comparison comes out

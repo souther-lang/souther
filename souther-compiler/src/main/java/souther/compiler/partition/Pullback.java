@@ -37,6 +37,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.check.AnIndexedMap;
 import souther.compiler.inputs.AnIdentityMap;
+import souther.compiler.inputs.CaseCompared;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ElementsMet;
@@ -714,6 +715,7 @@ final class Pullback {
                 () -> partOf(at, truthCompared(stated, reads)),
                 () -> heldAgainstAWrittenTruth(stated, reads),
                 () -> partOf(at, ofTwoValuesWrittenOut(stated, reads)),
+                () -> partOf(at, ofACaseCompared(stated, reads)),
                 () -> partOf(at, asACut(stated, arithmetic.get(), fixed)),
                 () -> partOf(at, onAnOrder(stated, arithmetic.get(), reads)),
                 () -> ofTheYearOfADate(stated, at, fixed, reads),
@@ -4191,6 +4193,23 @@ final class Pullback {
                 : new Derivation.WrittenOut(left.equals(right) == (rel == Rel.EQ));
     }
 
+    /**
+     * A value of a sum compared with one of its cases, as that value being the case or not — or
+     * null where the comparison is no such one ({@link CaseCompared}).
+     *
+     * <p>What an arm of a {@code match} selecting the case states, so that the two writings state
+     * one thing and no line is drawn on the order the cases are declared in.
+     */
+    private Derivation ofACaseCompared(StatedComparison stated, InputReads reads) {
+        CaseCompared compared = CaseCompared.of(stated, read, reads);
+        if (compared == null) {
+            return null;
+        }
+        return new Derivation.UnderADenial(new Derivation.CasesOfASubject(
+                new DecisionSubject.AnInput(compared.at()), compared.selected()),
+                !compared.heldAtTheCase());
+    }
+
     /** The case {@code side} stands as, where it stands as one written with nothing in it, or the
      *  string, where it stands as one written out — or null. */
     private Object valueWrittenAt(Core side, InputReads reads) {
@@ -4261,10 +4280,14 @@ final class Pullback {
      * <p>Only where it stopped: a date against a written date and a case of an enumeration are
      * values it does not count, and the comparison still states a line on their order. A comparison
      * the arithmetic read is that arithmetic's, which is the reading a border is drawn by.
+     *
+     * <p>Not a case of an enumeration held equal to the value or not: that asks which case the
+     * value is and nothing of the order ({@link #ofACaseCompared}).
      */
     private Derivation onAnOrder(StatedComparison comparison,
                                  AffineReading.OfAComparison arithmetic, InputReads reads) {
-        if (!(arithmetic instanceof AffineReading.OfAComparison.Stopped)) {
+        if (!(arithmetic instanceof AffineReading.OfAComparison.Stopped)
+                || CaseCompared.of(comparison, read, reads) != null) {
             return null;
         }
         ComparedLine drawn = ComparedLine.asWritten(comparison, read, reads);

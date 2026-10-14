@@ -226,8 +226,9 @@ class WhatAComparisonIsARuleAboutTest {
                 "and one against itself cuts nothing, on that order like any other");
         assertEquals("AcrossPositions", named(about("(g: Grade, h: Grade)", "g <= h")),
                 "an enumeration's cases are ordered by the sum they are of");
-        assertEquals("AtAPosition", named(about("(g: Grade)", "g == Mid")),
-                "and a case written against one of them is a value of that position");
+        assertEquals("StatesNoRelation", named(about("(g: Grade)", "g == Mid")),
+                "and a case held equal to one of them asks which case it is, and nothing of the"
+                        + " order");
         assertEquals("AtAPosition", named(about("(s: String)", "s == \"m\"")),
                 "a string against a written string is read where the arithmetic cannot go");
     }

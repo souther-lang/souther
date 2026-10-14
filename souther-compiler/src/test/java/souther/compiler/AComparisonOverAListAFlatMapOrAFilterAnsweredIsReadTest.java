@@ -2,11 +2,21 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.ElementBindings;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReads;
+import souther.compiler.meaning.MeaningsOfABody;
+import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -20,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * through the name to the definition, and the definition is a list these operations put together of
  * a list written out. Where the list a flatMap puts together is the list written out, the report is
  * the one the written list gets, line for line. A filter's report is about the elements it keeps:
- * one it drops is no line, and one it keeps is, whatever it is kept by.
+ * one it drops is no case the comparison names, and one it keeps is, whatever it is kept by.
  */
 class AComparisonOverAListAFlatMapOrAFilterAnsweredIsReadTest {
 
@@ -39,16 +49,46 @@ class AComparisonOverAListAFlatMapOrAFilterAnsweredIsReadTest {
                 | "c" : (Carol) -> false
             """;
 
+    private static final String PLACED = """
+            module p
+            data Suspect = Alice | Bob | Carol
+            data Placement = { who: Suspect, room: Int }
+            let places = %s
+            behavior f : (who: Suspect) -> Bool
+            let f (who) = List.any(p -> p.who == who, places)
+            example f
+            %s""";
+
     private static String measured(String places, String rows) {
-        return measured("""
-                module p
-                data Suspect = Alice | Bob | Carol
-                data Placement = { who: Suspect, room: Int }
-                let places = %s
-                behavior f : (who: Suspect) -> Bool
-                let f (who) = List.any(p -> p.who == who, places)
-                example f
-                %s""".formatted(places, rows));
+        return measured(PLACED.formatted(places, rows));
+    }
+
+    /**
+     * What {@code f} states of who it is asked about, over {@code places}.
+     *
+     * <p>Each placement compares a case with the value, which asks which case it is and draws no
+     * line: the cases the list holds are what says it was read.
+     */
+    private static String states(String places, String rows) {
+        Compilation compilation = Compilation.ofSource(PLACED.formatted(places, rows), "Main");
+        compilation.answerEverything();
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("p")).value();
+        AnalysisBody analysis = checked.analysisBodies().get("f");
+        RuleReadingSource rules = RuleReadings.of(compilation, "p");
+        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("p")).value().get("f");
+        InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
+                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
+                inputs.dependencies());
+        MeaningsOfABody meanings = MeaningsOfABodyReading.of(analysis,
+                () -> inputs.reading(rules), reads, rules.symbols(), rules.newtypes());
+        List<String> out = new ArrayList<>();
+        meanings.stated().forEach((site, meaning) -> {
+            if (site.part() == MeaningsOfABody.Part.Asked.ITSELF) {
+                out.add(meaning.states().key());
+            }
+        });
+        assertEquals(1, out.size(), () -> "one comparison is written: " + out);
+        return out.getFirst();
     }
 
     private static String measured(String source) {
@@ -72,12 +112,18 @@ class AComparisonOverAListAFlatMapOrAFilterAnsweredIsReadTest {
                 .findFirst().orElse("no " + section + " in " + report);
     }
 
-    /** Control: the list written out is read, a line at each placement. */
+    /** What the comparison states over a list holding Alice and Bob: the closure applied to each. */
+    private static final String BOTH = "on an application[who is Alice, who is Bob]";
+
+    /** What it states over a list holding Alice alone. */
+    private static final String ALICE = "who is Alice";
+
+    /** Control: the list written out is read, a case at each placement. */
     @Test
     void theListWrittenOutIsRead() {
         String report = measured(WRITTEN, BOTH_PLACED);
         assertEquals(List.of(), notRead(report));
-        assertTrue(headed(report, "border").contains("borders 2"), report);
+        assertEquals(BOTH, states(WRITTEN, BOTH_PLACED), "who is one of the two placed");
     }
 
     @Test
@@ -99,23 +145,25 @@ class AComparisonOverAListAFlatMapOrAFilterAnsweredIsReadTest {
         assertEquals(measured(WRITTEN, BOTH_PLACED), report);
     }
 
-    /** A filter dropping a placement leaves the line at it out; the one it keeps is a line. */
+    /** A filter dropping a placement leaves the case at it out; the one it keeps is a case. */
     @Test
     void aFilterIsReadAsTheElementsItKeeps() {
-        String report = measured("List.filter(p -> p.room == 1, [Placement { who = Alice,"
-                + " room = 1 }, Placement { who = Bob, room = 2 }])", ALICE_PLACED);
+        String kept = "List.filter(p -> p.room == 1, [Placement { who = Alice,"
+                + " room = 1 }, Placement { who = Bob, room = 2 }])";
+        String report = measured(kept, ALICE_PLACED);
         assertEquals(List.of(), notRead(report));
-        assertTrue(headed(report, "border").contains("borders 1"), report);
+        assertEquals(ALICE, states(kept, ALICE_PLACED), "only Alice is kept");
         assertTrue(report.contains("adequacy: satisfied"), report);
     }
 
-    /** The same filter keeping both is a line at each: what made the difference is what it kept. */
+    /** The same filter keeping both is a case at each: what made the difference is what it kept. */
     @Test
-    void aFilterKeepingEveryElementIsALineAtEach() {
-        String report = measured("List.filter(p -> p.room >= 1, [Placement { who = Alice,"
-                + " room = 1 }, Placement { who = Bob, room = 2 }])", BOTH_PLACED);
+    void aFilterKeepingEveryElementIsACaseAtEach() {
+        String kept = "List.filter(p -> p.room >= 1, [Placement { who = Alice,"
+                + " room = 1 }, Placement { who = Bob, room = 2 }])";
+        String report = measured(kept, BOTH_PLACED);
         assertEquals(List.of(), notRead(report));
-        assertTrue(headed(report, "border").contains("borders 2"), report);
+        assertEquals(BOTH, states(kept, BOTH_PLACED), "both are kept");
     }
 
     /**
@@ -229,10 +277,11 @@ class AComparisonOverAListAFlatMapOrAFilterAnsweredIsReadTest {
     @Test
     void aFilterKeepingByACaseIsReadAsTheElementsItKeeps() {
         for (String keep : List.of("p.who == Alice", "p.who /= Bob")) {
-            String report = measured("List.filter(p -> " + keep + ", [Placement { who = Alice,"
-                    + " room = 1 }, Placement { who = Bob, room = 2 }])", ALICE_PLACED);
+            String kept = "List.filter(p -> " + keep + ", [Placement { who = Alice,"
+                    + " room = 1 }, Placement { who = Bob, room = 2 }])";
+            String report = measured(kept, ALICE_PLACED);
             assertEquals(List.of(), notRead(report), keep);
-            assertTrue(headed(report, "border").contains("borders 1"), report);
+            assertEquals(ALICE, states(kept, ALICE_PLACED), keep);
         }
     }
 

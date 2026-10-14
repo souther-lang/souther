@@ -268,42 +268,45 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
                 () -> "no Level is five, so the equality draws no line: " + report);
     }
 
+    private static final String LEVELS = """
+            module d
+
+            data Low
+            data Mid
+            data High
+            data Lowish = Low | Mid
+            data Level = Lowish | High
+            data R = { level: Level }
+
+            behavior f : (r: R) -> String
+            """;
+
     /**
-     * A case an arm leaves out is a hole on the order the cases stand on, and a line at it is one
-     * nothing arrives at.
-     *
-     * <p>The same question as the numeric hole above and the same answer, for the same reason: what
-     * the narrowing states is the places of the order it leaves out, and a line at one of them is a
-     * line no row past the arm holds a value at. Narrowed to one case or to a sum of several, which
-     * leave different places out.
+     * A case held equal to the value asks which case it is and draws no line on the order, so there
+     * is no line for nothing to arrive at. The way the arm has already ruled out is still ruled out,
+     * as the case the arm leaves out: narrowed to one case or to a sum of several.
      */
     @Test
-    void aCaseAnArmLeavesOutIsALineNothingArrivesAt() {
-        String levels = """
-                module d
-
-                data Low
-                data Mid
-                data High
-                data Lowish = Low | Mid
-                data Level = Lowish | High
-                data R = { level: Level }
-
-                behavior f : (r: R) -> String
-                """;
-        assertEquals(1, droppedForNothingArriving(levels + """
+    void aCaseHeldEqualToTheValueIsNoLineToDrop() {
+        for (String body : List.of("""
                 let f (r) =
                     match r.level with
                         | Low -> (if r.level == Mid then "never" else "low")
                         | Mid -> "mid"
                         | High -> "high"
-                """));
-        assertEquals(1, droppedForNothingArriving(levels + """
+                """, """
                 let f (r) =
                     match r.level with
                         | Lowish -> (if r.level == High then "never" else "low")
                         | High -> "high"
-                """));
+                """)) {
+            String report = reportOf(LEVELS + body);
+            assertEquals(0, droppedForNothingArriving(LEVELS + body), report);
+            assertTrue(report.contains("border      not applicable"), report);
+            assertTrue(report.contains("no row is owed at 1 decision rule — its way would need one"
+                    + " position to be two things at once"),
+                    () -> "the way the arm rules out is owed no row: " + report);
+        }
     }
 
     /**

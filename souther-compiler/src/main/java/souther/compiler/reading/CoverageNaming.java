@@ -12,14 +12,15 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Naming;
 import souther.compiler.flow.Truth;
+import souther.compiler.inputs.CaseCompared;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.ComparedNumbers;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.WhatAConditionRuns;
-import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -110,13 +111,6 @@ final class CoverageNaming implements Naming<Outcome> {
             // it, so there is nothing here to say. The fork on it is named where the way in is.
             return null;
         }
-        // The one reading of this comparison, which is the reading whatever admitted the way used.
-        // Read again here, the decision would be said of a number the admission never saw.
-        ComparedNumber drawn = numbers.of(comparison, reads);
-        if (drawn == null) {
-            return null;
-        }
-        NumericTerm at = drawn.term();
         // Which construct of the model the decision is of. An application answering here comes
         // first: the comparison is then the code of the operation it applies, which the model
         // states nothing of, and the rule the author wrote — and drew a line by — is the
@@ -128,15 +122,43 @@ final class CoverageNaming implements Naming<Outcome> {
         if (outcome == null) {
             return null;
         }
+        Condition condition = conditionOf(comparison, outcome, held);
+        if (condition == null) {
+            return null;
+        }
         // The condition and the claim are about one comparison, so they are read off one value. The
         // place the claim is made at says which comparison it is a way out of; asked of the node
         // instead, the two halves of this decision would be two answers, and a decision whose
         // condition named one comparison and whose claim was recorded at another is one nothing
         // here reads both halves of to notice.
         return ControlClaim.of(outcome)
-                .map(claim -> one(new Decision(
-                        new Condition.Side(at, outcome.occurrence(), held, lineOf(drawn)), claim)))
+                .map(claim -> one(new Decision(condition, claim)))
                 .orElse(null);
+    }
+
+    /**
+     * What {@code comparison} coming out {@code held} leaves the position it is about, or null
+     * where it names no number of the input or leaves the value no case at all.
+     *
+     * <p>A value of a sum compared with one of its cases is left cases, as an arm of a
+     * {@code match} on it leaves them ({@link CaseCompared}); a run is steered there by which case
+     * it hands in, and the order the cases are declared in has nothing to do with it. That holds of
+     * a sum whose other cases carry something, which no order counts. Every other comparison comes
+     * out a side of its number.
+     */
+    private Condition conditionOf(Core.Binary comparison, ControlPlace.Outcome outcome,
+                                  boolean held) {
+        CaseCompared compared = CaseCompared.of(comparison, numbers.reading(), reads);
+        if (compared != null) {
+            List<TypeSymbol> left = compared.leavesWhere(held);
+            return left.isEmpty() ? null : new Condition.Case(compared.at(),
+                    left.stream().map(TypeSymbol::name).toList());
+        }
+        // The one reading of this comparison, which is the reading whatever admitted the way used.
+        // Read again here, the decision would be said of a number the admission never saw.
+        ComparedNumber drawn = numbers.of(comparison, reads);
+        return drawn == null ? null
+                : new Condition.Side(drawn.term(), outcome.occurrence(), held, lineOf(drawn));
     }
 
     /**
@@ -287,6 +309,10 @@ final class CoverageNaming implements Naming<Outcome> {
      * its names read where it stands, and the way is the one way the condition came out: a
      * comparison on it the walk had words for is on it, and one it had none for is not, which is
      * a part this has no words for either.
+     *
+     * <p>Found by the claim and not by the condition. A comparison comes out a side of its number
+     * or a set of cases ({@link #side}), and either way its claim is that it came out the way it
+     * did where it was stated.
      */
     private static boolean named(Outcome way, WhatAConditionRuns.Settled part) {
         if (!(Core.withoutStanding(part.part()) instanceof Core.Binary comparison)
@@ -294,9 +320,9 @@ final class CoverageNaming implements Naming<Outcome> {
             return false;
         }
         for (Decision each : way.holds()) {
-            if (each.constrains() instanceof Condition.Side side
-                    && side.statedAt().equals(comparison.occurrence())
-                    && side.held() == part.held()) {
+            if (each.claims().at() instanceof ControlPlace.Outcome outcome
+                    && outcome.occurrence().equals(comparison.occurrence())
+                    && outcome.held() == part.held()) {
                 return true;
             }
         }
