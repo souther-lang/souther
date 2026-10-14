@@ -8,8 +8,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Which arm a run went through is read off the sites it passed, and the rewrite of that arm stands
@@ -54,13 +56,71 @@ class ARewriteThroughAnArmStandsAtEverySiteOfItTest {
                 "two sites of one arm are one rewrite");
     }
 
-    /** A site whose classes do not carry the sibling is one the rewrite cannot be run at. */
+    /**
+     * What a recording is run again under: at a site that carries the sibling, the sibling
+     * standing wherever it is carried; at a site that does not, nothing.
+     */
     @Test
-    void aSiteThatDoesNotCarryTheSiblingIsLeftOut() {
+    void aRecordingIsRunAgainOnlyWhereTheSitePassedCarriesTheSibling() {
         ArmReplacements partly = spliced().carryingNothingAt(Set.of(7));
 
         assertEquals(Map.of(3, 1), partly.through(Set.of(3)).getFirst().replacing());
         assertEquals(List.of(), partly.through(Set.of(7)),
                 "a run through the site carrying nothing asks for nothing there");
     }
+
+    @Test
+    void aRewriteEverySiteCarriesIsAskedAndRunsAtEverySite() {
+        assertEquals(List.of(new ArmReplacements.Asked.Runs(new ArmReplacements.Rewrite(FORK, 0, 1,
+                        new TreeMap<>(Map.of(3, 1, 7, 1))))),
+                spliced().askedOf(FORK, 0, NOWHERE_UNREACHED));
+    }
+
+    /**
+     * A rewrite some site of the arm does not carry is no run of the arm rewritten, whichever site
+     * a row went through: run at the sites that carry it, the site the row passed may answer as
+     * written, and the row would be asked about a program nobody can write.
+     */
+    @Test
+    void aRewriteSomeSiteDoesNotCarryIsAskedAndNotRun() {
+        ArmReplacements partly = spliced().carryingNothingAt(Set.of(7));
+
+        assertEquals(List.of(new ArmReplacements.Asked.NotRun(1,
+                        ArmReplacements.Sibling.Why.TOO_LARGE)),
+                partly.askedOf(FORK, 0, NOWHERE_UNREACHED));
+    }
+
+    /** A sibling that parts from the arm on no way is the arm under another spelling. */
+    @Test
+    void aSiblingThatPartsOnNoWayIsNotAsked() {
+        TreeMap<Integer, ArmReplacements.AtSite> bySite = new TreeMap<>();
+        bySite.put(3, new ArmReplacements.AtSite(FORK, 0,
+                Map.of(1, new ArmReplacements.Sibling.Carried(ArmReplacements.Differs.NEVER))));
+
+        assertEquals(List.of(),
+                new ArmReplacements(bySite).askedOf(FORK, 0, NOWHERE_UNREACHED));
+    }
+
+    /**
+     * Every rewrite a row through a site is asked has a run among those its recording is run again
+     * under, which is what the measure of a written row reads its answer from.
+     */
+    @Test
+    void everyRewriteARowIsAskedIsOneItsRecordingIsRunAgainUnder() {
+        for (ArmReplacements carried : List.of(spliced(), spliced().carryingNothingAt(Set.of(7)))) {
+            for (int site : carried.bySite().keySet()) {
+                ArmReplacements.AtSite at = carried.bySite().get(site);
+                List<ArmReplacements.Rewrite> run = carried.through(Set.of(site));
+                for (ArmReplacements.Asked each
+                        : carried.askedOf(at.fork(), at.part(), NOWHERE_UNREACHED)) {
+                    if (each instanceof ArmReplacements.Asked.Runs(var rewrite)) {
+                        assertTrue(run.contains(rewrite),
+                                () -> rewrite + " is asked at site " + site + ", run: " + run);
+                    }
+                }
+            }
+        }
+    }
+
+    private static final Predicate<ControlPlace.Arm> NOWHERE_UNREACHED = _ -> false;
 }

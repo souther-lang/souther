@@ -1159,9 +1159,10 @@ public final class Generator {
         }
 
         /**
-         * Every rewrite {@link #runReplacing} can be asked for of the arms a run that went where
-         * {@code ran} did went through. None unless a way to run rows has the classes to say which
-         * siblings they carry.
+         * Every rewrite a row whose run went where {@code ran} did is asked, and that
+         * {@link #runReplacing} can be asked for: the questions the measure of the rows written
+         * puts to such a row ({@link ArmReplacements#askedOfARun}). None unless a way to run rows
+         * has the classes and the plan to say which.
          */
         default List<ArmReplacements.Rewrite> rewritesThrough(AlignedObservation ran) {
             return List.of();
@@ -8337,7 +8338,9 @@ public final class Generator {
      *
      * <p>Which rewrites are asked of a row is what its run went through, and not what the point was
      * drawn on. A line and an arm are not one to one — a comparison may decide no fork, or several
-     * — so the arms are read off the run.
+     * — so the arms are read off the run. And they are the rewrites the measure asks of such a row
+     * and no others ({@link Trial#rewritesThrough}): one it does not ask, or one no run can be, is
+     * not a question the row's answer will be read for.
      *
      * <p>A run that comes back with nothing to read, or a rewrite whose run cannot be told from the
      * body's, tells nothing apart.

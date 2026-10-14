@@ -158,6 +158,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /** How well a module's {@code example} rows cover what it declares. */
@@ -2558,7 +2559,7 @@ public final class Adequacy {
             MeasuredInput subject = read == null ? null : subjectOf(db, name, spec, read);
             Coverages.Probe probe = subject == null ? null
                     : probing(sig, subject, StatementsOfAnInput.of(read), constructing(db, name),
-                            runningRowsOf(trialling(db, name), behavior, sig, checked.value(),
+                            runningRowsOf(db, name, trialling(db, name), behavior, sig,
                                     RequiredDependencies.of(db, name, behavior)),
                             answering(db, name, behavior, subject));
             if (probe == null) {
@@ -2994,8 +2995,7 @@ public final class Adequacy {
             }
             return Answer.of(Coverages.merged(Coverages.searched(measured, subject,
                     probing(sig, subject, StatementsOfAnInput.of(read), constructing(db, name),
-                            runningRowsOf(trialling(db, name), behavior, sig,
-                                    db.ask(new Bodies.Observable(name)).value(),
+                            runningRowsOf(db, name, trialling(db, name), behavior, sig,
                                     RequiredDependencies.of(db, name, behavior)),
                             answering(db, name, behavior, subject)),
                     divided.reaching())));
@@ -5132,8 +5132,7 @@ public final class Adequacy {
                             numbering,
                             observed,
                             constructing(db, name),
-                            runningRowsOf(trialling(db, name), behavior, sig,
-                                    db.ask(new Bodies.Observable(name)).value(),
+                            runningRowsOf(db, name, trialling(db, name), behavior, sig,
                                     RequiredDependencies.of(db, name, behavior)),
                             // What every row this composes stands the dependencies in with, settled
                             // before the search so that a candidate is run in the environment the
@@ -6181,6 +6180,26 @@ public final class Adequacy {
     }
 
     /**
+     * The arms of {@code behavior} the model's own rules prove no run arrives at, with what the
+     * rows did taken in: a row through an arm shows the proof of it wrong, and a proof shown wrong
+     * closes no way. None where nothing was proven.
+     *
+     * <p>Held to the plan the arms are places of before any of them is looked up: a reading of
+     * another plan answers that nothing arrives at a place it never walked, which would prove a
+     * rewrite the same.
+     */
+    static Predicate<ControlPlace.Arm> unreachedIn(
+            Map<String, PathReachability.Answers.AsRun> arrived, String behavior,
+            Bodies.Elaborated checked) {
+        PathReachability.Answers.AsRun arrives = arrived == null ? null : arrived.get(behavior);
+        if (arrives == null) {
+            return _ -> false;
+        }
+        arrives.answers().requireNumbering(checked.numberingIdentity());
+        return arm -> arrives.answers().at(arm) instanceof Reachability.Unreachable;
+    }
+
+    /**
      * A way to run one behavior's composed rows, said in the generator's words.
      *
      * <p>Two seams and one adaptation, the way the check that a value can be built already is. What
@@ -6191,12 +6210,15 @@ public final class Adequacy {
      * what anybody asking after one does — the search that composes them, and whoever asks what one
      * of them would settle.
      *
-     * @param checked the bodies as observed, whose numbering a run is read under and whose plan
-     *                says which arms of the behavior there are; null where there are none
+     * <p>Which rewrites of the arms a run went through it can be asked for is the question the
+     * measure of the rows written asks ({@link ArmReplacements#askedOf}), under the same proof of
+     * which ways nothing arrives at, so a row chosen for them is chosen for what that measure reads.
+     *
+     * @param trials the classes rows are run in, or null where none are
      */
-    static Generator.Trial runningRowsOf(RowTrials trials, String behavior, Sig sig,
-                                         Bodies.Elaborated checked,
-                                         RequiredDependencies requires) {
+    static Generator.Trial runningRowsOf(Db db, String module, RowTrials trials, String behavior,
+                                         Sig sig, RequiredDependencies requires) {
+        Bodies.Elaborated checked = db.ask(new Bodies.Observable(module)).value();
         if (trials == null || checked == null || requires == null) {
             // Nothing runs where nothing applies the behavior, nothing is read where the module has
             // no numbering to read it under, and nothing is applied where what the behavior
@@ -6206,6 +6228,8 @@ public final class Adequacy {
         }
         SiteNumbering numbering = SiteNumbering.of(checked.numberingIdentity());
         List<CoverageSites.ArmSite> arms = checked.plan().arms(behavior);
+        Predicate<ControlPlace.Arm> unreached =
+                unreachedIn(db.ask(new Arrived(module)).value(), behavior, checked);
         ArmReplacements carried = trials.carried();
         RowTrials.OfBehavior application = trials.forBehavior(behavior, sig);
         // What each row came to, and each row under each rewrite, once. A search runs a row to
@@ -6272,7 +6296,7 @@ public final class Adequacy {
 
             @Override
             public List<ArmReplacements.Rewrite> rewritesThrough(AlignedObservation ran) {
-                return carried.through(arms, ran);
+                return carried.askedOfARun(arms, ran, unreached);
             }
 
             private static List<Hir.Expr> valuesOf(RowToRun row) {

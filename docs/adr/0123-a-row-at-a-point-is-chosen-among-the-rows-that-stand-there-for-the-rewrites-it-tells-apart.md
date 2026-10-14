@@ -22,8 +22,10 @@ which arms a run goes through.
 
 Where a way to run rows is at hand, the composer offers each whole row it composes for a point to a
 preference, and the walk goes on to the next row while the preference passes rows over. A row is run,
-and run again once for each rewrite of each arm it went through that the instrumented classes carry —
-the rewrite as ADR-0121 defines it, at every site of the arm, wherever the run passed. The first row
+and run again once for each rewrite the replacement measure would ask of a row through the arms it
+went through — a sibling that is another program, standing at every site of the arm, and carried at
+every one of them. Which rewrites those are has one answer, read by the measure and by the
+composer alike, so a row is never chosen for a question its answer will not be read for. The first row
 whose every such rewrite answers it differently is taken. Where the preference is not satisfied within
 a fixed number of rows of its own, the row that told the most rewrites apart is taken, the earliest of
 those.
