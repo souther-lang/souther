@@ -1,5 +1,6 @@
 package souther.compiler.reading;
 
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
@@ -9,9 +10,14 @@ import souther.compiler.flow.ComparisonWays;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.ComparedNumbers;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.partition.WhatTheDeclarationsLeave;
@@ -141,8 +147,140 @@ final class NumberWays implements ComparisonWays {
         }
         ComparedNumber said = binary != null ? numbers.of(binary, reads) : null;
         ComparedNumber.DrawnLine drawn = said == null ? null : said.line();
-        return drawn == null ? ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy)
-                : !ruledOut(drawn, want);
+        if (drawn != null) {
+            return !ruledOut(drawn, want);
+        }
+        PairsLeft left = said != null && said.against() != null
+                ? twoPositionsComeOut(said, want) : PairsLeft.NOT_READ;
+        // The declarations hold of every input, so a way they leave no pair standing is closed
+        // whatever the text of the body would allow: the text reads two positions as two values
+        // nothing relates.
+        return switch (left) {
+            case NONE -> false;
+            case SOME -> true;
+            case NOT_READ -> ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy);
+        };
+    }
+
+    /** What the declarations leave of a way two positions stand to each other. */
+    private enum PairsLeft {
+        /** Some pair of values they leave stands that way. */
+        SOME,
+        /** No pair of values they leave does, every end read as far as it is written. */
+        NONE,
+        /** What they leave of the two is not read here. */
+        NOT_READ
+    }
+
+    /**
+     * Whether some pair of values the declarations leave two positions stands to each other the
+     * way {@code said} needs to come out {@code want}.
+     *
+     * <p>Asked of a comparison of one position against another, which draws no line. The two run
+     * where the declarations leave them, apart, and a pair stands each way the runs leave room for:
+     * level where they meet, and one below the other where one reaches lower than the other reaches
+     * high. Not a proof a row takes the way — what lies inside a run is more than this reads.
+     *
+     * <p>And the two held against each other where a rule relates them: the runs apart leave a
+     * pair standing each way, and a rule that one is never past the other leaves only some of them.
+     * Asked as where the difference of the two lies, which is the rule's own question. Each answer
+     * reads an end as far as it is written and no further, so a sign it says no pair stands is one
+     * every value it covers is strictly out of; the two together are what both leave.
+     */
+    private PairsLeft twoPositionsComeOut(ComparedNumber said, boolean want) {
+        if (!(said.placed() instanceof ComparisonClaim claim)) {
+            return PairsLeft.NOT_READ;
+        }
+        NumericDomain.Bounds one = quantities.runsBetween(said.term());
+        NumericDomain.Bounds other = quantities.runsBetween(said.against());
+        if (one == null || other == null) {
+            return PairsLeft.NOT_READ;
+        }
+        NumericDomain.Bounds apart = differenceOf(said);
+        if (apart == null) {
+            return PairsLeft.NONE;
+        }
+        Rel needed = want ? claim.statedRelation() : claim.statedRelation().denied();        for (int sign = -1; sign <= 1; sign++) {
+            if (needed.holds(sign) && standThatWay(one, other, sign)
+                    && differsThatWay(apart, sign)) {
+                return PairsLeft.SOME;
+            }
+        }
+        return PairsLeft.NONE;
+    }
+
+    /**
+     * Where the first position less the second lies, as the region reads every rule reaching the
+     * two; null where it leaves the two no values at all. Every value there is where the
+     * difference is no number counted — two strings have none — where the arithmetic could not
+     * hold it, or where the region read nothing of it.
+     */
+    private NumericDomain.Bounds differenceOf(ComparedNumber said) {
+        LinearForm<NumericTerm> form = LinearForm.atom(said.term())
+                .minus(LinearForm.atom(said.against())).orNull();
+        if (form == null) {
+            return NumericDomain.Bounds.OPEN;
+        }
+        return switch (quantities.region().projectionOf(form)) {
+            case NumericDomain.FormProjection.NothingIsLeft _ -> null;
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) ->
+                    new NumericDomain.Bounds(counted(bounds.min()), counted(bounds.max()));
+            // Nothing read of where the form lies, which rules nothing out.
+            case null -> NumericDomain.Bounds.OPEN;
+        };
+    }
+
+    /** {@code end} where it is a number counted, and no end where it is anything else. */
+    private static Endpoint counted(Endpoint end) {
+        return end != null && end.at() instanceof Count ? end : null;
+    }
+
+    /**
+     * Whether a difference within {@code apart} can have the sign {@code sign}: below nothing where
+     * it reaches under nothing, at nothing where nothing lies in it, above where it reaches over.
+     */
+    private static boolean differsThatWay(NumericDomain.Bounds apart, int sign) {
+        Endpoint nothing = Endpoint.inclusive(Count.ZERO);
+        return switch (Integer.signum(sign)) {
+            case 0 -> notPast(apart.min(), nothing) && notPast(nothing, apart.max());
+            case -1 -> below(apart.min(), nothing);
+            default -> below(nothing, apart.max());
+        };
+    }
+
+    /**
+     * Whether a value of {@code one} and a value of {@code other} can stand {@code sign} from each
+     * other: level where the runs meet, below where {@code one} starts under where {@code other}
+     * ends, above the other way round. An absent end runs to the end of the order.
+     */
+    private static boolean standThatWay(NumericDomain.Bounds one, NumericDomain.Bounds other,
+                                        int sign) {
+        return switch (Integer.signum(sign)) {
+            case 0 -> meet(one, other);
+            case -1 -> below(one.min(), other.max());
+            default -> below(other.min(), one.max());
+        };
+    }
+
+    /** Whether some value lies in both runs. */
+    private static boolean meet(NumericDomain.Bounds one, NumericDomain.Bounds other) {
+        return notPast(one.min(), other.max()) && notPast(other.min(), one.max());
+    }
+
+    /** Whether a value at or above {@code low} lies at or below {@code high}, each taken as far as
+     *  it is inclusive. */
+    private static boolean notPast(Endpoint low, Endpoint high) {
+        if (low == null || high == null) {
+            return true;
+        }
+        int at = low.at().compareTo(high.at());
+        return at < 0 || (at == 0 && low.inclusive() && high.inclusive());
+    }
+
+    /** Whether some value from {@code low} up stands strictly below some value up to
+     *  {@code high}. */
+    private static boolean below(Endpoint low, Endpoint high) {
+        return low == null || high == null || low.at().compareTo(high.at()) < 0;
     }
 
     /**

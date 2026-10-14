@@ -84,10 +84,10 @@ public sealed interface WhyNotTaken {
 
         /**
          * A quantity read from end to end that stands on no order a region measures values on:
-         * {@code a == b} over two records is read perfectly, and what it comes to is a difference
-         * between two positions that is a distance on nothing. What is here for an author to act
-         * on is the carrier — a position whose values this compiler measures on nothing is one
-         * every rule about it is unrepresented in.
+         * {@code a > b} over two cases of one sum is read perfectly, and what it comes to is a
+         * difference between two positions that is a distance on nothing. What is here for an
+         * author to act on is the carrier — a position whose values this compiler measures on
+         * nothing is one every rule about it is unrepresented in.
          */
         A_QUANTITY_ON_NO_ORDER,
 

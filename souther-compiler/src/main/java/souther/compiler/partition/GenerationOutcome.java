@@ -261,8 +261,9 @@ public sealed interface GenerationOutcome {
 
             /** Nothing searches for an input by the output it produces. */
             NO_STRATEGY_FOR_AN_OUTPUT_CASE(
-                    "rows here are composed from what the input positions divide into, and nothing"
-                            + " searches for one by the case it would answer with"),
+                    "rows here are composed for what the input positions divide into and not for"
+                            + " the case they answer with, so which of them answers with it is what"
+                            + " their runs say"),
 
             /** The position the case belongs to is not one any axis was derived at. */
             NO_AXIS_AT_THIS_POSITION("no axis was derived at the position this case belongs to, so"

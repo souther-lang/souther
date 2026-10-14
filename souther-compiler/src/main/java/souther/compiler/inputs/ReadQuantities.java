@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.NumberAt;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.ConstraintState;
@@ -106,6 +107,16 @@ final class ReadQuantities implements Quantities {
      */
     private final List<Assumed> assumed;
     /**
+     * The forms among {@link #assumed} that are two positions on an order that counts nothing held
+     * against each other, each as the two.
+     *
+     * <p>Read off a form where it is taken in and carried from then on. What it is read back for is
+     * where one of the two stands, which a search asks at every value it tries, and every value it
+     * tries is a fixing that makes a reading of its own — read off the list there, each candidate
+     * would ask the orders of every form taken in again.
+     */
+    private final List<HeldAgainst> heldAgainst;
+    /**
      * What the ones taken in on an order leave each term, worked out from {@link #assumed} the
      * first time anybody asks.
      *
@@ -116,8 +127,10 @@ final class ReadQuantities implements Quantities {
      * not: nothing adds to it, and meeting the ends is the same answer in any order they are met.
      *
      * <p>On demand and not when the value is made, because a value is made far more often than this
-     * is asked: every fixing a search does builds one, and a fixing changes nothing here. Worked out
-     * eagerly, the walk that chooses a value paid for this list at every candidate it tried.
+     * is asked: every fixing a search does builds one. Worked out eagerly, the walk that chooses a
+     * value paid for this list at every candidate it tried. A fixing is part of the answer only
+     * where one of two positions held against each other stands at a place
+     * ({@link #heldAgainst}), and each value holds its own fixings.
      *
      * <p>Whichever thread gets there first, and the rest read what it wrote. Two that raced would
      * work out the same map from the same list, so what is published is a value and never a
@@ -221,6 +234,64 @@ final class ReadQuantities implements Quantities {
         }
     }
 
+    /**
+     * Two positions on an order that counts nothing, one held against the other:
+     * {@code left rel right}.
+     *
+     * <p>What a form taken in over two strings is: {@code left - right rel 0}. The arithmetic
+     * carries it as a relation of the two and that is all it can do with it, since a place on such
+     * an order is no number — a position fixed at one is not among what the arithmetic solves. So
+     * what the relation leaves the other position once one of them stands at a place is read off
+     * this: a place on that order the other is held against ({@link #heldBy}).
+     *
+     * <p>The two in the order the terms are written down in, the relation turned to match, so one
+     * statement said with its sides exchanged is the same one.
+     */
+    private record HeldAgainst(NumericTerm.FromOnePosition left, NumericTerm.FromOnePosition right,
+                               Rel rel) {
+
+        /**
+         * {@code form rel 0} as two positions held against each other, where it weighs one by one
+         * and another by minus one and adds nothing — or null where it is any other form.
+         */
+        static HeldAgainst of(LinearForm<NumericTerm> form, Rel rel) {
+            if (form.constant().signum() != 0 || form.coefs().size() != 2) {
+                return null;
+            }
+            List<NumericTerm> terms = NumericTerms.inOrder(form.coefs().keySet());
+            if (!(terms.get(0) instanceof NumericTerm.FromOnePosition first)
+                    || !(terms.get(1) instanceof NumericTerm.FromOnePosition second)
+                    || !form.coefs().get(first).negated().equals(form.coefs().get(second))
+                    || form.coefs().get(first).abs().compareTo(ExactRatio.ONE) != 0) {
+                return null;
+            }
+            return form.coefs().get(first).signum() > 0
+                    ? new HeldAgainst(first, second, rel)
+                    : new HeldAgainst(first, second, rel.turned());
+        }
+
+        /** The two positions. */
+        List<NumericTerm.FromOnePosition> both() {
+            return List.of(left, right);
+        }
+
+        /**
+         * The relation {@code term} stands in to the other position, said with {@code term} on the
+         * left — or null where {@code term} is neither of the two.
+         */
+        Rel heldBy(NumericTerm term) {
+            if (term.equals(left)) {
+                return rel;
+            }
+            return term.equals(right) ? rel.turned() : null;
+        }
+
+        /** The position held against {@code term} here. */
+        NumericTerm.FromOnePosition besides(NumericTerm term) {
+            return term.equals(left) ? right : left;
+        }
+    }
+
     /** The values fixed at one term, kept as their least and greatest so that what was fixed does
      *  not depend on the order it arrived in. */
     private record Fixed(Place least, Place most) {
@@ -240,12 +311,13 @@ final class ReadQuantities implements Quantities {
                            java.util.function.Function<TermPath, Type> typeAt,
                            Map<NumericTerm, Fixed> fixed,
                            RuleReadingContext ruleReading, List<Assumed> assumed,
-                           Contexts contexts) {
+                           List<HeldAgainst> heldAgainst, Contexts contexts) {
         this.contexts = contexts;
         this.cases = List.copyOf(cases);
         this.ruleReading = ruleReading;
         this.typeAt = typeAt;
         this.assumed = List.copyOf(assumed);
+        this.heldAgainst = List.copyOf(heldAgainst);
         // In the order the behavior declares its parameters. A proof of emptiness names one of them
         // and a report is a document compared against the one written last time, so an order read
         // off a hash would move which parameter is named between runs.
@@ -265,7 +337,7 @@ final class ReadQuantities implements Quantities {
                              java.util.function.Function<TermPath, Type> typeAt,
                              RuleReadingContext ruleReading) {
         return new ReadQuantities(byRoot, new Roots(roots), byPath, cases, typeAt, Map.of(),
-                ruleReading, List.of(), new Contexts());
+                ruleReading, List.of(), List.of(), new Contexts());
     }
 
     /**
@@ -279,7 +351,7 @@ final class ReadQuantities implements Quantities {
     private ReadQuantities unrefined() {
         return fixed.isEmpty() && assumed.isEmpty() ? this
                 : new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), ruleReading,
-                        List.of(), contexts);
+                        List.of(), List.of(), contexts);
     }
 
     /**
@@ -701,7 +773,35 @@ final class ReadQuantities implements Quantities {
                 out.add(each.at());
             }
         }
+        // And a position held unequal to another that stands at one place, which is a hole at
+        // that place.
+        for (HeldAgainst against : heldAgainst) {
+            if (against.heldBy(term) == Rel.NE
+                    && standingAt(against.besides(term)) instanceof Place other) {
+                out.add(other);
+            }
+        }
         return souther.compiler.numeric.PlacesApart.of(out);
+    }
+
+    /** The one place {@code term} was fixed at, or null where it was fixed at none or at two. */
+    private Place standingAt(NumericTerm term) {
+        Fixed at = fixed.get(term);
+        return at != null && at.isOne() ? at.least() : null;
+    }
+
+    /** {@code taken}, where it is a form over two positions on an order that counts nothing held
+     *  against each other, as the two; null where it is anything else. */
+    private HeldAgainst heldAgainst(Assumed taken) {
+        return taken instanceof Assumed.OverAForm over
+                && HeldAgainst.of(over.form(), over.rel()) instanceof HeldAgainst pair
+                && !countsOn(pair.left()) && !countsOn(pair.right()) ? pair : null;
+    }
+
+    /** Whether the order {@code term} stands on counts to numbers, or is no order this knows. */
+    private boolean countsOn(NumericTerm term) {
+        Carrier order = ordersOf(term).answered();
+        return order == null || order.counts();
     }
 
     /** The same rules with one more thing taken in, or this where it was already taken in. */
@@ -711,8 +811,13 @@ final class ReadQuantities implements Quantities {
         }
         List<Assumed> both = new ArrayList<>(assumed);
         both.add(taking);
+        List<HeldAgainst> pairs = heldAgainst;
+        if (heldAgainst(taking) instanceof HeldAgainst pair) {
+            pairs = new ArrayList<>(heldAgainst);
+            pairs.add(pair);
+        }
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, ruleReading,
-                both, contexts);
+                both, pairs, contexts);
     }
 
     /**
@@ -1192,7 +1297,7 @@ final class ReadQuantities implements Quantities {
         // stopped above — a field every case of a sum spreads is one — was spaced by nothing while
         // the order was there to be had, and a count under more steps than the enumeration goes
         // down would lose the floor every count has.
-        souther.compiler.check.Carrier carrier = ordersOf(term).answered();
+        Carrier carrier = ordersOf(term).answered();
         return carrier == null ? null : carrier.spacing();
     }
 
@@ -1434,7 +1539,7 @@ final class ReadQuantities implements Quantities {
             return this;
         }
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, ruleReading,
-                assumed, contexts);
+                assumed, heldAgainst, contexts);
     }
 
     /**
@@ -1510,6 +1615,16 @@ final class ReadQuantities implements Quantities {
             if (taken instanceof Assumed.ApartFrom hole && pinnedAt(hole.term(), hole.at())) {
                 return Optional.of(new EmptyInput.WhereARuleHoldsThePositionApart(hole.term(),
                         hole.at()));
+            }
+        }
+        // And two positions held against each other, each fixed where the other is not on the
+        // side the rule holds it to. No arithmetic carries the two, so this is where it is seen.
+        for (HeldAgainst against : heldAgainst) {
+            if (standingAt(against.left()) instanceof Place left
+                    && standingAt(against.right()) instanceof Place right
+                    && !against.rel().holds(Integer.signum(left.compareTo(right)))) {
+                return Optional.of(new EmptyInput.HeldAgainstAnotherWhereItIsNot(against.left(),
+                        left, against.right(), right));
             }
         }
         // Two things fixed under cases no one value is both of. Said here rather than by the rules,
@@ -1979,6 +2094,18 @@ final class ReadQuantities implements Quantities {
         for (Assumed taken : assumed) {
             if (taken instanceof Assumed.OnAnOrder each) {
                 out.merge(each.term(), boundsAt(each.at(), each.rel()), ReadQuantities::meeting);
+            }
+        }
+        // A position held against another that stands at one place is held against that place,
+        // which is a bound like the ones above — and a hole where it is held unequal, which
+        // {@link #apartAt} says.
+        for (HeldAgainst against : heldAgainst) {
+            for (NumericTerm term : against.both()) {
+                Rel rel = against.heldBy(term);
+                Place other = standingAt(against.besides(term));
+                if (other != null && rel != Rel.NE) {
+                    out.merge(term, boundsAt(other, rel), ReadQuantities::meeting);
+                }
             }
         }
         Map<NumericTerm, NumericDomain.Bounds> made = Map.copyOf(out);

@@ -7,10 +7,12 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Text;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -19,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -168,6 +171,59 @@ class AComparisonAgainstAWrittenValueIsCarriedOnItsOwnOrderTest {
                         "over both of the positions it holds apart");
             }
         }
+    }
+
+    /**
+     * And what the arithmetic carries of them is the relation and no more: a place on that order is
+     * no number, so one of the two standing at a place is nothing it solves with. What the relation
+     * leaves the other then is a place on the order it is held against — a hole where the two are to
+     * differ, an end where one is to stand below the other — and two standing where it does not
+     * leave them is a row no rule admits.
+     */
+    @Test
+    void oneOfTwoPositionsStandingAtAPlaceHoldsTheOtherAgainstIt() {
+        Text t = Text.of("t");
+        SearchRegion apart = narrowedBy("textApartFromAnotherPosition");
+        NumericTerm.FromOnePosition a = termAt("textApartFromAnotherPosition", "p.a");
+        NumericTerm.FromOnePosition b = termAt("textApartFromAnotherPosition", "p.b");
+        assertTrue(apart.given(a, t).apartAt(b).has(t),
+                "the other is held away from where the first stands");
+        assertInstanceOf(EmptyInput.WhereARuleHoldsThePositionApart.class,
+                apart.given(a, t).given(b, t).emptiness().orElse(null),
+                "and the two at one place is refused");
+        assertTrue(apart.given(a, t).given(b, Text.of("u")).emptiness().isEmpty(),
+                "and at two is not");
+
+        SearchRegion below = narrowedBy("textBelowAnotherPosition");
+        NumericTerm.FromOnePosition lower = termAt("textBelowAnotherPosition", "p.a");
+        NumericTerm.FromOnePosition upper = termAt("textBelowAnotherPosition", "p.b");
+        NumericDomain.Bounds runs = below.given(lower, t).projectionOf(upper)
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds held)
+                ? held : null;
+        assertNotNull(runs, "the other runs somewhere");
+        assertEquals("t", end(runs.min()), "from the place the first stands at");
+        assertFalse(runs.min().inclusive(), "and strictly above it");
+        assertInstanceOf(EmptyInput.HeldAgainstAnotherWhereItIsNot.class,
+                below.given(lower, t).given(upper, Text.of("s")).emptiness().orElse(null),
+                "and the second below the first is refused");
+    }
+
+    /** The region of {@code behavior}'s input narrowed by what its condition holding takes in. */
+    private static SearchRegion narrowedBy(String behavior) {
+        return new WayToTheBorder(stating(behavior, true)).narrowing(regionOf(behavior));
+    }
+
+    /** The term of the form {@code behavior}'s condition takes in that is read at {@code path}. */
+    private static NumericTerm.FromOnePosition termAt(String behavior, String path) {
+        TakenConstraint.Affine carried = assertInstanceOf(TakenConstraint.Affine.class,
+                taken(behavior, true));
+        for (NumericTerm each : carried.form().coefs().keySet()) {
+            if (each instanceof NumericTerm.FromOnePosition one
+                    && one.subjectPath().toString().equals(path)) {
+                return one;
+            }
+        }
+        throw new AssertionError(behavior + " reads no number at " + path + ": " + carried);
     }
 
     /** And so is a written value the carrier counts, which is what keeps the split at the reading

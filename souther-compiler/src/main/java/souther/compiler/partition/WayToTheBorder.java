@@ -131,6 +131,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                     // Which of two values stands at a position no region measures. The row is
                     // written with it where the row is composed, and the region says nothing of it.
                     case RowDemand.ATruth _ -> region;
+                    // Two values being one on no order, which no region measures either.
+                    case RowDemand.OneValueAtBoth _ -> region;
                 };
             }
         }

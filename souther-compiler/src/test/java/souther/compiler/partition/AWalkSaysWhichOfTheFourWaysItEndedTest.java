@@ -12,6 +12,7 @@ import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -193,6 +194,28 @@ class AWalkSaysWhichOfTheFourWaysItEndedTest {
         assertEquals(List.of(Count.of(0), Count.of(-1), Count.of(2), Count.of(-2)),
                 walked.places(),
                 "the value the declarations refuse is not offered, and the rest of the run is");
+    }
+
+    /**
+     * Strings a set names outright are walked, every one of them, though the order has no step:
+     * the set says which they are, so nothing has to be stepped to.
+     *
+     * <p>And the figure is met where a string it names was left untaken, as it is on an order
+     * that steps.
+     */
+    @Test
+    void stringsASetNamesAreWalkedWithNoStepToTake() {
+        ValueSet named = new ValueSet.Finite(new LinkedHashSet<>(List.of(
+                Value.text("a"), Value.text("b"), Value.text("c"))));
+        Outwards.Walked walked = Outwards.from(Text.of("a"), Count.of(1), Carrier.TEXT,
+                NumericDomain.Bounds.OPEN, 8, 64, named, PlacesApart.of(List.of(Text.of("b"))));
+
+        assertEquals(List.of(Text.of("a"), Text.of("c")), walked.places(),
+                "the string held apart is stepped past and the others are walked");
+        assertEquals(Outwards.Ended.HAVING_TRIED_THEM_ALL, walked.ended());
+        assertEquals(Outwards.Ended.AT_THE_FIGURE_OF_CANDIDATES,
+                Outwards.from(Text.of("a"), Count.of(1), Carrier.TEXT, NumericDomain.Bounds.OPEN,
+                        2, 64, named, PlacesApart.NONE).ended());
     }
 
     private static Outwards.Ended walkOfStrings(Endpoint low, Endpoint high) {

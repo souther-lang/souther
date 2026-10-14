@@ -1049,6 +1049,28 @@ public sealed interface Carrier extends ValueOrder {
     }
 
     /**
+     * Every place {@code set} names on this order, in the order the set names them, where it names
+     * finitely many; null where it does not.
+     *
+     * <p>The places an order with no step to take can still be walked through: the set says which
+     * they are, so nothing has to be stepped to. A value the order holds no place for is left out,
+     * as {@link #somewhereIn} leaves it out.
+     */
+    default List<Place> everyPlaceOf(ValueSet set) {
+        if (!(set instanceof ValueSet.Finite finite)) {
+            return null;
+        }
+        List<Place> out = new ArrayList<>();
+        for (Value each : finite.values()) {
+            Place at = placeOf(each);
+            if (at != null) {
+                out.add(at);
+            }
+        }
+        return out;
+    }
+
+    /**
      * A place this order holds inside {@code range} that {@code set} admits and none of
      * {@code apart} stands at, or null where this composed none.
      *

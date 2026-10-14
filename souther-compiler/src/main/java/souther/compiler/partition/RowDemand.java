@@ -185,6 +185,91 @@ public sealed interface RowDemand {
     }
 
     /**
+     * That the values at two positions are one value, or are not.
+     *
+     * <p>A value to write and not a relation to place, as {@link ATruth} is: two records, two cases
+     * of a sum or two truths are equal or unequal on no order, so no region measures how they
+     * stand and what a row is asked is which values it writes at the two. A composer meets it by
+     * writing at one of them the value it wrote at the other, or one other than that.
+     *
+     * <p>Symmetric, and which of the two is written first is the composing's to decide: the two
+     * positions are held in one order for paths ({@link TermPath#structuralOrder}), so the same
+     * statement written with its sides exchanged is the same demand.
+     *
+     * @param one   the first of the two positions in that order
+     * @param other the second
+     * @param same  whether a row passing the condition holds one value at both
+     */
+    record OneValueAtBoth(TermPath one, TermPath other, boolean same) implements OfACondition {
+
+        public OneValueAtBoth {
+            Objects.requireNonNull(one, "the first of two positions");
+            Objects.requireNonNull(other, "the second of two positions");
+            if (TermPath.structuralOrder().compare(one, other) >= 0) {
+                throw new IllegalArgumentException("two positions, held in the order paths are"
+                        + " held in: " + one + ", " + other);
+            }
+        }
+
+        /**
+         * The two in the order paths are held in, whichever order they come in — or null where
+         * either is a position a row's value is not read at down to its fields
+         * ({@link #fieldsTo}), so that a composer could not tell what it wrote there.
+         */
+        static OneValueAtBoth of(TermPath a, TermPath b, boolean same) {
+            if (a.equals(b) || fieldsTo(a) == null || fieldsTo(b) == null) {
+                return null;
+            }
+            return TermPath.structuralOrder().compare(a, b) < 0 ? new OneValueAtBoth(a, b, same)
+                    : new OneValueAtBoth(b, a, same);
+        }
+
+        /**
+         * The fields {@code at} steps through from its parameter, or null where it steps into an
+         * element or a key.
+         *
+         * <p>A case it steps under is no field: a value written under the case is that case's
+         * record, and its fields are read off it as they stand. One written under another case has
+         * no such field, and nothing is read there.
+         */
+        static List<String> fieldsTo(TermPath at) {
+            List<String> out = new ArrayList<>();
+            for (TermPath.Step step : at.steps()) {
+                switch (step) {
+                    case TermPath.Step.Field(var name) -> out.add(name);
+                    case TermPath.Step.Refine _ -> { }
+                    case TermPath.Step.Element _, TermPath.Step.Key _ -> {
+                        return null;
+                    }
+                }
+            }
+            return out;
+        }
+
+        /** The position across from {@code at}, which is one of the two. */
+        TermPath besides(TermPath at) {
+            return at.equals(one) ? other : one;
+        }
+
+        /** None: two values on no order are no number. */
+        @Override
+        public Set<NumericTerm> terms() {
+            return Set.of();
+        }
+
+        @Override
+        public Set<TermPath> positions() {
+            return elementAndValue(one, other);
+        }
+
+        /** None: a row held to this writes both. */
+        @Override
+        public Set<TermPath> valuesRead() {
+            return Set.of();
+        }
+    }
+
+    /**
      * That the value at a position inside an element is one of the cases {@code position} is
      * narrowed to.
      *
@@ -482,7 +567,7 @@ public sealed interface RowDemand {
         return switch (demand) {
             case Exists exists -> exists.ofAnElement().oneWay();
             case ForAll every -> every.ofEachElement().oneWay();
-            case Relational _, ATruth _, SoMany _, ForTheRun _ -> true;
+            case Relational _, ATruth _, OneValueAtBoth _, SoMany _, ForTheRun _ -> true;
         };
     }
 

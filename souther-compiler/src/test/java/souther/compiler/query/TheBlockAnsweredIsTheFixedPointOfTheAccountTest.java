@@ -94,8 +94,11 @@ class TheBlockAnsweredIsTheFixedPointOfTheAccountTest {
         // by a row composed for it, and the block writes that down.
         List<String> offered = rowsOffered(MODEL);
         assertFalse(offered.isEmpty(), () -> "the block offers rows:\n" + block(MODEL));
-        assertTrue(block(MODEL).contains("nothing offers a row for `No` in `judge`"),
+        assertTrue(block(MODEL).contains("nothing aims a row at `No` in `judge`"),
                 () -> "and names what it could compose none for:\n" + block(MODEL));
+        assertFalse(block(MODEL).contains("nothing offers a row for `No`"),
+                () -> "without saying no row reaches it, which some of these rows do once they"
+                        + " run:\n" + block(MODEL));
 
         // Written out with their answers, they are rows this module keeps.
         String answered = withRows(MODEL, offered);
@@ -154,7 +157,7 @@ class TheBlockAnsweredIsTheFixedPointOfTheAccountTest {
                 () -> "what was answered and what was expected are two columns:\n" + report(missed));
 
         // And the next run says it again, in the words of the thing that could compose no row.
-        assertTrue(block(missed).contains("nothing offers a row for `No` in `judge`"),
+        assertTrue(block(missed).contains("nothing aims a row at `No` in `judge`"),
                 () -> "the block names what is still owed:\n" + block(missed));
 
         // Beside it, the other half of writing answers by hand: the rows that are wrong are wrong,

@@ -34,25 +34,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ARunOfARowShortOfTheWayIsNotEvidenceAboutTheRuleTest {
 
     /**
-     * A body deciding on two records of its own input.
+     * A body deciding on a record of its own input against one it builds out of another position.
      *
-     * <p>A difference between two records is read from end to end and is a distance on nothing, so
-     * the way over the input states nothing about it and the demand reading has nothing to say
-     * either — the condition is about the input. Nothing is written into the account of the
-     * composing by either composer, and what the row was composed without is the walk's own
-     * decline.
+     * <p>The record the body builds is no position a row writes, so a row is composed without
+     * what the condition states — the condition is about the input, and what the row was composed
+     * without is what the way states of it.
      */
     private static final String RECORDS_OF_THE_INPUT_COMPARED = """
             module example.inputrecords
 
             data K = { id: Int }
-            data R = { k: K, j: K }
+            data R = { k: K, n: Int }
             data Yes
             data No
             data Answer = Yes | No
 
             behavior decides : (r: R) -> Answer
-            let decides (r) = if r.k == r.j then Yes else No
+            let decides (r) = if r.k == K { id = r.n } then Yes else No
             """;
 
     /** The rule the composed row did not take is not one this says nothing takes. */

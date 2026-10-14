@@ -30,9 +30,12 @@ import souther.compiler.numeric.Place;
  *               too and places nothing on them
  * @param at     where the other side falls on the number's order, or null where it is not a value
  *               that order writes — another position, a value this compiler does not place
+ * @param against the number of this input the other side names, where it names one: the second
+ *                of two positions held against each other. Null where the other side is a value
+ *                or names no number here
  */
 public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlacement placed,
-                             Place at) {
+                             Place at, NumericTerm against) {
 
     public ComparedNumber {
         // The orders say which number they are of, and the number is held here as well because a
@@ -90,11 +93,16 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
         if (side == null) {
             return null;
         }
+        // The other side as a number only where it is no value the order writes: a value placed
+        // on the order is the line, and asked as a number it would be the same side twice.
+        Named other = side.at() != null ? null
+                : namedBy(side.turned() ? binary.left() : binary.right(), read, reads);
         // Turned round as what it states and not as the operator it would have been written with:
         // which side a number stands on is how the source was spelled, and what the rule places is
         // read off the operator once.
         return new ComparedNumber(side.named().term(), side.named().orders(),
-                side.turned() ? placed.turned() : placed, side.at());
+                side.turned() ? placed.turned() : placed, side.at(),
+                other == null ? null : other.term());
     }
 
     /**

@@ -26,7 +26,7 @@ class WhatAParameterTurnsOnReachesThroughTheParametersBetweenTest {
             new ContentsAsked.Asked(TermPath.of("outer").then("held"),
                     TermPath.of("box").then("held"), true, false, Optional.empty()),
             new ContentsAsked.Asked(TermPath.of("box").then("held"), TermPath.of("n"), true,
-                    false, Optional.empty())));
+                    false, Optional.empty())), List.of());
 
     private static final List<String> DECLARED = List.of("outer", "box", "n");
 
@@ -53,11 +53,31 @@ class WhatAParameterTurnsOnReachesThroughTheParametersBetweenTest {
                 new ContentsAsked.Asked(TermPath.of("b").then("xs"), TermPath.of("a").then("v"),
                         true, false, Optional.empty()),
                 new ContentsAsked.Asked(TermPath.of("a").then("ys"), TermPath.of("b").then("w"),
-                        true, false, Optional.empty())));
+                        true, false, Optional.empty())), List.of());
         CompositionOrder.Result.Circular said = assertInstanceOf(
                 CompositionOrder.Result.Circular.class,
                 CompositionOrder.of(List.of("a", "b", "c"), circular));
         assertEquals(List.of("a", "b"), said.parameters());
+    }
+
+    /**
+     * Two parameters held to one value say nothing of which comes first: they keep the order they
+     * are declared in, and the one composed second turns on the first, whichever of the two the
+     * relation names first.
+     */
+    @Test
+    void ofTwoParametersHeldToOneValueTheSecondComposedTurnsOnTheFirst() {
+        for (boolean same : List.of(true, false)) {
+            ContentsAsked held = new ContentsAsked(List.of(), List.of(RowDemand.OneValueAtBoth.of(
+                    TermPath.of("n").then("v"), TermPath.of("outer").then("v"), same)));
+            CompositionOrder order = ordered(held);
+
+            assertEquals(List.of(0, 1, 2), order.order(), "held adds no order of its own");
+            assertTrue(order.mayTurnOn(2, 0), "n, composed after outer, turns on it");
+            assertFalse(order.mayTurnOn(0, 2));
+            assertTrue(order.awaited(0));
+            assertTrue(order.alone(1), "box is held to nothing");
+        }
     }
 
     private static CompositionOrder ordered(ContentsAsked contents) {
