@@ -6610,7 +6610,7 @@ public final class Generator {
 
     /**
      * What placing a cut about a container's elements came to, with nothing it found standing for
-     * a proof unless {@code provedByTheRules} says the rules themselves leave it nothing.
+     * a proof unless {@code provedByTheDeclarations} says the rules themselves leave it nothing.
      *
      * <p>A region reads a term inside the elements as the value of one element, and a row writes
      * every element as that one. What that leaves nothing for is a row of elements written alike,
@@ -6618,9 +6618,9 @@ public final class Generator {
      * what this composer did, and the model's word only where the declarations alone settle it.
      */
     private static Placed asComposedOnly(OnTheWay.TakenIn cut, Placed placed,
-                                         boolean provedByTheRules) {
+                                         boolean provedByTheDeclarations) {
         return placed instanceof Placed.AtNone(ReachabilityGap.ProvedImpossible _)
-                && !provedByTheRules
+                && !provedByTheDeclarations
                 ? new Placed.AtNone(new ReachabilityGap.Uncomposed(cut,
                         new ReachabilityGap.Why.ElementsWrittenAlike()))
                 : placed;
@@ -11789,7 +11789,7 @@ public final class Generator {
                 case TermRealizations.Realization.Unexhausted some -> some.detail();
                 case TermRealizations.Realization.Built _,
                      TermRealizations.Realization.Stopped _,
-                     TermRealizations.Realization.NoNumberTheRulesAdmit _ -> null;
+                     TermRealizations.Realization.NoNumberTheDeclarationsAdmit _ -> null;
             };
         }
 
@@ -11815,7 +11815,7 @@ public final class Generator {
          * the same question asks for it and the rest are not handed it.
          */
         boolean settlesTheQuestion() {
-            return came instanceof TermRealizations.Realization.NoNumberTheRulesAdmit;
+            return came instanceof TermRealizations.Realization.NoNumberTheDeclarationsAdmit;
         }
 
         /** What to report where no value was offered here at all. */
@@ -11835,7 +11835,7 @@ public final class Generator {
                 // at, and whether that settles what somebody is owed a row at turns on what is
                 // owed — so it is asked for ({@link #settlesTheQuestion()}) by the reader that
                 // knows, and is not carried in a word every reader takes.
-                case TermRealizations.Realization.NoNumberTheRulesAdmit _ ->
+                case TermRealizations.Realization.NoNumberTheDeclarationsAdmit _ ->
                         UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
                 case TermRealizations.Realization.Built _ -> throw new IllegalStateException(
                         "an edge that offered values asked why it offered none");

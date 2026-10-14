@@ -528,8 +528,8 @@ public sealed interface ItemAssessment {
                 for (souther.compiler.partition.ReachabilityGap gap : account.onTheWay()) {
                     if (gap instanceof souther.compiler.partition.ReachabilityGap
                             .ProvedImpossible) {
-                        throw new IllegalArgumentException("a row stands where the rules leave"
-                                + " nothing standing: " + gap.anchor());
+                        throw new IllegalArgumentException("a row stands where no value can"
+                                + " stand: " + gap.anchor());
                     }
                 }
                 return account;

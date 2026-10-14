@@ -1500,7 +1500,7 @@ public final class LevelRealizer {
                 return Reached.EXHAUSTED;
             }
             at[i] = new Count(solved);
-            if (!theRulesHaveNotRefused()) {
+            if (!theDeclarationsHaveNotRefused()) {
                 at[i] = null;
                 return Reached.EXHAUSTED;
             }
@@ -1531,7 +1531,7 @@ public final class LevelRealizer {
          * <p>What giving this up may not give up is the answer. An assignment out of the wider box
          * that nothing held against the rules is one the record can refuse, and offered as a row it
          * comes back refused where it is built — which is the defect this reading exists to remove,
-         * arriving by way of a budget. So the last step is {@link #theRulesHaveNotRefused} and is
+         * arriving by way of a budget. So the last step is {@link #theDeclarationsHaveNotRefused} and is
          * not budgeted.
          */
         private SearchRegion narrowing(
@@ -1560,12 +1560,12 @@ public final class LevelRealizer {
          * never put to the rules at all, so asking about the last of them alone would hold the walk
          * to nothing it had not already checked.
          */
-        private boolean theRulesHaveNotRefused() {
+        private boolean theDeclarationsHaveNotRefused() {
             java.util.Map<RealizationTarget, Place> all = new LinkedHashMap<>();
             for (int j = 0; j < terms.size(); j++) {
                 all.put(terms.get(j).getKey(), at[j]);
             }
-            return LevelRealizer.this.theRulesHaveNotRefused(all, within);
+            return LevelRealizer.this.theDeclarationsHaveNotRefused(all, within);
         }
 
         /**
@@ -2002,14 +2002,14 @@ public final class LevelRealizer {
         if (tried.holds(fixing)) {
             return Realization.Unknown.nothingComposedOne();
         }
-        return theRulesHaveNotRefused(fixing, within)
+        return theDeclarationsHaveNotRefused(fixing, within)
                 ? new Realization.Found(fixing)
                 : Realization.Unknown.nothingComposedOne();
     }
 
     /**
-     * Whether the rules, with every position of an item fixed at what was chosen, were not shown to
-     * leave nothing.
+     * Whether the declarations — the types and the rules written on them — with every position of
+     * an item fixed at what was chosen, were not shown to leave nothing.
      *
      * <p>Not that a value exists. Nothing here builds one, and an emptiness nobody proved is not a
      * value proven to exist — what settles that is the row itself, where it is built. What this
@@ -2028,7 +2028,7 @@ public final class LevelRealizer {
      * about the values in it. Anything more would be a claim about an order this reading does not
      * reach.
      */
-    private boolean theRulesHaveNotRefused(Map<RealizationTarget, Place> fixing,
+    private boolean theDeclarationsHaveNotRefused(Map<RealizationTarget, Place> fixing,
                                            SearchRegion within) {
         Map<NumericTerm, Place> standing = new LinkedHashMap<>();
         // A count is no number the region holds a range of; the numbers fixed beside it are.

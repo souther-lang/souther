@@ -15,8 +15,8 @@ import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.partition.MeaningsOfABodyReading;
-import souther.compiler.partition.WhatTheRulesLeave;
-import souther.compiler.partition.WhatTheRulesLeaveAnArm;
+import souther.compiler.partition.WhatTheDeclarationsLeave;
+import souther.compiler.partition.WhatTheDeclarationsLeaveAnArm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
 import souther.compiler.types.ModelOccurrence;
@@ -88,7 +88,7 @@ final class NumberWays implements ComparisonWays {
 
     /**
      * A fork of the model is entered where what its condition states can come out that way under
-     * the input's rules ({@link WhatTheRulesLeave}). So is a fork in a copy of one of the
+     * the input's rules ({@link WhatTheDeclarationsLeave}). So is a fork in a copy of one of the
      * language's operations: it states nothing of the model, and what its condition states, read
      * where the copy stands, is what the operation's body says at the call
      * ({@link MeaningsOfABodyReading#ofACopiedCondition}) — read by the rules a model's conditions
@@ -103,7 +103,7 @@ final class NumberWays implements ComparisonWays {
         }
         if (construct.isEmpty()) {
             return insideACopyOfTheLibrary(fork)
-                    ? Optional.of(WhatTheRulesLeave.admits(MeaningsOfABodyReading
+                    ? Optional.of(WhatTheDeclarationsLeave.admits(MeaningsOfABodyReading
                             .ofACopiedCondition(fork.cond(), reads, numbers.reading()), want,
                             numbers.reading()))
                     : Optional.empty();
@@ -113,7 +113,7 @@ final class NumberWays implements ComparisonWays {
         MeaningsOfABody.Site site =
                 new MeaningsOfABody.Site(construct.get(), MeaningsOfABody.Part.Asked.CONDITION);
         return Optional.of(meanings.at(site)
-                .map(proposition -> WhatTheRulesLeave.admits(proposition, want,
+                .map(proposition -> WhatTheDeclarationsLeave.admits(proposition, want,
                         numbers.reading()))
                 .orElseGet(() -> new AWayThrough.NotRuledOut(List.of(
                         new WhyNotTaken.MeaningUnread(meanings.whyNothingAt(site))))));
@@ -128,8 +128,8 @@ final class NumberWays implements ComparisonWays {
 
     @Override
     public Predicate<Core.Case> mayTake(Core.Match match) {
-        WhatTheRulesLeaveAnArm arms = WhatTheRulesLeaveAnArm.of(match, reads, symbols, newtypes,
-                meanings, numbers.reading());
+        WhatTheDeclarationsLeaveAnArm arms = WhatTheDeclarationsLeaveAnArm.of(match, reads,
+                symbols, newtypes, meanings, numbers.reading());
         return arm -> arms.ruledOut(match.cases().indexOf(arm)).isEmpty();
     }
 
@@ -152,7 +152,7 @@ final class NumberWays implements ComparisonWays {
             case ComparisonClaim.Cut cut -> {
                 // Which side the way needs, which is the side the comparison is true on.
                 boolean upIsTrue = cut.satisfyingSide() == Towards.ABOVE;
-                yield WhatTheRulesLeave.anythingBeyond(runs, drawn.at(), upIsTrue == want,
+                yield WhatTheDeclarationsLeave.anythingBeyond(runs, drawn.at(), upIsTrue == want,
                         cut.holdsAtTheValue() == want);
             }
             // The value itself where the way is the one the comparison holds at, and everything else
@@ -165,13 +165,13 @@ final class NumberWays implements ComparisonWays {
 
     /** Whether the run holds the value the comparison named. */
     private static boolean holds(NumericDomain.Bounds runs, Place at) {
-        return WhatTheRulesLeave.anythingBeyond(runs, at, true, true)
-                && WhatTheRulesLeave.anythingBeyond(runs, at, false, true);
+        return WhatTheDeclarationsLeave.anythingBeyond(runs, at, true, true)
+                && WhatTheDeclarationsLeave.anythingBeyond(runs, at, false, true);
     }
 
     /** Whether the run holds anything but the value the comparison named. */
     private static boolean notOnlyOneValue(NumericDomain.Bounds runs, Place at) {
-        return WhatTheRulesLeave.anythingBeyond(runs, at, true, false)
-                || WhatTheRulesLeave.anythingBeyond(runs, at, false, false);
+        return WhatTheDeclarationsLeave.anythingBeyond(runs, at, true, false)
+                || WhatTheDeclarationsLeave.anythingBeyond(runs, at, false, false);
     }
 }

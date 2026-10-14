@@ -569,7 +569,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         LinearForm<NumericTerm> overTheInput =
                 stated.proposition() instanceof Proposition.Compared(
                         Relation.Affine affine, boolean _, String _)
-                        ? WhatTheRulesLeave.ofTheInput(affine.form()) : null;
+                        ? WhatTheDeclarationsLeave.ofTheInput(affine.form()) : null;
         // And a count of the elements meeting something, where what is stated is one over that.
         Read counted = overTheInput == null && stated.proposition() instanceof Proposition.Compared(
                 Relation.Affine affine, boolean holds, String _)
@@ -1168,7 +1168,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                InputReading read, InputReads reads) {
         return switch (line.relation()) {
             case Relation.Affine affine -> {
-                LinearForm<NumericTerm> over = WhatTheRulesLeave.ofTheInput(affine.form());
+                LinearForm<NumericTerm> over = WhatTheDeclarationsLeave.ofTheInput(affine.form());
                 // A relation over no form of the input's numbers may be one over how many elements
                 // meet something, which is a line too.
                 yield over == null ? firstDrawn(onACount(behavior, affine, true, read),

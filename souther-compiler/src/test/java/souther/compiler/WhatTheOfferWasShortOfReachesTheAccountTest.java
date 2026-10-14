@@ -98,8 +98,8 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
     void theDecisionSentenceNamesTheRuleThatGaveTheOfferNoValue() {
         String line = whereNothingCouldShowARow(human(model(NOTHING_READS_IT)));
 
-        assertTrue(line.contains("every value tried at a rule of the decision was refused, and what"
-                        + " was tried was not everything the rules leave"),
+        assertTrue(line.contains("every value tried at a rule of the decision was refused, and not"
+                        + " every value there could be tried, which does not make it impossible"),
                 () -> "what the search came to: " + line);
         assertTrue(line.contains("invariant Code (shape) at `t.code` gave none of them: written in"
                         + " a form this compiler does not read"),

@@ -1234,8 +1234,9 @@ class CompileExampleGenerateTest {
         // that reads as the model refusing what it states.
         assertTrue(block.contains("// no row for `else` (13:20) in `label`: every value tried was"
                 + " refused"
-                + " at construction, and what was tried was not everything the rules leave, and"
-                + " invariant C #1 at `c` gave none of them"), block);
+                + " at construction, and not every value there could be tried, which does not"
+                + " make the combination impossible, and invariant C #1 at `c` gave none of them"),
+                block);
     }
 
     /**

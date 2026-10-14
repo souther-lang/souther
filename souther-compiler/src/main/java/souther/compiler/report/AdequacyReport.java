@@ -3309,7 +3309,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /** What settled a point nobody is owed a row at, in the words the report promises its reader. */
-    private String whyNotOwed(NotOwedReason reason) {
+    static String whyNotOwed(NotOwedReason reason) {
         return switch (reason) {
             // Not what proved it: a reader told a rule refuses the point goes looking for one, and
             // a Set<Bool> asked for three elements has none to find.
@@ -4972,7 +4972,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /** The category a search came back with, where the class it was about said nothing itself. */
-    private static String whyUnresolved(Generator.UnresolvedCombination why) {
+    static String whyUnresolved(Generator.UnresolvedCombination why) {
         String at = why.subject();
         return switch (why.reason()) {
             case NOTHING_COMPOSES_ONE -> "nothing here could build a representative for " + at;
@@ -4981,8 +4981,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // what was tried came from the rules beside it — and an author told the line above
             // would go looking for the rule that refuses those values, which is not what happened.
             case NOT_ALL_CANDIDATES_COULD_BE_OFFERED ->
-                    "every value tried at " + at + " was refused, and what was tried was not"
-                            + " everything the rules leave";
+                    "every value tried at " + at + " was refused, and not every value there could"
+                            + " be tried, which does not make it impossible";
             // What the row is short of, and not what the model is short of. A row that stands
             // nothing in for a dependency its target requires is one nothing applies, so it is
             // held back rather than handed over to be pasted and refused.

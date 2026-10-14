@@ -187,10 +187,10 @@ public sealed interface Quantities permits ReadQuantities {
      * {@link #runsBetween} answers as every value there is.
      *
      * <p>For a reader drawing the lines of a position, which owes none where no value stands — the
-     * elements of a container the rules hold to none, in an input that has values. One projection
-     * answers both, so such a reader asks this alone rather than this and the range.
+     * elements of a container the declarations hold to none, in an input that has values. One
+     * projection answers both, so such a reader asks this alone rather than this and the range.
      */
-    NumericDomain.FormProjection projectionOfTheRules(NumericTerm term);
+    NumericDomain.FormProjection projectionOfTheDeclarations(NumericTerm term);
 
     /**
      * The same rules, with these positions fixed at these values.

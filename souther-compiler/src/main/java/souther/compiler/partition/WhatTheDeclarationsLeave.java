@@ -40,26 +40,33 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Whether some input the rules admit brings what a condition states out one way.
+ * Whether some input the declarations admit brings what a condition states out one way.
+ *
+ * <p>The declarations are the types and every rule written on them, read together: a
+ * {@code Set<Bool>} holding three values is refused by its element having two, with no rule
+ * written, as surely as a value outside an invariant's bound is. Which of them refused a way is
+ * not said here, and the word is not "the rules", which an author reads as what they wrote.
  *
  * <p>Asked of the proposition and not of how the condition was written, so two spellings of one
  * condition leave the same ways. A relation over numbers of the input is asked of the run of
- * values the rules leave the number, and a way stands where some value of that run falls on the
- * side the way needs.
+ * values the declarations leave the number, and a way stands where some value of that run falls on
+ * the side the way needs.
  *
- * <p><b>Ruled out is a proof and nothing else is.</b> A way is ruled out only where the rules leave
- * no value behind it. Everything else is not ruled out, and says which parts were not asked of the
- * rules at all, which is a part nothing read. A case, a truth or a value being there is asked of
- * what the rules leave the position; some element meeting something, of what they leave one element
- * and the container's size; and a number that is none of the input's — what a dependency answered,
- * what the body works out — is one the rules range over none of. A conjunction is ruled out where
- * one of its parts is, and a disjunction where every part is — each part asked on its own, which is
- * weaker than asking them together and never wrong the other way. Not ruled out is never a witness
- * that a run takes the way ({@link AWayThrough}).
+ * <p><b>Ruled out is a proof and nothing else is.</b> A way is ruled out only where the
+ * declarations leave no value behind it; what is left is wider than what they admit wherever a
+ * part was asked on its own, so it is never read as the values the model admits. Everything else is
+ * not ruled out, and says which parts were not asked of the declarations at all, which is a part
+ * nothing read. A case, a truth or a value being there is asked of what the declarations leave the
+ * position; some element meeting something, of what they leave one element and the container's
+ * size; and a number that is none of the input's — what a dependency answered, what the body works
+ * out — is one they range over none of. A conjunction is ruled out where one of its parts is, and a
+ * disjunction where every part is — each part asked on its own, which is weaker than asking them
+ * together and never wrong the other way. Not ruled out is never a witness that a run takes the way
+ * ({@link AWayThrough}).
  */
-public final class WhatTheRulesLeave {
+public final class WhatTheDeclarationsLeave {
 
-    private WhatTheRulesLeave() {}
+    private WhatTheDeclarationsLeave() {}
 
     private static final AWayThrough LEFT = new AWayThrough.NotRuledOut(List.of());
 

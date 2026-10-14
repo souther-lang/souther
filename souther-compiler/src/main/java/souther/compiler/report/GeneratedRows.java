@@ -1221,19 +1221,21 @@ public final class GeneratedRows {
             case RepairShortfall.WayPast.CutShort(CameToNothing came, CompositionBudget figure) ->
                     Reasons.met(CompositionShortfall.of(Set.of(figure)))
                             + saidOf(came, rendering, places);
-            case RepairShortfall.WayPast.NotSearchable(RepairShortfall.Barrier why) ->
-                    switch (why) {
-                        case NOTHING_HOLDS_A_ROW_TO_IT -> "nothing here can hold a row to it, so it"
-                                + " was not looked for — which does not make it a way no row goes";
-                        case NO_VALUE_CAN_GO_THAT_WAY -> "no value can go that way, so no row"
-                                + " goes this way";
-                        case IT_WOULD_REWRITE_A_STATED_VALUE -> "a row going this way would write"
-                                + " afresh a value the module states, which the row keeps as"
-                                + " written, so it was not looked for";
-                        case THE_ROW_ALREADY_DOES_ALL_OF_IT -> "the row was seen doing all of it"
-                                + " and stopped all the same, so the ways read off the body are"
-                                + " not every way there is";
-                    };
+            case RepairShortfall.WayPast.NotSearchable(RepairShortfall.Barrier why) -> why(why);
+        };
+    }
+
+    /** Why a way past a guard was not looked for, in the words a reader of the block is shown. */
+    static String why(RepairShortfall.Barrier why) {
+        return switch (why) {
+            case NOTHING_HOLDS_A_ROW_TO_IT -> "nothing here can hold a row to it, so it was not"
+                    + " looked for — which does not make it a way no row goes";
+            case NO_VALUE_CAN_GO_THAT_WAY -> "no value can go that way, so no row goes this way";
+            case IT_WOULD_REWRITE_A_STATED_VALUE -> "a row going this way would write afresh a"
+                    + " value the module states, which the row keeps as written, so it was not"
+                    + " looked for";
+            case THE_ROW_ALREADY_DOES_ALL_OF_IT -> "the row was seen doing all of it and stopped"
+                    + " all the same, so the ways read off the body are not every way there is";
         };
     }
 
@@ -1337,13 +1339,13 @@ public final class GeneratedRows {
             case ALL_CANDIDATES_REJECTED ->
                     "every value tried was refused at construction, which does not make the"
                             + " combination impossible";
-            // The same refusals, and one fewer thing they show. The values tried came from the
-            // rules this compiler read, so a reader is told they were refused and told not to read
-            // that as the rules refusing them. Which rule gave none of them follows this, said as
-            // the rule it was.
+            // The same refusals, and one fewer thing they show. Not every value there could be
+            // tried, so a reader is told they were refused and told this proves nothing about the
+            // ones left untried. Which rule gave none of them follows this, said as the rule it
+            // was.
             case NOT_ALL_CANDIDATES_COULD_BE_OFFERED ->
-                    "every value tried was refused at construction, and what was tried was not"
-                            + " everything the rules leave";
+                    "every value tried was refused at construction, and not every value there"
+                            + " could be tried, which does not make the combination impossible";
             // What is missing is the stand-in and not the row's values, so an author reading this
             // is being told what to write beside the row rather than that no row exists.
             case NOTHING_STANDS_IN_FOR_A_DEPENDENCY ->

@@ -1537,7 +1537,7 @@ final class DemandReading {
             case Relation.Affine affine when countAndNumbers(affine, read) != null ->
                     soManyAgainstNumbers(compared, affine, met, read);
             case Relation.Affine(LinearForm<Quantity> form, Rel _) -> {
-                LinearForm<NumericTerm> against = WhatTheRulesLeave.ofTheInput(form);
+                LinearForm<NumericTerm> against = WhatTheDeclarationsLeave.ofTheInput(form);
                 if (against == null) {
                     yield overNoRowNumber(compared, form);
                 }

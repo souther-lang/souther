@@ -278,7 +278,7 @@ final class Intervals {
             // than this says, and it is not this reader's to carry: what a representative is for
             // is standing in a class, and a class the rules leave nothing in has nothing to stand
             // in it whichever of the two is why.
-            case TermRealizations.Realization.NoNumberTheRulesAdmit _,
+            case TermRealizations.Realization.NoNumberTheDeclarationsAdmit _,
                  TermRealizations.Realization.None _ ->
                     new RepresentativeSource.NothingProducible("nothing here writes " + what);
             // Everything the search met, whichever of its vocabularies that was in: a number this

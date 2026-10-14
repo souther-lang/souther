@@ -41,7 +41,7 @@ class AWayNotRuledOutIsNeverAProofTest {
     }
 
     private static AWayThrough admits(Proposition stated, boolean want) {
-        return WhatTheRulesLeave.admits(stated, want, null);
+        return WhatTheDeclarationsLeave.admits(stated, want, null);
     }
 
     private static List<WhyNotTaken> notAsked(AWayThrough way) {
@@ -92,8 +92,8 @@ class AWayNotRuledOutIsNeverAProofTest {
                 unread(0, NO_SIZE), unread(1, NOT_LINEAR))), true);
         assertEquals(List.of(new WhyNotTaken.MeaningUnread(NO_SIZE),
                         new WhyNotTaken.MeaningUnread(NOT_LINEAR)),
-                notAsked(WhatTheRulesLeave.admits(some, true, read)));
-        assertEquals(List.of(), notAsked(WhatTheRulesLeave.admits(some, false, read)),
+                notAsked(WhatTheDeclarationsLeave.admits(some, true, read)));
+        assertEquals(List.of(), notAsked(WhatTheDeclarationsLeave.admits(some, false, read)),
                 "no element meeting it is a container holding none, which the rules leave");
     }
 

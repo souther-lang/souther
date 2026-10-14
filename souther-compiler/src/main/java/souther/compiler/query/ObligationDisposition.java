@@ -446,7 +446,7 @@ public sealed interface ObligationDisposition {
         if (knowledge instanceof WritabilityKnowledge.Refuted) {
             if (coverage instanceof ObligationCoverage.Witnessed) {
                 throw new IllegalStateException(
-                        "a row was read at a point the rules leave no value at: " + coverage);
+                        "a row was read at a point no value can stand at: " + coverage);
             }
             return new Refuted();
         }
@@ -465,7 +465,7 @@ public sealed interface ObligationDisposition {
                 // bears on a point no value can be at. Named all the same, so that the arm is one
                 // somebody has to decide about rather than one a `default` decides for them.
                 case WritabilityKnowledge.Refuted _ -> throw new IllegalStateException(
-                        "a point the rules leave no value at is settled before the rows are read");
+                        "a point no value can stand at is settled before the rows are read");
                 // The rows are read out and no row is at the point, and what would have shown a row
                 // can be written did not arrive. No finding is made of it, because nothing here can
                 // say the row an author would write is one that exists — and the obligation stays,
@@ -499,7 +499,7 @@ public sealed interface ObligationDisposition {
             // The same point as the arm above: a proof about the model is not a question left
             // open, so nothing here is open to say beside the rows.
             case WritabilityKnowledge.Refuted _ -> throw new IllegalStateException(
-                    "a point the rules leave no value at is settled before the rows are read");
+                    "a point no value can stand at is settled before the rows are read");
             case WritabilityKnowledge.Prevented stopped ->
                     open.add(new Uncertainty.WhetherARowCanBeWritten.Stopped(stopped));
             case WritabilityKnowledge.NoEvidence _ ->
