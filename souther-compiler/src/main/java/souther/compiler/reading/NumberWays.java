@@ -1,5 +1,6 @@
 package souther.compiler.reading;
 
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
@@ -12,6 +13,8 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.partition.WhatTheDeclarationsLeave;
@@ -137,9 +140,75 @@ final class NumberWays implements ComparisonWays {
                 Core.withoutStanding(e) instanceof Core.Binary binary
                         ? numbers.of(binary, reads) : null;
         ComparedNumber.DrawnLine drawn = said == null ? null : said.line();
-        return drawn == null
-                ? ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy)
-                : !ruledOut(drawn, want);
+        if (drawn != null) {
+            return !ruledOut(drawn, want);
+        }
+        return ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy)
+                || (said != null && said.against() != null && twoPositionsComeOut(said, want));
+    }
+
+    /**
+     * Whether some pair of values the declarations leave two positions stands to each other the
+     * way {@code said} needs to come out {@code want}.
+     *
+     * <p>Asked of a comparison of one position against another, which draws no line and which the
+     * body's text answers only for whole numbers nothing declares. The two run where the
+     * declarations leave them, apart, and a pair stands each way the runs leave room for: level
+     * where they meet, and one below the other where one reaches lower than the other reaches
+     * high. Not a proof a row takes the way — what lies inside a run is more than this reads — and
+     * the answer is the positive one only, as the line's is.
+     */
+    private boolean twoPositionsComeOut(ComparedNumber said, boolean want) {
+        if (!(said.placed() instanceof ComparisonClaim claim)) {
+            return false;
+        }
+        NumericDomain.Bounds one = quantities.runsBetween(said.term());
+        NumericDomain.Bounds other = quantities.runsBetween(said.against());
+        if (one == null || other == null) {
+            return false;
+        }
+        Rel needed = want ? claim.statedRelation() : claim.statedRelation().denied();
+        for (int sign = -1; sign <= 1; sign++) {
+            if (needed.holds(sign) && standThatWay(one, other, sign)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a value of {@code one} and a value of {@code other} can stand {@code sign} from each
+     * other: level where the runs meet, below where {@code one} starts under where {@code other}
+     * ends, above the other way round. An absent end runs to the end of the order.
+     */
+    private static boolean standThatWay(NumericDomain.Bounds one, NumericDomain.Bounds other,
+                                        int sign) {
+        return switch (Integer.signum(sign)) {
+            case 0 -> meet(one, other);
+            case -1 -> below(one.min(), other.max());
+            default -> below(other.min(), one.max());
+        };
+    }
+
+    /** Whether some value lies in both runs. */
+    private static boolean meet(NumericDomain.Bounds one, NumericDomain.Bounds other) {
+        return notPast(one.min(), other.max()) && notPast(other.min(), one.max());
+    }
+
+    /** Whether a value at or above {@code low} lies at or below {@code high}, each taken as far as
+     *  it is inclusive. */
+    private static boolean notPast(Endpoint low, Endpoint high) {
+        if (low == null || high == null) {
+            return true;
+        }
+        int at = low.at().compareTo(high.at());
+        return at < 0 || (at == 0 && low.inclusive() && high.inclusive());
+    }
+
+    /** Whether some value from {@code low} up stands strictly below some value up to
+     *  {@code high}. */
+    private static boolean below(Endpoint low, Endpoint high) {
+        return low == null || high == null || low.at().compareTo(high.at()) < 0;
     }
 
     /**
