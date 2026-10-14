@@ -7,6 +7,7 @@ import souther.compiler.partition.WhereNothingIsAnswered;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -48,14 +49,15 @@ record ArmAccount(List<ArmObligation> obligations, ArmCensus census) {
      *
      * @param owed       every occurrence of every arm the behavior is owed a row for, in the order
      *                   the body holds them
-     * @param covered    the probes a row that states what it expects went through
+     * @param covered    the probes a row that states what it expects went through, and which rows
+     *                   did as far as whether they are all rows that do not hold
      * @param awaiting   the probes a row whose answer is owed went through
      * @param rowsUnread what the reading of this behavior's rows went without
      * @param census     whether anything has shown {@code owed} to be short of an arm
      * @param premisesOf the parts of the body every row through the occurrences of one arm would
      *                   reach, or nothing where some such row answers
      */
-    static ArmAccount of(List<CoverageSites.ArmSite> owed, Set<ArmProbe> covered,
+    static ArmAccount of(List<CoverageSites.ArmSite> owed, Map<ArmProbe, RowWitnesses> covered,
                          Set<ArmProbe> awaiting, WeakeningSet rowsUnread, ArmCensus census,
                          Function<List<CoverageSites.ArmSite>,
                                  List<WhereNothingIsAnswered.Premise>> premisesOf) {

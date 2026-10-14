@@ -9,6 +9,7 @@ import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.query.RowWitnesses;
 import souther.compiler.query.Sites;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.Decision;
@@ -147,7 +148,7 @@ class AnEmptinessCheckDrawsTheLineItsSizeDrawsTest {
     @Test
     void aRowThatSkippedTheApplicationDoesNotMeetItsLine() {
         for (String guard : List.of(EMPTY, SIZE)) {
-            assertEquals(new ItemAssessment.Coverage.Hit(),
+            assertEquals(new ItemAssessment.Coverage.Hit(RowWitnesses.ANOTHER_ROW),
                     coverageAtNought(guard, "0", "Auto"), guard + " ran and answered true");
             assertEquals(new ItemAssessment.Coverage.NoHit(),
                     coverageAtNought(guard, "-1", "Manual"), guard + " never ran");

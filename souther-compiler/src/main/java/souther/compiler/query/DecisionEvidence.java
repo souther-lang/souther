@@ -115,20 +115,22 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
      *
      * @param rowsRead       how many rows this reading was given, which the three below are the
      *                       whole of
-     * @param rules          the rules some row was seen taking
+     * @param taken          the rules some row was seen taking, and which rows did as far as
+     *                       whether they are all rows that do not hold
      * @param rowsPlaced     how many rows were placed at one of them
      * @param rowsNotPlaced  rows something watched whose rule this reading could not tell
      * @param rowsNotWatched rows nothing watched, which is this compiler's shortfall and not
      *                       anything about the model
      */
-    public record RowsPlaced(int rowsRead, Set<DecisionRule> rules, int rowsPlaced,
+    public record RowsPlaced(int rowsRead, Map<DecisionRule, RowWitnesses> taken, int rowsPlaced,
                              int rowsNotPlaced, int rowsNotWatched) {
 
         public RowsPlaced {
             // Sealed and not only copied. What the account answers about a behavior is read off
-            // this — which rules were covered, which were not — and a set a caller can add to is a
+            // this — which rules were covered, which were not — and a map a caller can add to is a
             // value whose answers change after it was made.
-            rules = Collections.unmodifiableSet(new LinkedHashSet<>(rules));
+            taken = Collections.unmodifiableMap(new LinkedHashMap<>(taken));
+            Set<DecisionRule> rules = taken.keySet();
             if (rowsPlaced < 0 || rowsNotPlaced < 0 || rowsNotWatched < 0) {
                 throw new IllegalArgumentException("rows are counted from none: " + rowsPlaced
                         + "/" + rowsNotPlaced + "/" + rowsNotWatched);
@@ -142,6 +144,11 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                 throw new IllegalArgumentException("more rules were taken than rows took one: "
                         + rules.size() + " rules by " + rowsPlaced + " rows");
             }
+        }
+
+        /** The rules some row was seen taking. */
+        public Set<DecisionRule> rules() {
+            return taken.keySet();
         }
 
         /** Whether every row of the behavior was one something watched. */
@@ -389,14 +396,15 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
      *                               taken by a row that reading never saw
      */
     public static Measure<RowsPlaced> of(String behavior, RunPlacement against,
-                                         List<ObservedInputs> rows,
+                                         List<WitnessedRow> rows,
                                          WeakeningSet whatTheRowsWentWithout) {
-        Set<DecisionRule> took = new LinkedHashSet<>();
+        Map<DecisionRule, RowWitnesses.Gathering> took = new LinkedHashMap<>();
         List<Weakening> whyNotPlaced = new ArrayList<>();
         int placed = 0;
         int notPlaced = 0;
         int notWatched = 0;
-        for (ObservedInputs row : rows) {
+        for (WitnessedRow witnessed : rows) {
+            ObservedInputs row = witnessed.observed();
             // Exhaustive, so a row cannot fall through into none of the counts. What a row that was
             // watched came to is asked below; that a row was not watched is answered here, because
             // it is a fact about this build rather than about where the row went.
@@ -405,7 +413,8 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                 case Generator.Watched.Ran _ -> {
                     switch (against.takenBy(row)) {
                         case RulesTaken.WhichRule.TookThis it -> {
-                            took.add(it.rule());
+                            took.computeIfAbsent(it.rule(), _ -> new RowWitnesses.Gathering())
+                                    .add(witnessed.by());
                             placed++;
                         }
                         case RulesTaken.WhichRule.CouldNotTell it -> {
@@ -432,7 +441,8 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                     WeakeningSet.of(new Weakening.DecisionRunNotWatched(behavior)));
         }
         RowsPlaced made =
-                new RowsPlaced(rows.size(), took, placed, notPlaced, notWatched);
+                new RowsPlaced(rows.size(), RowWitnesses.Gathering.done(took), placed, notPlaced,
+                        notWatched);
         // A row this reading could not place says what stopped it, and a row nothing watched says
         // what the run went without. Either leaves the placement partial; neither may arrive as a
         // complete reading of the rows.

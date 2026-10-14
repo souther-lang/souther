@@ -136,6 +136,12 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
         return declared.stream().filter(each -> !excluded.contains(each)).toList();
     }
 
+    /** How many of {@link #coverable()} a row uses — see {@link Evidence#amongThem}. Throws where
+     *  nothing was measured, for the reason {@link #seen()} does. */
+    public int specifiedCount() {
+        return Evidence.amongThem(coverable(), seen().specified());
+    }
+
     /** Cases this input can be that no row uses, and that a row could have been written for. Empty
      *  where nothing was measured. */
     public List<TypeSymbol> unspecified() {

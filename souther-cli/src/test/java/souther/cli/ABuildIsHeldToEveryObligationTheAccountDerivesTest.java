@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.query.RowWitnesses;
 import souther.compiler.report.AdequacyReport;
 
 
@@ -106,7 +107,8 @@ class ABuildIsHeldToEveryObligationTheAccountDerivesTest {
                         AReportOfOneBorder.assessed(AReportOfOneBorder.aBorderABodyDrew(),
                                 role -> role.againstTheLine()
                                         ? AReportOfOneBorder.settled(
-                                                new ItemAssessment.Coverage.Hit())
+                                                new ItemAssessment.Coverage.Hit(
+                                                        RowWitnesses.ANOTHER_ROW))
                                         : AReportOfOneBorder.undecided()));
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED,
                 AReportOfOneBorder.verdictOf(lines),

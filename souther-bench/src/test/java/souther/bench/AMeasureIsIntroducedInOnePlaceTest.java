@@ -77,7 +77,7 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.ofEntries(
             Map.entry("souther.compiler.query.Coverages#pairsOf(Ljava/lang/String;Lsouther/compiler/query/Coverages$Readings;ZLsouther/compiler/partition/AdequacyPolicy$OfTheMeasures;Lsouther/compiler/partition/BodyInputReading;)Lsouther/compiler/query/PartitionEvidence$PairSpace;", 2),
             Map.entry("souther.compiler.query.Coverages#coverageOf(Lsouther/compiler/query/Coverages$Readings$AtPosition;Lsouther/compiler/query/Coverages$Readings$AxisReading;Lsouther/compiler/query/Coverages$Readings;Lsouther/compiler/partition/Partitions$Partitioning;ZLsouther/compiler/partition/BodyDistinction;Lsouther/compiler/partition/InputUse;)Lsouther/compiler/query/PartitionEvidence$AxisCoverage;", 2),
-            Map.entry("souther.compiler.query.Coverages#verdictOf(Lsouther/compiler/partition/StandingAtAPoint$Met;ZLsouther/compiler/partition/Border;Lsouther/compiler/query/Adequacy$RowReading;)Lsouther/compiler/query/Measurement;", 3),
+            Map.entry("souther.compiler.query.Coverages#verdictOf(Lsouther/compiler/partition/StandingAtAPoint$Met;Ljava/util/function/Supplier;ZLsouther/compiler/partition/Border;Lsouther/compiler/query/Adequacy$RowReading;)Lsouther/compiler/query/Measurement;", 3),
             Map.entry("souther.compiler.query.Coverages#whyNoGuardLine(Lsouther/compiler/query/Adequacy$RowReading;)Lsouther/compiler/query/Measurement;", 2),
             Map.entry("souther.compiler.query.Coverages#whyNoInvariantLine(Lsouther/compiler/query/Adequacy$RowReading;)Lsouther/compiler/query/Measurement;", 1),
             // Two searches of one reading of one line, as that reading's measurement. It makes
@@ -124,7 +124,7 @@ class AMeasureIsIntroducedInOnePlaceTest {
             // Two sets of probes: the arms a row that states what it expects went through, and the
             // arms a row whose answer is owed went through. They are handed in apart because they
             // answer different questions about one arm.
-            Map.entry("souther.compiler.query.Adequacy$BranchEvidence#measured(Ljava/lang/String;Ljava/util/List;Ljava/util/Set;Ljava/util/Set;Lsouther/compiler/check/PathReachability$Answers$AsRun;Lsouther/compiler/query/WeakeningSet;Ljava/util/function/Function;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 2),
+            Map.entry("souther.compiler.query.Adequacy$BranchEvidence#measured(Ljava/lang/String;Ljava/util/List;Ljava/util/Map;Ljava/util/Set;Lsouther/compiler/check/PathReachability$Answers$AsRun;Lsouther/compiler/query/WeakeningSet;Ljava/util/function/Function;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 2),
             // And one arm of a behavior, which is a measure of its own beside the account over all
             // of them. Three states from two facts: whether a row lit this arm, and whether the
             // reading that could have lit it ran out. The fourth combination is the one that cannot
@@ -139,7 +139,7 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.entry("souther.compiler.query.ReplacementEvidence#bodyNotInEvaluation(Ljava/lang/String;)Lsouther/compiler/query/ReplacementEvidence;", 1),
             Map.entry("souther.compiler.query.ReplacementEvidence#unreadable(Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/ReplacementEvidence;", 1),
             Map.entry("souther.compiler.query.ReplacementEvidence#measured(Ljava/lang/String;Ljava/util/List;Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/ReplacementEvidence;", 2),
-            Map.entry("souther.compiler.query.ArmObligation#of(Ljava/util/List;Ljava/util/Set;Ljava/util/Set;Lsouther/compiler/query/WeakeningSet;Ljava/util/function/Function;)Lsouther/compiler/query/ArmObligation;", 3),
+            Map.entry("souther.compiler.query.ArmObligation#of(Ljava/util/List;Ljava/util/Map;Ljava/util/Set;Lsouther/compiler/query/WeakeningSet;Ljava/util/function/Function;)Lsouther/compiler/query/ArmObligation;", 3),
             // Which rules of a body's decision the rows took. Two places and each chooses between
             // states nothing else may: the gates say why no run could be placed at all — the build
             // recording nothing, a body nobody lowered, rows that ran without an account, rows

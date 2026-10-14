@@ -121,6 +121,7 @@ import souther.compiler.query.ArmDisposition;
 import souther.compiler.query.ArmExclusion;
 import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.partition.WhichLine;
+import souther.compiler.query.ArmCoverage;
 import souther.compiler.query.ArmObligation;
 import souther.compiler.query.ArmSummary;
 import souther.compiler.query.BorderAssessment;
@@ -145,6 +146,9 @@ import souther.compiler.publish.PlaceProse;
 import souther.compiler.publish.PublishedAt;
 import souther.compiler.publish.PublishedIncompleteness;
 import souther.compiler.observe.RowIdentity;
+import souther.compiler.observe.RowOutcome;
+import souther.compiler.observe.RowRef;
+import souther.compiler.query.RowWitnesses;
 import souther.compiler.publish.MeasureWord;
 import souther.compiler.publish.PublishedSubject;
 import souther.compiler.publish.PublishedOpening;
@@ -313,11 +317,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     public record DeclarationsShown(Adequacy.DeclaredBoundaries owed,
                                     Map<ConditionReportAnchor, Citation> conditionPlaces,
-                                    Map<RuleCitation.Written, Citation> rulePlaces) {
+                                    Map<RuleCitation.Written, Citation> rulePlaces,
+                                    Map<RowRef, WhereARowIs.Shown> rowPlaces) {
 
         public DeclarationsShown {
             conditionPlaces = Map.copyOf(conditionPlaces);
             rulePlaces = Map.copyOf(rulePlaces);
+            rowPlaces = Map.copyOf(rowPlaces);
+        }
+
+        /** Where this report shows a row of the module that does not hold — see
+         *  {@link WhereARowIs}. */
+        public WhereARowIs rowPlace() {
+            return WhereARowIs.in(rowPlaces);
         }
 
         /** Where this report shows the rules the declarations' own block names, raised where it
@@ -335,7 +347,72 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
         /** Nothing owed and nothing to point at, for a module nobody could ask. */
         public static final DeclarationsShown NONE =
-                new DeclarationsShown(null, Map.of(), Map.of());
+                new DeclarationsShown(null, Map.of(), Map.of(), Map.of());
+    }
+
+    /**
+     * Where this report shows a row that does not hold, worked out when it was assembled.
+     *
+     * <p>A measure names such a row by its identity and holds no place, for the reason any answer
+     * of a measure holds none. So the place is looked up here, once per row the module has, and
+     * from the whole compile rather than the part a narrowed report shows: the row covering an arm
+     * of one behavior may be written for another. A row this report was not assembled with is two
+     * of this compiler's answers disagreeing, and is raised rather than shown pointing nowhere.
+     *
+     * <p>Where it stopped comes with where it is written, for the same reason: the row's outcome is
+     * not in reach of a report narrowed to another behavior, and a row named without it reads as a
+     * wrong answer whatever stopped it.
+     */
+    @FunctionalInterface
+    public interface WhereARowIs {
+
+        /**
+         * A row that does not hold, as a report shows it.
+         *
+         * @param at     where it is written
+         * @param failed where it stopped
+         */
+        record Shown(Citation at, RowFailure failed) {
+
+            public Shown {
+                Objects.requireNonNull(at, "a row is shown somewhere");
+                Objects.requireNonNull(failed, "a row that does not hold stopped somewhere");
+            }
+
+            /** {@code row}, which does not hold. */
+            static Shown of(RowOutcome row) {
+                return new Shown(Citation.of(row.at()), RowFailure.of(row.failurePhase()));
+            }
+        }
+
+        /** How {@code row} is shown. */
+        Shown of(RowRef row);
+
+        /** Each row {@code shown} holds, and a refusal for any other. */
+        static WhereARowIs in(Map<RowRef, Shown> shown) {
+            return row -> {
+                Shown it = shown.get(row);
+                if (it == null) {
+                    throw new IllegalStateException(
+                            "this report was not assembled with the row " + row);
+                }
+                return it;
+            };
+        }
+    }
+
+    /** How each row of a module that does not hold is shown, read off the rows that came back. */
+    private static Map<RowRef, WhereARowIs.Shown> rowPlaces(
+            Map<String, Adequacy.RowReading> readings) {
+        Map<RowRef, WhereARowIs.Shown> places = new LinkedHashMap<>();
+        for (Adequacy.RowReading reading : readings.values()) {
+            for (RowOutcome row : reading.rowsSeen()) {
+                if (row.disposition() == Disposition.FAILED) {
+                    places.put(RowRef.of(row), WhereARowIs.Shown.of(row));
+                }
+            }
+        }
+        return places;
     }
 
     /**
@@ -512,6 +589,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *                  an obligation and a rule nothing could show a row for is owed none, while a
      *                  page or a document that showed only the findings would say a rule count and
      *                  put fewer lines under it than the count
+     * @param rowPlaces where each row of the module that does not hold is shown, for the lines that
+     *                  name what only such rows cover. The module's and not this behavior's: a row
+     *                  of another behavior can be what covers an arm of this one, and a report
+     *                  narrowed to this one still names it
      */
     public record BehaviorReport(String name, BehaviorImplementation implementation,
                                  BehaviorEvidence evidence,
@@ -523,7 +604,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  Map<RuleCitation.Written, Citation> rulePlaces,
                                  Map<RuleSite, Citation> partPlaces,
                                  Map<DecisionReading.Ruled, List<ShownCondition>> ruleReadings,
-                                 Map<DecisionRule, RuleSettlement> ruleSettlements) {
+                                 Map<DecisionRule, RuleSettlement> ruleSettlements,
+                                 Map<RowRef, WhereARowIs.Shown> rowPlaces) {
         public BehaviorReport {
             reported = List.copyOf(reported);
             armPlaces = Map.copyOf(armPlaces);
@@ -532,6 +614,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             partPlaces = Map.copyOf(partPlaces);
             ruleReadings = Map.copyOf(ruleReadings);
             ruleSettlements = Map.copyOf(ruleSettlements);
+            rowPlaces = Map.copyOf(rowPlaces);
+        }
+
+        /** Where this report shows a row of the module that does not hold — see
+         *  {@link WhereARowIs}. */
+        public WhereARowIs rowPlace() {
+            return WhereARowIs.in(rowPlaces);
         }
 
         /**
@@ -675,6 +764,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             return evidence.branch();
         }
 
+        /** What its measures count as met that only rows that do not hold cover. Derived, for the
+         *  reason {@link #weakenedBy()} is. */
+        public CoveredOnlyByRowsThatDoNotHold coveredOnlyByRowsThatDoNotHold() {
+            return CoveredOnlyByRowsThatDoNotHold.of(this);
+        }
+
+        /**
+         * The rows written for it that do not hold, in the order they were read.
+         *
+         * <p>Its own rows and no others. A row of another behavior can cover an arm of this one, and
+         * that row is named where the arm is; what is listed here is what a reader of this
+         * behavior's examples has failing.
+         */
+        public List<RowOutcome> rowsThatDoNotHold() {
+            return reading().rowsSeen().stream()
+                    .filter(row -> row.disposition() == Disposition.FAILED).toList();
+        }
+
         /**
          * What this behavior's measures went without.
          *
@@ -782,6 +889,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         Map<String, Adequacy.RowReading> readings = Objects.requireNonNull(
                 compilation.db().ask(new Adequacy.RowReadings(name)).value(),
                 () -> "the rows of `" + name + "` were not read for or against");
+        // Where the rows that do not hold are written, which every behavior's page and the
+        // declarations' block may name, whichever behavior a row is written for.
+        Map<RowRef, WhereARowIs.Shown> rowPlaces = rowPlaces(readings);
         // What the rows themselves owe, which is the same account the findings are the unmet group
         // of. Held to answering for the reason the reading above is: it is read off the shapes,
         // which a module got this far by having, so an absence is this report and that query
@@ -888,7 +998,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     ruleReadings(compilation, name, behavior.name(),
                             decisions == null ? null : decisions.get(behavior.name()),
                             reported),
-                    requirements));
+                    requirements, rowPlaces));
         }
         Adequacy.DeclaredBoundaries declared =
                 compilation.db().ask(new Adequacy.DeclaredBorders(name)).value();
@@ -903,7 +1013,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // under are the debts' rather than any behavior's.
                 new DeclarationsShown(declared,
                         conditionPlaces(compilation, declaredLines(declared), List.of(), Map.of()),
-                        rulePlaces(compilation, citedByDeclarations(declared, owed))));
+                        rulePlaces(compilation, citedByDeclarations(declared, owed)),
+                        rowPlaces));
     }
 
     /** The lines a module's declarations were read at, which is where the block about them looks
@@ -958,9 +1069,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * numbered the places, and a page is not where that is asked — the same reason the arm places
      * beside this are worked out at assembly.
      *
-     * <p>One entry per finding about a rule and nothing else, so a page describes a rule by every
-     * condition it turns on: read off whichever conditions a walk happened to have words for,
-     * two rules of one behavior would be shown the same sentence with nothing under it.
+     * <p>One entry per rule a line of the page is about — a finding about a rule, and a rule only
+     * rows that do not hold take — and nothing else, so a page describes a rule by every condition
+     * it turns on: read off whichever conditions a walk happened to have words for, two rules of one
+     * behavior would be shown the same sentence with nothing under it.
      *
      * <p>Which rules those are is the findings' answer and is read off them. A rule is raised for
      * more than what its search came to — every row of it reaching an {@code unreachable} is raised
@@ -978,6 +1090,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             if (each.about() instanceof About.ARuleNoRowTakes(var _, var ruled)) {
                 about.add(ruled);
             }
+        }
+        // And the rules only rows that do not hold take, which a page names the same way.
+        for (CoveredOnlyByRowsThatDoNotHold.Covered<DecisionReading.Stated> taken
+                : CoveredOnlyByRowsThatDoNotHold.rulesOf(decision)) {
+            about.add(taken.obligation().display());
         }
         CoverageSites.Plan plan = placesOf(compilation, module);
         Map<DecisionReading.Ruled, List<ShownCondition>> out = new LinkedHashMap<>();
@@ -1361,7 +1478,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * what the model itself is short of once.
      */
     private void declared(StringBuilder out, ModuleReport module, SourceRendering rendering,
-                          PublishedRuleHandle.WhereARuleIs places) {
+                          PublishedRuleHandle.WhereARuleIs places, MarksWritten marks) {
         // What the declarations are owed, folded the way a behavior's own account is and by the same
         // fold. Here rather than in the blocks above, because that is where the work is: a line a
         // `data` clause drew is owed once for the module, and a behavior carrying the type is short
@@ -1399,6 +1516,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             readings(out, each.debt(), _ -> true, at -> whatWasTried(
                     at.owedAt(each.debt().at()).searches(),
                     module.owedByDeclarations().conditionPlaces(), rendering, null));
+        }
+        for (CoveredOnlyByRowsThatDoNotHold.Covered<Adequacy.DeclaredDebt> covered
+                : CoveredOnlyByRowsThatDoNotHold.debtsOf(debts)) {
+            out.append(String.format("      %s at the %s: %s%n",
+                    onlyRowsThatDoNotHold(marks, covered.by(),"is", "are"),
+                    pointOf(covered.obligation(), RuleHandleProse.said(
+                            covered.obligation().debt().describe(places), rendering, null)),
+                    rowsThatDoNotHold(covered.by(), module.owedByDeclarations().rowPlace(),
+                            rendering, null)));
         }
         Map<String, List<Adequacy.Finding>> byDeclaration = new LinkedHashMap<>();
         for (ReportedFinding each : module.declarations()) {
@@ -1474,7 +1600,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     new DeclarationsShown(m.owedByDeclarations().owed() == null ? null
                             : m.owedByDeclarations().owed().keptFor(names),
                             m.owedByDeclarations().conditionPlaces(),
-                            m.owedByDeclarations().rulePlaces()));
+                            m.owedByDeclarations().rulePlaces(),
+                            m.owedByDeclarations().rowPlaces()));
             kept.add(one);
             overall = overall.union(one.weakenedBy());
         }
@@ -1507,6 +1634,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         modules.stream().flatMap(m -> m.declarations().stream())
                                 .map(ReportedFinding::finding))
                 .toList();
+    }
+
+    /**
+     * The rows that do not hold, across every behavior reported.
+     *
+     * <p>Not part of {@link #adequacy()}. Whether the rows cover what the model owes and whether
+     * they hold are two questions, and a row that does not hold is evidence of what it went
+     * through all the same; the verdict answers the first and this answers the second, and a
+     * report says both.
+     */
+    public List<RowOutcome> rowsThatDoNotHold() {
+        return modules.stream().flatMap(m -> m.behaviors().stream())
+                .flatMap(b -> b.rowsThatDoNotHold().stream()).toList();
     }
 
     /** The findings a build is entitled to refuse: a measure came to an answer and the answer was
@@ -1998,6 +2138,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (BehaviorImplementation each : BehaviorImplementation.values()) {
             counted.put(each, 0);
         }
+        MarksWritten marks = new MarksWritten();
         for (ModuleReport module : modules) {
             out.append(String.format("%s measurement: %s%n",
                     DisplayColumns.padRight(module.module(), 56),
@@ -2016,9 +2157,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                         behavior.pending().getAsInt())
                                 : "rows not read"));
                 signature(out, behavior);
-                partition(out, behavior, module.declaredIn(), rendering, behavior.rulePlace());
-                branch(out, behavior, module.declaredIn(), rendering);
-                decision(out, behavior, module.declaredIn(), rendering);
+                // Read once for every section that marks what rests on rows that do not hold.
+                CoveredOnlyByRowsThatDoNotHold onlyBy = behavior.coveredOnlyByRowsThatDoNotHold();
+                partition(out, behavior, module.declaredIn(), rendering, behavior.rulePlace(),
+                        onlyBy, marks);
+                branch(out, behavior, module.declaredIn(), rendering, onlyBy, marks);
+                decision(out, behavior, module.declaredIn(), rendering, onlyBy, marks);
                 replacement(out, behavior);
                 // Under the behavior it names, because a reason printed at the module's foot is
                 // read as belonging to whichever behavior came last. That was survivable while the
@@ -2028,7 +2172,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 .map(behavior.name()::equals).orElse(false))
                         .toList(), rendering);
             }
-            declared(out, module, rendering, module.owedByDeclarations().rulePlace());
+            declared(out, module, rendering, module.owedByDeclarations().rulePlace(), marks);
             said(out, module.incompleteness().written().stream()
                     .filter(gap -> gap.fact().behavior().isEmpty()).toList(), rendering);
         }
@@ -2093,6 +2237,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             out.append(String.format("%d %s marked `!`: what a strict build refuses over.%n",
                     refused.size(), refused.size() == 1 ? "gap" : "gaps"));
         }
+        // And whether the rows hold, which the verdict above does not answer. Last, because the
+        // last lines are what a terminal or a build log leaves in front of a reader, and a report
+        // ending on `satisfied` over a row that does not hold reads as examples that pass.
+        List<RowOutcome> notHolding = rowsThatDoNotHold();
+        if (!notHolding.isEmpty()) {
+            out.append(String.format("%d %s not hold:%n", notHolding.size(),
+                    notHolding.size() == 1 ? "row does" : "rows do"));
+            // With where each stopped. Not every one of them is a wrong answer: a row whose input
+            // could not be built never applied the behavior, and is fixed somewhere else.
+            for (RowOutcome row : notHolding) {
+                WhereARowIs.Shown shown = WhereARowIs.Shown.of(row);
+                out.append(String.format("  %s: %s%n",
+                        aRowSaid(RowRef.of(row), shown.at(), rendering, null),
+                        shown.failed().said()));
+            }
+        }
+        // Counted here as well as marked where each is, for a report narrowed to a behavior whose
+        // own rows all hold: a row of another behavior can be all that covers one of its arms, and
+        // then nothing above this line would say a row does not hold. The marks written, which is
+        // what the sentence is about.
+        int resting = marks.restingOnRowsThatDoNotHoldWritten();
+        if (resting > 0) {
+            out.append(String.format("%d %s counted as met %s covered only by rows that do not hold,"
+                            + " marked `~`.%n",
+                    resting, resting == 1 ? "obligation" : "obligations",
+                    resting == 1 ? "is" : "are"));
+        }
         return out.toString();
     }
 
@@ -2131,12 +2302,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         boolean decided = counted.inFull();
         OutputCaseEvidence output = signature.output();
         if (!output.declared().isEmpty() && output.cases().made().isPresent()) {
-            OutputCaseEvidence.Cases cases = output.cases().made().orElseThrow();
+            // Each numerator is the evidence's count out of the same cases as the denominator, and
+            // never the size of what the rows reached, which can hold a case this is not out of.
             out.append(String.format("    signature   out specified %d/%d  observed %d/%d "
                             + " verified %d/%d%s%n",
-                    cases.specified().size(), output.declared().size(),
-                    cases.observed().size(), output.declared().size(),
-                    cases.verified().size(), output.declared().size(),
+                    output.specifiedCount(), output.declared().size(),
+                    output.observedCount(), output.declared().size(),
+                    output.verifiedCount(), output.declared().size(),
                     decided ? "" : "   (partial)"));
             for (Adequacy.Finding f : behavior.findings()) {
                 if (f.about() instanceof About.ACaseNoRowExpects(var _, var missing)) {
@@ -2171,8 +2343,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // for is one the compiler refuses a row for, so leaving it in the denominator would ask
             // for work that cannot be done and hold the model one case short for ever.
             out.append(String.format("                in #%d specified %d/%d%s%n", input.at() + 1,
-                    input.cases().made().orElseThrow().specified().size(),
-                    input.coverable().size(),
+                    input.specifiedCount(), input.coverable().size(),
                     input.excluded().isEmpty() ? ""
                             : "   excluded " + input.excluded().size()));
             for (Adequacy.Finding f : behavior.findings()) {
@@ -2266,6 +2437,65 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return finding.established() ? "no row " : "undecided whether a row ";
     }
 
+    /**
+     * The marks one page has written, counted as they are written.
+     *
+     * <p>What the page's closing line counts is what it marked, and the two are one fact only where
+     * the count is taken from the writing. Counted over the measures instead, a section with a
+     * reason of its own not to be printed — a partition with nothing measurable, a decision whose
+     * ways were not all read — leaves its marks out of the page and in the number, and the number
+     * then names lines nobody can find.
+     */
+    static final class MarksWritten {
+
+        private int resting;
+
+        void restingOnRowsThatDoNotHold() {
+            resting++;
+        }
+
+        /** How many lines were marked `~`. */
+        int restingOnRowsThatDoNotHoldWritten() {
+            return resting;
+        }
+    }
+
+    /**
+     * How a line says an obligation counted as met is covered by rows that do not hold and no
+     * others, with the verb agreeing with however many there are, and the line counted.
+     *
+     * <p>Marked `~` and never `!`. Nothing here is a gap: the obligation is met, the count says so,
+     * and a strict build refuses nothing over it. What the line tells a reader is what the count has
+     * only through those rows — taken away, the obligation is not covered. Correcting a row's stated
+     * answer alone leaves where it goes as it was, so that is not always what correcting it does.
+     */
+    private static String onlyRowsThatDoNotHold(MarksWritten marks,
+                                                RowWitnesses.OnlyRowsThatDoNotHold by,
+                                                String one, String many) {
+        marks.restingOnRowsThatDoNotHold();
+        return by.witnesses().size() == 1
+                ? "~ only a row that does not hold " + one
+                : "~ only rows that do not hold " + many;
+    }
+
+    /** Which rows, each sent to where it is written. A row of another behavior says whose it is
+     *  like any other, so it reads the same wherever the obligation it covers is. */
+    private static String rowsThatDoNotHold(RowWitnesses.OnlyRowsThatDoNotHold by,
+                                            WhereARowIs places, SourceRendering rendering,
+                                            SourceId declaredIn) {
+        return by.witnesses().stream()
+                .map(row -> aRowSaid(row, places.of(row).at(), rendering, declaredIn))
+                .collect(Collectors.joining(", "));
+    }
+
+    /** One row as a line of this report names it — in the words {@link RowRef#shown} keeps, so two
+     *  rows never read as one — and where it is written. */
+    private static String aRowSaid(RowRef row, Citation at, SourceRendering rendering,
+                                   SourceId declaredIn) {
+        return row.shown(rendering.names().nameOf(row.source())) + " ("
+                + at.said(rendering, declaredIn) + ")";
+    }
+
     /** The positions this report has an axis for, which is what tells a claim it can print beside
      *  one from a claim it has to name a position for. */
     private List<String> measuredPaths(PartitionEvidence partition) {
@@ -2301,7 +2531,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private void partition(StringBuilder out, BehaviorReport behavior,
                                   SourceId declaredIn, SourceRendering rendering,
-                                  PublishedRuleHandle.WhereARuleIs places) {
+                                  PublishedRuleHandle.WhereARuleIs places,
+                                  CoveredOnlyByRowsThatDoNotHold onlyByRowsThatDoNotHold,
+                                  MarksWritten marks) {
         // Whether there is a section at all is settled once, for every surface, and asked of the
         // measurement rather than of the entries beside it. Asked of the entries, a behavior whose
         // measures both had something to say and whose lists happened to be empty was left out of
@@ -2350,6 +2582,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     out.append(String.format("      %s %sis in `%s` at %s%s%n", mark(f), noRow(f),
                             missing.name(), missing.axis().name(), onAPremise(f)));
                 }
+            }
+            for (CoveredOnlyByRowsThatDoNotHold.Covered<PartitionEvidence.AxisClass> onlyBy
+                    : onlyByRowsThatDoNotHold.classes()) {
+                out.append(String.format("      %s in `%s` at %s: %s%n",
+                        onlyRowsThatDoNotHold(marks, onlyBy.by(),"is", "are"),
+                        onlyBy.obligation().name(), onlyBy.obligation().axis().name(),
+                        rowsThatDoNotHold(onlyBy.by(), behavior.rowPlace(), rendering,
+                                declaredIn)));
             }
             // Not a finding: nothing is owed here, and what the line says is what the model already
             // decided rather than something the rows left undone.
@@ -2434,7 +2674,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // positions — telling a reader that this behavior is held to the neighbouring technique,
         // which is a statement about the model that nothing measured.
         switch (behavior.evidence().combinations()) {
-        case CombinationCriterion.Interactions(var meetings) -> interaction(out, behavior, meetings);
+        case CombinationCriterion.Interactions(var meetings) ->
+                interaction(out, behavior, meetings,
+                        onlyByRowsThatDoNotHold.combinationsOfDecisions(), declaredIn, rendering,
+                        marks);
         case null -> { }
         case CombinationCriterion.PairFallback _ -> {
             if (partitioned.counted()) {
@@ -2451,6 +2694,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                     mark(f.finding()), noRow(f.finding()),
                                     twoClasses(combination), onAPremise(f.finding())));
                         }
+                    }
+                    for (CoveredOnlyByRowsThatDoNotHold.Covered<PartitionEvidence.PairSpace.Cell>
+                            onlyBy : onlyByRowsThatDoNotHold.combinationsOfClasses()) {
+                        out.append(String.format("      %s in %s: %s%n",
+                                onlyRowsThatDoNotHold(marks, onlyBy.by(),"is", "are"),
+                                twoClasses(onlyBy.obligation().owedBy(behavior.name())),
+                                rowsThatDoNotHold(onlyBy.by(), behavior.rowPlace(), rendering,
+                                        declaredIn)));
                     }
                 }
             }
@@ -2567,6 +2818,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     readings(out, point, _ -> true, _ -> "");
                 }
             }
+        }
+        // A point counted as met that only rows that do not hold stand at, in the words a point no
+        // row is at is written in.
+        for (CoveredOnlyByRowsThatDoNotHold.Covered<BorderObligationPointAssessment> covered
+                : onlyByRowsThatDoNotHold.points()) {
+            BorderObligationPointAssessment point = covered.obligation();
+            out.append(String.format("      %s at %s %s point%s (%s): %s%n",
+                    onlyRowsThatDoNotHold(marks, covered.by(),"is", "are"),
+                    point.role().againstTheLine() ? "the" : "an", point.role(), point.whichSide(),
+                    RuleHandleProse.said(point.describe(places), rendering, declaredIn),
+                    rowsThatDoNotHold(covered.by(), behavior.rowPlace(), rendering, declaredIn)));
         }
         // A point some row answers, at a reading nothing stands at. Not a gap — the line is owed
         // once and a row stands at it — and still a fact about that position: a reader who wants
@@ -2875,7 +3137,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * invite an author to stop looking exactly where there is more to find.
      */
     void branch(StringBuilder out, BehaviorReport behavior,
-                               SourceId declaredIn, SourceRendering rendering) {
+                               SourceId declaredIn, SourceRendering rendering,
+                               CoveredOnlyByRowsThatDoNotHold onlyByRowsThatDoNotHold,
+                               MarksWritten marks) {
         Adequacy.BranchEvidence branch = behavior.branch();
         if (branch == null) {
             return;
@@ -2940,6 +3204,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         mark(f.finding()), ArmVocabulary.label(arm),
                         f.at().said(rendering, declaredIn)));
             }
+        }
+        for (CoveredOnlyByRowsThatDoNotHold.Covered<ArmObligation.Counted> covered
+                : onlyByRowsThatDoNotHold.arms()) {
+            out.append(String.format("      %s through `%s` (%s): %s%n",
+                    onlyRowsThatDoNotHold(marks, covered.by(),"goes", "go"),
+                    ArmVocabulary.label(covered.obligation().display()),
+                    behavior.placeOf(covered.obligation().display()).said(rendering, declaredIn),
+                    rowsThatDoNotHold(covered.by(), behavior.rowPlace(), rendering, declaredIn)));
         }
     }
 
@@ -3019,7 +3291,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * other kind and had stopped holding for this one.
      */
     private void interaction(StringBuilder out, BehaviorReport behavior,
-                             InteractionEvidence meetings) {
+                             InteractionEvidence meetings,
+                             List<CoveredOnlyByRowsThatDoNotHold.Covered<
+                                     ObligationIdentity.OfACombinationOfDecisions>> onlyBy,
+                             SourceId declaredIn, SourceRendering rendering,
+                             MarksWritten marks) {
         Optional<InteractionEvidence.RowsMeeting> made = meetings.made().made();
         String held = meetings.asked().notMeasured().isEmpty() ? ""
                 : String.format("   %d meetings not walked", meetings.asked().notMeasured().size());
@@ -3034,6 +3310,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 out.append(String.format("      %s %smakes this combination of the decisions%s%n",
                         mark(f.finding()), noRow(f.finding()), onAPremise(f.finding())));
             }
+        }
+        for (CoveredOnlyByRowsThatDoNotHold.Covered<ObligationIdentity.OfACombinationOfDecisions>
+                covered : onlyBy) {
+            out.append(String.format("      %s this combination of the decisions: %s%n",
+                    onlyRowsThatDoNotHold(marks, covered.by(),"makes", "make"),
+                    rowsThatDoNotHold(covered.by(), behavior.rowPlace(), rendering, declaredIn)));
         }
     }
 
@@ -3053,7 +3335,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * settled either way is said after them in the words its own search came back with.
      */
     void decision(StringBuilder out, BehaviorReport behavior,
-                  SourceId declaredIn, SourceRendering rendering) {
+                  SourceId declaredIn, SourceRendering rendering,
+                  CoveredOnlyByRowsThatDoNotHold onlyByRowsThatDoNotHold, MarksWritten marks) {
         DecisionEvidence decision = behavior.evidence().decision();
         if (decision == null) {
             return;
@@ -3090,6 +3373,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // rules apart is the proposition each condition is keyed on and that is written the
             // one way round an account needs rather than the way the author wrote it.
             for (ShownCondition read : behavior.readingsOf(rule.ruled())) {
+                out.append(String.format("          · %s%n", said(read, declaredIn, rendering)));
+            }
+        }
+        for (CoveredOnlyByRowsThatDoNotHold.Covered<DecisionReading.Stated> covered
+                : onlyByRowsThatDoNotHold.rules()) {
+            out.append(String.format("      %s a decision rule: %s%n",
+                    onlyRowsThatDoNotHold(marks, covered.by(),"takes", "take"),
+                    rowsThatDoNotHold(covered.by(), behavior.rowPlace(), rendering, declaredIn)));
+            for (ShownCondition read : behavior.readingsOf(covered.obligation().display())) {
                 out.append(String.format("          · %s%n", said(read, declaredIn, rendering)));
             }
         }
@@ -5602,7 +5894,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // sent to is exactly what {@link FindingSubject} was introduced
             // to keep.
             declarations(m.putArray("declarations"), module.declarations(), module.debts(),
-                    sources, module.owedByDeclarations().rulePlace());
+                    sources, module.owedByDeclarations().rulePlace(),
+                    module.owedByDeclarations().rowPlace());
             ArrayNode behaviors = m.putArray("behaviors");
             for (BehaviorReport behavior : module.behaviors()) {
                 ObjectNode b = behaviors.addObject();
@@ -5619,16 +5912,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // have gone without, and put behind a measurement a row waiting for its answer
                 // would be a finding with no entry to join to exactly when nobody ran the rows.
                 rowObligations(b, behavior.rowsOwed(), sources);
+                // And which of its rows do not hold, which the verdict is not about and a reader
+                // of the document is owed all the same. Empty where none, and never absent: a
+                // consumer asking whether the examples pass reads this array.
+                ArrayNode notHolding = b.putArray("rowsThatDoNotHold");
+                for (RowOutcome row : behavior.rowsThatDoNotHold()) {
+                    aRowThatDoesNotHold(notHolding.addObject(), RowRef.of(row),
+                            WhereARowIs.Shown.of(row), sources);
+                }
                 b.put("status", wire(behavior.status()));
                 weakening(b, behavior.weakenedBy());
                 signature(b, behavior.name(), behavior.signature(), sources);
                 partition(b, behavior.partition(), behavior.boundaryReadings(),
                         behavior.account(), behavior.claimed(), sources,
                         behavior.rulePlace(), behavior.partPlace(),
-                        behavior.evidence().combinations());
+                        behavior.evidence().combinations(), behavior.rowPlace());
                 branch(b, behavior, sources);
                 decision(b, behavior, sources);
-                interaction(b, behavior);
+                interaction(b, behavior, sources);
                 replacement(b, behavior, sources);
                 findings(b, behavior, sources);
             }
@@ -5881,7 +6182,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                   List<BorderObligationPointAssessment> account,
                                   ClaimAnnotations claimed, DocumentSources sources,
                                   PublishedRuleHandle.WhereARuleIs places, WhereAPartIs parts,
-                                  CombinationCriterion criterion) {
+                                  CombinationCriterion criterion, WhereARowIs rowsAt) {
         // The one decision, the same one the page reads. Written here as well, the two surfaces
         // answered a reader differently about which behaviors have a section at all.
         if (!(PartitionSection.of(partition) instanceof PartitionSection.Present)) {
@@ -5935,6 +6236,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             measured(a, axis.reached(), (node, reached) -> {
                 reached.covered().stream().sorted().forEach(node.putArray("covered")::add);
                 node.put("unclassifiedRows", reached.unclassifiedRows());
+                // The classes of `covered` only rows that do not hold are in, where there are any.
+                List<String> leaning = reached.witnessed().entrySet().stream()
+                        .filter(e -> !e.getValue().anotherRow())
+                        .map(Map.Entry::getKey).sorted().toList();
+                if (!leaning.isEmpty()) {
+                    ArrayNode only = node.putArray("coveredOnlyBy");
+                    for (String id : leaning) {
+                        ObjectNode one = only.addObject();
+                        one.put("class", id);
+                        onlyWitnessedBy(one, reached.witnessed().get(id), rowsAt, sources);
+                    }
+                }
             });
         }
         // The questions the model raised that nothing answered, beside the measures rather than
@@ -6096,7 +6409,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // two entries there and one here. A consumer joining a finding to what it is about joins
         // here, on the point, where on the line and the rule; and every reading is published, so
         // nothing a text report left out for room is missing from the document.
-        obligations(DocumentPart.OBLIGATIONS.putArray(out), account, null, sources, places);
+        obligations(DocumentPart.OBLIGATIONS.putArray(out), account, null, sources, places,
+                rowsAt);
         // Written where the pair space is what this behavior is held to, and left out where its
         // decisions meet: the criterion is one or the other, and a document carrying both would
         // hand a consumer a second universe of combinations nobody is owed a row in.
@@ -6119,6 +6433,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 if (partition.pairs().counted().made().isPresent()) {
                     said.put("covered", partition.pairs().counts().covered(pair.between()));
                     said.put("unknown", partition.pairs().unknown(pair));
+                    // The combinations among them only rows that do not hold are in.
+                    ArrayNode only = null;
+                    for (Map.Entry<PartitionEvidence.PairSpace.Cell, RowWitnesses> cell
+                            : partition.pairs().counts().witnessed(pair.between()).entrySet()) {
+                        if (cell.getValue().anotherRow()) {
+                            continue;
+                        }
+                        if (only == null) {
+                            only = said.putArray("coveredOnlyBy");
+                        }
+                        ObjectNode one = only.addObject();
+                        one.put("one", cell.getKey().one());
+                        one.put("other", cell.getKey().other());
+                        onlyWitnessedBy(one, cell.getValue(), rowsAt, sources);
+                    }
                 }
             }
             // The two numbers over the whole space, and neither of them worked out here. What is
@@ -6222,7 +6551,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     // And what left it open, where something did. Provenance and not a second
                     // answer: an arm a row that did not come back may have gone through is
                     // undecided, and which reading stopped is what a reader acts on.
-                    case ArmObligation.Counted it -> weakening(a, it.coverage().weakening());
+                    case ArmObligation.Counted it -> {
+                        weakening(a, it.coverage().weakening());
+                        if (it.coverage().made().orElse(null)
+                                instanceof ArmCoverage.Hit(RowWitnesses by)) {
+                            onlyWitnessedBy(a, by, behavior.rowPlace(), sources);
+                        }
+                    }
                     case ArmObligation.NotCounted it ->
                             a.put("notCountedBecause", wire(it.because()));
                 }
@@ -6267,7 +6602,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (DecisionReading.Stated stated : decision.read().stated()) {
             ObjectNode one = all.addObject();
             ruleId(one.putObject("obligationId"), behavior.name(), stated.rule());
-            placed.ifPresent(rows -> one.put("taken", rows.rules().contains(stated.rule())));
+            placed.ifPresent(rows -> {
+                one.put("taken", rows.rules().contains(stated.rule()));
+                RowWitnesses by = rows.taken().get(stated.rule());
+                if (by != null) {
+                    onlyWitnessedBy(one, by, behavior.rowPlace(), sources);
+                }
+            });
             // What this rule's own derivation went without, on the rule. The coverage above says
             // the measure is short of some rule; which one is this entry's to say, and a consumer
             // handed only the measure's word could not tell a rule read short from its neighbours.
@@ -6318,7 +6659,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * of the number. What they hold is combinations nobody counted, and an account whose total said
      * only what it walked would call a behavior measured in full over the part of it that fitted.
      */
-    static void interaction(ObjectNode into, BehaviorReport behavior) {
+    static void interaction(ObjectNode into, BehaviorReport behavior, DocumentSources sources) {
         if (!(behavior.evidence().combinations()
                 instanceof CombinationCriterion.Interactions(var meetings))) {
             return;
@@ -6331,7 +6672,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (ObligationIdentity.OfACombinationOfDecisions each : meetings.asked().ways().keySet()) {
             ObjectNode one = all.addObject();
             combinationId(one.putObject("obligationId"), each.behavior(), each.settled());
-            met.ifPresent(rows -> one.put("made", rows.met().contains(each)));
+            met.ifPresent(rows -> {
+                one.put("made", rows.met().contains(each));
+                RowWitnesses by = rows.made().get(each);
+                if (by != null) {
+                    onlyWitnessedBy(one, by, behavior.rowPlace(), sources);
+                }
+            });
         }
     }
 
@@ -6595,7 +6942,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private void obligations(DocumentArray out, List<BorderObligationPointAssessment> account,
                              Map<BorderObligationPoint, String> axes,
                              DocumentSources sources,
-                             PublishedRuleHandle.WhereARuleIs places) {
+                             PublishedRuleHandle.WhereARuleIs places, WhereARowIs rowsAt) {
         for (BorderObligationPointAssessment point : account) {
             DocumentItem owed = out.addObject();
             ObjectNode o = owed.node();
@@ -6620,7 +6967,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 o.put("axis", axis);
                 o.put("against", against);
             }
-            owedIn(o, point.owed());
+            owedIn(o, point.owed(), rowsAt, sources);
             // The readings, each as the position it met the line at and what a row there has to
             // do in that position's terms. In the order the sentences sort and never the walk's;
             // the order is not a contract, and a consumer reads these as a bag: two entries that
@@ -6649,7 +6996,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private void declarations(ArrayNode out, List<ReportedFinding> written,
                               List<Adequacy.DeclaredDebt> owed, DocumentSources sources,
-                              PublishedRuleHandle.WhereARuleIs places) {
+                              PublishedRuleHandle.WhereARuleIs places, WhereARowIs rowsAt) {
         // What the declarations are owed, under the declaration each is owed to, and not only what
         // they are short of. A line a row already stands at has no finding, so a section written
         // from the findings alone publishes the gaps and nothing else — a reader could not tell a
@@ -6682,7 +7029,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     entry.owed.stream().map(Adequacy.DeclaredDebt::debt).toList(),
                     entry.owed.stream().collect(Collectors.toMap(
                             each -> each.debt().point(), Adequacy.DeclaredDebt::axis, (a, _) -> a)),
-                    sources, places);
+                    sources, places, rowsAt);
             findings(DocumentPart.FINDINGS.putArray(one), entry.found, sources, places);
         });
     }
@@ -6986,6 +7333,32 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * Which rows cover an obligation, written exactly where every one of them does not hold.
+     *
+     * <p>Absent everywhere else, which is the obligation being covered by some other row as well
+     * or by none. Beside what says it is covered rather than instead of it: the obligation is met
+     * either way, and this says the count has it only through these rows.
+     */
+    private static void onlyWitnessedBy(ObjectNode into, RowWitnesses by, WhereARowIs places,
+                                        DocumentSources sources) {
+        if (by instanceof RowWitnesses.OnlyRowsThatDoNotHold(var witnesses)) {
+            ArrayNode all = into.putArray("onlyWitnessedBy");
+            for (RowRef row : witnesses) {
+                aRowThatDoesNotHold(all.addObject(), row, places.of(row), sources);
+            }
+        }
+    }
+
+    /** A row that does not hold, as which row it is — the key its behavior's
+     *  {@code rowObligations} entry is under — and where it is written. */
+    private static void aRowThatDoesNotHold(ObjectNode into, RowRef row,
+                                            WhereARowIs.Shown shown, DocumentSources sources) {
+        obligationId(into.putObject("row"), new ObligationIdentity.OfARow(row), sources);
+        at(into, shown.at(), sources);
+        into.put("failedAt", word(shown.failed()));
+    }
+
+    /**
      * What became of one obligation: the evidence, and where that evidence puts it.
      *
      * <p><b>Both, because they answer different questions.</b> The evidence says what was seen and
@@ -6998,7 +7371,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * and the document says of it what it says of every other measure. Which word says how far it
      * got is {@link ReportMeasurement}'s, where the other measures ask it.
      */
-    private static void owedIn(ObjectNode of, ObligationAssessment owed) {
+    private static void owedIn(ObjectNode of, ObligationAssessment owed, WhereARowIs rowsAt,
+                               DocumentSources sources) {
         ItemAssessment.WritabilityEvidence evidence = owed.writabilityEvidence();
         of.put("knownWritable", evidence.known());
         ArrayNode because = of.putArray("writableBecause");
@@ -7013,6 +7387,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         weakening(of, coverage.weakening());
         if (coverage.hasAnswer()) {
             of.put("hit", coverage.hasRowWitness());
+        }
+        if (coverage instanceof ObligationCoverage.Witnessed(RowWitnesses by)) {
+            onlyWitnessedBy(of, by, rowsAt, sources);
         }
         of.put("disposition", wire(owed.disposition()));
         if (owed.disposition() instanceof ObligationDisposition.Undecided open) {

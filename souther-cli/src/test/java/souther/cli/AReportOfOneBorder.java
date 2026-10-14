@@ -36,6 +36,7 @@ import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionDerivation;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.query.RowWitnesses;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.source.SourceId;
 import souther.compiler.diag.Citation;
@@ -226,7 +227,7 @@ final class AReportOfOneBorder {
 
     /** A row is at every point the border owes. */
     static Measurement<ItemAssessment.Coverage> hit(PointRole role) {
-        return settled(new ItemAssessment.Coverage.Hit());
+        return settled(new ItemAssessment.Coverage.Hit(RowWitnesses.ANOTHER_ROW));
     }
 
     /**
@@ -309,7 +310,7 @@ final class AReportOfOneBorder {
                 new souther.compiler.query.RowSummary(List.of()),
                 souther.compiler.query.ClaimAnnotations.NONE, List.of(), java.util.Map.of(),
                 java.util.Map.of(), rulePlaces(lines), java.util.Map.of(), java.util.Map.of(),
-                java.util.Map.of());
+                Map.of(), Map.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", WeakeningSet.none(),
                 List.of(new AdequacyReport.ModuleReport("example.wide",
                         new SourceId("wide.sou"), List.of(behavior), List.of(),
@@ -317,7 +318,7 @@ final class AReportOfOneBorder {
                         // them went without: the fixture is about one behavior's own lines.
                         new AdequacyReport.DeclarationsShown(
                                 new Adequacy.DeclaredBoundaries(List.of(), java.util.Map.of()),
-                                java.util.Map.of(), java.util.Map.of()))))
+                                Map.of(), Map.of(), Map.of()))))
                 .adequacy();
     }
 
