@@ -45,8 +45,10 @@ public sealed interface PointAnswer {
      * @param reason    why no row is owed
      * @param settledBy where else it was settled and by whom: the far end of the empty run beside
      *                  the line, or the ends the rules leave the position at that refuse the value.
-     *                  None where the line alone settled it, or where the carrier names no value
-     *                  there
+     *                  None where the line alone settled it, where the carrier names no value
+     *                  there, and where what refused the value is a class of whole numbers or the
+     *                  values the rules name: neither is an end, and which clause it was read from
+     *                  is not carried with it
      */
     record NotOwed(NotOwedReason reason, List<RegionClaim> settledBy) implements PointAnswer {
 

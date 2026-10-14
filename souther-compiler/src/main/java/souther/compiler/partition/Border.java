@@ -682,15 +682,14 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * {@code "aa"} between them on the order of the strings, and none of a position holding one of
      * the two.
      *
-     * @param admits what the position's rules leave its value, where the quantity is that value;
-     *               every value where it is anything else, since a set of a position's values says
-     *               nothing about a number taken of them
+     * @param admits what the position's rules leave its value, put only where the quantity is that
+     *               value ({@link BorderQuantity#valuesOn})
      */
     public static Border at(BoundaryTarget target, LineOrigin origin, NumericDomain.Bounds within,
                             Congruences class_, ValueSet admits,
                             ExactAnswer<List<Parting>> parted, NarrowedBounds narrowed) {
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
-        Admissible admissible = new Admissible(reach, class_, admits);
+        Admissible admissible = new Admissible(reach, class_, admits, target.of().valuesOn());
         LevelSpace space = target.levels();
         Level cut = target.at();
         if (!reaches(cut, () -> seamOf(space, cut, origin), origin.lineFacts().claim(),
@@ -1377,17 +1376,23 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * is why this is asked only for the refusal ({@link #admits}, {@link #admitsNothingIn}) and
      * never read as the presence of a row.
      *
+     * <p>The values are a position's and are put only to levels on the position's own order. A
+     * value is a value of one order, and put to a level of another a set says it holds no such
+     * value — which reads as a refusal nobody made.
+     *
      * @param bounds the range the value runs in
      * @param necessary the class every value is of, or null where none is known
      * @param values the values the position's rules admit
+     * @param on the order those values are on, or null where the quantity is no position's value
+     *           and the values say nothing of it
      */
     private record Admissible(NumericDomain.Bounds bounds, Congruences necessary,
-                              ValueSet values) {
+                              ValueSet values, Carrier on) {
 
         /** Whether a row may be written at {@code level} as far as these three say. */
         boolean admits(Level level) {
-            if (!values.isAny() && level instanceof Level.OnACarrier on
-                    && !on.of().admitted(values, on.at())) {
+            if (namesValues() && level instanceof Level.OnACarrier at && at.of().equals(on)
+                    && !on.admitted(values, at.at())) {
                 return false;
             }
             ExactRatio number = level.asANumber();
@@ -1401,26 +1406,21 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
          * Whether the values named leave nothing in {@code part}, so far as that is said without
          * building anything.
          *
-         * <p>Asked of the order the run's ends are on, and of nothing where neither end is on one: a
-         * run with no end holds every value there is, and the rules naming none is a declaration
-         * refused before anything here reads it. Nor where the rules name nothing, which is most
-         * positions and refuses no run.
+         * <p>Not of a run with an end that is no place of the position — one in a written form's
+         * units — which the values say nothing of.
          */
         boolean admitsNothingIn(LevelInterval part) {
-            if (values.isAny()) {
+            if (!namesValues()) {
                 return false;
             }
-            Carrier carrier = carrierOf(part.low());
-            if (carrier == null) {
-                carrier = carrierOf(part.high());
-            }
-            OrderedInterval run = carrier == null ? null : LevelRealizer.runOf(part, carrier);
-            return run != null && carrier.admitsNothingIn(values, run);
+            OrderedInterval run = LevelRealizer.runOf(part, on);
+            return run != null && on.admitsNothingIn(values, run);
         }
 
-        private static Carrier carrierOf(Bound end) {
-            return end != null && end.at().written() instanceof Level.OnACarrier on ? on.of()
-                    : null;
+        /** Whether the values say anything here: of a position's value, and naming fewer than
+         *  every value, which most positions' rules do not and which refuses nothing. */
+        private boolean namesValues() {
+            return on != null && !values.isAny();
         }
 
         private boolean inTheClass(ExactRatio number) {

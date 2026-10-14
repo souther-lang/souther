@@ -1223,6 +1223,22 @@ public sealed interface BorderQuantity
     }
 
     /**
+     * The order a position's own values are on, where this quantity is those values; null where it
+     * is anything else.
+     *
+     * <p>What a set of a position's values can be put to. A set names values and says nothing of a
+     * number taken of them — a string held to {@code "a"} or {@code "b"} has lengths nobody named —
+     * nor of where two positions stand apart or what a form over them comes to.
+     */
+    default Carrier valuesOn() {
+        return switch (this) {
+            case OfACoordinate it -> it.term() instanceof NumericTerm.ValueOf
+                    ? it.of().answered() : null;
+            case Apart _, OverAForm _, HowMany _, RemainderOfAForm _ -> null;
+        };
+    }
+
+    /**
      * What a row standing at {@code where} asks of each of the terms this is taken of.
      *
      * <p><b>The item is about this quantity, and only one kind of quantity is a term's own

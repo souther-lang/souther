@@ -458,7 +458,7 @@ public final class Partitions {
         // that relates two positions draws a line on neither of them, and every line on no position
         // is arranged with the others where they are all in hand, which this phase is not.
         LinesRead read = new LinesRead();
-        java.util.Map<AxisId, List<Border>> lines = linesAlong(settled, quantities, read);
+        Map<AxisId, List<Border>> lines = linesAlong(settled, quantities, read);
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         MeasureClosure.Both closed = MeasureClosure.of(positions, standing, read);
         return new Partitioning(List.copyOf(settled), standing, uncertain,
@@ -1031,7 +1031,7 @@ public final class Partitions {
         // the position and a line between two leaves its border beside them; they are the same
         // reading, and an accounting over one of them says nothing about the other.
         LinesRead read = new LinesRead();
-        java.util.Map<AxisId, List<Border>> lines = linesAlong(measurements, reading, read);
+        Map<AxisId, List<Border>> lines = linesAlong(measurements, reading, read);
         List<Border> across = Border.allOf(between, partedByQuantity(out), read);
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         read.returning(across);
@@ -1085,7 +1085,7 @@ public final class Partitions {
      * <p>Walked by position, because what a position's rules admit is the position's and every
      * axis of it reads it from there.
      */
-    private static java.util.Map<AxisId, List<Border>> linesAlong(
+    private static Map<AxisId, List<Border>> linesAlong(
             List<PositionMeasurements> measured, Quantities reading, LinesRead read) {
         Map<AxisId, List<Border>> out = new LinkedHashMap<>();
         for (PositionMeasurements at : measured) {
@@ -1202,9 +1202,6 @@ public final class Partitions {
         // inside the range that is not of the class is one the rules refuse.
         Congruences valueClass = axis.term() instanceof NumericTerm.ValueOf place
                 ? reading.region().valueClassAt(place) : null;
-        // And the values the position's rules name, which is about the value and about no number
-        // taken of it: a string held to two values has lengths nobody named.
-        ValueSet values = axis.term() instanceof NumericTerm.ValueOf ? admits : ValueSet.ANY;
         List<Border> out = new ArrayList<>();
         // Every place the rules part this position's values, collected before any border is built.
         // What a comparison's border owes away from its line is a run of the arrangement they make
@@ -1256,7 +1253,7 @@ public final class Partitions {
                 // The line is written down as it is met and the border where it lands, so that the
                 // day something is written between the two the reading is held to having lost one.
                 read.found(target, origin);
-                out.add(read.drew(Border.at(target, origin, within, valueClass, values, parted,
+                out.add(read.drew(Border.at(target, origin, within, valueClass, admits, parted,
                         axis.narrowed())));
             }
         }
