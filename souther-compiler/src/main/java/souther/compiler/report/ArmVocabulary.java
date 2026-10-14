@@ -3,7 +3,6 @@ package souther.compiler.report;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.OutcomeName;
 import souther.compiler.coverage.SourceOutcome;
-import souther.compiler.query.ReplacementAsWritten;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.TypeSymbol;
 
@@ -56,24 +55,6 @@ public final class ArmVocabulary {
             case SourceOutcome.Held _, SourceOutcome.Failed _ ->
                     OutcomeName.of(construct, outcome).name().toLowerCase(Locale.ROOT);
         };
-    }
-
-    /** The word for the arm {@code rewrite} rewrites. */
-    public static String rewritten(ReplacementAsWritten.OfAnArm rewrite) {
-        return label(rewrite.replacement().fork().kind(), rewrite.arm());
-    }
-
-    /** The word for the arm {@code rewrite} has it answer as. */
-    public static String answeredAs(ReplacementAsWritten.OfAnArm rewrite) {
-        return label(rewrite.replacement().fork().kind(), rewrite.sibling());
-    }
-
-    /**
-     * The words a table and a generated row call {@code rewrite} by: the arm, and the arm it
-     * answers as. One function for both, for the reason {@link #label(CoverageSites.Site)} is.
-     */
-    public static String label(ReplacementAsWritten.OfAnArm rewrite) {
-        return rewritten(rewrite) + " answering as " + answeredAs(rewrite);
     }
 
     private static String namesOf(List<TypeSymbol> cases) {

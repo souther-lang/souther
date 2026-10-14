@@ -85,6 +85,65 @@ class AGeneratedRowSaysWhichForkEachRewriteItFillsIsAtTest {
                 "one row for both, and both over it: " + generated);
     }
 
+    /**
+     * Two forks of code this build holds no source of, in two definitions: the rewrite of each is
+     * said with the definition that wrote it, so the two rows for them are two rows for two
+     * things.
+     */
+    @Test
+    void eachRewriteOfALibraryForkIsSaidByTheDefinitionThatWroteIt() throws Exception {
+        String generated = generated("spread.sou", """
+                behavior spread : (a: Int, b: Int) -> Int
+
+                let spread (a, b) = Int.max(a, b) - Int.min(a, b)
+
+                example spread
+                    | (0, 0) -> 0
+                    | (3, 3) -> 0
+                """);
+
+        assertEquals(List.of(
+                        "// fills else answering as then (in a fork of `souther.int.max` this build"
+                                + " holds no source of)",
+                        "// fills else answering as then (in a fork of `souther.int.min` this build"
+                                + " holds no source of)"),
+                generated.lines().filter(line -> line.startsWith("// fills")).toList(),
+                generated);
+        assertFalse(generated.contains("\"else answering as then\""),
+                "and neither row is named by words the other has too: " + generated);
+    }
+
+    /**
+     * Two forks of one definition this build holds no source of are said in the same words and at
+     * the same place, which is all this build can say of them. They are still two, so neither is
+     * dropped as a repeat of the other and no row is named by words that are both of theirs.
+     */
+    @Test
+    void twoForksOfOneLibraryDefinitionAreTwoThingsThoughTheyAreSaidAlike() throws Exception {
+        String generated = generated("clamp.sou", """
+                data Ok = { n: Int }
+                data Err
+                data Outcome = Ok | Err
+
+                behavior kept : (n: Int) -> Outcome
+
+                let kept (n) = Ok { n = Int.clamp(0, 10, n) }
+
+                example kept
+                    | (-5) -> Ok
+                    | (5) -> Ok
+                    | (15) -> Ok
+                """);
+
+        assertEquals(2, generated.lines().filter(line -> line.startsWith(
+                        "// no row for `then answering as else` (in a fork of `souther.int.clamp`"))
+                        .count(),
+                "the rewrite of each fork's `then` is said, once each: " + generated);
+        assertFalse(generated.contains("\"else answering as then\""),
+                "and the row for one fork's `else` is not named by words the other's has: "
+                        + generated);
+    }
+
     /** {@code souther examples --generate} over {@code source}, and what it printed. */
     private static String generated(String name, String source) throws Exception {
         Path file = Files.createTempDirectory("souther-generate").resolve(name);

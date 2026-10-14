@@ -2522,7 +2522,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         onlyBy, marks);
                 branch(out, behavior, module.declaredIn(), rendering, onlyBy, marks);
                 decision(out, behavior, module.declaredIn(), rendering, onlyBy, marks);
-                replacement(out, behavior, module.declaredIn(), rendering);
+                replacement(out, behavior, module.module(), module.declaredIn(), rendering);
                 // Under the behavior it names, because a reason printed at the module's foot is
                 // read as belonging to whichever behavior came last. That was survivable while the
                 // only reasons naming one were rare; a position that could not be read is not.
@@ -3612,8 +3612,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * sibling. A rewrite left open is counted out of the number and said beside it, since nothing
      * showed it to be a gap; one shown to be is said under the line, one to a line.
      */
-    private void replacement(StringBuilder out, BehaviorReport behavior, SourceId declaredIn,
-                             SourceRendering rendering) {
+    private void replacement(StringBuilder out, BehaviorReport behavior, String module,
+                             SourceId declaredIn, SourceRendering rendering) {
         ReplacementEvidence replacement = behavior.evidence().replacement();
         if (replacement == null) {
             return;
@@ -3629,10 +3629,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 : String.format("   %d left open", rewrites.undecided());
         out.append(String.format("    replacement %d/%d%s%n", rewrites.noticed(),
                 rewrites.noticed() + rewrites.unnoticed(), open));
-        // Each arm said in the word the branch measure says it in, and the fork's place once: both
-        // arms are of the one fork, and what tells two rewrites at it apart is which arm answered
-        // as which. A fork in code this build holds no source of has no place here to give, and
-        // the place the finding is shown at is the behavior's, which is not where the fork is.
+        // Each said by what tells it from the others of the body, in RewriteVocabulary's words. An
+        // arm's by the arm and the arm it answered as, with the fork's place once: both arms are of
+        // the one fork. A fork in code this build holds no source of has no place here to give, and
+        // the place the finding is shown at is the behavior's, which is not where the fork is. The
+        // body answering one value is told from another by the value, and said by the row that
+        // came to it.
         for (ReportedFinding f : behavior.reported()) {
             if (f.finding().about() instanceof About.ARewriteNoRowTellsApart(
                     var _, var written, var reportAt, var _, var _)) {
@@ -3640,17 +3642,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case ReplacementAsWritten.OfAnArm rewrite -> switch (reportAt) {
                         case ReplacementReportAnchor.AtTheFork _ -> String.format(
                                 "no row would come out differently if `%s` (%s) answered as `%s`",
-                                ArmVocabulary.rewritten(rewrite),
+                                RewriteVocabulary.rewritten(rewrite),
                                 f.at().said(rendering, declaredIn),
-                                ArmVocabulary.answeredAs(rewrite));
+                                RewriteVocabulary.answeredAs(rewrite));
                         case ReplacementReportAnchor.AtTheBehavior _ -> String.format(
-                                "no row would come out differently if `%s` answered as `%s` in a"
-                                        + " fork this build holds no source of",
-                                ArmVocabulary.rewritten(rewrite),
-                                ArmVocabulary.answeredAs(rewrite));
+                                "no row would come out differently if `%s` answered as `%s` %s",
+                                RewriteVocabulary.rewritten(rewrite),
+                                RewriteVocabulary.answeredAs(rewrite),
+                                RewriteVocabulary.outOfSight(rewrite, module));
                     };
-                    case ReplacementAsWritten.ByOneAnswer _ ->
-                            "no row would come out differently if the body answered one value";
+                    case ReplacementAsWritten.ByOneAnswer one -> String.format(
+                            "no row would come out differently if the body always answered what"
+                                    + " `%s` answers",
+                            RewriteVocabulary.answeredBy(one, rendering));
                 }));
             }
         }

@@ -166,8 +166,9 @@ class ARewriteOfALibraryArmIsShownAtTheBehaviorTest {
     }
 
     /**
-     * The page names the two arms of a fork it holds no source of and gives no place for it: the
-     * place the finding is shown at is the behavior's, which is not where the fork is.
+     * The page names the two arms of a fork it holds no source of, and the definition that wrote
+     * the fork, and gives no place: the place the finding is shown at is the behavior's, which is
+     * not where the fork is.
      */
     @Test
     void thePageNamesTheArmsAndSaysTheForkIsOutOfSight() {
@@ -175,7 +176,7 @@ class ARewriteOfALibraryArmIsShownAtTheBehaviorTest {
         String page = AdequacyReport.of(c).human(SourceRendering.namedByIdentity(c.texts()));
 
         assertTrue(page.contains("no row would come out differently if `then` answered as `else`"
-                        + " in a fork this build holds no source of"),
+                        + " in a fork of `souther.int.max` this build holds no source of"),
                 () -> "what the page says: " + page);
     }
 

@@ -7283,7 +7283,7 @@ No row of `refund` would come out differently if the `case OutOfPocket` arm of t
   hint: Write a row at (Item { amount = Amount(1), payer = OutOfPocket }), which the two answer differently at.
 ----
 
-A warning (<<what-a-build-refuses-over-is-the-account>>). Said of a behavior with a body, at the fork of the arm a rewrite replaces or at the body when the rewrite is one answer (<<every-rewrite-of-a-body-is-told-apart>>). A rewrite of an arm names the arm and the arm it answers as, in the words <<e1918>> names an arm in: a fork has more than one arm where it is written, and which answered as which is what tells two rewrites at one fork apart.
+A warning (<<what-a-build-refuses-over-is-the-account>>). Said of a behavior with a body, at the fork of the arm a rewrite replaces or at the body when the rewrite is one answer (<<every-rewrite-of-a-body-is-told-apart>>). A rewrite of an arm names the arm and the arm it answers as, in the words <<e1918>> names an arm in: a fork has more than one arm where it is written, and which answered as which is what tells two rewrites at one fork apart. A rewrite of the body as one answer names the row that came to that value, which is what tells it from the rewrite as another.
 
 *Reaching is not deciding.* <<e1918>> asks that a row go through every arm, and a row that does has shown the arm ran. Whether what the arm answers is looked at by any row is a separate question. A row at `+OutOfPocket+` holding `+Amount(0)+` goes through the arm answering `+item.amount+` and passes just as well when that arm answers `+Amount(0)+` the way its siblings do, so nothing written tells the model from one that never refunds anything.
 

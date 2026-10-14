@@ -8241,7 +8241,9 @@ public final class Adequacy {
                                         twoClasses(combination), combination.behavior());
                         // The behavior, and the rewrite by which sentence it is: an arm's is
                         // pointed at the fork where there is one here to point at, and says the arm
-                        // and the sibling it answered as in the phrases an arm is said in.
+                        // and the sibling it answered as in the phrases an arm is said in. One of
+                        // the body answering one value says the row that came to that value, which
+                        // is what tells it from another value's.
                         case About.ARewriteNoRowTellsApart(var behavior, var written,
                                 var reportAt, var _, var _) -> switch (written) {
                             case ReplacementAsWritten.OfAnArm(var rewrite, var arm, var sibling) -> {
@@ -8258,8 +8260,9 @@ public final class Adequacy {
                                                     phraseFor(construct, sibling), behavior);
                                 };
                             }
-                            case ReplacementAsWritten.ByOneAnswer _ ->
-                                    new ExampleMessage.NoRowTellsTheBodyFromOneAnswer(behavior);
+                            case ReplacementAsWritten.ByOneAnswer(var rewrite) ->
+                                    new ExampleMessage.NoRowTellsTheBodyFromOneAnswer(
+                                            rewrite.answeredBy().identity().shown(), behavior);
                         };
                         // Kinds no build is told about under any code. Listed rather than
                         // defaulted, so that one added later has to be answered here rather than

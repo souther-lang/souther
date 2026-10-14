@@ -374,10 +374,17 @@ public sealed interface ExampleMessage extends Message {
                                                    String behavior)
             implements ExampleMessage, Reported {}
 
-    /** No row of the behavior would come out differently if its body answered one value whatever
-     *  it was given. */
+    /**
+     * No row of the behavior would come out differently if its body answered, whatever it was
+     * given, the value one of its rows came to.
+     *
+     * <p>The row and not the value. Two of these at one behavior are two values, and the row that
+     * came to each is how a reader is sent to it without the value written out in a form of its
+     * own.
+     */
     @Code(DiagnosticCode.E1939)
-    record NoRowTellsTheBodyFromOneAnswer(String behavior) implements ExampleMessage, Reported {}
+    record NoRowTellsTheBodyFromOneAnswer(String row, String behavior)
+            implements ExampleMessage, Reported {}
 
     /** What to do where a written row shows the rewrite answering differently: write down the
      *  answer it gives. */
