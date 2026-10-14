@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.TypeView;
+import souther.compiler.numeric.Towards;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -51,7 +52,10 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
             let f (s) = if %s == %d then 1 else 2
             """;
 
-    /** A set or a map of three of them is built, and the row at the line is one the search wrote. */
+    /**
+     * A set or a map of three of them is built, and every point of the line owed a row — at it,
+     * beside it, and in the regions either side — has one the search wrote.
+     */
     @Test
     void aCollectionOfTemporalValuesIsBuiltPastOneElement() {
         record Case(String type, String size) {}
@@ -65,11 +69,16 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
                 new Case("Map<Date, Bool>", "Map.size(s)"))) {
             BorderAssessment line = lineOf(MODEL.formatted(TYPES, each.type(), each.size(), 3));
 
-            assertTrue(line.items().get(new DomainPoint.AtTheLine())
-                    instanceof ItemAssessment.Owed owed
-                    && owed.searches().each().stream()
-                            .anyMatch(ItemAssessment.Attempt.Certified.class::isInstance),
-                    () -> each.type() + " " + line.items().get(new DomainPoint.AtTheLine()));
+            for (DomainPoint point : List.of(new DomainPoint.AtTheLine(),
+                    new DomainPoint.BesideTheLine(Towards.BELOW),
+                    new DomainPoint.BesideTheLine(Towards.ABOVE),
+                    new DomainPoint.InTheRegion(Towards.BELOW),
+                    new DomainPoint.InTheRegion(Towards.ABOVE))) {
+                assertTrue(line.items().get(point) instanceof ItemAssessment.Owed owed
+                        && owed.searches().each().stream()
+                                .anyMatch(ItemAssessment.Attempt.Certified.class::isInstance),
+                        () -> each.type() + " " + point + " " + line.items().get(point));
+            }
         }
     }
 
