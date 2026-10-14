@@ -1,12 +1,19 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.GuaranteeWalk;
 import souther.compiler.check.NonAffineOperation;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.observe.WorkFigure;
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.values.TextExtents;
 import net.unit8.notation199x.pattern.Meter;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
 /**
@@ -63,6 +70,16 @@ public sealed interface BlockReason {
          * the reasons themselves say, one word at a time.
          */
         RunSensitivity runSensitivity();
+
+        /**
+         * The figures this compiler compared something against and stopped at: empty exactly where
+         * {@link #runSensitivity} is {@link RunSensitivity#UNAFFECTED}.
+         *
+         * <p>Carried from where the comparison was made, or fixed where the figure is declared and
+         * the reason can be no other one. Never read off a word several figures share: a reader
+         * told a figure stopped something is told which, and at the number the run used.
+         */
+        List<Figure> figures();
     }
 
     /**
@@ -81,13 +98,28 @@ public sealed interface BlockReason {
      */
     sealed interface AnswerRealizationStopped extends QuestionStandingReason {
 
-        /** All three are an allowance a reading was granted running out, which is a figure a run
-         *  may allow more of. */
+        /** An allowance a reading was granted running out, which is a figure a run may allow more
+         *  of — and for the sets a position hands on, only where one did run out. */
         @Override
         default RunSensitivity runSensitivity() {
             return switch (this) {
-                case ExactValuesTooCostly _, RulesNotHandedOnAsSets _,
-                     BehaviorDistinctionsTooCostly _ -> RunSensitivity.MAY_CHANGE;
+                case ExactValuesTooCostly _, BehaviorDistinctionsTooCostly _ ->
+                        RunSensitivity.MAY_CHANGE;
+                // A position whose own answer stopped short publishes no sets, whatever stopped
+                // it, so what this carries is what stopped that: a figure where one did, and
+                // nothing a wider run changes where the answer stopped at a form nobody reads.
+                case RulesNotHandedOnAsSets it -> it.stoppedAt().isEmpty()
+                        ? RunSensitivity.UNAFFECTED : RunSensitivity.MAY_CHANGE;
+            };
+        }
+
+        /** The same switch, saying which figure. */
+        @Override
+        default List<Figure> figures() {
+            return switch (this) {
+                case ExactValuesTooCostly it -> List.of(it.figure());
+                case BehaviorDistinctionsTooCostly it -> List.of(it.figure());
+                case RulesNotHandedOnAsSets it -> it.stoppedAt();
             };
         }
     }
@@ -221,12 +253,27 @@ public sealed interface BlockReason {
          */
         Comparator<RuleReadingStopped> IN_A_STEADY_ORDER =
                 Comparator.<RuleReadingStopped>comparingInt(RuleReadingStopped::rank)
-                        .thenComparing(RuleReadingStopped::carrying,
-                                Comparator.nullsFirst(Comparator.naturalOrder()));
+                        .thenComparing(RuleReadingStopped::figures, RuleReadingStopped::inOrder);
 
-        /** What a member carries, where it carries anything a second of its kind can differ in. */
-        private static Meter.Stopped carrying(RuleReadingStopped reason) {
-            return reason instanceof OrderedExtentTooCostly it ? it.stopped() : null;
+        /**
+         * Two lists of figures, figure by figure and then the shorter first.
+         *
+         * <p>What a member carries that a second of its kind can differ in is the figure it stopped
+         * at — the limit, and the number a run held it to — so that is what is compared, by what
+         * names a figure and by what it stood at, apart.
+         */
+        private static int inOrder(List<Figure> these, List<Figure> those) {
+            for (int i = 0; i < Math.min(these.size(), those.size()); i++) {
+                int byName = these.get(i).name().compareTo(those.get(i).name());
+                if (byName != 0) {
+                    return byName;
+                }
+                int byMost = these.get(i).most().compareTo(those.get(i).most());
+                if (byMost != 0) {
+                    return byMost;
+                }
+            }
+            return Integer.compare(these.size(), those.size());
         }
 
         private static int rank(RuleReadingStopped reason) {
@@ -341,6 +388,42 @@ public sealed interface BlockReason {
                         RunSensitivity.UNAFFECTED;
             };
         }
+
+        /**
+         * The same switch, saying which figure.
+         *
+         * <p>Where a member carries its figure, that is the one: an allowance a run was handed is
+         * carried from where the machine was refused. Where the figure is fixed where it is
+         * declared and the member can be no other one, it is said here.
+         */
+        @Override
+        default List<Figure> figures() {
+            return switch (this) {
+                case PatternTooCostly it -> List.of(it.figure());
+                // The machines that say where a rule's strings stop are built under one allowance
+                // and nothing hands it another ({@code TextExtents}), so which limit refused is
+                // the whole of what varies.
+                case OrderedExtentTooCostly it -> List.of(TextExtents.refusedAt(it.stopped()));
+                // Each of the two is one figure, declared where it is counted.
+                case WhatItStatesIsNoLine(var why) -> switch (why) {
+                    case MORE_READINGS_THAN_ARE_MADE ->
+                            List.of(CompositionBudget.READINGS_OF_ONE_CONDITION);
+                    case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> List.of(
+                            WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(WrittenOutElements.MOST_WALKED));
+                    case A_PART_NOT_READ, A_NUMBER_NO_POSITION_HOLDS, NO_RELATION_OF_NUMBERS ->
+                            List.of();
+                };
+                case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
+                     RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
+                     NonAffineArithmetic _,
+                     ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
+                     EndLeftOpenByAChoice _,
+                     ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
+                     LineSideNotWorkedOut _,
+                     CasePairingNotDetermined _, SeveralLinesInOneRule _,
+                     RelationNotShownToReachEveryValue _ -> List.of();
+            };
+        }
     }
 
     /**
@@ -404,6 +487,19 @@ public sealed interface BlockReason {
                 case ValueRulesNotReachedPastDepthLimit _ -> RunSensitivity.MAY_CHANGE;
             };
         }
+
+        /**
+         * The same switch, saying which figure: the one depth a walk stops at for want of
+         * affording more, which is declared where the walk is and handed to it nowhere else.
+         */
+        @Override
+        default List<Figure> figures() {
+            return switch (this) {
+                case TypeUnresolved _, RecursiveExpansion _, ValueRulesNotReached _ -> List.of();
+                case ValueRulesNotReachedPastDepthLimit _ -> List.of(
+                        WorkFigure.FIELDS_A_RULE_IS_FOLLOWED_DOWN.at(GuaranteeWalk.FIELDS_SEEDED));
+            };
+        }
     }
 
     /**
@@ -429,11 +525,12 @@ public sealed interface BlockReason {
      * about, so a caller here would be naming one it does not have — which is the whole of what
      * {@link AboutThePosition} is beside this for.
      */
-    static RuleReadingStopped ofARuleTheValueReadingLeft(souther.compiler.values.UnreadReason why) {
+    static RuleReadingStopped ofARuleTheValueReadingLeft(StoppedReading stopped) {
+        UnreadReason why = stopped.why();
         // Whether there is a rule to name is the reason's own answer and not a list kept here.
         // Kept here, this was a third place saying which reasons are about a rule, and three
         // answers to one question are three chances for two of them to disagree.
-        if (why.about() != souther.compiler.values.UnreadReason.About.A_RULE) {
+        if (why.about() != UnreadReason.About.A_RULE) {
             throw new IllegalArgumentException(
                     "a reason about " + why.about() + " holds no rule to say this of: " + why);
         }
@@ -445,7 +542,7 @@ public sealed interface BlockReason {
             // an author does different work about them: one is a clause to rewrite and one is a
             // branch beside a clause that reads.
             case ALTERNATIVE_NOT_READ -> new ValueRuleLeftOpenByAChoice();
-            case PATTERN_TOO_COSTLY -> new PatternTooCostly();
+            case PATTERN_TOO_COSTLY -> new PatternTooCostly(stopped.figure());
             // Refused above, each of them, and named here so that a reason added to the vocabulary
             // stops this rather than arriving as whichever arm is nearest.
             case EXACT_VALUES_TOO_COSTLY, NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT ->
@@ -465,9 +562,9 @@ public sealed interface BlockReason {
      * leaving a rule without a line — that is the reading of ends' answer to give — so nothing this
      * returns may reach a caller as a rule read from end to end.
      */
-    static ReadingStopReason of(souther.compiler.values.UnreadReason why) {
-        return switch (why) {
-            case NOT_REACHED -> ofANamedRule(why);
+    static ReadingStopReason of(StoppedReading stopped) {
+        return switch (stopped.why()) {
+            case NOT_REACHED -> ofANamedRule(stopped);
             case NOT_REACHED_PAST_DEPTH_LIMIT -> new ValueRulesNotReachedPastDepthLimit();
             // And every other way this reading is short by the one below, since all of them leave a
             // question of a rule standing. Written out rather than defaulted to: a reason added to
@@ -475,7 +572,7 @@ public sealed interface BlockReason {
             // that decision by arriving at whichever arm was written last.
             case EXACT_VALUES_TOO_COSTLY, RELATES_TWO_POSITIONS, RELATES_ELEMENTS_OF_A_CONTAINER,
                  FORM_NOT_READ,
-                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY -> ofAQuestionStandingOn(why);
+                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY -> ofAQuestionStandingOn(stopped);
         };
     }
 
@@ -492,11 +589,12 @@ public sealed interface BlockReason {
      * deciding it twice — and a reason added to the vocabulary would be classified by whichever arm
      * it happened to land in instead of stopping the compile here.
      */
-    static QuestionStandingReason ofAQuestionStandingOn(souther.compiler.values.UnreadReason why) {
+    static QuestionStandingReason ofAQuestionStandingOn(StoppedReading stopped) {
+        UnreadReason why = stopped.why();
         return switch (why) {
-            case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly();
+            case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly(stopped.figure());
             case RELATES_TWO_POSITIONS, RELATES_ELEMENTS_OF_A_CONTAINER, FORM_NOT_READ,
-                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY -> ofARuleTheValueReadingLeft(why);
+                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY -> ofARuleTheValueReadingLeft(stopped);
             case NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT -> throw new IllegalArgumentException(
                     "a reason about " + why.about() + " leaves no question of a rule standing: "
                             + why);
@@ -511,13 +609,14 @@ public sealed interface BlockReason {
      * arrived. What is left is a fact about what the rules of a position come to between them, which
      * names no rule and sends a reader to no clause.
      */
-    static AnswerRealizationStopped ofTheAnswerTheReadingCouldNotBuild(UnreadReason why) {
+    static AnswerRealizationStopped ofTheAnswerTheReadingCouldNotBuild(StoppedReading stopped) {
+        UnreadReason why = stopped.why();
         if (why.about() != UnreadReason.About.THE_ANSWER) {
             throw new IllegalArgumentException(
                     "a reason about " + why.about() + " is not one the answer was short of: " + why);
         }
         return switch (why) {
-            case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly();
+            case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly(stopped.figure());
             // Refused above, each of them, and named here so that a reason added to the vocabulary
             // stops this rather than arriving as whichever arm is nearest.
             case RELATES_TWO_POSITIONS, RELATES_ELEMENTS_OF_A_CONTAINER, FORM_NOT_READ,
@@ -531,18 +630,19 @@ public sealed interface BlockReason {
      * The same, for a caller holding the rule the reason is said beside.
      *
      * <p>A rule a reading gave up on is filed as that rule, and a rule nothing reached as rules no
-     * reading reached — which is what {@link #of(UnreadReason)} files it as too, by asking this.
+     * reading reached — which is what {@link #of(StoppedReading)} files it as too, by asking this.
      * So a caller that names the rule, an offer of values that got nothing from it among them,
      * says it in the word the position's own account has for the same clause.
      *
      * <p>Refused for the rest. A depth a run could afford is no fact about the rule it stopped
      * above, and an answer nothing built names no rule at all.
      */
-    static RuleOfferShortfallReason ofANamedRule(UnreadReason why) {
+    static RuleOfferShortfallReason ofANamedRule(StoppedReading stopped) {
+        UnreadReason why = stopped.why();
         return switch (why) {
             case NOT_REACHED -> new ValueRulesNotReached();
             case RELATES_TWO_POSITIONS, RELATES_ELEMENTS_OF_A_CONTAINER, FORM_NOT_READ,
-                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY -> ofARuleTheValueReadingLeft(why);
+                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY -> ofARuleTheValueReadingLeft(stopped);
             case NOT_REACHED_PAST_DEPTH_LIMIT, EXACT_VALUES_TOO_COSTLY ->
                     throw new IllegalArgumentException(
                             "a reason about " + why.about() + " is said of no rule an offer holds: "
@@ -757,8 +857,17 @@ public sealed interface BlockReason {
      *
      * <p>A rule all the same, which is why it is here and not beside the one below. Somebody wrote
      * this pattern and could write it differently.
+     *
+     * @param figure the figure the machine was refused at, carried from where it was refused: how
+     *               many states one machine for the values a position admits may have, at the
+     *               number the run was handed
      */
-    record PatternTooCostly() implements RuleReadingStopped {}
+    record PatternTooCostly(Figure figure) implements RuleReadingStopped {
+
+        public PatternTooCostly {
+            Objects.requireNonNull(figure, "a pattern too costly was refused at some figure");
+        }
+    }
 
     /**
      * A rule whose strings this read, and whose place on the order they are measured on would take
@@ -799,8 +908,16 @@ public sealed interface BlockReason {
      * <p>So it carries no rule and is not among the reasons that do ({@link
      * AnswerRealizationStopped}). A reader here has nothing to send an author to, and that is the
      * answer rather than something missing from it.
+     *
+     * @param figure the figure the answer was refused at, carried from where it was refused: one
+     *               machine for the values a position admits, or everything built for them
      */
-    record ExactValuesTooCostly() implements AnswerRealizationStopped {}
+    record ExactValuesTooCostly(Figure figure) implements AnswerRealizationStopped {
+
+        public ExactValuesTooCostly {
+            Objects.requireNonNull(figure, "an answer too costly was refused at some figure");
+        }
+    }
 
     /**
      * A behavior's rules about the strings at this position were read, and building what they tell
@@ -823,9 +940,17 @@ public sealed interface BlockReason {
      * are written at the position — so a reader of the position is owed the sentence about each of
      * them, and what it says is that the position's distinctions were not built rather than that
      * this one rule was the expensive one.
+     *
+     * @param figure the figure the group was refused at, carried from where it was refused: one
+     *               machine for the strings a behavior tells apart, or everything built for them
      */
-    record BehaviorDistinctionsTooCostly()
-            implements AnswerRealizationStopped, StoppedWithoutALine {}
+    record BehaviorDistinctionsTooCostly(Figure figure)
+            implements AnswerRealizationStopped, StoppedWithoutALine {
+
+        public BehaviorDistinctionsTooCostly {
+            Objects.requireNonNull(figure, "distinctions too costly were refused at some figure");
+        }
+    }
 
     /**
      * The rules about the strings at this position were read, what the position admits was worked
@@ -847,8 +972,23 @@ public sealed interface BlockReason {
      * <p>Beside {@link ExactValuesTooCostly} rather than the same thing said twice: that one is the
      * position's own answer coming out wider than the rules leave it, and here that answer is what
      * the rules leave and a reader is short of something else.
+     *
+     * <p><b>Or the position's own answer stopped first, and nothing was handed on at all.</b> A
+     * position whose values were not answered for publishes no sets of its rules, and what stopped
+     * them is what stopped it — so the figures here are those: the one the sets were refused at
+     * where they were asked for, and where they were not, the ones the position's answer stopped
+     * at, which are none where it stopped at a form nobody reads.
+     *
+     * @param stoppedAt the figures what was handed on stopped at, carried from where each was
+     *                  compared; empty where no figure is why
      */
-    record RulesNotHandedOnAsSets() implements AnswerRealizationStopped, StoppedWithoutALine {}
+    record RulesNotHandedOnAsSets(List<Figure> stoppedAt)
+            implements AnswerRealizationStopped, StoppedWithoutALine {
+
+        public RulesNotHandedOnAsSets {
+            stoppedAt = List.copyOf(stoppedAt);
+        }
+    }
 
     /**
      * A rule about the position says how it stands against another position, and what is held here

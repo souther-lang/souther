@@ -4,7 +4,9 @@ import souther.compiler.values.AdmissibleValues;
 import souther.compiler.values.StringFacts;
 import souther.compiler.values.StringMachineAnswers;
 import souther.compiler.values.Allowance;
+import souther.compiler.observe.Figure;
 import souther.compiler.values.ConjoinedAdmissibleValues;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Combinators.Handed;
@@ -516,7 +518,7 @@ public final class InvariantChecker {
                   List<Written> readings,
                   Map<FactSubject, souther.compiler.numeric.Granularity> spacing,
                   Map<RuleKey, ValueSet> admitted,
-                  Map<RuleKey, List<UnreadReason>> unreadAt,
+                  Map<RuleKey, List<StoppedReading>> unreadAt,
                   Set<RuleKey> notSeparated,
                   StringFacts stringMachines,
                   Map<RuleRef.Invariant, Map<FactSubject, Set<ChoiceToLift>>> endsLeftOpen,
@@ -1184,12 +1186,12 @@ public final class InvariantChecker {
         // finish it, and a reading kept by a reader that only asks questions of it would be
         // keeping an allowance.
         Map<RuleKey, ValueSet> admitted = new LinkedHashMap<>();
-        Map<RuleKey, List<UnreadReason>> unreadAt = new LinkedHashMap<>();
+        Map<RuleKey, List<StoppedReading>> unreadAt = new LinkedHashMap<>();
         Set<RuleKey> notSeparated = new LinkedHashSet<>();
         ConjoinedAdmissibleValues<FactSubject> readAs = constraints.values();
         for (RuleKey field : written(atoms, keys)) {
             ValueSet here = ValueSet.ANY;
-            List<UnreadReason> why = new ArrayList<>();
+            List<StoppedReading> why = new ArrayList<>();
             // Not asked at all where the reading admits nothing. What it holds there is not the
             // relation's projections — those are empty wherever the relation is — but where the
             // arithmetic had got to when it learned that no value of this type exists, so whether
@@ -1204,7 +1206,11 @@ public final class InvariantChecker {
                         allowed.meet(readAs.blockOf(name), here, readAs.at(name));
                 here = made.set();
                 if (made.gaveUp()) {
-                    why.add(UnreadReason.EXACT_VALUES_TOO_COSTLY);
+                    StoppedReading wide = StoppedReading.ofTheValues(
+                            UnreadReason.EXACT_VALUES_TOO_COSTLY, made.refused());
+                    if (!why.contains(wide)) {
+                        why.add(wide);
+                    }
                 }
                 separated = separated && readAs.projectionExactAt(name);
                 // Every one of them. Two subjects of one name are two ways the same rules were
@@ -1212,7 +1218,7 @@ public final class InvariantChecker {
                 // an ordering the interval algebra knows the place by and a pattern the values
                 // reading knows it by stop this reading in two ways, and each is a rule of the
                 // author's to act on. Said once here — a limit met under both names is one limit.
-                for (UnreadReason each : readAs.whyUnread(name)) {
+                for (StoppedReading each : readAs.stoppedAt(name)) {
                     if (!why.contains(each)) {
                         why.add(each);
                     }
@@ -3247,9 +3253,10 @@ public final class InvariantChecker {
             // outstanding and no rule of it is why. Written down all the same: what a reader takes
             // from an absence here is that the model draws no line, and the truth is that nobody
             // worked out whether it does.
-            if (runs.notPublishedAt(position)) {
+            BlockReason.RulesNotHandedOnAsSets notHandedOn = runs.notPublishedAt(position);
+            if (notHandedOn != null) {
                 add(noLines, new FieldDomains.NoLine(each.getValue().at(), part, clause,
-                        new BlockReason.RulesNotHandedOnAsSets()));
+                        notHandedOn));
                 continue;
             }
             // And what the rule itself came to once its own choices are decided and its own
@@ -3334,8 +3341,8 @@ public final class InvariantChecker {
                 // And a rule of a position that could not hand its sets on leaves the question
                 // standing with nothing about the rule to say. What was not made is the position's
                 // group of them, which this rule is no more answerable for than the one beside it.
-                case AdmittedStrings.NotPublished _ ->
-                        byPosition.put(position, new Run.NotPublished());
+                case AdmittedStrings.NotPublished it ->
+                        byPosition.put(position, new Run.NotPublished(it.stoppedAt()));
             }
         });
         return new RunsRead(byPosition);
@@ -3441,8 +3448,16 @@ public final class InvariantChecker {
          * whole group of sets and no rule of it is answerable for that, so this carries no reason
          * to name one with — what it says is that the question about this conjunct stands, and the
          * one word for why is the position's ({@link BlockReason.RulesNotHandedOnAsSets}).
+         *
+         * @param stoppedAt the figures the position's sets stopped at, which are the position's
+         *                  and carried here only to be said in that word
          */
-        record NotPublished() implements Run {}
+        record NotPublished(List<Figure> stoppedAt) implements Run {
+
+            public NotPublished {
+                stoppedAt = List.copyOf(stoppedAt);
+            }
+        }
     }
 
     /** What one conjunct's rules about strings came to, per position. */
@@ -3492,15 +3507,16 @@ public final class InvariantChecker {
         }
 
         /**
-         * Whether this conjunct states a rule about the strings at {@code position} that the
-         * position could not hand on as a set.
+         * Why this conjunct's rule about the strings at {@code position} was not handed on as a
+         * set, or null where the position handed it on or the conjunct states none there.
          *
          * <p>Asked apart from {@link #stoppedAt} because the answer is not one of that one's. Those
          * are reasons about a rule and this one is about the position, and the two would be one
          * list only by giving the position's shortfall a rule to be filed against.
          */
-        boolean notPublishedAt(FactSubject position) {
-            return byPosition.get(position) instanceof Run.NotPublished;
+        BlockReason.RulesNotHandedOnAsSets notPublishedAt(FactSubject position) {
+            return byPosition.get(position) instanceof Run.NotPublished it
+                    ? new BlockReason.RulesNotHandedOnAsSets(it.stoppedAt()) : null;
         }
 
     }

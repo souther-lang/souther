@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.numeric.OrderedIntervals;
+import souther.compiler.observe.Figure;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmissibleValues;
@@ -13,6 +15,7 @@ import souther.compiler.values.PlannedValues;
 import souther.compiler.values.Realizations;
 import souther.compiler.values.Realized;
 import souther.compiler.values.Sameness;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.Unbuilt;
 import souther.compiler.values.UnreadReason;
 import souther.compiler.values.ValueSet;
@@ -24,6 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.UnaryOperator;
 
@@ -456,7 +460,7 @@ sealed interface StatedByClauses {
                     .filter(each -> !accountedFor(each, unread))
                     .forEach(each -> out.add(new ReadingShortfall(choice.writtenIn(),
                             choice.writtenAs(), RuleShortfall.Kind.CHOICE,
-                            UnreadReason.ALTERNATIVE_NOT_READ, each)));
+                            StoppedReading.of(UnreadReason.ALTERNATIVE_NOT_READ), each)));
         }
 
         /** Whether {@code unread} holds an account of {@code at}. */
@@ -1140,7 +1144,7 @@ sealed interface StatedByClauses {
             // holds of everything waiting on it; what a pattern asked for and was refused is a fact
             // about the pattern, and travels to whoever asked rather than to the place they asked
             // about.
-            Map<FactSubject, List<UnreadReason>> answered =
+            Map<FactSubject, List<StoppedReading>> answered =
                     new LinkedHashMap<>();
             made.aboutTheAnswer().forEach(each -> answered.merge(each.at(),
                     List.of(each.why()), ReadByClauses::alsoSaying));
@@ -1895,18 +1899,32 @@ sealed interface StatedByClauses {
                         }
                     })));
             Map<FactSubject, Realizations> answers = new LinkedHashMap<>();
+            Map<FactSubject, List<Figure>> notHandedOn = new LinkedHashMap<>();
             // Built for the block the position is on, which is what the machine is being made for:
             // positions the rules hold as one value have one answer between them, and one purse.
-            asked.forEach((position, plans) -> answers.put(position,
-                    answered.speaksFor(position)
-                            ? handingOn.realizeAll(answered.blockOf(position), plans)
-                            : new Realizations.NotBuilt()));
+            asked.forEach((position, plans) -> {
+                if (!answered.speaksFor(position)) {
+                    // Nothing was asked for, so no limit of the sets' allowance is why: what
+                    // stopped them is what stopped the position's own answer, figure and all.
+                    notHandedOn.put(position, answered.stoppedAt(position).stream()
+                            .map(StoppedReading::figure).filter(Objects::nonNull).distinct()
+                            .toList());
+                    return;
+                }
+                Realizations made = handingOn.realizeAll(answered.blockOf(position), plans);
+                if (made instanceof Realizations.NotBuilt it) {
+                    notHandedOn.put(position, List.of(it.refused().as(
+                            WorkFigure.RULE_SETS_ONE_MACHINE, WorkFigure.RULE_SETS_IN_ALL)));
+                } else {
+                    answers.put(position, made);
+                }
+            });
             Map<K, Map<ClauseOccurrence, ReadByClauses.OfAPart>> out = new LinkedHashMap<>();
             said.forEach((key, mine) -> {
                 Map<ClauseOccurrence, ReadByClauses.OfAPart> here = new LinkedHashMap<>();
                 mine.forEach((each, part) -> here.put(each, new ReadByClauses.OfAPart(
                         part.byValues(), part.byOrder(), part.stopped(), part.aboutARule(),
-                        admitted(part.aboutStrings(), answers), part.endsLeftOpen(),
+                        admitted(part.aboutStrings(), answers, notHandedOn), part.endsLeftOpen(),
                         part.boundsLeftOpen())));
                 out.put(key, here);
             });
@@ -1925,7 +1943,8 @@ sealed interface StatedByClauses {
          */
         private static Map<FactSubject, AdmittedStrings> admitted(
                 Map<FactSubject, StringRestriction> stated,
-                Map<FactSubject, Realizations> answers) {
+                Map<FactSubject, Realizations> answers,
+                Map<FactSubject, List<Figure>> notHandedOn) {
             if (stated.isEmpty()) {
                 return Map.of();
             }
@@ -1937,7 +1956,8 @@ sealed interface StatedByClauses {
                     case StringRestriction.Admitting it ->
                             out.put(position, answers.get(position) instanceof Realizations.Exact made
                                     ? new AdmittedStrings.Admitting(made.of(it.plan()))
-                                    : new AdmittedStrings.NotPublished());
+                                    : new AdmittedStrings.NotPublished(
+                                            notHandedOn.get(position)));
                 }
             });
             return Collections.unmodifiableMap(out);

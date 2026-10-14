@@ -2,6 +2,8 @@ package souther.compiler.values;
 
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Text;
+import souther.compiler.observe.Figure;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.regex.Language;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
@@ -206,6 +208,18 @@ public final class TextExtents {
     private static Language notBefore(String from, Meter meter) {
         Language before = Language.before(from, meter);
         return before == null ? null : before.not(meter);
+    }
+
+    /**
+     * The figure a walk here was refused at, where {@code stopped} is the limit that refused it.
+     *
+     * <p>Said here because the allowance is this question's and nothing hands it another, so which
+     * limit refused is the whole of what varies: a reason that carries only the limit is told the
+     * number by the one place the allowance is named.
+     */
+    public static Figure refusedAt(Meter.Stopped stopped) {
+        return new PatternPlan.Refused(PatternPlan.Budget.OF_AN_ORDERED_EXTENT, stopped)
+                .as(WorkFigure.ORDERED_EXTENT_ONE_MACHINE, WorkFigure.ORDERED_EXTENT_IN_ALL);
     }
 
     /**

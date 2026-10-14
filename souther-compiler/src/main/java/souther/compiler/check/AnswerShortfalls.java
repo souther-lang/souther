@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
 import java.util.Collections;
@@ -21,19 +22,19 @@ import java.util.Set;
  * order among them, which is the same claim made smaller — would be answering where in a source a
  * reader should look for something the source does not hold.
  *
- * @param reasons what the answer was short of, each a fact about the answer and about no rule
+ * @param reasons what the answer was short of, each a fact about the answer and about no rule, with
+ *                the figure it stopped at
  */
-record AnswerShortfalls(Set<UnreadReason> reasons) {
+record AnswerShortfalls(Set<StoppedReading> reasons) {
 
     AnswerShortfalls {
         if (reasons == null) {
             throw new IllegalArgumentException("an account of an answer says what it was short of");
         }
         reasons.forEach(each -> {
-            if (each.about() != UnreadReason.About.THE_ANSWER) {
-                throw new IllegalArgumentException(
-                        "a reason about " + each.about() + " is not one the answer is short of: "
-                                + each);
+            if (each.why().about() != UnreadReason.About.THE_ANSWER) {
+                throw new IllegalArgumentException("a reason about " + each.why().about()
+                        + " is not one the answer is short of: " + each);
             }
         });
         reasons = Collections.unmodifiableSet(new LinkedHashSet<>(reasons));

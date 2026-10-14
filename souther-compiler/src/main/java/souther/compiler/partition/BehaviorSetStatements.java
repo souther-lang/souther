@@ -477,13 +477,14 @@ public final class BehaviorSetStatements {
      */
     private static void state(Asked each, Realizations answer,
                               List<RuleEvidence> statements, List<ClassingBlocker> blocked) {
-        if (!(answer instanceof Realizations.Exact built)) {
-            blocked.add(new ClassingBlocker(each.term(), each.by(),
-                    new BlockReason.BehaviorDistinctionsTooCostly()));
-            return;
+        switch (answer) {
+            case Realizations.NotBuilt it -> blocked.add(new ClassingBlocker(each.term(), each.by(),
+                    new BlockReason.BehaviorDistinctionsTooCostly(
+                            Classing.ofTheDistinctions(it.refused()))));
+            case Realizations.Exact built -> statements.add(new RuleEvidence.BySet(
+                    new SetStatement(each.term(), built.of(each.whenTrue()),
+                            built.of(each.whenFalse()), each.states(), each.by())));
         }
-        statements.add(new RuleEvidence.BySet(new SetStatement(each.term(),
-                built.of(each.whenTrue()), built.of(each.whenFalse()), each.states(), each.by())));
     }
 
     /**

@@ -9,6 +9,9 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Text;
 import net.unit8.notation199x.pattern.Meter;
+import souther.compiler.observe.Figure;
+import souther.compiler.observe.WorkFigure;
+import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.Sameness;
 import souther.compiler.values.Value;
@@ -299,7 +302,7 @@ final class Classing {
                 active.add(each);
                 continue;   // filled in below, once it is known whether the classes took it up
             }
-            Boolean divides = tellsApart(term, admits,
+            Worked<Boolean> worked = tellsApart(term, admits,
                     new AsASet(set.states().whenTrue(), set.states().whenFalse(),
                             set.states().statement()),
                     allowance);
@@ -308,9 +311,11 @@ final class Classing {
             // of them to be part of, so what became of every one of them is the same thing. Said as
             // nothing at all, the account that follows is handed a position whose rules it was owed
             // an answer about and got none.
-            if (divides == null) {
-                return notComposed(mine, told, new BlockReason.BehaviorDistinctionsTooCostly());
+            if (worked.refused() != null) {
+                return notComposed(mine, told, new BlockReason.BehaviorDistinctionsTooCostly(
+                        ofTheDistinctions(worked.refused())));
             }
+            boolean divides = worked.answer();
             told.add(divides
                     ? new Disposed(each, Outcome.DIVIDED, null)
                     : new Disposed(each, Outcome.TOLD_NOTHING_APART,
@@ -337,10 +342,12 @@ final class Classing {
         }
         List<AsASet> said = new ArrayList<>();
         active.forEach(each -> said.add(asASet(each, carrier)));
-        List<Cell> cells = refined(term, admits, said, allowance);
-        if (cells == null) {
-            return notComposed(mine, told, new BlockReason.BehaviorDistinctionsTooCostly());
+        Worked<List<Cell>> refined = refined(term, admits, said, allowance);
+        if (refined.refused() != null) {
+            return notComposed(mine, told, new BlockReason.BehaviorDistinctionsTooCostly(
+                    ofTheDistinctions(refined.refused())));
         }
+        List<Cell> cells = refined.answer();
         List<PartitionClass> out = new ArrayList<>();
         for (Cell cell : cells) {
             out.add(classOf(term, cell, carrier, perWitness, writing).ofTheNumber(term));
@@ -397,22 +404,52 @@ final class Classing {
     }
 
     /**
-     * Whether {@code said} tells two of the position's values apart, or null where the allowance
-     * ran out working it out.
+     * The figure a refusal of a behavior's distinctions was, said as the figures of what a behavior
+     * tells apart: what was being built under the allowance here is that and nothing else.
+     */
+    static Figure ofTheDistinctions(PatternPlan.Refused refused) {
+        return refused.as(WorkFigure.BEHAVIOR_DISTINCTIONS_ONE_MACHINE,
+                WorkFigure.BEHAVIOR_DISTINCTIONS_IN_ALL);
+    }
+
+    /**
+     * What working something out under the allowance came to: the answer, or the limit that
+     * refused it and no answer.
+     *
+     * @param answer  what was worked out, or null where it was refused
+     * @param refused the limit that refused it, or null where it was worked out
+     */
+    private record Worked<T>(T answer, PatternPlan.Refused refused) {
+
+        static <T> Worked<T> to(T answer) {
+            return new Worked<>(answer, null);
+        }
+
+        static <T> Worked<T> refusedAt(PatternPlan.Refused refused) {
+            return new Worked<>(null, refused);
+        }
+    }
+
+    /**
+     * Whether {@code said} tells two of the position's values apart, or the limit the allowance
+     * refused working it out at.
      *
      * <p>Both sides against what the position holds, and not against every value there is. A rule
      * can name strings on both sides and have the declarations leave nothing on one of them, which
      * is the position undivided by it however the strings fall.
      */
-    private static Boolean tellsApart(NumericTerm.FromOnePosition term, ValueSet admits,
-                                      AsASet said,
-                                      Allowance<NumericTerm.FromOnePosition> allowance) {
+    private static Worked<Boolean> tellsApart(NumericTerm.FromOnePosition term, ValueSet admits,
+                                              AsASet said,
+                                              Allowance<NumericTerm.FromOnePosition> allowance) {
         Allowance.Composed yes = allowance.meet(Sameness.Block.of(term), admits, said.whenTrue());
-        Allowance.Composed no = allowance.meet(Sameness.Block.of(term), admits, said.whenFalse());
-        if (yes.gaveUp() || no.gaveUp()) {
-            return null;
+        if (yes.gaveUp()) {
+            return Worked.refusedAt(yes.refused());
         }
-        return !yes.set().isEmpty() && !no.set().isEmpty();
+        Allowance.Composed no = allowance.meet(Sameness.Block.of(term), admits, said.whenFalse());
+        if (no.gaveUp()) {
+            return Worked.refusedAt(no.refused());
+        }
+        return Worked.to(!yes.set().isEmpty() && !no.set().isEmpty());
     }
 
     /**
@@ -457,19 +494,19 @@ final class Classing {
     }
 
     /**
-     * What {@code said} leaves {@code term} divided into, or null where the allowance ran out.
+     * What {@code said} leaves {@code term} divided into, or the limit the allowance refused it at.
      *
      * <p>Each distinction in turn against what the ones before it left: a cell either satisfies it
      * or does not, and one that would hold no value is no class of the position and is dropped
      * rather than published as a class no run is ever counted at.
      *
-     * <p>Null and not the cells so far. A partition is exclusive and exhaustive or it is not one,
-     * and cells the meets got through before the allowance ran out are neither — read as the
+     * <p>The limit and not the cells so far. A partition is exclusive and exhaustive or it is not
+     * one, and cells the meets got through before the allowance ran out are neither — read as the
      * position's classes, the values in the ones nobody finished would be owed no row at all.
      */
-    private static List<Cell> refined(NumericTerm.FromOnePosition term, ValueSet admits,
-                                      List<AsASet> said,
-                                      Allowance<NumericTerm.FromOnePosition> allowance) {
+    private static Worked<List<Cell>> refined(NumericTerm.FromOnePosition term, ValueSet admits,
+                                              List<AsASet> said,
+                                              Allowance<NumericTerm.FromOnePosition> allowance) {
         // What the position holds, which is what the rules of a body divide. Started from the
         // strings instead, a rule would divide values the declarations already refused and the
         // position would come back with classes no run is ever in.
@@ -483,7 +520,7 @@ final class Classing {
                     Allowance.Composed met =
                             allowance.meet(Sameness.Block.of(term), cell.values(), side);
                     if (met.gaveUp()) {
-                        return null;
+                        return Worked.refusedAt(met.refused());
                     }
                     if (!met.set().isEmpty()) {
                         narrower.add(cell.and(met.set(), each.states(), holding));
@@ -492,7 +529,7 @@ final class Classing {
             }
             cells = narrower;
         }
-        return cells;
+        return Worked.to(cells);
     }
 
     /** One cell as a class: what it holds, what it is called, and what a row would carry for it. */

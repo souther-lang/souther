@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.UndividedPosition;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,7 +39,8 @@ class OneRuleReadTwoWaysIsTwoAnswersAndOneWordTest {
 
     /** And what the reading of values makes of the same rule. */
     private static final BlockReason.RuleReadingStopped THE_VALUE_READING =
-            BlockReason.ofARuleTheValueReadingLeft(UnreadReason.RELATES_TWO_POSITIONS);
+            BlockReason.ofARuleTheValueReadingLeft(
+                    StoppedReading.of(UnreadReason.RELATES_TWO_POSITIONS));
 
     /**
      * The line reading finished, so nothing is owed on its account.
@@ -94,8 +96,9 @@ class OneRuleReadTwoWaysIsTwoAnswersAndOneWordTest {
     @Test
     void aReadingThatReachedNoRuleNamesNone() {
         assertInstanceOf(BlockReason.AboutThePosition.class,
-                BlockReason.of(UnreadReason.NOT_REACHED));
+                BlockReason.of(StoppedReading.of(UnreadReason.NOT_REACHED)));
+        StoppedReading notReached = StoppedReading.of(UnreadReason.NOT_REACHED);
         assertThrows(IllegalArgumentException.class,
-                () -> BlockReason.ofARuleTheValueReadingLeft(UnreadReason.NOT_REACHED));
+                () -> BlockReason.ofARuleTheValueReadingLeft(notReached));
     }
 }

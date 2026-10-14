@@ -17,11 +17,14 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleRef;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
 import java.util.ArrayList;
@@ -337,10 +340,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     @Test
     void aReadingsAccountOfNeverReachingAPositionKeepsWhichOfThemItWas() {
         assertEquals(RunSensitivity.MAY_CHANGE,
-                BlockReason.of(UnreadReason.NOT_REACHED_PAST_DEPTH_LIMIT).runSensitivity(),
+                BlockReason.of(stopped(UnreadReason.NOT_REACHED_PAST_DEPTH_LIMIT)).runSensitivity(),
                 "a walk stopped by the depth it could afford is one a wider run reads past");
         assertEquals(RunSensitivity.UNAFFECTED,
-                BlockReason.of(UnreadReason.NOT_REACHED).runSensitivity(),
+                BlockReason.of(stopped(UnreadReason.NOT_REACHED)).runSensitivity(),
                 "and every other way of never reaching a position is met again");
     }
 
@@ -477,6 +480,14 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
      * <p>That it holds every reason is not this list's word either: {@link
      * #everyReasonThereIsHasARowAbove} reads the seal.
      */
+    private static final Figure AT_A_FIGURE = WorkFigure.ADMITTED_VALUES_IN_ALL.at(
+            "200000 states built and 50000000 looked at");
+
+    /** {@code why} as a reading stopped by it says it, at a figure where it carries one. */
+    private static StoppedReading stopped(UnreadReason why) {
+        return new StoppedReading(why, StoppedReading.carriesAFigure(why) ? AT_A_FIGURE : null);
+    }
+
     private static List<BlockReason> everyReason() {
         List<BlockReason> every = new ArrayList<>(List.of(
                 new BlockReason.UnreadComparisonForm(),
@@ -495,11 +506,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                         NonAffineOperation.REMAINDER_BY_NON_CONSTANT_VALUE),
                 new BlockReason.EndLeftOpenByAChoice(),
                 new BlockReason.ValueRuleLeftOpenByAChoice(),
-                new BlockReason.PatternTooCostly(),
+                new BlockReason.PatternTooCostly(AT_A_FIGURE),
                 new BlockReason.OrderedExtentTooCostly(Meter.Stopped.ONE_MACHINE),
-                new BlockReason.ExactValuesTooCostly(),
-                new BlockReason.BehaviorDistinctionsTooCostly(),
-                new BlockReason.RulesNotHandedOnAsSets(),
+                new BlockReason.ExactValuesTooCostly(AT_A_FIGURE),
+                new BlockReason.BehaviorDistinctionsTooCostly(AT_A_FIGURE),
+                new BlockReason.RulesNotHandedOnAsSets(List.of(AT_A_FIGURE)),
                 new BlockReason.ValueRuleRelatingTwoPositions(),
                 new BlockReason.ValueRuleRelatingElements(),
                 new BlockReason.CasePairingNotDetermined(),
@@ -693,7 +704,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     void whatAReasonIsAboutDecidesWhichCapabilityItArrivesIn() {
         Map<String, String> arrived = new LinkedHashMap<>();
         for (UnreadReason why : UnreadReason.values()) {
-            arrived.put(why.name(), capabilityOf(BlockReason.of(why)));
+            arrived.put(why.name(), capabilityOf(BlockReason.of(stopped(why))));
         }
 
         Map<String, String> expected = new LinkedHashMap<>();
@@ -731,10 +742,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         for (UnreadReason why : UnreadReason.values()) {
             if (why.about() == UnreadReason.About.NEITHER) {
                 assertThrows(IllegalArgumentException.class,
-                        () -> BlockReason.ofAQuestionStandingOn(why),
+                        () -> BlockReason.ofAQuestionStandingOn(stopped(why)),
                         () -> why + " reached no rule, so no question of one stands on it");
             } else {
-                assertEquals(BlockReason.of(why), BlockReason.ofAQuestionStandingOn(why),
+                assertEquals(BlockReason.of(stopped(why)),
+                        BlockReason.ofAQuestionStandingOn(stopped(why)),
                         () -> why + " leaves a question standing, and says the same thing there");
             }
         }
@@ -760,7 +772,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                                 new BlockReason.UnreadComparisonDomain()),
                         new RuleReasons.Said(RuleSite.at(aPart(1)), RuleSite.theRuleItself(),
                                 new BlockReason.UnreadValueRule()))),
-                Optional.of(new BlockReason.ExactValuesTooCostly()));
+                Optional.of(new BlockReason.ExactValuesTooCostly(AT_A_FIGURE)));
 
         assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_DOMAIN,
                         UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
@@ -835,7 +847,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         List<BlockReason.AnswerRealizationStopped> out = new java.util.ArrayList<>(
                 Arrays.stream(UnreadReason.values())
                         .filter(each -> each.about() == UnreadReason.About.THE_ANSWER)
-                        .map(BlockReason::ofAQuestionStandingOn)
+                        .map(each -> BlockReason.ofAQuestionStandingOn(stopped(each)))
                         .map(BlockReason.AnswerRealizationStopped.class::cast).toList());
         // And every other member of the capability, which is where this used to be short. The
         // surface a document writes one of these into is the capability's, so a reason that

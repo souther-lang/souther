@@ -8,6 +8,7 @@ import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.StoppedReading;
 
 import java.util.HashMap;
 import java.util.List;
@@ -294,8 +295,8 @@ public enum StringPredicates {
      * in one word for as long as that reading says it.
      */
     private static final BlockReason.RuleOfferShortfallReason
-            WHY_A_CLAUSE_NOTHING_TYPED_WAS_NOT_READ = BlockReason.ofANamedRule(
-                    FieldDomains.whyNothingReached(Set.of(new RulesMissed.ClauseNotTyped())));
+            WHY_A_CLAUSE_NOTHING_TYPED_WAS_NOT_READ = BlockReason.ofANamedRule(StoppedReading.of(
+                    FieldDomains.whyNothingReached(Set.of(new RulesMissed.ClauseNotTyped()))));
 
     /**
      * What the rules governing one declaration say about strings, part by part.

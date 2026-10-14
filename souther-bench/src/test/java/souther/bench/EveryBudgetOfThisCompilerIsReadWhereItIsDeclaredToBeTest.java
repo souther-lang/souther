@@ -614,6 +614,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Collection;)"
                             + "Lsouther/compiler/partition/Generator$UnresolvedCombination$Reason;",
                     "the word a search stopped by these comes back with"),
+            Map.entry("souther.compiler.inputs.BlockReason$RuleReadingStopped#figures()"
+                            + "Ljava/util/List;",
+                    "the figure a statement read more times than are made stopped at, handed to"
+                            + " whoever is told the reason"),
             Map.entry("souther.compiler.report.Reasons#said("
                             + "Lsouther/compiler/publish/CanonicalSelection;)Ljava/lang/String;",
                     "what a figure is called where a reader meets one"),

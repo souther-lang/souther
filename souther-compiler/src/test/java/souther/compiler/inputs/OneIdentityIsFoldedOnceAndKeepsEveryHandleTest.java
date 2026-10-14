@@ -9,6 +9,8 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleRef;
+import souther.compiler.observe.Figure;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeKey;
@@ -189,7 +191,7 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
                 .mergedWith(asked(ANOTHER_CALL, itsRuleAlone()));
 
         assertEquals(Set.of(ONE_CALL, ANOTHER_CALL), both.cited());
-        assertEquals(Optional.of(new BlockReason.ExactValuesTooCostly()),
+        assertEquals(Optional.of(new BlockReason.ExactValuesTooCostly(AT_A_FIGURE)),
                 both.stopped().itsPositionWasShortOf(),
                 "the question stands on it, and it was met once");
     }
@@ -200,7 +202,7 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
         StandingQuestion one = asked(ONE_CALL, standingOn());
         StandingQuestion other = asked(ANOTHER_CALL, new WhatAQuestionStandsOn(
                 RuleReasons.one(new BlockReason.UnreadComparisonForm()),
-                Optional.of(new BlockReason.RulesNotHandedOnAsSets())));
+                Optional.of(new BlockReason.RulesNotHandedOnAsSets(List.of(AT_A_FIGURE)))));
 
         assertThrows(TwoAccountsOfOneQuestion.class, () -> one.mergedWith(other));
     }
@@ -275,8 +277,12 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
     private static WhatAQuestionStandsOn standingOn() {
         return new WhatAQuestionStandsOn(
                 RuleReasons.one(new BlockReason.UnreadComparisonForm()),
-                Optional.of(new BlockReason.ExactValuesTooCostly()));
+                Optional.of(new BlockReason.ExactValuesTooCostly(AT_A_FIGURE)));
     }
+
+    /** What an answer that ran out stopped at. */
+    private static final Figure AT_A_FIGURE = WorkFigure.ADMITTED_VALUES_IN_ALL.at(
+            "200000 states built and 50000000 looked at");
 
     /** One question short in as many ways as somebody wrote. */
     private static WhatAQuestionStandsOn standingOn(BlockReason.RuleReadingStopped... these) {

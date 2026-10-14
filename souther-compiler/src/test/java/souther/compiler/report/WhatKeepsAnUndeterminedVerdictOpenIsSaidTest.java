@@ -15,6 +15,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -331,7 +332,8 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
                 "two rules nothing could read are two things to tell a person");
         assertEquals(Map.of("rule_unread/may_change", 1L, "rule_unread/unaffected", 1L),
                 howManyOfEach(keptOpenBy(WeakeningSet.of(
-                        ruleUnread(new BlockReason.PatternTooCostly(), "a"),
+                        ruleUnread(new BlockReason.PatternTooCostly(
+                                WorkFigure.ADMITTED_VALUES_ONE_MACHINE.at(50_000)), "a"),
                         ruleUnread(new BlockReason.RuleAboutADerivedValue(), "b")))),
                 "and one word over two answers is two entries, not one of either");
     }

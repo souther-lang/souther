@@ -31,7 +31,7 @@ import java.util.function.Predicate;
  * that has to account for every rule owes a line for what it did not read, and a reading that only
  * wants the relations it can state is short of nothing.
  */
-final class GuaranteeWalk {
+public final class GuaranteeWalk {
 
     private final TypeGuarantees guarantees;
 
@@ -55,8 +55,11 @@ final class GuaranteeWalk {
      * <p>A cost bound and not a rule of the model: a rule four records down refuses the outermost
      * construction exactly as one on its own fields does. What a construction has to satisfy has no
      * depth at all, and a reader answering for that asks for one that has none.
+     *
+     * <p>The one depth this walk stops at for want of affording more, so a reading told it stopped
+     * there is told this figure ({@code BlockReason.ValueRulesNotReachedPastDepthLimit}).
      */
-    static final int FIELDS_SEEDED = 2;
+    public static final int FIELDS_SEEDED = 2;
 
     /**
      * How far a reader is asking this walk to go.

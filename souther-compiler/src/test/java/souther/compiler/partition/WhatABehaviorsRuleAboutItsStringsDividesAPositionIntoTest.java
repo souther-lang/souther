@@ -9,6 +9,7 @@ import souther.compiler.check.StatedContract;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -170,10 +171,16 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 "and the body's rule on its own");
 
         assertEquals(List.of(), read.statements(), "neither rule divides the position");
-        assertEquals(List.of(new BlockReason.BehaviorDistinctionsTooCostly(),
-                        new BlockReason.BehaviorDistinctionsTooCostly()),
+        // Every machine of the group is smaller than one may be, and what they come to together
+        // is more than the group may make: the figure is the group's, at the numbers it was given.
+        BlockReason.BehaviorDistinctionsTooCostly spent =
+                new BlockReason.BehaviorDistinctionsTooCostly(
+                        WorkFigure.BEHAVIOR_DISTINCTIONS_IN_ALL.at(
+                                "60 states built and 1000000000 looked at"));
+        assertEquals(List.of(spent, spent),
                 read.blocked().stream().map(ClassingBlocker::why).toList(),
-                "and both are answered for as the position's distinctions not being built");
+                "and both are answered for as the position's distinctions not being built, at"
+                        + " the figure this run held them to");
     }
 
 
@@ -253,8 +260,12 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 new PatternPlan.Budget(1, 1, 1_000_000_000L));
 
         assertEquals(List.of(), read.statements(), "neither rule divides the position");
-        assertEquals(List.of(new BlockReason.BehaviorDistinctionsTooCostly(),
-                        new BlockReason.BehaviorDistinctionsTooCostly()),
+        // A machine of one state is smaller than any of these rules', so the first machine past it
+        // is refused as a machine, at the one state this run allowed.
+        BlockReason.BehaviorDistinctionsTooCostly refused =
+                new BlockReason.BehaviorDistinctionsTooCostly(
+                        WorkFigure.BEHAVIOR_DISTINCTIONS_ONE_MACHINE.at(1));
+        assertEquals(List.of(refused, refused),
                 read.blocked().stream().map(ClassingBlocker::why).toList(),
                 "and both are answered for as the position's distinctions not being built");
     }

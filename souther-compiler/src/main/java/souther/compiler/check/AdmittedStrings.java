@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.observe.Figure;
 import souther.compiler.values.ValueSet;
 
 import java.util.List;
@@ -62,6 +63,19 @@ sealed interface AdmittedStrings {
      * told nothing more because there is nothing about this rule to tell. The rule beside it may
      * have been affordable — one of them was not, and which is not something either of them
      * answers for.
+     *
+     * <p>What it does carry is the position's, so that the word said for it can name the figure:
+     * the one the group of sets was refused at, or, where the position's own answer stopped
+     * first and nothing was asked for, the figures that answer stopped at — none where it stopped
+     * at a form nobody reads.
+     *
+     * @param stoppedAt the figures the position's sets stopped at, carried from where each was
+     *                  compared
      */
-    record NotPublished() implements AdmittedStrings {}
+    record NotPublished(List<Figure> stoppedAt) implements AdmittedStrings {
+
+        public NotPublished {
+            stoppedAt = List.copyOf(stoppedAt);
+        }
+    }
 }

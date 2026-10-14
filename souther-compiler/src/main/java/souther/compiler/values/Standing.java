@@ -56,7 +56,7 @@ public final class Standing<A> {
      * asked is a different question with a different reader ({@code AdmissibleReading.askedAt}),
      * and it is answered there rather than recovered from here.
      */
-    private record Entry<A>(Set<A> positions, UnreadReason why) {
+    private record Entry<A>(Set<A> positions, StoppedReading why) {
 
         private Entry {
             positions = Collections.unmodifiableSet(new LinkedHashSet<>(positions));
@@ -94,7 +94,7 @@ public final class Standing<A> {
      * nowhere, so holding one would make {@link #isEmpty} mean "holds an entry" where every reader
      * of it means "has something to say".
      */
-    public static <A> Standing<A> of(Set<A> named, UnreadReason why) {
+    public static <A> Standing<A> of(Set<A> named, StoppedReading why) {
         return named.isEmpty() ? nothing()
                 : new Standing<>(List.of(new Entry<>(named, why)), Set.of());
     }
@@ -123,7 +123,7 @@ public final class Standing<A> {
     }
 
     /** This, with one more rule that went unread at {@code positions}. */
-    public Standing<A> alsoAt(Set<A> positions, UnreadReason why) {
+    public Standing<A> alsoAt(Set<A> positions, StoppedReading why) {
         return and(Standing.of(positions, why));
     }
 
@@ -151,7 +151,7 @@ public final class Standing<A> {
      * <p>Every one of them and each once. Two rules stopped by the same limit are one thing for a
      * reader to lift, and which of them were the parts is the clause's rather than this reading's.
      */
-    List<UnreadReason> at(A position) {
+    List<StoppedReading> at(A position) {
         return across(Set.of(position));
     }
 
@@ -171,15 +171,15 @@ public final class Standing<A> {
      * this is — a rule about the value two positions share is a rule about each of them, so a
      * direct rule at either is nearer than a choice that opened the other.
      */
-    List<UnreadReason> across(Set<A> positions) {
-        List<UnreadReason> out = new ArrayList<>();
+    List<StoppedReading> across(Set<A> positions) {
+        List<StoppedReading> out = new ArrayList<>();
         for (Entry<A> each : entries) {
             if (!Collections.disjoint(each.positions(), positions) && !out.contains(each.why())) {
                 out.add(each.why());
             }
         }
         if (out.isEmpty() && !Collections.disjoint(openedByAlternative, positions)) {
-            return List.of(UnreadReason.ALTERNATIVE_NOT_READ);
+            return List.of(StoppedReading.of(UnreadReason.ALTERNATIVE_NOT_READ));
         }
         return Collections.unmodifiableList(out);
     }

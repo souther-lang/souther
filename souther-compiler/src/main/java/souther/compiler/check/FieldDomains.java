@@ -19,6 +19,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.StringFacts;
 import souther.compiler.values.StringMachineAnswers;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 import souther.compiler.values.ValueSet;
 
@@ -170,7 +171,7 @@ public final class FieldDomains {
      * {@link #admits}. Every reason and not the first: a name is written by as many parts of as
      * many clauses as the author wrote about it, and two of them stop this reading in two ways that
      * are lifted by different work. */
-    private final Map<RuleKey, List<UnreadReason>> unreadByName;
+    private final Map<RuleKey, List<StoppedReading>> unreadByName;
 
     /** The names the reading of values could not show hold exactly, resolved onto names as the
      *  values are. Asked of each name rather than of the reading: the proposition is quantified
@@ -274,7 +275,7 @@ public final class FieldDomains {
     private FieldDomains(Map<RuleKey, NumericDomain.Bounds> byName,
                          Map<RuleKey, NumericDomain.Bounds> heldByName,
                          Map<RuleKey, ValueSet> admittedByName,
-                         Map<RuleKey, List<UnreadReason>> unreadByName,
+                         Map<RuleKey, List<StoppedReading>> unreadByName,
                          Set<RuleKey> notSeparatedByName,
                          List<InvariantChecker.Direct> directs, List<NoLine> noLines,
                          List<WithoutAnEnd> withoutAnEnd, List<AboutOneCoordinate> aboutOneCoordinate,
@@ -1343,9 +1344,9 @@ public final class FieldDomains {
         Set<RuleShortfall> why = took.stoppedBy(rule, named);
         // And what the answer this question waited on was short of, which is the name's and is
         // taken beside the rule's rather than where the rule has none of its own.
-        Set<UnreadReason> answered = new LinkedHashSet<>();
+        Set<StoppedReading> answered = new LinkedHashSet<>();
         unreadByName.getOrDefault(at, List.of()).stream()
-                .filter(FieldDomains::standsBesideARulesOwnAccount)
+                .filter(each -> standsBesideARulesOwnAccount(each.why()))
                 .forEach(answered::add);
         if (why.isEmpty() && answered.isEmpty()) {
             throw new AStandingQuestionWithNoAccount(rule, named);
@@ -1868,7 +1869,7 @@ public final class FieldDomains {
         // whichever way this one is.
         Set<AdmissibleSet.Widening> spread = notSeparatedByName.contains(path)
                 ? Set.of(new AdmissibleSet.Widening.AlternativesNotSeparated()) : Set.of();
-        List<UnreadReason> here = unreadByName.getOrDefault(path, List.of());
+        List<StoppedReading> here = unreadByName.getOrDefault(path, List.of());
         if (!here.isEmpty()) {
             // One widening per reason. A set of them is what {@link AdmissibleSet.Completeness} is
             // for — a reader looking for either finds it — and folding the several a name was
@@ -1888,7 +1889,8 @@ public final class FieldDomains {
         // would settle this reading's completeness by a reading that is not this one.
         if (!everyRuleReachedAt(path)) {
             return AdmissibleSet.wider(values, with(spread,
-                    List.of(new AdmissibleSet.Widening.RuleUnread(whyNothingReached(path)))));
+                    List.of(new AdmissibleSet.Widening.RuleUnread(
+                            StoppedReading.of(whyNothingReached(path))))));
         }
         return spread.isEmpty() ? AdmissibleSet.complete(values)
                 : AdmissibleSet.wider(values, spread);
