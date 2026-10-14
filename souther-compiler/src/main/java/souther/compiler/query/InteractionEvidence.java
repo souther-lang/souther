@@ -9,8 +9,9 @@ import souther.compiler.publish.CanonicalSelection;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -126,16 +127,18 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
      * counted here.
      *
      * @param rowsRead       how many rows this reading was given
-     * @param met            the combinations some row was seen making
+     * @param made           the combinations some row was seen making, and which rows did as far
+     *                       as whether they are all rows that do not hold
      * @param rowsWatched    how many rows carried an account of their run
      * @param rowsNotWatched rows nothing watched, which is this compiler's shortfall and not
      *                       anything about the model
      */
-    public record RowsMeeting(int rowsRead, Set<ObligationIdentity.OfACombinationOfDecisions> met,
+    public record RowsMeeting(int rowsRead,
+                              Map<ObligationIdentity.OfACombinationOfDecisions, RowWitnesses> made,
                               int rowsWatched, int rowsNotWatched) {
 
         public RowsMeeting {
-            met = Collections.unmodifiableSet(new LinkedHashSet<>(met));
+            made = Collections.unmodifiableMap(new LinkedHashMap<>(made));
             if (rowsWatched < 0 || rowsNotWatched < 0) {
                 throw new IllegalArgumentException(
                         "rows are counted from none: " + rowsWatched + "/" + rowsNotWatched);
@@ -144,6 +147,11 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
                 throw new IllegalArgumentException("a reading of " + rowsRead
                         + " rows accounted for " + (rowsWatched + rowsNotWatched) + " of them");
             }
+        }
+
+        /** The combinations some row was seen making. */
+        public Set<ObligationIdentity.OfACombinationOfDecisions> met() {
+            return made.keySet();
         }
 
         /** Whether every row of the behavior was one something watched. */
@@ -166,30 +174,41 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
      * to refuse over a gap. Said here rather than left to the reading of the rows, for the reason
      * the rules' measure says it: a row with no account can sit in a reading of the rows that
      * finished.
+     *
+     * <p>A combination a row that does not hold makes is asked of the rows after it as well, until
+     * one of another kind makes it too: whether it would still be made without those rows is part
+     * of what a reader is told about it.
      */
     public static InteractionEvidence of(String behavior, InteractionRequirements asked,
-                                         List<Generator.Watched> watched,
+                                         List<WitnessedRow> watched,
                                          WeakeningSet weakening,
                                          WhereNothingIsAnswered unanswered) {
-        Set<ObligationIdentity.OfACombinationOfDecisions> met = new LinkedHashSet<>();
-        int seen = 0;
+        Map<ObligationIdentity.OfACombinationOfDecisions, RowWitnesses.Gathering> making =
+                new LinkedHashMap<>();
         List<Generator.Watched.Ran> ran = new ArrayList<>();
-        for (Generator.Watched each : watched) {
-            if (each instanceof Generator.Watched.Ran run) {
-                seen++;
+        List<RowWitnesses> whose = new ArrayList<>();
+        for (WitnessedRow each : watched) {
+            if (each.observed().watched() instanceof Generator.Watched.Ran run) {
                 ran.add(run);
+                whose.add(each.by());
             }
         }
+        int seen = ran.size();
         for (ObligationIdentity.OfACombinationOfDecisions item : asked.ways().keySet()) {
-            for (Generator.Watched.Ran run : ran) {
+            for (int i = 0; i < ran.size(); i++) {
+                Generator.Watched.Ran run = ran.get(i);
                 if (asked.met(item, claim -> claim.satisfiedBy(run.seen()))) {
-                    met.add(item);
-                    break;
+                    RowWitnesses.Gathering found =
+                            making.computeIfAbsent(item, _ -> new RowWitnesses.Gathering());
+                    found.add(whose.get(i));
+                    if (found.anotherRow()) {
+                        break;
+                    }
                 }
             }
         }
-        RowsMeeting rows =
-                new RowsMeeting(watched.size(), met, seen, watched.size() - seen);
+        RowsMeeting rows = new RowsMeeting(watched.size(), RowWitnesses.Gathering.done(making),
+                seen, watched.size() - seen);
         // A row nothing watched leaves a meeting it may have made unread, and that is a shortfall
         // only where there is a meeting to make. A behavior whose decisions meet nowhere is asked
         // nothing here, and a measure a behavior has nothing to answer is not a degradation of it.

@@ -100,5 +100,22 @@ public enum FailurePhase {
      * {@link #ANSWERER_ESTABLISHMENT}: that is decided once for a behavior, before any row of it is
      * handed over, and this can happen after it agreed.
      */
-    VALUE_CROSSING
+    VALUE_CROSSING;
+
+    /**
+     * Whether a row can fail here — end {@link Disposition#FAILED} rather than undecided.
+     *
+     * <p>Where the model did not do what the row says. Everything else a row can stop at is a
+     * budget, a stack, a handing-over or nothing having gone wrong, and a row stopped there ends
+     * undecided: what it would have decided is exactly what was not found out. Held by a row's own
+     * outcome, so a reader of a failed row can rely on it having stopped at one of these.
+     */
+    public boolean failsARow() {
+        return switch (this) {
+            case INPUT_FIXTURE, EXPECTED_FIXTURE, FAKE_RESOLUTION, ENSURES, INVOCATION, COMPARISON ->
+                    true;
+            case NONE, ANSWERER_ESTABLISHMENT, IMPLEMENTATION_NOT_MADE, STEP_LIMIT, DEPTH_LIMIT,
+                 TIMEOUT, STACK_EXHAUSTED, VALUE_CROSSING -> false;
+        };
+    }
 }

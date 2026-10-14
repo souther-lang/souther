@@ -1058,6 +1058,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "rule_unread" ],
       "signature" : {
@@ -2277,6 +2278,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "rule_unread" ],
       "signature" : {

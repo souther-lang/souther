@@ -1231,6 +1231,9 @@
             "type": "boolean",
             "description": "Whether some row stands at the point, under any reading of it. Present exactly where `status` is not `unavailable`."
           },
+          "onlyWitnessedBy": {
+            "$ref": "#/$defs/onlyWitnessedBy"
+          },
           "readings": {
             "type": "array",
             "description": "Every position that read the line, as an unordered bag. Two entries that print alike are two readings.",
@@ -1958,6 +1961,7 @@
         "implementation",
         "status",
         "rowObligations",
+        "rowsThatDoNotHold",
         "findings"
       ],
       "additionalProperties": false,
@@ -1990,6 +1994,13 @@
           "type": "integer",
           "minimum": 0,
           "description": "How many of those rows are recorded rather than evaluated. Present and absent exactly where `rows` is, and for the same reason."
+        },
+        "rowsThatDoNotHold": {
+          "type": "array",
+          "description": "The rows written for this behavior that ran, or were to run, and did not do what they say, in the order they were read — each with where it stopped. Empty where none, and never absent. Not part of `adequacy`: whether the rows cover what the model owes and whether they hold are two questions, and a row that does not hold is evidence of what it reached before it stopped all the same. Each is keyed as its entry of `rowObligations` is.",
+          "items": {
+            "$ref": "#/$defs/aRowThatDoesNotHold"
+          }
         },
         "rowObligations": {
           "type": "array",
@@ -4113,6 +4124,43 @@
         }
       }
     },
+    "aRowThatDoesNotHold": {
+      "type": "object",
+      "description": "A row that ran, or was to run, and did not do what it says: which row, where it is written, and where it stopped. The place and the stop travel with the row because a row covering an obligation of one behavior may be written for another, and a document narrowed to the first has no entry of that row to look them up in.",
+      "required": [
+        "row",
+        "at",
+        "failedAt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "row": {
+          "$ref": "#/$defs/rowObligationId"
+        },
+        "at": {
+          "$ref": "#/$defs/at"
+        },
+        "failedAt": {
+          "description": "Where the row stopped, which is not always the behavior answering otherwise. `input_fixture` is an input that could not be built and `expected_fixture` an expectation that could not be built, and neither applied the behavior; `fake_resolution` is a dependency with no fake for it; `ensures` is what the row states breaking what the behavior declares of its answer; `invocation` is the behavior applied and giving no answer; `comparison` is the behavior answering with something other than the row expects. What a row covers is what it reached before it stopped. A row that went over a budget or could not be handed over ends undecided and is not one of these.",
+          "enum": [
+            "input_fixture",
+            "expected_fixture",
+            "fake_resolution",
+            "ensures",
+            "invocation",
+            "comparison"
+          ]
+        }
+      }
+    },
+    "onlyWitnessedBy": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The rows covering an obligation, written exactly where every one of them does not hold and absent wherever some other row covers it too. The obligation is met either way and counted as met: whatever a row that does not hold reached before it stopped, it reached. What this says is that the count has the obligation only through these rows — without them it is not covered. Correcting only the answer a row states leaves where it goes as it was, so that is not always what correcting it takes away. Another row is any row the measure counts that does not fail — one that held, one waiting for its answer, one recorded before there was a body — so an obligation without this field is not thereby one a row was seen to hold at.",
+      "items": {
+        "$ref": "#/$defs/aRowThatDoesNotHold"
+      }
+    },
     "rowObligationId": {
       "type": "object",
       "description": "What tells one row an author wrote from every other, which is what the answer it owes is owed at. A key within this document: it names an entry of the behavior's `rowObligations`, and a consumer joins an `unanswered_row` finding to the row it is about on it. Three parts, because two of them are not enough: a row written with no name is numbered within the source that writes it, so a behavior exampled in a module and in a file attached to it has a first row in each. Not the arm such a row may stand at — an arm is owed a row and any row through it discharges that, while this is owed an answer and only an answer written here discharges it.",
@@ -4364,6 +4412,9 @@
                 "type": "boolean",
                 "description": "Whether a row was seen taking this rule. Absent where `coverage.status` is `unavailable`: a rule nothing was read about is not a rule no row takes, and `false` for both would be one word for two states."
               },
+              "onlyWitnessedBy": {
+                "$ref": "#/$defs/onlyWitnessedBy"
+              },
               "weakening": {
                 "$ref": "#/$defs/weakening",
                 "description": "What the reading of this rule went without, which is about this entry rather than about the list: `decision_rule_read_short` is a rule read with fewer of the distinctions its way consults than the body draws. No run is placed at such a rule and a finding about it refuses no build; a rule beside it without this word is not weakened by it. Absent where the rule was read in full."
@@ -4572,6 +4623,9 @@
               "made": {
                 "type": "boolean",
                 "description": "Whether a row was seen making this combination. Absent where the coverage has no number: a combination nothing was read about is not one no row makes."
+              },
+              "onlyWitnessedBy": {
+                "$ref": "#/$defs/onlyWitnessedBy"
               }
             }
           },
@@ -4728,6 +4782,9 @@
                   "undecided",
                   "not_counted"
                 ]
+              },
+              "onlyWitnessedBy": {
+                "$ref": "#/$defs/onlyWitnessedBy"
               },
               "notCountedBecause": {
                 "description": "Why this arm is outside the count, present exactly where `disposition` is `not_counted`. `occurrences_not_told_apart` is a fork whose declaration says the caller decides where which rule that was could not be worked out: one place can stand for as many arms as there are rules reaching it, so a row through it may or may not be a row through this one. Both arms of such a fork are out together, and `weakening` says `arms_unsettled`.",
@@ -5000,6 +5057,27 @@
               "unclassifiedRows": {
                 "type": "integer",
                 "minimum": 0
+              },
+              "coveredOnlyBy": {
+                "type": "array",
+                "minItems": 1,
+                "description": "The classes of `covered` only rows that do not hold are in, each beside those rows. Written exactly where there is one.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "class",
+                    "onlyWitnessedBy"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "class": {
+                      "type": "string"
+                    },
+                    "onlyWitnessedBy": {
+                      "$ref": "#/$defs/onlyWitnessedBy"
+                    }
+                  }
+                }
               },
               "status": {
                 "$ref": "#/$defs/status"
@@ -5418,6 +5496,33 @@
                     "type": "integer",
                     "minimum": 0,
                     "description": "And how many are left."
+                  },
+                  "coveredOnlyBy": {
+                    "type": "array",
+                    "minItems": 1,
+                    "description": "The combinations among those the rows reach that only rows that do not hold are in, each by its two classes and beside those rows. Written exactly where there is one.",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "one",
+                        "other",
+                        "onlyWitnessedBy"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "one": {
+                          "type": "string",
+                          "description": "The class at the position `one` names."
+                        },
+                        "other": {
+                          "type": "string",
+                          "description": "The class at the position `other` names."
+                        },
+                        "onlyWitnessedBy": {
+                          "$ref": "#/$defs/onlyWitnessedBy"
+                        }
+                      }
+                    }
                   }
                 }
               }

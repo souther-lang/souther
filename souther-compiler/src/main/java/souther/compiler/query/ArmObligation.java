@@ -6,6 +6,7 @@ import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.publish.CanonicalSelection;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
@@ -173,7 +174,10 @@ public sealed interface ArmObligation {
      * from what was observed, and nothing downstream works either of them out again.
      *
      * @param occurrences every copy of the arm, in the order the body holds them
-     * @param covered     the probes a row that states what it expects went through
+     * @param covered     the probes a row that states what it expects went through, and which rows
+     *                    did. The arm is covered by the rows of every occurrence together: one
+     *                    copy lit only by a row that does not hold and another lit by any other
+     *                    row is an arm another row goes through
      * @param awaiting    the probes a row whose answer is owed went through. Handed in beside
      *                    {@code covered} rather than taken out of it: the two answer different
      *                    questions about one arm, and an arm both sets hold is covered and has a
@@ -186,7 +190,8 @@ public sealed interface ArmObligation {
      * @param premisesOf  the parts of the body every row through the occurrences handed to it would
      *                    reach, or nothing where some such row answers
      */
-    static ArmObligation of(List<CoverageSites.ArmSite> occurrences, Set<ArmProbe> covered,
+    static ArmObligation of(List<CoverageSites.ArmSite> occurrences,
+                            Map<ArmProbe, RowWitnesses> covered,
                             Set<ArmProbe> awaiting, WeakeningSet rowsUnread,
                             Function<List<CoverageSites.ArmSite>,
                                     List<WhereNothingIsAnswered.Premise>> premisesOf) {
@@ -200,9 +205,20 @@ public sealed interface ArmObligation {
         }
         Awaited awaited = occurrences.stream().anyMatch(site -> awaiting.contains(site.index()))
                 ? Awaited.A_ROW_IS : Awaited.NOTHING_IS;
-        if (occurrences.stream().anyMatch(site -> covered.contains(site.index()))) {
-            return new Counted(occurrences, new Measurement.Complete<>(new ArmCoverage.Hit()),
-                    awaited, ObligationDisposition.openOn(List.of()));
+        RowWitnesses.Gathering by = null;
+        for (CoverageSites.ArmSite site : occurrences) {
+            RowWitnesses here = covered.get(site.index());
+            if (here != null) {
+                if (by == null) {
+                    by = new RowWitnesses.Gathering();
+                }
+                by.add(here);
+            }
+        }
+        if (by != null) {
+            return new Counted(occurrences,
+                    new Measurement.Complete<>(new ArmCoverage.Hit(by.done())), awaited,
+                    ObligationDisposition.openOn(List.of()));
         }
         return new Counted(occurrences, rowsUnread.isEmpty()
                 ? new Measurement.Complete<>(new ArmCoverage.NoHit())

@@ -717,6 +717,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -1466,6 +1467,7 @@
       "rows" : 0,
       "pending" : 0,
       "rowObligations" : [ ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -3022,6 +3024,7 @@
       "rows" : 0,
       "pending" : 0,
       "rowObligations" : [ ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -4018,6 +4021,7 @@
       "rows" : 0,
       "pending" : 0,
       "rowObligations" : [ ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "body_not_in_evaluation" ],
       "signature" : {
@@ -4085,6 +4089,7 @@
       "rows" : 0,
       "pending" : 0,
       "rowObligations" : [ ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "rule_unread" ],
       "signature" : {
