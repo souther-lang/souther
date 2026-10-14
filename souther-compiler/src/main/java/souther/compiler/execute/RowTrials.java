@@ -2,6 +2,7 @@ package souther.compiler.execute;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Sig;
+import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.RunRecord;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
@@ -27,6 +28,14 @@ public interface RowTrials {
 
     /** A way to run rows of {@code behavior}. */
     OfBehavior forBehavior(String behavior, Sig sig);
+
+    /**
+     * Which siblings the classes rows are run in carry, which are the rewrites a run here can be
+     * asked for ({@link OfBehavior#runReplacing}). Nothing, unless those classes say otherwise.
+     */
+    default ArmReplacements carried() {
+        return ArmReplacements.NONE;
+    }
 
     /**
      * A way to run one row's inputs and see what it did.

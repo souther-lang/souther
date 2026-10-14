@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.carrier.Lookup;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.flow.Ways;
@@ -1155,6 +1156,15 @@ public final class Generator {
          */
         default AnswerChange change(AnswerObservation was, AnswerObservation now) {
             return AnswerChange.COULD_NOT_TELL;
+        }
+
+        /**
+         * Every rewrite {@link #runReplacing} can be asked for of the arms a run that went where
+         * {@code ran} did went through. None unless a way to run rows has the classes to say which
+         * siblings they carry.
+         */
+        default List<ArmReplacements.Rewrite> rewritesThrough(AlignedObservation ran) {
+            return List.of();
         }
 
         /** Nothing runs here — what a caller with no runtime to run against uses. */
@@ -4813,11 +4823,12 @@ public final class Generator {
                                               NumbersAskedFor asking,
                                               Reachability.Reaching reaching, CandidateCheck check) {
         return probeFixing(subject, label, fixing, asking, reaching, check,
-                StandInAttempt.REQUIRING_NOTHING);
+                StandInAttempt.REQUIRING_NOTHING, Trial.NOTHING_RUNS);
     }
 
     /**
-     * The same, for a subject whose behavior requires dependencies to be stood in.
+     * The same, for a subject whose behavior requires dependencies to be stood in, with its rows
+     * run by {@code trial}.
      *
      * <p>The stand-ins arrive with the search rather than being put on the row afterwards. A row
      * without them is a row nothing applies, so a point answered with one is a point nothing was
@@ -4827,12 +4838,18 @@ public final class Generator {
      * <p>And what standing them in was arrived at without joins what the search for this point's
      * own values was. Both are conditions of one way, read through two projections, and a reader of
      * the attempt is owed them as one account.
+     *
+     * <p>Where {@code trial} runs rows, the row taken is one the rewrites of the arms it goes
+     * through answer differently on, where one is found among the first rows composed for the
+     * point ({@link TellingArmsApart}). Every row composed here stands at the point, so which of
+     * them is taken changes nothing about whether there is one: where none is found, the row is
+     * the one told the most of them apart.
      */
     public static BoundaryAttempt probeFixing(MeasuredInput subject, String label,
                                               Map<RealizationTarget, Place> fixing,
                                               NumbersAskedFor asking,
                                               Reachability.Reaching reaching, CandidateCheck check,
-                                              StandInAttempt stood) {
+                                              StandInAttempt stood, Trial trial) {
         // Where an element may meet something several ways, a row writing its elements alike is
         // composed along each way of choosing one for every element first. A row along one is a
         // row of the way; one of them coming to nothing says nothing of the rest, or of elements
@@ -4848,7 +4865,7 @@ public final class Generator {
                 .anyMatch(cut -> countedOf(cut.demand()).isPresent());
         if (apartFirst) {
             BoundaryAttempt counted = probeFixingAlong(subject, label, fixing, asking, reaching,
-                    check, stood, true, null);
+                    check, stood, trial, true, null);
             if (counted instanceof BoundaryAttempt.Built) {
                 return counted;
             }
@@ -4856,13 +4873,13 @@ public final class Generator {
         ElementsWrittenAlike.Choices alike = ElementsWrittenAlike.of(reaching);
         for (ElementsWrittenAlike.Alike one : alike.ways()) {
             BoundaryAttempt along = probeFixingAlong(subject, label, fixing, asking,
-                    one.reaching(), check, stood, false, one.leftBy());
+                    one.reaching(), check, stood, trial, false, one.leftBy());
             if (along instanceof BoundaryAttempt.Built) {
                 return along;
             }
         }
         BoundaryAttempt whole = probeFixingAlong(subject, label, fixing, asking, reaching, check,
-                stood, false, alike.stoppedBy());
+                stood, trial, false, alike.stoppedBy());
         // And where that came to nothing, with every container a quantifier is over composed for
         // its counts. What the way as it stands came to is what is said where this comes to
         // nothing as well.
@@ -4870,7 +4887,7 @@ public final class Generator {
             return whole;
         }
         BoundaryAttempt counted = probeFixingAlong(subject, label, fixing, asking, reaching, check,
-                stood, true, null);
+                stood, trial, true, null);
         return counted instanceof BoundaryAttempt.Built ? counted : whole;
     }
 
@@ -4929,7 +4946,7 @@ public final class Generator {
                                                     NumbersAskedFor asking,
                                                     Reachability.Reaching reaching,
                                                     CandidateCheck check, StandInAttempt stood,
-                                                    boolean byCounts,
+                                                    Trial trial, boolean byCounts,
                                                     CompositionBudget alikeStoppedBy) {
         LocationWrites decided = new LocationWrites();
         // What the rest of the row has to sit beside. A field of a record is not chosen from its own
@@ -5052,6 +5069,11 @@ public final class Generator {
                 truthsWritten);
         FixtureTemplate[] composed = new FixtureTemplate[order.parameters().size()];
         List<ParameterCameToNothing> cameToNothing = new ArrayList<>();
+        // Only where a row can be run: a row nothing stands the dependencies in for is no row
+        // anything applies, and a trial that runs nothing has nothing to tell the rows apart by.
+        TellingArmsApart preferring = trial != Trial.NOTHING_RUNS
+                && stood.outcome() instanceof AnswersStoodIn.Stood(var answers)
+                ? new TellingArmsApart(trial, answers) : null;
         ContentsAsked.UnderTheCases.Walked walked = under.tryEach(way -> {
             // And the value the way asks of each Bool position it read, which no edge offers and
             // no region placed — at the position each stands at in this way, which for a Bool the
@@ -5091,8 +5113,12 @@ public final class Generator {
                             ? new Reachability.Ways.Whole(unsplit, figure, List.of())
                             : Reachability.Ways.ONE, reaching.declined());
             ParameterCameToNothing one = new InOrder(subject, order, composed, standing, writes,
-                    settled, thisWay, check, way.contents()).from(0, ValuesHandedOn.NONE);
+                    settled, thisWay, check, way.contents(), preferring)
+                    .from(0, ValuesHandedOn.NONE);
             if (one == null) {
+                if (preferring != null) {
+                    preferring.writeTakenInto(composed);
+                }
                 return true;
             }
             cameToNothing.add(one);
@@ -5395,26 +5421,40 @@ public final class Generator {
      * the one that came to nothing does not turn on this one, the walk stops there: nothing here
      * would be different with another value.
      *
-     * <p>Where no parameter after it turns on it, the first value is the row's.
+     * <p>Where no parameter after it turns on it, the first value is the row's — unless rows are
+     * being told apart by their arms ({@code preferring}). Then every value composed is handed on,
+     * every whole row is offered, and a row passed over sends the walk on to the next assignment the
+     * way a value a later parameter came to nothing under does, until a row is taken or the
+     * offering stops.
      *
-     * @param composed each parameter's value, by its declared position, filled as the walk goes
+     * @param composed   each parameter's value, by its declared position, filled as the walk goes
+     * @param preferring what the whole rows are offered to, or null where the first row is taken
      */
     private record InOrder(MeasuredInput subject, CompositionOrder order, FixtureTemplate[] composed,
                            Map<RealizationTarget, Place> standing, LocationWrites decided,
                            Map<TermPath, Place> settled, Reachability.Reaching reaching,
-                           CandidateCheck check, ContentsAsked contents) {
+                           CandidateCheck check, ContentsAsked contents,
+                           TellingArmsApart preferring) {
 
         /**
          * The parameters from the {@code next}-th in the order on, or the first of them nothing
          * was composed for.
+         *
+         * <p>Null where a row was composed, and where rows are offered, where some row composed
+         * from here was offered: which of them is the row's is then {@code preferring}'s to say,
+         * and a value after it that came to nothing does not take that row away.
          *
          * @param elsewhere what stands at the positions of the parameters composed so far that a
          *                  container is handed
          */
         ParameterCameToNothing from(int next, ValuesHandedOn elsewhere) {
             if (next == order.order().size()) {
+                if (preferring != null) {
+                    preferring.offer(composed);
+                }
                 return null;
             }
+            int offeredBefore = preferring == null ? 0 : preferring.offered();
             int p = order.order().get(next);
             String head = subject.parameters().get(p);
             // What this parameter's search finds out about its own candidates: one turned away for
@@ -5442,15 +5482,16 @@ public final class Generator {
                 }
             }
             boolean awaited = order.awaited(next);
+            boolean handsOn = awaited || preferring != null;
             // What the parameters after this one came to with the value handed on last, and every
             // value of this one a parameter after it came to nothing under.
             ParameterCameToNothing[] after = {null};
             List<ParameterCameToNothing> cameToNothing = new ArrayList<>();
-            ValueTaking taking = !awaited ? ValueTaking.FIRST : value -> {
+            ValueTaking taking = !handsOn ? ValueTaking.FIRST : value -> {
                 composed[p] = value.value();
                 after[0] = from(next + 1, elsewhere.and(value.read()));
                 if (after[0] == null) {
-                    return Acceptance.TAKEN;
+                    return preferring == null ? Acceptance.TAKEN : preferring.said();
                 }
                 if (!order.mayTurnOn(after[0].parameter(), p)) {
                     return Acceptance.STOPPED;
@@ -5461,11 +5502,15 @@ public final class Generator {
             Outcome tried = valueAt(subject, p, here, sizesUnder(decided,
                             TermPath.of(head)), settled, reaching.requirements(),
                     new Handed(contents, elsewhere), certified, found, taking);
+            if (!(tried instanceof Outcome.Built) && preferring != null
+                    && preferring.offered() > offeredBefore) {
+                return null;
+            }
             return switch (tried) {
                 // Taken where the rest was composed with it, and taken first where nothing after
                 // it turns on it — so the rest is still to compose.
                 case Outcome.Built(ComposedValue value) -> {
-                    if (awaited) {
+                    if (handsOn) {
                         yield null;
                     }
                     composed[p] = value.value();
@@ -5476,8 +5521,11 @@ public final class Generator {
                 case Outcome.PassedOver _ -> overEveryValue(cameToNothing, found.shortfall());
                 // Stopped for a parameter after it that nothing could be composed for whatever
                 // this one is, said with the values before it that one came to nothing under.
-                case Outcome.Halted _ ->
-                        overEveryValue(withFirst(after[0], cameToNothing), found.shortfall());
+                // Where nothing after it turns on it, its value was handed on only for the rows to
+                // be offered, and what the parameter after it came to is said as it would have
+                // been with this one's first value taken.
+                case Outcome.Halted _ -> !awaited ? after[0]
+                        : overEveryValue(withFirst(after[0], cameToNothing), found.shortfall());
                 // Its own search came to nothing, which ended the walk.
                 case Outcome.Unresolved _, Outcome.Stopped _, Outcome.Unexhausted _,
                      Outcome.OfferShort _, Outcome.Limited _, Outcome.Unplanned _ ->
@@ -8257,6 +8305,128 @@ public final class Generator {
                 out.add(ReplacementDisposition.Ended.NOTHING_WAS_COMPOSED);
             }
             return out;
+        }
+    }
+
+    /**
+     * How many whole rows one point offers {@link TellingArmsApart} before the best of them is
+     * taken.
+     *
+     * <p>Counted in rows and not in runs: each row offered is run once and once more per rewrite of
+     * the arms it went through, which the point reads and this does not choose. Its own figure, and
+     * not the one a search for a rewrite runs under ({@link RewriteSearch}): that one bounds the
+     * search that decides whether a rewrite is a gap, and this bounds a choice among rows that all
+     * stand at the point, which decides nothing.
+     */
+    private static final int MOST_ROWS_OFFERED_FOR_THE_ARMS = 4;
+
+    /**
+     * Which of the rows composed for one point is taken: the first that every rewrite of the arms
+     * it goes through answers differently on, or, where none is offered before the figure, the one
+     * the most of them answered differently on, the earliest of those.
+     *
+     * <p>A preference and never a condition. Every row offered stands at the point, so one is taken
+     * whatever the runs say, and a point whose arms answer alike on every row is still a point a
+     * row is composed for. What the rewrites came to on the row taken is not kept either: a row
+     * composed here is a question put to a person, and whether its answer tells a rewrite apart is
+     * read off the answer they write ({@link ReplacementOwed}).
+     *
+     * <p>Among rows that go one way. A row reaching other arms, or a condition coming out the other
+     * way, is a row the other measures read differently, and choosing it for its rewrites would be
+     * choosing what those measures see as well.
+     *
+     * <p>Which rewrites are asked of a row is what its run went through, and not what the point was
+     * drawn on. A line and an arm are not one to one — a comparison may decide no fork, or several
+     * — so the arms are read off the run.
+     *
+     * <p>A run that comes back with nothing to read, or a rewrite whose run cannot be told from the
+     * body's, tells nothing apart.
+     */
+    private static final class TellingArmsApart {
+
+        private final Trial trial;
+        private final List<StoodInAnswer> answers;
+        /** Where the first row offered went: the arms it passed and how its conditions came out. */
+        private AlignedObservation way;
+        /** The row taken so far, and how many rewrites were told apart on it. */
+        private FixtureTemplate[] best;
+        private int bestTold = -1;
+        private int offered;
+        private Acceptance said = Acceptance.PASSED;
+
+        private TellingArmsApart(Trial trial, List<StoodInAnswer> answers) {
+            this.trial = trial;
+            this.answers = List.copyOf(answers);
+        }
+
+        /** How many rows have been offered, which a walk reads to tell whether one came from it. */
+        int offered() {
+            return offered;
+        }
+
+        /** What was made of the row offered last. */
+        Acceptance said() {
+            return said;
+        }
+
+        /** One whole row, as the walk has it composed. */
+        void offer(FixtureTemplate[] composed) {
+            offered++;
+            RowToRun row = new RowToRun(List.of(composed), answers);
+            ObservedRun ran = trial.run(row);
+            if (!(ran.watched() instanceof Watched.Ran(AlignedObservation seen))) {
+                // Nothing can say which arms it went through, and no other row of this point will
+                // say more.
+                keep(composed, 0);
+                said = Acceptance.TAKEN;
+                return;
+            }
+            // Only a row that goes the way the first one did, through the same arms with every
+            // condition coming out the same. Which arms and conditions a row reaches is what the
+            // other measures read off it, so the row taken here covers what the first row would
+            // have, and the one thing that differs is which rewrites it tells apart.
+            if (way == null) {
+                way = seen;
+            } else if (!seen.equals(way)) {
+                said = offered < MOST_ROWS_OFFERED_FOR_THE_ARMS ? Acceptance.PASSED
+                        : Acceptance.STOPPED;
+                return;
+            }
+            // One way is one set of arms, so every row offered here is asked the same rewrites, and
+            // a row after the first is taken over it only by telling more of them apart. Where the
+            // rewrites left could not bring it past the row kept, they are not run.
+            List<ArmReplacements.Rewrite> rewrites = trial.rewritesThrough(seen);
+            int told = 0;
+            for (int i = 0; i < rewrites.size() && told + rewrites.size() - i > bestTold; i++) {
+                Optional<AnswerObservation> now =
+                        trial.runReplacing(row, rewrites.get(i).replacing());
+                if (now.isPresent()
+                        && trial.change(ran.answer(), now.get()) == AnswerChange.CHANGED) {
+                    told++;
+                }
+            }
+            keep(composed, told);
+            if (told == rewrites.size()) {
+                best = composed.clone();
+                said = Acceptance.TAKEN;
+            } else {
+                said = offered < MOST_ROWS_OFFERED_FOR_THE_ARMS ? Acceptance.PASSED
+                        : Acceptance.STOPPED;
+            }
+        }
+
+        private void keep(FixtureTemplate[] composed, int told) {
+            if (told > bestTold) {
+                best = composed.clone();
+                bestTold = told;
+            }
+        }
+
+        /** The row taken, written over what the walk last composed. */
+        void writeTakenInto(FixtureTemplate[] composed) {
+            if (best != null) {
+                System.arraycopy(best, 0, composed, 0, composed.length);
+            }
         }
     }
 

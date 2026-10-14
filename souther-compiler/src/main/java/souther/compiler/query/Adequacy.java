@@ -25,7 +25,9 @@ import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.inputs.TermPath;
 
 
+import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.RunBodies;
@@ -2555,8 +2557,7 @@ public final class Adequacy {
             MeasuredInput subject = read == null ? null : subjectOf(db, name, spec, read);
             Coverages.Probe probe = subject == null ? null
                     : probing(sig, subject, StatementsOfAnInput.of(read), constructing(db, name),
-                            runningRowsOf(trialling(db, name), behavior, sig,
-                                    numberingOf(db, name),
+                            runningRowsOf(trialling(db, name), behavior, sig, checked.value(),
                                     RequiredDependencies.of(db, name, behavior)),
                             answering(db, name, behavior, subject));
             if (probe == null) {
@@ -2993,7 +2994,7 @@ public final class Adequacy {
             return Answer.of(Coverages.merged(Coverages.searched(measured, subject,
                     probing(sig, subject, StatementsOfAnInput.of(read), constructing(db, name),
                             runningRowsOf(trialling(db, name), behavior, sig,
-                                    numberingOf(db, name),
+                                    db.ask(new Bodies.Observable(name)).value(),
                                     RequiredDependencies.of(db, name, behavior)),
                             answering(db, name, behavior, subject)),
                     divided.reaching())));
@@ -3099,7 +3100,7 @@ public final class Adequacy {
                     for (souther.compiler.partition.StandInAttempt stood
                             : answers.of(demands, pinned.values())) {
                         out.add(Generator.probeFixing(subject, label, fixing, asking,
-                                pinned.reaching(), check, stood));
+                                pinned.reaching(), check, stood, trial));
                     }
                     if (out.stream().anyMatch(Adequacy::composedAgainstEverythingAsked)) {
                         return List.copyOf(out);
@@ -5130,7 +5131,8 @@ public final class Adequacy {
                             numbering,
                             observed,
                             constructing(db, name),
-                            runningRowsOf(trialling(db, name), behavior, sig, numbering,
+                            runningRowsOf(trialling(db, name), behavior, sig,
+                                    db.ask(new Bodies.Observable(name)).value(),
                                     RequiredDependencies.of(db, name, behavior)),
                             // What every row this composes stands the dependencies in with, settled
                             // before the search so that a candidate is run in the environment the
@@ -6187,17 +6189,23 @@ public final class Adequacy {
      * <p>Beside {@link #trialling} rather than inside the search, because running a composed row is
      * what anybody asking after one does — the search that composes them, and whoever asks what one
      * of them would settle.
+     *
+     * @param checked the bodies as observed, whose numbering a run is read under and whose plan
+     *                says which arms of the behavior there are; null where there are none
      */
     static Generator.Trial runningRowsOf(RowTrials trials, String behavior, Sig sig,
-                                         Optional<SiteNumbering> numbering,
+                                         Bodies.Elaborated checked,
                                          RequiredDependencies requires) {
-        if (trials == null || numbering.isEmpty() || requires == null) {
+        if (trials == null || checked == null || requires == null) {
             // Nothing runs where nothing applies the behavior, nothing is read where the module has
             // no numbering to read it under, and nothing is applied where what the behavior
             // requires could not be worked out — the three are the same module, so the rest follow
             // the first and are said rather than assumed.
             return Generator.Trial.NOTHING_RUNS;
         }
+        SiteNumbering numbering = SiteNumbering.of(checked.numberingIdentity());
+        List<CoverageSites.ArmSite> arms = checked.plan().arms(behavior);
+        ArmReplacements carried = trials.carried();
         RowTrials.OfBehavior application = trials.forBehavior(behavior, sig);
         return new Generator.Trial() {
 
@@ -6218,7 +6226,7 @@ public final class Adequacy {
                             // classes numbered otherwise is refused here rather than answered about
                             // places it was never near.
                             case RunRecord.Recorded(var seen) ->
-                                    new Generator.Watched.Ran(numbering.orElseThrow().align(seen));
+                                    new Generator.Watched.Ran(numbering.align(seen));
                             case RunRecord.NoAccount _ -> new Generator.Watched.NoAccount();
                         }, ran.answer()))
                         .orElseGet(Generator.ObservedRun::nothingRan);
@@ -6235,6 +6243,11 @@ public final class Adequacy {
             @Override
             public AnswerChange change(AnswerObservation was, AnswerObservation now) {
                 return application.change(was, now);
+            }
+
+            @Override
+            public List<ArmReplacements.Rewrite> rewritesThrough(AlignedObservation ran) {
+                return carried.through(arms, ran);
             }
 
             private static List<Hir.Expr> valuesOf(RowToRun row) {

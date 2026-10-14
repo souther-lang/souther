@@ -2,7 +2,9 @@ package souther.compiler.coverage;
 
 import souther.compiler.types.SourceConstructOrigin;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,6 +12,7 @@ import java.util.Objects;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.function.Predicate;
 
 /**
@@ -181,5 +184,66 @@ public record ArmReplacements(SequencedMap<Integer, AtSite> bySite) {
             }
         });
         return sites;
+    }
+
+    /**
+     * One rewrite a run can be asked for: arm {@code part} of {@code fork} answering as its sibling
+     * {@code with}, at {@code replacing}'s sites ({@link #replacing}).
+     */
+    public record Rewrite(SourceConstructOrigin fork, int part, int with,
+                          SequencedMap<Integer, Integer> replacing) {
+
+        public Rewrite {
+            Objects.requireNonNull(fork, "an arm is an arm of some fork");
+            replacing = Collections.unmodifiableSequencedMap(new TreeMap<>(replacing));
+        }
+    }
+
+    /**
+     * Every rewrite a run that went through {@code sites} can be asked for: each sibling the
+     * classes carry of each arm at one of them, once per arm and sibling however many of its sites
+     * the run passed, in the order of the sites and then of the siblings.
+     *
+     * <p>Only the arms the run went through. A rewrite of an arm the run did not reach leaves its
+     * answer where it was, so running it again would show nothing about the row.
+     */
+    public List<Rewrite> through(Set<Integer> sites) {
+        List<Rewrite> out = new ArrayList<>();
+        Set<List<Object>> asked = new HashSet<>();
+        for (int site : new TreeSet<>(sites)) {
+            AtSite at = bySite.get(site);
+            if (at != null) {
+                rewritesOf(at, asked, out);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * The same, of a run read as places: the arms of {@code arms} it was recorded at, each asked of
+     * the run, in the order of {@code arms}.
+     */
+    public List<Rewrite> through(List<CoverageSites.ArmSite> arms, AlignedObservation run) {
+        List<Rewrite> out = new ArrayList<>();
+        Set<List<Object>> asked = new HashSet<>();
+        for (CoverageSites.ArmSite arm : arms) {
+            if (arm.place().probe().isPresent() && run.lit(arm.place().probe().get())) {
+                for (AtSite at : ofArm(arm.obligation().origin(), arm.obligation().part())) {
+                    rewritesOf(at, asked, out);
+                }
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** Each sibling the classes carry at {@code at} not {@code asked} already, added to {@code out}. */
+    private void rewritesOf(AtSite at, Set<List<Object>> asked, List<Rewrite> out) {
+        for (int with : new TreeSet<>(at.siblings().keySet())) {
+            if (at.siblings().get(with) instanceof Sibling.Carried
+                    && asked.add(List.of(at.fork(), at.part(), with))) {
+                out.add(new Rewrite(at.fork(), at.part(), with,
+                        replacing(at.fork(), at.part(), with)));
+            }
+        }
     }
 }

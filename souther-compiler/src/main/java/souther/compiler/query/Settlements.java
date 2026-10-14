@@ -599,7 +599,7 @@ public record Settlements(List<ObligationIdentity> requested,
             return new OneBehavior(behavior, subject, sig, building,
                     sig == null || trials == null ? Generator.Trial.NOTHING_RUNS
                             : Adequacy.runningRowsOf(trials, behavior, sig,
-                                    Adequacy.numberingOf(db, module),
+                                    db.ask(new Bodies.Observable(module)).value(),
                                     RequiredDependencies.of(db, module, behavior)),
                     filling == null ? List.of() : filling.composed().plan().obligations(),
                     identityOfArm, targetOfArm, rulesOf(db, module, behavior),
