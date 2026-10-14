@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Values built to hold what a rule says a value must hold.
@@ -1060,11 +1061,13 @@ final class Witnesses {
      * value of the type and not a shape that carries a difference.
      *
      * <p>And what a value of the type may be beyond the one each of its kinds stands for: an
-     * optional's every value of what it holds, a sum's every value of each of its cases, and a set
-     * holding a different few of its element's values at one size. A set of such values is built
+     * optional's every value of what it holds, a sum's every value of each of its cases, and a
+     * collection's every content at every size ({@link #arrange}). A set of such values is built
      * from as many of them as it holds, and the one per kind the type divides into ran out at the
-     * number of kinds. Those for a set are proposals and not built values — a rule over what the
-     * set holds is the decoder's to apply — so they come after every size was built once.
+     * number of kinds. Each is walked in one order and stopped at {@code many}, so what comes back
+     * is as many values as the type has up to that number. The contents of a collection beyond
+     * the one built at each size are proposals and not built values — a rule over what it holds
+     * is the decoder's to apply — so they come after every size was built once.
      */
     private static List<FixtureTemplate> differing(Type type, int many, FieldDomains.Held held,
                                                    RuleReadingContext reading,
@@ -1100,16 +1103,25 @@ final class Witnesses {
                     if (one.values().isEmpty()) {
                         break;
                     }
-                    out.add(one.values().getFirst());
+                    // Built as the collection the names are worn over, so the names are put on
+                    // here as they are on every value this answers.
+                    out.addAll(worn(view, List.of(one.values().getFirst()), source));
                 }
-                // Only where the elements are apart as wholes, which a set's are. A set kept apart
-                // at a field of its elements is one whose few its rules choose, and a run of the
-                // element's values would offer sets that share the field.
-                if (view.shape() instanceof Shape.Sequence(Shape.Sequence.Kind kind, Type element)
-                        && kind == Shape.Sequence.Kind.SET
-                        && apart.stream().allMatch(List::isEmpty)) {
-                    out.addAll(worn(view, setsBeside(out, element, range, many, reading, inside),
-                            source));
+                // Then every other content, where the elements are apart as wholes or not at all.
+                // One kept apart at a field of its elements holds a few its rules choose, and an
+                // arrangement of the element's values would offer some that share the field.
+                if (out.size() < many && apart.stream().allMatch(List::isEmpty)) {
+                    Set<String> written = new HashSet<>();
+                    out.forEach(each -> written.add(each.text()));
+                    arrange(view.shape(), !apart.isEmpty(), range, many, reading, inside,
+                            content -> {
+                                FixtureTemplate each =
+                                        WornNames.under(view.wrappers(), content, source);
+                                if (each != null && written.add(each.text())) {
+                                    out.add(each);
+                                }
+                                return out.size() < many;
+                            });
                 }
                 yield out;
             }
@@ -1153,6 +1165,10 @@ final class Witnesses {
      * Up to {@code many} values of the cases of a sum, taking each case's values in turn and one
      * from each before a second from any, so that a few of them are not all of one case.
      *
+     * <p>Each case is asked for its share of {@code many} and no more, and the share is doubled
+     * for the cases that filled it only while the values together fall short. Asked for
+     * {@code many} each, a sum of many cases built that many of every case to keep a few.
+     *
      * @param sum the sum's own name, which a case reached from inside it does not open again; null
      *            for a union, which has none
      */
@@ -1164,11 +1180,36 @@ final class Witnesses {
         if (sum != null && !within.add(sum)) {
             return List.of();
         }
-        List<List<FixtureTemplate>> each = new ArrayList<>();
-        for (TypeSymbol leaf : cases) {
-            each.add(within.contains(leaf) ? List.of()
-                    : distinctValuesOf(Type.ref(leaf), many, reading, within));
+        List<TypeSymbol> open = cases.stream().filter(leaf -> !within.contains(leaf)).toList();
+        if (open.isEmpty() || many <= 0) {
+            return List.of();
         }
+        List<List<FixtureTemplate>> each = new ArrayList<>();
+        open.forEach(leaf -> each.add(List.of()));
+        boolean[] spent = new boolean[open.size()];
+        int share = Math.max(1, (many + open.size() - 1) / open.size());
+        while (true) {
+            boolean anyFilled = false;
+            for (int i = 0; i < open.size(); i++) {
+                if (spent[i]) {
+                    continue;
+                }
+                List<FixtureTemplate> values =
+                        distinctValuesOf(Type.ref(open.get(i)), share, reading, within);
+                each.set(i, values);
+                spent[i] = values.size() < share;
+                anyFilled |= !spent[i];
+            }
+            List<FixtureTemplate> out = takenInTurn(each, many);
+            if (out.size() >= many || !anyFilled || share >= many) {
+                return out;
+            }
+            share = Math.min(many, share * 2);
+        }
+    }
+
+    /** Up to {@code many} of {@code each}, the first of every list before the second of any. */
+    private static List<FixtureTemplate> takenInTurn(List<List<FixtureTemplate>> each, int many) {
         List<FixtureTemplate> out = new ArrayList<>();
         for (int i = 0; out.size() < many; i++) {
             boolean more = false;
@@ -1186,32 +1227,138 @@ final class Witnesses {
     }
 
     /**
-     * Sets of {@code element} beside the ones {@code built} holds, up to {@code many} in all: at
-     * each size the range leaves, a run of the element's values starting one further along each
-     * time, so no two of them hold the same few.
+     * Every content of a collection of {@code shape} the count range leaves, smallest first,
+     * handed to {@code offer} until it answers false: each few of the element's values a set can
+     * hold, each run of them a list can, and each few of the keys with each run of values for a
+     * map.
      *
-     * <p>Proposals. The one set built at each size is made against the rules, and these are not —
-     * where a rule over what the set holds refuses one, the decoder says so.
+     * <p>Arranged from the first {@code many} values of what it holds, which is enough to tell
+     * {@code many} contents apart. Proposals and not built values: a rule over what the collection
+     * holds is the decoder's to apply.
+     *
+     * @param apart whether the elements are apart as wholes, so that a list or a map's values say
+     *              no value twice; a set's never do
      */
-    private static List<FixtureTemplate> setsBeside(List<FixtureTemplate> built, Type element,
-                                                    DeclaredBounds.CountRange range, int many,
-                                                    RuleReadingContext reading,
-                                                    Set<TypeSymbol> inside) {
-        List<FixtureTemplate> out = new ArrayList<>();
-        if (built.size() >= many) {
-            return out;
-        }
-        List<FixtureTemplate> values = distinctValuesOf(element, many, reading, inside);
-        for (int size = Math.max(range.least(), 1);
-             size <= range.most() && size < values.size(); size++) {
-            for (int from = 1; from + size <= values.size(); from++) {
-                if (built.size() + out.size() >= many) {
-                    return out;
+    private static void arrange(Shape shape, boolean apart, DeclaredBounds.CountRange range,
+                                int many, RuleReadingContext reading, Set<TypeSymbol> inside,
+                                Predicate<FixtureTemplate> offer) {
+        int least = Math.max(range.least(), 0);
+        switch (shape) {
+            case Shape.Sequence(Shape.Sequence.Kind kind, Type element) -> {
+                List<FixtureTemplate> values = distinctValuesOf(element, many, reading, inside);
+                boolean once = apart || kind == Shape.Sequence.Kind.SET;
+                for (int size = least; size <= range.most(); size++) {
+                    if (once && size > values.size() || values.isEmpty() && size > 0) {
+                        return;
+                    }
+                    int[] at = first(size, once);
+                    do {
+                        if (!offer.test(FixtureTemplate.collection(picked(values, at)))) {
+                            return;
+                        }
+                    } while (kind == Shape.Sequence.Kind.SET
+                            ? nextFew(at, values.size())
+                            : nextRun(at, values.size(), once));
                 }
-                out.add(FixtureTemplate.collection(values.subList(from, from + size)));
             }
+            case Shape.Mapping(Type key, Type value) -> {
+                List<FixtureTemplate> keys = distinctValuesOf(key, many, reading, inside);
+                List<FixtureTemplate> values = distinctValuesOf(value, many, reading, inside);
+                for (int size = least; size <= range.most() && size <= keys.size(); size++) {
+                    if (values.isEmpty() && size > 0 || apart && size > values.size()) {
+                        return;
+                    }
+                    int[] which = first(size, true);
+                    do {
+                        List<FixtureTemplate> held = picked(keys, which);
+                        int[] to = first(size, apart);
+                        do {
+                            List<FixtureTemplate> entries = new ArrayList<>();
+                            for (int i = 0; i < size; i++) {
+                                entries.add(FixtureTemplate.entry(held.get(i),
+                                        values.get(to[i])));
+                            }
+                            if (!offer.test(FixtureTemplate.collection(entries))) {
+                                return;
+                            }
+                        } while (nextRun(to, values.size(), apart));
+                    } while (nextFew(which, keys.size()));
+                }
+            }
+            case Shape.Scalar _, Shape.Product _, Shape.Sum _, Shape.Unit _, Shape.Optional _,
+                 Shape.Unresolved _, Shape.Cases _, Shape.Tuple _, Shape.Function _,
+                 Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _, Shape.Undecided _ -> { }
+        }
+    }
+
+    /** The values {@code at} names, in its order. */
+    private static List<FixtureTemplate> picked(List<FixtureTemplate> values, int[] at) {
+        List<FixtureTemplate> out = new ArrayList<>(at.length);
+        for (int i : at) {
+            out.add(values.get(i));
         }
         return out;
+    }
+
+    /** The first of {@code size} places: nought upwards where no value is said twice, and nought
+     *  everywhere where one may be. */
+    private static int[] first(int size, boolean once) {
+        int[] at = new int[size];
+        for (int i = 0; once && i < size; i++) {
+            at[i] = i;
+        }
+        return at;
+    }
+
+    /**
+     * {@code at} moved on to the next few of {@code n} values in order, each taken once and in
+     * the order the values come, or false where it was the last. Starts at {@code first(size,
+     * true)}.
+     */
+    private static boolean nextFew(int[] at, int n) {
+        for (int i = at.length - 1; i >= 0; i--) {
+            if (at[i] < n - at.length + i) {
+                at[i]++;
+                for (int j = i + 1; j < at.length; j++) {
+                    at[j] = at[j - 1] + 1;
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * {@code at} moved on to the next run of {@code n} values, counting as a number does, or false
+     * where it was the last; a run naming a value twice is passed over where {@code once}. Starts
+     * at {@code first(size, once)}.
+     */
+    private static boolean nextRun(int[] at, int n, boolean once) {
+        while (true) {
+            int i = at.length - 1;
+            while (i >= 0 && at[i] == n - 1) {
+                at[i] = 0;
+                i--;
+            }
+            if (i < 0) {
+                return false;
+            }
+            at[i]++;
+            if (!once || allApart(at)) {
+                return true;
+            }
+        }
+    }
+
+    private static boolean allApart(int[] at) {
+        for (int i = 0; i < at.length; i++) {
+            for (int j = i + 1; j < at.length; j++) {
+                if (at[i] == at[j]) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /**

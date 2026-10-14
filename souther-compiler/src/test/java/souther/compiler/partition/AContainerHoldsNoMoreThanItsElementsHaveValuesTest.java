@@ -37,6 +37,8 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
             data Tagged = { n: Int }
             data Plain
             data Payload = Plain | Tagged
+            data Short = List<Bool>
+              invariant List.length(value) <= 2
             """;
 
     private static final String MODEL = """
@@ -59,6 +61,10 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
                 new Case("Set<Pair>", "Set.size(s)", 6),
                 // The sets of a two-valued element.
                 new Case("Set<Set<Bool>>", "Set.size(s)", 4),
+                // And of a three-valued one, among which are sets no run of the values makes.
+                new Case("Set<Set<Service>>", "Set.size(s)", 8),
+                // The lists of a two-valued element no longer than two.
+                new Case("Set<Short>", "Set.size(s)", 7),
                 // The rules of the element's own declaration.
                 new Case("Set<Slot>", "Set.size(s)", 5),
                 new Case("Picked", "Set.size(s.value)", 3),
@@ -106,6 +112,23 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
                             .anyMatch(ItemAssessment.Attempt.Certified.class::isInstance),
                     () -> each.type() + " " + line.items().get(new DomainPoint.AtTheLine()));
         }
+    }
+
+    /**
+     * A set of maps is built from maps holding different entries at one size, as a set of sets
+     * is from different few: one map per size runs out at how many sizes there are, and one per
+     * few keys at how many few the keys have, which is fewer than ten.
+     */
+    @Test
+    void aSetOfMapsIsBuiltFromMapsOfOneSizeHoldingDifferentEntries() {
+        BorderAssessment line = lineOf(MODEL.formatted(TYPES, "Set<Map<Service, Bool>>",
+                "Set.size(s)", 10), "p", "10");
+
+        assertTrue(line.items().get(new DomainPoint.AtTheLine())
+                instanceof ItemAssessment.Owed owed
+                && owed.searches().each().stream()
+                        .anyMatch(ItemAssessment.Attempt.Certified.class::isInstance),
+                () -> String.valueOf(line.items().get(new DomainPoint.AtTheLine())));
     }
 
     private static final String SERVICES = """
