@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -203,14 +204,16 @@ class AnObligationEveryRowOfWhichReachesAnUnreachableIsUndecidedTest {
      * The pair is still counted, and nothing the body says took it out.
      *
      * <p>The arithmetic and not the two numbers apart: a pair gone from the space and from the rows
-     * at once would leave a ratio that looks the same.
+     * at once would leave a ratio that looks the same. A run under {@code X} asks nothing of
+     * {@code b}, so what is owed is the two cases of {@code b} under {@code Y} — the one whose run
+     * ends at the {@code unreachable} among them, since that run reads both before it ends.
      */
     @Test
     void theBlankCellIsStillOneOfThePairs() {
         PartitionEvidence.PairSpace pairs = pairsOf(measured(BLANK));
 
-        assertEquals(4, pairs.total(), "two classes against two");
-        assertEquals(3, pairs.counts().covered());
+        assertEquals(2, pairs.total(), "the two cases of b under Y");
+        assertEquals(1, pairs.counts().covered());
     }
 
     /** And it is undecided on the body's premise, which is what the verdict comes to. */
@@ -312,9 +315,8 @@ class AnObligationEveryRowOfWhichReachesAnUnreachableIsUndecidedTest {
      *
      * <p>What a reader is sent to is the part, and two parts are two things to prove or answer.
      * Told apart by the words, the second would fold into the first and a reader would fix one and
-     * be told the verdict is settled. And a combination the two hold only between them —
-     * {@code Q} with {@code Off}, which one of them holds where {@code a} is {@code X} and the other
-     * where it is {@code Y} — rests on both.
+     * be told the verdict is settled. So the combination each holds is open on its own part and not
+     * on the other's.
      */
     @Test
     void twoPartsSayingTheSameWordsAreTwoPremises() {
@@ -328,9 +330,14 @@ class AnObligationEveryRowOfWhichReachesAnUnreachableIsUndecidedTest {
         assertEquals(2, premises.size(), () -> open.toString());
         assertEquals(List.of(List.of("not applicable"), List.of("not applicable")),
                 premises.stream().map(WhereNothingIsAnswered.Premise::reasons).toList());
-        assertEquals(2, pairFinding(compilation, "Q", "Off").premises().size());
-        assertEquals(Adequacy.Finding.Disposition.UNDECIDED,
-                pairFinding(compilation, "Q", "Off").disposition());
+        Adequacy.Finding underY = pairFinding(compilation, "Y", "Q");
+        Adequacy.Finding underX = pairFinding(compilation, "X", "Off");
+        assertEquals(Adequacy.Finding.Disposition.UNDECIDED, underY.disposition());
+        assertEquals(Adequacy.Finding.Disposition.UNDECIDED, underX.disposition());
+        assertEquals(1, underY.premises().size(), () -> underY.premises().toString());
+        assertEquals(1, underX.premises().size(), () -> underX.premises().toString());
+        assertNotEquals(underY.premises(), underX.premises(),
+                "each is open on the part it reaches");
     }
 
     /**

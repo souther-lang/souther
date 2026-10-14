@@ -5333,7 +5333,7 @@
         },
         "pairs": {
           "type": "object",
-          "description": "Two-class combinations, kept as the relations they are between. Counts rather than a ratio: a combination no row reaches has not been shown unreachable, only unknown, so the denominator is not known. Present exactly where the pair space is the criterion this behavior is held to, which is where its decisions meet nowhere and where it has no body to read — a behavior whose body brings decisions together carries `interaction` instead, and never both: the two state different requirements, and a consumer reading the one that is not the criterion would act on a combination nobody is owed.",
+          "description": "Two-class combinations owed a row, kept as the relations they are between. A combination is owed where the body tells both positions apart, some run of it reads the two classes together, and one value can hold both; with no body, every combination one value can hold is owed. Counts rather than a ratio: a combination no row reaches has not been shown unreachable, only unknown, so the denominator is not known. Present exactly where the pair space is the criterion this behavior is held to, which is where its decisions meet nowhere and where it has no body to read — a behavior whose body brings decisions together carries `interaction` instead, and never both: the two state different requirements, and a consumer reading the one that is not the criterion would act on a combination nobody is owed.",
           "required": [
             "total",
             "status",
@@ -5358,7 +5358,7 @@
             "unknown": {
               "type": "integer",
               "minimum": 0,
-              "description": "Combinations no row sits in. Not shown unreachable and not owed: nothing tried to build one, and nothing asks for a row at a combination."
+              "description": "Combinations owed that no row sits in. Not shown unreachable: nothing tried to build one, so each is a gap a row is asked for and not a combination the model rules out."
             },
             "weakening": {
               "$ref": "#/$defs/weakening"
@@ -5398,7 +5398,7 @@
                   "total": {
                     "type": "integer",
                     "minimum": 0,
-                    "description": "How many combinations the model has between them."
+                    "description": "How many combinations of the two are owed a row."
                   },
                   "covered": {
                     "type": "integer",

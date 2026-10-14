@@ -21,9 +21,9 @@ import java.util.List;
  * of it and a class of how many the container holds that admits no count from one up are in no one
  * value either: an empty list has no element to hold the field.
  *
- * <p>One answer for every reader of a pair space. How many combinations there are and which of them
- * are left are two readings of one space, and a combination one of them leaves out and the other
- * keeps is a row asked for that no count will ever take.
+ * <p>One answer for every reader of the classes of two positions: the combinations a pair space owes
+ * are listed once with it, and how many there are and which are left are read off that list, so a
+ * combination this rules out is neither counted nor asked a row for.
  *
  * <p>Made once for the positions of one behavior and asked of each combination of their classes.
  * What a row at each class requires and which count classes hold nothing from one up are facts

@@ -1977,11 +1977,11 @@
           } ]
         } ],
         "pairs" : {
-          "total" : 4,
+          "total" : 2,
           "between" : [ {
             "one" : "grantLeave/worked",
             "other" : "grantLeave/rate",
-            "total" : 4
+            "total" : 2
           } ],
           "status" : "unavailable",
           "reason" : "no_rows"

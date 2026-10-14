@@ -14,11 +14,14 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BodyDistinction;
+import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.RuleEvidenceOrigin;
 import souther.compiler.partition.UndividedPosition;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -596,6 +599,17 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                             "a count of the pairs is a count of these pairs, in this order: "
                                     + asked + " counted as " + made.byPair().sequencedKeySet());
                 }
+                // What a row reached is counted only where it is owed, and a count is made only of
+                // combinations somebody listed: a reached combination outside them is a count over
+                // more than the space, and what is left would come out below nothing.
+                for (AxisPair pair : space) {
+                    if (!(pair.owed() instanceof Owed.Listed(var cells))
+                            || !new HashSet<>(cells).containsAll(made.reached(pair.between()))) {
+                        throw new IllegalArgumentException("what the rows reached of "
+                                + pair.between() + " is among what is owed there: "
+                                + made.reached(pair.between()) + " against " + pair.owed());
+                    }
+                }
             }
         }
 
@@ -616,23 +630,65 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         }
 
         /**
-         * One relation of the model: which two positions, and what each divides into.
+         * One relation of the model: which two positions, and the combinations of their classes a
+         * row is owed for.
          *
-         * <p>The classes and not a list of the combinations. How many a relation holds is the
-         * product of its sides, and which one a row sits in is a pair of them — so the space is
-         * said by what it is made of, and a combination is made where something asks for one. Held
-         * as the product, a behavior of a few wide positions would carry a list nobody walks in
-         * every value a measure passes around.
+         * <p>Owed where both positions are told apart by the body, some run reads the two classes
+         * together, and a value can be in both — so which they are is no product of the sides, and
+         * is said by listing them. Listed once, here, and read by every reader of the relation: how
+         * many there are, which of them a row reached, and which are left.
+         *
+         * <p>Counted and not listed where the space is wider than this compilation counts off the
+         * rows. The number is still exact; what is not there is the list, which nothing reads of a
+         * space nobody walks.
          */
-        public record AxisPair(Between between, long total) {
+        public record AxisPair(Between between, Owed owed) {
 
             public AxisPair {
                 if (between == null) {
                     throw new IllegalArgumentException("a size is a size of some two positions");
                 }
-                if (total < 0) {
-                    throw new IllegalArgumentException("a relation holds no negative number of"
-                            + " combinations: " + total);
+                if (owed == null) {
+                    throw new IllegalArgumentException("a relation says what it owes");
+                }
+            }
+
+            /** How many combinations a row is owed for here. */
+            public long total() {
+                return switch (owed) {
+                    case Owed.Listed it -> it.cells().size();
+                    case Owed.Counted it -> it.size();
+                };
+            }
+        }
+
+        /** The combinations one relation owes a row for. */
+        public sealed interface Owed {
+
+            /**
+             * Each of them, in the order of the classes of the first position and then the second.
+             *
+             * <p>A list, because the order is part of the answer — what is left is said in it — and
+             * two answers in different orders are two answers.
+             */
+            record Listed(List<Cell> cells) implements Owed {
+
+                public Listed {
+                    cells = List.copyOf(cells);
+                    if (new HashSet<>(cells).size() != cells.size()) {
+                        throw new IllegalArgumentException("a combination is owed once: " + cells);
+                    }
+                }
+            }
+
+            /** How many there are, in a space too wide to list. */
+            record Counted(long size) implements Owed {
+
+                public Counted {
+                    if (size < 0) {
+                        throw new IllegalArgumentException("a relation holds no negative number"
+                                + " of combinations: " + size);
+                    }
                 }
             }
         }
@@ -829,6 +885,34 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          */
         public long unknown(AxisPair pair) {
             return pair.total() - counts().covered(pair.between());
+        }
+
+        /**
+         * The combinations owed that no row is in, owed by {@code behavior}.
+         *
+         * <p>What is owed less what was reached, both read off this space, so that the list and
+         * the count beside it are one subtraction and not two readings that agree until one of
+         * them is asked something new.
+         *
+         * <p>Empty where no count was made. A combination nothing was read about is not one no row
+         * is in, and a list of the whole space would be read as a list of gaps.
+         */
+        public List<ObligationIdentity.OfAFallbackPairCell> left(String behavior) {
+            if (counted.made().isEmpty()) {
+                return List.of();
+            }
+            CoveredBetween made = counted.made().orElseThrow();
+            List<ObligationIdentity.OfAFallbackPairCell> out = new ArrayList<>();
+            for (AxisPair pair : space) {
+                Set<Cell> reached = made.reached(pair.between());
+                // A count is made only over listed combinations, which the constructor holds.
+                for (Cell cell : ((Owed.Listed) pair.owed()).cells()) {
+                    if (!reached.contains(cell)) {
+                        out.add(cell.owedBy(behavior));
+                    }
+                }
+            }
+            return List.copyOf(out);
         }
 
         /** The same for a caller that has only the name, which costs a look through the space. */

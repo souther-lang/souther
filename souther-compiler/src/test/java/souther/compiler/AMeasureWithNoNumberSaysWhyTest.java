@@ -335,7 +335,8 @@ class AMeasureWithNoNumberSaysWhyTest {
     @Test
     void thePairsOfABehaviorNoRowNamesAreNotCountedEither() {
         PartitionEvidence.PairSpace pairs = partitions().get("sift").pairs();
-        assertEquals(4, pairs.total(), "two positions of two classes each");
+        assertEquals(2, pairs.total(),
+                "the right's two classes, which a run reads only under a left of Yes");
         assertEquals(MeasurementStatus.NOT_MEASURED, AdequacyReport.statusOf(pairs.counted()));
         assertEquals(PartitionEvidence.PairSpace.NoRows.NO_ROWS, pairs.counted().why());
         assertFalse(behaviorBlock(human(), "sift").contains("pairs"),

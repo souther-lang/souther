@@ -28,7 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Which case went which way is not read: the closure is applied to every element, a different
  * case each time. So no class of the element is said to take one way, and a row is still owed for
- * each case beside each class of the count that can hold it.
+ * each case beside each class of the count that can hold it. The count is asked after the elements
+ * are, so every run that reads the elements reads the count too: asked first, a run the count sends
+ * away reads no element, and nothing is owed for the two together there.
  *
  * <p>And a row for such a pair holds the element. A class of the count taking none and some, beside
  * a case of an element, is a list of one, which the class takes — never the empty list its values
@@ -54,10 +56,10 @@ class AnElementsCaseMatchedInAClosureIsPairedWithTheListsLengthTest {
                 constructs Out
 
             let northern (u) = {
-                guard length(u.regions) >= %d else Out(0)
                 guard all(r -> match r with
                     | North -> true
                     | South -> false, u.regions) else Out(1)
+                guard length(u.regions) >= %d else Out(0)
                 Out(2)
             }
 
@@ -91,10 +93,10 @@ class AnElementsCaseMatchedInAClosureIsPairedWithTheListsLengthTest {
                 constructs Out
 
             let northern (u) = {
-                guard Map.size(u.counts) >= %d else Out(0)
                 guard List.all(k -> match k with
                     | North -> true
                     | South -> false, Map.keys(u.counts)) else Out(1)
+                guard Map.size(u.counts) >= %d else Out(0)
                 Out(2)
             }
 
@@ -102,7 +104,14 @@ class AnElementsCaseMatchedInAClosureIsPairedWithTheListsLengthTest {
                 | (Usage { counts = [] }) -> Out(0)
             """;
 
-    /** A map's keys likewise, beside how many the map holds. */
+    /**
+     * A map's keys likewise, beside how many the map holds.
+     *
+     * <p>The case of a key matched in a closure over {@code Map.keys} is a decision whose subject
+     * the reading of the ways does not name, so which classes a run reads it beside are not read
+     * either and every combination is kept ({@code ReadTogether}). What is asked here is only which
+     * of them a value can hold.
+     */
     @Test
     void theCasesOfAKeyArePairedWithTheSizeThatHoldsOne() {
         PartitionEvidence counted = measured(KEYED.formatted(1), "example.keys", "northern");

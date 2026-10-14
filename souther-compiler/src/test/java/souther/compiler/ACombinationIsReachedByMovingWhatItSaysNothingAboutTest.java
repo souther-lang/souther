@@ -36,6 +36,7 @@ class ACombinationIsReachedByMovingWhatItSaysNothingAboutTest {
      * <p>The body tells two positions apart — the case of the request and which side of the line
      * its cost falls — and decides nothing about the cap. So the cap is not a position the
      * combinations are over, while the invariant makes every row's cap a value the cost settles.
+     * The cost is asked under either case, so each case beside each side of the line is owed.
      */
     private static final String MODEL = """
             module example.repair
@@ -58,7 +59,10 @@ class ACombinationIsReachedByMovingWhatItSaysNothingAboutTest {
                     guard request.cost.value <= 100 else Waiting { n = 1 }
                     Ok { n = 0 }
                 }
-                | Overseas -> Ok { n = 2 }
+                | Overseas -> {
+                    guard request.cost.value <= 100 else Waiting { n = 3 }
+                    Ok { n = 2 }
+                }
 
             example submit
                 | (Request { kind = Domestic, cost = Amount(50), cap = Amount(50) }) -> Ok { n = 0 }
