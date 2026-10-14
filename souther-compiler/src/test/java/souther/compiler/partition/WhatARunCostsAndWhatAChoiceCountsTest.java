@@ -47,10 +47,9 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
             return true;
         };
 
-        once.run(row, spend);
-        once.run(row, spend);
-        once.runReplacing(row, Map.of(3, 1), spend);
-        once.runReplacing(row, Map.of(3, 1), spend);
+        assertEquals(once.run(row, spend), once.run(row, spend), "the same run, answered twice");
+        assertEquals(once.runReplacing(row, Map.of(3, 1), spend),
+                once.runReplacing(row, Map.of(3, 1), spend), "and under the rewrite");
 
         assertEquals(2, spent[0], "one run of the row and one under the rewrite were made");
         assertEquals(List.of("run 7", "rewritten 7"), trial.made);
@@ -61,8 +60,8 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
     void aRunMadeBeforeIsAnsweredWithNothingLeftToSpend() {
         Generator.RunOnce once = Generator.runningOnce(new Counting(numbering(), _ -> 0));
         RowToRun row = row(7);
-        once.run(row);
-        once.runReplacing(row, Map.of(3, 1));
+        assertNotNull(once.run(row));
+        assertNotNull(once.runReplacing(row, Map.of(3, 1)));
 
         assertNotNull(once.run(row, () -> false), "the row was run already");
         assertNotNull(once.runReplacing(row, Map.of(3, 1), () -> false),
@@ -82,7 +81,7 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         Generator.RowTaking taking = choosing.over(inputs -> text(inputs).startsWith("-")
                 ? Generator.Acceptance.PASSED : Generator.Acceptance.TAKEN);
 
-        taking.take(List.of(FixtureTemplate.integer(0)));
+        assertEquals(Generator.Acceptance.PASSED, taking.take(List.of(FixtureTemplate.integer(0))));
         for (int i = 1; i <= Generator.MOST_ROWS_OFFERED_FOR_THE_ARMS; i++) {
             assertEquals(Generator.Acceptance.PASSED,
                     taking.take(List.of(FixtureTemplate.integer(-i))));
@@ -119,7 +118,7 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
                 new Counting(numbering(), _ -> 0), List.of());
         Generator.RowTaking taking = choosing.over(inputs -> text(inputs).startsWith("-")
                 ? Generator.Acceptance.PASSED : Generator.Acceptance.TAKEN);
-        taking.take(List.of(FixtureTemplate.integer(0)));
+        assertEquals(Generator.Acceptance.PASSED, taking.take(List.of(FixtureTemplate.integer(0))));
 
         int handed = 0;
         Generator.Acceptance said = Generator.Acceptance.PASSED;

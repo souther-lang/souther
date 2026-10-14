@@ -5300,17 +5300,18 @@ public final class Generator {
                     settled, thisWay, check, way.contents(), taking)
                     .from(0, ValuesHandedOn.NONE);
             switch (came) {
-                case WalkedInOrder.CameToNothing(ParameterCameToNothing why) -> {
+                case WalkedInOrder.CameToNothingAt(ParameterCameToNothing why) -> {
                     cameToNothing.add(why);
                     return false;
                 }
-                case WalkedInOrder.Taken _, WalkedInOrder.PassedOver _, WalkedInOrder.Halted _ -> {
+                case WalkedInOrder.RowTaken _, WalkedInOrder.PassedOver _,
+                     WalkedInOrder.Halted _ -> {
                     // A row was composed. Which one goes out is the preference's, and the first
                     // composed where nothing ranked them.
                     List<FixtureTemplate> kept = preferring == null ? null : preferring.taken();
                     if (kept != null) {
                         kept.toArray(composed);
-                    } else if (!(came instanceof WalkedInOrder.Taken)) {
+                    } else if (!(came instanceof WalkedInOrder.RowTaken)) {
                         throw new IllegalStateException("rows at a point were passed over and"
                                 + " none was kept");
                     }
@@ -5612,7 +5613,7 @@ public final class Generator {
     private sealed interface WalkedInOrder {
 
         /** A row, taken, and standing in the walk's values. */
-        record Taken() implements WalkedInOrder {}
+        record RowTaken() implements WalkedInOrder {}
 
         /** Rows were composed and every one was passed over. Not a refusal of any of them. */
         record PassedOver() implements WalkedInOrder {}
@@ -5621,9 +5622,9 @@ public final class Generator {
         record Halted() implements WalkedInOrder {}
 
         /** No row could be composed, and the parameter it came to nothing at. */
-        record CameToNothing(ParameterCameToNothing why) implements WalkedInOrder {}
+        record CameToNothingAt(ParameterCameToNothing why) implements WalkedInOrder {}
 
-        Taken TAKEN = new Taken();
+        RowTaken TAKEN = new RowTaken();
         PassedOver PASSED_OVER = new PassedOver();
         Halted HALTED = new Halted();
     }
@@ -5707,7 +5708,7 @@ public final class Generator {
                 composed[p] = value.value();
                 after[0] = from(next + 1, elsewhere.and(value.read()));
                 return switch (after[0]) {
-                    case WalkedInOrder.Taken _ -> Acceptance.TAKEN;
+                    case WalkedInOrder.RowTaken _ -> Acceptance.TAKEN;
                     case WalkedInOrder.PassedOver _ -> {
                         passed[0] = true;
                         yield Acceptance.PASSED;
@@ -5716,7 +5717,7 @@ public final class Generator {
                     // A parameter after this one that does not turn on this one's value cannot be
                     // composed with any other value of it either, and the walk here is stopped with
                     // what that one said. One that does may be, so the next is tried.
-                    case WalkedInOrder.CameToNothing(ParameterCameToNothing why) -> {
+                    case WalkedInOrder.CameToNothingAt(ParameterCameToNothing why) -> {
                         if (!awaited || !order.mayTurnOn(why.parameter(), p)) {
                             yield Acceptance.STOPPED;
                         }
@@ -5734,25 +5735,25 @@ public final class Generator {
                 // Every value passed over: for a row the caller passed over, or for what a
                 // parameter after it came to under each of them — said over all of them.
                 case Outcome.PassedOver _ -> passed[0] ? WalkedInOrder.PASSED_OVER
-                        : new WalkedInOrder.CameToNothing(
+                        : new WalkedInOrder.CameToNothingAt(
                                 overEveryValue(cameToNothing, found.shortfall()));
                 // Stopped by the caller, which is the answer as it stands; or by a parameter after
                 // this one that nothing could be composed for whatever this one is. Where nothing
                 // after it turns on it, that is said as it came, the value before it being the
                 // first; otherwise with the values before it that one came to nothing under.
                 case Outcome.Halted _ -> {
-                    if (!(after[0] instanceof WalkedInOrder.CameToNothing(
+                    if (!(after[0] instanceof WalkedInOrder.CameToNothingAt(
                             ParameterCameToNothing why)) || passed[0]) {
                         yield passed[0] ? WalkedInOrder.PASSED_OVER : after[0];
                     }
-                    yield !awaited ? after[0] : new WalkedInOrder.CameToNothing(
+                    yield !awaited ? after[0] : new WalkedInOrder.CameToNothingAt(
                             overEveryValue(withFirst(why, cameToNothing), found.shortfall()));
                 }
                 // Its own search came to nothing, which ended the walk.
                 case Outcome.Unresolved _, Outcome.Stopped _, Outcome.Unexhausted _,
                      Outcome.OfferShort _, Outcome.Limited _, Outcome.Unplanned _ ->
                         passed[0] ? WalkedInOrder.PASSED_OVER
-                                : new WalkedInOrder.CameToNothing(overEveryValue(withFirst(
+                                : new WalkedInOrder.CameToNothingAt(overEveryValue(withFirst(
                                         new ParameterCameToNothing(p, tried, found.shortfall(),
                                                 here),
                                         cameToNothing), found.shortfall()));
@@ -11276,9 +11277,6 @@ public final class Generator {
     private interface ValueTaking {
 
         Acceptance take(ComposedValue value);
-
-        /** The first value composed, which is what every search but a witness's wants. */
-        ValueTaking FIRST = _ -> Acceptance.TAKEN;
     }
 
     /**
