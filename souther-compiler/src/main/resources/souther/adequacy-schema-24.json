@@ -4790,7 +4790,7 @@
               "synthesisShortfalls": {
                 "type": "array",
                 "minItems": 1,
-                "description": "What this compiler's composings came to where none produced a candidate for the rule, one entry per word they came back with, present exactly where `because` is `nothing_was_composed_to_try`. This compiler's shortfall and never an answer about the model: a way nothing here composed a value for may be the easiest row in the file to write by hand, so whether a row is owed at the rule stays `unsettled` rather than settled by this. A rule is composed for once per way of standing its dependencies in, and every way that had nothing to try is here; two ways that came back with one word are one entry holding what both met. In one order, whatever order the ways were walked in.",
+                "description": "What this compiler's composings came to where none produced a candidate for the rule, one entry per word they came back with, present exactly where `because` is `nothing_was_composed_to_try`. This compiler's shortfall and never an answer about the model: a way nothing here composed a value for may be the easiest row in the file to write by hand, so whether a row is owed at the rule stays `unsettled` rather than settled by this. A rule is composed for once per way of standing its dependencies in, and every way that had nothing to try is here; two ways that came back with one word are one entry holding what both met, and two entries with one `reason` differ in their `causes`. In one order, whatever order the ways were walked in.",
                 "items": {
                   "type": "object",
                   "required": [

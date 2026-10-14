@@ -197,6 +197,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.HashSet;
+import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -7474,7 +7475,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                             DocumentSources sources,
                                             PublishedRuleHandle.WhereARuleIs places) {
         ArrayNode all = into.putArray("synthesisShortfalls");
-        for (RuleSearch.Came each : came) {
+        for (RuleSearch.Came each : published(came)) {
             ObjectNode one = all.addObject();
             one.put("reason", word(each.why().reason()));
             if (!each.figures().isEmpty()) {
@@ -7496,6 +7497,37 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
             causes(one, each.why(), sources, places);
         }
+    }
+
+    /**
+     * What the ways came back with, one per thing the document can tell apart.
+     *
+     * <p>The document says a word and the causes of its offer, and not the sentence a search said
+     * beside the word. Two ways with one word and two sentences are two things on the page and
+     * one thing here, so they are one entry holding what both met — written as two, a consumer
+     * reads one entry twice and cannot say what makes them two.
+     *
+     * <p>In the order of the first of each, which is the order the search holds them in.
+     */
+    static List<RuleSearch.Came> published(List<RuleSearch.Came> came) {
+        SequencedMap<List<Object>, RuleSearch.Came> under = new LinkedHashMap<>();
+        for (RuleSearch.Came each : came) {
+            under.merge(List.of(each.why().reason(), each.why().alsoShort()), each,
+                    (first, then) -> new RuleSearch.Came(first.why(),
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(
+                                    both(first.figures(), then.figures())),
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(
+                                    both(first.populations(), then.populations())),
+                            PublicationOrders.COMPOSITION_CAPACITIES.keep(
+                                    both(first.unheld(), then.unheld()))));
+        }
+        return List.copyOf(under.values());
+    }
+
+    private static <T> Set<T> both(CanonicalSelection<T> one, CanonicalSelection<T> other) {
+        Set<T> out = new LinkedHashSet<>(one.written());
+        out.addAll(other.written());
+        return out;
     }
 
     /**
