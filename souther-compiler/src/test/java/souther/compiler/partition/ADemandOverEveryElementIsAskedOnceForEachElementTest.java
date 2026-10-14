@@ -313,8 +313,9 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
 
     private static FixtureTemplate built(List<FixtureTemplate> eachFiled,
                                          List<FixtureTemplate> keptOut, int most) {
-        return Witnesses.holding(map(), List.of(), List.of(), null, eachFiled, keptOut,
+        Proposals built = Witnesses.holding(map(), List.of(), List.of(), null, eachFiled, keptOut,
                 new DeclaredBounds.CountRange(0, most), READING);
+        return built.isEmpty() ? null : built.values().getFirst();
     }
 
     /** Each key handed is an entry of the map built, and one key handed twice is one entry. */

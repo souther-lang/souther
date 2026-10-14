@@ -105,8 +105,12 @@ public final class MeasuredInput {
      * <p>No part of what makes two of these one, for the reason {@link #machines} is not: it is
      * derived from what is compared and from the reading, and two of these that compare equal would
      * fill it alike.
+     *
+     * <p>The whole answer, with what building it met: a search reading the values from here and
+     * why they are short from a second build would hold two answers that agree only while the
+     * builds do.
      */
-    private final Map<Offered, List<FixtureTemplate>> offered = new ConcurrentHashMap<>();
+    private final Map<Offered, Proposals> offered = new ConcurrentHashMap<>();
     /**
      * Which values' rules name each position, as {@link #ruleRoots} answers it.
      *
@@ -313,16 +317,15 @@ public final class MeasuredInput {
      * type reads the types inside it, and a map filled while it is being filled is not one a
      * reading may count on.
      */
-    List<FixtureTemplate> representativesHolding(Type type, NumericDomain.Bounds within,
-                                                 FieldDomains.Held held) {
+    Proposals representativesHolding(Type type, NumericDomain.Bounds within,
+                                     FieldDomains.Held held) {
         Offered at = new Offered(type, within, held);
-        List<FixtureTemplate> already = offered.get(at);
+        Proposals already = offered.get(at);
         if (already != null) {
             return already;
         }
-        List<FixtureTemplate> made =
-                Partitions.representativesHolding(type, ruleReading(), within, held);
-        List<FixtureTemplate> raced = offered.putIfAbsent(at, made);
+        Proposals made = Partitions.representativesHolding(type, ruleReading(), within, held);
+        Proposals raced = offered.putIfAbsent(at, made);
         return raced != null ? raced : made;
     }
 

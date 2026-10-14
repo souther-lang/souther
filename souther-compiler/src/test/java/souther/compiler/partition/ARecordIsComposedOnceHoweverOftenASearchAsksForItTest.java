@@ -59,10 +59,10 @@ class ARecordIsComposedOnceHoweverOftenASearchAsksForItTest {
         long before = RevisionKnowledge.timesDone(Partitions.ARecordComposed.class);
         List<FixtureTemplate> first = Partitions.representativesOf(payment,
                 RuleReadingContext.of(rules, ReadAs.THE_COMPILATION_DOES,
-                        compilation.db().readings()), null, Set.of());
+                        compilation.db().readings()), null, Set.of()).values();
         List<FixtureTemplate> second = Partitions.representativesOf(payment,
                 RuleReadingContext.of(rules, ReadAs.THE_COMPILATION_DOES,
-                        compilation.db().readings()), null, Set.of());
+                        compilation.db().readings()), null, Set.of()).values();
 
         assertFalse(first.isEmpty(), "a payment has values to stand for it");
         assertEquals(first, second, "and the same ones from either reading");

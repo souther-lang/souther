@@ -75,6 +75,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
 
     private static final String REALIZATION = "L" + PARTITION + "TermRealizations$Realization;";
 
+    private static final String PROPOSALS = "L" + PARTITION + "Proposals;";
+
     private static final String THE_SPINE = TYPE_OPS + "#newtypeSpine";
 
     private static final String THE_NAMES = TYPE_OPS + "#newtypeChain";
@@ -186,7 +188,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "Partitions", "admittedStrings",
                     "(" + TYPE + CONTEXT + "I)Ljava/util/List;", THE_POSITION),
             row(PARTITION + "Partitions", "displacedRepresentativesOf",
-                    "(" + TYPE + CONTEXT + BOUNDS + HELD + ")Ljava/util/List;", THE_POSITION),
+                    "(" + TYPE + CONTEXT + BOUNDS + HELD + ")" + PROPOSALS, THE_POSITION),
             row(PARTITION + "Partitions", "inReserve",
                     "(" + TYPE + CONTEXT + BOUNDS + ")Ljava/util/List;", THE_POSITION),
             row(PARTITION + "Partitions", "measureAt",
@@ -197,16 +199,14 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + INPUTS + "RulesWithNoLine$Gathered;L" + PARTITION
                             + "EvidenceAccount;)L" + PARTITION + "BodyCutInspection;",
                     THE_POSITION),
-            row(PARTITION + "Partitions", "notBuilt",
-                    "(" + TYPE + CONTEXT + HELD + ")Ljava/util/Set;", THE_POSITION),
             row(PARTITION + "Partitions", "notOffered",
                     "(" + TYPE + CONTEXT + ")L" + PARTITION + "StringOfferShortfall;",
                     THE_POSITION),
             row(PARTITION + "Partitions", "representativesHolding",
-                    "(" + TYPE + CONTEXT + BOUNDS + HELD + "Ljava/util/Set;)Ljava/util/List;",
+                    "(" + TYPE + CONTEXT + BOUNDS + HELD + "Ljava/util/Set;)" + PROPOSALS,
                     THE_POSITION),
             row(PARTITION + "Partitions", "representativesOf",
-                    "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/Set;)Ljava/util/List;",
+                    "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/Set;)" + PROPOSALS,
                     THE_POSITION),
             row(PARTITION + "TermRealizations", "atThoseParts",
                     "(Ljava/util/Map;" + TYPE + "L" + CHECK + "Carrier;" + SOURCE + ")"
@@ -239,25 +239,24 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + REALIZATION,
                     THE_POSITION),
             row(PARTITION + "ValuesCarryingANumber", "at",
-                    "(L" + PARTITION + "ConstructionPlan$Slot;)L" + PARTITION + "FixtureTemplate;",
+                    "(L" + PARTITION + "ConstructionPlan$Slot;)" + PROPOSALS,
                     THE_POSITION),
             row(PARTITION + "ValuesOfAnElement", "valuesOf",
                     "(" + TYPE + "L" + INPUTS + "TermPath;" + ADMITTED + CONTEXT
                             + "ILjava/util/function/Function;Ljava/util/Set;)Ljava/util/List;",
                     THE_POSITION),
             row(PARTITION + "Witnesses", "differing",
-                    "(" + TYPE + "I" + HELD + CONTEXT + "Ljava/util/Set;)Ljava/util/List;",
+                    "(" + TYPE + "I" + HELD + CONTEXT + "Ljava/util/Set;)" + PROPOSALS,
                     THE_POSITION),
             row(PARTITION + "Witnesses", "holdingAt",
-                    "(" + TYPE + "Ljava/util/Map;" + CONTEXT + ")L" + PARTITION
-                            + "FixtureTemplate;",
+                    "(" + TYPE + "Ljava/util/Map;" + CONTEXT + ")" + PROPOSALS,
                     THE_POSITION),
             row(PARTITION + "Witnesses", "placed",
                     "(" + TYPE + ADMITTED + CONTEXT + "Ljava/util/Set;)L" + PARTITION
                             + "Witnesses$Placed;",
                     THE_POSITION),
             row(PARTITION + "Witnesses", "varied",
-                    "(" + TYPE + "I" + CONTEXT + ")L" + PARTITION + "FixtureTemplate;",
+                    "(" + TYPE + "I" + CONTEXT + ")" + PROPOSALS,
                     THE_POSITION));
 
     private static String row(String owner, String name, String descriptor, String way) {

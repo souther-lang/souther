@@ -26,7 +26,6 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -479,7 +478,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
         int many = CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum() + 2;
         for (String type : List.of("Huge", "Wide")) {
             for (FixtureTemplate each : Witnesses.distinctValuesOf(declared(type), many,
-                    reading, Set.of())) {
+                    reading, Set.of()).values()) {
                 assertTrue(each.text().split(", ").length
                         <= CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum(),
                         () -> type + " " + each.text().length());
@@ -490,7 +489,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     @Test
     void noStringAnElementIsOfferedHoldsMoreThanAProposalHolds() {
         for (FixtureTemplate each : Witnesses.distinctValuesOf(declared("Long"), 4,
-                pastTheFigures(), Set.of())) {
+                pastTheFigures(), Set.of()).values()) {
             assertTrue(each.text().length() <= CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS
                     .maximum() + "Long(\"\")".length(), () -> each.text().length() + " long");
         }
@@ -498,10 +497,14 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
 
     @Test
     void aCollectionFilledToItsFloorIsNotBuiltPastWhatAProposalHolds() {
-        assertNull(Witnesses.holding(new Shape.Sequence(Shape.Sequence.Kind.LIST, Type.BOOL),
-                List.of(), List.of(), List.of(), new DeclaredBounds.CountRange(
+        Proposals filled = Witnesses.holding(
+                new Shape.Sequence(Shape.Sequence.Kind.LIST, Type.BOOL), List.of(), List.of(),
+                List.of(), new DeclaredBounds.CountRange(
                         CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum() + 1,
-                        Integer.MAX_VALUE), pastTheFigures()));
+                        Integer.MAX_VALUE), pastTheFigures());
+        assertEquals(List.of(), filled.values());
+        assertEquals(Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS), filled.met().figures(),
+                "and says it is this compiler that would not build it");
     }
 
     private static RuleReadingContext pastTheFigures() {

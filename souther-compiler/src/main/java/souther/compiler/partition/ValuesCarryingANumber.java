@@ -9,7 +9,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.SequencedMap;
 
 /**
  * The values of a plan where one position inside it holds a number the caller has, and others hold
@@ -51,59 +50,64 @@ record ValuesCarryingANumber(TermPath fixed, FixtureTemplate value,
     }
 
     @Override
-    public FixtureTemplate at(ConstructionPlan.Slot slot) {
+    public Proposals at(ConstructionPlan.Slot slot) {
         // A value the caller fixed is a value of its position already, and stands as it is.
         FixtureTemplate given = beside.get(slot.at());
         if (given != null) {
-            return given;
+            return Proposals.of(List.of(given));
         }
         // The value itself, under every name the position wears. What the caller hands over is a
         // number and not a value of the position, so the names its own type wears go on here — the
         // plan's `worn` is what a value already wearing those is still missing, which is what a
         // value chosen at a slot by a search is.
         if (slot.at().equals(fixed)) {
-            return WornNames.under(TypeView.of(slot.type(), reading.source().inners(),
+            FixtureTemplate written = WornNames.under(TypeView.of(slot.type(),
+                            reading.source().inners(),
                             reading.source().symbols(),
                             reading.source().kinds(),
                             reading.source().sums()).wrappers(),
                     value, reading.source());
+            return written == null ? Proposals.NONE : Proposals.of(List.of(written));
         }
         // A position narrowed to a case nothing is composed under. Which case it is is the value:
         // a case that carries nothing is written by naming it, and that is what the caller asked
         // for. Left to the declaration, the field is whichever case comes first. Where the case
         // stands for no value, nothing is composed here rather than another case.
         if (narrowed.contains(slot.at()) && slot.leaf() instanceof ConstructionPlan.Leaf.Open) {
-            List<FixtureTemplate> standing = Partitions.representativesOf(slot.type(), reading);
-            return standing.isEmpty() ? null : standing.getFirst();
+            Proposals standing = Partitions.representativesOf(slot.type(), reading);
+            return new Proposals(standing.isEmpty() ? List.of()
+                    : List.of(standing.values().getFirst()), standing.met());
         }
-        return null;
+        return Proposals.NONE;
     }
 
     @Override
-    public SequencedMap<String, FixtureTemplate> under(ConstructionPlan.Built built,
-                                                       PlanComposer.Under under) {
+    public Partitions.FieldsChosen under(ConstructionPlan.Built built, PlanComposer.Under under) {
         // A constructor this cannot name is a value nothing here writes, which is what the empty
         // answer says.
         if (!(built.of() instanceof TypeSymbol.AtModule record)) {
-            return null;
+            return Partitions.FieldsChosen.NONE;
         }
         Map<String, FixtureTemplate> composed = new LinkedHashMap<>();
+        CompositionShortfall met = CompositionShortfall.NONE;
         for (Map.Entry<String, ConstructionPlan.Node> each : built.under().entrySet()) {
             if (!holdsSomethingAsked(each.getValue())) {
                 continue;
             }
-            FixtureTemplate inner = under.of(each.getValue());
-            if (inner == null) {
-                return null;
+            Proposals inner = under.of(each.getValue());
+            met = met.and(inner.met());
+            if (inner.isEmpty()) {
+                return new Partitions.FieldsChosen(null, met);
             }
-            composed.put(each.getKey(), inner);
+            composed.put(each.getKey(), inner.values().getFirst());
         }
         if (composed.isEmpty()) {
-            return null;
+            return new Partitions.FieldsChosen(null, met);
         }
-        return Partitions.fieldsOf(record,
+        Partitions.FieldsChosen rest = Partitions.fieldsOf(record,
                 Partitions.rulesOver(built.worn(), record, reading.source()), reading, Set.of(),
                 composed);
+        return new Partitions.FieldsChosen(rest.fields(), met.and(rest.met()));
     }
 
     /**

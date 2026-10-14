@@ -88,7 +88,8 @@ class WhatABehaviorDividesIsWrittenIntoTheDocumentAndIntoRowsTest {
         List<String> written = new ArrayList<>();
         for (PartitionClass each : axis.classes()) {
             List<FixtureTemplate> made = Partitions.standingFor(each.representatives(),
-                    RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), Set.of());
+                    RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), Set.of())
+                    .values();
             assertFalse(made.isEmpty(), "a row can be composed for `" + each.label() + "`");
             made.forEach(one -> written.add(one.text()));
         }

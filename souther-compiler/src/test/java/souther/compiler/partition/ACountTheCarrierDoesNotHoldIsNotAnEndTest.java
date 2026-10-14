@@ -201,7 +201,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
                                 souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey(module, name))),
                         RuleReadingContext.unshared(rules,
                                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
-                .stream().map(FixtureTemplate::text).toList();
+                .values().stream().map(FixtureTemplate::text).toList();
     }
 
     /** Every obligation the one position of {@code source}'s behavior owes, written. */

@@ -103,7 +103,7 @@ final class TermRealizations {
         /**
          * Values that answer it, and what was not built.
          *
-         * <p>Two halves of one answer, as {@link Witnesses.Sized} keeps them. A caller reading only
+         * <p>Two halves of one answer, as {@link Proposals} keeps them. A caller reading only
          * the first says every value was refused where some were never built, which is a different
          * thing to tell an author.
          *
@@ -2886,22 +2886,26 @@ final class TermRealizations {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                     ((WornNames.Unwritable) wears).why());
         }
-        Witnesses.Sized built = Witnesses.ofSize(holder, many, keptApart, reading, Set.of());
-        if (built.values().isEmpty()) {
+        Proposals built = Witnesses.ofSize(holder, many, keptApart, reading, Set.of());
+        if (built.isEmpty()) {
             // Read off the build that was already done. `Witnesses` keeps what it made and why it
-            // stopped as two halves of one answer for exactly this, and asking it again would be
-            // the same decision taken twice — the two could not disagree today and there is no
-            // reason to leave a second taking of it here.
-            return built.heldBack().isEmpty()
+            // stopped as two halves of one answer for exactly this — what stopped it includes what
+            // stopped the values its elements were built from — and asking it again would be the
+            // same decision taken twice.
+            if (!built.met().figures().isEmpty()) {
+                return new Realization.Stopped(built.met());
+            }
+            return built.met().nothing()
                     ? new Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                    : new Realization.Stopped(CompositionShortfall.of(built.heldBack()));
+                    : new Realization.Unexhausted(built.met(),
+                            "nothing here could build a value of that many");
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : built.values()) {
             out.add(RepresentativeSource.under(worn.names(), each));
         }
-        return new Realization.Built(out, CompositionShortfall.of(built.heldBack()));
+        return new Realization.Built(out, built.met());
     }
 
     /**

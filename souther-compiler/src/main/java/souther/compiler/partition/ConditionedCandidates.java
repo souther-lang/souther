@@ -33,6 +33,9 @@ final class ConditionedCandidates {
     private final ConstructionRules rules;
     private final Map<Asked, List<FixtureTemplate>> found = new HashMap<>();
 
+    /** What of this compiler's building what the positions can take met, over every settling. */
+    private CompositionShortfall met = CompositionShortfall.NONE;
+
     /**
      * @param rules the rules of the value being composed, read once for the whole search
      */
@@ -54,11 +57,20 @@ final class ConditionedCandidates {
             return known;
         }
         FieldDomains.ConstructionLimits limits = rules.limitsAt(asked.at(), asked.settled());
-        List<FixtureTemplate> stands = Witnesses.firstWhatThePlaceAdmits(position.type(), limits,
+        Proposals stands = Witnesses.firstWhatThePlaceAdmits(position.type(), limits,
                 reading, Set.of(), () -> Partitions.displacedRepresentativesOf(position.type(),
                         reading, limits.values(), limits.held()));
-        found.put(asked, stands);
-        return stands;
+        met = met.and(stands.met());
+        found.put(asked, stands.values());
+        return stands.values();
+    }
+
+    /**
+     * What of this compiler's building the values offered so far met, so that a search that
+     * chose from them and came back without a row says what its offer was short of.
+     */
+    CompositionShortfall met() {
+        return met;
     }
 
     /** One position under one settling, which is what the same answer is the answer to. */

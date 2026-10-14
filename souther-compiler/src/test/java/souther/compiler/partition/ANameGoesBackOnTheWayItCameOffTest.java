@@ -201,7 +201,8 @@ class ANameGoesBackOnTheWayItCameOffTest {
 
     private List<String> written(PartitionClass each) {
         return Partitions.standingFor(each.representatives(), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES), java.util.Set.of()).stream()
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES), java.util.Set.of())
+                .values().stream()
                 .map(FixtureTemplate::text).toList();
     }
 }

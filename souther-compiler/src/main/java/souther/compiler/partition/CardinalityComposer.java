@@ -310,6 +310,7 @@ final class CardinalityComposer {
                                                           RuleReadingContext reading) {
         List<FixtureTemplate> built = new ArrayList<>();
         Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
+        CompositionShortfall met = CompositionShortfall.NONE;
         int least = 0;
         for (int i = 0; i < meeting.size(); i++) {
             // No count up to the most elements a container for one is composed with: the figure
@@ -359,16 +360,13 @@ final class CardinalityComposer {
             if (cannotSplit) {
                 continue;
             }
-            if (!splitAt.isEmpty()) {
-                FixtureTemplate apart =
-                        Witnesses.apart(view, elements, splitAt, keptApart, reading);
-                if (apart != null) {
-                    ofThatSize.add(apart);
-                }
-            } else {
-                ofThatSize.addAll(
-                        Witnesses.ofSize(view, elements, keptApart, reading, Set.of()).values());
-            }
+            // What building them met is carried on as what the offer was short of: a container
+            // of that many whose elements' values were cut at a figure is one this did not build.
+            Proposals made = !splitAt.isEmpty()
+                    ? Witnesses.apart(view, elements, splitAt, keptApart, reading)
+                    : Witnesses.ofSize(view, elements, keptApart, reading, Set.of());
+            ofThatSize.addAll(made.values());
+            met = met.and(made.met());
             for (FixtureTemplate bare : ofThatSize) {
                 FixtureTemplate one = WornNames.under(view.wrappers(), bare, reading.source());
                 if (one == null) {
@@ -383,7 +381,7 @@ final class CardinalityComposer {
             }
         }
         CompositionShortfall rest = CompositionShortfall.of(refused,
-                Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT), Set.of());
+                Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT), Set.of()).and(met);
         if (!built.isEmpty()) {
             return new TermRealizations.Realization.Built(built, rest);
         }
