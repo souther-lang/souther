@@ -8747,7 +8747,7 @@
                   "ordinal" : 3,
                   "lowered" : 0
                 },
-                "part" : 0
+                "relation" : "Affine[form=LinearForm[constant=-3, coefs={shelf.counts[*]=1}], proposition=GE]"
               },
               "facts" : {
                 "valueBelongsBelow" : false,
@@ -8823,7 +8823,7 @@
                   "ordinal" : 3,
                   "lowered" : 0
                 },
-                "part" : 0
+                "relation" : "Affine[form=LinearForm[constant=-3, coefs={shelf.counts[*]=1}], proposition=GE]"
               },
               "facts" : {
                 "valueBelongsBelow" : false,
@@ -8881,7 +8881,7 @@
                   "ordinal" : 3,
                   "lowered" : 0
                 },
-                "part" : 0
+                "relation" : "Affine[form=LinearForm[constant=-3, coefs={shelf.counts[*]=1}], proposition=GE]"
               },
               "facts" : {
                 "valueBelongsBelow" : false,
@@ -8938,7 +8938,7 @@
                   "ordinal" : 3,
                   "lowered" : 0
                 },
-                "part" : 0
+                "relation" : "Affine[form=LinearForm[constant=-3, coefs={shelf.counts[*]=1}], proposition=GE]"
               },
               "facts" : {
                 "valueBelongsBelow" : false,
@@ -9000,7 +9000,7 @@
                   "ordinal" : 3,
                   "lowered" : 0
                 },
-                "part" : 0
+                "relation" : "Affine[form=LinearForm[constant=-3, coefs={shelf.counts[*]=1}], proposition=GE]"
               },
               "facts" : {
                 "valueBelongsBelow" : false,

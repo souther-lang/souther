@@ -54,17 +54,19 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
     @Test
     void eachRelationIsALineOfTheOneRule() {
         JsonNode report = reportOf("Int.max(a, b.v) > 5", "");
-        Set<Integer> parts = new TreeSet<>();
+        Set<String> parts = new TreeSet<>();
         Set<String> rules = new TreeSet<>();
         for (JsonNode obligation : obligationsOfParts(report)) {
-            parts.add(obligation.at("/obligationId/line/which/part").asInt());
+            parts.add(obligation.at("/obligationId/line/which/relation").asString());
             rules.add(obligation.at("/obligationId/line/which/rule").toString());
         }
         assertEquals(1, rules.size(), () -> "one comparison, one rule: " + rules);
         // And not the line between the two arms of max, which the reading also holds: where a
         // crosses b.v the answer does not jump, so no row on either side of it is in a case where
         // the statement turns.
-        assertEquals(Set.of(0, 1), parts, "the line on a and the line on b");
+        assertEquals(Set.of("Affine[form=LinearForm[constant=-5, coefs={a=1}], proposition=GT]",
+                        "Affine[form=LinearForm[constant=-5, coefs={b.v=1}], proposition=GT]"),
+                parts, "the line on a and the line on b, each named by its relation");
         assertTrue(reasonsAt(report, "a").stream()
                         .noneMatch("several_lines_in_one_rule"::equals),
                 "the statement is drawn, not held back");

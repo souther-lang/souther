@@ -1,5 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhyUnread;
+
 /**
  * Which of the lines one comparison states is this one, as the reading that took the comparison
  * apart named it.
@@ -10,39 +13,66 @@ package souther.compiler.partition;
  * that reading makes one — so nothing that meets a line afterwards can number the lines of a
  * comparison by a count of its own, and a reader handed one can only have been handed it.
  *
- * <p>Counted over the relations the statement holds, each once and in the order of their
- * spellings ({@link souther.compiler.meaning.WhereEachLineDecides}). Not over where each was
- * written: one relation stated twice is one line.
+ * <p>The relation the line is, held. A helper's comparison is read once per call, and each call's
+ * statement is taken apart on its own; what two calls' lines share is the relation, and where each
+ * fell among the relations its own call stated is that call's and nothing the other knows. A name
+ * taken from that place makes one relation two lines in two calls and two relations one. Not where
+ * the relation was written either: one relation stated twice is one line.
+ *
+ * <p>Or, where a statement on one application was read as far as a number nothing holds, what it
+ * came to there. That reading has no relation to name — the relation is linear and cannot be
+ * written down — and it draws no line, so it is told from the others only for being a different
+ * part of the comparison.
  */
 public final class PartOfAComparison {
 
-    private final int ordinal;
+    /** The statement held, as a proposition spells it: one spelling for one relation. */
+    private final String spelled;
 
-    PartOfAComparison(int ordinal) {
-        if (ordinal < 0) {
-            throw new IllegalArgumentException("the lines of a comparison are counted from nought: "
-                    + ordinal);
-        }
-        this.ordinal = ordinal;
+    private PartOfAComparison(String spelled) {
+        this.spelled = spelled;
     }
 
-    /** Which of the comparison's lines this is, counted from nought. */
-    public int ordinal() {
-        return ordinal;
+    /** The line {@code relation} draws. */
+    public static PartOfAComparison of(Proposition.Compared relation) {
+        if (!relation.holds()) {
+            throw new IllegalArgumentException("a line is the relation held: " + relation);
+        }
+        return new PartOfAComparison(relation.key());
+    }
+
+    /**
+     * The line a statement that is one line draws: the relation it states, whichever way round, or
+     * the number nothing holds that it was read as far as.
+     */
+    static PartOfAComparison ofTheStatement(Proposition stated) {
+        return switch (stated) {
+            case Proposition.Compared compared ->
+                    of(compared.holds() ? compared : (Proposition.Compared) compared.denied());
+            case Proposition.Unread unread when unread.why() instanceof WhyUnread.ANumberNotHeld ->
+                    new PartOfAComparison((unread.holds() ? unread : unread.denied()).key());
+            default -> throw new IllegalArgumentException(
+                    "a statement that is one line states a relation: " + stated);
+        };
+    }
+
+    /** The relation, as the reading spelled it: what tells this line from the comparison's others. */
+    public String spelled() {
+        return spelled;
     }
 
     @Override
     public boolean equals(Object other) {
-        return other instanceof PartOfAComparison that && ordinal == that.ordinal;
+        return other instanceof PartOfAComparison that && spelled.equals(that.spelled);
     }
 
     @Override
     public int hashCode() {
-        return Integer.hashCode(ordinal);
+        return spelled.hashCode();
     }
 
     @Override
     public String toString() {
-        return "line " + ordinal;
+        return "line " + spelled;
     }
 }

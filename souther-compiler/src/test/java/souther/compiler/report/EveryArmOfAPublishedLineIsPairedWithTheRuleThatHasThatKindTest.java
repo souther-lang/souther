@@ -58,14 +58,14 @@ class EveryArmOfAPublishedLineIsPairedWithTheRuleThatHasThatKindTest {
      * lower bounds admitting their own value say the same thing about two numbers.
      *
      * <p>A body's comparison carries nothing beside the rule where it is one line, and which of its
-     * lines where it states several relations held together — a number the reading that took the
-     * statement apart issued, and never a part of something an author wrote.
+     * lines where it states several relations held together — the relation the reading that took
+     * the statement apart found, and never a part of something an author wrote.
      */
     private static final Map<String, String> CARRIES = new TreeMap<>(Map.of(
             "part", "[kind, line, part, rule]",
             "statement_of_part", "[kind, part, rule, statement]",
             "comparison", "[kind, rule]",
-            "part_of_comparison", "[kind, part, rule]"));
+            "part_of_comparison", "[kind, relation, rule]"));
 
     @Test
     void everyArmPairsItsWordWithTheKindOfRuleThatIsDecomposedThatWay() throws IOException {

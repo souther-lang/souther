@@ -1618,7 +1618,7 @@
           "additionalProperties": false
         },
         {
-          "description": "One of the lines a comparison written in a body states, where it states several relations held together: `Int.max(a, b) > 5` is one rule with a line on `a` and a line on `b`, and a row at one says nothing about the other. `part` is which of them this is, counted from zero over the relations the statement holds, each once and in one order, and it means something only beside the rule. Each line is owed rows only where the statement turns on it.",
+          "description": "One of the lines a comparison written in a body states, where it states several relations held together: `Int.max(a, b) > 5` is one rule with a line on `a` and a line on `b`, and a row at one says nothing about the other. `relation` is which of them this is: the relation the line is, over the behavior's inputs, as this compiler spells it. A helper's comparison is read once per call, and two calls' lines are one line exactly where they are one relation. It means something only beside the rule, and is a key to compare rather than text to parse. Each line is owed rows only where the statement turns on it.",
           "properties": {
             "kind": {
               "const": "part_of_comparison"
@@ -1631,14 +1631,13 @@
                 }
               }
             },
-            "part": {
-              "type": "integer",
-              "minimum": 0
+            "relation": {
+              "type": "string"
             }
           },
           "additionalProperties": false,
           "required": [
-            "part"
+            "relation"
           ]
         }
       ]

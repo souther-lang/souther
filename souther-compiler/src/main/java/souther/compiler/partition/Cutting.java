@@ -333,6 +333,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * One line an application of a closure draws: the relation it is, and what reading it came to.
+     *
+     * <p>Both, because each answers a different half of whether two applications drew one line. The
+     * drawing is a quantity cut at a level, and two relations can be cut at one level of one
+     * quantity; the relation is what the line is owed for ({@link PartOfAComparison}), and one
+     * relation drawn two ways is two readings to keep rather than one to choose between.
+     */
+    private record ALineRead(PartOfAComparison id, Read read) {}
+
+    /**
      * What a comparison inside a closure states on each application it is handed: one rule, with
      * a line for each line some application draws.
      *
@@ -340,6 +350,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * where it decides on one of them, met where a run makes that one
      * ({@link WhereAnApplicationIsMade#decidesOn}). Drawn on every application where it decides
      * everywhere, it is the line a comparison outside every closure would be.
+     *
+     * <p>One line is one relation, drawn the same way ({@link ALineRead}). Two relations that come
+     * to the same drawing on two applications are two lines a row at one says nothing about.
      *
      * <p>Every application's statement is a line or none of them is drawn, as with the relations of
      * one statement: where one application's reading stopped, the comparison stops there with that
@@ -359,7 +372,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         List<FilingCoordinate> settled = new ArrayList<>();
         List<FilingCoordinate> against = new ArrayList<>();
         List<UndividedByARelation> relations = new ArrayList<>();
-        Map<Read, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
+        Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
         InputReads statingNoRelation = null;
         for (ClosureApplications.Application one : each) {
             if (one.reached() instanceof Proposition.Always(boolean made) && !made) {
@@ -386,9 +399,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     relations.addAll(alone.relations());
                 }
                 case Read.Several several -> several.parts().forEach(part -> lines
-                        .computeIfAbsent(part.line(), _ -> new ArrayList<>())
+                        .computeIfAbsent(new ALineRead(part.id(), part.line()),
+                                _ -> new ArrayList<>())
                         .add(new WhereAnApplicationIsMade.OnOne(part.cases(), one.reached())));
-                case Read line -> lines.computeIfAbsent(line, _ -> new ArrayList<>())
+                case Read line -> lines.computeIfAbsent(new ALineRead(
+                                PartOfAComparison.ofTheStatement(conditions.comparison(
+                                        comparison, one.reads(), read).stated().proposition()),
+                                line), _ -> new ArrayList<>())
                         .add(WhereAnApplicationIsMade.OnOne.wherever(one.reached()));
             }
         }
@@ -410,8 +427,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return new Read.CutsNothing(settled);
         }
         List<Read.Several.Part> parts = new ArrayList<>();
-        lines.forEach((line, readings) -> parts.add(new Read.Several.Part(
-                new PartOfAComparison(parts.size()), line,
+        lines.forEach((line, readings) -> parts.add(new Read.Several.Part(line.id(), line.read(),
                 WhereAnApplicationIsMade.decidesOn(readings))));
         if (parts.size() == 1 && WhereAnApplicationIsMade.everywhere(parts.getFirst().cases())) {
             return parts.getFirst().line();
@@ -1031,9 +1047,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * one of the relations is no line on the input, or there is none.
      *
      * <p>One rule, read as many lines as it holds relations, each named by this reading and nothing
-     * else ({@link PartOfAComparison}). Where each decides is part of what the line is: a row at
-     * {@code a = g} under {@code Int.max(a, b) <= g} with {@code b} above {@code g} is answered the
-     * same way on both sides of the line, so it is no row for it.
+     * else: the relation it is ({@link PartOfAComparison}). Where each decides is part of what the
+     * line is: a row at {@code a = g} under {@code Int.max(a, b) <= g} with {@code b} above
+     * {@code g} is answered the same way on both sides of the line, so it is no row for it.
      *
      * <p>Every relation of the statement is a line or none of them is drawn. A relation over
      * something no row writes — what a dependency answered — has no line on the input to be; the
@@ -1057,13 +1073,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return null;
         }
         List<Read.Several.Part> parts = new ArrayList<>();
-        for (int i = 0; i < lines.size(); i++) {
-            Read line = lineOf(behavior, lines.get(i).line(), written, read, reads);
+        for (WhereEachLineDecides.Decides each : lines) {
+            Read line = lineOf(behavior, each.line(), written, read, reads);
             if (line == null) {
                 return null;
             }
-            parts.add(new Read.Several.Part(new PartOfAComparison(i), line,
-                    lines.get(i).cases()));
+            parts.add(new Read.Several.Part(PartOfAComparison.of(each.line()), line,
+                    each.cases()));
         }
         return new Read.Several(parts);
     }

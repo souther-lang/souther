@@ -34,6 +34,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -216,6 +218,49 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
         assertEquals(guard.cut(), bound.cut(), "one value of one quantity, read at one position");
         assertNotEquals(guard.obligation(), bound.obligation(),
                 "and two rules the author wrote, each owed a row of its own");
+    }
+
+    /**
+     * Two calls of a helper whose statements share one relation are one debt for that relation, and
+     * one debt apiece for the others.
+     *
+     * <p>{@code fits} states {@code Int.max(x, y) <= g}, a line on each of the two. Called on
+     * {@code p, q} and on {@code q, s}, the first call's lines are on {@code p} and {@code q} and the
+     * second's on {@code q} and {@code s}. The line on {@code q} is one relation read at both calls,
+     * and a row at it in either is the row the author owes; the lines on {@code p} and {@code s}
+     * have nothing to do with each other, and a row at one says nothing about the other. Each call
+     * takes its statement apart on its own, and {@code q} is second among the first call's
+     * relations and first among the second's — so a line named by where it falls among its call's
+     * relations would split the one and join the two.
+     */
+    @Test
+    void twoCallsSharingOneRelationOweOneRowForItAndOneForEachOfTheOthers() {
+        assertOneDebtPerRelation(OVERLAPPING_CALLS);
+    }
+
+    /**
+     * The same, where each relation is what a closure states on one of the values it is applied
+     * to.
+     *
+     * <p>Each call reads the closure once per application and gathers the lines the applications
+     * draw, and the line on {@code q} is drawn by the second application of the first call and the
+     * first of the second.
+     */
+    @Test
+    void twoCallsApplyingAClosureToOneSharedValueOweOneRowForIt() {
+        assertOneDebtPerRelation(OVERLAPPING_APPLICATIONS);
+    }
+
+    private static void assertOneDebtPerRelation(String model) {
+        Map<BorderObligationId, Set<String>> debts = new LinkedHashMap<>();
+        boundariesOf(model, "example.overlap").values().forEach(each ->
+                each.forEach(line -> debts.computeIfAbsent(line.border().obligation(),
+                        _ -> new TreeSet<>()).add(line.border().label())));
+
+        assertEquals(Set.of(Set.of("p = g"), Set.of("q = g"), Set.of("s = g")),
+                Set.copyOf(debts.values()),
+                () -> "one debt for each relation, and the line on q one however many calls read"
+                        + " it: " + debts);
     }
 
     /** What the rules leave the quantity, where they leave it everything. */
@@ -508,6 +553,26 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
 
             example touch
                 | "a" : (Task { owner = UserId("x") }) -> Ok
+            """;
+
+    /** One helper stating two relations, called twice with one argument in common. */
+    private static final String OVERLAPPING_CALLS = """
+            module example.overlap
+
+            behavior admit : (p: Int, q: Int, s: Int, g: Int) -> Bool
+            let admit (p, q, s, g) = fits(p, q, g) && fits(q, s, g)
+
+            let fits (x: Int, y: Int, g: Int): Bool = Int.max(x, y) <= g
+            """;
+
+    /** The same two calls, where the helper states its relations as a closure applied to each. */
+    private static final String OVERLAPPING_APPLICATIONS = """
+            module example.overlap
+
+            behavior admit : (p: Int, q: Int, s: Int, g: Int) -> Bool
+            let admit (p, q, s, g) = fits(p, q, g) && fits(q, s, g)
+
+            let fits (x: Int, y: Int, g: Int): Bool = List.all(v -> v <= g, [x, y])
             """;
 
     /** One type's invariant carried twice by one behavior. */

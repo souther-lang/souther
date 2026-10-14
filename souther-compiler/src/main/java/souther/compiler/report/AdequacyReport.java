@@ -6127,11 +6127,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 ruleId(which.putObject("rule"), it.rule());
             }
             // Which of the comparison's lines, as the reading that took the statement apart named
-            // it, and never a count this made of the lines it was handed.
+            // it: the relation, which is what two calls of a helper share. A position among the
+            // lines would be one call's count, and a different line in the next.
             case WhichLine.OfAPartOfAComparison it -> {
                 which.put("kind", "part_of_comparison");
                 ruleId(which.putObject("rule"), it.rule());
-                which.put("part", it.part().ordinal());
+                which.put("relation", it.part().spelled());
             }
         }
         ObjectNode facts = into.putObject("facts");

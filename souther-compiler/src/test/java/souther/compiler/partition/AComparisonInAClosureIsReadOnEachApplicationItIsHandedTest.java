@@ -50,13 +50,15 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
     void eachApplicationDrawsALineOfTheOneRule() {
         JsonNode report = reportOf("List.any(x -> x > 5, [a, b])", "");
         Set<String> rules = new TreeSet<>();
-        Set<Integer> parts = new TreeSet<>();
+        Set<String> parts = new TreeSet<>();
         for (JsonNode obligation : obligationsOfParts(report)) {
             rules.add(obligation.at("/obligationId/line/which/rule").toString());
-            parts.add(obligation.at("/obligationId/line/which/part").asInt());
+            parts.add(obligation.at("/obligationId/line/which/relation").asString());
         }
         assertEquals(1, rules.size(), () -> "one comparison, one rule: " + rules);
-        assertEquals(Set.of(0, 1), parts, "a line on a and a line on b");
+        assertEquals(Set.of("Affine[form=LinearForm[constant=-5, coefs={a=1}], proposition=GT]",
+                        "Affine[form=LinearForm[constant=-5, coefs={b=1}], proposition=GT]"), parts,
+                "a line on a and a line on b, each named by its relation");
         assertEquals(Set.of("pick/a", "pick/b"), axesOfParts(report));
     }
 
