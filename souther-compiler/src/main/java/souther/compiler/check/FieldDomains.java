@@ -954,7 +954,7 @@ public final class FieldDomains {
      * asked for the other.
      */
     public Composing composing(Map<NumberAt<RuleKey>, Count> fixed) {
-        return new Composing(settling(fixed), atomAt, countAt, this::keptApartAt);
+        return new Composing(settling(fixed), atomAt, countAt, this::keptApartAt, this::admits);
     }
 
     /**
@@ -1077,21 +1077,32 @@ public final class FieldDomains {
          *  the reading this was taken off answers it ({@link FieldDomains#keptApartAt}). */
         private final Function<RuleKey, List<List<String>>> keptApartAt;
 
+        /** Which values may stand at each place, as the reading this was taken off has them
+         *  ({@link FieldDomains#admits}). */
+        private final Function<RuleKey, AdmissibleSet> admits;
+
         private Composing(ConstraintState<FactSubject> constraints,
                           Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt,
-                          Function<RuleKey, List<List<String>>> keptApartAt) {
+                          Function<RuleKey, List<List<String>>> keptApartAt,
+                          Function<RuleKey, AdmissibleSet> admits) {
             this.constraints = constraints;
             this.atomAt = atomAt;
             this.countAt = countAt;
             this.keptApartAt = keptApartAt;
+            this.admits = admits;
         }
 
         /**
-         * The two numeric projections a caller building a value at {@code path} chooses against.
+         * What a caller building a value at {@code path} chooses against.
          *
          * <p>The value's own range and what it holds are handed over together and stay apart
          * ({@link Held}). A caller filling a position needs both — which values may stand there,
          * and how many a collection there must hold — and the two are numbers of different things.
+         *
+         * <p>And which values may stand there, as the reading has them before anything is
+         * settled. A settling only takes values away, so the set read before it is still an upper
+         * bound after it — and a set is what says which of a type's values the rules leave, which
+         * no range on a string or on the cases of an enumeration can.
          */
         public ConstructionLimits at(RuleKey path) {
             if (path == null || path.isTheValueItself()) {
@@ -1102,7 +1113,8 @@ public final class FieldDomains {
             NumericDomain.Bounds held = counted == null ? null : boundsOn(counted.atom());
             List<List<String>> apart = keptApartAt.apply(path);
             return new ConstructionLimits(values, held == null && apart.isEmpty() ? null
-                    : new Held(held == null ? NumericDomain.Bounds.OPEN : held, apart));
+                    : new Held(held == null ? NumericDomain.Bounds.OPEN : held, apart),
+                    admits.apply(path));
         }
 
         /** Where these constraints stop one subject, or null where they stop it nowhere. */
@@ -1126,11 +1138,22 @@ public final class FieldDomains {
      *
      * @param values where the value standing at the position stops, or null where nothing stops it
      * @param held   how many a collection there holds, or null where no rule counts it
+     * @param admits which values may stand at the position, read in full and naming none where the
+     *               rules say nothing about which
      */
-    public record ConstructionLimits(NumericDomain.Bounds values, Held held) {
+    public record ConstructionLimits(NumericDomain.Bounds values, Held held,
+                                     AdmissibleSet admits) {
 
-        /** A position the rules reach in neither way. */
-        public static final ConstructionLimits NONE = new ConstructionLimits(null, null);
+        public ConstructionLimits {
+            if (admits == null) {
+                throw new IllegalArgumentException(
+                        "a position says which values may stand there, every one of them included");
+            }
+        }
+
+        /** A position the rules reach in no way. */
+        public static final ConstructionLimits NONE =
+                new ConstructionLimits(null, null, AdmissibleSet.complete(ValueSet.ANY));
     }
 
     /**

@@ -26,6 +26,7 @@ import souther.compiler.inputs.Position;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TypeBounds;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.ValueSet;
 import souther.compiler.inputs.NumericTerm;
@@ -1823,7 +1824,7 @@ public final class Partitions {
         for (Map.Entry<String, Type> field : fields.entrySet()) {
             FieldDomains.ConstructionLimits limits = left.at(RuleKey.of(field.getKey()));
             List<FixtureTemplate> values = Witnesses.distinctValuesOf(field.getValue(), many,
-                    limits.held(), reading, inside);
+                    limits.held(), limits.admits(), reading, inside);
             if (values.size() < 2) {
                 continue;
             }
@@ -1849,6 +1850,19 @@ public final class Partitions {
             }
         }
         return out.size() > 1 ? out : List.of();
+    }
+
+    /**
+     * Which values the rules of {@code record} leave at {@code field}, which is what a builder of
+     * the record's values chooses that field's among.
+     *
+     * <p>Asked here, where a field of a record is taken for the name its rules write it under,
+     * so that a builder holding the field by name is handed the answer rather than deciding for
+     * itself which of a value's steps a rule names.
+     */
+    static AdmissibleSet admittedAt(TypeSymbol.AtModule record, String field,
+                                    RuleReadingContext reading) {
+        return FieldDomains.of(record, reading).admits(RuleKey.of(field));
     }
 
     /**
@@ -1906,8 +1920,10 @@ public final class Partitions {
             FixtureTemplate at = given.get(field.getKey());
             if (at == null) {
                 FieldDomains.ConstructionLimits limits = left.at(RuleKey.of(field.getKey()));
-                List<FixtureTemplate> stands = representativesHolding(field.getValue(), reading,
-                        limits.values(), limits.held(), inside);
+                List<FixtureTemplate> stands = Witnesses.firstWhatThePlaceAdmits(
+                        field.getValue(), limits, reading, inside,
+                        () -> representativesHolding(field.getValue(), reading, limits.values(),
+                                limits.held(), inside));
                 if (stands.isEmpty()) {
                     return null;
                 }

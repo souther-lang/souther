@@ -7,8 +7,11 @@ import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.ElementsApart;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.ReadingPolicy;
+import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.ValueSet;
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.revision.RevisionWork;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
@@ -30,6 +33,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Values built to hold what a rule says a value must hold.
@@ -935,29 +939,37 @@ final class Witnesses {
      * apart as records, or as lists, has its elements from here — taken from the proposals alone it
      * had one of them, and a list of two was a list saying one value twice.
      */
-    private static List<FixtureTemplate> distinctValuesOf(Type type, int many,
-                                                          RuleReadingContext reading,
-                                                          Set<TypeSymbol> expanding) {
-        return distinctValuesOf(type, many, null, reading, expanding);
+    static List<FixtureTemplate> distinctValuesOf(Type type, int many,
+                                                  RuleReadingContext reading,
+                                                  Set<TypeSymbol> expanding) {
+        return distinctValuesOf(type, many, null, AdmissibleSet.complete(ValueSet.ANY), reading,
+                expanding);
     }
 
     /**
      * The same, of a value at a field whose record's rules say what it holds ({@code held}, null
-     * where nothing holds it): a collection differing in how many it holds holds as many as those
-     * rules leave, kept apart as they keep it.
+     * where nothing holds it) and which values may stand there ({@code atThePlace}): a collection
+     * differing in how many it holds holds as many as those rules leave, kept apart as they keep
+     * it, and the values offered first are the ones the field is read as dividing into
+     * ({@link #placed}), and the only ones where they are every value it can hold.
      */
     static List<FixtureTemplate> distinctValuesOf(Type type, int many, FieldDomains.Held held,
+                                                  AdmissibleSet atThePlace,
                                                   RuleReadingContext reading,
                                                   Set<TypeSymbol> expanding) {
         Set<String> written = new LinkedHashSet<>();
         List<FixtureTemplate> out = new ArrayList<>();
-        for (FixtureTemplate each : dividesInto(type, reading, expanding)) {
+        Placed placed = placed(type, atThePlace, reading, expanding);
+        for (FixtureTemplate each : placed.values()) {
             if (out.size() >= many) {
                 return List.copyOf(out);
             }
             if (written.add(each.text())) {
                 out.add(each);
             }
+        }
+        if (placed.everyValue()) {
+            return List.copyOf(out);
         }
         for (FixtureTemplate each : Partitions.admittedStrings(type, reading, many)) {
             if (out.size() >= many) {
@@ -1439,22 +1451,96 @@ final class Witnesses {
     }
 
     /**
-     * The values a type divides into, under every name it wears: a {@code Bool} is two of them and a
-     * sum is its cases. Empty where the type is not divided, which is where a range or a length is
-     * what tells its values apart instead.
+     * What stands at a place whose own rules admit {@code atThePlace}: a value for each class the
+     * place divides into, under every name its type wears — a {@code Bool} is two of them, a sum
+     * its cases, a type whose rules name a few values those values — and whether those are every
+     * value the place can hold.
      *
-     * <p>Asked once. This used to ask again of what the names wrap and put them back on itself,
-     * because the reading it asks stopped at a name — so the same rule about what a newtype divides
-     * into was written here as well, and the two could differ about how far to look. The reading
-     * goes through the names now and hands the values back written under them.
+     * <p>The one answer every builder of a value at a place starts from, so that what is offered
+     * at a place is what the place is read as dividing into ({@link PartitionClasses#casesAt}). Asked
+     * by each builder for itself, a builder offers a case the place's rules leave nothing in and
+     * takes the whole value it is building with it.
+     *
+     * <p><b>Every value where the rules name finitely many.</b> A finite set the rules leave is an
+     * upper bound however much of them was read ({@link AdmissibleSet}), so a value outside it is
+     * one the rules refuse — stepped, composed or proposed, it only takes what holds it with it.
      */
-    private static List<FixtureTemplate> dividesInto(Type type, RuleReadingContext reading,
-                                                     Set<TypeSymbol> expanding) {
+    static Placed placed(Type type, AdmissibleSet atThePlace, RuleReadingContext reading,
+                         Set<TypeSymbol> expanding) {
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
         List<FixtureTemplate> out = new ArrayList<>();
-        for (PartitionClass each : PartitionClasses.of(type, reading, expanding)) {
+        for (PartitionClass each : PartitionClasses.of(
+                PartitionClasses.casesAt(view, atThePlace, reading), view, reading, expanding)) {
             out.addAll(Partitions.standingFor(each.representatives(), reading, expanding));
         }
-        return out;
+        return new Placed(out, namesFinitelyMany(atThePlace)
+                || namesFinitelyMany(PartitionClasses.admittedByItsNames(view, reading)));
+    }
+
+    /**
+     * What stands at a place, out of the classes it divides into.
+     *
+     * @param values     a value for each class, in the order the classes are read
+     * @param everyValue whether those are every value the place can hold, so that nothing else
+     *                   is to be offered there
+     */
+    record Placed(List<FixtureTemplate> values, boolean everyValue) {
+
+        Placed {
+            values = List.copyOf(values);
+        }
+
+        /** These kept to the numbers {@code within} leaves, where a value is a number and a range
+         *  is known; a value that is no number is not one a range says anything about. */
+        Placed within(NumericDomain.Bounds within) {
+            if (within == null) {
+                return this;
+            }
+            return new Placed(values.stream()
+                    .filter(each -> !(Counts.writtenIn(each.value()) instanceof Place at)
+                            || within.admits(at))
+                    .toList(), everyValue);
+        }
+
+        /** These first, and where they are not every value, {@code otherwise} after them, each
+         *  value once. */
+        List<FixtureTemplate> before(Supplier<List<FixtureTemplate>> otherwise) {
+            if (everyValue) {
+                return values;
+            }
+            Map<String, FixtureTemplate> once = new LinkedHashMap<>();
+            values.forEach(each -> once.putIfAbsent(each.text(), each));
+            otherwise.get().forEach(each -> once.putIfAbsent(each.text(), each));
+            return List.copyOf(once.values());
+        }
+    }
+
+    /**
+     * {@code otherwise}, the values a builder would offer at a place of {@code type}, with what the
+     * place divides into under its rules put first ({@link #placed}) — and alone, where that is
+     * every value the place can hold.
+     *
+     * <p>Only where the place's rules say which values stand there. Where they say nothing, the
+     * place divides into what its type does, which is what a builder already offers.
+     */
+    static List<FixtureTemplate> firstWhatThePlaceAdmits(Type type,
+                                                         FieldDomains.ConstructionLimits limits,
+                                                         RuleReadingContext reading,
+                                                         Set<TypeSymbol> expanding,
+                                                         Supplier<List<FixtureTemplate>> otherwise) {
+        if (limits.admits().approximation().isAny()) {
+            return otherwise.get();
+        }
+        return placed(type, limits.admits(), reading, expanding).within(limits.values())
+                .before(otherwise);
+    }
+
+    /** Whether {@code admitted} names the values it leaves, and some of them. */
+    private static boolean namesFinitelyMany(AdmissibleSet admitted) {
+        return admitted.approximation() instanceof ValueSet.Finite finite
+                && !finite.values().isEmpty();
     }
 
     /**

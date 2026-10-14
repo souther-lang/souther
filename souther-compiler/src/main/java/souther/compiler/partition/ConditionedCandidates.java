@@ -8,6 +8,7 @@ import souther.compiler.numeric.Place;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What one position can take, for a search choosing them one at a time.
@@ -53,8 +54,9 @@ final class ConditionedCandidates {
             return known;
         }
         FieldDomains.ConstructionLimits limits = rules.limitsAt(asked.at(), asked.settled());
-        List<FixtureTemplate> stands = Partitions.displacedRepresentativesOf(position.type(),
-                reading, limits.values(), limits.held());
+        List<FixtureTemplate> stands = Witnesses.firstWhatThePlaceAdmits(position.type(), limits,
+                reading, Set.of(), () -> Partitions.displacedRepresentativesOf(position.type(),
+                        reading, limits.values(), limits.held()));
         found.put(asked, stands);
         return stands;
     }

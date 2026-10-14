@@ -67,6 +67,10 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
             data Kept = Code
               invariant value.value /= "z"
             data Item = { code: Code, active: Bool }
+            data Few = Service
+              invariant value == Support || value == Security
+            data Pick = { s: Service, n: Bool }
+              invariant s == Support || s == Security
             data Odd = Int
               invariant value == 1 || value == 3 || value == 7
             data Loose = String
@@ -133,6 +137,10 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
                 new Case("Set<Wrapped>", "Set.size(s)", 2),
                 new Case("Set<Kept>", "Set.size(s)", 2),
                 new Case("Set<Odd>", "Set.size(s)", 3),
+                // Whatever the shape: cases of an enumeration its rules hold to a few, and a
+                // record whose rules hold one field to a few of them, built from those alone.
+                new Case("Set<Few>", "Set.size(s)", 2),
+                new Case("Set<Pick>", "Set.size(s)", 4),
                 // Beside a rule nothing reads, which may refuse one of them and add none.
                 new Case("Set<Loose>", "Set.size(s)", 2))) {
             BorderAssessment line = lineOf(MODEL.formatted(TYPES, each.type(), each.size(),
@@ -213,18 +221,26 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     /**
      * A record holding such a value is built twice over for a count of the records meeting a
      * statement about another of its fields: the two differ at the value, which the statement
-     * says nothing of.
+     * says nothing of, and each is one the record's rules leave.
      */
     @Test
     void recordsMeetingAStatementDifferAtAValueTheStatementDoesNotRead() {
-        BorderAssessment line = lineOf(MODEL.formatted(TYPES, "Set<Item>",
-                "Set.size(Set.filter(x -> x.active, s))", 2), "p", "2");
+        record Case(String type, String count) {}
+        for (Case each : List.of(
+                new Case("Set<Item>", "Set.size(Set.filter(x -> x.active, s))"),
+                // The values the record's rules leave its field, which are not the first of its
+                // type's: a value of each kind of the type was one the record refuses.
+                new Case("Set<Pick>", "Set.size(Set.filter(x -> x.n, s))"),
+                new Case("List<Pick>", "List.length(List.filter(x -> x.n, s))"))) {
+            BorderAssessment line =
+                    lineOf(MODEL.formatted(TYPES, each.type(), each.count(), 2), "p", "2");
 
-        assertTrue(line.items().get(new DomainPoint.AtTheLine())
-                instanceof ItemAssessment.Owed owed
-                && owed.searches().each().stream()
-                        .anyMatch(ItemAssessment.Attempt.Certified.class::isInstance),
-                () -> String.valueOf(line.items().get(new DomainPoint.AtTheLine())));
+            assertTrue(line.items().get(new DomainPoint.AtTheLine())
+                    instanceof ItemAssessment.Owed owed
+                    && owed.searches().each().stream()
+                            .anyMatch(ItemAssessment.Attempt.Certified.class::isInstance),
+                    () -> each.type() + " " + line.items().get(new DomainPoint.AtTheLine()));
+        }
     }
 
     /** Every row offered for {@code f}, with what stopped it where something did. */
@@ -305,7 +321,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
         // made from and those are as many as are asked for.
         int many = CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum() + 2;
         for (String type : List.of("Huge", "Wide")) {
-            for (FixtureTemplate each : Witnesses.distinctValuesOf(declared(type), many, null,
+            for (FixtureTemplate each : Witnesses.distinctValuesOf(declared(type), many,
                     reading, Set.of())) {
                 assertTrue(each.text().split(", ").length
                         <= CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum(),
@@ -316,7 +332,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
 
     @Test
     void noStringAnElementIsOfferedHoldsMoreThanAProposalHolds() {
-        for (FixtureTemplate each : Witnesses.distinctValuesOf(declared("Long"), 4, null,
+        for (FixtureTemplate each : Witnesses.distinctValuesOf(declared("Long"), 4,
                 pastTheFigures(), Set.of())) {
             assertTrue(each.text().length() <= CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS
                     .maximum() + "Long(\"\")".length(), () -> each.text().length() + " long");

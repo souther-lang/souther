@@ -11,6 +11,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
@@ -103,6 +104,22 @@ public final class Distinctions {
     }
 
     /**
+     * What a position whose rules admit {@code admitted} divides into: the distinctions its type
+     * states, less those the rules leave nothing in, and where the type states none, the values the
+     * rules name.
+     *
+     * <p>The one answer to that, for a position read with its rules and for a value built under
+     * them. Decided by each, the two part wherever a type's distinctions are held to a few of
+     * them: the builder offers one the reader knows the rules refuse, and a collection holding it
+     * is refused whole.
+     */
+    public static List<Case> leftBy(List<Case> declared, AdmissibleSet admitted, Type type,
+                                    NewtypeInners inners) {
+        return declared.isEmpty() ? ofValues(admitted.approximation(), type, inners)
+                : Crossing.admits(declared, admitted);
+    }
+
+    /**
      * The distinctions the rules give a position whose type states none.
      *
      * <p>The same division a sum states, written another way. {@code data Gender = A | B} and
@@ -121,7 +138,7 @@ public final class Distinctions {
      * something the position does not hold, and a division this can only half describe is one it
      * does not make.
      */
-    public static List<Case> ofValues(ValueSet admitted, Type type, NewtypeInners inners) {
+    static List<Case> ofValues(ValueSet admitted, Type type, NewtypeInners inners) {
         if (!(admitted instanceof ValueSet.Finite finite) || finite.values().isEmpty()) {
             return List.of();
         }

@@ -14,6 +14,8 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
+import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,32 +34,53 @@ import java.util.List;
 final class PartitionClasses {
 
     /**
-     * The classes a type states, before any rule of a position is crossed with them. What a witness
-     * varies over and what a generator offers for a bare position, which are asked of a type and not
-     * of a position of one.
-     *
-     * <p>Where the type states no division, the values its own rules name: {@code data Code =
-     * String invariant value == "a" || value == "b"} divides into its two strings as
-     * {@code data Code = A | B} does into its cases, and a position of it is read that way
-     * ({@link Distinctions#ofValues}), so a set of it is built from both. Asked only of a value
-     * with no parts, since a rule names the whole of nothing else, and read off the reading every
-     * other question about the type's rules asks rather than off the clauses again.
+     * The classes a value of {@code type} divides into where no rule is written about the place it
+     * stands: what the type states, under the rules of the names it wears. What a witness varies
+     * over and what a generator offers for a bare position.
      */
     static List<PartitionClass> of(Type type, RuleReadingContext reading,
                                    java.util.Set<TypeSymbol> expanding) {
         RuleReadingSource ruleSource = reading.source();
         TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
-        List<Case> cases = Distinctions.ofType(view.shape(), ruleSource.symbols(),
+        return of(casesAt(view, AdmissibleSet.complete(ValueSet.ANY), reading), view, reading,
+                expanding);
+    }
+
+    /**
+     * The distinctions a place of {@code view} divides into, whose own rules admit
+     * {@code atThePlace}: one class apiece, and what a builder writing a value of each without a
+     * class around it reads.
+     *
+     * <p>Under both, the type's names first: what the type states less what its names' rules leave
+     * nothing in, and where it states nothing, the values those rules name — {@code data Code =
+     * String invariant value == "a" || value == "b"} divides into its two strings as
+     * {@code data Code = A | B} does into its cases. Then the same again with what the place's
+     * rules admit, which a record's rules about one of its fields are. The answer is the one a
+     * position of the type is read with ({@link Distinctions#leftBy}), so what is offered at a
+     * place is what the place is read as dividing into.
+     *
+     * <p>The rules of the names are read off the outermost name, whose reading takes in the rules
+     * of every name beneath it ({@link TypeView#outermostName}). A declaration whose rules that
+     * reading shows to contradict is refused where it is declared (E1013), so a type reaching here
+     * is one the reading has values of.
+     */
+    static List<Case> casesAt(TypeView view, AdmissibleSet atThePlace,
+                              RuleReadingContext reading) {
+        RuleReadingSource ruleSource = reading.source();
+        Type type = view.declared();
+        List<Case> stated = Distinctions.ofType(view.shape(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
-        if (cases.isEmpty() && view.shape() instanceof Shape.Scalar
-                && view.outermostName() instanceof TypeSymbol.AtModule named) {
-            // A declaration whose rules this reading shows to contradict is refused where it is
-            // declared (E1013), so a type reaching here is one the reading has values of.
-            cases = Distinctions.ofValues(FieldDomains.of(named, reading)
-                    .admits(RuleKey.THE_VALUE).approximation(), type, ruleSource.inners());
-        }
-        return of(cases, view, reading, expanding);
+        List<Case> underItsNames = Distinctions.leftBy(stated, admittedByItsNames(view, reading),
+                type, ruleSource.inners());
+        return Distinctions.leftBy(underItsNames, atThePlace, type, ruleSource.inners());
+    }
+
+    /** What the rules of the names {@code view} wears admit, or every value where it wears none. */
+    static AdmissibleSet admittedByItsNames(TypeView view, RuleReadingContext reading) {
+        return view.outermostName() instanceof TypeSymbol.AtModule named
+                ? FieldDomains.of(named, reading).admits(RuleKey.THE_VALUE)
+                : AdmissibleSet.complete(ValueSet.ANY);
     }
 
     /**

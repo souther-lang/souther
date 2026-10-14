@@ -13,6 +13,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.values.AdmissibleSet;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -112,14 +113,16 @@ final class ConstructionRules {
         List<RuleRoots.Naming> named = namingOf(path);
         NumericDomain.Bounds values = null;
         FieldDomains.Held held = null;
+        AdmissibleSet admits = FieldDomains.ConstructionLimits.NONE.admits();
         for (int i = 0; i < named.size(); i++) {
             RuleRoots.Naming each = named.get(i);
             FieldDomains.ConstructionLimits here = composedUnder(each, settling.fixed().get(i))
                     .at(each.address().key());
             values = meet(values, here.values());
             held = meet(held, here.held());
+            admits = admits.narrower(here.admits());
         }
-        return new FieldDomains.ConstructionLimits(values, held);
+        return new FieldDomains.ConstructionLimits(values, held, admits);
     }
 
     /**
