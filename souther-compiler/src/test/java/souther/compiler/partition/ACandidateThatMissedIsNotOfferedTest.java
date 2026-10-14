@@ -104,7 +104,7 @@ class ACandidateThatMissedIsNotOfferedTest {
                         == Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS),
                 "the combinations were left untried: " + filled.unresolved());
         assertTrue(filled.unresolved().stream().noneMatch(each -> each.why().reason()
-                        == Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
+                        == Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE),
                 "and nothing was said to be impossible: " + filled.unresolved());
     }
 

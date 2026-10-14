@@ -75,9 +75,9 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         BorderAssessment bound = borders.get("h.a = 0");
         assertNotNull(bound, borders.keySet().toString());
         assertEquals(new souther.compiler.query.ItemAssessment.NotOwed(
-                        NotOwedReason.THE_RULES_REFUSE_IT), bound.at(PointRole.OFF));
+                        NotOwedReason.NO_VALUE_CAN_STAND_THERE), bound.at(PointRole.OFF));
         assertEquals(new souther.compiler.query.ItemAssessment.NotOwed(
-                        NotOwedReason.THE_RULES_REFUSE_IT), bound.at(PointRole.OUT));
+                        NotOwedReason.NO_VALUE_CAN_STAND_THERE), bound.at(PointRole.OUT));
 
         BorderAssessment guard = borders.get("h.a = 100");
         assertNotNull(guard, borders.keySet().toString());
@@ -180,10 +180,10 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     @Test
     void atAnEndOfTheRangeTheTwoValuesBesideTheLineAreAnsweredApart() {
         assertEquals(List.of(
-                        "== 100: beside below = 99 (OFF), beside above = THE_RULES_REFUSE_IT",
-                        "/= 100: beside below = 99 (ON), beside above = THE_RULES_REFUSE_IT",
-                        "== 0: beside below = THE_RULES_REFUSE_IT, beside above = 1 (OFF)",
-                        "/= 0: beside below = THE_RULES_REFUSE_IT, beside above = 1 (ON)",
+                        "== 100: beside below = 99 (OFF), beside above = NO_VALUE_CAN_STAND_THERE",
+                        "/= 100: beside below = 99 (ON), beside above = NO_VALUE_CAN_STAND_THERE",
+                        "== 0: beside below = NO_VALUE_CAN_STAND_THERE, beside above = 1 (OFF)",
+                        "/= 0: beside below = NO_VALUE_CAN_STAND_THERE, beside above = 1 (ON)",
                         "== 50: beside below = 49 (OFF), beside above = 51 (OFF)",
                         "/= 50: beside below = 49 (ON), beside above = 51 (ON)"),
                 besideTheLineOf("== 100", "/= 100", "== 0", "/= 0", "== 50", "/= 50"),
@@ -373,7 +373,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     @Test
     void aSideTheRulesLeaveOneValueWideOwesNoPointAwayFromTheBorder() {
         assertEquals(new souther.compiler.query.ItemAssessment.NotOwed(
-                        NotOwedReason.THE_RULES_REFUSE_IT),
+                        NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                 bordersOf(model("Int", ">= 0", "<= 0", "0")).get("h.a = 0").at(PointRole.IN),
                 "nothing is inside `0 <= x <= 0` and away from its border");
         assertEquals("in 0 <= h.a < 3",

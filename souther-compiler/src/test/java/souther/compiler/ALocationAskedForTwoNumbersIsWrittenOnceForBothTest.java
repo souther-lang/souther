@@ -248,7 +248,7 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
 
         assertFalse(whatNothingCouldShow(WHERE_NO_VALUE_STANDS_AT_THE_POINT).isEmpty(),
                 () -> "no string stands below the least one, so the point is open: " + page);
-        assertFalse(page.contains("the rules leave no value at"),
+        assertFalse(page.contains("no value can stand at"),
                 () -> "and nothing here showed that, so the page does not say it: " + page);
     }
 

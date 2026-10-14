@@ -118,8 +118,8 @@ public sealed interface RuleRequirement {
         }
 
         /**
-         * The rules of the way to the rule leave no value that takes it, and the composings are
-         * what proved it.
+         * No value takes the way to the rule, and the composings are what proved it — whether a
+         * rule on the way or a type with too few values is what leaves none.
          *
          * <p>Beside the two above rather than under them, and it is the one of the three a search
          * establishes ({@link Generator.UnresolvedCombination.Reason#provesInfeasible} is what
@@ -132,7 +132,7 @@ public sealed interface RuleRequirement {
          * answer is every way of standing the dependencies in having proved it, and a value holding
          * one proof says nothing about the ways it does not hold.
          */
-        record TheRulesLeaveNoValueForIt() implements Excluded {}
+        record NoValueCanTakeIt() implements Excluded {}
     }
 
     /**

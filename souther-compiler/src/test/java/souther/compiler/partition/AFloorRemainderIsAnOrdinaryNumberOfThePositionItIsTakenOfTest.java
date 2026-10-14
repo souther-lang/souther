@@ -118,7 +118,7 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
     /** A run holding no member of the class is a run the rules leave nothing at. */
     @Test
     void aRunHoldingNoMemberOfTheClassIsOneTheRulesLeaveNothingAt() {
-        assertEquals(List.of(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
+        assertEquals(List.of(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE),
                 unresolvedAt("x: Int, y: Int", "x >= 10 && x <= 12 && Int.floorMod(x, 7) == 0",
                         "Int.floorMod(x, 7) = 0"));
     }

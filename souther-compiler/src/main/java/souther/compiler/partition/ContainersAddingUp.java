@@ -199,7 +199,7 @@ final class ContainersAddingUp {
                 || !(within.projectionOf(new NumericTerm.ValueOf(occurring))
                         instanceof NumericDomain.FormProjection.Within(
                                 NumericDomain.Bounds runs))) {
-            return none(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
+            return none(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
         }
         Ends ends = Ends.of(runs == null ? NumericDomain.Bounds.OPEN : runs, elements);
         if (ends == null) {

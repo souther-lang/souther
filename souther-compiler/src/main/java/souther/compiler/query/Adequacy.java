@@ -6008,7 +6008,7 @@ public final class Adequacy {
                 // Asked before the way to it, since it holds wherever the comparison is reached:
                 // the rules leave its values the same range on every way.
                 if (edge.border().theRulesLeaveNothingWhereItComesOut(outcome.held())) {
-                    return new HeldOutcome.Bringing.TheRulesLeaveNoValueThere();
+                    return new HeldOutcome.Bringing.NoValueCanStandThere();
                 }
                 if (!(souther.compiler.partition.Reachability.of(reaching.wayTo(comparison),
                         subject.quantities().region())

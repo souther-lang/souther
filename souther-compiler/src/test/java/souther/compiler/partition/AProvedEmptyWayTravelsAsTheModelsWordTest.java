@@ -88,7 +88,7 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
     void noRowIsHandedOverForAWayTheRulesLeaveNothingOn() {
         Generator.BoundaryAttempt attempt = composing(NothingTheRulesLeave.REGION, CUT);
 
-        assertEquals(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE,
+        assertEquals(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE,
                 assertInstanceOf(Generator.BoundaryAttempt.Unresolved.class, attempt,
                         "a way that leaves nothing standing is a way no row arrives by").why()
                         .reason(),

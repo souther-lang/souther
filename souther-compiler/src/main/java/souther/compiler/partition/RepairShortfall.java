@@ -131,10 +131,12 @@ public record RepairShortfall(List<Generator.Purpose> soughtFor, CoverageSites.A
         NOTHING_HOLDS_A_ROW_TO_IT,
 
         /**
-         * A part of it is a comparison coming out on a side the rules leave no value on. No row
-         * goes this way, which is the model's to say and not a search that stopped.
+         * A part of it is a comparison coming out on a side no value can stand on. No row goes
+         * this way, which is the model's to say and not a search that stopped — and whether a rule
+         * or the type alone leaves the side empty is not said, since a reader does the same about
+         * either.
          */
-        THE_RULES_LEAVE_NO_VALUE_THAT_WAY,
+        NO_VALUE_CAN_GO_THAT_WAY,
 
         /**
          * Holding the row to it would compose afresh a parameter the row writes as the value the

@@ -1186,7 +1186,7 @@
             "uniqueItems": true,
             "items": {
               "enum": [
-                "the_rules_prove_it",
+                "it_is_proved",
                 "a_row_is_at_it",
                 "a_value_was_built"
               ]
@@ -4631,12 +4631,12 @@
                 ]
               },
               "because": {
-                "description": "How the requirement came to that answer. Present with `requirement` except where that is `required`, whose answer is the row that was seen standing in and has nothing beside it. Four are the model's: `the_way_needs_one_position_to_be_two` is a way asking a position to be two things at once, `an_arm_nothing_reaches` a way through an arm no value arrives at, `a_condition_never_comes_out_that_way` a way past a condition every row brings out the other way — a predicate that always holds, or sides whose difference is the same on every row — and `the_rules_leave_no_value_for_it` a search proving the rules leave no value that takes the rule — the one of the four a search establishes, and it takes every way of standing the dependencies in to say so. The rest are about the inquiry — a row was composed and took another rule, a row was composed against less than the way asks, a run this reading could not place, a run nothing watched, or there was nothing composed to try the rule with. `a_composed_row_was_short_of_the_way` is the one to read no negative from: the row was built and run, and a row meeting some of what the way states reaches whatever such a row reaches, so where it went says nothing about the rule. `nothing_was_composed_to_try` says only that the inquiry had no candidate; what the composing fell short on is `synthesisShortfall`, a different question with a field of its own. A human report counts the rules under these rather than writing one line apiece, so this is what such a count is taken over.",
+                "description": "How the requirement came to that answer. Present with `requirement` except where that is `required`, whose answer is the row that was seen standing in and has nothing beside it. Four are the model's: `the_way_needs_one_position_to_be_two` is a way asking a position to be two things at once, `an_arm_nothing_reaches` a way through an arm no value arrives at, `a_condition_never_comes_out_that_way` a way past a condition every row brings out the other way — a predicate that always holds, or sides whose difference is the same on every row — and `no_value_can_take_it` a search proving no value takes the way to the rule, whether a rule or a type with too few values leaves none — the one of the four a search establishes, and it takes every way of standing the dependencies in to say so. The rest are about the inquiry — a row was composed and took another rule, a row was composed against less than the way asks, a run this reading could not place, a run nothing watched, or there was nothing composed to try the rule with. `a_composed_row_was_short_of_the_way` is the one to read no negative from: the row was built and run, and a row meeting some of what the way states reaches whatever such a row reaches, so where it went says nothing about the rule. `nothing_was_composed_to_try` says only that the inquiry had no candidate; what the composing fell short on is `synthesisShortfall`, a different question with a field of its own. A human report counts the rules under these rather than writing one line apiece, so this is what such a count is taken over.",
                 "enum": [
                   "the_way_needs_one_position_to_be_two",
                   "an_arm_nothing_reaches",
                   "a_condition_never_comes_out_that_way",
-                  "the_rules_leave_no_value_for_it",
+                  "no_value_can_take_it",
                   "a_composed_row_went_elsewhere",
                   "a_composed_row_was_short_of_the_way",
                   "the_rule_the_row_took_could_not_be_told",
@@ -4652,7 +4652,7 @@
                   "nothing_stands_in_for_a_dependency",
                   "a_table_is_what_this_needs",
                   "the_search_left_something_untried",
-                  "the_rules_leave_nothing_there",
+                  "no_value_can_stand_there",
                   "one_position_cannot_be_both",
                   "a_condition_never_comes_out_that_way",
                   "nothing_to_build_against",
@@ -5540,10 +5540,10 @@
                     },
                     "notOwed": {
                       "enum": [
-                        "the_rules_refuse_it",
+                        "no_value_can_stand_there",
                         "the_carrier_names_no_neighbour"
                       ],
-                      "description": "Why no row is owed here, present exactly when one is not. `the_rules_refuse_it` is the model's own answer — nothing outside an invariant's bound can be constructed, so the points out there are excluded and counted out, and a side the rules leave one value wide has no `in` point for the same reason. `the_carrier_names_no_neighbour` is this language having no name for the value one step from the line, which a `Decimal`, a `DateTime` and a `String` do not — at a place, and at the difference two terms of a line between them stand at. The two ask different things of a reader — one is the model having settled the point and the other is a limit of this language — which is why the key is a word and not a flag."
+                      "description": "Why no row is owed here, present exactly when one is not. `no_value_can_stand_there` is the model's own answer — nothing outside an invariant's bound can be constructed, so the points out there are excluded and counted out, a side one value wide has no `in` point for the same reason, and a count of a `Set<Bool>` past two has no value with no rule written. The word says that no value stands at the point and not what showed it: a type with few values, a rule on the type, a rule on a container's size and how many of an element's values meet a statement each show it, and two of them may show one point alike. `the_carrier_names_no_neighbour` is this language having no name for the value one step from the line, which a `Decimal`, a `DateTime` and a `String` do not — at a place, and at the difference two terms of a line between them stand at. The two ask different things of a reader — one is the model having settled the point and the other is a limit of this language — which is why the key is a word and not a flag."
                     },
                     "relation": {
                       "type": "string",
@@ -5566,12 +5566,12 @@
                       "uniqueItems": true,
                       "items": {
                         "enum": [
-                          "the_rules_prove_it",
+                          "it_is_proved",
                           "a_row_is_at_it",
                           "a_value_was_built"
                         ]
                       },
-                      "description": "Which grounds established that a row can be written at this point, empty where none did. A set: more than one holds at once wherever more than one was found, and no word here stands above another. `the_rules_prove_it` is the one ground about the model rather than about this run — every rule reaching the value this position sits in was read in full and leaves the point inside what they admit — so it stands whatever any search afterwards makes of the point, where the other two are what this run came to. `a_row_is_at_it` is a row this compilation read standing at the point, and holds exactly where `hit` is `true`. `a_value_was_built` is a value at the point built through the module's own decoders, and it is in no other field of this document: what the search itself came to is what the human-readable report and `--generate` carry. The order is fixed to the order the words are listed here so that two runs finding the same grounds write the same document; it carries no meaning, and a reader comparing these compares them as sets. Written exactly where a row is owed at the point, beside `knownWritable`, which is `true` exactly where this is non-empty; a point owed a row with no grounds is an empty array."
+                      "description": "Which grounds established that a row can be written at this point, empty where none did. A set: more than one holds at once wherever more than one was found, and no word here stands above another. `it_is_proved` is the one ground about the model rather than about this run — what the model says of the value this position sits in, its types and every rule reaching it, was read in full and leaves the point inside what it admits, and which of those showed it is not said — so it stands whatever any search afterwards makes of the point, where the other two are what this run came to. `a_row_is_at_it` is a row this compilation read standing at the point, and holds exactly where `hit` is `true`. `a_value_was_built` is a value at the point built through the module's own decoders, and it is in no other field of this document: what the search itself came to is what the human-readable report and `--generate` carry. The order is fixed to the order the words are listed here so that two runs finding the same grounds write the same document; it carries no meaning, and a reader comparing these compares them as sets. Written exactly where a row is owed at the point, beside `knownWritable`, which is `true` exactly where this is non-empty; a point owed a row with no grounds is an empty array."
                     },
                     "status": {
                       "$ref": "#/$defs/status"

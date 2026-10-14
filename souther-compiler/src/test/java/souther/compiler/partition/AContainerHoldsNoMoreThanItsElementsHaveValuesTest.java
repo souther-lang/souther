@@ -151,9 +151,9 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
             BorderAssessment line = lineOf(MODEL.formatted(TYPES, each.type(), each.size(),
                     each.most()), "p", Integer.toString(each.most()));
 
-            assertEquals(new ItemAssessment.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+            assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                     line.items().get(new DomainPoint.BesideTheLine(Towards.ABOVE)), each.type());
-            assertEquals(new ItemAssessment.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+            assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                     line.items().get(new DomainPoint.InTheRegion(Towards.ABOVE)), each.type());
             // The number itself is one such a value holds, so the end refuses nothing short of it,
             // and a value holding that many is built: every value of what it holds apart, once.
@@ -180,17 +180,17 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
 
     /**
      * A guard asking a set for more than its element has values is one no row goes past, and each
-     * way past it is said as the rules leaving no value that way — not as a way nothing here could
-     * hold a row to, which would leave an author looking for a row nobody can write.
+     * way past it is said as one no value can go — not as a way nothing here could hold a row to,
+     * which would leave an author looking for a row nobody can write.
      *
      * <p>Both ways of writing that, and none of the guards a row does go past: as many as there
      * are, fewer, and a set of an element with no end of values. A row going past one of those is
-     * looked for and offered, and no way past it is said to be one the rules leave nothing on.
+     * looked for and offered, and no way past it is said to be one no value can go.
      */
     @Test
-    void aGuardAskingForMoreValuesThanThereAreIsOneTheRulesLetNoRowPast() {
+    void aGuardAskingForMoreValuesThanThereAreIsOneNoRowGoesPast() {
         RepairShortfall.WayPast leftNoValue = new RepairShortfall.WayPast.NotSearchable(
-                RepairShortfall.Barrier.THE_RULES_LEAVE_NO_VALUE_THAT_WAY);
+                RepairShortfall.Barrier.NO_VALUE_CAN_GO_THAT_WAY);
         record Case(String type, String guard, boolean past) {}
         for (Case each : List.of(
                 new Case("Set<Code>", "Set.size(s) >= 3", false),
@@ -313,9 +313,9 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
      */
     private static void assertEndsAt(String model, int most, String said) {
         BorderAssessment line = countLineOf(model, most, said);
-        assertEquals(new ItemAssessment.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+        assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                 line.items().get(new DomainPoint.BesideTheLine(Towards.ABOVE)), said);
-        assertEquals(new ItemAssessment.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+        assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                 line.items().get(new DomainPoint.InTheRegion(Towards.ABOVE)), said);
         assertTrue(line.items().get(new DomainPoint.AtTheLine()) instanceof ItemAssessment.Owed,
                 () -> said + " " + line.items());
@@ -538,7 +538,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
         Compilation compilation =
                 Compilation.ofSources(List.of(SERVICES, PICKING), ModulePath.EMPTY);
 
-        assertEquals(new ItemAssessment.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+        assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                 lineOf(compilation, "app.p", "3").items()
                         .get(new DomainPoint.BesideTheLine(Towards.ABOVE)));
     }
@@ -553,7 +553,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     void anEditToTheElementMovesTheEnd() {
         Compilation compilation = Compilation.ofDocuments(
                 Map.of("s", SERVICES, "p", PICKING), Set.of(), ModulePath.EMPTY);
-        assertEquals(new ItemAssessment.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+        assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                 lineOf(compilation, "app.p", "3").items()
                         .get(new DomainPoint.BesideTheLine(Towards.ABOVE)));
 

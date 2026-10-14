@@ -32,9 +32,9 @@ class AProofIsNotToldAsASearchThatTriedEverythingTest {
     @Test
     void theRulesLeavingNothingIsSaidWithoutASearch() {
         String said = GeneratedRows.why(
-                Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
+                Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
 
-        assertTrue(said.contains("the rules leave no value"),
+        assertTrue(said.contains("no value can stand"),
                 () -> "what the model settles is what is said: " + said);
         for (String word : OF_A_SEARCH) {
             assertFalse(said.contains(word),

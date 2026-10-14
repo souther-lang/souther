@@ -134,7 +134,7 @@ class ARuleNoReadingTakesInIsStillOneTest {
 
     /** Every place the report says the rules leave nothing, which is what may not move. */
     private static List<String> emptyPlaces(String report) {
-        return report.lines().filter(each -> each.contains("the rules leave no value there"))
+        return report.lines().filter(each -> each.contains("no value can stand there"))
                 .map(String::strip).sorted().toList();
     }
 

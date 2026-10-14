@@ -484,11 +484,11 @@ public final class Generator {
              *
              * <p>What it licenses is one thing either way, which is why it is one word: nothing here
              * was shown about the model, so a reader may not act on it as they may act on
-             * {@link #THE_RULES_LEAVE_NOTHING_THERE}.
+             * {@link #NO_VALUE_CAN_STAND_THERE}.
              */
             THE_SEARCH_LEFT_SOMETHING_UNTRIED,
             /**
-             * The rules leave no value here.
+             * No value can stand here.
              *
              * <p>Apart from every other word here, and the difference is the whole point of having
              * it. The rest say what this compiler did not manage; this one says what the model
@@ -496,15 +496,16 @@ public final class Generator {
              *
              * <p><b>The word is the theorem and not the way it was come by.</b> Two routes reach it
              * and ADR-0091 admits both: a walk of the whole of what the rules leave that reached
-             * nothing, and rules shown to leave nothing before anything was walked. What a reader
-             * does about it is the same either way, and a word that also said which route it was
-             * would be false on one of them the moment the other was added — which it was.
+             * nothing, and the model shown to leave nothing before anything was walked. And what
+             * shows it may be a rule or no rule at all — a {@code Set<Bool>} asked for three
+             * elements is refused by its element having two values. What a reader does about it is
+             * the same whichever, and a word that also said which would be false on the others.
              */
-            THE_RULES_LEAVE_NOTHING_THERE,
+            NO_VALUE_CAN_STAND_THERE,
             /**
              * One position of the row would have to be two things at once.
              *
-             * <p>What the model settles, as {@link #THE_RULES_LEAVE_NOTHING_THERE} is, and not
+             * <p>What the model settles, as {@link #NO_VALUE_CAN_STAND_THERE} is, and not
              * something this compiler fell short of. A class under one case of a sum and a class
              * under another are classes of positions that are not in one value: no row is a
              * {@code FeedQuery} and has a {@code GlobalQuery}'s {@code tag}. Reported as a value
@@ -682,7 +683,7 @@ public final class Generator {
              */
             public boolean provesInfeasible() {
                 return switch (this) {
-                    case THE_RULES_LEAVE_NOTHING_THERE, ONE_POSITION_CANNOT_BE_BOTH,
+                    case NO_VALUE_CAN_STAND_THERE, ONE_POSITION_CANNOT_BE_BOTH,
                          A_CONDITION_NEVER_COMES_OUT_THAT_WAY -> true;
                     // Every one of these is this compiler falling short, and none of them is the
                     // model saying anything: another value of the same classes may well build.
@@ -836,7 +837,7 @@ public final class Generator {
                     // what somebody else did: the model settling the point, a candidate refused, a
                     // module with no classes, a position held back, a group never offered.
                     case ALL_CANDIDATES_REJECTED, NOT_ALL_CANDIDATES_COULD_BE_OFFERED,
-                         THE_RULES_LEAVE_NOTHING_THERE,
+                         NO_VALUE_CAN_STAND_THERE,
                          NOTHING_STANDS_IN_FOR_A_DEPENDENCY, A_TABLE_IS_WHAT_THIS_NEEDS,
                          ONE_POSITION_CANNOT_BE_BOTH, A_CONDITION_NEVER_COMES_OUT_THAT_WAY,
                          NOTHING_TO_BUILD_AGAINST,
@@ -1891,7 +1892,7 @@ public final class Generator {
                 classAnswers.put(asked, new ClassDisposition.Unresolved(
                         CameToNothing.metNothing(new UnresolvedCombination(
                                 List.of(labelOf(subject, asked)),
-                                UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE))));
+                                UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE))));
             }
         }
         // And the combinations the body settles a value by, where those are what this behavior is
@@ -2945,9 +2946,9 @@ public final class Generator {
                     continue;
                 }
                 switch (holding.at(each.at())) {
-                    case HeldOutcome.Bringing.TheRulesLeaveNoValueThere _ -> {
+                    case HeldOutcome.Bringing.NoValueCanStandThere _ -> {
                         return new WayPastTheGuard.Barred(
-                                RepairShortfall.Barrier.THE_RULES_LEAVE_NO_VALUE_THAT_WAY);
+                                RepairShortfall.Barrier.NO_VALUE_CAN_GO_THAT_WAY);
                     }
                     case HeldOutcome.Bringing.NothingFound _ -> {
                         if (barred == null) {
@@ -5162,7 +5163,7 @@ public final class Generator {
         for (ReachabilityGap gap : where.unrepresented().onTheWay()) {
             if (gap instanceof ReachabilityGap.ProvedImpossible) {
                 return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
-                        UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
+                        UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE),
                         where.unrepresented());
             }
         }
@@ -9256,7 +9257,7 @@ public final class Generator {
         for (ReachabilityGap gap : where.unrepresented().onTheWay()) {
             if (gap instanceof ReachabilityGap.ProvedImpossible) {
                 return new HeldTogether.Refused(new Attempt(null,
-                        UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE, null,
+                        UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE, null,
                         Optional.empty()));
             }
         }
@@ -11877,7 +11878,7 @@ public final class Generator {
             return new BoundaryAttempt.Unresolved(
                     UnresolvedCombination.atAPoint(label,
                             settlesTheQuestion() && ofWhatThePointFixes
-                                    ? UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE
+                                    ? UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE
                                     : reason(),
                             said()),
                     unrepresented);

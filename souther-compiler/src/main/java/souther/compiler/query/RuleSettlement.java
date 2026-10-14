@@ -60,7 +60,7 @@ public record RuleSettlement(RuleRequirement requirement, RuleSearch search,
                  RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
                     search instanceof RuleSearch.NotMade;
             // And the one the composings themselves proved, which is what they came back with.
-            case RuleRequirement.Excluded.TheRulesLeaveNoValueForIt _ ->
+            case RuleRequirement.Excluded.NoValueCanTakeIt _ ->
                     search instanceof RuleSearch.CameToNothing;
             // The inquiry having had no candidate is that same shape without the proof.
             case RuleRequirement.Unsettled.NothingWasComposedToTry _ ->
@@ -104,15 +104,15 @@ public record RuleSettlement(RuleRequirement requirement, RuleSearch search,
     }
 
     /**
-     * A rule every way of standing the dependencies in proved the rules leave no value for, in the
-     * words those composings came back with.
+     * A rule every way of standing the dependencies in proved no value takes, in the words those
+     * composings came back with.
      *
      * <p>The universal is the caller's to establish
      * ({@link Adequacy.DecisionSearch#provedByEveryWay}) and is not a claim this value makes: what
      * is held is what each composing said, the way a point holds its searches.
      */
     public static RuleSettlement provedNothingTakesIt(RuleSearch.CameToNothing proofs) {
-        return new RuleSettlement(new RuleRequirement.Excluded.TheRulesLeaveNoValueForIt(), proofs,
+        return new RuleSettlement(new RuleRequirement.Excluded.NoValueCanTakeIt(), proofs,
                 souther.compiler.partition.CompositionAccount.NOTHING);
     }
 

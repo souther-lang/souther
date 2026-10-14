@@ -225,7 +225,7 @@ final class TermRealizations {
          * try. Nothing here can tell them apart, so a walk that ran to the end of what it was
          * handed may have run to the end of one candidate — and this word is the one that says so
          * rather than the one that settles the class. What licenses a sentence about the model is
-         * {@link Generator.UnresolvedCombination.Reason#THE_RULES_LEAVE_NOTHING_THERE}, and
+         * {@link Generator.UnresolvedCombination.Reason#NO_VALUE_CAN_STAND_THERE}, and
          * nothing reaches it by counting what a walk refused.
          *
          * <p>The word is how a reader downstream treats it and {@code detail} is what happened in

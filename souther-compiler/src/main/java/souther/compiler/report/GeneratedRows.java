@@ -208,7 +208,7 @@ public final class GeneratedRows {
                 case BorderAccount.Unmet.TheLineCannotBeWritten(var owedBy, var asked, var _) ->
                         say(out, said, String.format(
                                 "// no row can be written at `%s` owed by `%s`: every reading of the"
-                                        + " line was searched and the rules leave no value at it%n",
+                                        + " line was searched and no value can stand at it%n",
                                 asked, owedBy));
                 // One line per reading, because they are not one fact: a reading whose rules leave
                 // nothing at its own position and one whose search stopped are different news, and
@@ -1225,8 +1225,8 @@ public final class GeneratedRows {
                     switch (why) {
                         case NOTHING_HOLDS_A_ROW_TO_IT -> "nothing here can hold a row to it, so it"
                                 + " was not looked for — which does not make it a way no row goes";
-                        case THE_RULES_LEAVE_NO_VALUE_THAT_WAY -> "the rules leave no value that"
-                                + " way, so no row goes this way";
+                        case NO_VALUE_CAN_GO_THAT_WAY -> "no value can go that way, so no row"
+                                + " goes this way";
                         case IT_WOULD_REWRITE_A_STATED_VALUE -> "a row going this way would write"
                                 + " afresh a value the module states, which the row keeps as"
                                 + " written, so it was not looked for";
@@ -1373,9 +1373,10 @@ public final class GeneratedRows {
             // Two routes reach here — a walk of the whole of what the rules leave that reached
             // nothing, and a proof that was in hand before anything was walked — and a sentence
             // saying everything was tried is false of the second and tells a reader of the first
-            // something they cannot act on either.
-            case THE_RULES_LEAVE_NOTHING_THERE ->
-                    "the rules leave no value here";
+            // something they cannot act on either. Nor which part of the model proved it: a type
+            // with two values leaves nothing past them with no rule written.
+            case NO_VALUE_CAN_STAND_THERE ->
+                    "no value can stand here";
             case ONE_POSITION_CANNOT_BE_BOTH ->
                     "it would need one position to be two things at once, which no value is, so"
                             + " there is no row to write";

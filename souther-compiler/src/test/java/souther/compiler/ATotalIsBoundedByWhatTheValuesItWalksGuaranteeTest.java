@@ -132,7 +132,7 @@ class ATotalIsBoundedByWhatTheValuesItWalksGuaranteeTest {
         String said = report(AMOUNTS);
 
         assertTrue(said.contains("no OUT point is owed at List.sum(items[*].cost) = 0"
-                + " (comparison@18:24): excluded — the rules leave no value there"), said);
+                + " (comparison@18:24): excluded — no value can stand there"), said);
     }
 
     /** And the same where the amounts are reached through a sum, which is where the issue was found. */
@@ -141,7 +141,7 @@ class ATotalIsBoundedByWhatTheValuesItWalksGuaranteeTest {
         String said = report(UNDER_A_SUM);
 
         assertTrue(said.contains("no OUT point is owed at List.sum(items[*].cost.amount) = 0"
-                + " (comparison@23:24): excluded — the rules leave no value there"), said);
+                + " (comparison@23:24): excluded — no value can stand there"), said);
     }
 
     /** Neither of them owes it, said of the whole report: a line removed from one model and left on
@@ -172,7 +172,7 @@ class ATotalIsBoundedByWhatTheValuesItWalksGuaranteeTest {
     void numbersNothingDeclaresStillOweThePointBelowTheLine() {
         String said = report(PLAIN_NUMBERS);
 
-        assertFalse(said.contains("excluded — the rules leave no value there"), said);
+        assertFalse(said.contains("excluded — no value can stand there"), said);
         assertTrue(said.contains("OUT point"),
                 () -> "nothing bounds these below, so the point below the line is owed: " + said);
     }

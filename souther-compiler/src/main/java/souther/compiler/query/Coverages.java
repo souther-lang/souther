@@ -1776,7 +1776,7 @@ final class Coverages {
                                             java.util.List.of(label),
                                             souther.compiler.partition.Generator
                                                     .UnresolvedCombination.Reason
-                                                    .THE_RULES_LEAVE_NOTHING_THERE), within)),
+                                                    .NO_VALUE_CAN_STAND_THERE), within)),
                             Optional.empty());
                     // A walk that reached no placement. Where a budget of this compiler's is why it
                     // reached none, that travels: the point is one this declined to look further

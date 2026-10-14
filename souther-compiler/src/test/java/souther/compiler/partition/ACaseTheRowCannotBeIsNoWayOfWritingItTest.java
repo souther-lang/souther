@@ -72,7 +72,7 @@ class ACaseTheRowCannotBeIsNoWayOfWritingItTest {
         Generator.BoundaryAttempt.Unresolved unresolved = assertInstanceOf(
                 Generator.BoundaryAttempt.Unresolved.class, composing(rowIsA("P")));
 
-        assertEquals(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE,
+        assertEquals(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE,
                 unresolved.why().reason(), unresolved.toString());
     }
 

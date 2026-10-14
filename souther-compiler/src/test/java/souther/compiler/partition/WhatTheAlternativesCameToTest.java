@@ -72,7 +72,7 @@ class WhatTheAlternativesCameToTest {
     }
 
     private static final Tried PROOF =
-            tried(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
+            tried(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
     private static final Tried ANOTHER_PROOF =
             tried(Generator.UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH);
     private static final Tried NOTHING_COMPOSED =
@@ -270,11 +270,11 @@ class WhatTheAlternativesCameToTest {
                         Optional.empty()).why().reason());
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                 turnedAway.published(List.of(),
-                        Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE, null,
+                        Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE, null,
                         Optional.empty()).why().reason());
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                 A_CASE_NOBODY_READ.published(List.of(),
-                        Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE, null,
+                        Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE, null,
                         Optional.empty()).why().reason());
         CameToNothing offeredShort = SearchShortfall.of(ASSIGNMENTS, SHORT_AT_THE_CODE)
                 .published(List.of(), Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,

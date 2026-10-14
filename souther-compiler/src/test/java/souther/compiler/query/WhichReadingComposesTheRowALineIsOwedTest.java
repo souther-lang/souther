@@ -355,6 +355,6 @@ class WhichReadingComposesTheRowALineIsOwedTest {
      *  answer a reader may act on (ADR-0091). */
     private static Generator.UnresolvedCombination nothingThere() {
         return new Generator.UnresolvedCombination(List.of(SAID),
-                Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
+                Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
     }
 }

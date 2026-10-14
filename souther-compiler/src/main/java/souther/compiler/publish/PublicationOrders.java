@@ -541,7 +541,7 @@ public final class PublicationOrders {
      */
     public static final CanonicalSelection.Order<ItemAssessment.WritabilityEvidence.Ground>
             WRITABILITY_GROUNDS = CanonicalSelection.Order.overValues(List.of(
-                    ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT,
+                    ItemAssessment.WritabilityEvidence.Ground.IT_IS_PROVED,
                     ItemAssessment.WritabilityEvidence.Ground.A_ROW_IS_AT_IT,
                     ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT));
 
@@ -578,7 +578,7 @@ public final class PublicationOrders {
             // reading about the same refusals: these were refused too, and what they were is not
             // everything the position had.
             case NOT_ALL_CANDIDATES_COULD_BE_OFFERED -> 1;
-            case THE_RULES_LEAVE_NOTHING_THERE -> 2;
+            case NO_VALUE_CAN_STAND_THERE -> 2;
             case ONE_POSITION_CANNOT_BE_BOTH -> 3;
             case A_CONDITION_NEVER_COMES_OUT_THAT_WAY -> 4;
             // After what the model settles and before what this compiler fell short of: it is what

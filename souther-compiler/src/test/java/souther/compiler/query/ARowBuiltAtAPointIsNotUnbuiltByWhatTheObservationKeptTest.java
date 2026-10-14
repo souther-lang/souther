@@ -117,7 +117,7 @@ class ARowBuiltAtAPointIsNotUnbuiltByWhatTheObservationKeptTest {
      */
     @Test
     void aRowNothingPlacedIsNotGroundsForAnything() {
-        assertEquals(List.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
+        assertEquals(List.of(ItemAssessment.WritabilityEvidence.Ground.IT_IS_PROVED),
                 line(Limits.DEFAULT.maxText() + 1).owedAt(PointRole.ON)
                         .writabilityEvidence().grounds().written(),
                 "the rules still prove it; the row that was not placed adds nothing");

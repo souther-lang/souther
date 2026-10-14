@@ -593,7 +593,7 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
         }
         assertFalse(said.isEmpty());
         assertFalse(said.contains(
-                Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
+                Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE),
                 said::toString);
     }
 

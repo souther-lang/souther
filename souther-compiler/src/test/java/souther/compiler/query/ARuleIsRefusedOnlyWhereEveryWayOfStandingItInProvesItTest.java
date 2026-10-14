@@ -91,7 +91,7 @@ class ARuleIsRefusedOnlyWhereEveryWayOfStandingItInProvesItTest {
     }
 
     private static Generator.UnresolvedCombination leavesNothing() {
-        return word(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
+        return word(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
     }
 
     private static Generator.UnresolvedCombination positionCannotBeBoth() {

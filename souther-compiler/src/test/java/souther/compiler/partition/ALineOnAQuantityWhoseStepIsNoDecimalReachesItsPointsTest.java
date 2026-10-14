@@ -108,7 +108,7 @@ class ALineOnAQuantityWhoseStepIsNoDecimalReachesItsPointsTest {
                         .answer(new DomainPoint.BesideTheLine(Towards.ABOVE)),
                 "a third past one is under two, so a row is owed there");
 
-        assertEquals(new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+        assertEquals(new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                 lineAtOne(new NumericDomain.Bounds(null, Endpoint.inclusive(Count.of(1))))
                         .answer(new DomainPoint.BesideTheLine(Towards.ABOVE)),
                 "and over one, so a range stopping there leaves it nowhere");

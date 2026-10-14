@@ -55,7 +55,7 @@ class AWayPastEveryElementIsOpenToAContainerHoldingNoneTest {
         Compilation compilation = measured();
         String report = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
-        assertFalse(report.contains("the rules leave no value at a rule of the decision"),
+        assertFalse(report.contains("no value can stand at a rule of the decision"),
                 () -> "a way an empty list takes is not one the rules close:\n" + report);
     }
 
