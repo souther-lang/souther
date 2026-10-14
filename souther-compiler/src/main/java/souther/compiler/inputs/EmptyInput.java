@@ -78,6 +78,22 @@ public sealed interface EmptyInput {
     record WhereARuleHoldsThePositionApart(NumericTerm term, Place fixed) implements EmptyInput {}
 
     /**
+     * Two positions a rule on the way holds against each other were fixed at places that do not
+     * stand to each other the way it says.
+     *
+     * <p>The same kind of fact as the one above, said of a pair: the two values are held against
+     * what was said about them, and the declarations were never asked. Its own arm because what
+     * contradicts is neither value alone — each of them is a place its own position admits.
+     *
+     * @param one        the position on the left of the rule
+     * @param oneFixed   where it was fixed
+     * @param other      the position on the right of the rule
+     * @param otherFixed where that was fixed
+     */
+    record HeldAgainstAnotherWhereItIsNot(NumericTerm one, Place oneFixed, NumericTerm other,
+                                          Place otherFixed) implements EmptyInput {}
+
+    /**
      * The declarations of every parameter and everything a caller took in, said together, leave no
      * value.
      *
