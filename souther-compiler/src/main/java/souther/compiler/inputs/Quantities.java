@@ -143,9 +143,8 @@ public sealed interface Quantities permits ReadQuantities {
     NumericTerm namedAt(NumericTerm.FromOnePosition term, TermPath at);
 
     /**
-     * The most the container standing at {@code at} holds: what the rules leave how many it holds,
-     * where a rule counts it, and otherwise what its type leaves that number — or every number
-     * where neither says.
+     * How many the rules leave the container standing at {@code at}, or every number where they
+     * leave it unsaid.
      *
      * <p>Answered here because both halves of it are this reading's: which positions hold a
      * container is what the reading found, and what its rules leave one of them is what the same

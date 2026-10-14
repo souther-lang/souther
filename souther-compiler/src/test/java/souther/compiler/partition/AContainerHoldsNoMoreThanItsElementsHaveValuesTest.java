@@ -77,6 +77,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
               invariant (value == "a" || value == "b") && %s
             data Flags = { c: Bool, n: Bool }
             data Bag = { items: Set<Flags> }
+            data Timed = { n: Bool, at: Slot }
             data Wide = { a: Bool, b: Bool, c: Bool, d: Bool, e: Bool, f: Bool, g: Bool, h: Bool,
                           i: Bool }
             """.formatted(ARuleNoReadingTakesIn.about("value"));
@@ -262,18 +263,19 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
      * of a set no more than how many values of its element meet it: the points past that are
      * refused, and the point at it and the ones below are not.
      *
-     * <p>Each with the most worked out by hand. Where the statement reads something beside the
-     * element, or the set is not a parameter, the most is the one the container holds, which is
-     * an end and no claim that a set of that many meeting the statement is there to be written.
+     * <p>Each with the most worked out by hand. An end is no claim that a set of that many meeting
+     * the statement is there to be written, so nothing here asks for one.
      */
     @Test
     void aCountOfTheElementsMeetingAStatementEndsWhereTheElementsValuesMeetingItDo() {
-        // Beside something the statement reads that a row holding one element writes nothing at:
-        // a truth it could not tell, and a number it would fail of.
+        // Beside a parameter the statement reads, whose value nothing about the element says: an
+        // element meets it where it could, and fails it where it fails whatever that value is.
         record Beside(String type, String count, int most) {}
         for (Beside each : List.of(
                 new Beside("Bool", "Set.size(Set.filter(x -> x.n || b, s))", 4),
-                new Beside("Int", "Set.size(Set.filter(x -> x.n || b > 3, s))", 4))) {
+                new Beside("Int", "Set.size(Set.filter(x -> x.n || b > 3, s))", 4),
+                new Beside("Bool", "Set.size(Set.filter(x -> x.n && b, s))", 2),
+                new Beside("Int", "Set.size(Set.filter(x -> x.n && b > 3, s))", 2))) {
             assertEndsAt(BESIDE.formatted(TYPES, each.type(), each.count(), each.most()),
                     each.most(), each.type() + " " + each.count());
         }
@@ -290,8 +292,12 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
                 // A number among the element's values, each of which is a value the rules name. Its
                 // line is drawn at another value than the count's.
                 new Held("Set<Odd>", "Set.size(Set.filter(x -> x.value >= 3, s))", 2),
-                // A set inside a record holds at most its element's values, whatever it meets.
-                new Held("Bag", "Set.size(Set.filter(x -> x.n, s.items))", 4),
+                // A number its rules leave a run of so many whole numbers, every one of them read,
+                // alone and as a part of a record.
+                new Held("Set<Slot>", "Set.size(Set.filter(x -> x.value > 3, s))", 2),
+                new Held("Set<Timed>", "Set.size(Set.filter(x -> x.n, s))", 5),
+                // A set inside a record, read the same way as one at a parameter.
+                new Held("Bag", "Set.size(Set.filter(x -> x.n, s.items))", 2),
                 // A list holds a value over again, and what its rules leave its size is its end.
                 new Held("Short", "List.length(List.filter(x -> x, s.value))", 2))) {
             assertEndsAt(MODEL.formatted(TYPES, each.type(), each.count(), each.most()),

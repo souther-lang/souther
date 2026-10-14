@@ -822,8 +822,9 @@ public sealed interface BorderQuantity
          * nothing is added to it. With a form added, the sum runs wherever the form's numbers do,
          * and is left unbounded.
          *
-         * <p>Two of these with different ends are two quantities, whatever they count: what the
-         * rules leave them differs, and a map holding one would answer for the other.
+         * <p>The most is not part of which quantity this is, as the orders of the form's numbers
+         * are not: both are what the reading has of the count, and a reading works out one most
+         * for each count it reads ({@link HowManyCanMeet#of}).
          */
         NumericDomain.Bounds runs() {
             if (!against.coefs().isEmpty()) {
@@ -1054,12 +1055,12 @@ public sealed interface BorderQuantity
         @Override
         public boolean equals(Object other) {
             return other instanceof HowMany that && counted.equals(that.counted)
-                    && against.equals(that.against) && most.equals(that.most);
+                    && against.equals(that.against);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(counted, against, most);
+            return Objects.hash(counted, against);
         }
 
         @Override

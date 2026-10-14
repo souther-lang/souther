@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 
@@ -82,6 +83,14 @@ public final class InputReading {
     /** The scope and the clause representation the two were read against. */
     public RuleReadingSource rules() {
         return rules;
+    }
+
+    /**
+     * The world the two were read in, for a reader going on to read the declarations they reach:
+     * the same rules under the same budget, borrowing what this reading's own walk made of them.
+     */
+    public RuleReadingContext ruleReading() {
+        return RuleReadingContext.of(rules, domain.policy(), domain.machines());
     }
 
     /** The names the two were read against. */

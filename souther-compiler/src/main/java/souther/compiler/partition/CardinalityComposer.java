@@ -481,8 +481,7 @@ final class CardinalityComposer {
         boolean distinct = !ElementsKeptApart.at(view, keptApart, reading).isEmpty();
         Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
-        ElementsOfAParameter ofTheElement = ElementsOfAParameter.of(container, sourceType,
-                holding.element(), reading,
+        ElementValues ofTheElement = ElementValues.of(container, holding.element(), reading,
                 at -> numbersAt(at, asked, measuring, within, distinct ? MOST_ELEMENTS : 1,
                         unheld, unnamed));
         if (ofTheElement == null) {
@@ -493,7 +492,7 @@ final class CardinalityComposer {
         Groups<ObservedValue> every = new Groups<>(new ArrayList<>(), new ArrayList<>(),
                 new LinkedHashSet<>());
         for (ObservedValue value : listed.values()) {
-            BorderQuantity.Observation row = ofTheElement.holding(List.of(value));
+            BorderQuantity.Observation row = ofTheElement.holding(sourceType, List.of(value));
             every.add(value, i -> ofAnElement.get(i).apply(row), asked.size());
         }
         Groups<ObservedValue> groups = every.keptBy(asked);
@@ -513,7 +512,7 @@ final class CardinalityComposer {
                     return false;
                 }
                 List<ObservedValue> values = groups.drawn(share, distinct);
-                BorderQuantity.Observation whole = ofTheElement.holding(values);
+                BorderQuantity.Observation whole = ofTheElement.holding(sourceType, values);
                 for (Asked each : asked) {
                     // A count reads the container through the row and not the values handed it.
                     if (!(each.over(container, List.of(), whole)

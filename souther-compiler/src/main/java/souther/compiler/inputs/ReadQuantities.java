@@ -1,7 +1,6 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.NumberAt;
-import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.ConstraintState;
 import souther.compiler.check.Emptiness;
@@ -340,9 +339,6 @@ final class ReadQuantities implements Quantities {
         }
         NumericTerm counted = howManyItHolds(at.at());
         if (counted == null) {
-            counted = howManyItsTypeHolds(at.at());
-        }
-        if (counted == null) {
             return Integer.MAX_VALUE;
         }
         // Asked of the rules when the question arrives rather than solved for every container as
@@ -382,33 +378,8 @@ final class ReadQuantities implements Quantities {
                 || !(taken.operation() instanceof ValueName.Stdlib operation)) {
             return null;
         }
-        NumericTerm.TakenOf term =
-                NumericTerm.TakenOf.asItStands(operation, at, typeAt.apply(at),
-                        ruleReading.source().inners(), ruleReading.source().symbols());
-        return term != null && term.takenAs() instanceof TakenAs.HowManyItHolds ? term : null;
-    }
-
-    /**
-     * The number that is how many the value at {@code at} holds as its type counts it, or null
-     * where its type counts nothing or no value this reading holds can name it.
-     *
-     * <p>For how many a container holds at most, where no rule counts it: what its type leaves that
-     * number is an end all the same — a set holds each value of its element once — and it is the
-     * end a rule taking {@code Set.size} of it is read against. Not for whether it holds something,
-     * which {@link #howManyItHolds} answers only where a rule counts it, so that a container no
-     * rule measures is never taken to be one that must hold something.
-     */
-    private NumericTerm howManyItsTypeHolds(TermPath at) {
-        if (rootOf(at) == null) {
-            return null;
-        }
-        Type type = typeAt.apply(at);
-        ValueName.Stdlib operation = type == null ? null
-                : NumericMeasures.takenOf(type, ruleReading.source().inners());
-        NumericTerm.TakenOf term = operation == null ? null
-                : NumericTerm.TakenOf.asItStands(operation, at, type,
-                        ruleReading.source().inners(), ruleReading.source().symbols());
-        return term != null && term.takenAs() instanceof TakenAs.HowManyItHolds ? term : null;
+        return NumericTerm.TakenOf.howManyHeldAt(operation, at, typeAt.apply(at),
+                ruleReading.source().inners(), ruleReading.source().symbols());
     }
 
     /**
