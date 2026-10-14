@@ -54,9 +54,10 @@ public final class ReplacementReading {
         record Noticed(RowIdentity by) implements Standing {}
 
         /** A row's run of the rewrite answered differently from the body, and no row came out
-         *  differently under it; {@code lookFor} is the rewrite as a search for a row telling it
-         *  apart is put to it. */
-        record Unnoticed(RowIdentity shownBy, ReplacementOwed lookFor) implements Standing {}
+         *  differently under it; {@code shownBy} is that row with the source it is written in,
+         *  which a row written without a name is told from another source's by, and
+         *  {@code lookFor} is the rewrite as a search for a row telling it apart is put to it. */
+        record Unnoticed(RowRef shownBy, ReplacementOwed lookFor) implements Standing {}
 
         /** No row came out differently under the rewrite and no run showed it answering
          *  differently: what is left to ask is whether any input would. */
@@ -244,7 +245,7 @@ public final class ReplacementReading {
                 });
             }
         }
-        RowIdentity shownBy = null;
+        RowOutcome shownBy = null;
         boolean unknown = false;
         List<List<ObservedValue>> seenThrough = new ArrayList<>();
         for (RowOutcome row : rows) {
@@ -275,7 +276,7 @@ public final class ReplacementReading {
                 return new Standing.Noticed(row.identity());
             }
             if (shownBy == null && run.changed() == AnswerChange.CHANGED) {
-                shownBy = row.identity();
+                shownBy = row;
             }
         }
         if (unknown) {
@@ -285,7 +286,8 @@ public final class ReplacementReading {
                 replaced.with(), where,
                 replacements.replacing(replaced.fork(), replaced.part(), replaced.with()),
                 seenThrough);
-        return shownBy != null ? new Standing.Unnoticed(shownBy, lookFor)
+        return shownBy != null
+                ? new Standing.Unnoticed(RowRef.of(shownBy), lookFor)
                 : new Standing.Open(lookFor);
     }
 
@@ -357,7 +359,7 @@ public final class ReplacementReading {
         // A row whose own answer was another value is a run the rewrite answers differently.
         for (int i = 0; i < answered.size(); i++) {
             if (!comparing.same(values.get(i), always)) {
-                return new Standing.Unnoticed(answered.get(i).identity(),
+                return new Standing.Unnoticed(RowRef.of(answered.get(i)),
                         new ReplacementOwed.ByOneAnswer(rewrite));
             }
         }

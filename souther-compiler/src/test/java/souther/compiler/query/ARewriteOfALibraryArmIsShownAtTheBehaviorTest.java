@@ -191,8 +191,8 @@ class ARewriteOfALibraryArmIsShownAtTheBehaviorTest {
                 .toList();
 
         assertTrue(said.contains("No row of `keepInTheLibrary` would come out differently if the"
-                        + " `then` arm of a fork it reaches in code this build holds no source of"
-                        + " answered as the `else` arm."),
+                        + " `then` arm of a fork of `souther.int.max`, which this build holds no"
+                        + " source of, answered as the `else` arm."),
                 () -> "what a build is told: " + said);
         assertTrue(said.contains("No row of `keepHere` would come out differently if the `then`"
                         + " arm of this fork answered as the `else` arm."),

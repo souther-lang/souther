@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.MeasureReason;
+import souther.compiler.observe.RowRef;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.observe.RowIdentity;
@@ -153,11 +154,17 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
     /** Which row shows a rewrite answering differently from the body. */
     public sealed interface ShownBy {
 
-        /** A row the module writes: its run under the rewrite answered differently. */
-        record AWrittenRow(RowIdentity identity) implements ShownBy {
+        /**
+         * A row the module writes: its run under the rewrite answered differently.
+         *
+         * @param rowRef which row, with the source it is written in: a row written without a name
+         *               is numbered within its source, and two sources each have a first row.
+         *               Where it is written is asked by whoever sends a reader there
+         */
+        record AWrittenRow(RowRef rowRef) implements ShownBy {
 
             public AWrittenRow {
-                Objects.requireNonNull(identity, "a written row is some row");
+                Objects.requireNonNull(rowRef, "a written row is some row");
             }
         }
 

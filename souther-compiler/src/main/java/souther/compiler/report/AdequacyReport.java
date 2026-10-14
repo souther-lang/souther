@@ -109,6 +109,7 @@ import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.query.About;
 import souther.compiler.query.CombinationCriterion;
 import souther.compiler.query.DecisionEvidence;
+import souther.compiler.query.Db;
 import souther.compiler.query.InteractionEvidence;
 import souther.compiler.query.ReplacementEvidence;
 import souther.compiler.query.ReplacementAsWritten;
@@ -1135,37 +1136,53 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (about.isEmpty()) {
             return Map.of();
         }
-        DecisionRuleReading.Places places =
-                DecisionRuleReading.Places.of(placesOf(compilation, module), behavior);
+        DecisionRuleReading.Places places = placesFor(compilation.db(), module, behavior);
         Map<DecisionReading.Ruled, List<ShownCondition>> out = new LinkedHashMap<>();
         for (DecisionReading.Ruled rule : decision.read().found()) {
-            if (!about.contains(rule)) {
-                continue;
+            if (about.contains(rule)) {
+                out.put(rule, conditionsOf(compilation.db(), module, places, rule));
             }
-            List<ShownCondition> shown = new ArrayList<>();
-            // One line per place the way consulted a condition at, naming every call it was
-            // consulted at there: one condition written twice is consulted at two places, and a
-            // helper's condition met at two calls is one place met twice.
-            for (RuleStep step : rule.steps()) {
-                Map<Optional<Citation>, DecisionRuleReading> readAt = new LinkedHashMap<>();
-                Map<Optional<Citation>, List<List<CallSite>>> callsAt = new LinkedHashMap<>();
-                for (ShownBy each : step.seen()) {
-                    DecisionRuleReading read = DecisionRuleReading.of(each, places);
-                    Optional<Citation> at =
-                            Optional.ofNullable(whereItIsWritten(compilation, read));
-                    readAt.putIfAbsent(at, read);
-                    List<List<CallSite>> calls = callsAt.computeIfAbsent(at,
-                            _ -> new ArrayList<>());
-                    each.copy().ifPresent(copy ->
-                            calls.add(callsOf(compilation, module,
-                                    StepOfACopy.of(copy.lineage()))));
-                }
-                readAt.forEach((at, read) ->
-                        shown.add(new ShownCondition(read, at.orElse(null), callsAt.get(at))));
-            }
-            out.put(rule, List.copyOf(shown));
         }
         return out;
+    }
+
+    /**
+     * Where the places of {@code behavior}'s plan are, which naming the arm a condition goes
+     * through takes.
+     */
+    static DecisionRuleReading.Places placesFor(Db db, String module, String behavior) {
+        return DecisionRuleReading.Places.of(placesOf(db, module), behavior);
+    }
+
+    /**
+     * Every condition {@code rule} turns on, as a reader is told it: one per place the way
+     * consulted a condition at, naming every call it was consulted at there. One condition written
+     * twice is consulted at two places, and a helper's condition met at two calls is one place met
+     * twice.
+     *
+     * <p>The one reading of a rule for every reader that says one — a page under its count, and a
+     * row composed for it — so that the two say a rule by the same conditions.
+     */
+    static List<ShownCondition> conditionsOf(Db db, String module,
+                                             DecisionRuleReading.Places places,
+                                             DecisionReading.Ruled rule) {
+        List<ShownCondition> shown = new ArrayList<>();
+        for (RuleStep step : rule.steps()) {
+            Map<Optional<Citation>, DecisionRuleReading> readAt = new LinkedHashMap<>();
+            Map<Optional<Citation>, List<List<CallSite>>> callsAt = new LinkedHashMap<>();
+            for (ShownBy each : step.seen()) {
+                DecisionRuleReading read = DecisionRuleReading.of(each, places);
+                Optional<Citation> at = Optional.ofNullable(whereItIsWritten(db, read));
+                readAt.putIfAbsent(at, read);
+                List<List<CallSite>> calls = callsAt.computeIfAbsent(at,
+                        _ -> new ArrayList<>());
+                each.copy().ifPresent(copy ->
+                        calls.add(callsOf(db, module, StepOfACopy.of(copy.lineage()))));
+            }
+            readAt.forEach((at, read) ->
+                    shown.add(new ShownCondition(read, at.orElse(null), callsAt.get(at))));
+        }
+        return List.copyOf(shown);
     }
 
     /**
@@ -1200,31 +1217,44 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (about.isEmpty()) {
             return Map.of();
         }
-        DecisionRuleReading.Places places =
-                DecisionRuleReading.Places.of(placesOf(compilation, module), behavior);
+        DecisionRuleReading.Places places = placesFor(compilation.db(), module, behavior);
         Map<ObligationIdentity.OfACombinationOfDecisions, List<List<ShownCondition>>> out =
                 new LinkedHashMap<>();
         for (ObligationIdentity.OfACombinationOfDecisions combination : about) {
-            List<InteractionRequirements.Way> ways = meetings.asked().ways().get(combination);
-            if (ways == null) {
-                throw new IllegalStateException("a line of `" + behavior + "` is about a"
-                        + " combination its measure states no way to: " + combination);
-            }
-            List<List<ShownCondition>> read = new ArrayList<>();
-            for (InteractionRequirements.Way way : ways) {
-                List<ShownCondition> shown = new ArrayList<>();
-                for (DecisionRuleReading.Seen each
-                        : DecisionRuleReading.ofAWay(way.claims(), places)) {
-                    shown.add(new ShownCondition(each.read(),
-                            whereItIsWritten(compilation, each.read()),
-                            each.through().isEmpty() ? List.of()
-                                    : List.of(callsOf(compilation, module, each.through()))));
-                }
-                read.add(shown);
-            }
-            out.put(combination, distinctWays(read));
+            out.put(combination, waysOf(compilation.db(), module, places, meetings, combination));
         }
         return out;
+    }
+
+    /**
+     * Every way to {@code combination} the measure holds it under, each as the conditions a run
+     * along it is seen at, as a reader is told them — and a way that reads like one before it said
+     * once.
+     *
+     * <p>The one reading of a combination for every reader that says one, as
+     * {@link #conditionsOf} is for a rule.
+     */
+    static List<List<ShownCondition>> waysOf(Db db, String module,
+                                             DecisionRuleReading.Places places,
+                                             InteractionEvidence meetings,
+                                             ObligationIdentity.OfACombinationOfDecisions combination) {
+        List<InteractionRequirements.Way> ways = meetings.asked().ways().get(combination);
+        if (ways == null) {
+            throw new IllegalStateException("a line of `" + combination.behavior() + "` is about"
+                    + " a combination its measure states no way to: " + combination);
+        }
+        List<List<ShownCondition>> read = new ArrayList<>();
+        for (InteractionRequirements.Way way : ways) {
+            List<ShownCondition> shown = new ArrayList<>();
+            for (DecisionRuleReading.Seen each
+                    : DecisionRuleReading.ofAWay(way.claims(), places)) {
+                shown.add(new ShownCondition(each.read(), whereItIsWritten(db, each.read()),
+                        each.through().isEmpty() ? List.of()
+                                : List.of(callsOf(db, module, each.through()))));
+            }
+            read.add(shown);
+        }
+        return distinctWays(read);
     }
 
     /**
@@ -1269,7 +1299,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (ModelOccurrence copy : copies) {
             out.computeIfAbsent(copy, _ -> new CopyShown(
                     Sites.placeIfKnown(compilation.db(), copy.origin()),
-                    callsOf(compilation, module, StepOfACopy.of(copy.lineage()))));
+                    callsOf(compilation.db(), module, StepOfACopy.of(copy.lineage()))));
         }
         return out;
     }
@@ -1332,11 +1362,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *
      * @param steps the steps of the copy, outermost first, as a lineage holds them
      */
-    private static List<CallSite> callsOf(Compilation compilation, String module,
-                                          List<StepOfACopy> steps) {
+    private static List<CallSite> callsOf(Db db, String module, List<StepOfACopy> steps) {
         List<CallSite> out = new ArrayList<>();
         for (StepOfACopy step : steps.reversed()) {
-            Answer<Citation> made = Sites.whereMade(compilation.db(), step);
+            Answer<Citation> made = Sites.whereMade(db, step);
             out.add(new CallSite(step, Sites.calledIn(step, module),
                     made.present() ? made.value() : null));
         }
@@ -1433,13 +1462,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * measure came to no answer states rules all the same, and asking that table for one of their
      * arms is a page failing on an arm it was never assembled with.
      */
-    private static Citation whereItIsWritten(Compilation compilation, DecisionRuleReading read) {
+    private static Citation whereItIsWritten(Db db, DecisionRuleReading read) {
         return switch (read) {
             case DecisionRuleReading.AComparisonCameOut(var comparison, var _) -> comparison.at();
             case DecisionRuleReading.AnApplicationAnswered(var application, var _) ->
                     application.writtenAt();
             case DecisionRuleReading.AForkTookAnArm(var _, var shownAt) ->
-                    Sites.placeOf(compilation.db(), shownAt);
+                    Sites.placeOf(db, shownAt);
             case DecisionRuleReading.AConditionIsNotShown _,
                     DecisionRuleReading.AnOutcomeIsNotPlaced _,
                     DecisionRuleReading.AForkIsNotPlaced _ -> null;
@@ -1472,9 +1501,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
 
     /** Where this compilation numbered the places a run through each construct is recorded. */
-    private static CoverageSites.Plan placesOf(Compilation compilation, String module) {
-        Bodies.Elaborated checked =
-                compilation.db().ask(new Bodies.Observable(module)).value();
+    private static CoverageSites.Plan placesOf(Db db, String module) {
+        Bodies.Elaborated checked = db.ask(new Bodies.Observable(module)).value();
         return checked == null ? CoverageSites.Plan.NONE : checked.plan();
     }
 
@@ -4065,8 +4093,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>Exhaustive with no {@code default}, so a shape added to the reading is one somebody words
      * rather than one that goes quiet.
      */
-    private static String said(ShownCondition shown, SourceId declaredIn,
-                               SourceRendering rendering) {
+    static String said(ShownCondition shown, SourceId declaredIn, SourceRendering rendering) {
         // And which call of the helper it is in, after what it is. A helper called three times is
         // one place in the source, and three conditions of a rule sent there alike are three a
         // reader cannot tell apart.

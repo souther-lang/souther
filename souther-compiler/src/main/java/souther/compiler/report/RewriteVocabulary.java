@@ -3,8 +3,6 @@ package souther.compiler.report;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.observe.RowRef;
 import souther.compiler.query.ReplacementAsWritten;
-import souther.compiler.types.ValueName;
-import souther.compiler.types.WrittenOwner;
 
 /**
  * What the reports written in one language call a rewrite of a body.
@@ -24,17 +22,12 @@ public final class RewriteVocabulary {
 
     /**
      * Where the fork of a rewrite this build holds no source of is, as far as this build can say:
-     * the definition that wrote it, as a reader of {@code module} names a definition of another
-     * module.
-     *
-     * <p>The definition and not the name a call reached it by. A rewrite is one for every call that
-     * reaches the fork, and each call may spell its way in differently; which definition wrote the
-     * fork is one answer for all of them, and is what tells two such forks apart.
+     * the definition that wrote it ({@link ReplacementAsWritten.OfAnArm#writtenBy}), as a reader of
+     * {@code module} names a definition of another module.
      */
     public static String outOfSight(ReplacementAsWritten.OfAnArm rewrite, String module) {
-        WrittenOwner.Body body = WrittenOwner.theBodyThatWrote(rewrite.replacement().fork().owner());
-        return "in a fork of `" + new ValueName.Helper(body.module(), body.definition())
-                .saidIn(module) + "` this build holds no source of";
+        return "in a fork of `" + rewrite.writtenBy().saidIn(module)
+                + "` this build holds no source of";
     }
 
     /** The word for the arm {@code rewrite} rewrites. */

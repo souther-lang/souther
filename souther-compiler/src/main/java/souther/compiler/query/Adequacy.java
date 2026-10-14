@@ -8239,25 +8239,28 @@ public final class Adequacy {
                         case About.ACombinationOfTwoClassesNoRowIsIn(var combination) ->
                                 new ExampleMessage.NoRowIsInThatCombinationOfClasses(
                                         twoClasses(combination), combination.behavior());
-                        // The behavior, and the rewrite by which sentence it is: an arm's is
-                        // pointed at the fork where there is one here to point at, and says the arm
-                        // and the sibling it answered as in the phrases an arm is said in. One of
-                        // the body answering one value says the row that came to that value, which
-                        // is what tells it from another value's.
+                        // The behavior, and the rewrite by what ReplacementAsWritten says tells it
+                        // from the others: an arm's is pointed at the fork where there is one here
+                        // to point at, and says the arm and the sibling it answered as in the
+                        // phrases an arm is said in — and the definition that wrote the fork where
+                        // there is not. One of the body answering one value says the row that came
+                        // to that value, and is marked there below.
                         case About.ARewriteNoRowTellsApart(var behavior, var written,
                                 var reportAt, var _, var _) -> switch (written) {
-                            case ReplacementAsWritten.OfAnArm(var rewrite, var arm, var sibling) -> {
-                                SourceConstruct construct = rewrite.fork().kind();
+                            case ReplacementAsWritten.OfAnArm rewrite -> {
+                                SourceConstruct construct = rewrite.replacement().fork().kind();
                                 yield switch (reportAt) {
                                     case ReplacementReportAnchor.AtTheFork _ ->
                                             new ExampleMessage.NoRowTellsTheArmFromItsSibling(
-                                                    phraseFor(construct, arm),
-                                                    phraseFor(construct, sibling), behavior);
+                                                    phraseFor(construct, rewrite.arm()),
+                                                    phraseFor(construct, rewrite.sibling()),
+                                                    behavior);
                                     case ReplacementReportAnchor.AtTheBehavior _ ->
                                             new ExampleMessage
                                                     .NoRowTellsAnArmOutOfSightFromItsSibling(
-                                                    phraseFor(construct, arm),
-                                                    phraseFor(construct, sibling), behavior);
+                                                    phraseFor(construct, rewrite.arm()),
+                                                    phraseFor(construct, rewrite.sibling()),
+                                                    rewrite.writtenBy().saidIn(module), behavior);
                                 };
                             }
                             case ReplacementAsWritten.ByOneAnswer(var rewrite) ->
@@ -8280,15 +8283,27 @@ public final class Adequacy {
                 case About.ACaseNoRowExpects(var _, var missing) ->
                         built.hint(new ExampleMessage.WriteARowExpectingThatCase(missing.name()));
                 // The row the two answer differently on: one composed, written as it would be
-                // offered, or one the module writes, whose answer is what is left to write down.
-                case About.ARewriteNoRowTellsApart(var _, var _, var _, var shownBy, var _) ->
-                        built.hint(switch (shownBy) {
-                            case ReplacementEvidence.ShownBy.AComposedRow(var inputs) ->
-                                    new ExampleMessage.WriteARowAtThatInput(
-                                            "(" + String.join(", ", inputs) + ")");
-                            case ReplacementEvidence.ShownBy.AWrittenRow(var row) ->
-                                    new ExampleMessage.WriteDownTheAnswerOfThatRow(row.shown());
-                        });
+                // offered, or one the module writes, whose answer is what is left to write down —
+                // marked where it is written, since a row written without a name is numbered
+                // within its source and the number alone can be another source's row. And the
+                // body answering one value marks the row that came to that value, for the same
+                // reason.
+                case About.ARewriteNoRowTellsApart(var _, var written, var _, var shownBy,
+                        var _) -> {
+                    if (written instanceof ReplacementAsWritten.ByOneAnswer(var rewrite)) {
+                        label(built, whereItIsWritten(db, module, rewrite.answeredBy()),
+                                new ExampleMessage.TheValueIsTheOneThisRowCameTo());
+                    }
+                    switch (shownBy) {
+                        case ReplacementEvidence.ShownBy.AComposedRow(var inputs) ->
+                                built.hint(new ExampleMessage.WriteARowAtThatInput(
+                                        "(" + String.join(", ", inputs) + ")"));
+                        case ReplacementEvidence.ShownBy.AWrittenRow(var row) ->
+                                label(built, whereItIsWritten(db, module, row),
+                                        new ExampleMessage.WriteDownTheAnswerOfThatRow(
+                                                row.identity().shown()));
+                    }
+                }
                 // The input the two lines part company at, where one was worked out. Said as a hint
                 // rather than in the sentence: the sentence is about the two lines, and this is the
                 // one row that settles which of them the model draws.
@@ -8719,6 +8734,28 @@ public final class Adequacy {
                 case Citation.Unplaced _, Citation.UnplacedElsewhere _ ->
                         built.hint(new ExampleMessage.OneConditionOfTheRuleIsNotShown());
             }
+        }
+
+        /**
+         * Where {@code row} is written, asked of the rows {@code module}'s reading saw — which is
+         * every row a finding about a rewrite can name, since each was read and ran.
+         *
+         * <p>Asked here, where a reader is about to be sent there, and not carried in the finding:
+         * a finding holds what it is about, and where a row stands is the source's to say.
+         *
+         * @throws Sites.NothingPlacesIt where no row of the reading is {@code row}
+         */
+        private static Citation whereItIsWritten(Db db, String module, RowRef row) {
+            Map<String, RowReading> readings = db.ask(new RowReadings(module)).value();
+            RowReading reading = readings == null ? null : readings.get(row.behavior());
+            if (reading != null) {
+                for (RowOutcome each : reading.rowsSeen()) {
+                    if (RowRef.of(each).equals(row)) {
+                        return Citation.of(each.at());
+                    }
+                }
+            }
+            throw new Sites.NothingPlacesIt(row);
         }
 
         private static String casesOf(SourceOutcome outcome) {

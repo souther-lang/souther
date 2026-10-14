@@ -7,9 +7,12 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -463,9 +466,48 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         assertFalse(moment.contains("2026-08-01T00:00:01 < x < 2026-08-01T00:00:02"),
                 "nothing lies strictly between two adjacent moments, so the two rules part them"
                         + " in one place and there is no class between: " + moment);
-        assertTrue(moment.contains("\"x=x <= 2026-08-01T00:00:01\""), moment);
-        assertTrue(moment.contains("\"x=2026-08-01T00:00:01 < x\""),
+        assertTrue(classesOffered(moment).contains("x=x <= 2026-08-01T00:00:01"), moment);
+        assertTrue(classesOffered(moment).contains("x=2026-08-01T00:00:01 < x"),
                 "and the position has the two classes either side of that one line: " + moment);
+    }
+
+    /**
+     * The classes a block offers a row for, whether as a row's name or over an unnamed row. A row
+     * composed for a class and for the decision rule the class is reached by, or handed for a point
+     * of a line besides, is for several things and is named for none. A class is said as the
+     * position and its label joined by {@code =}, which no rule, combination or point is.
+     */
+    private static List<String> classesOffered(String block) {
+        List<String> out = new ArrayList<>();
+        Matcher named = Pattern.compile("\\|\\s*\"([^\"]*)\"\\s*:").matcher(block);
+        while (named.find()) {
+            out.add(named.group(1));
+        }
+        block.lines().filter(line -> line.startsWith("// fills "))
+                .map(line -> line.substring("// fills ".length()))
+                .filter(said -> A_CLASS.matcher(said).lookingAt())
+                .forEach(out::add);
+        return out;
+    }
+
+    private static final Pattern A_CLASS = Pattern.compile("[^\\s=]+=");
+
+    /** The row offered for {@code label}: named by it, or with it said over an unnamed row. */
+    private static String rowFor(String block, String label) {
+        List<String> lines = block.lines().toList();
+        for (int at = 0; at < lines.size(); at++) {
+            if (lines.get(at).startsWith("    | \"" + label + "\"")) {
+                return lines.get(at);
+            }
+            if (lines.get(at).equals("// fills " + label)) {
+                for (int row = at; row < lines.size(); row++) {
+                    if (lines.get(row).startsWith("    | ")) {
+                        return lines.get(row);
+                    }
+                }
+            }
+        }
+        throw new AssertionError("no row is offered for " + label + " in " + block);
     }
 
     /**
@@ -495,7 +537,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
 
         String dense = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.matrix", "singledDense", SourceRendering.namedByIdentity(compilation.texts())).text();
-        assertTrue(dense.contains("\"x=/= 0, 1\" : (TwoDecimals(0.5m)"),
+        assertTrue(rowFor(dense, "x=/= 0, 1").contains("(TwoDecimals(0.5m)"),
                 "a decimal lies between the two singled out: " + dense);
 
         String moment = souther.compiler.report.GeneratedRows.of(
@@ -562,7 +604,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
 
             assertFalse(block.contains("no value of this range can be written"),
                     behavior + ": the range between the two lines holds a value: " + block);
-            assertEquals(3, block.lines().filter(line -> line.contains(" : (")).count(),
+            assertEquals(3, classesOffered(block).size(),
                     behavior + ": a row for each of the three classes: " + block);
         }
     }

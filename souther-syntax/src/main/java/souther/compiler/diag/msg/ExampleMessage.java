@@ -367,11 +367,12 @@ public sealed interface ExampleMessage extends Message {
      * this build holds no source of answered as another.
      *
      * <p>Pointed at the behavior, since there is no fork here to point at, so the sentence says
-     * which arms it is about and that the fork is out of sight.
+     * which arms it is about and which definition wrote the fork: two forks out of sight are told
+     * apart by that and by nothing a reader here could be sent to.
      */
     @Code(DiagnosticCode.E1939)
     record NoRowTellsAnArmOutOfSightFromItsSibling(Localizable arm, Localizable sibling,
-                                                   String behavior)
+                                                   String definition, String behavior)
             implements ExampleMessage, Reported {}
 
     /**
@@ -385,6 +386,13 @@ public sealed interface ExampleMessage extends Message {
     @Code(DiagnosticCode.E1939)
     record NoRowTellsTheBodyFromOneAnswer(String row, String behavior)
             implements ExampleMessage, Reported {}
+
+    /**
+     * Marked at the row that came to the value, beside the sentence about it. A row written without
+     * a name is numbered within its source, so the number alone can be another source's row; where
+     * it is written is what this mark adds.
+     */
+    record TheValueIsTheOneThisRowCameTo() implements ExampleMessage, Supporting {}
 
     /** What to do where a written row shows the rewrite answering differently: write down the
      *  answer it gives. */

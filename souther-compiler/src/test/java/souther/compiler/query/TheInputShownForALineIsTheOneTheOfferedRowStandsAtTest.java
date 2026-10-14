@@ -60,7 +60,7 @@ class TheInputShownForALineIsTheOneTheOfferedRowStandsAtTest {
 
         assertEquals("x = 1, y = 3",
                 table.shownFor(Set.of(COMPOSED_FOR_IT, COMPOSED_FOR_SOMETHING_ELSE))
-                        .get(LINE).said(),
+                        .get(LINE).at().orElseThrow().said(),
                 "the row composed for the line is the one a person is handed for it");
     }
 
@@ -69,7 +69,7 @@ class TheInputShownForALineIsTheOneTheOfferedRowStandsAtTest {
         Settlements table = bothSettleIt();
 
         assertEquals("x = 2, y = 5",
-                table.shownFor(Set.of(COMPOSED_FOR_SOMETHING_ELSE)).get(LINE).said(),
+                table.shownFor(Set.of(COMPOSED_FOR_SOMETHING_ELSE)).get(LINE).at().orElseThrow().said(),
                 "a row composed for something else answers the line as much, so when the row"
                         + " composed for it goes the input shown is where that one was read");
     }
@@ -92,7 +92,7 @@ class TheInputShownForALineIsTheOneTheOfferedRowStandsAtTest {
         Settlements table = new Settlements(List.of(LINE), composedFor, byRow,
                 new LinkedHashMap<>(), Map.of(LINE, standing(1, 3)));
 
-        assertEquals("x = 1, y = 3", table.shownFor(Set.of(COMPOSED_FOR_IT)).get(LINE).said(),
+        assertEquals("x = 1, y = 3", table.shownFor(Set.of(COMPOSED_FOR_IT)).get(LINE).at().orElseThrow().said(),
                 "the row is offered for the line, so the input shown is the one it was composed"
                         + " at — a reading that did not happen names nowhere");
     }
@@ -126,7 +126,7 @@ class TheInputShownForALineIsTheOneTheOfferedRowStandsAtTest {
         Set<RowKey> kept = table.keeping();
         assertEquals(Set.of(COMPOSED_FOR_IT, COMPOSED_FOR_SOMETHING_ELSE), kept,
                 "each row is the only one settling one of the two items, so both are kept");
-        assertEquals("x = 2, y = 5", table.shownFor(kept).get(LINE).said(),
+        assertEquals("x = 2, y = 5", table.shownFor(kept).get(LINE).at().orElseThrow().said(),
                 "the line is shown where the row that rules it out stands, and not where the row"
                         + " composed for it and kept for something else does");
     }

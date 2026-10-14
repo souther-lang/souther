@@ -12,7 +12,6 @@ import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.StringOfferShortfall;
 import souther.compiler.publish.RuleHandleProse;
@@ -32,11 +31,13 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
 import souther.compiler.query.BorderAccount;
+import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.GenerationScope;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.query.OfferedRow;
 import souther.compiler.query.Offering;
 import souther.compiler.query.OfferingRequest;
+import souther.compiler.query.InteractionEvidence;
 import souther.compiler.query.ReplacementAsWritten;
 import souther.compiler.query.ReplacementReportAnchor;
 
@@ -50,6 +51,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.Set;
 
@@ -368,8 +370,9 @@ public final class GeneratedRows {
         Offered {
             purposes = List.copyOf(purposes);
             stops = List.copyOf(stops);
-            if (named && purposes.size() != 1) {
-                throw new IllegalArgumentException("a row is named for one thing: " + purposes);
+            if (named && (purposes.size() != 1 || purposes.getFirst().name().isEmpty())) {
+                throw new IllegalArgumentException("a row is named for one thing that has a name: "
+                        + purposes);
             }
         }
 
@@ -381,7 +384,7 @@ public final class GeneratedRows {
             // it stands, a name holding a quote — which a class named after a rule about strings
             // does — closes the literal early and the rest of it becomes source.
             return named
-                    ? "    | " + FixtureTemplate.quoted(purposes.getFirst().name())
+                    ? "    | " + FixtureTemplate.quoted(purposes.getFirst().words())
                             + " : (" + inputs + ")" + standsIn + " -> " + UNANSWERED
                     : "    | (" + inputs + ")" + standsIn + " -> " + UNANSWERED;
         }
@@ -422,39 +425,61 @@ public final class GeneratedRows {
     /**
      * What one thing a row is composed for is called in this block, and where it is.
      *
-     * <p>Apart, because they are put in different places. {@code name} is what a row may be named
-     * by: it stays in the source, so it carries no place, which would go stale as the source moves.
-     * A comment says both, where the place is read once and is what tells two things of the same
-     * name apart. A thing with no place to give has none.
+     * <p>Apart, because they are put in different places. {@code words} with no place are what a
+     * row may be named by, where they are short words that are the thing's own: a name stays in the
+     * source, so it carries no place, which would go stale as the source moves. A comment says both,
+     * where the place is read once and is what tells two things of the same words apart. A thing
+     * with no place to give has none.
      *
-     * @param owed which thing it is, which is what decides whether two of these are one
+     * <p>Not every thing has a name. A decision rule and a combination of decisions are told apart
+     * by every condition they turn on, and each condition is a place; their words say what kind of
+     * thing it is and the conditions are the place, so a row is never named by them.
+     *
+     * @param owed     which thing it is, which is what decides whether two of these are one
+     * @param nameable whether {@code words} name the thing, so that a row may be named by them
      */
-    private record Called(Owed owed, String name, Optional<String> place) {
+    private record Called(Owed owed, String words, Optional<String> place, boolean nameable) {
 
         Called {
             Objects.requireNonNull(owed, "a thing a row is for is some thing");
-            Objects.requireNonNull(name, "and is called something");
+            Objects.requireNonNull(words, "and is called something");
             Objects.requireNonNull(place, "and is somewhere, or nowhere it can say");
         }
 
-        /** The name and the place, as a comment over a row says them. */
-        String placed() {
-            return name + place.map(at -> " (" + at + ")").orElse("");
+        /** A thing whose words are its name, at {@code place}. */
+        static Called named(Owed owed, String name, Optional<String> place) {
+            return new Called(owed, name, place, true);
         }
 
-        /** The same, with the name marked as the words it is, as a note under a block says it. */
+        /** The words a row may be named by, where there are any. */
+        Optional<String> name() {
+            return nameable ? Optional.of(words) : Optional.empty();
+        }
+
+        /** The words and the place, as a comment over a row says them. */
+        String placed() {
+            return words + place.map(at -> " (" + at + ")").orElse("");
+        }
+
+        /** The same, with a name marked as the words it is, as a note under a block says it. */
         String quoted() {
-            return "`" + name + "`" + place.map(at -> " (" + at + ")").orElse("");
+            return (nameable ? "`" + words + "`" : words)
+                    + place.map(at -> " (" + at + ")").orElse("");
         }
     }
 
     /**
      * What a finding is called in this block: the words the report writes for what it is about,
-     * and for an arm and a rewrite of one, the same with the place the report shows it at.
+     * and where the report sends a reader for it.
      *
-     * <p>The place is the one the finding is shown at ({@link Adequacy#placeOf}), and not one
-     * worked out here. A rewrite of an arm this build holds no source of is shown at the behavior,
-     * which is not where its fork is, so it is said to be out of sight rather than given that place.
+     * <p>The place of an arm and of a rewrite of one is the one the finding is shown at
+     * ({@link Adequacy#placeOf}), and not one worked out here. A rewrite of an arm this build holds
+     * no source of is shown at the behavior, which is not where its fork is, so it is said by the
+     * definition that wrote the fork instead.
+     *
+     * <p>A decision rule and a combination of decisions are said by the conditions the report says
+     * them by ({@link AdequacyReport#conditionsOf}, {@link AdequacyReport#waysOf}) — the one
+     * reading of each for both — and have no name: every condition is a place.
      */
     private static Called called(Adequacy.Finding finding, Db db, String module,
                                  SourceRendering rendering,
@@ -465,56 +490,89 @@ public final class GeneratedRows {
         // file with it in another's.
         SourceId declaredIn = Compilation.sourceIdOf(db, module);
         return switch (finding.about()) {
-            case About.AnArmNoRowGoesThrough _ -> new Called(owed, name, Optional.of(
+            case About.AnArmNoRowGoesThrough _ -> Called.named(owed, name, Optional.of(
                     Adequacy.placeOf(db, module, finding).said(rendering, declaredIn)));
             case About.ARewriteNoRowTellsApart(var _, ReplacementAsWritten.OfAnArm rewrite,
-                    var reportAt, var _, var _) -> new Called(owed, name, Optional.of(
+                    var reportAt, var _, var _) -> Called.named(owed, name, Optional.of(
                     switch (reportAt) {
                         case ReplacementReportAnchor.AtTheFork _ ->
                                 Adequacy.placeOf(db, module, finding).said(rendering, declaredIn);
                         case ReplacementReportAnchor.AtTheBehavior _ ->
                                 RewriteVocabulary.outOfSight(rewrite, module);
                     }));
-            default -> new Called(owed, name, Optional.empty());
+            case About.ARuleNoRowTakes(var behavior, var ruled) ->
+                    new Called(owed, "a decision rule", Optional.of(said(
+                            AdequacyReport.conditionsOf(db, module,
+                                    AdequacyReport.placesFor(db, module, behavior), ruled),
+                            declaredIn, rendering)), false);
+            // A point of a line is said with the rule that drew it, which is its place; and points
+            // coincide, so no row is named for one.
+            case About.APointOfABorder _, About.APointOfADeclaredBorder _ ->
+                    new Called(owed, name, Optional.empty(), false);
+            case About.ACombinationNoRowMakes(var combination) -> {
+                InteractionEvidence meetings = Objects.requireNonNull(
+                        db.ask(new Adequacy.Interacts(module)).value(),
+                        "a combination no row makes was measured").get(combination.behavior());
+                List<String> ways = AdequacyReport.waysOf(db, module,
+                                AdequacyReport.placesFor(db, module, combination.behavior()),
+                                meetings, combination).stream()
+                        .map(way -> said(way, declaredIn, rendering)).toList();
+                yield new Called(owed, "a combination of the decisions",
+                        Optional.of(String.join(", or ", ways)), false);
+            }
+            default -> Called.named(owed, name, Optional.empty());
         };
     }
 
+    /** The conditions of one way, as the report says each, in their order. */
+    private static String said(List<AdequacyReport.ShownCondition> way, SourceId declaredIn,
+                               SourceRendering rendering) {
+        return way.stream().map(each -> AdequacyReport.said(each, declaredIn, rendering))
+                .collect(Collectors.joining("; "));
+    }
+
     /**
-     * What each arm and each rewrite of one behavior is called, by what a row composed for it
-     * carries: an arm by the probe the plan gave it, a rewrite by which rewrite it is.
+     * What each thing of one behavior a row may be composed for is called: an arm by the probe the
+     * plan gave it, and a rewrite, a decision rule and a combination of decisions by the obligation
+     * each is.
      *
      * <p>Read off the findings the generation answers, which is where what they are is already
-     * written. An arm or a rewrite the search composed a row for is one a finding named, the plan
-     * being made of them, so there are words here for every one a row is offered for.
+     * written. A thing the search composed a row for is one a finding named, the plan being made of
+     * them, so there are words here for every one a row is offered for.
      */
-    private record WhatTheFindingsCall(Map<ArmProbe, Called> arms,
-                                       Map<Replacement, Called> rewrites) {
+    private record WhatTheFindingsCall(String behavior, Map<ArmProbe, Called> arms,
+                                       Map<ObligationIdentity, Called> owed) {
 
-        static WhatTheFindingsCall in(Adequacy.Filling filling, Db db, String module,
-                                      SourceRendering rendering,
+        static WhatTheFindingsCall in(String behavior, Adequacy.Filling filling, Db db,
+                                      String module, SourceRendering rendering,
                                       PublishedRuleHandle.WhereARuleIs places) {
             Map<ArmProbe, Called> arms = new LinkedHashMap<>();
-            Map<Replacement, Called> rewrites = new LinkedHashMap<>();
+            Map<ObligationIdentity, Called> owed = new LinkedHashMap<>();
             // A behavior with no search of its own composed a row a declaration is owed and nothing
-            // else, so there is no arm or rewrite here to be called anything.
+            // else, so there is nothing here to be called anything.
             if (filling != null) {
                 for (Adequacy.GenerationDisposition each : filling.generation()) {
                     switch (each.finding().about()) {
                         case About.AnArmNoRowGoesThrough(var arm) -> arms.put(arm.index(),
                                 called(each.finding(), db, module, rendering, places));
-                        case About.ARewriteNoRowTellsApart rewrite -> rewrites.put(
-                                rewrite.replacement(),
+                        case About.ARewriteNoRowTellsApart rewrite -> owed.put(
+                                rewrite.obligationIdentity(),
+                                called(each.finding(), db, module, rendering, places));
+                        case About.ARuleNoRowTakes rule -> owed.put(rule.obligationIdentity(),
+                                called(each.finding(), db, module, rendering, places));
+                        case About.ACombinationNoRowMakes combination -> owed.put(
+                                combination.obligationIdentity(),
                                 called(each.finding(), db, module, rendering, places));
                         default -> { }
                     }
                 }
             }
-            return new WhatTheFindingsCall(arms, rewrites);
+            return new WhatTheFindingsCall(behavior, arms, owed);
         }
 
-        /** Every arm and rewrite the findings name, whether or not a row is for it. */
+        /** Every thing the findings name, whether or not a row is for it. */
         Stream<Called> all() {
-            return Stream.concat(arms.values().stream(), rewrites.values().stream());
+            return Stream.concat(arms.values().stream(), owed.values().stream());
         }
 
         /**
@@ -526,9 +584,9 @@ public final class GeneratedRows {
          * — the same fault as naming a row for everything it turns out to settle, arriving from the
          * other side.
          *
-         * <p>An arm or a rewrite nothing named is left out, which leaves the row unnamed where it
-         * was for that alone: the state of a row nobody has named yet, which is what the language
-         * writes for one. Words invented here would be a second vocabulary for it.
+         * <p>A thing nothing named is left out, which leaves the row unnamed where it was for that
+         * alone: the state of a row nobody has named yet, which is what the language writes for
+         * one. Words invented here would be a second vocabulary for it.
          */
         List<Called> of(List<Generator.Purpose> purposes) {
             SequencedMap<Owed, Called> out = new LinkedHashMap<>();
@@ -539,22 +597,31 @@ public final class GeneratedRows {
                             out.putIfAbsent(arms.get(probe).owed(), arms.get(probe));
                         }
                     }
-                    case Generator.Purpose.ForAReplacement(var owed) -> {
-                        if (rewrites.containsKey(owed.replacement())) {
-                            Called rewrite = rewrites.get(owed.replacement());
-                            out.putIfAbsent(rewrite.owed(), rewrite);
-                        }
-                    }
+                    case Generator.Purpose.ForAReplacement(var rewrite) -> add(out,
+                            new ObligationIdentity.OfAReplacement(behavior,
+                                    rewrite.replacement()));
+                    case Generator.Purpose.ForADecisionRule(var rule) -> add(out,
+                            new ObligationIdentity.OfADecisionRule(behavior, rule));
+                    case Generator.Purpose.ForACombinationOfDecisions(var settled) -> add(out,
+                            new ObligationIdentity.OfACombinationOfDecisions(behavior, settled));
                     case Generator.Purpose.ForAClass _, Generator.Purpose.ForAFallbackPairCell _,
-                            Generator.Purpose.ForACombinationOfDecisions _,
-                            Generator.Purpose.ForADecisionRule _, Generator.Purpose.ForAPoint _,
-                            Generator.Purpose.Unstated _ -> purpose.labels().forEach(label -> {
+                            Generator.Purpose.ForAPoint _, Generator.Purpose.Unstated _ ->
+                            purpose.labels().forEach(label -> {
                                 Owed owed = new Owed.ALabel(purpose, label);
-                                out.putIfAbsent(owed, new Called(owed, label, Optional.empty()));
+                                out.putIfAbsent(owed,
+                                        Called.named(owed, label, Optional.empty()));
                             });
                 }
             }
             return List.copyOf(out.values());
+        }
+
+        /** The thing {@code identity} is, where a finding named it. */
+        private void add(SequencedMap<Owed, Called> out, ObligationIdentity identity) {
+            Called thing = owed.get(identity);
+            if (thing != null) {
+                out.putIfAbsent(thing.owed(), thing);
+            }
         }
     }
 
@@ -572,25 +639,39 @@ public final class GeneratedRows {
                                                     SourceRendering rendering,
                                                     PublishedRuleHandle.WhereARuleIs places) {
         String module = offering.request().module();
+        Map<ObligationIdentity, Called> lines = linesOf(offering, rendering, places);
         Map<String, List<Offered>> out = new LinkedHashMap<>();
         offering.rowsByBehavior().forEach((behavior, rows) -> {
-            WhatTheFindingsCall called = WhatTheFindingsCall.in(offering.searched().get(behavior),
-                    db, module, rendering, places);
-            List<List<Called>> purposes = rows.stream()
-                    .map(row -> called.of(row.namedFor())).toList();            // Each name, and every thing of the behavior it is the name of: what the rows are for,
-            // and every arm and rewrite a finding of it names whether or not a row was composed
-            // for it. A name is unique only against all of them, since the report and the notes
-            // below the block say the ones with no row under the same words.
+            WhatTheFindingsCall called = WhatTheFindingsCall.in(behavior,
+                    offering.searched().get(behavior), db, module, rendering, places);
+            // What each row was composed for, and then the lines it is the row a person is handed
+            // for. A row is never composed for a line — what a line is owed is answered in the
+            // account — so those come from the offering's answer of where each line is shown.
+            List<List<Called>> purposes = rows.stream().map(row -> {
+                SequencedMap<Owed, Called> these = new LinkedHashMap<>();
+                called.of(row.namedFor()).forEach(thing -> these.putIfAbsent(thing.owed(), thing));
+                for (ObligationIdentity line : offering.linesShownAt(row.key())) {
+                    Called point = lines.get(line);
+                    if (point != null) {
+                        these.putIfAbsent(point.owed(), point);
+                    }
+                }
+                return List.copyOf(these.values());
+            }).toList();
+            // Each name, and every thing of the behavior it is the name of: what the rows are for,
+            // and every thing a finding of it names whether or not a row was composed for it. A
+            // name is unique only against all of them, since the report and the notes below the
+            // block say the ones with no row under the same words.
             Map<String, Set<Owed>> byName = new HashMap<>();
             Stream.concat(purposes.stream().flatMap(List::stream), called.all())
-                    .forEach(thing -> byName.computeIfAbsent(thing.name(), _ -> new HashSet<>())
-                            .add(thing.owed()));
+                    .forEach(thing -> thing.name().ifPresent(name -> byName
+                            .computeIfAbsent(name, _ -> new HashSet<>()).add(thing.owed())));
             List<Offered> here = new ArrayList<>();
             for (int i = 0; i < rows.size(); i++) {
                 OfferedRow row = rows.get(i);
                 List<Called> these = purposes.get(i);
-                boolean named = these.size() == 1
-                        && byName.get(these.getFirst().name()).size() == 1;
+                boolean named = these.size() == 1 && these.getFirst().name()
+                        .map(name -> byName.get(name).size() == 1).orElse(false);
                 // Whose search a stop was said only where the row is for more than one thing: a row
                 // for one already says, by its name or over it, which requirement it was looked
                 // for.
@@ -602,6 +683,35 @@ public final class GeneratedRows {
                         stops));
             }
             out.put(behavior, List.copyOf(here));
+        });
+        return out;
+    }
+
+    /**
+     * What each point of a line this offering answers for is called: a body's own lines and its
+     * declarations' alike, whichever module declares the type a declaration's line is of.
+     *
+     * <p>Asked of the account and not of the findings. A point no row is written at is undecided
+     * rather than a finding, and is a point a row here is handed for all the same; and the account
+     * holds every point the offering answers for, in the words the report says each in — the rule
+     * that drew a body's line, and what a declaration wrote its own line on.
+     *
+     * <p>No name. A point's words are its place, and points coincide: which one a row is handed
+     * for is what changes when something else is written.
+     */
+    private static Map<ObligationIdentity, Called> linesOf(Offering offering,
+                                                           SourceRendering rendering,
+                                                           PublishedRuleHandle.WhereARuleIs places) {
+        Map<ObligationIdentity, Called> out = new LinkedHashMap<>();
+        if (offering.account() == null) {
+            return out;
+        }
+        offering.account().resolved().forEach((point, answer) -> {
+            ObligationIdentity line = new ObligationIdentity.OfALine(point);
+            String words = answer.declaredAxis() == null
+                    ? about(answer.point(), rendering, places)
+                    : answer.said();
+            out.put(line, new Called(new Owed.AnObligation(line), words, Optional.empty(), false));
         });
         return out;
     }
@@ -798,7 +908,9 @@ public final class GeneratedRows {
                                 switch (each.finding().about()) {
                                     case About.AnArmNoRowGoesThrough _,
                                             About.ALineTheRowsDoNotTellFromAnother _,
-                                            About.ARewriteNoRowTellsApart _ ->
+                                            About.ARewriteNoRowTellsApart _,
+                                            About.ARuleNoRowTakes _,
+                                            About.ACombinationNoRowMakes _ ->
                                             called(each.finding(), db, module, rendering, places)
                                                     .quoted();
                                     default -> "`" + came.why().subject() + "`";
@@ -925,6 +1037,17 @@ public final class GeneratedRows {
     }
 
     /**
+     * What a point of a body's line is called: the rule that drew the line, said in the words a
+     * report says a rule in, and which point of it. The one place a block says a point, whether a
+     * finding is about it or a row is handed for it.
+     */
+    private static String about(BorderObligationPointAssessment point,
+                                SourceRendering rendering,
+                                PublishedRuleHandle.WhereARuleIs places) {
+        return RuleHandleProse.said(point.said(places), rendering, null);
+    }
+
+    /**
      * What a gap is about, in the words its own finding carries.
      *
      * <p>Read off the value the finding was established with, so that a subject printed here and
@@ -937,8 +1060,7 @@ public final class GeneratedRows {
             // above ({@code saidOf}). Spelled out here as well, the two vocabularies differed by
             // the role: a point away from the line was written as the value the line is at, which
             // is the one place in reach that such a point is not.
-            case About.APointOfABorder(var point) ->
-                    RuleHandleProse.said(point.said(places), rendering, null);
+            case About.APointOfABorder(var point) -> about(point, rendering, places);
             // The same words on what the declaration wrote. Nothing composes a row for one of
             // these yet — the search walks one behavior's inputs and this line is owed once over
             // all of them — so what is printed beside it is that, in its own sentence.
