@@ -240,6 +240,7 @@ public final class ReplacementReading {
         }
         RowIdentity shownBy = null;
         boolean unknown = false;
+        List<List<ObservedValue>> seenThrough = new ArrayList<>();
         for (RowOutcome row : rows) {
             if (where.stream().noneMatch(wentThrough.apply(row)::contains)) {
                 continue;
@@ -250,6 +251,7 @@ public final class ReplacementReading {
                 unknown = true;
                 continue;
             }
+            seenThrough.add(row.inputs());
             // Every rewrite of every arm a decided row went through was run, or is said to have
             // run out, so one missing is this reading and the run disagreeing about what was
             // carried — not something to read a reason off.
@@ -275,7 +277,8 @@ public final class ReplacementReading {
         }
         ReplacementOwed lookFor = new ReplacementOwed.OfAnArm(replaced.fork(), replaced.part(),
                 replaced.with(), where,
-                replacements.replacing(replaced.fork(), replaced.part(), replaced.with()));
+                replacements.replacing(replaced.fork(), replaced.part(), replaced.with()),
+                seenThrough);
         return shownBy != null ? new Standing.Unnoticed(shownBy, lookFor)
                 : new Standing.Open(lookFor);
     }
