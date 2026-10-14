@@ -1325,24 +1325,6 @@ public sealed interface BorderQuantity
     }
 
     /**
-     * Whether a value a rule singles out on this quantity, where no position is divided to hold it
-     * as a class, still has values beside it a row can be owed at.
-     *
-     * <p>A count does: it is one number, and the counts either side of the one named are the
-     * nearest rows that do not meet it, as the values either side of a position's singled value
-     * are. A form over several positions does not: where it comes to the value named is reached
-     * by every way its positions can be written, and the rows either side of it are one class.
-     */
-    default boolean singlesWithSides() {
-        return switch (this) {
-            case LinearQuantity _ -> false;
-            // One number, whose values either side of the one named are the nearest rows that do
-            // not leave it, as a count's are.
-            case HowMany _, RemainderOfAForm _ -> true;
-        };
-    }
-
-    /**
      * Why a rule drawn on this quantity divides none of the positions it is made of, in the word
      * that is true of what the quantity is.
      *

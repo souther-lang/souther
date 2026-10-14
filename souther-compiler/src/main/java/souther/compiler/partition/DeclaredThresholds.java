@@ -94,7 +94,12 @@ public final class DeclaredThresholds {
         // none of them or several — so the two are disjoint exactly as far as the two readings
         // agree about how many coordinates a quantity is over. They are two readings of one
         // question and neither is asked of the other.
-        if (assessed instanceof ComparisonAssessment.AcrossPositions over && over.drawsABorder()) {
+        //
+        // And only an order. A declaration holding the quantity at one value leaves every value of
+        // it beside that one refused, so a line there is owed no row on either side and adds
+        // nothing to what the declaration's values already are.
+        if (assessed instanceof ComparisonAssessment.AcrossPositions over && over.drawsABorder()
+                && over.cutting().ordering() != null) {
             out.add(new LineDrawn(over.cutting(), originOf(clause, over.cutting())));
         }
     }

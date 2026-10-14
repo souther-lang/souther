@@ -9,7 +9,6 @@ import souther.compiler.report.AdequacyReport;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * The other producer of the same claim, held to the same reading of it.
@@ -46,17 +45,18 @@ class AnEnsuresBetweenTwoPositionsSinglesNothingOutTest {
                 .flatMap(each -> each.classes().stream()).toList();
     }
 
-    /** A rule over a pair singles nothing out at either of them. */
+    /**
+     * A rule over a pair singles nothing out at either of them, and is a line over the two.
+     *
+     * <p>As the guard of the same shape is: the place the two meet and the nearest rows either side
+     * of it.
+     */
     @Test
     void anEqualityBetweenTwoPositionsDividesNeitherOfThem() {
         assertEquals(List.of(), classes("r.a == r.other"));
         assertEquals(List.of(), classes("r.a /= r.other"));
-        // The measure's own answer and not a count read off it, which nought would also be where
-        // nobody measured: what the rule leaves is no line for a row to be at.
-        assertInstanceOf(souther.compiler.query.Measure.NotApplicable.class,
-                measured("r.a == r.other").boundaryReadings(),
-                "and it is not a line either: the values either side of the place they meet are"
-                        + " one class");
+        assertEquals(1, measured("r.a == r.other").lines().size());
+        assertEquals(1, measured("r.a /= r.other").lines().size());
     }
 
     /** While one about a single position still puts the value in a class of its own. */

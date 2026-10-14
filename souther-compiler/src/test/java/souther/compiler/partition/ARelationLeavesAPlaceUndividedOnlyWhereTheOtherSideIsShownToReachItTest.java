@@ -240,7 +240,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /** Rows that cover the comparison still satisfy the model once the record carries a rule over
-     *  two of its other fields. */
+     *  two of its other fields. The comparison is a line over how far the two stand apart, so the
+     *  rows are where they meet and one either side of it. */
     @Test
     void rowsCoveringTheComparisonSatisfyAModelWhoseRecordRulesOverItsOtherFields() {
         Compilation compilation = Compilation.ofSource("""
@@ -264,6 +265,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 example approve
                     | "boss" : (Pending { me = EmpId("a"), boss = EmpId("b"), low = 1, high = 2 }, EmpId("b")) -> Granted
                     | "other" : (Pending { me = EmpId("a"), boss = EmpId("b"), low = 1, high = 2 }, EmpId("c")) -> Denied
+                    | "below" : (Pending { me = EmpId("a"), boss = EmpId("b"), low = 1, high = 2 }, EmpId("a")) -> Denied
                     | "equal bounds" : (Pending { me = EmpId("xx"), boss = EmpId("x"), low = 0, high = 0 }, EmpId("x")) -> Granted
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
