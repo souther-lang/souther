@@ -346,6 +346,18 @@ public sealed interface Proposition {
             return key.hashCode();
         }
 
+        /**
+         * Both components, the spelling first. The parts are a tree as deep as the conjunctions
+         * inside one another, and two propositions that differ almost always differ in what they
+         * spell, which a string's hash says before a character is compared.
+         */
+        @Override
+        public boolean equals(Object other) {
+            return this == other || other instanceof All that
+                    && key.hashCode() == that.key.hashCode() && key.equals(that.key)
+                    && parts.equals(that.parts);
+        }
+
         public All(List<Proposition> parts) {
             this(parts, null);
         }
@@ -374,6 +386,14 @@ public sealed interface Proposition {
         @Override
         public int hashCode() {
             return key.hashCode();
+        }
+
+        /** Both components, the spelling first, as {@link All} compares them. */
+        @Override
+        public boolean equals(Object other) {
+            return this == other || other instanceof Any that
+                    && key.hashCode() == that.key.hashCode() && key.equals(that.key)
+                    && parts.equals(that.parts);
         }
 
         public Any(List<Proposition> parts) {
@@ -613,6 +633,14 @@ public sealed interface Proposition {
             return key.hashCode();
         }
 
+        /** Both components, the spelling first, as {@link All} compares them. */
+        @Override
+        public boolean equals(Object other) {
+            return this == other || other instanceof OnAnApplication that
+                    && key.hashCode() == that.key.hashCode() && key.equals(that.key)
+                    && each.equals(that.each);
+        }
+
         public OnAnApplication(List<Proposition> each) {
             this(each, null);
         }
@@ -643,7 +671,7 @@ public sealed interface Proposition {
             throw new IllegalArgumentException("a condition is read on some application");
         }
         return kept.size() == 1 ? kept.firstEntry().getValue()
-                : new OnAnApplication(List.copyOf(kept.values()));
+                : SharedPropositions.shared(new OnAnApplication(List.copyOf(kept.values())));
     }
 
     /**
@@ -888,8 +916,8 @@ public sealed interface Proposition {
         return switch (kept.size()) {
             case 0 -> new Always(every);
             case 1 -> kept.firstEntry().getValue();
-            default -> every ? new All(List.copyOf(kept.values()))
-                    : new Any(List.copyOf(kept.values()));
+            default -> SharedPropositions.shared(every ? new All(List.copyOf(kept.values()))
+                    : new Any(List.copyOf(kept.values())));
         };
     }
 }

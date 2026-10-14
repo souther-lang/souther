@@ -122,6 +122,11 @@ final class DecisionPath {
          * it.
          */
         Consulted again(Consulted more) {
+            // Consulted again as itself it is told of no place and no copy it was not already, and
+            // telling it walks every entry on the way to find that out.
+            if (more == this) {
+                return this;
+            }
             List<ShownBy> places = new ArrayList<>(seen);
             more.seen.stream().filter(each -> !places.contains(each)).forEach(places::add);
             return new Consulted(answer, places, states,
