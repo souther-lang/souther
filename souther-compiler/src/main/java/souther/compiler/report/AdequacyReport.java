@@ -10,6 +10,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.PartId;
+import souther.compiler.publish.InputUseWord;
 import souther.compiler.publish.MaterialisationRegionWord;
 import souther.compiler.publish.RegionSlotWord;
 import souther.compiler.publish.ThroughStepWord;
@@ -52,6 +53,7 @@ import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.FarEnd;
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.InputUse;
 import souther.compiler.partition.Level;
 import souther.compiler.partition.NotOwedReason;
 import souther.compiler.partition.CompositionAccount;
@@ -2328,6 +2330,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             List<ReaderDisposition.Wider> wider =
                     ReaderDisposition.widerThanTheyAreSeparated(partition.pairs(), partition.axes());
             for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
+                // A position nothing the behavior states reads, which is owed no row at any of its
+                // classes. Said whether or not the rows reach them: the count above still has them,
+                // and a reader is told why none of them is asked for.
+                boolean read = !(axis.use() instanceof InputUse.NotRead);
+                if (!read) {
+                    out.append(String.format("      · %s holds %d classes and nothing this behavior"
+                                    + " states reads it, so no row is owed at any of them%n",
+                            axis.name(), axis.classes().size()));
+                }
                 // A position holding more classes than this behavior's body tells apart, whose
                 // classes take part in a relation no row reaches. Asked of the one thing that
                 // answers it, which is what the decision this leaves a reader is read from: worked
@@ -2335,13 +2346,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 //
                 // Said in groups, because a body that asks whether a value is one of two cases out
                 // of four tells the four apart as two groups.
+                //
+                // Not said of a position nothing reads, which the line above has said more of. And
+                // where every class goes one way, said as read without being told apart where it
+                // is read: a value carried into the answer is told apart by nothing and owed a row
+                // at every class, and a line saying only the first would read as the second's
+                // contradiction.
                 for (ReaderDisposition.Wider each : wider) {
-                    if (!each.axis().at().equals(axis.at())) {
+                    if (!each.axis().at().equals(axis.at()) || !read) {
                         continue;
                     }
                     out.append(each.groups() <= 1
-                            ? String.format("      · %s holds %d classes and this behavior does"
-                                            + " not tell them apart%n",
+                            ? String.format(axis.use() instanceof InputUse.Read
+                                            ? "      · %s holds %d classes and this behavior reads it"
+                                                    + " without telling them apart%n"
+                                            : "      · %s holds %d classes and this behavior does"
+                                                    + " not tell them apart%n",
                                     axis.name(), axis.classes().size())
                             : String.format("      · %s holds %d classes and this behavior tells"
                                             + " them apart as %d groups%n",
@@ -5888,6 +5908,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 read.put("rulesNotReached", true);
             }
             axis.classes().forEach(a.putArray("classes")::add);
+            // Whether anything the behavior states reads the position, which is what says whether
+            // a row is owed at each of `classes`. Beside them and never taken out of them: the
+            // classes are the model's, and `covered` is counted over them either way.
+            a.put("use", word(InputUseWord.of(axis.use())));
             ArrayNode excluded = a.putArray("excluded");
             ArrayNode unproven = a.putArray("unprovenClaims");
             for (ClaimAnnotations.Said said : claimed.at(axis.path())) {

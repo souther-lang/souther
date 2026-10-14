@@ -44,10 +44,10 @@ class APositionUnderANameIsReachedThroughItTest {
             data SlotN = Slot
 
             behavior bare : (x: Slot) -> Ok
-            let bare (x) = Ok
+            let bare (x) = if x.flag then Ok else Ok
 
             behavior wrapped : (x: SlotN) -> Ok
-            let wrapped (x) = Ok
+            let wrapped (x) = if x.value.flag then Ok else Ok
 
             example bare
                 | (Slot { flag = true }) -> Ok

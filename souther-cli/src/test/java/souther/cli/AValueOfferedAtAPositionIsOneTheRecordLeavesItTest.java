@@ -50,7 +50,7 @@ class AValueOfferedAtAPositionIsOneTheRecordLeavesItTest {
 
                 behavior f : (r: R, flag: Bool) -> Ok
 
-                let f (r, flag) = Ok
+                let f (r, flag) = if flag then Ok else Ok
                 """.replace("CLAUSES", clauses).replace("FIELD", field);
     }
 

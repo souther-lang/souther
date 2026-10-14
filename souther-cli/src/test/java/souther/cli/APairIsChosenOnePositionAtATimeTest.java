@@ -37,7 +37,7 @@ class APairIsChosenOnePositionAtATimeTest {
 
                 behavior f : (r: R, flag: Bool) -> Ok
 
-                let f (r, flag) = Ok
+                let f (r, flag) = if flag then Ok else Ok
                 """.replace("CLAUSE", clauses);
         Path file = Files.createTempDirectory("souther-paired").resolve("model.sou");
         Files.writeString(file, model);
@@ -114,7 +114,7 @@ class APairIsChosenOnePositionAtATimeTest {
 
                 behavior f : (r: R, flag: Bool) -> Ok
 
-                let f (r, flag) = Ok
+                let f (r, flag) = if flag then Ok else Ok
                 """.replace("FIELDS", fields.toString()).replace("RULE", rule.toString());
         Path file = Files.createTempDirectory("souther-budget").resolve("model.sou");
         Files.writeString(file, model);
@@ -158,7 +158,7 @@ class APairIsChosenOnePositionAtATimeTest {
 
                 behavior f : (r: R, flag: Bool) -> Ok
 
-                let f (r, flag) = Ok
+                let f (r, flag) = if flag then Ok else Ok
                 """.replace("FIELDS", fields.toString());
         Path file = Files.createTempDirectory("souther-exact").resolve("model.sou");
         Files.writeString(file, model);
@@ -205,7 +205,7 @@ class APairIsChosenOnePositionAtATimeTest {
 
                 behavior f : (band: Band, flag: Bool) -> Ok
 
-                let f (band, flag) = Ok
+                let f (band, flag) = if flag then Ok else Ok
                 """;
         Path file = Files.createTempDirectory("souther-band").resolve("model.sou");
         Files.writeString(file, model);

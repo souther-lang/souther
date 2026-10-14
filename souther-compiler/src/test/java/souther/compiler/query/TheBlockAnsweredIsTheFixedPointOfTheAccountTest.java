@@ -61,7 +61,8 @@ class TheBlockAnsweredIsTheFixedPointOfTheAccountTest {
 
             behavior judge : (size: Size, cost: Amount) -> Verdict
             let judge (size, cost) =
-                if cost.value > 50 then No else Yes
+                match size with
+                    | Small | Large -> if cost.value > 50 then No else Yes
 
             example judge
                 | "small and cheap" : (Small, Amount(10)) -> Yes

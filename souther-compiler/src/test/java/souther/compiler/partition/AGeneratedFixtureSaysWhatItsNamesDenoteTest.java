@@ -53,7 +53,7 @@ class AGeneratedFixtureSaysWhatItsNamesDenoteTest {
 
             behavior f : (r: Req) -> Verdict
             let f (r) = { guard r.amount.value < 500 else Ok
-                No }
+                if r.kind == up.Domestic then No else No }
             """;
 
     /** Every expression of every row the model is offered, at every depth. */

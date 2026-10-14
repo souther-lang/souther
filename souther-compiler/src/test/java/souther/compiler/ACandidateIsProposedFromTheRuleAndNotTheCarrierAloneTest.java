@@ -35,7 +35,8 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      * A model whose one uncovered combination needs a value of the constrained type.
      *
      * <p>{@code t.kind} is divided into two and one of them has a row, so the row that is owed is the
-     * other one — and writing it takes a {@code tags} the type admits.
+     * other one — and writing it takes a {@code tags} the type admits. The body reads {@code kind},
+     * which is what makes a row at its other class one that is owed.
      */
     private static String model(String declaration, String field, String written) {
         return """
@@ -51,7 +52,10 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
 
                 behavior look : (t: T) -> Int
 
-                let look (t) = 1
+                let look (t) =
+                    match t.kind with
+                        | Domestic -> 1
+                        | Overseas -> 1
 
                 example look
                     | (T { kind = Domestic, %s }) -> 1
@@ -236,7 +240,15 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      */
     @Test
     void aSetOfASumIsBuiltFromItsCases() {
-        List<String> rows = generatedRows(model("""
+        // The body reads `palette` as well as `kind`, so a row at a case of it is owed as one at a
+        // case of `kind` is.
+        List<String> rows = generatedRows("""
+                module nd.gen
+
+                data Domestic
+                data Overseas
+                data Kind = Domestic | Overseas
+
                 data Red
                 data Green
                 data Blue
@@ -244,7 +256,19 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
 
                 data Palette = Set<Color>
                     invariant enough = Set.size(value) >= 2
-                """, "palette: Palette", "palette = Palette([Red, Blue])"));
+
+                data T = { kind: Kind, palette: Palette }
+
+                behavior look : (t: T) -> Int
+
+                let look (t) =
+                    match t.kind with
+                        | Domestic -> Set.size(t.palette.value)
+                        | Overseas -> Set.size(t.palette.value)
+
+                example look
+                    | (T { kind = Domestic, palette = Palette([Red, Blue]) }) -> 2
+                """);
 
         // The written row holds `Red` and `Blue`, so `Green` is the case left, and the other
         // position owes a row of its own. Both are sets of two, and the one for `Green` holds it.
@@ -495,7 +519,10 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
 
                 behavior look : (t: T) -> Int
 
-                let look (t) = 1
+                let look (t) =
+                    match t.kind with
+                        | Domestic -> 1
+                        | Overseas -> 1
                 """;
         souther.compiler.partition.FillResult filled = generated(source);
 
@@ -560,7 +587,10 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
 
                 behavior look : (t: T) -> Int
 
-                let look (t) = 1
+                let look (t) =
+                    match t.kind with
+                        | Domestic -> 1
+                        | Overseas -> 1
                 """.formatted(formats, formats, notEmpty));
 
         assertEquals(List.of(), filled.rows(),
@@ -599,7 +629,10 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
 
                 behavior look : (t: T) -> Int
 
-                let look (t) = 1
+                let look (t) =
+                    match t.kind with
+                        | Domestic -> 1
+                        | Overseas -> 1
                 """);
 
         assertFalse(filled.rows().isEmpty(), "a tree with no kids is a tree");

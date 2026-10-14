@@ -30,6 +30,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class CompileExampleGenerateTest {
 
+    /**
+     * Two positions the body reads, so each class is owed a row of its own, and no combination of
+     * the two is: one arm takes every case of {@code kind}, so the body tells none of them apart,
+     * and both sides of {@code urgent} give the same answer.
+     */
     private static final String TRIP = """
             module example.trip
 
@@ -44,7 +49,10 @@ class CompileExampleGenerateTest {
             behavior submit : (request: Request) -> Accepted
                 constructs Accepted
 
-            let submit (request) = Accepted { at = "now" }
+            let submit (request) =
+                match request.kind with
+                    | Domestic | Overseas ->
+                        if request.urgent then Accepted { at = "now" } else Accepted { at = "now" }
 
             example submit
                 | (Request { kind = Domestic, urgent = true }) -> Accepted { at = "now" }
@@ -201,7 +209,10 @@ class CompileExampleGenerateTest {
                 behavior submit : (request: Request) -> Accepted
                     constructs Accepted
 
-                let submit (request) = Accepted { at = "now" }
+                let submit (request) =
+                    match request.kind with
+                        | Domestic -> Accepted { at = "now" }
+                        | Overseas -> Accepted { at = "now" }
                 """;
         Adequacy.Filling filling = generated(bounded).get("submit");
 
@@ -290,7 +301,10 @@ class CompileExampleGenerateTest {
                 behavior register : (office: Office) -> Ok
                     constructs Ok
 
-                let register (office) = Ok { n = 0 }
+                let register (office) =
+                    match office.kind with
+                        | Domestic -> Ok { n = 0 }
+                        | Overseas -> Ok { n = 0 }
 
                 example register
                     | (Office { id = OfficeId("12-345678"), prefecture = Prefecture("13"),
@@ -320,7 +334,10 @@ class CompileExampleGenerateTest {
                 behavior take : (request: Request) -> Ok
                     constructs Ok
 
-                let take (request) = Ok { n = 0 }
+                let take (request) =
+                    match request.flag with
+                        | Yes -> Ok { n = 0 }
+                        | No -> Ok { n = 0 }
 
                 example take
                     | (Request { on = Date("2026-08-03"), flag = Yes }) -> Ok { n = 0 }
@@ -356,7 +373,10 @@ class CompileExampleGenerateTest {
                 behavior take : (note: Note) -> Ok
                     constructs Ok
 
-                let take (note) = Ok { n = 0 }
+                let take (note) =
+                    match note.flag with
+                        | Yes -> Ok { n = 0 }
+                        | No -> Ok { n = 0 }
 
                 example take
                     | (Note { text = Spaced("a\\tb"), flag = Yes }) -> Ok { n = 0 }
@@ -397,7 +417,10 @@ class CompileExampleGenerateTest {
                 behavior take : (r: Req) -> Ok
                     constructs Ok
 
-                let take (r) = Ok { n = 0 }
+                let take (r) =
+                    match r.f with
+                        | Yes -> Ok { n = 0 }
+                        | No -> Ok { n = 0 }
 
                 example take
                     | (Req { v = %s, f = Yes }) -> Ok { n = 0 }
@@ -462,7 +485,10 @@ class CompileExampleGenerateTest {
                 behavior take : (request: Req) -> Ok
                     constructs Ok
 
-                let take (request) = Ok { n = 0 }
+                let take (request) =
+                    match request.flag with
+                        | Yes -> Ok { n = 0 }
+                        | No -> Ok { n = 0 }
 
                 example take
                     | (Req { left = Left("x"), right = Right("x"), flag = Yes }) -> Ok { n = 0 }
@@ -516,7 +542,10 @@ class CompileExampleGenerateTest {
                 behavior take : (one: One, two: Two) -> Ok
                     constructs Ok
 
-                let take (one, two) = Ok { n = 0 }
+                let take (one, two) =
+                    match two.flag with
+                        | Yes -> Ok { n = 0 }
+                        | No -> Ok { n = 0 }
                 """.formatted(declarations);
 
         List<String> rows = inputs(generated(source).get("take").composed());
@@ -558,7 +587,7 @@ class CompileExampleGenerateTest {
                 behavior take : (request: R, flag: Bool) -> Ok
                     constructs Ok
 
-                let take (request, flag) = Ok { n = 0 }
+                let take (request, flag) = if flag then Ok { n = 0 } else Ok { n = 0 }
                 """;
 
         souther.compiler.partition.FillResult filled = generated(source).get("take").composed();
@@ -609,7 +638,10 @@ class CompileExampleGenerateTest {
                 behavior take : (request: Req) -> Ok
                     constructs Ok
 
-                let take (request) = Ok { n = 0 }
+                let take (request) =
+                    match request.flag with
+                        | Yes -> Ok { n = 0 }
+                        | No -> Ok { n = 0 }
                 """.formatted(declarations, fields)
                 .replace("UNREAD", ARuleNoReadingTakesIn.narrowly("a.value"));
 
@@ -655,7 +687,16 @@ class CompileExampleGenerateTest {
                 behavior take : (r: Req) -> Ok
                     constructs Ok
 
-                let take (r) = Ok { n = 0 }
+                let take (r) =
+                    match r.contact with
+                        | Email ->
+                            match r.w with
+                                | NoAmount -> Ok { n = 0 }
+                                | Amount -> Ok { n = 0 }
+                        | NoContact ->
+                            match r.w with
+                                | NoAmount -> Ok { n = 0 }
+                                | Amount -> Ok { n = 0 }
 
                 example take
                     | (Req { contact = NoContact, w = NoAmount }) -> Ok { n = 0 }
@@ -809,7 +850,11 @@ class CompileExampleGenerateTest {
             behavior calc : (c: Cond) -> Out
                 constructs Out
 
-            let calc (c) = Out { n = 0 }
+            let calc (c) =
+                match c.f with
+                    | C | B ->
+                        match c.g with
+                            | G1 | G2 -> Out { n = 0 }
 
             example calc
                 | "base" : (none) -> Out { n = 0 }
@@ -1080,7 +1125,10 @@ class CompileExampleGenerateTest {
                     behavior %1$s : (r: Req) -> Ok
                         constructs Ok
 
-                    let %1$s (r) = Ok { n = 0 }
+                    let %1$s (r) =
+                        match r.flag with
+                            | Yes -> Ok { n = 0 }
+                            | No -> Ok { n = 0 }
 
                     """.formatted(name));
             rows.append("""

@@ -98,20 +98,21 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
      * <p>A {@code Bool} rather than a sum, because a sum's case and its class are two findings the
      * same row closes and this model is here to move one of them on its own. Nothing draws a line,
      * so no border owes a point; the output is one data, so no case of it goes unexpected; the body
-     * forks nowhere, so no arm goes unreached. What is left is the class.
+     * forks nowhere, so no arm goes unreached. What is left is the class, which is owed a row because
+     * the body carries {@code flag} into its answer.
      */
     private static final String ONE_CLASS_OF_TWO = """
             module example.rate
 
-            data Charged = { cost: Int }
+            data Charged = { cost: Int, flag: Bool }
 
             behavior submit : (flag: Bool, cost: Int) -> Charged
                 constructs Charged
 
-            let submit (flag, cost) = Charged { cost = cost }
+            let submit (flag, cost) = Charged { cost = cost, flag = flag }
 
             example submit
-                | "set" : (true, 1) -> Charged { cost = 1 }
+                | "set" : (true, 1) -> Charged { cost = 1, flag = true }
             """;
 
     @Test

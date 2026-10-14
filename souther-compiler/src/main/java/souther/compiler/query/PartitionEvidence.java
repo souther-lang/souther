@@ -14,6 +14,7 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BodyDistinction;
+import souther.compiler.partition.InputUse;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.RuleEvidenceOrigin;
@@ -558,6 +559,23 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
     }
 
     /**
+     * Whether a row at each class of the position {@code at} names is owed, for a measure that
+     * reaches the same classes by another road.
+     *
+     * <p>A case of an input with a position of its own is a class of that position, and one entry
+     * with the class ({@link ObligationIdentity.OfAClass}). Where this measure found that nothing
+     * reads the position, the case is owed no row either. Owed wherever this has no such position.
+     */
+    public boolean owesARowPerClassAt(AxisId at) {
+        for (AxisCoverage axis : axes()) {
+            if (axis.at().equals(at)) {
+                return axis.use().owesARowPerClass();
+            }
+        }
+        return true;
+    }
+
+    /**
      * How many two-class combinations the rows reach, taken between the two positions each is
      * between.
      *
@@ -949,6 +967,10 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      *                  to whether it takes the position wider than it needs. Its own value beside
      *                  {@code divides}, because a {@code match} over the cases of a sum composes no
      *                  class and tells every one of them apart
+     * @param use       whether anything the behavior states reads the value here, which is what
+     *                  says whether a row at each class checks something a row at another does not.
+     *                  Not {@code toldApart}: a value copied into the answer is told apart by
+     *                  nothing and comes out differently for every class
      * @param reached what the rows reached of them, where anybody counted. A position nothing was
      *                measured at used to carry an empty {@code covered} and a zero count beside a
      *                status saying so, which reads exactly like a position every class of which
@@ -956,7 +978,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      */
     public record AxisCoverage(AxisId at, String path,
                                List<String> classes, List<RuleEvidenceOrigin> divides,
-                               BodyDistinction toldApart,
+                               BodyDistinction toldApart, InputUse use,
                                Reading read, Measurement<Reached> reached) {
 
         /**
@@ -1055,16 +1077,16 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          *  so — which is why a position nothing was measured at still names them. */
         public static AxisCoverage noRows(AxisId at, String path, List<String> classes,
                                           List<RuleEvidenceOrigin> divides,
-                                          BodyDistinction toldApart, Reading read) {
-            return new AxisCoverage(at, path, classes, divides, toldApart, read,
+                                          BodyDistinction toldApart, InputUse use, Reading read) {
+            return new AxisCoverage(at, path, classes, divides, toldApart, use, read,
                     new Measurement.NotMeasured<>(AxisCoverage.NoRows.NO_ROWS));
         }
 
         /** The same, where nobody asked for a measurement at all. */
         public static AxisCoverage notAsked(AxisId at, String path, List<String> classes,
                                             List<RuleEvidenceOrigin> divides,
-                                            BodyDistinction toldApart, Reading read) {
-            return new AxisCoverage(at, path, classes, divides, toldApart, read,
+                                            BodyDistinction toldApart, InputUse use, Reading read) {
+            return new AxisCoverage(at, path, classes, divides, toldApart, use, read,
                     new Measurement.NotMeasured<>(NothingWasAsked.NOT_ASKED));
         }
 
@@ -1074,6 +1096,10 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             if (toldApart == null) {
                 throw new IllegalArgumentException(
                         "a position with no account of what the body tells apart there: " + path);
+            }
+            if (use == null) {
+                throw new IllegalArgumentException(
+                        "a position with no account of whether anything reads it: " + path);
             }
             if (read == null) {
                 throw new IllegalArgumentException(
@@ -1119,8 +1145,15 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * <p>Which is the reading a point of a line gets as well
          * ({@link ObligationAssessment#worthSearching}). A state added to {@link Measurement}
          * arrives here as a compile error rather than as a silent nothing.
+         *
+         * <p>And none at a position nothing the behavior states reads ({@link InputUse}). The
+         * classes are still the model's and still counted; a row at one of them gives the answer a
+         * row at any other gives, so it is owed nothing it could check.
          */
         public List<AxisClass> owed() {
+            if (!use.owesARowPerClass()) {
+                return List.of();
+            }
             return switch (reached) {
                 // Read to the end, or as far as it got: either way the classes it did not reach
                 // are classes no row sits in.
