@@ -460,9 +460,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "inputs/ElementProjection$Reading", "steps", "(" + core + "L" + c
                 + "types/BindingId;L" + c + "inputs/BindingTrail;)Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
-        row(out, c + "inputs/InputDemand", "walk", "(" + core + reads + "L" + c + "check/Symbols;L"
-                + c + "check/DeclarationNewtypes;Ljava/util/Set;)V",
+        row(out, c + "inputs/InputUses$Walk", "whole", "(" + core + reads + ")V",
                 Reading.EACH_SUBEXPRESSION, ASKS_EACH);
+        row(out, c + "inputs/InputUses$Walk", "takenOff", "(" + core + reads + ")V",
+                Reading.EACH_SUBEXPRESSION, ASKS_EACH);
+        row(out, c + "inputs/InputUses$Walk", "fieldOf", "(" + core + ")" + core,
+                Reading.NAMES, READS_THE_NAMES);
         row(out, c + "inputs/InputPath", "introducing", "(" + core + "L" + c
                 + "inputs/BindingEnvironment;L" + c + "inputs/InputPath$OfAConstruction;)"
                 + "Ljava/lang/Object;", Reading.NAMES, READS_THE_NAMES);

@@ -634,6 +634,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "rule_unread" ],
       "signature" : {
@@ -687,6 +688,7 @@
             "extent" : "complete"
           },
           "classes" : [ "None", "Some" ],
+          "use" : "not_read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -1436,6 +1438,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -1808,6 +1811,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "rule_unread" ],
       "signature" : {
@@ -1861,6 +1865,7 @@
             "extent" : "partial"
           },
           "classes" : [ "among/0 <= x < 1", "among/1 <= x" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -2721,6 +2726,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "rule_unread" ],
       "signature" : {
@@ -2774,6 +2780,7 @@
             "extent" : "partial"
           },
           "classes" : [ "among/0 <= x < 1", "among/1 <= x" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -4018,6 +4025,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "complete",
@@ -4062,6 +4070,7 @@
             "extent" : "complete"
           },
           "classes" : [ "通常", "速達", "冷蔵" ],
+          "use" : "not_known",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -4579,6 +4588,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "rule_unread", "rewrite_undecided" ],
       "signature" : {
@@ -4631,6 +4641,7 @@
             "extent" : "complete"
           },
           "classes" : [ "指示.重量/1 <= x <= 30000", "指示.重量/30000 < x" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -4643,6 +4654,7 @@
             "extent" : "complete"
           },
           "classes" : [ "通常", "速達", "冷蔵" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -4655,6 +4667,7 @@
             "extent" : "complete"
           },
           "classes" : [ "Time.hour(指示.集荷時刻)/0 <= x < 12", "Time.hour(指示.集荷時刻)/12 <= x <= 23" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -5779,17 +5792,17 @@
           } ]
         } ],
         "pairs" : {
-          "total" : 4,
+          "total" : 2,
           "between" : [ {
             "one" : "出荷する/指示.重量",
             "other" : "出荷する/Time.hour(指示.集荷時刻)",
-            "total" : 4,
-            "covered" : 3,
-            "unknown" : 1
+            "total" : 2,
+            "covered" : 2,
+            "unknown" : 0
           } ],
           "status" : "complete",
-          "covered" : 3,
-          "unknown" : 1
+          "covered" : 2,
+          "unknown" : 0
         },
         "notDerivable" : [ "指示.品目", "指示.記録時刻" ],
         "notRead" : [ {
@@ -6497,21 +6510,6 @@
             "declaration" : "Int.max"
           }
         }
-      }, {
-        "kind" : "pair_uncovered",
-        "disposition" : "refused",
-        "subject" : "出荷する",
-        "obligationId" : {
-          "behavior" : "出荷する",
-          "classes" : [ {
-            "axis" : "出荷する/Time.hour(指示.集荷時刻)",
-            "class" : "Time.hour(指示.集荷時刻)/12 <= x <= 23"
-          }, {
-            "axis" : "出荷する/指示.重量",
-            "class" : "指示.重量/30000 < x"
-          } ]
-        },
-        "code" : "E1937"
       } ]
     }, {
       "name" : "送料を出す",
@@ -6564,6 +6562,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -6596,6 +6595,7 @@
             "extent" : "complete"
           },
           "classes" : [ "通常", "速達", "冷蔵" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -6608,6 +6608,7 @@
             "extent" : "complete"
           },
           "classes" : [ "Time.hour(指示.集荷時刻)/0 <= x < 12", "Time.hour(指示.集荷時刻)/12 <= x <= 23" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -8095,6 +8096,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "complete",
@@ -8139,6 +8141,7 @@
             "extent" : "complete"
           },
           "classes" : [ "shelf.counts[*]/x < 3", "shelf.counts[*]/3 <= x" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -8705,6 +8708,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "rewrite_undecided" ],
       "signature" : {
@@ -8750,6 +8754,7 @@
             "extent" : "complete"
           },
           "classes" : [ "shelf.counts[*]/x < 3", "shelf.counts[*]/3 <= x" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "complete",
@@ -9403,6 +9408,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "position_not_read" ],
       "signature" : {
@@ -9628,6 +9634,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "position_not_read" ],
       "signature" : {

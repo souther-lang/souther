@@ -98,20 +98,21 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
      * <p>A {@code Bool} rather than a sum, because a sum's case and its class are two findings the
      * same row closes and this model is here to move one of them on its own. Nothing draws a line,
      * so no border owes a point; the output is one data, so no case of it goes unexpected; the body
-     * forks nowhere, so no arm goes unreached. What is left is the class.
+     * forks nowhere, so no arm goes unreached. What is left is the class, which is owed a row because
+     * the body carries {@code flag} into its answer.
      */
     private static final String ONE_CLASS_OF_TWO = """
             module example.rate
 
-            data Charged = { cost: Int }
+            data Charged = { cost: Int, flag: Bool }
 
             behavior submit : (flag: Bool, cost: Int) -> Charged
                 constructs Charged
 
-            let submit (flag, cost) = Charged { cost = cost }
+            let submit (flag, cost) = Charged { cost = cost, flag = flag }
 
             example submit
-                | "set" : (true, 1) -> Charged { cost = 1 }
+                | "set" : (true, 1) -> Charged { cost = 1, flag = true }
             """;
 
     @Test
@@ -711,6 +712,46 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         assertTrue(reported.out().contains("adequacy: not satisfied"), reported.out());
         assertEquals(0, reported.code(),
                 "the account decides the verdict and `--strict` decides the exit");
+    }
+
+    /**
+     * A class no row is in at a position nothing the behavior reads is counted and not refused
+     * over: the count keeps the class, and a strict run passes.
+     */
+    @Test
+    void aClassAtAPositionNothingReadsIsCountedAndNotRefusedOver() throws Exception {
+        Run run = examples("""
+                module example.equip
+
+                data OneHanded
+                data TwoHanded
+                data Grip = OneHanded | TwoHanded
+                data Upgradable
+                data NotUpgradable
+                data Upgrade = Upgradable | NotUpgradable
+                data Weapon = { grip: Grip, upgrade: Upgrade }
+                data Equipped
+                data Refused
+
+                behavior equip : (weapon: Weapon) -> Equipped | Refused
+
+                let equip (weapon) =
+                    match weapon.grip with
+                        | OneHanded -> Equipped
+                        | TwoHanded -> Refused
+
+                example equip
+                    | "one-handed" : (Weapon { grip = OneHanded, upgrade = NotUpgradable })
+                        -> Equipped
+                    | "two-handed" : (Weapon { grip = TwoHanded, upgrade = NotUpgradable })
+                        -> Refused
+                """, "--strict");
+
+        assertEquals(0, run.code(), run.out() + run.err());
+        assertTrue(run.out().contains("equivalence partitions 3/4"), run.out());
+        assertTrue(run.out().contains("weapon.upgrade holds 2 classes and nothing this behavior"
+                + " states reads it, so no row is owed at any of them"), run.out());
+        assertTrue(run.out().contains("adequacy: satisfied"), run.out());
     }
 
     /** The same finding on the other surface, refused under its own code. */

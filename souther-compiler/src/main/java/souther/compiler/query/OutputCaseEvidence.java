@@ -159,4 +159,20 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Measure<Cases> cases)
         return cases.made().map(it -> Evidence.missingFrom(declared, it.verified()))
                 .orElseGet(List::of);
     }
+
+    /** How many of {@link #declared} a row expects — see {@link Evidence#amongThem}. Throws where
+     *  nothing was measured, for the reason {@link #seen()} does. */
+    public int specifiedCount() {
+        return Evidence.amongThem(declared, seen().specified());
+    }
+
+    /** How many of {@link #declared} the behavior was seen to answer with. */
+    public int observedCount() {
+        return Evidence.amongThem(declared, seen().observed());
+    }
+
+    /** How many of {@link #declared} a row expected and the behavior produced. */
+    public int verifiedCount() {
+        return Evidence.amongThem(declared, seen().verified());
+    }
 }

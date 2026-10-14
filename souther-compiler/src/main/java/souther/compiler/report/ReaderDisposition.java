@@ -89,7 +89,9 @@ public sealed interface ReaderDisposition {
      * classes than this behavior's body tells apart, and that combinations those classes take part
      * in are unknown because no row reaches a combination the behavior never tells apart. What that
      * is worth is the author's: a value passed through untouched is as ordinary as an input wider
-     * than it needs to be.
+     * than it needs to be. A position nothing the behavior states reads is weighed on the same
+     * terms as one the body reads and sends every class of one way, since the body tells neither
+     * apart; what differs is that no row is owed at its classes, which is said beside it.
      */
     record ReconsiderWhatThisBehaviorNeedsToDistinguish(Subject subject)
             implements ReaderDisposition {}
@@ -166,8 +168,8 @@ public sealed interface ReaderDisposition {
      * rows happen not to sit in, and there is nothing further here — which is what {@link Settled}
      * says and is not the same as saying nothing is owed.
      *
-     * <p>Read from the axes and not from the count. How many are unknown says how much of the
-     * product the rows reach; whether any of it is out of their reach is the positions' answer.
+     * <p>Read from the axes and not from the count. How many are unknown says how much of what is
+     * owed the rows reach; whether any of it is out of their reach is the positions' answer.
      */
     static ReaderDisposition of(PartitionEvidence.PairSpace pairs,
                                 List<PartitionEvidence.AxisCoverage> axes) {

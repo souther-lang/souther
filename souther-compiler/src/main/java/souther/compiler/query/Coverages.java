@@ -7,6 +7,7 @@ import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputQuestion;
+import souther.compiler.inputs.InputUses;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.inputs.SearchRegion;
@@ -32,7 +33,9 @@ import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BodyDistinction;
+import souther.compiler.partition.BodyInputReading;
 import souther.compiler.partition.Border;
+import souther.compiler.partition.InputUse;
 import souther.compiler.partition.ClassCoexistence;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.ReachingCuts;
@@ -52,18 +55,21 @@ import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.PartitionClass;
 import souther.compiler.partition.Partitions;
 import souther.compiler.partition.QuantityKey;
+import souther.compiler.partition.ReadTogether;
 import souther.compiler.partition.InputClassifications;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.Reachability;
 import souther.compiler.partition.WayToTheBorder;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -271,11 +277,14 @@ final class Coverages {
      * behavior is owed at them is the module's one relation projected to it
      * ({@link souther.compiler.query.Adequacy.BodyBorders}), and the classes measure reads none of
      * it.
+     *
+     * <p>{@code uses} is whether anything the behavior states reads each position, which decides
+     * what each position is owed and nothing about what it holds or what the rows reached.
      */
     static PartitionEvidence of(souther.compiler.partition.MeasuredInput subject,
                                 souther.compiler.query.Adequacy.RowReading observed,
                                 souther.compiler.partition.AdequacyPolicy.OfTheMeasures budget,
-                                Map<AxisId, BodyDistinction> toldApart) {
+                                BodyInputReading body, InputUses uses) {
         List<RowOutcome> rows = observed.rowsSeen();
         Partitions.Partitioning partitioning = subject.partitioning();
 
@@ -294,7 +303,8 @@ final class Coverages {
         for (Readings.AtPosition at : readings.positions()) {
             for (Readings.AxisReading reading : at.axes()) {
                 axes.add(coverageOf(at, reading, readings, partitioning, observed.rowsWereRead(),
-                        toldApartAt(toldApart, reading.axis())));
+                        toldApartAt(body.distinctions(), reading.axis()),
+                        uses.at(reading.axis().path())));
             }
         }
         // Each measure asked its own closure, and neither told from the length of what came back.
@@ -304,7 +314,7 @@ final class Coverages {
         return new PartitionEvidence(
                 PartitionDerivation.of(axes, partitioning.partitionClosure(),
                         partitioning.inputIsEmpty()),
-                pairsOf(subject.behavior(), readings, observed.rowsWereRead(), budget, toldApart),
+                pairsOf(subject.behavior(), readings, observed.rowsWereRead(), budget, body),
                 partitioning.undivided(), partitioning.rulesWithoutALine(), partitioning.blocked(),
                 // What the model asked and nothing answered, taken whole and not gathered as the
                 // axes are walked. The questions are the model's; whether a position could be
@@ -347,12 +357,13 @@ final class Coverages {
          * again with a measure in hand would be putting a question to this reading about something
          * it holds, which is what an axis from another measurement gets a wrong answer out of.
          */
-        record AxisReading(Axis axis, int at, Set<String> covered, int couldNotSay,
+        record AxisReading(Axis axis, int at, Map<String, RowWitnesses> covered, int couldNotSay,
                            List<Incompleteness> stopped) {}
 
-        /** Where one row was placed at each measure, in the order the measures are walked. Null at
-         *  a measure the row is not placed by, which is one the model only bounds. */
-        record WhereARowSat(List<Classification> at) {}
+        /** Where one row was placed at each measure, in the order the measures are walked, and what
+         *  the row is as a witness of the classes it was placed in. Null at a measure the row is not
+         *  placed by, which is one the model only bounds. */
+        record WhereARowSat(List<Classification> at, RowWitnesses by) {}
 
         static Readings of(List<RowOutcome> rows,
                            souther.compiler.partition.MeasuredInput subject,
@@ -363,7 +374,8 @@ final class Coverages {
             souther.compiler.partition.MeasuredInput.MeasuredAxes walked = subject.partitionAxes();
             List<WhereARowSat> read = new ArrayList<>(rows.size());
             for (RowOutcome row : rows) {
-                read.add(new WhereARowSat(InputClassifications.placedAt(row.inputs(), walked)));
+                read.add(new WhereARowSat(InputClassifications.placedAt(row.inputs(), walked),
+                        RowWitnesses.of(row)));
             }
             // And the same run of measures cut where the locations cut it, which is what the walk
             // above is the flattening of.
@@ -389,20 +401,23 @@ final class Coverages {
          * one position are — how many there were is the count beside it.
          */
         static AxisReading readingOf(Axis axis, int at, List<WhereARowSat> rows) {
-            Set<String> covered = new LinkedHashSet<>();
+            Map<String, RowWitnesses.Gathering> covering = new LinkedHashMap<>();
             Map<Object, Incompleteness> byKind = new LinkedHashMap<>();
             int couldNotSay = 0;
             for (WhereARowSat row : rows) {
                 Classification said = row.at().get(at);
                 if (said instanceof Classification.Classified in) {
-                    covered.addAll(in.classIds());
+                    for (String id : in.classIds()) {
+                        covering.computeIfAbsent(id, _ -> new RowWitnesses.Gathering())
+                                .add(row.by());
+                    }
                 }
                 if (said != null && said.stopped() != null) {
                     couldNotSay++;
                     byKind.putIfAbsent(said.stopped().identity(), said.stopped());
                 }
             }
-            return new AxisReading(axis, at, covered, couldNotSay,
+            return new AxisReading(axis, at, RowWitnesses.Gathering.done(covering), couldNotSay,
                     List.copyOf(byKind.values()));
         }
 
@@ -482,7 +497,7 @@ final class Coverages {
                                                       Readings readings, boolean asked,
                                                       souther.compiler.partition.AdequacyPolicy
                                                               .OfTheMeasures budget,
-                                                      Map<AxisId, BodyDistinction> toldApart) {
+                                                      BodyInputReading body) {
         // Every measure a row is placed at, which is the locations above flattened rather than a
         // list somebody gathered beside them. A pair is between two positions, so this question is
         // the one that reads across them.
@@ -505,12 +520,19 @@ final class Coverages {
         // BodyDistinction#makesCombinations}). A position nothing in the body is about answers the
         // same however the other one moves, so the product of it with anything asks for a row that
         // shows nothing the two rows apart do not.
+        //
+        // And of those, only the classes some run reads together ({@link ReadTogether}). Two
+        // positions read on ways no run takes both of are told apart by the body each, and a row
+        // combining them shows nothing the rows apart do not either.
         boolean[] combining = new boolean[axes.size()];
         for (int i = 0; i < axes.size(); i++) {
-            combining[i] = toldApartAt(toldApart, axes.get(i)).makesCombinations();
+            combining[i] = toldApartAt(body.distinctions(), axes.get(i)).makesCombinations();
         }
-        List<PartitionEvidence.PairSpace.AxisPair> space = new ArrayList<>();
+        // Listed while there are no more of them than this compilation counts off the rows, and
+        // counted past that: the number is exact either way, and a list nobody walks is not kept.
+        List<OwedBetween> owed = new ArrayList<>();
         ClassCoexistence among = ClassCoexistence.among(axes);
+        long total = 0;
         for (int i = 0; i < axes.size(); i++) {
             if (!combining[i]) {
                 continue;
@@ -519,16 +541,23 @@ final class Coverages {
                 if (!combining[j]) {
                     continue;
                 }
-                long between = combinationsOf(among, axes, i, j);
-                if (between > 0) {
-                    space.add(new PartitionEvidence.PairSpace.AxisPair(
-                            new PartitionEvidence.PairSpace.Between(
-                                    axes.get(i).id(), axes.get(j).id()), between));
+                OwedBetween between = owedBetween(among, body.together(), axes, i, j,
+                        budget.pairSpace() - total);
+                total += between.count();
+                if (between.count() > 0) {
+                    owed.add(between);
                 }
             }
         }
-        if (space.isEmpty()) {
+        if (owed.isEmpty()) {
             return PartitionEvidence.PairSpace.NONE;
+        }
+        boolean listed = total <= budget.pairSpace();
+        List<PartitionEvidence.PairSpace.AxisPair> space = new ArrayList<>();
+        for (OwedBetween each : owed) {
+            space.add(new PartitionEvidence.PairSpace.AxisPair(each.between(), listed
+                    ? new PartitionEvidence.PairSpace.Owed.Listed(List.copyOf(each.cells()))
+                    : new PartitionEvidence.PairSpace.Owed.Counted(each.count())));
         }
         // Before anything about the rows, because there are none to be about: a build that asked for
         // no measurement read no row, and what the model holds stays what the model says it is.
@@ -541,30 +570,23 @@ final class Coverages {
         if (readings.noRows() && !readings.someRowsUnseen()) {
             return PartitionEvidence.PairSpace.noRows(space);
         }
-        long total = space.stream().mapToLong(PartitionEvidence.PairSpace.AxisPair::total).sum();
-        if (total > budget.pairSpace()) {
+        if (!listed) {
             return PartitionEvidence.PairSpace.truncated(behavior, space, total,
                     budget.pairSpace());
         }
         // One set of combinations per relation, in the order the relations were worked out. What is
         // counted is the same as it was; where the count goes is what changed.
         SequencedMap<PartitionEvidence.PairSpace.Between,
-                Set<PartitionEvidence.PairSpace.Cell>> reached = new LinkedHashMap<>();
-        space.forEach(pair -> reached.put(pair.between(), new LinkedHashSet<>()));
+                Map<PartitionEvidence.PairSpace.Cell, RowWitnesses.Gathering>> reached =
+                new LinkedHashMap<>();
+        space.forEach(pair -> reached.put(pair.between(), new LinkedHashMap<>()));
         // Which relation each pair of positions is, worked out once. Which two positions they are
         // does not turn on the row, and made inside the walk over the rows it is a name built and
         // thrown away for every row the behavior has.
         Map<Long, ReachedBetween> byPositions = new LinkedHashMap<>();
-        for (int i = 0; i < axes.size(); i++) {
-            for (int j = i + 1; j < axes.size(); j++) {
-                PartitionEvidence.PairSpace.Between relation =
-                        new PartitionEvidence.PairSpace.Between(axes.get(i).id(), axes.get(j).id());
-                Set<PartitionEvidence.PairSpace.Cell> here = reached.get(relation);
-                if (here != null) {
-                    byPositions.put((long) i * axes.size() + j,
-                            new ReachedBetween(relation, here));
-                }
-            }
+        for (OwedBetween each : owed) {
+            byPositions.put((long) each.one() * axes.size() + each.other(), new ReachedBetween(
+                    each.between(), each.cells(), reached.get(each.between())));
         }
         for (Readings.WhereARowSat where : readings.byRow()) {
             for (int i = 0; i < axes.size(); i++) {
@@ -583,15 +605,24 @@ final class Coverages {
                         // Which classes, within the relation that holds them. The relation is the
                         // key above and a class id is unique within its axis, so what is written
                         // here needs to tell two combinations of these two positions apart and no
-                        // more.
-                        at.cells().add(new PartitionEvidence.PairSpace.Cell(
-                                at.between(), pair.getKey(), pair.getValue()));
+                        // more. Counted only where it is owed: a row in a combination no run
+                        // reads together reached nothing anybody asked for.
+                        PartitionEvidence.PairSpace.Cell cell =
+                                new PartitionEvidence.PairSpace.Cell(
+                                        at.between(), pair.getKey(), pair.getValue());
+                        if (at.owed().contains(cell)) {
+                            at.cells().computeIfAbsent(cell, _ -> new RowWitnesses.Gathering())
+                                    .add(where.by());
+                        }
                     }
                 }
             }
         }
+        SequencedMap<PartitionEvidence.PairSpace.Between,
+                Map<PartitionEvidence.PairSpace.Cell, RowWitnesses>> found = new LinkedHashMap<>();
+        reached.forEach((between, cells) -> found.put(between, RowWitnesses.Gathering.done(cells)));
         PartitionEvidence.PairSpace.CoveredBetween made =
-                new PartitionEvidence.PairSpace.CoveredBetween(reached);
+                new PartitionEvidence.PairSpace.CoveredBetween(found);
         WeakeningSet by = readings.weakening(read);
         return new PartitionEvidence.PairSpace(space, by.isEmpty()
                 ? new Measurement.Complete<>(made) : new Measurement.Partial<>(made, by));
@@ -614,91 +645,74 @@ final class Coverages {
     }
 
     /**
-     * How many combinations two positions' classes make between them.
+     * The combinations two positions' classes owe a row for: those some run reads together, of
+     * classes that can be in one value.
      *
-     * <p>The product where the two are in one value, and less where they are not. Which two classes
-     * can be in one value is {@link ClassCoexistence}'s answer, and the same answer is what decides
-     * which combinations are left ({@link #uncovered}) — so what is counted here and what a row is
-     * asked for come from one reading rather than from two that agree until a case is added.
+     * <p>Which two classes can be in one value is {@link ClassCoexistence}'s answer and which a run
+     * reads together is {@link ReadTogether}'s, both asked here once. The list made here is what
+     * the space holds, and the count, what the rows reached and what is left are all read off it —
+     * so what is counted and what a row is asked for come from one reading rather than from two
+     * that agree until a case is added.
+     *
+     * @param room how many may be listed; past that they are counted and not listed
      */
-    private static long combinationsOf(ClassCoexistence among, List<Axis> axes, int one,
-                                       int other) {
+    private static OwedBetween owedBetween(ClassCoexistence among, ReadTogether together,
+                                           List<Axis> axes, int one, int other, long room) {
+        Axis ones = axes.get(one);
+        Axis others = axes.get(other);
+        PartitionEvidence.PairSpace.Between between =
+                new PartitionEvidence.PairSpace.Between(ones.id(), others.id());
+        SequencedSet<PartitionEvidence.PairSpace.Cell> cells = new LinkedHashSet<>();
+        List<String> oneClasses = ones.classes().stream().map(PartitionClass::id).toList();
+        List<String> otherClasses = others.classes().stream().map(PartitionClass::id).toList();
+        // A class of the first at a time, so that what is made to answer is one row of the
+        // combinations and not all of them.
+        ReadTogether.Between read = together.between(ones.id(), oneClasses, others.id(),
+                otherClasses);
         long count = 0;
-        for (int here = 0; here < axes.get(one).classes().size(); here++) {
-            for (int there = 0; there < axes.get(other).classes().size(); there++) {
-                if (among.canHoldTogether(one, here, other, there)) {
-                    count++;
-                }
-            }
-        }
-        return count;
-    }
-
-    /**
-     * One relation of two positions, beside the combinations of it the rows have reached.
-     *
-     * <p>The two together because the walk over the rows wants both at once, and which relation a
-     * position and the one beside it make does not turn on the row. Looked up separately, the
-     * relation is fetched again for every combination every row is in.
-     */
-    private record ReachedBetween(PartitionEvidence.PairSpace.Between between,
-                                  Set<PartitionEvidence.PairSpace.Cell> cells) {
-    }
-
-    /**
-     * The combinations of a behavior's pair space no row is in, made where somebody asks for them.
-     *
-     * <p>Here rather than on the measure, and made rather than held. The space is as large as the
-     * positions make it and what is worth carrying about it is two numbers and the combinations the
-     * rows reached; which ones are left is wanted where something acts on them, and is worked out
-     * from the positions — which are the model's and are not part of an answer about the rows.
-     *
-     * <p>Combinations a value can be in only, asked the way the count is asked. A class of a
-     * position under one case of a sum and a class of a position under another are in no one value,
-     * and neither are a class of an element's field and a count of its list that admits no element,
-     * so they make no combination and nothing is owed at them.
-     *
-     * <p>Empty where no count was made. A combination nothing was read about is not one no row is
-     * in, and a list of the whole space would be read as a list of gaps.
-     */
-    static List<souther.compiler.partition.ObligationIdentity.OfAFallbackPairCell> uncovered(
-            String behavior, souther.compiler.partition.MeasuredInput.MeasuredAxes axes,
-            PartitionEvidence.PairSpace pairs) {
-        if (pairs.counted().made().isEmpty()) {
-            return List.of();
-        }
-        PartitionEvidence.PairSpace.CoveredBetween made = pairs.counted().made().orElseThrow();
-        List<souther.compiler.partition.ObligationIdentity.OfAFallbackPairCell> out =
-                new ArrayList<>();
-        List<Axis> ordered = axes.axes();
-        ClassCoexistence among = ClassCoexistence.among(ordered);
-        for (int i = 0; i < ordered.size(); i++) {
-            for (int j = i + 1; j < ordered.size(); j++) {
-                PartitionEvidence.PairSpace.Between between =
-                        new PartitionEvidence.PairSpace.Between(
-                                ordered.get(i).id(), ordered.get(j).id());
-                if (!made.byPair().containsKey(between)) {
+        for (int here = 0; here < oneClasses.size(); here++) {
+            BitSet readWith = read.readWith(here);
+            for (int there = readWith.nextSetBit(0); there >= 0;
+                    there = readWith.nextSetBit(there + 1)) {
+                if (!among.canHoldTogether(one, here, other, there)) {
                     continue;
                 }
-                Set<PartitionEvidence.PairSpace.Cell> reached = made.reached(between);
-                List<PartitionClass> ones = ordered.get(i).classes();
-                List<PartitionClass> others = ordered.get(j).classes();
-                for (int here = 0; here < ones.size(); here++) {
-                    for (int there = 0; there < others.size(); there++) {
-                        if (!among.canHoldTogether(i, here, j, there)) {
-                            continue;
-                        }
-                        PartitionEvidence.PairSpace.Cell cell =
-                                new PartitionEvidence.PairSpace.Cell(between,
-                                        ones.get(here).id(), others.get(there).id());
-                        if (!reached.contains(cell)) {
-                            out.add(cell.owedBy(behavior));
-                        }
-                    }
+                String oneClass = oneClasses.get(here);
+                String otherClass = otherClasses.get(there);
+                count++;
+                if (count <= room) {
+                    cells.add(new PartitionEvidence.PairSpace.Cell(between, oneClass,
+                            otherClass));
                 }
             }
         }
-        return List.copyOf(out);
+        return new OwedBetween(one, other, between, count,
+                count <= room ? cells : new LinkedHashSet<>());
+    }
+
+    /**
+     * The combinations of one relation a row is owed for, and how many there are.
+     *
+     * @param one   which of the positions walked the relation's first is
+     * @param other which its second is
+     * @param cells each of them, where there are no more than could be listed; empty past that
+     */
+    private record OwedBetween(int one, int other, PartitionEvidence.PairSpace.Between between,
+                               long count, SequencedSet<PartitionEvidence.PairSpace.Cell> cells) {
+    }
+
+    /**
+     * One relation of two positions, beside the combinations of it owed and those the rows have
+     * reached.
+     *
+     * <p>Together because the walk over the rows wants them at once, and which relation a position
+     * and the one beside it make does not turn on the row. Looked up separately, the relation is
+     * fetched again for every combination every row is in.
+     */
+    private record ReachedBetween(PartitionEvidence.PairSpace.Between between,
+                                  Set<PartitionEvidence.PairSpace.Cell> owed,
+                                  Map<PartitionEvidence.PairSpace.Cell,
+                                          RowWitnesses.Gathering> cells) {
     }
 
     /**
@@ -745,7 +759,7 @@ final class Coverages {
     private static PartitionEvidence.AxisCoverage coverageOf(Readings.AtPosition where,
             Readings.AxisReading reading, Readings readings,
             souther.compiler.partition.Partitions.Partitioning partitioning,
-            boolean asked, BodyDistinction toldApart) {
+            boolean asked, BodyDistinction toldApart, InputUse use) {
         Axis axis = reading.axis();
         souther.compiler.partition.PositionAccount at = where.position().position();
         List<String> classes = axis.classes().stream().map(PartitionClass::id).toList();
@@ -774,18 +788,18 @@ final class Coverages {
         // below, and a build that asked for no measurement read no row.
         if (!asked) {
             return PartitionEvidence.AxisCoverage.notAsked(axis.id(),
-                    axis.term().toString(), classes, axis.divides(), toldApart, read);
+                    axis.term().toString(), classes, axis.divides(), toldApart, use, read);
         }
         if (readings.noRows() && !readings.someRowsUnseen()) {
             return PartitionEvidence.AxisCoverage.noRows(axis.id(),
-                    axis.term().toString(), classes, axis.divides(), toldApart, read);
+                    axis.term().toString(), classes, axis.divides(), toldApart, use, read);
         }
         PartitionEvidence.AxisCoverage.Reached reached =
                 new PartitionEvidence.AxisCoverage.Reached(reading.covered(),
                         reading.couldNotSay());
         WeakeningSet by = readings.weakening(List.of(reading));
         return new PartitionEvidence.AxisCoverage(axis.id(), axis.term().toString(),
-                classes, axis.divides(), toldApart, read, by.isEmpty()
+                classes, axis.divides(), toldApart, use, read, by.isEmpty()
                         ? new Measurement.Complete<>(reached)
                         : new Measurement.Partial<>(reached, by));
     }
@@ -891,7 +905,7 @@ final class Coverages {
             List<Border> lines, souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
             ItemAssessment.WritabilityProjection projection,
-            java.util.Optional<SiteNumbering> numbering, ReachingCuts reaching) {
+            RowsPutToTheLines put, ReachingCuts reaching) {
         // One entry per reading and not per line. A guard inside a non-recursive helper is read once
         // per call of that helper, and the rows do not owe the same border twice for having been
         // offered it twice — but each reading is reached under its caller's own conditions, so what
@@ -901,7 +915,7 @@ final class Coverages {
         for (Border each : lines) {
             out.add(assessed(each, reading(subject.at(each), projection, elsewhere(lines, each),
                             wayTo(each, reaching), subject.quantities().region()),
-                    observed, numbering));
+                    observed, put));
         }
         return List.copyOf(out);
     }
@@ -1137,6 +1151,40 @@ final class Coverages {
     }
 
     /**
+     * One behavior's rows as every line of it is put to them, read once for all of its lines.
+     *
+     * <p>What a row holds and what running it recorded do not turn on the line, so reading them
+     * again for each line was the same work once per line the behavior has. The rows that are not
+     * ones that do not hold are set apart here too, since a point is first asked of them alone
+     * wherever there are any of the others.
+     *
+     * @param all        every row, in the order the reading holds them
+     * @param notHolding the rows among them that do not hold
+     * @param others     the values of every other row, which is {@code all}'s where there are none
+     */
+    record RowsPutToTheLines(List<ObservedInputs> all, List<WitnessedRow> notHolding,
+                             List<ObservedInputs> others) {
+
+        static RowsPutToTheLines of(Adequacy.RowReading observed,
+                                    Optional<SiteNumbering> numbering) {
+            List<ObservedInputs> all = new ArrayList<>();
+            List<WitnessedRow> notHolding = new ArrayList<>();
+            List<ObservedInputs> others = new ArrayList<>();
+            for (RowOutcome row : observed.rowsSeen()) {
+                WitnessedRow read = WitnessedRow.of(row, numbering);
+                all.add(read.observed());
+                if (read.by().anotherRow()) {
+                    others.add(read.observed());
+                } else {
+                    notHolding.add(read);
+                }
+            }
+            return new RowsPutToTheLines(List.copyOf(all), List.copyOf(notHolding),
+                    notHolding.isEmpty() ? List.copyOf(all) : List.copyOf(others));
+        }
+    }
+
+    /**
      * What each of one border's four points came to.
      *
      * <p>Every role, and the ones nobody is owed a row in carry the border's own reason rather than
@@ -1153,7 +1201,7 @@ final class Coverages {
      */
     private static BorderAssessment assessed(Border border, OneShapeOfBorder shape,
                                              souther.compiler.query.Adequacy.RowReading observed,
-                                             java.util.Optional<SiteNumbering> numbering) {
+                                             RowsPutToTheLines put) {
         // Whether meeting this border takes the comparison having run, asked of the rule rather than
         // read off which kind it is, and asked once for the border rather than once per point. A
         // guard's line is about a place in a body and is reached or not; an invariant's and a
@@ -1164,10 +1212,8 @@ final class Coverages {
                 whyNothingWasReadAgainstTheLine(guard, observed);
 
         // The rows as the values they hold and what running them recorded, which is the whole of
-        // what a point is met by. Read once for the border: what a row is stays the same however
-        // many of the four points it is put to.
-        List<ObservedInputs> rows = observed.rowsSeen().stream()
-                .map(row -> ObservedInputs.of(row, numbering)).toList();
+        // what a point is met by. Read once for every line of the behavior.
+        List<ObservedInputs> rows = put.all();
 
         java.util.Map<DomainPoint, ItemAssessment> items = new java.util.LinkedHashMap<>();
         for (DomainPoint point : border.answers().keySet()) {
@@ -1176,8 +1222,7 @@ final class Coverages {
                 case Demand.NotWorkedOut not -> new ItemAssessment.NotWorkedOut(not.why());
                 case Demand.Owed owed -> {
                     Measurement<ItemAssessment.Coverage> coverage = absent != null ? absent
-                            : verdictOf(shape.met(owed.criterion(), rows), guard,
-                                    border, observed);
+                            : standingAt(shape, owed.criterion(), put, guard, border, observed);
                     // No search. Nothing was searched for here, and that is said by there being no
                     // search rather than by a search saying nobody asked: whether a value was
                     // composed is a fact about who asked for one, and a measurement that carried it
@@ -1194,6 +1239,54 @@ final class Coverages {
                 ? new AnotherLineTheRowsAllow.CouldNotTell(
                         new AnotherLineTheRowsAllow.Unsettled.TheRowsWereNotRead(absent))
                 : shape.beside(everyPointMet(items), rows));
+    }
+
+    /**
+     * What the rows come to at one point, with which rows stand there as far as whether they are
+     * all rows that do not hold.
+     *
+     * <p>Asked of the same walk every time, put to fewer rows. Meeting a point is one row standing
+     * there, so where some row does not hold the point is asked of the other rows first: one of them
+     * standing there is the point met by another row, and the walk over every row is not made at
+     * all. Only where none of them does is every row put to it, and where that meets it, each row
+     * that does not hold alone, to say which it rests on. A behavior none of whose rows fails is
+     * asked the one question it always was.
+     */
+    private static Measurement<ItemAssessment.Coverage> standingAt(
+            OneShapeOfBorder shape, Criterion criterion, RowsPutToTheLines put, boolean guard,
+            Border border, Adequacy.RowReading observed) {
+        if (put.notHolding().isEmpty()) {
+            return verdictOf(shape.met(criterion, put.all()), () -> RowWitnesses.ANOTHER_ROW,
+                    guard, border, observed);
+        }
+        StandingAtAPoint.Met byOthers = shape.met(criterion, put.others());
+        if (byOthers instanceof StandingAtAPoint.Met.Reached) {
+            return verdictOf(byOthers, () -> RowWitnesses.ANOTHER_ROW, guard, border, observed);
+        }
+        return verdictOf(shape.met(criterion, put.all()),
+                () -> onlyRowsThatDoNotHoldAt(shape, criterion, put.notHolding()),
+                guard, border, observed);
+    }
+
+    /** Which of {@code notHolding} stand at a point every row was found to meet and no other row
+     *  does. */
+    private static RowWitnesses onlyRowsThatDoNotHoldAt(OneShapeOfBorder shape,
+                                                        Criterion criterion,
+                                                        List<WitnessedRow> notHolding) {
+        RowWitnesses.Gathering found = new RowWitnesses.Gathering();
+        boolean any = false;
+        for (WitnessedRow row : notHolding) {
+            if (shape.met(criterion, List.of(row.observed()))
+                    instanceof StandingAtAPoint.Met.Reached) {
+                found.add(row.by());
+                any = true;
+            }
+        }
+        if (!any) {
+            throw new IllegalStateException("a point the rows meet is met by one of them, and none"
+                    + " of them meets it on its own");
+        }
+        return found.done();
     }
 
     /**
@@ -2070,7 +2163,7 @@ final class Coverages {
     static List<BorderAssessment> assessBetween(
             souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
-            java.util.Optional<SiteNumbering> numbering, ReachingCuts reaching) {
+            RowsPutToTheLines put, ReachingCuts reaching) {
         Partitions.Partitioning partitioning = subject.partitioning();
         // One entry per reading, the way a line at a place is read: what several readings of one
         // line come to is one answer, and it is put together where the last thing that is a
@@ -2081,7 +2174,7 @@ final class Coverages {
                             ItemAssessment.WritabilityProjection.NOT_COMPUTED,
                             elsewhere(partitioning.between(), each), wayTo(each, reaching),
                             subject.quantities().region()),
-                    observed, numbering));
+                    observed, put));
         }
         return List.copyOf(out);
     }
@@ -2096,11 +2189,11 @@ final class Coverages {
      * comparison, and everything else is answered by how whole the reading was.
      */
     private static Measurement<ItemAssessment.Coverage> verdictOf(
-            StandingAtAPoint.Met met, boolean guard, souther.compiler.partition.Border border,
-            souther.compiler.query.Adequacy.RowReading observed) {
+            StandingAtAPoint.Met met, Supplier<RowWitnesses> whoStandsThere, boolean guard,
+            Border border, Adequacy.RowReading observed) {
         if (met instanceof StandingAtAPoint.Met.Reached) {
             // Found is found: a row settles this whatever else went unread, so nothing weakens it.
-            return new Measurement.Complete<>(new ItemAssessment.Coverage.Hit());
+            return new Measurement.Complete<>(new ItemAssessment.Coverage.Hit(whoStandsThere.get()));
         }
         // What is not found is undecided rather than absent, wherever the reading behind it was not
         // whole — and now says which reading it was. A row whose value here could not be read; a row

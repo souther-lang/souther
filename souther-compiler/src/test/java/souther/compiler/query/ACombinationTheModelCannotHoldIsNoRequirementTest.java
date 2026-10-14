@@ -84,8 +84,7 @@ class ACombinationTheModelCannotHoldIsNoRequirementTest {
     @Test
     void whatIsLeftToWriteIsWhatTheCountSaysIsLeft() {
         PartitionEvidence.PairSpace pairs = pairsOf();
-        List<ObligationIdentity.OfAFallbackPairCell> left =
-                Coverages.uncovered("take", axesOf(), pairs);
+        List<ObligationIdentity.OfAFallbackPairCell> left = pairs.left("take");
 
         assertEquals(pairs.unknown(), left.size(),
                 () -> "the combinations left over are the ones the count is short of: " + left);

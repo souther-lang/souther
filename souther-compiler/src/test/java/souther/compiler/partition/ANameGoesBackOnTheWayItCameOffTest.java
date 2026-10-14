@@ -54,7 +54,10 @@ class ANameGoesBackOnTheWayItCameOffTest {
             data DecisionNN = DecisionN
 
             behavior run : (x: DecisionN) -> Ok
-            let run (x) = Ok
+            let run (x) =
+                match x.value with
+                    | Approved -> Ok
+                    | Rejected -> Ok
             """;
 
     private final RuleReadingSource rules = RuleReadings.ofSource(MODULE);

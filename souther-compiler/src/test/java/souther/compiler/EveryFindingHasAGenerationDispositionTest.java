@@ -763,11 +763,18 @@ class EveryFindingHasAGenerationDispositionTest {
         StringBuilder names = new StringBuilder();
         StringBuilder declared = new StringBuilder();
         StringBuilder written = new StringBuilder();
+        // Every position read, by one arm for both cases: a case of a position nothing reads is
+        // owed no row, and one arm tells nothing apart, so no combination joins what is offered.
+        StringBuilder body = new StringBuilder();
         for (int at = 1; at <= positions; at++) {
             names.append(at == 1 ? "" : ", ").append("k").append(at);
             declared.append(at == 1 ? "" : ", ").append("k").append(at).append(": Kind");
             written.append(at == 1 ? "" : ", ").append("Domestic");
+            String indent = "    ".repeat(2 * at - 1);
+            body.append(indent).append("match k").append(at).append(" with\n")
+                    .append(indent).append("    | Domestic | Overseas ->\n");
         }
+        body.append("    ".repeat(2 * positions + 1)).append("Fine\n");
         return """
                 module example.wide
 
@@ -781,11 +788,11 @@ class EveryFindingHasAGenerationDispositionTest {
 
                 behavior pick : (%s) -> Verdict
 
-                let pick (%s) = Fine
-
+                let pick (%s) =
+                %s
                 example pick
                     | "all home" : (%s) -> Fine
-                """.formatted(declared, names, written);
+                """.formatted(declared, names, body, written);
     }
 
     /** The answer for the case named {@code missing} of the input at {@code at}, one-based. */

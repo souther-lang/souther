@@ -204,6 +204,13 @@ public record RowOutcome(SourcePos at,
             throw new IllegalArgumentException("a row whose answer is owed holds an answer to"
                     + " nothing: " + stage + " with " + disposition + " at " + failurePhase);
         }
+        if (disposition == Disposition.FAILED && !failurePhase.failsARow()) {
+            // A failed row says where the model did not do what it says. Stopped anywhere else, it
+            // ends undecided, and a failed row carrying such a place would be read as a row the
+            // model got wrong by every reader that asks where it stopped.
+            throw new IllegalArgumentException("a row that failed stopped where a row can fail: "
+                    + failurePhase);
+        }
         if (!owed && disposition == Disposition.NOTHING_TO_HOLD) {
             throw new IllegalArgumentException("a row that ended with nothing to hold its answer to"
                     + " is one whose answer is owed: " + expectation);

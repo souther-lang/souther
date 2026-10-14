@@ -35,9 +35,11 @@ import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Clause;
 import souther.compiler.check.RuleRef;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.RowFailure;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.RuleOrigin;
+import souther.compiler.publish.InputUseWord;
 import souther.compiler.publish.MaterialisationRegionWord;
 import souther.compiler.publish.RegionSlotWord;
 import souther.compiler.publish.ThroughStepWord;
@@ -387,6 +389,10 @@ class EverySchemaWordIsAccountedForTest {
                             "properties", "construct", "properties", "through", "items",
                             "properties", "kind"),
                     ThroughStepWord.class),
+            // Where a row that does not hold stopped, which only the places a row fails at spell.
+            new Vocabulary("aRowThatDoesNotHold.failedAt",
+                    List.of("$defs", "aRowThatDoesNotHold", "properties", "failedAt"),
+                    RowFailure.class),
             new Vocabulary("materialisationRegion.kind",
                     List.of("$defs", "materialisationRegion", "properties", "kind"),
                     MaterialisationRegionWord.class),
@@ -619,6 +625,10 @@ class EverySchemaWordIsAccountedForTest {
                             "reason"),
                     PartitionEvidence.AxisCoverage.class,
                     souther.compiler.query.NothingWasAsked.class),
+            new Vocabulary("partition.axes[].use",
+                    List.of("$defs", "partition", "properties", "axes", "items", "properties",
+                            "use"),
+                    InputUseWord.class),
             new Vocabulary("partition.axes[].unprovenClaims[].why",
                     List.of("$defs", "partition", "properties", "axes", "items", "properties",
                             "unprovenClaims", "items", "properties", "why"),

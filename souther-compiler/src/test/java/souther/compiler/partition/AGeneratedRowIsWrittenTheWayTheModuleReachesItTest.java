@@ -37,7 +37,12 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
             data Kind = Domestic | Overseas
             """;
 
-    /** A boundary at an imported newtype, drawn by a guard, and a case beside it. */
+    /**
+     * A boundary at an imported newtype, drawn by a guard, and a case beside it.
+     *
+     * <p>The body reads the case, spelled the way {@code kind} reaches its type, so a row at each
+     * of its classes is owed.
+     */
     private static String app(String imports, String amount, String kind) {
         return """
                 module app exposing ( Req, Ok, No, Verdict, f )
@@ -52,8 +57,8 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
 
                 behavior f : (r: Req) -> Verdict
                 let f (r) = { guard r.amount.value < 500 else Ok
-                    No }
-                """.formatted(imports, amount, kind);
+                    if r.kind == %s then No else No }
+                """.formatted(imports, amount, kind, kind.replace("Kind", "Domestic"));
     }
 
     private static Compilation compiled(String source) {

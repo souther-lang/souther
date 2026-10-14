@@ -279,7 +279,7 @@ class AMeasureWithNoValueWritesNoFieldOfOneTest {
         Set<String> identity = Set.of("obligationId");
         Set<String> shown = Set.of("label", "kind", "construct", "at");
         Set<String> state = Set.of("disposition");
-        Set<String> provenance = Set.of("weakening", "notCountedBecause");
+        Set<String> provenance = Set.of("weakening", "notCountedBecause", "onlyWitnessedBy");
 
         Set<String> vocabulary = new java.util.LinkedHashSet<>();
         vocabulary.addAll(identity);

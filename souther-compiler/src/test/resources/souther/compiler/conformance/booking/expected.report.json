@@ -717,6 +717,7 @@
         },
         "disposition" : "met"
       } ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -1466,6 +1467,7 @@
       "rows" : 0,
       "pending" : 0,
       "rowObligations" : [ ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -1519,6 +1521,7 @@
             "extent" : "complete"
           },
           "classes" : [ "voucher/= spring", "voucher//= spring" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "unavailable",
@@ -1530,6 +1533,7 @@
             "extent" : "complete"
           },
           "classes" : [ "party/1 <= x <= 4", "party/4 < x <= 8" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "unavailable",
@@ -2630,11 +2634,11 @@
           } ]
         } ],
         "pairs" : {
-          "total" : 4,
+          "total" : 2,
           "between" : [ {
             "one" : "redeem/voucher",
             "other" : "redeem/party",
-            "total" : 4
+            "total" : 2
           } ],
           "status" : "unavailable",
           "reason" : "no_rows"
@@ -3020,6 +3024,7 @@
       "rows" : 0,
       "pending" : 0,
       "rowObligations" : [ ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -3073,6 +3078,7 @@
             "extent" : "complete"
           },
           "classes" : [ "ticket/String.startsWith(\"w-\", x)", "ticket/not String.startsWith(\"w-\", x)" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "unavailable",
@@ -3084,6 +3090,7 @@
             "extent" : "complete"
           },
           "classes" : [ "party/1 <= x <= 4", "party/4 < x <= 8" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "unavailable",
@@ -4014,6 +4021,7 @@
       "rows" : 0,
       "pending" : 0,
       "rowObligations" : [ ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "body_not_in_evaluation" ],
       "signature" : {
@@ -4081,6 +4089,7 @@
       "rows" : 0,
       "pending" : 0,
       "rowObligations" : [ ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "partial",
       "weakening" : [ "rule_unread" ],
       "signature" : {

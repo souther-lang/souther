@@ -43,7 +43,7 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
 
             data Tier = Gold | Silver
             data Draft = { cost: Amount, tier: Tier }
-            data Submitted = { cost: Amount }
+            data Submitted = { cost: Amount, tier: Tier }
             data Rejected = { reason: String }
 
             behavior submit : (request: Draft) -> Submitted | Rejected
@@ -51,7 +51,7 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
 
             let submit (request) = {
                 guard request.cost.value <= 100 else Rejected { reason = "over" }
-                Submitted { cost = request.cost }
+                Submitted { cost = request.cost, tier = request.tier }
             }
             """;
 
@@ -61,7 +61,7 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
             example submit
                 | "a silver draft under the ceiling is submitted"
                     : (Draft { cost = Amount(0), tier = Silver })
-                    -> Submitted { cost = Amount(0) }
+                    -> Submitted { cost = Amount(0), tier = Silver }
             """;
 
     /** {@code | "name" : (inputs)} as the block writes it, over lines the formatter may have wrapped. */

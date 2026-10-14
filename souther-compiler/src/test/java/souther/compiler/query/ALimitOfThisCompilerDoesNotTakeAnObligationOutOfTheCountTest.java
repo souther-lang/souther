@@ -230,7 +230,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
     }
 
     private static List<ObligationCoverage> everyCoverage() {
-        return List.of(new ObligationCoverage.Witnessed(),
+        return List.of(new ObligationCoverage.Witnessed(RowWitnesses.ANOTHER_ROW),
                 new ObligationCoverage.Missed(),
                 new ObligationCoverage.Undecided(WeakeningSet.of(
                         new Weakening.BorderValueUnreadable(null,

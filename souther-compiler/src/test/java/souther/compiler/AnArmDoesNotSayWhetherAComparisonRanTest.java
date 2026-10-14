@@ -7,6 +7,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.RowWitnesses;
 import souther.compiler.report.ArmVocabulary;
 
 import java.util.List;
@@ -94,7 +95,7 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
      */
     @Test
     void oneValueAndOneArmAreNotOneAnswer() {
-        assertEquals(new ItemAssessment.Coverage.Hit(),
+        assertEquals(new ItemAssessment.Coverage.Hit(RowWitnesses.ANOTHER_ROW),
 coverageOf(linesFor("0", "100001", "Manual"), "gate/r.cost", "100001").made().orElseThrow(),
                 "the comparison produced false, which is reaching it");
         assertEquals(new ItemAssessment.Coverage.NoHit(),
@@ -105,7 +106,7 @@ coverageOf(linesFor("-1", "100001", "Manual"), "gate/r.cost", "100001").made().o
     /** A row that reached the comparison and made it true meets the line's own value. */
     @Test
     void aRowThatMadeTheComparisonTrueMeetsTheValue() {
-        assertEquals(new ItemAssessment.Coverage.Hit(),
+        assertEquals(new ItemAssessment.Coverage.Hit(RowWitnesses.ANOTHER_ROW),
 coverageOf(linesFor("0", "100000", "Auto"), "gate/r.cost", "100000").made().orElseThrow());
     }
 

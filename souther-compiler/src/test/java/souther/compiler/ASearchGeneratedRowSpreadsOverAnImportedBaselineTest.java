@@ -53,7 +53,10 @@ class ASearchGeneratedRowSpreadsOverAnImportedBaselineTest {
             behavior calc : (c: Cond) -> Out
                 constructs Out
 
-            let calc (c) = Out { n = 0 }
+            let calc (c) =
+                match c.f with
+                    | C -> Out { n = 0 }
+                    | B -> Out { n = 0 }
 
             example calc
                 | "base" : (standard) -> Out { n = 0 }

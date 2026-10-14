@@ -556,6 +556,7 @@
       "rows" : 0,
       "pending" : 0,
       "rowObligations" : [ ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -604,6 +605,7 @@
             "extent" : "complete"
           },
           "classes" : [ "worked/1 <= x < 5", "worked/5 <= x <= 7" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "unavailable",
@@ -615,6 +617,7 @@
             "extent" : "complete"
           },
           "classes" : [ "rate/0 <= x < 0.8", "rate/0.8 <= x <= 1" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "unavailable",
@@ -1977,11 +1980,11 @@
           } ]
         } ],
         "pairs" : {
-          "total" : 4,
+          "total" : 2,
           "between" : [ {
             "one" : "grantLeave/worked",
             "other" : "grantLeave/rate",
-            "total" : 4
+            "total" : 2
           } ],
           "status" : "unavailable",
           "reason" : "no_rows"
@@ -2098,6 +2101,7 @@
       "rows" : 0,
       "pending" : 0,
       "rowObligations" : [ ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -2146,6 +2150,7 @@
             "extent" : "complete"
           },
           "classes" : [ "Standard", "Extended" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "unavailable",
@@ -2157,6 +2162,7 @@
             "extent" : "complete"
           },
           "classes" : [ "hours/0 <= x <= 45", "hours/45 < x <= 100", "hours/100 < x <= 200" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "unavailable",
@@ -3415,6 +3421,7 @@
       "rows" : 0,
       "pending" : 0,
       "rowObligations" : [ ],
+      "rowsThatDoNotHold" : [ ],
       "status" : "complete",
       "signature" : {
         "status" : "unavailable",
@@ -3463,6 +3470,7 @@
             "extent" : "complete"
           },
           "classes" : [ "Standard", "Extended" ],
+          "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
           "status" : "unavailable",
