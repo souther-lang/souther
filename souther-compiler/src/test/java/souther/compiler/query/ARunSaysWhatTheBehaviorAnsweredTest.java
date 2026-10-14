@@ -194,9 +194,8 @@ class ARunSaysWhatTheBehaviorAnsweredTest {
                 .flatMap(block -> block.rows().stream())
                 .filter(each -> each.identity().shown().equals(name))
                 .findFirst().orElseThrow();
-        Generator.Trial trial = Adequacy.runningRowsOf(Adequacy.trialling(db, module), behavior,
-                sig, Adequacy.numberingOf(db, module),
-                RequiredDependencies.of(db, module, behavior));
+        Generator.Trial trial = Adequacy.runningRowsOf(db, module, Adequacy.trialling(db, module),
+                behavior, sig, RequiredDependencies.of(db, module, behavior));
         return trial.run(RowToRun.of(row.inputs().stream()
                 .map(input -> new FixtureTemplate(name, input)).toList()));
     }

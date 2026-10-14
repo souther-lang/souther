@@ -24,7 +24,6 @@ import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.RewriteSearch;
-import souther.compiler.reach.Reachability;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -96,19 +95,8 @@ public final class Replacements {
                     return List.of();
                 }
                 Position at = Position.at(sig.outputType());
-                // What the model's own rules prove no run arrives at, with what the rows did taken
-                // in: a row through an arm shows the proof of it wrong, and a proof shown wrong
-                // closes no way.
-                PathReachability.Answers.AsRun arrives = arrived == null ? null
-                        : arrived.get(behavior.name());
-                // Held to the plan the arms are places of before any of them is looked up: a
-                // reading of another plan answers that nothing arrives at a place it never walked,
-                // which here would prove a rewrite the same.
-                if (arrives != null) {
-                    arrives.answers().requireNumbering(checked.numberingIdentity());
-                }
-                Predicate<ControlPlace.Arm> unreached = arm -> arrives != null
-                        && arrives.answers().at(arm) instanceof Reachability.Unreachable;
+                Predicate<ControlPlace.Arm> unreached =
+                        Adequacy.unreachedIn(arrived, behavior.name(), checked);
                 return ReplacementReading.of(behavior.name(), checked.plan(), inTheClasses,
                         row -> Adequacy.armsSeenIn(row, numbering), unreached, rows,
                         new ReplacementReading.Comparing() {

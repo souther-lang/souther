@@ -625,8 +625,7 @@ public record Settlements(List<ObligationIdentity> requested,
             // is nothing where nothing asked it.
             return new OneBehavior(behavior, subject, sig, building,
                     sig == null || trials == null ? Generator.Trial.NOTHING_RUNS
-                            : Adequacy.runningRowsOf(trials, behavior, sig,
-                                    Adequacy.numberingOf(db, module),
+                            : Adequacy.runningRowsOf(db, module, trials, behavior, sig,
                                     RequiredDependencies.of(db, module, behavior)),
                     filling == null ? List.of() : filling.composed().plan().obligations(),
                     identityOfArm, targetOfArm, rulesOf(db, module, behavior),
