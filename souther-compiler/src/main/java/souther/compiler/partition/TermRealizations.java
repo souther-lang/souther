@@ -2898,8 +2898,7 @@ final class TermRealizations {
             return built.met().nothing()
                     ? new Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                    : new Realization.Unexhausted(built.met(),
-                            "nothing here could build a value of that many");
+                    : new Realization.Unexhausted(built.met(), null);
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : built.values()) {

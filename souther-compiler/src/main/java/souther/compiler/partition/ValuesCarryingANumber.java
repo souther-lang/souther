@@ -67,16 +67,14 @@ record ValuesCarryingANumber(TermPath fixed, FixtureTemplate value,
                             reading.source().kinds(),
                             reading.source().sums()).wrappers(),
                     value, reading.source());
-            return written == null ? Proposals.NONE : Proposals.of(List.of(written));
+            return Proposals.ofNullable(written);
         }
         // A position narrowed to a case nothing is composed under. Which case it is is the value:
         // a case that carries nothing is written by naming it, and that is what the caller asked
         // for. Left to the declaration, the field is whichever case comes first. Where the case
         // stands for no value, nothing is composed here rather than another case.
         if (narrowed.contains(slot.at()) && slot.leaf() instanceof ConstructionPlan.Leaf.Open) {
-            Proposals standing = Partitions.representativesOf(slot.type(), reading);
-            return new Proposals(standing.isEmpty() ? List.of()
-                    : List.of(standing.values().getFirst()), standing.met());
+            return Partitions.representativesOf(slot.type(), reading).firstOf(1);
         }
         return Proposals.NONE;
     }

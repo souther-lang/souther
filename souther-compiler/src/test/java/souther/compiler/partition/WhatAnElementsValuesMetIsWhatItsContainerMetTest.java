@@ -50,6 +50,12 @@ class WhatAnElementsValuesMetIsWhatItsContainerMetTest {
             data Small = { n: Int }
             data Large = { h: Huge }
             data Either = Small | Large
+
+            data Red = { r: Bool }
+              invariant r
+            data Blue = { b: Bool }
+              invariant b
+            data Three = Red | Blue | Large
             """;
 
     private static final RuleReadingSource RULES = RuleReadings.ofSource(MODULE);
@@ -81,13 +87,18 @@ class WhatAnElementsValuesMetIsWhatItsContainerMetTest {
         assertEquals(ELEMENTS, made.met().figures());
     }
 
-    /** One element short of the figure is built, and met nothing. */
+    /**
+     * One element short of the figure is built.
+     *
+     * <p>What it met is not nothing, and says so: the values of {@code Near} walked one after
+     * another are a list of sixty-four and then one of sixty-five, which the figure stops, so the
+     * second element is one taken in place of the value the figure kept out.
+     */
     @Test
     void aSetOfValuesAtTheFigureIsBuilt() {
         Proposals made = ofSize(new Type.SetOf(named("Near")), 2);
 
         assertFalse(made.values().isEmpty(), "two lists of sixty-four are two values");
-        assertTrue(made.met().nothing(), () -> made.met().toString());
     }
 
     /** A type with too few values is the model's answer, and nothing of this compiler's. */
@@ -133,18 +144,45 @@ class WhatAnElementsValuesMetIsWhatItsContainerMetTest {
     }
 
     /**
-     * A walk that found what it was asked for says nothing of a figure one of its steps met.
+     * A walk that found as many as it was asked for still says a figure met in front of the values
+     * it took.
      *
-     * <p>A sum's values are its cases' values, and one case of this one is past the figure while
-     * the other has as many as anybody asks. Carried on, the figure would stand under a refusal of
-     * values the walk had plenty of.
+     * <p>A sum's values are its cases' values, and one case of this one holds a value past the
+     * figure. What that case would have given stands second, and what stands there instead is one
+     * built around a value its rules refuse — so the values taken are not what the walk would have
+     * taken, and a reader of their refusal is owed the figure that changed them.
      */
     @Test
-    void valuesFoundInFullSayNothingOfAFigureOnTheWay() {
+    void aFigureInFrontOfTheValuesTakenIsSaidThoughEnoughWereFound() {
         Proposals found = Witnesses.distinctValuesOf(named("Either"), 3, READING, Set.of());
 
         assertEquals(3, found.values().size(), () -> found.values().toString());
+        assertEquals(ELEMENTS, found.met().figures());
+    }
+
+    /**
+     * And a figure past the last value taken is not, since nothing would have taken what it kept
+     * out.
+     */
+    @Test
+    void aFigurePastTheValuesTakenIsNotSaid() {
+        Proposals found = Witnesses.distinctValuesOf(named("Either"), 1, READING, Set.of());
+
+        assertEquals(1, found.values().size(), () -> found.values().toString());
         assertTrue(found.met().nothing(), () -> found.met().toString());
+    }
+
+    /**
+     * A set built in full met nothing, whatever the values held in reserve beside its elements
+     * met. Of a sum one case of which is past the figure, a set of two is built of the other
+     * two; the spare value the case past the figure would have been is one no set of two needed.
+     */
+    @Test
+    void aSetBuiltInFullSaysNothingOfASpareValueNotBuilt() {
+        Proposals made = ofSize(new Type.SetOf(named("Three")), 2);
+
+        assertFalse(made.values().isEmpty(), "two of the three cases are a set of two");
+        assertTrue(made.met().nothing(), () -> made.met().toString());
     }
 
     /**

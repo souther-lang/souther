@@ -190,7 +190,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "Partitions", "displacedRepresentativesOf",
                     "(" + TYPE + CONTEXT + BOUNDS + HELD + ")" + PROPOSALS, THE_POSITION),
             row(PARTITION + "Partitions", "inReserve",
-                    "(" + TYPE + CONTEXT + BOUNDS + ")Ljava/util/List;", THE_POSITION),
+                    "(" + TYPE + CONTEXT + BOUNDS + "Ljava/util/List;)Ljava/util/List;",
+                    THE_POSITION),
             row(PARTITION + "Partitions", "measureAt",
                     "(Ljava/util/List;L" + PARTITION + "PositionMeasurements;L" + PARTITION
                             + "Axis;L" + INPUTS + "NumericTerm$FromOnePosition;Ljava/util/List;"

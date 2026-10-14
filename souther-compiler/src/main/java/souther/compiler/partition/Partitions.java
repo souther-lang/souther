@@ -59,6 +59,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.Map;
 import java.util.Objects;
@@ -1353,7 +1354,7 @@ public final class Partitions {
      */
     static Proposals representativesOf(Type type, RuleReadingContext reading,
                                        NumericDomain.Bounds within) {
-        return representativesOf(type, reading, within, java.util.Set.of());
+        return representativesOf(type, reading, within, Set.of());
     }
 
     /**
@@ -1366,7 +1367,7 @@ public final class Partitions {
      */
     static Proposals representativesOf(Type type, RuleReadingContext reading,
                                        NumericDomain.Bounds within,
-                                       java.util.Set<TypeSymbol> expanding) {
+                                       Set<TypeSymbol> expanding) {
         return type == null ? Proposals.NONE
                 : representativesOf(TypeView.of(type, reading.source().inners(), reading.source().symbols(),
                         reading.source().kinds(), reading.source().sums()), reading,
@@ -1397,12 +1398,12 @@ public final class Partitions {
      */
     static Proposals representativesOf(TypeView view, RuleReadingContext reading,
                                        NumericDomain.Bounds within,
-                                       java.util.Set<TypeSymbol> expanding) {
+                                       Set<TypeSymbol> expanding) {
         RuleReadingSource ruleSource = reading.source();
         // Already inside the value of one of the names this wears, so the type is written in terms of
         // itself and there is nothing to hand back. Which is the answer and not a limit: no value of
         // such a type exists.
-        java.util.Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
+        Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
         for (TypeSymbol wears : view.wrappers()) {
             if (!inside.add(wears)) {
                 return Proposals.NONE;
@@ -1419,38 +1420,28 @@ public final class Partitions {
         // for the clauses to be walked and the counts to be read as many times as it has readers.
         PatternsStated stated = patternsStatedOn(view, ruleSource);
         DeclaredBounds.CountRange characters = DeclaredBounds.countsHeld(view, reading, null);
-        // What the rules ask for, and then what the position is where nothing was written about it.
-        List<FixtureTemplate> bare = new ArrayList<>();
-        bare.addAll(whatEveryRuleAdmits(stated, characters, reading));
-        bare.addAll(whereTheRulesLeaveTheValue(view, reading, within));
-        bare.addAll(whatAFormatAsksFor(stated.patterns(), reading));
+        // What the rules ask for, and then what the position is where nothing was written about it,
+        // each value once and under the names the position wears.
+        Proposals.Gathering candidates = Proposals.Gathering.distinct();
+        Function<FixtureTemplate, FixtureTemplate> named =
+                each -> RepresentativeSource.under(spelled.names(), each);
+        candidates.addAll(Proposals.of(whatEveryRuleAdmits(stated, characters, reading)).map(named));
+        candidates.addAll(Proposals.of(whereTheRulesLeaveTheValue(view, reading, within)).map(named));
+        candidates.addAll(Proposals.of(whatAFormatAsksFor(stated.patterns(), reading)).map(named));
         // What the rules say the value holds, before the value that would hold nothing. A floor
-        // past what a proposal holds is a value not built, which every value built out of this
-        // one has to be able to say.
-        Proposals floor = Witnesses.holding(view, characters.least(), List.of(), reading, inside);
-        bare.addAll(floor.values());
+        // past what a proposal holds is a value not built, and stands where it would have stood.
+        candidates.addAll(Witnesses.holding(view, characters.least(), List.of(), reading, inside)
+                .map(named));
         Proposals ofTheShape = whatTheShapeStandsFor(view, reading, within, inside);
-        bare.addAll(ofTheShape.values());
-        CompositionShortfall met = floor.met().and(ofTheShape.met());
-
-        List<FixtureTemplate> candidates = new ArrayList<>();
-        for (FixtureTemplate each : bare) {
-            candidates.add(RepresentativeSource.under(spelled.names(), each));
-        }
+        candidates.addAll(ofTheShape.map(named));
         // Where the shape stands for no value of its own, what stands at the position is one of the
         // kinds its type divides into, and the classes are what name them. Asked only there, because
         // a class of a position says what stands at the position under it: asked of a shape that has
         // a value of its own, the answer is that value again, arrived at by building it.
         if (ofTheShape.isEmpty()) {
-            Proposals divided = dividedInto(view, reading, inside);
-            candidates.addAll(divided.values());
-            met = met.and(divided.met());
+            candidates.addAll(dividedInto(view, reading, inside));
         }
-        Map<String, FixtureTemplate> once = new LinkedHashMap<>();
-        for (FixtureTemplate each : candidates) {
-            once.putIfAbsent(each.text(), each);
-        }
-        return new Proposals(List.copyOf(once.values()), met);
+        return candidates.done();
     }
 
     /**
@@ -1466,21 +1457,21 @@ public final class Partitions {
      * classes were wrong about themselves — the answer they carry is the one an author is shown.
      */
     private static Proposals dividedInto(TypeView view, RuleReadingContext reading,
-                                         java.util.Set<TypeSymbol> expanding) {
-        // What the classes passed over met, since a class with nothing for a figure is one a
-        // reader would otherwise take as a class with nothing to have.
-        CompositionShortfall met = CompositionShortfall.NONE;
+                                         Set<TypeSymbol> expanding) {
+        // In front of what is offered, what the classes passed over met: a class with nothing for a
+        // figure is the class that would have been offered in its place.
+        Proposals.Gathering out = Proposals.Gathering.inOrder();
         for (PartitionClass each : PartitionClasses.of(
                 Distinctions.ofType(view.shape(), reading.source().symbols(),
                         reading.source().kinds(), reading.source().sums()),
                 view, reading, expanding)) {
             Proposals stands = standingFor(each.representatives(), reading, expanding);
-            met = met.and(stands.met());
+            out.addAll(stands);
             if (!stands.isEmpty()) {
-                return new Proposals(stands.values(), met);
+                return out.done();
             }
         }
-        return new Proposals(List.of(), met);
+        return out.done();
     }
 
     /**
@@ -1545,7 +1536,7 @@ public final class Partitions {
      */
     private static Proposals whatTheShapeStandsFor(TypeView view, RuleReadingContext reading,
                                                    NumericDomain.Bounds within,
-                                                   java.util.Set<TypeSymbol> inside) {
+                                                   Set<TypeSymbol> inside) {
         RuleReadingSource ruleSource = reading.source();
         return switch (view.shape()) {
             case Shape.Scalar scalar -> Proposals.of(standsForA(scalar, within, ruleSource));
@@ -1625,20 +1616,17 @@ public final class Partitions {
      * not arrived at.
      */
     static Proposals standingFor(RepresentativeSource source, RuleReadingContext reading,
-                                 java.util.Set<TypeSymbol> expanding) {
+                                 Set<TypeSymbol> expanding) {
         return switch (source) {
             case RepresentativeSource.Values values -> Proposals.of(values.written());
             // Against the case's own rules: the names the position wears are over the sum, and a
             // rule of theirs reads no field of one of its cases.
-            case RepresentativeSource.Compose compose -> {
-                Proposals composed =
-                        composed(compose.through(), compose.through(), reading, expanding);
-                yield new Proposals(composed.values().stream().map(compose::written).toList(),
-                        composed.met());
-            }
+            case RepresentativeSource.Compose compose ->
+                    composed(compose.through(), compose.through(), reading, expanding)
+                            .map(compose::written);
             case RepresentativeSource.NothingProducible _ -> Proposals.NONE;
             case RepresentativeSource.NotArrivedAt notArrived ->
-                    new Proposals(List.of(), notArrived.met());
+                    Proposals.NONE.meeting(notArrived.met());
         };
     }
 
@@ -1669,7 +1657,7 @@ public final class Partitions {
      */
     private static Proposals composed(TypeSymbol.AtModule record, TypeSymbol.AtModule rulesOn,
                                       RuleReadingContext reading,
-                                      java.util.Set<TypeSymbol> expanding) {
+                                      Set<TypeSymbol> expanding) {
         // Given up on before it is asked, so that a record reached from its own field is the work
         // stopping and never the work borrowing itself.
         if (expanding.contains(record)) {
@@ -1794,18 +1782,18 @@ public final class Partitions {
      *              can build, and is the caller asking for a value of another type
      */
     static Proposals composed(TypeSymbol.AtModule record, TypeSymbol.AtModule rulesOn,
-                              RuleReadingContext reading, java.util.Set<TypeSymbol> expanding,
+                              RuleReadingContext reading, Set<TypeSymbol> expanding,
                               Map<String, FixtureTemplate> given) {
         if (expanding.contains(record)) {
             return Proposals.NONE;
         }
         RuleReadingSource ruleSource = reading.source();
         FieldsChosen chosen = fieldsOf(record, rulesOn, reading, expanding, given);
-        return chosen.fields() == null || !(ruleSource.symbols().scope().reach(record)
+        return (chosen.fields() == null || !(ruleSource.symbols().scope().reach(record)
                 instanceof TypeReachName.Written written)
-                        ? new Proposals(List.of(), chosen.met())
-                        : new Proposals(List.of(FixtureTemplate.record(written, chosen.fields())),
-                                chosen.met());
+                        ? Proposals.NONE
+                        : Proposals.of(List.of(FixtureTemplate.record(written, chosen.fields()))))
+                .meeting(chosen.met());
     }
 
     /**
@@ -1828,7 +1816,7 @@ public final class Partitions {
      */
     static Proposals differingAtItsFields(TypeSymbol.AtModule record, TypeSymbol.AtModule rulesOn,
                                           int many, RuleReadingContext reading,
-                                          java.util.Set<TypeSymbol> expanding) {
+                                          Set<TypeSymbol> expanding) {
         RuleReadingSource ruleSource = reading.source();
         if (expanding.contains(record)
                 || !(TypeView.shapeOf(Type.ref(record), ruleSource.inners(), ruleSource.symbols(),
@@ -1837,46 +1825,61 @@ public final class Partitions {
                         SequencedMap<String, Type> fields))) {
             return Proposals.NONE;
         }
-        java.util.Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
+        Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
         inside.add(record);
         FieldDomains.Composing left = FieldDomains.of(rulesOn, reading).composing(Map.of());
         // What each value found was written with, in the order found, keyed by how it is written.
         Map<String, Map<String, FixtureTemplate>> found = new LinkedHashMap<>();
-        List<FixtureTemplate> out = new ArrayList<>();
-        // What the fields' values and the records written of them met, which is why a record
-        // whose one varying field is past a figure has fewer values than were asked of it.
-        CompositionShortfall met = CompositionShortfall.NONE;
+        // The records found, and where the walk was stopped on the way to them: a field whose
+        // values were cut at a figure, in front of the records that field would have told apart,
+        // and a record whose composing met one, in front of that record.
+        Proposals.Gathering out = Proposals.Gathering.inOrder();
         for (Map.Entry<String, Type> field : fields.entrySet()) {
             FieldDomains.ConstructionLimits limits = left.at(RuleKey.of(field.getKey()));
             Proposals values = Witnesses.distinctValuesOf(field.getValue(), many,
                     limits.held(), limits.admits(), reading, inside);
-            met = met.and(values.met());
             if (values.values().size() < 2) {
+                out.stop(values.met());
                 continue;
             }
             List<Map<String, FixtureTemplate>> bases = found.isEmpty()
                     ? List.of(Map.of()) : List.copyOf(found.values());
+            boolean first = true;
             for (Map<String, FixtureTemplate> base : bases) {
-                for (FixtureTemplate value : values.values()) {
+                for (Proposals.Entry entry : values.entries()) {
                     if (out.size() >= many) {
-                        return Proposals.of(out);
+                        return out.done();
                     }
-                    Map<String, FixtureTemplate> given = new LinkedHashMap<>(base);
-                    given.put(field.getKey(), value);
-                    Proposals composed = composed(record, rulesOn, reading, expanding, given);
-                    met = met.and(composed.met());
-                    for (FixtureTemplate each : composed.values()) {
-                        if (found.putIfAbsent(each.text(), given) == null) {
-                            out.add(each);
+                    switch (entry) {
+                        // Met once, the first time the walk comes to it.
+                        case Proposals.Stopped(CompositionShortfall met) -> {
+                            if (first) {
+                                out.stop(met);
+                            }
+                        }
+                        case Proposals.Offered(FixtureTemplate value) -> {
+                            Map<String, FixtureTemplate> given = new LinkedHashMap<>(base);
+                            given.put(field.getKey(), value);
+                            Proposals composed =
+                                    composed(record, rulesOn, reading, expanding, given);
+                            out.stop(composed.met());
+                            for (FixtureTemplate each : composed.values()) {
+                                if (found.putIfAbsent(each.text(), given) == null) {
+                                    out.add(each);
+                                }
+                            }
                         }
                     }
                 }
+                first = false;
             }
             if (out.size() >= many) {
-                return Proposals.of(out);
+                return out.done();
             }
         }
-        return new Proposals(out.size() > 1 ? out : List.of(), met);
+        // One record is no values that differ, and what stopped the others is why.
+        Proposals differ = out.done();
+        return differ.values().size() > 1 ? differ : Proposals.NONE.meeting(differ.met());
     }
 
     /**
@@ -1919,7 +1922,7 @@ public final class Partitions {
      *                fields as the record does
      */
     static FieldsChosen fieldsOf(TypeSymbol.AtModule record, TypeSymbol.AtModule rulesOn,
-                                 RuleReadingContext reading, java.util.Set<TypeSymbol> expanding,
+                                 RuleReadingContext reading, Set<TypeSymbol> expanding,
                                  Map<String, FixtureTemplate> given) {
         RuleReadingSource ruleSource = reading.source();
         // What the record is made of, read where a position's reading is made. A walk from the
@@ -1943,7 +1946,7 @@ public final class Partitions {
             // A unit has no fields to compose, and is named rather than built.
             return FieldsChosen.NONE;
         }
-        java.util.Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
+        Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
         inside.add(record);
         Map<RuleKey, Count> settled = new LinkedHashMap<>();
         // The record's rules, read once. Each field is then chosen against this with the fields
@@ -1960,10 +1963,12 @@ public final class Partitions {
             FixtureTemplate at = given.get(field.getKey());
             if (at == null) {
                 FieldDomains.ConstructionLimits limits = left.at(RuleKey.of(field.getKey()));
+                // The first value, with what was met in front of it: a field's later values are
+                // values nothing here takes.
                 Proposals stands = Witnesses.firstWhatThePlaceAdmits(
                         field.getValue(), limits, reading, inside,
                         () -> representativesHolding(field.getValue(), reading, limits.values(),
-                                limits.held(), inside));
+                                limits.held(), inside)).firstOf(1);
                 met = met.and(stands.met());
                 if (stands.isEmpty()) {
                     return new FieldsChosen(null, met);
@@ -2109,13 +2114,13 @@ public final class Partitions {
      */
     static Proposals representativesHolding(Type type, RuleReadingContext reading,
                                             NumericDomain.Bounds within, FieldDomains.Held held) {
-        return representativesHolding(type, reading, within, held, java.util.Set.of());
+        return representativesHolding(type, reading, within, held, Set.of());
     }
 
     /** The same, of a position nothing here has read yet. */
     static Proposals representativesHolding(Type type, RuleReadingContext reading,
                                             NumericDomain.Bounds within, FieldDomains.Held held,
-                                            java.util.Set<TypeSymbol> expanding) {
+                                            Set<TypeSymbol> expanding) {
         return representativesHolding(TypeView.of(type, reading.source().inners(), reading.source().symbols(),
                         reading.source().kinds(), reading.source().sums()), reading,
                 within, held, expanding);
@@ -2125,10 +2130,9 @@ public final class Partitions {
      *  {@link #representativesOf} carries them. */
     static Proposals representativesHolding(TypeView view, RuleReadingContext reading,
                                             NumericDomain.Bounds within, FieldDomains.Held held,
-                                            java.util.Set<TypeSymbol> expanding) {
+                                            Set<TypeSymbol> expanding) {
         RuleReadingSource ruleSource = reading.source();
-        List<FixtureTemplate> candidates = new ArrayList<>();
-        CompositionShortfall met = CompositionShortfall.NONE;
+        Proposals.Gathering candidates = Proposals.Gathering.distinct();
         // Under every name the position wears, because a floor read off the record says how much the
         // value holds and not what it is written as: a field of a newtype over a list takes a list
         // inside that newtype's own name.
@@ -2136,20 +2140,12 @@ public final class Partitions {
         // A name this module cannot write leaves no value to write, which is asked once of the
         // position rather than of each value built for it.
         if (WornNames.of(view.wrappers(), ruleSource) instanceof WornNames.Spelled spelled) {
-            Proposals floor = Witnesses.holding(view, leastHeld(view, reading, held),
-                    ElementsKeptApart.heldBy(held), reading, expanding);
-            met = floor.met();
-            for (FixtureTemplate bare : floor.values()) {
-                candidates.add(RepresentativeSource.under(spelled.names(), bare));
-            }
+            candidates.addAll(Witnesses.holding(view, leastHeld(view, reading, held),
+                    ElementsKeptApart.heldBy(held), reading, expanding)
+                    .map(bare -> RepresentativeSource.under(spelled.names(), bare)));
         }
-        Proposals ordinarily = representativesOf(view, reading, within, expanding);
-        candidates.addAll(ordinarily.values());
-        Map<String, FixtureTemplate> once = new LinkedHashMap<>();
-        for (FixtureTemplate each : candidates) {
-            once.putIfAbsent(each.text(), each);
-        }
-        return new Proposals(List.copyOf(once.values()), met.and(ordinarily.met()));
+        candidates.addAll(representativesOf(view, reading, within, expanding));
+        return candidates.done();
     }
 
     /**
@@ -2177,35 +2173,31 @@ public final class Partitions {
         TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
         Proposals ordinarily = representativesHolding(view, reading, within, held,
-                java.util.Set.of());
-        CompositionShortfall met = ordinarily.met();
-        List<FixtureTemplate> base = new ArrayList<>(ordinarily.values());
+                Set.of());
+        Proposals.Gathering base = Proposals.Gathering.distinct();
+        base.addAll(ordinarily);
         // What a position holds back for the product search's second pass is on offer here from the
         // start. This pass runs only where both of those have already failed, and a position keeping
         // a value from the last search there is a value nothing will ever be tried at.
-        for (FixtureTemplate kept : inReserve(view, reading, within)) {
-            if (base.stream().noneMatch(each -> each.text().equals(kept.text()))) {
-                base.add(kept);
-            }
-        }
+        inReserve(view, reading, within, ordinarily.values()).forEach(base::add);
         Carrier carrier = numbersOf(view.shape());
         if (carrier == null) {
-            return new Proposals(base, met);
+            return base.done();
         }
         NumericDomain.Bounds range =
                 TypeBounds.admissible(DeclaredBounds.of(view, reading), within);
         Place step = displaced(range, carrier);
         if (step == null) {
-            return new Proposals(base, met);
+            return base.done();
         }
         FixtureTemplate value = standing(view, carrier, step, ruleSource);
         // Nothing to offer beside the first, either because the order has no value there or because
-        // a name the position wears is one this module cannot write.
-        if (value == null || base.stream().anyMatch(each -> each.text().equals(value.text()))) {
-            return new Proposals(base, met);
+        // a name the position wears is one this module cannot write. One already on offer is left
+        // out as every value is that is offered twice.
+        if (value != null) {
+            base.add(value);
         }
-        base.add(value);
-        return new Proposals(base, met);
+        return base.done();
     }
 
     /** A second count of a range, or null where the carrier has none to give. */
@@ -2752,16 +2744,22 @@ public final class Partitions {
      * product of what its positions offer and that search is bounded. A value added to one position
      * moves every assignment past it further back, so offering this one among the rest would lose
      * rows that were being reached at positions this has nothing to do with.
+     *
+     * @param offered what the position already offers, which the caller has in hand: nothing held
+     *                back is one of them
      */
     static List<FixtureTemplate> inReserve(Type type, RuleReadingContext reading,
-                                           NumericDomain.Bounds within) {
+                                           NumericDomain.Bounds within,
+                                           List<FixtureTemplate> offered) {
         return inReserve(TypeView.of(type, reading.source().inners(), reading.source().symbols(),
-                        reading.source().kinds(), reading.source().sums()), reading, within);
+                        reading.source().kinds(), reading.source().sums()), reading, within,
+                offered);
     }
 
     /** The same, of a position that has already been read. */
     static List<FixtureTemplate> inReserve(TypeView view, RuleReadingContext reading,
-                                           NumericDomain.Bounds within) {
+                                           NumericDomain.Bounds within,
+                                           List<FixtureTemplate> offered) {
         RuleReadingSource ruleSource = reading.source();
         // A far edge is a rule's, and a rule is written on a name. A position wearing none carries
         // no rule of its own, so there is no edge here to hold anything back at.
@@ -2785,9 +2783,9 @@ public final class Partitions {
             return List.of();   // a name this module cannot write leaves no value to hold back
         }
         // Nothing already on offer: a range whose far edge is the number the base type stands for
-        // would otherwise hold the same value twice, once in each tier.
-        return representativesOf(view, reading, within, java.util.Set.of()).values().stream()
-                .map(FixtureTemplate::text).anyMatch(held.text()::equals)
+        // would otherwise hold the same value twice, once in each tier. Asked of the offer the
+        // caller made rather than of an offer built again for the asking.
+        return offered.stream().map(FixtureTemplate::text).anyMatch(held.text()::equals)
                 ? List.of() : List.of(held);
     }
 

@@ -508,10 +508,10 @@ final class NestedContainersAddingUp {
                 met = met.and(inner.met());
                 Map<TermPath, FixtureTemplate> own = level.apart().besideFor(i, within.size());
                 if (own == null) {
-                    return new Proposals(List.of(), met.and(level.apart().met()));
+                    return Proposals.NONE.meeting(met.and(level.apart().met()));
                 }
                 if (inner.isEmpty()) {
-                    return new Proposals(List.of(), met);
+                    return Proposals.NONE.meeting(met);
                 }
                 Map<TermPath, FixtureTemplate> beside = new LinkedHashMap<>(own);
                 beside.putAll(filling.beside());
@@ -521,16 +521,16 @@ final class NestedContainersAddingUp {
                         reading);
                 met = met.and(one.met());
                 if (one.isEmpty()) {
-                    return new Proposals(List.of(), met);
+                    return Proposals.NONE.meeting(met);
                 }
                 each.add(one.values().getFirst());
             }
             if (!Witnesses.holdApart(each, level.apart().runs())) {
-                return new Proposals(List.of(), met);
+                return Proposals.NONE.meeting(met);
             }
             FixtureTemplate written = WornNames.under(level.view().wrappers(),
                     FixtureTemplate.collection(each), reading.source());
-            return new Proposals(written == null ? List.of() : List.of(written), met);
+            return Proposals.ofNullable(written).meeting(met);
         }
 
         @Override

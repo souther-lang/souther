@@ -94,21 +94,16 @@ final class PlanComposer {
             // one of its cases is written `DecisionN(...)` all the same.
             case ConstructionPlan.Slot slot -> {
                 Proposals at = values.at(slot);
-                yield new Proposals(at.isEmpty() ? List.of() : one(WornNames.under(slot.worn(),
-                        at.values().getFirst(), ruleSource)), at.met());
+                yield at.isEmpty() ? at : Proposals.ofNullable(WornNames.under(slot.worn(),
+                        at.values().getFirst(), ruleSource)).meeting(at.met());
             }
             case ConstructionPlan.Built built -> composed(built, values, reading);
             case ConstructionPlan.Held held -> held(held, values, reading);
             // The requirement settled this one, so nothing was chosen for it and there is nothing to
             // look up. Under every name the position wears, since the value arrives bare.
             case ConstructionPlan.Exact exact ->
-                    Proposals.of(one(WornNames.under(exact.worn(), exact.exact(), ruleSource)));
+                    Proposals.ofNullable(WornNames.under(exact.worn(), exact.exact(), ruleSource));
         };
-    }
-
-    /** {@code value} alone, or none where there is none. */
-    private static List<FixtureTemplate> one(FixtureTemplate value) {
-        return value == null ? List.of() : List.of(value);
     }
 
     /** What composing the positions a container is handed values from met. */
@@ -147,7 +142,7 @@ final class PlanComposer {
             Proposals composed = compose(plan.under().get(), values, reading);
             met = composed.met();
             if (composed.isEmpty()) {
-                return new Proposals(List.of(), met);
+                return Proposals.NONE.meeting(met);
             }
             element = composed.values().getFirst();
             holding.add(element);
@@ -158,7 +153,7 @@ final class PlanComposer {
                     node -> handed.noting(compose(node, values, reading)));
             met = met.and(handed.met);
             if (contents == null) {
-                return new Proposals(List.of(), met);
+                return Proposals.NONE.meeting(met);
             }
             holding.addAll(contents.holding());
             keptOut = contents.keptOut();
@@ -173,7 +168,7 @@ final class PlanComposer {
         if (!(TypeView.shapeOf(plan.type(), ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums())
                 instanceof Shape.Container container)) {
-            return new Proposals(List.of(), met);
+            return Proposals.NONE.meeting(met);
         }
         // The key the plan put the element under, or over whatever value the rules admit where
         // nothing was asked of the value.
@@ -182,7 +177,7 @@ final class PlanComposer {
             Proposals composed = compose(plan.key().get(), values, reading);
             met = met.and(composed.met());
             if (composed.isEmpty()) {
-                return new Proposals(List.of(), met);
+                return Proposals.NONE.meeting(met);
             }
             key = composed.values().getFirst();
         }
@@ -190,7 +185,7 @@ final class PlanComposer {
         // entry is filed under one key.
         for (FixtureTemplate asked : keysHeld) {
             if (key != null && !key.text().equals(asked.text())) {
-                return new Proposals(List.of(), met);
+                return Proposals.NONE.meeting(met);
             }
             key = asked;
         }
@@ -216,9 +211,9 @@ final class PlanComposer {
         };
         met = met.and(collection.met());
         // A name this module cannot write leaves no value to write.
-        return new Proposals(collection.isEmpty() ? List.of()
-                : one(WornNames.under(plan.worn(), collection.values().getFirst(), ruleSource)),
-                met);
+        return collection.isEmpty() ? Proposals.NONE.meeting(met)
+                : Proposals.ofNullable(WornNames.under(plan.worn(),
+                        collection.values().getFirst(), ruleSource)).meeting(met);
     }
 
     /** One record of the plan, out of whatever the caller has at the positions under it. */
@@ -227,7 +222,7 @@ final class PlanComposer {
         Partitions.FieldsChosen chosen =
                 values.under(built, node -> compose(node, values, reading));
         if (chosen.fields() == null) {
-            return new Proposals(List.of(), chosen.met());
+            return Proposals.NONE.meeting(chosen.met());
         }
         RuleReadingSource ruleSource = reading.source();
         // Under the names the position is written with, which the descent that found the fields took
@@ -236,14 +231,15 @@ final class PlanComposer {
         // A name this module cannot write leaves no value to write.
         if (!(ruleSource.symbols().scope().reach(built.of())
                 instanceof TypeReachName.Written written)) {
-            return new Proposals(List.of(), chosen.met());
+            return Proposals.NONE.meeting(chosen.met());
         }
         // Under every name the position wears, which where a refinement narrowed it are the names
         // it wore before the narrowing and the ones the narrowed value wears after it. One list and
         // one putting-back-on: read as two, the outer names had to be recovered from the class that
         // asked for the narrowing rather than from the position they belong to.
-        return new Proposals(one(WornNames.under(built.worn(),
-                FixtureTemplate.record(written, chosen.fields()), ruleSource)), chosen.met());
+        return Proposals.ofNullable(WornNames.under(built.worn(),
+                FixtureTemplate.record(written, chosen.fields()), ruleSource))
+                .meeting(chosen.met());
     }
 
     private PlanComposer() {}

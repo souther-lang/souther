@@ -7907,10 +7907,11 @@ public final class Generator {
      *
      * <p>Read where the plan's composing reads them, so a list built as a field of an element of
      * another list is kept apart as its own record says, whichever of the two builds it. Nothing
-     * settled: what is kept apart is the same whatever a row fixes.
+     * settled: what is kept apart is the same whatever a row fixes, so it is the input's answer,
+     * read once for every edge at the position ({@link MeasuredInput#keptApartAt}).
      */
     private static List<List<String>> keptApartUnder(MeasuredInput subject, TermPath at) {
-        return ElementsKeptApart.heldBy(ConstructionRules.of(subject, Map.of()).heldAt(at));
+        return subject.keptApartAt(at);
     }
 
     /**
@@ -11045,7 +11046,7 @@ public final class Generator {
         }
 
         static Choices missing(ConstructionPlan plan, String at,
-                               java.util.Set<CompositionBudget> under, CompositionShortfall met) {
+                               Set<CompositionBudget> under, CompositionShortfall met) {
             return new Choices(plan, List.of(), List.of(), List.of(), at, under, List.of(), met);
         }
 
@@ -11128,8 +11129,9 @@ public final class Generator {
             if (paths.contains(slot.at())) {
                 continue;   // an axis decides here
             }
-            NumericDomain.Bounds here = left.valuesAt(slot.at());
-            FieldDomains.Held held = left.heldAt(slot.at());
+            FieldDomains.ConstructionLimits limits = left.limitsAt(slot.at());
+            NumericDomain.Bounds here = limits.values();
+            FieldDomains.Held held = limits.held();
             Proposals stands = subject.representativesHolding(slot.type(), here, held);
             met = met.and(stands.met());
             if (stands.isEmpty()) {
@@ -11141,14 +11143,15 @@ public final class Generator {
                 // that decision rather than a fact about the model: what such a position is offered
                 // is whole values of a type this declined to look inside. Read off the plan's own
                 // leaf and not off whether the plan was cut anywhere, so a figure reached at one
-                // position is never the reason given for another having nothing.
+                // position is never the reason given for another having nothing — and for the same
+                // reason, what building the offer met is this position's own.
                 return Choices.missing(plan, slot.at() + ": " + Type.show(slot.type()),
                         slot.leaf() instanceof ConstructionPlan.Leaf.Beneath(var cutBy)
-                                ? cutBy : java.util.Set.of(), met);
+                                ? cutBy : Set.of(), stands.met());
             }
             paths.add(slot.at());
             values.add(stands.values());
-            reserves.add(Partitions.inReserve(slot.type(), reading, here));
+            reserves.add(Partitions.inReserve(slot.type(), reading, here, stands.values()));
             displacing.add(new Displacing(slot.type(), here, held));
         }
         return new Choices(plan, paths, values, reserves, null, Set.of(), displacing, met);
@@ -11723,8 +11726,7 @@ public final class Generator {
 
         @Override
         public Proposals at(ConstructionPlan.Slot slot) {
-            FixtureTemplate value = chosen.get(slot.at());
-            return value == null ? Proposals.NONE : Proposals.of(List.of(value));
+            return Proposals.ofNullable(chosen.get(slot.at()));
         }
 
         @Override

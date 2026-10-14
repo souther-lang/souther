@@ -1114,7 +1114,7 @@ final class ContainersAddingUp {
         for (int i = 0; i < split.size(); i++) {
             Map<TermPath, FixtureTemplate> own = apart.besideFor(i, split.size());
             if (own == null) {
-                return new Proposals(List.of(), met.and(apart.met()));
+                return Proposals.NONE.meeting(met.and(apart.met()));
             }
             Map<TermPath, FixtureTemplate> beside = new LinkedHashMap<>(own);
             beside.putAll(filling.beside());
@@ -1126,13 +1126,13 @@ final class ContainersAddingUp {
                     reading);
             met = met.and(one.met());
             if (one.isEmpty()) {
-                return new Proposals(List.of(), met);
+                return Proposals.NONE.meeting(met);
             }
             values.add(one.values().getFirst());
         }
         FixtureTemplate written =
                 WornNames.under(container.wrappers(), FixtureTemplate.collection(values), ruleSource);
-        return new Proposals(written == null ? List.of() : List.of(written), met);
+        return Proposals.ofNullable(written).meeting(met);
     }
 
     /**
@@ -1265,8 +1265,8 @@ final class ContainersAddingUp {
                 CompositionShortfall reached = CompositionShortfall.NONE;
                 for (List<String> run : beside) {
                     Proposals at = Witnesses.valuesApartAt(element, run, upTo, reading);
-                    read.add(at == null ? List.of() : at.values());
-                    reached = at == null ? reached : reached.and(at.met());
+                    read.add(at.values());
+                    reached = reached.and(at.met());
                 }
                 values = read;
                 readFor = upTo;

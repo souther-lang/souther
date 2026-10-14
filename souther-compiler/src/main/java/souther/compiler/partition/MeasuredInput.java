@@ -119,6 +119,15 @@ public final class MeasuredInput {
      * for the reason {@link #offered} is not.
      */
     private final Map<TermPath, List<RuleRoots.Naming>> named = new ConcurrentHashMap<>();
+    /**
+     * What the rules of every value written at each position keep apart there, with nothing
+     * settled.
+     *
+     * <p>Kept because every edge composed at a container asks it of the same position, and with
+     * nothing settled the answer is the reading's and nothing an edge brings. No part of what
+     * makes two of these one, for the reason {@link #offered} is not.
+     */
+    private final Map<TermPath, List<List<String>>> keptApart = new ConcurrentHashMap<>();
 
     /** A position as what it is offered turns on. */
     private record Offered(Type type, NumericDomain.Bounds within, FieldDomains.Held held) {}
@@ -258,6 +267,15 @@ public final class MeasuredInput {
      */
     List<RuleRoots.Naming> rulesNaming(TermPath path) {
         return named.computeIfAbsent(path, ruleRoots::naming);
+    }
+
+    /**
+     * What the rules of every value written at {@code path} keep apart there, with nothing a row
+     * fixes read in ({@link ConstructionRules#heldAt}, {@link ElementsKeptApart#heldBy}).
+     */
+    List<List<String>> keptApartAt(TermPath path) {
+        return keptApart.computeIfAbsent(path, at ->
+                ElementsKeptApart.heldBy(ConstructionRules.of(this, Map.of()).heldAt(at)));
     }
 
     /**
