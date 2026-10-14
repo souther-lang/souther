@@ -192,6 +192,13 @@ public final class InputReads {
             if (more == null) {
                 return this;
             }
+            // A value carried from a reading this one went on from holds this one's older takings
+            // as they are, so most of the time there is nothing of this to keep.
+            for (Taken at = more; at != null; at = at.older) {
+                if (at == this) {
+                    return more;
+                }
+            }
             Set<Core> newer = Collections.newSetFromMap(new IdentityHashMap<>());
             for (Taken at = more; at != null; at = at.older) {
                 newer.add(at.node);
@@ -736,6 +743,11 @@ public final class InputReads {
         InputReads at = value.at();
         Taken taken = at.applied.taken() == null ? applied.taken()
                 : at.applied.taken().under(applied.taken());
+        // Carried already: the reading it stands in holds what this one took, and as many
+        // readings. A reading made again would be one more value to hash wherever it is a key.
+        if (taken == at.applied.taken() && applied.readings() == at.applied.readings()) {
+            return value;
+        }
         return new Denotation(value.value(), new InputReads(at.names, at.alternatives, at.declared,
                 at.dependencies, at.applied.as(applied.readings(), taken)));
     }
