@@ -11,6 +11,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Contract;
+import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.Intervention;
 import souther.compiler.coverage.NumberingIdentity;
 import souther.compiler.coverage.Probe;
@@ -97,7 +98,7 @@ public final class RowTrial {
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
         Answerer answerer = Answering.generatedHere().over(generated, loader);
         EnsuresChecks ensures = new EnsuresChecks(loader, contracts, signatures.keySet());
-        return (behavior, sig) -> new RowTrials.OfBehavior() {
+        RowTrials running = (behavior, sig) -> new RowTrials.OfBehavior() {
 
             @Override
             public Optional<RowTrials.Ran> run(List<Hir.Expr> inputs,
@@ -140,6 +141,22 @@ public final class RowTrial {
              */
             private FixtureReader reader() {
                 return new FixtureReader(module, symbols, sums, kinds, fields, values, loader);
+            }
+        };
+        // The siblings these classes carry, which are the only rewrites a run of them can be asked
+        // for.
+        ArmReplacements held = probes instanceof ProbeImage.Instrumented(var _, var carried)
+                ? carried : ArmReplacements.NONE;
+        return new RowTrials() {
+
+            @Override
+            public RowTrials.OfBehavior forBehavior(String behavior, Sig sig) {
+                return running.forBehavior(behavior, sig);
+            }
+
+            @Override
+            public ArmReplacements carried() {
+                return held;
             }
         };
     }

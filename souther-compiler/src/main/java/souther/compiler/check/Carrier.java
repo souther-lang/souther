@@ -1495,7 +1495,7 @@ public sealed interface Carrier extends ValueOrder {
      * question about how many, and a caller reads it as the range being wider than the values it
      * was asked about.
      */
-    private List<Place> firstPlacesIn(OrderedInterval range, int atMost) {
+    default List<Place> firstPlacesIn(OrderedInterval range, int atMost) {
         OrderedInterval held = extent().meet(range);
         Endpoint low = held.low();
         Endpoint high = held.high();

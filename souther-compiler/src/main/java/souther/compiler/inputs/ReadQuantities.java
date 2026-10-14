@@ -378,10 +378,8 @@ final class ReadQuantities implements Quantities {
                 || !(taken.operation() instanceof ValueName.Stdlib operation)) {
             return null;
         }
-        NumericTerm.TakenOf term =
-                NumericTerm.TakenOf.asItStands(operation, at, typeAt.apply(at),
-                        ruleReading.source().inners(), ruleReading.source().symbols());
-        return term != null && term.takenAs() instanceof TakenAs.HowManyItHolds ? term : null;
+        return NumericTerm.TakenOf.howManyHeldAt(operation, at, typeAt.apply(at),
+                ruleReading.source().inners(), ruleReading.source().symbols());
     }
 
     /**

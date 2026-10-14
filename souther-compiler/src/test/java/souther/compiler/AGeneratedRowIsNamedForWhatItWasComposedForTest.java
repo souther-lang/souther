@@ -208,9 +208,13 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         String before = block(POLICY);
         String after = block(POLICY_AND_A_ROW_AT_THE_CAP);
         String written = "| (0, Policy { rate = Rate(0), cap = Cap(0) }) -> <?>";
+        // Once the cap's line is met, the cap is the row's to choose, and it is chosen so that the
+        // arm answering what accrued could be told from the arm answering the cap.
+        Pattern unnamed = Pattern.compile(
+                " {4}\\| \\(0, Policy \\{ rate = Rate\\(0\\), cap = Cap\\([0-9]+\\) \\}\\) -> <\\?>");
 
         assertTrue(before.contains(written), "the row two lines compose carries no name: " + before);
-        assertTrue(after.contains(written),
+        assertTrue(after.lines().anyMatch(line -> unnamed.matcher(line).matches()),
                 "and carries none once a row meets one of the two lines: " + after);
         assertEquals(List.of(), names(before), "there is nothing here a cell composed");
         assertEquals(List.of(), names(after), "nor after");

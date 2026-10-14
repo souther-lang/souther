@@ -447,8 +447,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         ComparisonClaim claim = ComparisonClaim.stating(
                 holds ? affine.proposition() : affine.proposition().denied());
-        BorderQuantity.HowMany of = new BorderQuantity.HowMany(CountedElements.of(behavior, count,
-                read.quantities(), DemandReading.anElementMeeting(count, read)));
+        CountedElements counted = CountedElements.of(behavior, count, read.quantities(),
+                DemandReading.anElementMeeting(count, read));
+        BorderQuantity.HowMany of =
+                new BorderQuantity.HowMany(counted, HowManyCanMeet.of(counted, read));
         Cutting drawn = made(of, new Level.OfTheQuantity(level), claim, read.quantities());
         return drawn == null ? null : cutsOrRefused(drawn);
     }
@@ -551,7 +553,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 holds ? affine.proposition() : affine.proposition().denied());
         BorderQuantity.HowMany of = new BorderQuantity.HowMany(CountedElements.of(behavior, count,
                 read.quantities(), DemandReading.anElementMeeting(count, read)),
-                new LinearForm<>(ExactRatio.ZERO, added), on);
+                new LinearForm<>(ExactRatio.ZERO, added), on, Optional.empty());
         Cutting drawn = made(of, new Level.OfTheQuantity(scaled.constant().negated()),
                 scale.signum() < 0 ? claim.turned() : claim, read.quantities());
         return drawn == null ? null : cutsOrRefused(drawn);

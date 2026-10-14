@@ -124,13 +124,13 @@ class ACountHeldAgainstANumberOfTheInputIsComposedOnEverySideOfItTest {
                     if List.length(List.filter(y -> y == "a", xs)) >= n + 3
                         then (if k > 0 then High else Low) else Low
                 """);
-        List<Row> past = rows.stream().filter(row -> row.numbers().get(1) > 0).toList();
-        assertFalse(past.isEmpty(), () -> "a row on each side of k: " + rows);
-        past.forEach(row -> assertTrue(row.meeting(IS_A) >= row.numbers().getFirst() + 3,
-                () -> "a row past k stands where the count holds: " + row));
-        assertTrue(rows.stream().anyMatch(row -> row.numbers().get(1) <= 0
-                        && row.meeting(IS_A) >= row.numbers().getFirst() + 3),
-                () -> "and k at its other side with the count held: " + rows);
+        // The rows k's line is owed are found by its points. A row for the count's own line does not
+        // read k, so k there is whatever tells the arms apart, on either side of k's line.
+        for (int k : List.of(-1, 0, 1, 2)) {
+            assertTrue(rows.stream().anyMatch(row -> row.numbers().get(1) == k
+                            && row.meeting(IS_A) >= row.numbers().getFirst() + 3),
+                    () -> "a row at k = " + k + " stands where the count holds: " + rows);
+        }
     }
 
     /** The one number is shared by two counts of one list, which is one list. */

@@ -26,8 +26,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.SequencedMap;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -101,8 +101,12 @@ public final class ReplacementReading {
         }
     }
 
-    /** The places in the plan one rewrite of an arm stands at, and the one place it is shown. */
-    private record Occurrences(ReplacementReportAnchor reportAt, List<ArmProbe> probes) {}
+    /**
+     * The places in the plan one rewrite of an arm stands at, the one place it is shown, and what
+     * it comes to as a question.
+     */
+    private record Occurrences(ReplacementReportAnchor reportAt, ArmReplacements.Asked asked,
+                               List<ArmProbe> probes) {}
 
     /**
      * What being the same answer means for the behavior: two values read in full, and a statement
@@ -131,7 +135,9 @@ public final class ReplacementReading {
      * part it from the body goes through an arm {@code unreached} answers for is the body under
      * another spelling — a proof, read off the source and the model's own rules — and no row is
      * owed for it. Nothing else here concludes that: a search finding no input the two part at
-     * leaves the rewrite open.
+     * leaves the rewrite open. Which rewrites those are, and which of them a run can be asked for,
+     * is {@link ArmReplacements#askedOf}'s to say, for this measure and for the rows composed to be
+     * offered alike.
      *
      * <p>Which siblings there are is {@code carried}, what the classes the rows ran in hold, and
      * not the plan's: a fork a method could not hold its siblings in was written without them, and
@@ -173,20 +179,19 @@ public final class ReplacementReading {
             if (site.place().probe().isEmpty()) {
                 continue;
             }
-            List<ArmReplacements.AtSite> sites =
-                    carried.ofArm(site.obligation().origin(), site.obligation().part());
-            List<Integer> withs = otherPrograms(sites, unreached);
-            forked = forked || !withs.isEmpty();
+            List<ArmReplacements.Asked> asked = carried.askedOf(site.obligation().origin(),
+                    site.obligation().part(), unreached);
+            forked = forked || !asked.isEmpty();
             ArmProbe probe = site.place().probe().get();
             if (!reached.contains(probe)) {
                 continue;
             }
             ReplacementReportAnchor reportAt = ReplacementReportAnchor.ofAnArm(site.anchor());
-            for (int with : withs) {
+            for (ArmReplacements.Asked each : asked) {
                 Replacement.OfAnArm replaced = new Replacement.OfAnArm(
-                        site.obligation().origin(), site.obligation().part(), with);
+                        site.obligation().origin(), site.obligation().part(), each.with());
                 Occurrences at = occurrences.computeIfAbsent(replaced,
-                        _ -> new Occurrences(reportAt, new ArrayList<>()));
+                        _ -> new Occurrences(reportAt, each, new ArrayList<>()));
                 // One fork is in a source this compilation holds or it is not, whichever call
                 // reached it; two answers would be the plan disagreeing with itself about the fork.
                 if (!at.reportAt().equals(reportAt)) {
@@ -199,7 +204,8 @@ public final class ReplacementReading {
         }
         occurrences.forEach((replaced, at) -> out.add(new Account(
                 ReplacementAsWritten.OfAnArm.in(plan, replaced), at.reportAt(),
-                armStanding(replaced, at.probes(), carried, stated, wentThrough, stoppedAt))));
+                armStanding(replaced, at.asked(), at.probes(), stated, wentThrough,
+                        stoppedAt))));
         // One answer only where no arm has a rewrite that is another program. Which family a body
         // invites is the body's: one with a fork is asked about the fork, arm by arm, whichever of
         // its arms the rows stating an answer happen to reach — read off what they reached
@@ -214,54 +220,25 @@ public final class ReplacementReading {
     }
 
     /**
-     * The siblings an arm at {@code sites} can be rewritten as that are other programs, in the
-     * order of their parts.
-     *
-     * <p>A rewrite stands at every site of the arm at once, so it is the body under another
-     * spelling only where it is at each of them: where every site either lacks the sibling or has
-     * it proven to part from the arm only on ways {@code unreached} answers for.
-     */
-    private static List<Integer> otherPrograms(List<ArmReplacements.AtSite> sites,
-                                               Predicate<ControlPlace.Arm> unreached) {
-        Set<Integer> withs = new TreeSet<>();
-        sites.forEach(at -> withs.addAll(at.siblings().keySet()));
-        List<Integer> out = new ArrayList<>();
-        for (int with : withs) {
-            if (!sites.stream().allMatch(at -> !at.siblings().containsKey(with)
-                    || at.siblings().get(with).differs().provenAway(unreached))) {
-                out.add(with);
-            }
-        }
-        return out;
-    }
-
-    /**
      * What the rows came to about one rewrite of an arm.
      *
      * <p>Every row that went through the arm and states something is asked, and one that ran out —
      * as written or under the rewrite — may be the row that tells it apart, so the rewrite is left
      * undecided rather than called unnoticed on the strength of the rows that did come back.
      */
-    private static Standing armStanding(Replacement.OfAnArm replaced, List<ArmProbe> where,
-                                        ArmReplacements replacements, List<RowOutcome> rows,
+    private static Standing armStanding(Replacement.OfAnArm replaced, ArmReplacements.Asked asked,
+                                        List<ArmProbe> where, List<RowOutcome> rows,
                                         Function<RowOutcome, Set<ArmProbe>> wentThrough,
                                         Function<RowOutcome, List<Figure>> stoppedAt) {
-        // Every site, since a rewrite stands at all of them at once: a site the JVM could not hold
-        // the sibling at leaves it unasked whatever a wider run lets the other forks carry.
-        List<ArmReplacements.Sibling.Why> notCarried = new ArrayList<>();
-        for (ArmReplacements.AtSite at : replacements.ofArm(replaced.fork(), replaced.part())) {
-            if (at.siblings().get(replaced.with())
-                    instanceof ArmReplacements.Sibling.NotCarried(
-                            ArmReplacements.Sibling.Why why, ArmReplacements.Differs _)) {
-                notCarried.add(why);
+        SequencedMap<Integer, Integer> replacing;
+        switch (asked) {
+            // Left unasked at the figure a fork was held to, or at what the JVM holds in one
+            // method, which no run of this compiler widens.
+            case ArmReplacements.Asked.NotRun(var _, var why) -> {
+                return new Standing.CannotBeAsked(
+                        ReplacementEvidence.Undecided.LeftOpen.of(List.of(wayOf(why))));
             }
-        }
-        if (!notCarried.isEmpty()) {
-            List<ReplacementEvidence.Undecided.Way> ways = new ArrayList<>();
-            for (ArmReplacements.Sibling.Why why : notCarried) {
-                ways.add(wayOf(why));
-            }
-            return new Standing.CannotBeAsked(ReplacementEvidence.Undecided.LeftOpen.of(ways));
+            case ArmReplacements.Asked.Runs(var rewrite) -> replacing = rewrite.replacing();
         }
         RowOutcome shownBy = null;
         boolean unknown = false;
@@ -313,9 +290,7 @@ public final class ReplacementReading {
                             Figure.inOrder(untoldAt)));
         }
         ReplacementOwed lookFor = new ReplacementOwed.OfAnArm(replaced.fork(), replaced.part(),
-                replaced.with(), where,
-                replacements.replacing(replaced.fork(), replaced.part(), replaced.with()),
-                seenThrough);
+                replaced.with(), where, replacing, seenThrough);
         return shownBy != null
                 ? new Standing.Unnoticed(RowRef.of(shownBy), lookFor)
                 : new Standing.Open(lookFor);

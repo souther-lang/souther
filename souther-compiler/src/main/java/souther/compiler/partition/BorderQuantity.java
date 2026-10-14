@@ -32,6 +32,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -753,14 +754,16 @@ public sealed interface BorderQuantity
         private final AStatementAtARow perElement;
         private final LinearForm<NumericTerm> against;
         private final Map<NumericTerm, TermOrders> on;
+        private final Optional<Count> most;
 
         /**
          * The count of what {@code counted} counts.
          *
          * @param counted what is counted, which is the whole of which count this is
+         * @param most    the most the count comes to, where something says ({@link HowManyCanMeet})
          */
-        HowMany(CountedElements counted) {
-            this(counted, new LinearForm<>(ExactRatio.ZERO, Map.of()), Map.of());
+        HowMany(CountedElements counted, Optional<Count> most) {
+            this(counted, new LinearForm<>(ExactRatio.ZERO, Map.of()), Map.of(), most);
         }
 
         /**
@@ -773,12 +776,22 @@ public sealed interface BorderQuantity
          * so {@code count >= n} and {@code 2 * count >= 2 * n} are one quantity, and what a rule
          * holds it against is the level, which is where the form's constant went.
          *
+         * <p>A most is the count's alone. With a form added, the form runs wherever its numbers do
+         * and the sum is left unbounded whatever the count comes to ({@link #runs}), so a most
+         * handed beside a form would be an end nothing reads.
+         *
          * @param counted what is counted, which is the whole of which count this is
          * @param against the form of the input's numbers added to the count, with no constant
          * @param on      the orders each of its numbers is read and written on
+         * @param most    the most the count comes to, where something says and nothing is added
+         *                to it ({@link HowManyCanMeet})
          */
         HowMany(CountedElements counted, LinearForm<NumericTerm> against,
-                Map<NumericTerm, TermOrders> on) {
+                Map<NumericTerm, TermOrders> on, Optional<Count> most) {
+            if (most.isPresent() && !against.coefs().isEmpty()) {
+                throw new IllegalArgumentException("a most is of the count alone, and this one has"
+                        + " a form added to it: " + against);
+            }
             if (against.constant().signum() != 0) {
                 throw new IllegalArgumentException(
                         "a quantity carries no constant; it belongs to the level: " + against);
@@ -801,6 +814,24 @@ public sealed interface BorderQuantity
             this.perElement = counted.perElement();
             this.against = against;
             this.on = Map.copyOf(on);
+            this.most = most;
+        }
+
+        /**
+         * What the rules leave the quantity: the count from none to the most it comes to, where
+         * nothing is added to it. With a form added, the sum runs wherever the form's numbers do,
+         * and is left unbounded.
+         *
+         * <p>The most is not part of which quantity this is, as the orders of the form's numbers
+         * are not: both are what the reading has of the count, and a reading works out one most
+         * for each count it reads ({@link HowManyCanMeet#of}).
+         */
+        NumericDomain.Bounds runs() {
+            if (!against.coefs().isEmpty()) {
+                return NumericDomain.Bounds.OPEN;
+            }
+            return most.map(end -> new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+                    Endpoint.inclusive(end))).orElse(NONE_OR_MORE);
         }
 
         /** What is added to the count, with no constant; no coefficient where the quantity is the
@@ -1287,10 +1318,7 @@ public sealed interface BorderQuantity
     default NumericDomain.Bounds runsWithin(Quantities quantities) {
         return switch (this) {
             case LinearQuantity form -> quantities.runsBetween(form.direction());
-            // The count runs from none and a form added to it runs wherever its numbers do, so the
-            // sum is left unbounded: what the rules leave it is no more than that.
-            case HowMany count -> count.against.coefs().isEmpty() ? NONE_OR_MORE
-                    : NumericDomain.Bounds.OPEN;
+            case HowMany count -> count.runs();
             case RemainderOfAForm remainder -> remainder.runs();
         };
     }
@@ -1305,8 +1333,7 @@ public sealed interface BorderQuantity
             case LinearQuantity form -> region.projectionOf(form.direction());
             // A region holds relations over a row's numbers, and no relation it holds is about a
             // count of elements: it leaves the count what a count runs between.
-            case HowMany count -> new NumericDomain.FormProjection.Within(
-                    count.against.coefs().isEmpty() ? NONE_OR_MORE : NumericDomain.Bounds.OPEN);
+            case HowMany count -> new NumericDomain.FormProjection.Within(count.runs());
             // Whatever the rules leave the form, a remainder stays below its divisor.
             case RemainderOfAForm remainder ->
                     new NumericDomain.FormProjection.Within(remainder.runs());

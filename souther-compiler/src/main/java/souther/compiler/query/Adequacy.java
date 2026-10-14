@@ -24,7 +24,9 @@ import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.inputs.TermPath;
 
 
+import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.OutcomeName;
@@ -158,6 +160,7 @@ import java.util.SequencedSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /** How well a module's {@code example} rows cover what it declares. */
@@ -2558,8 +2561,7 @@ public final class Adequacy {
             MeasuredInput subject = read == null ? null : subjectOf(db, name, spec, read);
             Coverages.Probe probe = subject == null ? null
                     : probing(sig, subject, StatementsOfAnInput.of(read), constructing(db, name),
-                            runningRowsOf(trialling(db, name), behavior, sig,
-                                    numberingOf(db, name),
+                            runningRowsOf(db, name, trialling(db, name), behavior, sig,
                                     RequiredDependencies.of(db, name, behavior)),
                             answering(db, name, behavior, subject));
             if (probe == null) {
@@ -2995,8 +2997,7 @@ public final class Adequacy {
             }
             return Answer.of(Coverages.merged(Coverages.searched(measured, subject,
                     probing(sig, subject, StatementsOfAnInput.of(read), constructing(db, name),
-                            runningRowsOf(trialling(db, name), behavior, sig,
-                                    numberingOf(db, name),
+                            runningRowsOf(db, name, trialling(db, name), behavior, sig,
                                     RequiredDependencies.of(db, name, behavior)),
                             answering(db, name, behavior, subject)),
                     divided.reaching())));
@@ -3102,7 +3103,7 @@ public final class Adequacy {
                     for (souther.compiler.partition.StandInAttempt stood
                             : answers.of(demands, pinned.values())) {
                         out.add(Generator.probeFixing(subject, label, fixing, asking,
-                                pinned.reaching(), check, stood));
+                                pinned.reaching(), check, stood, trial));
                     }
                     if (out.stream().anyMatch(Adequacy::composedAgainstEverythingAsked)) {
                         return List.copyOf(out);
@@ -5133,7 +5134,7 @@ public final class Adequacy {
                             numbering,
                             observed,
                             constructing(db, name),
-                            runningRowsOf(trialling(db, name), behavior, sig, numbering,
+                            runningRowsOf(db, name, trialling(db, name), behavior, sig,
                                     RequiredDependencies.of(db, name, behavior)),
                             // What every row this composes stands the dependencies in with, settled
                             // before the search so that a candidate is run in the environment the
@@ -6189,6 +6190,26 @@ public final class Adequacy {
     }
 
     /**
+     * The arms of {@code behavior} the model's own rules prove no run arrives at, with what the
+     * rows did taken in: a row through an arm shows the proof of it wrong, and a proof shown wrong
+     * closes no way. None where nothing was proven.
+     *
+     * <p>Held to the plan the arms are places of before any of them is looked up: a reading of
+     * another plan answers that nothing arrives at a place it never walked, which would prove a
+     * rewrite the same.
+     */
+    static Predicate<ControlPlace.Arm> unreachedIn(
+            Map<String, PathReachability.Answers.AsRun> arrived, String behavior,
+            Bodies.Elaborated checked) {
+        PathReachability.Answers.AsRun arrives = arrived == null ? null : arrived.get(behavior);
+        if (arrives == null) {
+            return _ -> false;
+        }
+        arrives.answers().requireNumbering(checked.numberingIdentity());
+        return arm -> arrives.answers().at(arm) instanceof Reachability.Unreachable;
+    }
+
+    /**
      * A way to run one behavior's composed rows, said in the generator's words.
      *
      * <p>Two seams and one adaptation, the way the check that a value can be built already is. What
@@ -6198,19 +6219,33 @@ public final class Adequacy {
      * <p>Beside {@link #trialling} rather than inside the search, because running a composed row is
      * what anybody asking after one does — the search that composes them, and whoever asks what one
      * of them would settle.
+     *
+     * <p>Which rewrites of the arms a run went through it can be asked for is the question the
+     * measure of the rows written asks ({@link ArmReplacements#askedOf}), under the same proof of
+     * which ways nothing arrives at, so a row chosen for them is chosen for what that measure reads.
+     *
+     * @param trials the classes rows are run in, or null where none are
      */
-    static Generator.Trial runningRowsOf(RowTrials trials, String behavior, Sig sig,
-                                         Optional<SiteNumbering> numbering,
-                                         RequiredDependencies requires) {
-        if (trials == null || numbering.isEmpty() || requires == null) {
+    static Generator.Trial runningRowsOf(Db db, String module, RowTrials trials, String behavior,
+                                         Sig sig, RequiredDependencies requires) {
+        Bodies.Elaborated checked = db.ask(new Bodies.Observable(module)).value();
+        if (trials == null || checked == null || requires == null) {
             // Nothing runs where nothing applies the behavior, nothing is read where the module has
             // no numbering to read it under, and nothing is applied where what the behavior
             // requires could not be worked out — the three are the same module, so the rest follow
             // the first and are said rather than assumed.
             return Generator.Trial.NOTHING_RUNS;
         }
+        SiteNumbering numbering = SiteNumbering.of(checked.numberingIdentity());
+        List<CoverageSites.ArmSite> arms = checked.plan().arms(behavior);
+        Predicate<ControlPlace.Arm> unreached =
+                unreachedIn(db.ask(new Arrived(module)).value(), behavior, checked);
+        ArmReplacements carried = trials.carried();
         RowTrials.OfBehavior application = trials.forBehavior(behavior, sig);
-        return new Generator.Trial() {
+        // Each row once, for every search that holds this: a search runs a row to choose it, its
+        // reader runs the row it was handed to see where it stands, and the searches of one
+        // behavior's points compose many of the same rows.
+        return Generator.once(new Generator.Trial() {
 
             @Override
             public Generator.ObservedRun run(RowToRun row) {
@@ -6229,7 +6264,7 @@ public final class Adequacy {
                             // classes numbered otherwise is refused here rather than answered about
                             // places it was never near.
                             case RunRecord.Recorded(var seen) ->
-                                    new Generator.Watched.Ran(numbering.orElseThrow().align(seen));
+                                    new Generator.Watched.Ran(numbering.align(seen));
                             case RunRecord.NoAccount _ -> new Generator.Watched.NoAccount();
                         }, ran.answer()))
                         .orElseGet(Generator.ObservedRun::nothingRan);
@@ -6248,11 +6283,16 @@ public final class Adequacy {
                 return application.change(was, now);
             }
 
+            @Override
+            public List<ArmReplacements.Rewrite> rewritesThrough(AlignedObservation ran) {
+                return carried.askedOfARun(arms, ran, unreached);
+            }
+
             private static List<Hir.Expr> valuesOf(RowToRun row) {
                 return row.inputs().stream()
                         .map(FixtureTemplate::value).toList();
             }
-        };
+        });
     }
 
     /**
