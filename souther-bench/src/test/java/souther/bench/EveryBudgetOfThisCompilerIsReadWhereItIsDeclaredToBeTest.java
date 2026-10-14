@@ -184,9 +184,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/ElementsWrittenAlike$Choices;",
                     "says the figure the walk stopped at beside the ways it looked along, which"
                             + " the way composed as it stands says of what it wrote alike"),
-            Map.entry("souther.compiler.partition.AnAnswerComposed#written(Ljava/util/List;)"
-                            + "Lsouther/compiler/partition/AnAnswerComposed$Ways;",
-                    "says the figures the walk stopped at in the ways it answers with"),
             Map.entry("souther.compiler.partition.CardinalityComposer#handingOn("
                             + "Ljava/util/List;Ljava/util/List;Ljava/util/List;"
                             + "Lsouther/compiler/partition/NumericSet;"
@@ -458,15 +455,38 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "counts the arms a value chosen by cases is read through — a body's answer, or"
                             + " what a match chooses by — and past the figure carries which case it"
                             + " is out as unread, naming it"),
-            Map.entry("souther.compiler.partition.Pullback#goingIn("
-                            + "Lsouther/compiler/partition/Pullback$Inside;"
-                            + "Lsouther/compiler/inputs/InputReads;"
-                            + "Lsouther/compiler/inputs/Denotation;Z"
-                            + "Ljava/util/function/Function;)"
-                            + "Lsouther/compiler/meaning/Derivation;",
-                    "counts the readings a value gone into is read in — the arms of a choice, the"
-                            + " values a name stands for, the cases of a definition — and past the"
-                            + " figure carries what is read out as a part nothing read, naming it"),
+            // The readings every split makes, one way down and in all. Each place that splits — a
+            // value gone into, a comparison of a choice, a law read of each value or application,
+            // a sum over values written out — asks here before reading any of them, and past
+            // either figure carries what it would have read out as a part nothing read, naming
+            // the one it reached.
+            Map.entry("souther.compiler.partition.Pullback#splitInto("
+                            + "Lsouther/compiler/inputs/InputReads;J)"
+                            + "Lsouther/compiler/meaning/WhyUnread;",
+                    "counts the readings a split makes along one way down, and says which figure"
+                            + " where they are past it"),
+            Map.entry("souther.compiler.partition.Pullback#<init>("
+                            + "Lsouther/compiler/inputs/InputReading;Ljava/util/Optional;)V",
+                    "how many readings one reading of a condition makes in all, which every split"
+                            + " takes its readings from and past which it says which figure"),
+            // What a step of a reading concludes, written out. Past the figure the step is
+            // concluded as a part nothing read, naming it.
+            Map.entry("souther.compiler.meaning.Conclusion#<clinit>()V",
+                    "how many parts a step of a reading is concluded with"),
+            Map.entry("souther.compiler.meaning.Conclusion#of("
+                            + "Lsouther/compiler/meaning/Derivation;)"
+                            + "Lsouther/compiler/meaning/Proposition;",
+                    "past the figure concludes the step as a part nothing read, naming it"),
+            Map.entry("souther.compiler.meaning.Conclusion#partsIn("
+                            + "Lsouther/compiler/meaning/Proposition;)J",
+                    "counts the parts a statement comes to written out no further than one past"
+                            + " the figure"),
+            // What a path takes in of a condition: the parts of a disjunction taken alone, across
+            // every disjunction inside another. Past the figure the disjunction is declined,
+            // naming it.
+            Map.entry("souther.compiler.check.MeaningAssumptions$Tries#<init>()V",
+                    "how many parts of a disjunction one reading of a condition takes alone,"
+                            + " past which the disjunction is declined for that figure"),
             Map.entry("souther.compiler.partition.Pullback$ALawRead#ofEachWrittenOut("
                             + "Lsouther/compiler/check/DeclaredArgument;"
                             + "Ljava/util/List;"
@@ -474,22 +494,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Pullback$WrittenOutRead;",
                     "counts the values a law is read of one by one, and past the figure carries"
                             + " the law out as a part nothing read, naming it"),
-            Map.entry("souther.compiler.partition.Pullback$ALawRead#onTheApplicationHandingEach("
-                            + "Lsouther/compiler/check/DeclaredArgument;"
-                            + "Ljava/util/List;"
-                            + "Lsouther/compiler/inputs/Denotation;"
-                            + "Lsouther/compiler/core/Core$Block;"
-                            + "Lsouther/compiler/semantics/LawProposition;)"
-                            + "Lsouther/compiler/partition/Pullback$WrittenOutRead;",
-                    "counts the applications a closure is handed each value on, and past the"
-                            + " figure carries the law out as a part nothing read, naming it"),
-            Map.entry("souther.compiler.partition.Pullback$ALawRead#sumOverWrittenOut("
-                            + "Lsouther/compiler/check/DeclaredArgument;"
-                            + "Ljava/util/List;"
-                            + "Lsouther/compiler/semantics/LawNumber;)"
-                            + "Lsouther/compiler/partition/Pullback$Sized;",
-                    "counts the values a sum is read of one by one, and past the figure carries"
-                            + " the number out as one nothing read, naming it"),
             Map.entry("souther.compiler.partition.Pullback#pastTheReadings("
                             + "Lsouther/compiler/meaning/Relation;)Z",
                     "counts the choices of which values written out meet a statement that a"
@@ -621,10 +625,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Collection;)"
                             + "Lsouther/compiler/partition/Generator$UnresolvedCombination$Reason;",
                     "the word a search stopped by these comes back with"),
-            Map.entry("souther.compiler.inputs.BlockReason$RuleReadingStopped#figures()"
-                            + "Ljava/util/List;",
-                    "the figure a statement read more times than are made stopped at, handed to"
-                            + " whoever is told the reason"),
             Map.entry("souther.compiler.report.Reasons#said("
                             + "Lsouther/compiler/publish/CanonicalSelection;)Ljava/lang/String;",
                     "what a figure is called where a reader meets one"),
@@ -635,12 +635,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.query.EstablishmentGap$Composition#runSensitivity()"
                             + "Lsouther/compiler/observe/RunSensitivity;",
                     "asks each figure of a gap whether a wider run goes past it"),
-            // The figure a reading declined at, said where the reading says a wider run may read
-            // past it: fixed where it is declared, so the gap names it rather than carrying it.
-            Map.entry("souther.compiler.partition.ReadingGap$ReachNotRead#figures()"
-                            + "Ljava/util/List;",
-                    "names the figure a part was declined at, for a reader told a wider run may"
-                            + " read past it"),
             // A budget as the figure a reader is told stopped something: what it is called, what
             // it counts and what it stands at, read off the budget and handed on with it.
             Map.entry("souther.compiler.observe.Figure$Budget#name()Ljava/lang/String;",
@@ -658,7 +652,20 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "names the budgets a gap was stopped at, where they are all that held it open"),
             Map.entry("souther.compiler.query.Weakening#figures()Ljava/util/List;",
                     "names the budget a decision's reading stopped at, for a reader told a wider"
-                            + " run may read past it")));
+                            + " run may read past it"),
+            // Which figure each reason a part was not read or a condition not taken in stopped at,
+            // said once for every reader that names the figure: a gap on the way, a rule that
+            // drew no line, a composer of an answer.
+            Map.entry("souther.compiler.meaning.WhyUnread#figure()Ljava/util/Optional;",
+                    "the figure each reason a part was not read stopped at, which every reader"
+                            + " naming the figure reads"),
+            Map.entry("souther.compiler.meaning.WhyNotTaken#figure()Ljava/util/Optional;",
+                    "the figure each reason a condition was not taken in stopped at, the same"
+                            + " way"),
+            Map.entry("souther.compiler.report.AdequacyReport#whyDeclined("
+                            + "Lsouther/compiler/meaning/WhyNotTaken;)Ljava/lang/String;",
+                    "what the figure a path stopped taking a disjunction at counts, in the words"
+                            + " a reader is told why a condition was not taken in")));
 
     /**
      * The places that read a figure are the places that say they do.

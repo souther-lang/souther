@@ -205,8 +205,10 @@ public final class ReportedReason {
             // that is no relation of numbers the word for values that carry no order to draw a
             // line on.
             case BlockReason.WhatItStatesIsNoLine(var why) -> switch (why) {
-                case MORE_READINGS_THAN_ARE_MADE, MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT,
-                     A_PART_NOT_READ -> UndividedPosition.Reason.RULE_MEANING_NOT_READ;
+                case MORE_READINGS_THAN_ARE_MADE, MORE_TOTAL_READINGS_THAN_ARE_MADE,
+                     MORE_PARTS_THAN_ARE_CONCLUDED, MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT,
+                     A_PART_NOT_READ ->
+                        UndividedPosition.Reason.RULE_MEANING_NOT_READ;
                 case A_NUMBER_NO_POSITION_HOLDS ->
                         UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE;
                 case NO_RELATION_OF_NUMBERS -> UndividedPosition.Reason.UNSUPPORTED_DOMAIN;

@@ -41,9 +41,12 @@ class WhoMaySayAPartOfAStatementWasNotReadTest {
      *
      * <p>What a body's conditions state is read in {@code Pullback} and filed by
      * {@code MeaningsOfABodyReading}; and a site nothing was filed at, or two readings of one site
-     * that disagree, is said by {@code MeaningsOfABody}.
+     * that disagree, is said by {@code MeaningsOfABody}. What each step of a reading states is
+     * concluded by {@code Conclusion}, which numbers the parts nothing read, and gives up a step
+     * whose statement comes to more parts than a step is concluded with.
      */
     private static final List<String> THE_READING = List.of(
+            "souther/compiler/meaning/Conclusion",
             "souther/compiler/meaning/MeaningsOfABody",
             "souther/compiler/partition/MeaningsOfABodyReading",
             "souther/compiler/partition/Pullback");

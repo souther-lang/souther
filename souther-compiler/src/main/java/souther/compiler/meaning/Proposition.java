@@ -45,6 +45,29 @@ public sealed interface Proposition {
     String key();
 
     /**
+     * The statements this one holds as parts of what it states, in the order it keeps them.
+     *
+     * <p>The one place that says which they are. A reader asking something of every part — whether
+     * one was not read, how many parts there are written out, whether one is about an answer —
+     * asks this for them, so a statement a kind comes to hold is one every such reader meets. Each
+     * reading the parts off the components for itself, a part added to a kind was met by none of
+     * them. What a count is taken over is a statement inside a number and not a part here.
+     */
+    default List<Proposition> partsHeld() {
+        return switch (this) {
+            case All all -> all.parts();
+            case Any any -> any.parts();
+            case OnAnApplication applications -> applications.each();
+            case Some some -> List.of(some.ofTheElement());
+            case SomeReachable reached -> reached.noneBelow()
+                    .map(none -> List.of(reached.atANode(), none))
+                    .orElseGet(() -> List.of(reached.atANode()));
+            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
+                 LastToHold _, Unread _, Carried _ -> List.of();
+        };
+    }
+
+    /**
      * Whether this can come out one way for one element of the container at {@code container} and
      * the other way for another: whether it names a subject an element is, or holds something
      * nothing here sees into.
@@ -69,20 +92,19 @@ public sealed interface Proposition {
                     || mayBeAnElementOf(same.other(), container);
             case LastToHold last ->
                     isAnElementOf(new DecisionSubject.AnInput(last.position()), container);
-            case All all -> all.parts().stream()
-                    .anyMatch(part -> part.mayTurnOnAnElementOf(container));
-            case Any any -> any.parts().stream()
-                    .anyMatch(part -> part.mayTurnOnAnElementOf(container));
-            case OnAnApplication applications -> applications.each().stream()
-                    .anyMatch(one -> one.mayTurnOnAnElementOf(container));
+            case All _, Any _, OnAnApplication _ -> somePartMayTurnOnAnElementOf(container);
             case Some some -> isAnElementOf(some.container(), container)
-                    || some.ofTheElement().mayTurnOnAnElementOf(container);
+                    || somePartMayTurnOnAnElementOf(container);
             // What it is written over is not what it is about, so it is taken to turn on an element
             // wherever it might, as a part nothing sees into is.
             case SomeReachable reached ->
                     isAnElementOf(new DecisionSubject.AnInput(reached.at()), container)
-                            || reached.atANode().mayTurnOnAnElementOf(container);
+                            || somePartMayTurnOnAnElementOf(container);
         };
+    }
+
+    private boolean somePartMayTurnOnAnElementOf(DecisionSubject container) {
+        return partsHeld().stream().anyMatch(part -> part.mayTurnOnAnElementOf(container));
     }
 
     /** Whether {@code quantity} may be read off an element of {@code container}. A value a body
@@ -346,6 +368,18 @@ public sealed interface Proposition {
             return key.hashCode();
         }
 
+        /**
+         * Both components, the spelling first. The parts are a tree as deep as the conjunctions
+         * inside one another, and two propositions that differ almost always differ in what they
+         * spell, which a string's hash says before a character is compared.
+         */
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof All that
+                    && key.hashCode() == that.key.hashCode() && key.equals(that.key)
+                    && parts.equals(that.parts));
+        }
+
         public All(List<Proposition> parts) {
             this(parts, null);
         }
@@ -360,7 +394,8 @@ public sealed interface Proposition {
 
         @Override
         public Proposition denied() {
-            return any(parts.stream().map(Proposition::denied).toList());
+            return SharedPropositions.denied(this,
+                    () -> any(parts.stream().map(Proposition::denied).toList()));
         }
     }
 
@@ -374,6 +409,14 @@ public sealed interface Proposition {
         @Override
         public int hashCode() {
             return key.hashCode();
+        }
+
+        /** Both components, the spelling first, as {@link All} compares them. */
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof Any that
+                    && key.hashCode() == that.key.hashCode() && key.equals(that.key)
+                    && parts.equals(that.parts));
         }
 
         public Any(List<Proposition> parts) {
@@ -390,7 +433,8 @@ public sealed interface Proposition {
 
         @Override
         public Proposition denied() {
-            return all(parts.stream().map(Proposition::denied).toList());
+            return SharedPropositions.denied(this,
+                    () -> all(parts.stream().map(Proposition::denied).toList()));
         }
     }
 
@@ -516,7 +560,8 @@ public sealed interface Proposition {
                 throw new IllegalArgumentException("a search goes below a node through something");
             }
             key = (holds ? "reachable " : "unreachable ") + at + " from " + writtenAt + " through "
-                    + through + " [" + atANode.key() + "]";
+                    + through + " [" + atANode.key() + "]"
+                    + noneBelow.map(none -> " none below [" + none.key() + "]").orElse("");
         }
 
         @Override
@@ -613,6 +658,14 @@ public sealed interface Proposition {
             return key.hashCode();
         }
 
+        /** Both components, the spelling first, as {@link All} compares them. */
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof OnAnApplication that
+                    && key.hashCode() == that.key.hashCode() && key.equals(that.key)
+                    && each.equals(that.each));
+        }
+
         public OnAnApplication(List<Proposition> each) {
             this(each, null);
         }
@@ -628,7 +681,8 @@ public sealed interface Proposition {
 
         @Override
         public Proposition denied() {
-            return onAnApplication(each.stream().map(Proposition::denied).toList());
+            return SharedPropositions.denied(this,
+                    () -> onAnApplication(each.stream().map(Proposition::denied).toList()));
         }
     }
 
@@ -643,7 +697,7 @@ public sealed interface Proposition {
             throw new IllegalArgumentException("a condition is read on some application");
         }
         return kept.size() == 1 ? kept.firstEntry().getValue()
-                : new OnAnApplication(List.copyOf(kept.values()));
+                : SharedPropositions.shared(new OnAnApplication(List.copyOf(kept.values())));
     }
 
     /**
@@ -674,11 +728,8 @@ public sealed interface Proposition {
     private static boolean stopsIn(Proposition stated, List<WhyUnread> into, boolean first) {
         return switch (stated) {
             case Unread unread -> into.add(unread.why());
-            case All all -> stopsIn(all.parts(), into, first);
-            case Any any -> stopsIn(any.parts(), into, first);
-            case OnAnApplication applications -> stopsIn(applications.each(), into, first);
-            case Some some -> stopsIn(some.ofTheElement(), into, first);
-            case SomeReachable reached -> stopsIn(reached.atANode(), into, first);
+            case All _, Any _, OnAnApplication _, Some _, SomeReachable _ ->
+                    stopsIn(stated.partsHeld(), into, first);
             case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
                  LastToHold _, Carried _ -> false;
         };
@@ -702,12 +753,8 @@ public sealed interface Proposition {
     static boolean saysTheLastToHold(Proposition stated) {
         return switch (stated) {
             case LastToHold _ -> true;
-            case All all -> all.parts().stream().anyMatch(Proposition::saysTheLastToHold);
-            case Any any -> any.parts().stream().anyMatch(Proposition::saysTheLastToHold);
-            case OnAnApplication applications ->
-                    applications.each().stream().anyMatch(Proposition::saysTheLastToHold);
-            case Some some -> saysTheLastToHold(some.ofTheElement());
-            case SomeReachable reached -> saysTheLastToHold(reached.atANode());
+            case All _, Any _, OnAnApplication _, Some _, SomeReachable _ ->
+                    stated.partsHeld().stream().anyMatch(Proposition::saysTheLastToHold);
             case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, Unread _,
                  Carried _ -> false;
         };
@@ -734,13 +781,10 @@ public sealed interface Proposition {
             case Present present -> present.of() instanceof DecisionSubject.AnAnswer;
             case SameValue same -> same.one() instanceof DecisionSubject.AnAnswer
                     || same.other() instanceof DecisionSubject.AnAnswer;
-            case All all -> all.parts().stream().anyMatch(Proposition::aboutAnAnswer);
-            case Any any -> any.parts().stream().anyMatch(Proposition::aboutAnAnswer);
-            case OnAnApplication applications ->
-                    applications.each().stream().anyMatch(Proposition::aboutAnAnswer);
+            case All _, Any _, OnAnApplication _, SomeReachable _ ->
+                    stated.partsHeld().stream().anyMatch(Proposition::aboutAnAnswer);
             case Some some -> some.container() instanceof DecisionSubject.AnAnswer
-                    || aboutAnAnswer(some.ofTheElement());
-            case SomeReachable reached -> aboutAnAnswer(reached.atANode());
+                    || some.partsHeld().stream().anyMatch(Proposition::aboutAnAnswer);
         };
     }
 
@@ -888,8 +932,8 @@ public sealed interface Proposition {
         return switch (kept.size()) {
             case 0 -> new Always(every);
             case 1 -> kept.firstEntry().getValue();
-            default -> every ? new All(List.copyOf(kept.values()))
-                    : new Any(List.copyOf(kept.values()));
+            default -> SharedPropositions.shared(every ? new All(List.copyOf(kept.values()))
+                    : new Any(List.copyOf(kept.values())));
         };
     }
 }

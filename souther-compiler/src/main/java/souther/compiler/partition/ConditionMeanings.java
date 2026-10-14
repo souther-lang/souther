@@ -59,6 +59,12 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
         return ReachingCuts.stating(condition, read, held, WhatConditionsState.of(read));
     }
 
+    /** What holds exactly where {@code stated} does not, the one denial of it every reader of
+     *  this reading is handed ({@link WhatConditionsState#denied}). */
+    Proposition denied(Proposition stated) {
+        return WhatConditionsState.of(read).denied(stated);
+    }
+
     /** What {@code condition} coming out true states, whole ({@link DemandReading#statedBy}). */
     Proposition statedBy(Condition condition) {
         return DemandReading.statedBy(condition, read, WhatConditionsState.of(read));

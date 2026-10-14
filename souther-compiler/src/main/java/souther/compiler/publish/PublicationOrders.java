@@ -337,6 +337,11 @@ public final class PublicationOrders {
                     CompositionBudget.RUNS_REPAIRING_A_ROW,
                     CompositionBudget.PATHS_OF_A_DECISION_READ,
                     CompositionBudget.READINGS_OF_ONE_CONDITION,
+                    // Beside it: one way down, then every way together, then what a step states of
+                    // them, then what a path takes in of what the reading made.
+                    CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION,
+                    CompositionBudget.PARTS_A_DERIVATION_CONCLUDES,
+                    CompositionBudget.ALTERNATIVES_A_PATH_TRIES,
                     CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS));
 
     /**
