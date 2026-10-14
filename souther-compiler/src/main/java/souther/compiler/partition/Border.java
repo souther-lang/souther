@@ -22,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -979,18 +980,15 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         alsoParted.forEach((key, parted) ->
                 byQuantity.computeIfAbsent(key, _ -> new ArrayList<>()).addAll(parted));
         for (LineDrawn each : drawn) {
-            if (!ordersAroundTheCut(each.by())) {
-                continue;
-            }
             // Every line as it was read. Two of them at one place are one place with two lines
             // against it, which the arrangement says and this does not: told apart here, whichever
             // was read first stood for the other and the second line was not written down anywhere.
             String quantity = each.cuts().quantity();
-            switch (each.cuts().seam()) {
-                case ExactAnswer.Held<Seam> held -> byQuantity
+            switch (partedBy(each)) {
+                case ExactAnswer.Held<List<Parting>> held -> byQuantity
                         .computeIfAbsent(quantity, _ -> new ArrayList<>())
-                        .add(Parting.by(held.value(), each.by().authoredLine()));
-                case ExactAnswer.Unheld<Seam> unheld ->
+                        .addAll(held.value());
+                case ExactAnswer.Unheld<List<Parting>> unheld ->
                         notWorkedOut.putIfAbsent(quantity, unheld.why());
             }
         }
@@ -1062,24 +1060,37 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * could move without touching the other.
      */
     public static ExactAnswer<List<Parting>> partedBy(BoundaryTarget target, LineOrigin origin) {
-        LevelSpace space = target.levels();
-        Level cut = target.at();
+        return partedBy(origin, side -> Seam.of(target.levels(), target.at(), side));
+    }
+
+    /**
+     * The same, of a line drawn, in its quantity's own units rather than the units its rule wrote.
+     *
+     * <p>For collecting the places every rule on one quantity parts it at, which is the only order
+     * the lines of one quantity are all on.
+     */
+    static ExactAnswer<List<Parting>> partedBy(LineDrawn line) {
+        return partedBy(line.by(), line.cuts()::seamTowards);
+    }
+
+    /**
+     * Where a rule parts the values, each place found by {@code seamOn} on the side asked for.
+     *
+     * <p>One answer for every reader that arranges a quantity: a bound parts nothing, and a rule
+     * parts the values where its claim does ({@link Seam#eachOf}) — a rule naming a value at the
+     * place under it and the place over it, with the value between them. Which of the two bounds
+     * which side is the arrangement's answer and not this one's: a run is on a side of the line by
+     * what stops it, and that is a fact about the runs.
+     */
+    private static ExactAnswer<List<Parting>> partedBy(
+            LineOrigin origin, Function<Towards, ExactAnswer<Seam>> seamOn) {
         if (drawnByAnInvariant(origin)) {
             // A bound is where the quantity stops rather than a place its values part: nothing
             // outside one can be constructed, so there is no run on the far side.
             return ExactAnswer.held(List.of());
         }
-        return switch (origin.lineFacts().claim()) {
-            case ComparisonClaim.Cut order -> Seam.of(space, cut, order.valueBelongs()).map(seam ->
-                    List.of(Parting.by(seam, origin.authoredLine())));
-            // The place under the value and the place over it, with the value between them. Which
-            // of the two bounds which side is the arrangement's answer and not this one's: a run
-            // is on a side of the line by what stops it, and that is a fact about the runs.
-            case ComparisonClaim.Singled _ -> Seam.of(space, cut, Towards.ABOVE).flatMap(above ->
-                    Seam.of(space, cut, Towards.BELOW).map(below -> List.of(
-                            Parting.by(above, origin.authoredLine()),
-                            Parting.by(below, origin.authoredLine()))));
-        };
+        return Seam.eachOf(origin.lineFacts().claim(), seamOn).map(seams -> seams.stream()
+                .map(seam -> Parting.by(seam, origin.authoredLine())).toList());
     }
 
     /**
@@ -1392,18 +1403,6 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     /**
-     * Whether the rule orders the values around its threshold at all.
-     *
-     * <p>Asked of the origin here rather than answered by it. Which rule drew a line and whether that
-     * line has two sides are two questions, and only the first is the rule's — the second is what
-     * this measure does with the answer, and reading it off the origin put the vocabulary of borders
-     * inside the identity every other measure of a rule shares.
-     */
-    private static boolean ordersAroundTheCut(LineOrigin origin) {
-        return ordersAroundTheCut(drawnByAnInvariant(origin), origin.lineFacts().singles());
-    }
-
-    /**
      * Whether a clause of a value's own declarations drew this line.
      *
      * <p>Nothing outside such a rule can be constructed, which is a fact about the construct the
@@ -1435,27 +1434,6 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                             + origin.saidWithoutAPlace());
         }
         return Seam.of(space, cut, order.valueBelongs());
-    }
-
-    /**
-     * The same, of a reading that has not named a rule for its line yet.
-     *
-     * <p>One derivation, asked by whoever holds the two facts. Whether a line has two sides is
-     * settled before a border is built — a reading has to know which points its line will owe
-     * before it can ask whether anything can stand at them — and it is settled again once the rule
-     * is named. Worked out twice, a line would owe one side while it was a reading and two once it
-     * had a rule.
-     *
-     * @param drawnByAnInvariant whether what drew it is a clause a value's declarations state.
-     *                           Nothing outside such a rule can be constructed, so there is no far
-     *                           side to order against. An {@code ensures} is written on a
-     *                           declaration too and is not one of these: what it states is a
-     *                           relation the behavior is held to, and both its sides hold values
-     * @param singles            whether the rule names a value rather than a side, which orders
-     *                           nothing around itself either
-     */
-    static boolean ordersAroundTheCut(boolean drawnByAnInvariant, boolean singles) {
-        return !drawnByAnInvariant && !singles;
     }
 
     /** Whether the threshold's own value satisfies the rule that drew the line. */

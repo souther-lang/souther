@@ -132,6 +132,77 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
     }
 
     /**
+     * A disequality places the line an equality does with the roles turned: the row where the two
+     * meet is outside what the rule holds at, and the ones beside it inside.
+     */
+    @Test
+    void aDisequalityTurnsTheRolesOfThePointsAnEqualityHas() {
+        Border equal = onlyLine(INTS, "a == b");
+        Border apart = onlyLine(INTS, "a /= b");
+        DomainPoint on = new DomainPoint.AtTheLine();
+        DomainPoint below = new DomainPoint.BesideTheLine(Towards.BELOW);
+        DomainPoint above = new DomainPoint.BesideTheLine(Towards.ABOVE);
+
+        assertEquals(List.of(PointRole.ON, PointRole.OFF, PointRole.OFF),
+                List.of(equal.roleOf(on), equal.roleOf(below), equal.roleOf(above)));
+        assertEquals(List.of(PointRole.OFF, PointRole.ON, PointRole.ON),
+                List.of(apart.roleOf(on), apart.roleOf(below), apart.roleOf(above)));
+    }
+
+    /**
+     * A run beside one line on a quantity stops at the next line on it, whichever of the two names
+     * a value and whichever orders the values.
+     *
+     * <p>Between a rule at three and one at five there is only four, which is the nearest value to
+     * each of them and their own point, so neither has a run on the side facing the other. Read
+     * past the next line, a row there would be a row of another class, counted for this one.
+     */
+    @Test
+    void aRunBesideALineStopsAtTheNextLineOnTheSameQuantity() {
+        Map<Integer, Map<Towards, String>> sets = regionsByLine("""
+                module m
+
+                data Service = Insurance | Support | Security
+
+                behavior both : (a: Set<Service>, b: Set<Service>) -> Int
+                let both (a, b) = if Set.size(a) + Set.size(b) == 3 then 1
+                    else if Set.size(a) + Set.size(b) == 5 then 2 else 0
+                """, AValueSingledOutOnAQuantityOverPositionsIsALineTest::sizes);
+        assertEquals(REFUSED, sets.get(3).get(Towards.ABOVE), () -> "" + sets);
+        assertEquals(REFUSED, sets.get(5).get(Towards.BELOW), () -> "" + sets);
+        assertTrue(sum(sets.get(3).get(Towards.BELOW)) < 2, () -> "below the nearest: " + sets);
+
+        Map<Integer, Map<Towards, String>> ints = regionsByLine("""
+                module m
+
+                behavior both : (a: Int, b: Int) -> Int
+                let both (a, b) = if a + b == 3 then 1 else if a + b < 5 then 2 else 0
+                """, AValueSingledOutOnAQuantityOverPositionsIsALineTest::added);
+        assertEquals(REFUSED, ints.get(3).get(Towards.ABOVE), () -> "" + ints);
+        assertEquals(REFUSED, ints.get(5).get(Towards.BELOW),
+                () -> "the order's run below stops at the value singled out: " + ints);
+        assertTrue(sum(ints.get(3).get(Towards.BELOW)) < 2, () -> "below the nearest: " + ints);
+        assertTrue(sum(ints.get(5).get(Towards.ABOVE)) > 5, () -> "above the line: " + ints);
+    }
+
+    /** And with a third line on the quantity, each run stops at whichever line is next to it. */
+    @Test
+    void aRunStopsAtTheNextLineWhereThereAreSeveral() {
+        Map<Integer, Map<Towards, String>> ints = regionsByLine("""
+                module m
+
+                behavior both : (a: Int, b: Int) -> Int
+                let both (a, b) = if a + b == 3 then 1 else if a + b == 5 then 2
+                    else if a + b < 6 then 3 else 0
+                """, AValueSingledOutOnAQuantityOverPositionsIsALineTest::added);
+        assertEquals(REFUSED, ints.get(3).get(Towards.ABOVE), () -> "" + ints);
+        assertEquals(REFUSED, ints.get(5).get(Towards.BELOW), () -> "" + ints);
+        assertEquals(REFUSED, ints.get(6).get(Towards.BELOW),
+                () -> "the order's run below stops at the value five singles out: " + ints);
+        assertTrue(sum(ints.get(6).get(Towards.ABOVE)) > 6, () -> "above the line: " + ints);
+    }
+
+    /**
      * Two strings held equal are no line, where the same two held in an order are one: they stand
      * no number apart, and the only value their distance takes is where they meet.
      */
@@ -232,6 +303,36 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
         return out;
     }
 
+    /** The border of the one line {@code condition} draws. */
+    private static Border onlyLine(String model, String condition) {
+        List<BorderAssessment> lines = lines(model, condition);
+        assertEquals(1, lines.size(), () -> condition + " draws one line: " + lines);
+        return lines.get(0).border();
+    }
+
+    /**
+     * What each of the lines the body's comparisons draw leaves in the run either side of it, by
+     * the level the line is at: refused, or what the row built there comes to.
+     */
+    private static Map<Integer, Map<Towards, String>> regionsByLine(
+            String source, Function<List<String>, String> read) {
+        Map<Integer, Map<Towards, String>> out = new LinkedHashMap<>();
+        for (BorderAssessment line : linesOf(source)) {
+            Map<DomainPoint, String> points = points(line, read);
+            Map<Towards, String> sides = new LinkedHashMap<>();
+            for (Towards side : Towards.values()) {
+                sides.put(side, points.get(new DomainPoint.InTheRegion(side)));
+            }
+            out.put(Integer.parseInt(line.border().cut().at().asAnExactNumber().toString()), sides);
+        }
+        return out;
+    }
+
+    /** Two numbers, as {@code "3 + -2"}, which {@link #sum} adds up. */
+    private static String added(List<String> inputs) {
+        return String.join(" + ", inputs);
+    }
+
     /** How many each of two sets holds, as {@code "3 + 2"}. */
     private static String sizes(List<String> inputs) {
         return inputs.stream().map(set -> set.equals("[]") ? "0"
@@ -244,10 +345,11 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
         return String.valueOf(Integer.parseInt(inputs.get(0)) - Integer.parseInt(inputs.get(1)));
     }
 
-    /** What the sizes {@link #sizes} read add up to, failing where the point held no row. */
+    /** What the numbers {@link #sizes} or {@link #added} read add up to, failing where the point
+     *  held no row. */
     private static int sum(String sizes) {
-        assertTrue(sizes != null && sizes.matches("\\d+( \\+ \\d+)*"),
-                () -> "a row of two sizes, where the point is owed one: " + sizes);
+        assertTrue(sizes != null && sizes.matches("-?\\d+( \\+ -?\\d+)*"),
+                () -> "a row of two numbers, where the point is owed one: " + sizes);
         int out = 0;
         for (String each : sizes.split(" \\+ ")) {
             out += Integer.parseInt(each);
@@ -256,7 +358,11 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
     }
 
     private static List<BorderAssessment> lines(String model, String condition) {
-        Compilation compilation = Compilation.ofSource(model.formatted(condition), "Main");
+        return linesOf(model.formatted(condition));
+    }
+
+    private static List<BorderAssessment> linesOf(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).lines();

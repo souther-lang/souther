@@ -859,11 +859,13 @@ sealed interface ComparisonAssessment {
         // The line is placed, and what stands beside it is asked here, once. A rule that could not
         // be told where the values part is neither a rule drawing nowhere nor one drawing
         // somewhere: it is one whose sides were not worked out, and it is said so at the position
-        // rather than read as less. Every reader of the line below holds the seam this asked for.
-        ExactAnswer<Seam> parted = cutting.seam();
-        if (parted instanceof ExactAnswer.Unheld<Seam> unheld) {
+        // rather than read as less. Every place the line parts the values is asked, which is two
+        // for a rule naming a value, and every reader of the line below holds the seams this
+        // asked for.
+        if (cutting.seams() instanceof ExactAnswer.Unheld<List<Seam>> unheld) {
             return sideNotWorkedOut(cutting, unheld.why());
         }
+        ExactAnswer<Seam> parted = cutting.seam();
         // The line and not one of its points. A rule drawing where the quantity never reaches
         // divides the position into nothing, and a reader told that the rule went unread would go
         // looking for a limit of this compiler that is not there.

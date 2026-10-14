@@ -1,11 +1,14 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * Where a rule parts one quantity's values: the last value on one side and the first on the other.
@@ -104,9 +107,28 @@ public record Seam(CutPosition at, Level below, Level above) {
      * @return the seam, or the way a number it needs was not held, as {@link #of(LevelSpace, Level,
      *         Towards, Scale)} says it
      */
-    public static ExactAnswer<Seam> where(BorderQuantity of, Level at, souther.compiler.check.ComparisonClaim claim) {
-        return where(of, at, claim instanceof souther.compiler.check.ComparisonClaim.Cut order
+    public static ExactAnswer<Seam> where(BorderQuantity of, Level at, ComparisonClaim claim) {
+        return where(of, at, claim instanceof ComparisonClaim.Cut order
                 ? order.valueBelongs() : Towards.ABOVE);
+    }
+
+    /**
+     * Every place a rule parts a quantity's values at, each found by {@code towards} on the side it
+     * is asked for: one for a rule that orders the values, on the side its own value belongs to,
+     * and two for one that names a value, over it and under it.
+     *
+     * <p>The one answer to which places a claim parts, for every reader that asks it of a line —
+     * where a quantity is arranged, and whether a line's sides were worked out. Answered from the
+     * one place {@link #where} gives, a value singled out kept only the side over it, and the side
+     * under it was left out of the runs beside every other line on its quantity.
+     */
+    static ExactAnswer<List<Seam>> eachOf(ComparisonClaim claim,
+                                          Function<Towards, ExactAnswer<Seam>> towards) {
+        return switch (claim) {
+            case ComparisonClaim.Cut order -> towards.apply(order.valueBelongs()).map(List::of);
+            case ComparisonClaim.Singled _ -> towards.apply(Towards.ABOVE).flatMap(above ->
+                    towards.apply(Towards.BELOW).map(below -> List.of(above, below)));
+        };
     }
 
     /**
