@@ -108,6 +108,30 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         assertEquals("1", text(choosing.taken()));
     }
 
+    /**
+     * A walk handing on rows that are no candidates — composed again, or not meeting the
+     * requirement — is stopped all the same: they use up nothing the choice ranks, and a walk over
+     * every assignment of every parameter would otherwise go on through all of them.
+     */
+    @Test
+    void aWalkHandingOnlyRowsThatAreNoCandidatesIsStopped() {
+        Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
+                new Counting(numbering(), _ -> 0), List.of());
+        Generator.RowTaking taking = choosing.over(inputs -> text(inputs).startsWith("-")
+                ? Generator.Acceptance.PASSED : Generator.Acceptance.TAKEN);
+        taking.take(List.of(FixtureTemplate.integer(0)));
+
+        int handed = 0;
+        Generator.Acceptance said = Generator.Acceptance.PASSED;
+        while (said == Generator.Acceptance.PASSED && handed < 10_000) {
+            handed++;
+            said = taking.take(List.of(FixtureTemplate.integer(handed % 2 == 0 ? 0 : -1)));
+        }
+
+        assertEquals(Generator.Acceptance.STOPPED, said, "stopped after " + handed + " rows");
+        assertEquals("0", text(choosing.taken()));
+    }
+
     /** Where every row it may rank tells nothing apart, the first of them is taken. */
     @Test
     void theFirstRowIsTakenWhereNoneRankedTellsMore() {

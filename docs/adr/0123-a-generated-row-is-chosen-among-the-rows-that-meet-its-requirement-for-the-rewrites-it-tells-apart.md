@@ -52,9 +52,15 @@ composed row answering differently under a rewrite is a question put to a person
 reads only the rows whose answers are written. Finding no row that tells a rewrite apart proves
 nothing about the rewrite.
 
-A row is run once however many searches compose it. The preference runs rows the searches did not, and
-a search may then compose one of them; what each row came to is kept where the way rows are run is
-held, and a search counting what it may spend counts only the rows nothing ran before.
+A row is run once however many searches compose it, and so is a row under a rewrite. The preference runs
+rows the searches did not, and a search may then compose one of them; what each run came to is kept
+where the way rows are run is held, and a search counting what it may spend counts only the runs
+nobody made before — of the row and of the row under a rewrite alike. Whether anything runs rows at
+all is asked of that way, so a way wrapped in another still says nothing runs.
+
+The preference's own figure counts rows that meet the requirement, each once. A row composed on the
+way that does not meet it is no candidate, and how many of those a walk composes is the walk's to
+bound.
 
 ## Alternatives
 

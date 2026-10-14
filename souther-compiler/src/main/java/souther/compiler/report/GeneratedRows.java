@@ -616,9 +616,14 @@ public final class GeneratedRows {
             return List.copyOf(out.values());
         }
 
+        /** The thing {@code identity} is, where a finding named it, or null. */
+        Called of(ObligationIdentity identity) {
+            return owed.get(identity);
+        }
+
         /** The thing {@code identity} is, where a finding named it. */
         private void add(SequencedMap<Owed, Called> out, ObligationIdentity identity) {
-            Called thing = owed.get(identity);
+            Called thing = of(identity);
             if (thing != null) {
                 out.putIfAbsent(thing.owed(), thing);
             }
@@ -644,16 +649,19 @@ public final class GeneratedRows {
         offering.rowsByBehavior().forEach((behavior, rows) -> {
             WhatTheFindingsCall called = WhatTheFindingsCall.in(behavior,
                     offering.searched().get(behavior), db, module, rendering, places);
-            // What each row was composed for, and then the lines it is the row a person is handed
-            // for. A row is never composed for a line — what a line is owed is answered in the
-            // account — so those come from the offering's answer of where each line is shown.
+            // What each row was composed for, and then the lines and rewrites it is the row a
+            // person is handed for. A row is never composed for a line — what a line is owed is
+            // answered in the account — and a row composed for something else may be the one a
+            // rewrite is answered by, so those come from the offering's answer of where each is
+            // shown.
             List<List<Called>> purposes = rows.stream().map(row -> {
                 SequencedMap<Owed, Called> these = new LinkedHashMap<>();
                 called.of(row.namedFor()).forEach(thing -> these.putIfAbsent(thing.owed(), thing));
-                for (ObligationIdentity line : offering.linesShownAt(row.key())) {
-                    Called point = lines.get(line);
-                    if (point != null) {
-                        these.putIfAbsent(point.owed(), point);
+                for (ObligationIdentity item : offering.shownOver(row.key())) {
+                    Called thing = item instanceof ObligationIdentity.OfALine ? lines.get(item)
+                            : called.of(item);
+                    if (thing != null) {
+                        these.putIfAbsent(thing.owed(), thing);
                     }
                 }
                 return List.copyOf(these.values());

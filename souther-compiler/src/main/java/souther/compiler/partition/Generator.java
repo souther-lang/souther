@@ -8580,6 +8580,8 @@ public final class Generator {
         /** The row taken so far, and how many rewrites were told apart on it. */
         private List<FixtureTemplate> best;
         private int bestTold = -1;
+        /** How many rows a walk has handed here, ranked or not. */
+        private int handed;
 
         TellingArmsApart(Trial trial, List<StoodInAnswer> answers) {
             this.trial = runningOnce(trial);
@@ -8590,9 +8592,19 @@ public final class Generator {
          * Every row a walk composes, ranked here once {@code meets} takes it as one that meets the
          * requirement; passed over, or stopped on, where {@code meets} says so, and passed over
          * where it was ranked already.
+         *
+         * <p>Two figures, each of its own thing. What is ranked is bounded by
+         * {@link #MOST_ROWS_OFFERED_FOR_THE_ARMS}; and the rows a walk hands here at all — ranked,
+         * not meeting the requirement, or composed again — by {@link #MOST_REPAIRS}, which bounds
+         * choosing a candidate's values again wherever that is done. A walk over every assignment of
+         * every parameter multiplies, and the rows it hands on that are no candidates cost
+         * composing each time even though they cost no run.
          */
         RowTaking over(RowTaking meets) {
             return inputs -> {
+                if (++handed > MOST_REPAIRS) {
+                    return Acceptance.STOPPED;
+                }
                 if (ranked.contains(RunOnce.writtenAs(new RowToRun(inputs, answers)))) {
                     return Acceptance.PASSED;
                 }
@@ -8664,10 +8676,9 @@ public final class Generator {
      * this changes only which of the rows meeting it goes out.
      *
      * <p>The walk over the candidate's values composes rows that do not meet the requirement as
-     * well, and those are no candidates of the preference's: so how many rows it composes is
-     * bounded as choosing a candidate's values again is ({@link #MOST_REPAIRS}), and where that is
-     * reached the walk stops with the rows it ranked. Nothing is owed for it — every row ranked
-     * meets the requirement, and the first of them is the one the search settled on.
+     * well; where it reaches what the preference lets a walk hand it ({@link TellingArmsApart#over})
+     * it stops with the rows it ranked. Nothing is owed for that — every row ranked meets the
+     * requirement, and the first of them is the one the search settled on.
      */
     private static List<FixtureTemplate> tellingArmsApart(
             MeasuredInput.MeasuredAxes axes, int[] where, CandidateCheck check,
@@ -8678,8 +8689,7 @@ public final class Generator {
         if (taking.take(first) == Acceptance.TAKEN) {
             return first;
         }
-        composed(axes, where, HeldTogether.Asked.NOTHING, check, given,
-                atMost(MOST_REPAIRS, () -> { }, taking));
+        composed(axes, where, HeldTogether.Asked.NOTHING, check, given, taking);
         List<FixtureTemplate> kept = preferring.taken();
         return kept == null ? first : kept;
     }

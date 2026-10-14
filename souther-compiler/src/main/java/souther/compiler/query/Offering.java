@@ -101,7 +101,7 @@ public final class Offering {
     /**
      * The input of the row a person is handed for {@code item}'s line, or null where no row here is
      * offered for it — or where one is and stands at no input the line's reading names, as a row
-     * at a point in a region does not. Which row it is, either way, is {@link #linesShownAt}'s.
+     * at a point in a region does not. Which row it is, either way, is {@link #shownOver}'s.
      *
      * <p>The one place a report may name for such a line. What a search composed is a candidate and
      * what is left after the reduction is the work, and only the second of those is in front of a
@@ -113,17 +113,22 @@ public final class Offering {
     }
 
     /**
-     * The lines {@code row} is the row a person is handed for, in the order they were asked about.
+     * The lines and the rewrites {@code row} is the row a person is handed for, in the order they
+     * were asked about.
      *
-     * <p>The same answer as {@link #shownAt}, asked from the row's side: a row standing at a line
+     * <p>The same answer as {@link #shownAt}, asked from the row's side. A row standing at a line
      * is not composed for it — what a line is owed is answered in the account, and a row named for
-     * whichever line it happened to be offered at would be renamed by an edit that did not touch it
-     * — so this is how a block says over a row which lines it is for, without naming it after one.
+     * whichever line it happened to be offered at would be renamed by an edit that did not touch it.
+     * A rewrite is in the same place wherever a row composed for something else tells it apart: the
+     * row composed for the rewrite goes, since this one answers it, and what the row is said to be
+     * for has to say so or the rewrite is answered by a row nothing says answers it. So this is how
+     * a block says over a row which of these it is for, without naming it after one.
      */
-    public List<ObligationIdentity> linesShownAt(RowKey row) {
+    public List<ObligationIdentity> shownOver(RowKey row) {
         List<ObligationIdentity> out = new ArrayList<>();
         shownAt.forEach((item, shown) -> {
-            if (shown.rowKey().equals(row) && item instanceof ObligationIdentity.OfALine) {
+            if (shown.rowKey().equals(row) && (item instanceof ObligationIdentity.OfALine
+                    || item instanceof ObligationIdentity.OfAReplacement)) {
                 out.add(item);
             }
         });
