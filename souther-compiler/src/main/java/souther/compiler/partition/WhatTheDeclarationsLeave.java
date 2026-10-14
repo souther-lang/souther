@@ -40,7 +40,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Whether some input the declarations admit brings what a condition states out one way.
+ * Whether the declarations prove that no input brings what a condition states out one way.
  *
  * <p>The declarations are the types and every rule written on them, read together: a
  * {@code Set<Bool>} holding three values is refused by its element having two, with no rule

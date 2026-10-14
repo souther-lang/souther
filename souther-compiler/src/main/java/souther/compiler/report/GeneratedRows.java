@@ -208,8 +208,8 @@ public final class GeneratedRows {
                 case BorderAccount.Unmet.TheLineCannotBeWritten(var owedBy, var asked, var _) ->
                         say(out, said, String.format(
                                 "// no row can be written at `%s` owed by `%s`: every reading of the"
-                                        + " line was searched and " + NoValue.standsAt("it") + "%n",
-                                asked, owedBy));
+                                        + " line was searched and %s%n",
+                                asked, owedBy, NoValue.standsAt("it")));
                 // One line per reading, because they are not one fact: a reading whose rules leave
                 // nothing at its own position and one whose search stopped are different news, and
                 // a line carrying whichever came first would carry the order the walk took.

@@ -23,7 +23,8 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Whether any value arrives at an arm of a {@code match}, decided once for every reader that asks.
+ * What proves no value arrives at an arm of a {@code match}, decided once for every reader that
+ * asks.
  *
  * <p>Three things can show it does not, and they are weighed in this order here and nowhere else.
  * A scrutinee the source wrote is of the cases written, and an arm none of them takes is entered by

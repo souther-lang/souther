@@ -4198,8 +4198,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     "its way would need one position to be two things at once, so "
                             + NoValue.goesThatWay();
             case RuleRequirement.Excluded.AnArmNothingReaches _ ->
-                    "its way goes through an arm " + NoValue.reaches("it") + ", and the branch"
-                            + " count is made without it";
+                    "its way goes through an arm, but " + NoValue.reaches("that arm")
+                            + ", so the branch count is made without it";
             case RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
                     "its way goes past a condition that comes out the other way for every row, so "
                             + NoValue.goesThatWay();
