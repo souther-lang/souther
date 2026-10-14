@@ -19,7 +19,10 @@ import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.ReadableFields;
 import souther.compiler.check.ReadingPolicy;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.TypeView;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenArguments;
@@ -284,12 +287,15 @@ public final class InputDomain {
      *
      * <p>What a row stands in for is asked of every caller and supplied by none: an input read
      * without its behavior's own account of its dependencies would read a fork on one of their
-     * answers as a value the model computes, and nothing would say so.
+     * answers as a value the model computes, and nothing would say so. And where the counts of the
+     * declarations it reaches are asked for, which is the caller's to say for the reason the
+     * reading closed over a demand gives.
      */
     public static InputDomain of(
             List<Parameter> parameters, RuleReadingContext reading,
+            TypeCardinality.Counts counted,
             souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
-        return of(parameters, reading, InputDemand.NONE, dependencies);
+        return of(parameters, reading, counted, InputDemand.NONE, dependencies);
     }
 
     /**
@@ -312,11 +318,21 @@ public final class InputDomain {
      * is the policy and the lender alone, kept here for the readers of those same declarations
      * that come after the walk ({@link #machines}).
      *
+     * <p>{@code counted} is where how many values each declaration the reading reaches has is
+     * asked, which is what a set's or a map's size is bounded by
+     * ({@link TypeCardinality#mostItHoldsApart}). Asked of the caller and supplied by nobody: a
+     * caller holding a compilation hands over the counts it keeps, so a declaration is counted
+     * once for the compilation and this reading depends on the count it read; one with nowhere to
+     * ask says so ({@link TypeCardinality.Counts#workedOutIn}). Supplied here instead, a caller
+     * holding a compilation could leave it out and read bounds that no edit to the declarations
+     * moves.
+     *
      * @param dependencies the behaviors a row of this behavior stands in for ({@link
      *                     #dependencies()})
      */
     public static InputDomain of(
-            List<Parameter> parameters, RuleReadingContext reading, InputDemand demand,
+            List<Parameter> parameters, RuleReadingContext reading,
+            TypeCardinality.Counts counted, InputDemand demand,
             souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
         List<Position> found = new ArrayList<>();
         List<RuleRoot> roots = new ArrayList<>();
@@ -345,7 +361,7 @@ public final class InputDomain {
             // twice, place its rules twice, and record a second answer where the ledger of what was
             // handed on keeps one — so a reading assembled from replays would depend on how many
             // demands ran through it.
-            walk(at, parameter.type(), ExpansionTrace.NONE, reading, rules, found, roots,
+            walk(at, parameter.type(), ExpansionTrace.NONE, reading, counted, rules, found, roots,
                     java.util.Set.of(), handoffs, observed, account,
                     Reach.enumerating(demand.under(at)));
         }
@@ -411,11 +427,13 @@ public final class InputDomain {
      * the declaration asks for nothing, which is why {@code arriving} says at which position each
      * one landed; the declaration's own parameters and their types were never two things to line up.
      *
-     * <p>Those behaviors are what {@code dependencies} names ({@link #dependencies()}).
+     * <p>Those behaviors are what {@code dependencies} names ({@link #dependencies()}), and
+     * {@code counted} is where the counts of the declarations it reaches are asked for.
      */
     public static InputDomain of(DeclaredSig declared,
                                  List<SpecImplementation.ParameterBinding.AnInput> arriving,
-                                 RuleReadingContext reading, InputDemand demand,
+                                 RuleReadingContext reading, TypeCardinality.Counts counted,
+                                 InputDemand demand,
                                  souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
         Map<Integer, BindingId> bindings = new LinkedHashMap<>();
         for (SpecImplementation.ParameterBinding.AnInput input : arriving) {
@@ -426,7 +444,7 @@ public final class InputDomain {
         for (DeclaredSig.Input input : declared.inputs()) {
             parameters.add(new Parameter(input.name(), bindings.get(at++), input.type()));
         }
-        return of(parameters, reading, demand, dependencies);
+        return of(parameters, reading, counted, demand, dependencies);
     }
 
     /**
@@ -439,9 +457,9 @@ public final class InputDomain {
      * for is still the caller's to say, as it is for every reading of an input.
      */
     public static InputDomain of(
-            DeclaredSig declared, RuleReadingContext reading,
+            DeclaredSig declared, RuleReadingContext reading, TypeCardinality.Counts counted,
             souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
-        return of(declared, List.of(), reading, InputDemand.NONE, dependencies);
+        return of(declared, List.of(), reading, counted, InputDemand.NONE, dependencies);
     }
 
     /** The positions, in the order they were read. */
@@ -1005,7 +1023,8 @@ public final class InputDomain {
      * way.
      */
     private static void walk(TermPath path, Type type, ExpansionTrace ancestry,
-                             RuleReadingContext reading, PlacedRules placed, List<Position> found,
+                             RuleReadingContext reading, TypeCardinality.Counts counted,
+                             PlacedRules placed, List<Position> found,
                              List<RuleRoot> roots, java.util.Set<Type> visited,
                              RuleHandoffs handoffs, NameReach.Observed observed,
                              Gathered account, Reach reach) {
@@ -1036,7 +1055,7 @@ public final class InputDomain {
                 ? StructuralInspection.stoppedAt(
                         new BlockReason.RecursiveExpansion(unfolds, already))
                 : StructuralInspection.of(input.shape(), declared);
-        Position here = read(input, path, reading, placed, structure, declared);
+        Position here = read(input, path, reading, counted, placed, structure, declared);
         // Passing through an occurrence is not finding a position. A reading following a path the
         // model named opens every declaration on the way — that is how it knows which step to take
         // and whose rules reach the end of it — and what it reports is the end. Published all the
@@ -1067,7 +1086,7 @@ public final class InputDomain {
                     if (!on.enters()) {
                         continue;
                     }
-                    walk(path.then(field.getKey()), field.getValue(), deeper, reading,
+                    walk(path.then(field.getKey()), field.getValue(), deeper, reading, counted,
                             // A field is a value of its own, so a sum met under it is one this walk
                             // has not taken apart however many were taken apart above.
                             placed, found, roots, java.util.Set.of(), handoffs, observed, account,
@@ -1075,7 +1094,7 @@ public final class InputDomain {
                 }
             }
             case StructuralInspection.Retained retained ->
-                    under(retained.continuation(), here, path, input, deeper, reading,
+                    under(retained.continuation(), here, path, input, deeper, reading, counted,
                             placed, found, roots, visited, handoffs, observed, account,
                             reach, already != null);
         }
@@ -1169,7 +1188,7 @@ public final class InputDomain {
      */
     private static void under(StructuralInspection.Continuation continuation, Position here,
                               TermPath path, ReadablePosition input, ExpansionTrace ancestry,
-                              RuleReadingContext reading,
+                              RuleReadingContext reading, TypeCardinality.Counts counted,
                               PlacedRules placed, List<Position> found, List<RuleRoot> roots,
                               java.util.Set<Type> visited, RuleHandoffs handoffs,
                               NameReach.Observed observed, Gathered account,
@@ -1182,15 +1201,15 @@ public final class InputDomain {
                  StructuralInspection.Continuation.Blocked _ -> { }
             case StructuralInspection.Continuation.Elements elements ->
                     inside(List.of(new Held(path.element(), elements.element())), path, ancestry,
-                            reading, placed, found, roots, handoffs, observed, account, reach,
-                            stopped);
+                            reading, counted, placed, found, roots, handoffs, observed, account,
+                            reach, stopped);
             // The keys first, which is the order a map is written in: a row writes each entry as
             // its key and then the value under it.
             case StructuralInspection.Continuation.Entries entries ->
                     inside(List.of(new Held(path.key(), entries.key()),
                                     new Held(path.element(), entries.value())), path, ancestry,
-                            reading, placed, found, roots, handoffs, observed, account, reach,
-                            stopped);
+                            reading, counted, placed, found, roots, handoffs, observed, account,
+                            reach, stopped);
             case StructuralInspection.Continuation.Branches branches -> {
                 // Asked where the branches are, which is the only place a name can cross one.
                 List<String> shared = sharedAt(input);
@@ -1252,7 +1271,8 @@ public final class InputDomain {
                     // standing under no narrowing — that is what the opening beside this says.
                     PlacedRules.Reaching reaching =
                             shared.isEmpty() ? null : new PlacedRules.Reaching(placed, crossing);
-                    walkBranch(branch, placed.root(), path, ancestry, reading, found, roots,
+                    walkBranch(branch, placed.root(), path, ancestry, reading, counted, found,
+                            roots,
                             visited, handoffs, observed, reaching,
                             new RootOpening.Refined(placed.root(), crossing), account,
                             reach.intoTheCase(path, branch.refinement(), crossing.names(),
@@ -1356,6 +1376,7 @@ public final class InputDomain {
      */
     private static void inside(List<Held> parts, TermPath container,
                                ExpansionTrace ancestry, RuleReadingContext reading,
+                               TypeCardinality.Counts counted,
                                PlacedRules placed, List<Position> found, List<RuleRoot> roots,
                                RuleHandoffs handoffs, NameReach.Observed observed,
                                Gathered account, Reach reach, boolean stopped) {
@@ -1381,7 +1402,7 @@ public final class InputDomain {
         // written about the container, and what it holds is a value with a declaration of its own.
         for (int i = 0; i < entered.size(); i++) {
             takeTheRulesOver(placed.root(), container, entered.get(i).at(), entered.get(i).type(),
-                    ancestry, reading, found, roots, Set.of(), handoffs, observed, null,
+                    ancestry, reading, counted, found, roots, Set.of(), handoffs, observed, null,
                     new RootOpening.Inside(placed.root(), container), account, ons.get(i));
         }
     }
@@ -1461,6 +1482,7 @@ public final class InputDomain {
      */
     private static void takeTheRulesOver(TermPath by, TermPath at, TermPath opened, Type type,
                                          ExpansionTrace ancestry, RuleReadingContext reading,
+                                         TypeCardinality.Counts counted,
                                          List<Position> found, List<RuleRoot> roots,
                                          java.util.Set<Type> visited, RuleHandoffs handoffs,
                                          NameReach.Observed observed,
@@ -1481,7 +1503,7 @@ public final class InputDomain {
         // Said as the reading of this value is opened, so that what a build has to account for is
         // what the rules of the values it read actually placed.
         account.from(rules);
-        walk(opened, type, ancestry, reading, rules, found, roots, visited,
+        walk(opened, type, ancestry, reading, counted, rules, found, roots, visited,
                 handoffs, observed, account, reach);
     }
 
@@ -1499,6 +1521,7 @@ public final class InputDomain {
      */
     private static void walkBranch(StructuralInspection.Branch branch, TermPath by, TermPath path,
                                    ExpansionTrace ancestry, RuleReadingContext reading,
+                                   TypeCardinality.Counts counted,
                                    List<Position> found, List<RuleRoot> roots,
                                    java.util.Set<Type> visited, RuleHandoffs handoffs,
                                    NameReach.Observed observed, PlacedRules.Reaching crossing,
@@ -1528,7 +1551,7 @@ public final class InputDomain {
         java.util.Set<Type> deeper = new java.util.LinkedHashSet<>(visited);
         deeper.add(branch.under());
         takeTheRulesOver(by, path, path.refine(branch.refinement()), branch.under(), ancestry,
-                reading, found, roots, deeper, handoffs, observed, crossing, opening,
+                reading, counted, found, roots, deeper, handoffs, observed, crossing, opening,
                 account, reach);
     }
 
@@ -1561,8 +1584,8 @@ public final class InputDomain {
      * one of them.
      */
     private static Position read(ReadablePosition input, TermPath path, RuleReadingContext world,
-                                 PlacedRules placed, StructuralInspection structure,
-                                 List<Case> declared) {
+                                 TypeCardinality.Counts counted, PlacedRules placed,
+                                 StructuralInspection structure, List<Case> declared) {
         RuleReadingSource source = world.source();
         TypeView view = input.view();
         Type type = view.declared();
@@ -1603,7 +1626,7 @@ public final class InputDomain {
                 placed.admits(path, souther.compiler.check.TypeOps.base(type, source.inners()));
         List<PositionBounds> bounds = new ArrayList<>();
         for (NumberAt.OfWhatNumber kind : kinds) {
-            bounds.add(boundsOn(kind, path, type, taken, source, carried, placed,
+            bounds.add(boundsOn(kind, path, type, taken, source, counted, carried, placed,
                     movedHere, stated, nothingExists));
         }
         rulesWithoutALineAt(placed, path, type, source, found);
@@ -1756,7 +1779,8 @@ public final class InputDomain {
      */
     private static PositionBounds boundsOn(NumberAt.OfWhatNumber kind, TermPath path, Type type,
                                            ValueName.Stdlib taken,
-                                           RuleReadingSource source, Carrier carried,
+                                           RuleReadingSource source,
+                                           TypeCardinality.Counts counted, Carrier carried,
                                            PlacedRules placed,
                                            List<FieldDomains.Placed> movedHere,
                                            List<FieldDomains.Placed> stated,
@@ -1803,12 +1827,31 @@ public final class InputDomain {
                 // a partition of one.
                 nothingExists ? null
                         : TypeBounds.admissible(own == null ? null : own.range(),
-                                projected.bounds(), term),
+                                projected.bounds(), term, heldBy(kind, type, source, counted)),
                 own, projected,
                 // Where the number actually stops, which the ends as written do not say: a clause
                 // placing one at 0 beside a clause that takes the 0 away leaves a number whose
                 // first value is 1, and a line drawn at the 0 is drawn at no value of it.
                 placed.leftAt(path, kind));
+    }
+
+    /**
+     * What the position's type leaves {@code kind} of it beyond what the number guarantees itself,
+     * or null where it leaves nothing more.
+     *
+     * <p>How many a set or a map holds, where what it holds apart has few enough values to say
+     * ({@link TypeCardinality#mostItHoldsApart}). The count the type declares is the one a position
+     * holding either has, so it is that number and no other this bounds.
+     */
+    private static NumericDomain.Bounds heldBy(NumberAt.OfWhatNumber kind, Type type,
+                                               RuleReadingSource source,
+                                               TypeCardinality.Counts counted) {
+        if (!(kind instanceof NumberAt.OfWhatNumber.OfWhatAnOperationAnswers)) {
+            return null;
+        }
+        long most = TypeCardinality.mostItHoldsApart(type, source, counted);
+        return most < 0 ? null
+                : new NumericDomain.Bounds(null, Endpoint.inclusive(Count.of(most)));
     }
 
     /**

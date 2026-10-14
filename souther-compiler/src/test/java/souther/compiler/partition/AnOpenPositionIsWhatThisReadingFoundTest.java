@@ -7,9 +7,11 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -69,11 +71,11 @@ class AnOpenPositionIsWhatThisReadingFoundTest {
     /** As a parameter is read: under the declaration the signature wrote, with what is written
      *  about it. */
     private Position read(String type) {
+        RuleReadingContext reading = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
         return InputDomain.of(
                         List.of(new InputDomain.Parameter("x", null, Type.ref(named(type)))),
-                        RuleReadingContext.unshared(rules,
-                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                        Membership.none())
+                        reading, TypeCardinality.Counts.workedOutIn(reading), Membership.none())
                 .at(TermPath.of("x"));
     }
 

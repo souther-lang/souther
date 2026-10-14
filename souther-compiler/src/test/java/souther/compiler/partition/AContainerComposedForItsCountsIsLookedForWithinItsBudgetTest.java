@@ -7,6 +7,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
@@ -191,7 +192,8 @@ class AContainerComposedForItsCountsIsLookedForWithinItsBudgetTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext reading = RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
-        InputDomain input = InputDomain.of(sigs.get("counted"), reading, Membership.none());
+        InputDomain input = InputDomain.of(sigs.get("counted"), reading,
+                TypeCardinality.Counts.workedOutIn(reading), Membership.none());
         TermPath xs = input.positions().stream().map(Position::path)
                 .filter(each -> each.toString().equals("xs")).findFirst().orElseThrow();
         return new Read(input.quantities(rules), reading, xs);

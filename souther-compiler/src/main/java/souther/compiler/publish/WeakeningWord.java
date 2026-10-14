@@ -81,7 +81,7 @@ public enum WeakeningWord {
      * value that could not be read and a place that holds none are answers a reading came to; this
      * is a reading nobody made. A consumer acts on it differently for the same reason it acts on
      * {@link #PAIR_SPACE_TRUNCATED} differently: what it is short of is a figure of this compiler's,
-     * so running again allowing more is the thing to do about it.
+     * so a wider run of this compiler may answer it, and a row written at the point does.
      */
     BORDER_READINGS_NOT_EXHAUSTED,
 

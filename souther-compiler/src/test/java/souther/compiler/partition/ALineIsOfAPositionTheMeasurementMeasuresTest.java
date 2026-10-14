@@ -15,6 +15,7 @@ import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
@@ -66,8 +67,9 @@ class ALineIsOfAPositionTheMeasurementMeasuresTest {
         for (String each : parameters) {
             declared.add(new InputDomain.Parameter(each, null, Type.INT));
         }
-        return InputDomain.of(declared,
-                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES),
+        RuleReadingContext context =
+                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES);
+        return InputDomain.of(declared, context, TypeCardinality.Counts.workedOutIn(context),
                 Membership.none()).reading(SYMBOLS);
     }
 

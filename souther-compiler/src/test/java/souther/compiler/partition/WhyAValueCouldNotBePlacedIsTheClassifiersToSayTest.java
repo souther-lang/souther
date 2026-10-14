@@ -6,6 +6,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
@@ -18,6 +19,7 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
+import souther.compiler.query.ReadAs;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -109,8 +111,10 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get("submit");
         CoverageSites.Plan plan = checked.plan();
-        InputDomain read = InputDomain.of(sigs.get("submit"), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+        RuleReadingContext reading = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
+        InputDomain read = InputDomain.of(sigs.get("submit"), reading,
+                TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none());
         Partitions.Partitioning partitioning = ThresholdFixtures.withThresholds(
                 Partitions.of("submit", read.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),

@@ -7,6 +7,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
@@ -63,8 +64,10 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
-        InputDomain domain = InputDomain.of(sigs.get("read"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), Membership.none());
+        RuleReadingContext context =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+        InputDomain domain = InputDomain.of(sigs.get("read"), context,
+                TypeCardinality.Counts.workedOutIn(context), Membership.none());
         Partitions.Partitioning partitioning =
                 Partitions.of("read", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
         return new Model(

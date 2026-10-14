@@ -11,6 +11,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.query.ReadAs;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
@@ -52,9 +53,11 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
     /** The reading of an input of one parameter, which is what says what a number of it is measured
      *  on. */
     private static souther.compiler.inputs.InputReading readingOf(String parameter, Type type) {
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES);
         return souther.compiler.inputs.InputDomain.of(
                 List.of(new souther.compiler.inputs.InputDomain.Parameter(parameter, null, type)),
-                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES),
+                reading, TypeCardinality.Counts.workedOutIn(reading),
                 Membership.none()).reading(SYMBOLS);
     }
 

@@ -6,6 +6,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ReadingPolicy;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 
@@ -49,7 +50,9 @@ class AReadingWithNoPositionsIsStillAReadingTest {
     @Test
     void aWalkOverNoParametersIsAReadingOfAnInputWithNoPositions() {
         ReadingPolicy policy = ReadAs.THE_COMPILATION_DOES;
-        InputDomain read = InputDomain.of(List.of(), RuleReadingContext.unshared(rules(), policy),
+        RuleReadingContext reading = RuleReadingContext.unshared(rules(), policy);
+        InputDomain read = InputDomain.of(List.of(), reading,
+                TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none());
 
         assertNotNull(read, "a walk answers with a reading");
@@ -69,9 +72,10 @@ class AReadingWithNoPositionsIsStillAReadingTest {
     @Test
     void andItSaysHowItsNamesAreRead() {
         ReadingPolicy policy = ReadAs.THE_COMPILATION_DOES;
+        RuleReadingContext reading = RuleReadingContext.unshared(rules(), policy);
 
         assertSame(policy,
-                InputDomain.of(List.of(), RuleReadingContext.unshared(rules(), policy),
+                InputDomain.of(List.of(), reading, TypeCardinality.Counts.workedOutIn(reading),
                         souther.compiler.carrier.Membership.none()).policy());
     }
 }

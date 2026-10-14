@@ -9,6 +9,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -70,10 +71,11 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs, "the model did not compile");
         RuleReadingSource rules = RuleReadings.of(compilation, module);
+        RuleReadingContext context =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
         InputDomain domain =
-                InputDomain.of(sigs.get("countThem"),
-                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
-                        Membership.none());
+                InputDomain.of(sigs.get("countThem"), context,
+                        TypeCardinality.Counts.workedOutIn(context), Membership.none());
         Partitions.Partitioning partitioning =
                 Partitions.of("countThem", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
         return GenerationFixtures.fill(MeasuredInput.of("countThem", domain.reading(rules), partitioning),

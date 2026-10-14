@@ -19,6 +19,7 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -28,6 +29,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Values built to hold what a rule says a value must hold.
@@ -62,15 +64,6 @@ import java.util.Set;
  * answer there, since no value of such a type exists.
  */
 final class Witnesses {
-
-    /** What this stops at, named where every budget of this compiler's is named. The figures are
-     *  {@link CompositionBudget}'s so that a reader of a stopped search reaches the one it ran out
-     *  of. */
-    private static final int MOST_ELEMENTS =
-            CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum();
-
-    private static final int MOST_CHARACTERS =
-            CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS.maximum();
 
     private static final int MOST_PAIRINGS =
             CompositionBudget.PAIRINGS_BUILT_AT_ONCE.maximum();
@@ -245,6 +238,27 @@ final class Witnesses {
         }
     }
 
+    /**
+     * The figure a value holding {@code count} elements is past, or null where it is inside it.
+     *
+     * <p>The one place a value built here is held to how many it holds, and every reader that
+     * decides how many a value it builds holds asks it before building one: the value built at a
+     * count, every content a collection is walked through, and a collection filled to what its
+     * rules ask. Asked by one of them alone, the others built at whatever count the rules asked
+     * for, so a collection past the figure was refused at one door and built at the next. Past it,
+     * a value is one this compiler does not build, which is not one the model cannot have.
+     */
+    private static CompositionBudget pastTheElements(int count) {
+        return count > CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum()
+                ? CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS : null;
+    }
+
+    /** The same, of a string holding {@code count} characters. */
+    private static CompositionBudget pastTheCharacters(int count) {
+        return count > CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS.maximum()
+                ? CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS : null;
+    }
+
     private static Built sized(TypeView position, int least, List<List<String>> held,
                                RuleReadingContext reading, Set<TypeSymbol> expanding) {
         if (least <= 0) {
@@ -259,15 +273,15 @@ final class Witnesses {
             // string of any characters at all after it — both are proposals, and the one every rule
             // admits is the one a caller with a single chance needs.
             case Shape.Scalar scalar when scalar.prim() == Type.Prim.STRING ->
-                    least > MOST_CHARACTERS
-                            ? Built.stoppedBy(CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS)
+                    pastTheCharacters(least) != null
+                            ? Built.stoppedBy(pastTheCharacters(least))
                             : Built.of(ofThatManyCharacters(position, least, reading));
-            case Shape.Sequence sequence -> least > MOST_ELEMENTS
-                    ? Built.stoppedBy(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS)
+            case Shape.Sequence sequence -> pastTheElements(least) != null
+                    ? Built.stoppedBy(pastTheElements(least))
                     : ofSequence(sequence, ElementsKeptApart.at(position, held, reading), least,
                             reading, expanding);
-            case Shape.Mapping mapping -> least > MOST_ELEMENTS
-                    ? Built.stoppedBy(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS)
+            case Shape.Mapping mapping -> pastTheElements(least) != null
+                    ? Built.stoppedBy(pastTheElements(least))
                     : ofMapping(mapping, least, reading, expanding);
             // Nothing else has a count this builds to. A number is one value however many the rules
             // ask for, a record holds its fields and not a number of them, and the shapes that are
@@ -834,7 +848,7 @@ final class Witnesses {
             }
         }
         int needed = Math.max(holds.least(), elements.size());
-        if (needed > holds.most()) {
+        if (needed > holds.most() || pastTheElements(needed) != null) {
             return null;
         }
         // Fewer than asked for is a type with too few values, which is a container the rules want
@@ -1051,12 +1065,21 @@ final class Witnesses {
 
     /**
      * Values of {@code type} that differ in what they hold, up to {@code many} of them, under every
-     * name it wears: a record's at one of its fields ({@link Partitions#differingAtAField}) and a
+     * name it wears: a record's at its fields ({@link Partitions#differingAtItsFields}) and a
      * collection's in how many it holds, from the fewest its rules and {@code held} leave. Nothing
      * for a type that holds nothing of its own, whose values were asked for above.
      *
      * <p>Each built as a value of its position is, under the rules there, so what differs is a
      * value of the type and not a shape that carries a difference.
+     *
+     * <p>And what a value of the type may be beyond the one each of its kinds stands for: an
+     * optional's every value of what it holds, a sum's every value of each of its cases, and a
+     * collection's every content at every size ({@link #arrange}). A set of such values is built
+     * from as many of them as it holds, and the one per kind the type divides into ran out at the
+     * number of kinds. Each is walked in one order and stopped at {@code many}, so what comes back
+     * is as many values as the type has up to that number. The contents of a collection beyond
+     * the one built at each size are proposals and not built values — a rule over what it holds
+     * is the decoder's to apply — so they come after every size was built once.
      */
     private static List<FixtureTemplate> differing(Type type, int many, FieldDomains.Held held,
                                                    RuleReadingContext reading,
@@ -1075,13 +1098,9 @@ final class Witnesses {
                 if (!(record.name() instanceof TypeSymbol.AtModule named)) {
                     yield List.of();
                 }
-                List<FixtureTemplate> out = new ArrayList<>();
-                for (FixtureTemplate each : Partitions.differingAtAField(named,
+                yield worn(view, Partitions.differingAtItsFields(named,
                         Partitions.rulesOver(view.wrappers(), named, source), many, reading,
-                        inside)) {
-                    out.add(WornNames.under(view.wrappers(), each, source));
-                }
-                yield out;
+                        inside), source);
             }
             case Shape.Sequence _, Shape.Mapping _ -> {
                 DeclaredBounds.CountRange range = Partitions.heldRange(type, reading, held);
@@ -1096,14 +1115,327 @@ final class Witnesses {
                     if (one.values().isEmpty()) {
                         break;
                     }
-                    out.add(one.values().getFirst());
+                    // Built as the collection the names are worn over, so the names are put on
+                    // here as they are on every value this answers.
+                    out.addAll(worn(view, List.of(one.values().getFirst()), source));
+                }
+                // Then every other content, where the elements are apart as wholes or not at all.
+                // One kept apart at a field of its elements holds a few its rules choose, and an
+                // arrangement of the element's values would offer some that share the field.
+                // Read with the rules of the names the collection wears, as the value built at
+                // each size reads them: a list a newtype keeps apart is apart here too.
+                List<List<String>> keptApart = view.shape() instanceof Shape.Sequence
+                        ? ElementsKeptApart.at(view, apart, reading) : apart;
+                if (out.size() < many && keptApart.stream().allMatch(List::isEmpty)) {
+                    Set<String> written = new HashSet<>();
+                    out.forEach(each -> written.add(each.text()));
+                    arrange(view.shape(), !keptApart.isEmpty(), range, many, reading, inside,
+                            content -> {
+                                FixtureTemplate each =
+                                        WornNames.under(view.wrappers(), content, source);
+                                if (each != null && written.add(each.text())) {
+                                    out.add(each);
+                                }
+                                return out.size() < many;
+                            });
                 }
                 yield out;
             }
-            case Shape.Scalar _, Shape.Optional _, Shape.Unit _, Shape.Sum _, Shape.Cases _,
-                 Shape.Unresolved _, Shape.Tuple _, Shape.Function _, Shape.Uninhabited _,
-                 Shape.Bottom _, Shape.Erroneous _, Shape.Undecided _ -> List.of();
+            // Nothing, and every value of what it holds. What it holds is written as itself.
+            case Shape.Optional optional -> {
+                List<FixtureTemplate> values = new ArrayList<>();
+                values.add(FixtureTemplate.none());
+                values.addAll(distinctValuesOf(optional.element(), many - 1, reading, inside));
+                yield worn(view, values, source);
+            }
+            // A value of a sum is a value of one of its cases, written as that case is.
+            case Shape.Sum sum -> worn(view, ofEachCase(sum.reaches().cases(), sum.name(), many,
+                    reading, inside), source);
+            // In an order of their own, since a union's members are a set and come in none.
+            case Shape.Cases cases -> worn(view, ofEachCase(cases.members().stream()
+                            .sorted(Comparator.comparing(TypeSymbol::toString)).toList(),
+                    null, many, reading, inside), source);
+            case Shape.Scalar _, Shape.Unit _, Shape.Unresolved _, Shape.Tuple _,
+                 Shape.Function _, Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _,
+                 Shape.Undecided _ -> List.of();
         };
+    }
+
+    /**
+     * {@code values} under the names {@code view} wears, leaving out any those names cannot be
+     * written on here ({@link WornNames#under}).
+     */
+    private static List<FixtureTemplate> worn(TypeView view, List<FixtureTemplate> values,
+                                              RuleReadingSource source) {
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (FixtureTemplate each : values) {
+            FixtureTemplate written = WornNames.under(view.wrappers(), each, source);
+            if (written != null) {
+                out.add(written);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Up to {@code many} values of the cases of a sum, taking each case's values in turn and one
+     * from each before a second from any, so that a few of them are not all of one case.
+     *
+     * <p>Each case is asked for its share of {@code many} and no more, and the share is doubled
+     * for the cases that filled it only while the values together fall short. Asked for
+     * {@code many} each, a sum of many cases built that many of every case to keep a few.
+     *
+     * @param sum the sum's own name, which a case reached from inside it does not open again; null
+     *            for a union, which has none
+     */
+    private static List<FixtureTemplate> ofEachCase(List<TypeSymbol> cases, TypeSymbol sum,
+                                                    int many,
+                                                    RuleReadingContext reading,
+                                                    Set<TypeSymbol> inside) {
+        Set<TypeSymbol> within = new LinkedHashSet<>(inside);
+        if (sum != null && !within.add(sum)) {
+            return List.of();
+        }
+        List<TypeSymbol> open = cases.stream().filter(leaf -> !within.contains(leaf)).toList();
+        if (open.isEmpty() || many <= 0) {
+            return List.of();
+        }
+        List<List<FixtureTemplate>> each = new ArrayList<>();
+        open.forEach(leaf -> each.add(List.of()));
+        boolean[] spent = new boolean[open.size()];
+        int share = Math.max(1, (many + open.size() - 1) / open.size());
+        while (true) {
+            boolean anyFilled = false;
+            for (int i = 0; i < open.size(); i++) {
+                if (spent[i]) {
+                    continue;
+                }
+                List<FixtureTemplate> values =
+                        distinctValuesOf(Type.ref(open.get(i)), share, reading, within);
+                each.set(i, values);
+                spent[i] = values.size() < share;
+                anyFilled |= !spent[i];
+            }
+            List<FixtureTemplate> out = takenInTurn(each, many);
+            if (out.size() >= many || !anyFilled || share >= many) {
+                return out;
+            }
+            share = Math.min(many, share * 2);
+        }
+    }
+
+    /** Up to {@code many} of {@code each}, the first of every list before the second of any. */
+    private static List<FixtureTemplate> takenInTurn(List<List<FixtureTemplate>> each, int many) {
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (int i = 0; out.size() < many; i++) {
+            boolean more = false;
+            for (List<FixtureTemplate> values : each) {
+                if (i < values.size() && out.size() < many) {
+                    out.add(values.get(i));
+                    more = true;
+                }
+            }
+            if (!more) {
+                break;
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Every content of a collection of {@code shape} the count range leaves, smallest first,
+     * handed to {@code offer} until it answers false: each few of the element's values a set can
+     * hold, each run of them a list can, and each few of the keys with each run of values for a
+     * map — where a list's elements or a map's values are apart, each order of each few.
+     *
+     * <p>Arranged from the first {@code many} values of what it holds, which is enough to tell
+     * {@code many} contents apart. Proposals and not built values: a rule over what the collection
+     * holds is the decoder's to apply.
+     *
+     * @param apart whether the elements are apart as wholes, so that a list or a map's values say
+     *              no value twice; a set's never do
+     */
+    private static void arrange(Shape shape, boolean apart, DeclaredBounds.CountRange range,
+                                int many, RuleReadingContext reading, Set<TypeSymbol> inside,
+                                Predicate<FixtureTemplate> offer) {
+        int least = Math.max(range.least(), 0);
+        // What tells two contents apart is the shape's: a set is the few it holds, and a list or
+        // what a map files under its keys is in an order as well.
+        Picking runs = apart ? Picking.AN_ORDER_OF_A_FEW : Picking.A_RUN;
+        switch (shape) {
+            case Shape.Sequence(Shape.Sequence.Kind kind, Type element) -> {
+                List<FixtureTemplate> values = distinctValuesOf(element, many, reading, inside);
+                Picking picking = kind == Shape.Sequence.Kind.SET ? Picking.A_FEW : runs;
+                for (int size = least; size <= range.most(); size++) {
+                    if (!picking.fits(size, values.size()) || pastTheElements(size) != null) {
+                        return;
+                    }
+                    int[] at = picking.first(size);
+                    do {
+                        if (!offer.test(FixtureTemplate.collection(picked(values, at)))) {
+                            return;
+                        }
+                    } while (picking.next(at, values.size()));
+                }
+            }
+            case Shape.Mapping(Type key, Type value) -> {
+                List<FixtureTemplate> keys = distinctValuesOf(key, many, reading, inside);
+                List<FixtureTemplate> values = distinctValuesOf(value, many, reading, inside);
+                for (int size = least; size <= range.most(); size++) {
+                    if (!Picking.A_FEW.fits(size, keys.size())
+                            || !runs.fits(size, values.size())
+                            || pastTheElements(size) != null) {
+                        return;
+                    }
+                    int[] which = Picking.A_FEW.first(size);
+                    do {
+                        List<FixtureTemplate> held = picked(keys, which);
+                        int[] to = runs.first(size);
+                        do {
+                            List<FixtureTemplate> entries = new ArrayList<>();
+                            for (int i = 0; i < size; i++) {
+                                entries.add(FixtureTemplate.entry(held.get(i),
+                                        values.get(to[i])));
+                            }
+                            if (!offer.test(FixtureTemplate.collection(entries))) {
+                                return;
+                            }
+                        } while (runs.next(to, values.size()));
+                    } while (Picking.A_FEW.next(which, keys.size()));
+                }
+            }
+            case Shape.Scalar _, Shape.Product _, Shape.Sum _, Shape.Unit _, Shape.Optional _,
+                 Shape.Unresolved _, Shape.Cases _, Shape.Tuple _, Shape.Function _,
+                 Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _, Shape.Undecided _ -> { }
+        }
+    }
+
+    /** The values {@code at} names, in its order. */
+    private static List<FixtureTemplate> picked(List<FixtureTemplate> values, int[] at) {
+        List<FixtureTemplate> out = new ArrayList<>(at.length);
+        for (int i : at) {
+            out.add(values.get(i));
+        }
+        return out;
+    }
+
+    /**
+     * Which places of {@code n} values a content of {@code size} names, walked one after another.
+     *
+     * <p>Two questions and not one: whether a value may be named twice, and whether the order
+     * they are named in tells two contents apart. A set answers no to both, a list free to repeat
+     * yes to both, and a list or a map's values kept apart no and yes — so each order of each few.
+     * Answered as one, a list kept apart would be walked as a set is, and of three values held
+     * three apart would offer one list where there are six.
+     *
+     * <p>Each step is as long as the content and passes nothing over, so a walk stopped at a
+     * number of contents costs that number of steps.
+     */
+    private enum Picking {
+
+        /** Each few, in the order the values come: a set's contents. */
+        A_FEW,
+
+        /** Each order of each few: a list's, or a map's values, kept apart. */
+        AN_ORDER_OF_A_FEW,
+
+        /** Each run, a value as often as it comes, counting as a number does: a list's. */
+        A_RUN;
+
+        /** Whether {@code size} places can be named among {@code n} values this way. */
+        boolean fits(int size, int n) {
+            return size == 0 || (n > 0 && (this == A_RUN || size <= n));
+        }
+
+        /** The first of {@code size} places: nought upwards where no value is named twice, and
+         *  nought everywhere where one may be. */
+        int[] first(int size) {
+            int[] at = new int[size];
+            for (int i = 0; this != A_RUN && i < size; i++) {
+                at[i] = i;
+            }
+            return at;
+        }
+
+        /** {@code at} moved on to the next of its kind among {@code n} values, or false where it
+         *  was the last. */
+        boolean next(int[] at, int n) {
+            return switch (this) {
+                case A_FEW -> nextFew(at, n);
+                // The next order of the same few, and past the last of them — which is the few
+                // the other way round — the first order of the next few.
+                case AN_ORDER_OF_A_FEW -> {
+                    if (nextOrder(at)) {
+                        yield true;
+                    }
+                    reverse(at);
+                    yield nextFew(at, n);
+                }
+                case A_RUN -> nextRun(at, n);
+            };
+        }
+
+        /** {@code at}, a few in the order the values come, moved on to the next few. */
+        private static boolean nextFew(int[] at, int n) {
+            for (int i = at.length - 1; i >= 0; i--) {
+                if (at[i] < n - at.length + i) {
+                    at[i]++;
+                    for (int j = i + 1; j < at.length; j++) {
+                        at[j] = at[j - 1] + 1;
+                    }
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /** {@code at} moved on to the next order of the values it names, or false where it was
+         *  the last of them, which leaves them the other way round from the first. */
+        private static boolean nextOrder(int[] at) {
+            int i = at.length - 2;
+            while (i >= 0 && at[i] > at[i + 1]) {
+                i--;
+            }
+            if (i < 0) {
+                return false;
+            }
+            int j = at.length - 1;
+            while (at[j] < at[i]) {
+                j--;
+            }
+            swap(at, i, j);
+            for (int left = i + 1, right = at.length - 1; left < right; left++, right--) {
+                swap(at, left, right);
+            }
+            return true;
+        }
+
+        /** {@code at} the other way round. */
+        private static void reverse(int[] at) {
+            for (int left = 0, right = at.length - 1; left < right; left++, right--) {
+                swap(at, left, right);
+            }
+        }
+
+        private static void swap(int[] at, int i, int j) {
+            int held = at[i];
+            at[i] = at[j];
+            at[j] = held;
+        }
+
+        /** {@code at} moved on to the next run of {@code n} values. */
+        private static boolean nextRun(int[] at, int n) {
+            int i = at.length - 1;
+            while (i >= 0 && at[i] == n - 1) {
+                at[i] = 0;
+                i--;
+            }
+            if (i < 0) {
+                return false;
+            }
+            at[i]++;
+            return true;
+        }
     }
 
     /**
@@ -1127,7 +1459,7 @@ final class Witnesses {
 
     /**
      * The {@code index}th value of {@code type} made by stepping its carrier, or null where the carrier
-     * has no order to step.
+     * has no order to step or the step is a string longer than a proposal holds.
      *
      * <p>A string grows by a character from the length its rules ask for, and a whole number steps
      * through the range they leave. Which characters is a question the carrier has no answer to, so
@@ -1143,9 +1475,12 @@ final class Witnesses {
         TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
         if (view.shape() instanceof Shape.Scalar scalar && scalar.prim() == Type.Prim.STRING) {
-            return WornNames.under(view.wrappers(), FixtureTemplate.string(
-                    "x".repeat(Math.max(1, Partitions.leastHeld(view, reading)) + index)),
-                    ruleSource);
+            // The floor asked first, so that a floor past the figure is not added to.
+            int least = Math.max(1, Partitions.leastHeld(view, reading));
+            return pastTheCharacters(least) != null || pastTheCharacters(least + index) != null
+                    ? null
+                    : WornNames.under(view.wrappers(),
+                            FixtureTemplate.string("x".repeat(least + index)), ruleSource);
         }
         Place at = Partitions.numberInside(view, reading, index);
         if (at == null) {

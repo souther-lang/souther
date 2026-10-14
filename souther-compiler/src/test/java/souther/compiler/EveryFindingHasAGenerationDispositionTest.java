@@ -8,12 +8,15 @@ import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.PointRole;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PointResolution;
+import souther.compiler.query.ReadAs;
 import souther.compiler.query.BorderAccount;
 import souther.compiler.query.GenerationScope;
 import souther.compiler.query.SearchCoverage;
@@ -945,9 +948,11 @@ class EveryFindingHasAGenerationDispositionTest {
     private static souther.compiler.partition.MeasuredInput nothingIsDivided() {
         RuleReadingSource rules = RuleReadings.ofNoClauseFiled(
                 souther.compiler.check.Symbols.none(DefaultStdlib.get()));
+        RuleReadingContext reading = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
         return souther.compiler.partition.MeasuredInput.of("pick",
-                souther.compiler.inputs.InputDomain.of(List.of(), RuleReadingContext.unshared(rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                InputDomain.of(List.of(), reading,
+                        TypeCardinality.Counts.workedOutIn(reading),
                         Membership.none()).reading(rules),
                 souther.compiler.partition.AxesATestWrote.asAMeasurement("pick", List.of()));
     }

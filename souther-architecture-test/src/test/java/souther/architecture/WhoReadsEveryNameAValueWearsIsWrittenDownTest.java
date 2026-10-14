@@ -125,6 +125,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_SPINE),
             row(INPUTS + "InputDomain", "walk",
                     "(L" + INPUTS + "TermPath;" + TYPE + "L" + INPUTS + "ExpansionTrace;" + CONTEXT
+                            + "L" + CHECK + "TypeCardinality$Counts;"
                             + "L" + INPUTS + "PlacedRules;Ljava/util/List;Ljava/util/List;"
                             + "Ljava/util/Set;L" + INPUTS + "RuleHandoffs;L" + INPUTS
                             + "NameReach$Observed;L" + INPUTS + "InputDomain$Gathered;L" + INPUTS

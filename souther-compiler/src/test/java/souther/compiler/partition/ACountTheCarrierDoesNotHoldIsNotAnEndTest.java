@@ -8,12 +8,14 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.DateTimes;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -212,8 +214,10 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertFalse(sigs.isEmpty(), "the model under test compiles");
         Map.Entry<String, DeclaredSig> declared = sigs.entrySet().iterator().next();
-        InputDomain domain = InputDomain.of(declared.getValue(), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES), Membership.none());
+        RuleReadingContext context = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
+        InputDomain domain = InputDomain.of(declared.getValue(), context,
+                TypeCardinality.Counts.workedOutIn(context), Membership.none());
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);
         Partitions.Partitioning p = Partitions.of(declared.getKey(), domain.reading(rules),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);

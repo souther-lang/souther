@@ -103,19 +103,19 @@ class EveryUnresolvedAdequacyFactLeavesTheReaderSomewhereTest {
     }
 
     /**
-     * And a wider run is offered exactly where a wider run would answer it.
+     * And a figure of this compiler's is named exactly where one stopped it.
      *
-     * <p>The one arm a reader acts on without looking at anything, so it is the one that must not be
-     * offered where it is wrong: told to measure again over a rule this compiler has no reading for,
-     * an author runs the build and meets the same sentence.
+     * <p>Told a figure stopped a search over a rule this compiler has no reading for, an author
+     * looks for the figure and finds a rule nobody read.
      */
     @Test
-    void aWiderRunIsOfferedExactlyWhereItWouldAnswer() {
+    void aFigureIsNamedExactlyWhereOneStoppedIt() {
         for (AdequacyUncertainty each : UNRESOLVED) {
-            boolean offered = ReaderDisposition.of(each) instanceof ReaderDisposition.WidenTheRun;
+            boolean named =
+                    ReaderDisposition.of(each) instanceof ReaderDisposition.StoppedAtAFigure;
 
-            assertEquals(each.runSensitivity() == RunSensitivity.MAY_CHANGE, offered,
-                    () -> "a wider run is offered for " + each + " and it says "
+            assertEquals(each.runSensitivity() == RunSensitivity.MAY_CHANGE, named,
+                    () -> "a figure is named for " + each + " and it says "
                             + each.runSensitivity());
         }
     }
