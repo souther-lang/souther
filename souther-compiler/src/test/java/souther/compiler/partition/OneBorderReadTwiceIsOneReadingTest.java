@@ -3,6 +3,12 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.AReadingOfAPosition;
+import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.coverage.Numberings;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
@@ -61,8 +67,8 @@ class OneBorderReadTwiceIsOneReadingTest {
      */
     @Test
     void arunOwedToMoreThingsIsAnotherReading() {
-        Border rulesOnly = bound(List.of());
-        Border andALine = bound(List.of(Parting.by(
+        Border rulesOnly = compared(List.of());
+        Border andALine = compared(List.of(Parting.by(
                 HeldSeams.of(space(), at(1000), Towards.BELOW), aComparison())));
 
         assertTrue(rulesOnly.demand(PointRole.IN).sameAs(andALine.demand(PointRole.IN)),
@@ -72,8 +78,26 @@ class OneBorderReadTwiceIsOneReadingTest {
                 "and a row inside it answers for more once the line is there");
         assertFalse(rulesOnly.sameReadingAs(andALine),
                 "so the two are not one reading of one line");
-        assertTrue(rulesOnly.sameReadingAs(bound(List.of())),
+        assertTrue(rulesOnly.sameReadingAs(compared(List.of())),
                 "while a reading against itself is one reading");
+    }
+
+    /**
+     * A bound's run is what the rules leave, whatever lines a body draws inside it.
+     *
+     * <p>Nothing outside a bound can be constructed, so what a row beside its line is asked for is a
+     * question about what the rules leave the position, and a comparison inside that divides it
+     * without moving it. Told about a line at five hundred, the bound's reading is the reading it
+     * is without it.
+     */
+    @Test
+    void aBoundIsTheSameReadingWhateverLinesABodyDrawsInsideIt() {
+        Border bare = bound(List.of());
+        Border besideALine = bound(List.of(Parting.by(
+                HeldSeams.of(space(), at(500), Towards.BELOW), aComparison())));
+
+        assertEquals(bare.answer(PointRole.IN), besideALine.answer(PointRole.IN));
+        assertTrue(bare.sameReadingAs(besideALine));
     }
 
     /**
@@ -126,7 +150,7 @@ class OneBorderReadTwiceIsOneReadingTest {
      */
     @Test
     void theOrderWhatStopsARunWasFoundInIsNoPartOfTheReading() {
-        Border one = bound(List.of(Parting.by(
+        Border one = compared(List.of(Parting.by(
                 HeldSeams.of(space(), at(1000), Towards.BELOW), aComparison())));
         Border other = reversed(one);
 
@@ -177,7 +201,7 @@ class OneBorderReadTwiceIsOneReadingTest {
     void aPlaceThatWasNotWorkedOutLeavesTheRunNotWorkedOut() {
         UnheldNumber why = UnheldNumber.MORE_ROOM_COULD_ANSWER;
 
-        Border border = Border.at(aLineAt("w.a", 100), aBound(),
+        Border border = Border.at(aLineAt("w.a", 100), aComparisonOrigin(),
                 new NumericDomain.Bounds(Endpoint.inclusive(Count.of(100)),
                         Endpoint.inclusive(Count.of(1000))),
                 ExactAnswer.unheld(why), NarrowedBounds.NOTHING);
@@ -199,6 +223,14 @@ class OneBorderReadTwiceIsOneReadingTest {
                 new NumericDomain.Bounds(Endpoint.inclusive(Count.of(100)),
                         Endpoint.inclusive(Count.of(1000))),
                 parted, narrowed);
+    }
+
+    /** A comparison at a hundred, kept above, over the same range, told about {@code parted}. */
+    private static Border compared(List<Parting> parted) {
+        return Border.at(aLineAt("w.a", 100), aComparisonOrigin(),
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(100)),
+                        Endpoint.inclusive(Count.of(1000))),
+                parted, NarrowedBounds.NOTHING);
     }
 
     /** The same bound, with its line written as {@code at}. */
@@ -248,7 +280,22 @@ class OneBorderReadTwiceIsOneReadingTest {
                 EndSide.LOWER, true);
     }
 
-    /** A line of a body, for a place to be parted by something other than the bound. */
+    /** A body's comparison keeping the values from a hundred up, which is what the readings whose
+     *  runs other lines stop are read off. */
+    private static LineOrigin aComparisonOrigin() {
+        SourceConstructOrigin wrote = new SourceConstructOrigin(
+                new WrittenOwner.Body("example.weigh", "weigh"), 1, 0, SourceConstruct.BINARY);
+        return new LineOrigin.ComparisonOrigin(
+                new LineOrigin.ComparisonOrigin.Read(
+                        new RuleRef.Comparison("weigh", wrote),
+                        new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
+                        new RuleReportAnchor.ByTheModuleThatWroteIt(),
+                        List.of(Numberings.comparison(1, 0)), ElementsMetOn.EVERY),
+                Optional.empty(),
+                new LineFacts(new ComparisonClaim.Cut(Towards.ABOVE, true)));
+    }
+
+    /** A line of a body, for a place to be parted by something other than the line read. */
     private static AuthoredLine aComparison() {
         return new AuthoredLine(new WhichLine.OfAComparison(new RuleRef.Comparison("weigh",
                 new souther.compiler.types.SourceConstructOrigin(

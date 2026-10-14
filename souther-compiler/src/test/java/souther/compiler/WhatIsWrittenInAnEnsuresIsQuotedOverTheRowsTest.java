@@ -74,11 +74,11 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
      * Every clause of the behavior, in the author's words and in the order they are written, over
      * the rows they are about — and nothing over the rows of a behavior that declares none.
      *
-     * <p>{@code echo} carries {@code TodoId} and is offered one row rather than two. The line the
-     * invariant draws is the declaration's and is owed once over every behavior carrying the type,
-     * so it is resolved at the first reading that composes a row — {@code findTodo}'s {@code
-     * TodoId(0)} — and what is left beside {@code echo} is the region of its own position
-     * (issue #1076).
+     * <p>{@code echo} carries {@code TodoId} and is offered no row for it. The line the invariant
+     * draws and the region beside it are the declaration's and are owed once over every behavior
+     * carrying the type, so both are resolved at the reading that composes rows for them —
+     * {@code findTodo}'s {@code TodoId(0)} and {@code TodoId(1)} — and what is left for {@code echo}
+     * is its own decision rule.
      */
     @Test
     void theClausesAreQuotedOverTheRowsOfTheBehaviorTheyAreWrittenOn() {
@@ -98,6 +98,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                     | (TodoId(0)) -> <?>
                 // fills id=0 < x
                 // fills a decision rule (the comparison at 16:33 holds)
+                // fills value in 0 < value
                 // fills ON point of ensures findTodo (asked)
                 // fills ON point of comparison@0:16:33
                     | (TodoId(1)) -> <?>
@@ -106,8 +107,8 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                     | (TodoId(2)) -> <?>
 
                 example echo
-                // fills value in 0 < value
-                    | (TodoId(1)) -> <?>
+                // fills a decision rule ()
+                    | (TodoId(0)) -> <?>
                 """, block(TODO));
     }
 

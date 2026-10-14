@@ -1226,7 +1226,7 @@ class CompileExampleGenerateTest {
 
         // One against the line and one away from it, so neither kind is answering for the other.
         assertTrue(block.contains("// no row for `s = 5` in `label`"), block);
-        assertTrue(block.contains("// no row for `1 < s < 5` in `label`"), block);
+        assertTrue(block.contains("// no row for `1 <= s < 4` in `label`"), block);
         // And what the block says about the rest of the account, beside the points rather than in
         // place of them. The arm is looked for at the classes the way into it leaves and every
         // value of them was refused, and the rule this compiler could not read is why those were
