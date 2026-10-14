@@ -2333,8 +2333,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // A position nothing the behavior states reads, which is owed no row at any of its
                 // classes. Said whether or not the rows reach them: the count above still has them,
                 // and a reader is told why none of them is asked for.
-                boolean read = !(axis.use() instanceof InputUse.NotRead);
-                if (!read) {
+                boolean owes = axis.owesARowPerClass();
+                if (!owes) {
                     out.append(String.format("      · %s holds %d classes and nothing this behavior"
                                     + " states reads it, so no row is owed at any of them%n",
                             axis.name(), axis.classes().size()));
@@ -2353,16 +2353,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // at every class, and a line saying only the first would read as the second's
                 // contradiction.
                 for (ReaderDisposition.Wider each : wider) {
-                    if (!each.axis().at().equals(axis.at()) || !read) {
+                    if (!each.axis().at().equals(axis.at()) || !owes) {
                         continue;
                     }
                     out.append(each.groups() <= 1
-                            ? String.format(axis.use() instanceof InputUse.Read
-                                            ? "      · %s holds %d classes and this behavior reads it"
-                                                    + " without telling them apart%n"
-                                            : "      · %s holds %d classes and this behavior does"
-                                                    + " not tell them apart%n",
-                                    axis.name(), axis.classes().size())
+                            ? String.format(switch (axis.use()) {
+                                        case InputUse.Read _ -> "      · %s holds %d classes and"
+                                                + " this behavior reads it without telling them"
+                                                + " apart%n";
+                                        case InputUse.NotKnown _ -> "      · %s holds %d classes and"
+                                                + " this behavior does not tell them apart%n";
+                                        case InputUse.NotRead _ -> throw new IllegalStateException(
+                                                "a position nothing reads is owed a row: "
+                                                        + axis.name());
+                                    }, axis.name(), axis.classes().size())
                             : String.format("      · %s holds %d classes and this behavior tells"
                                             + " them apart as %d groups%n",
                                     axis.name(), axis.classes().size(), each.groups()));

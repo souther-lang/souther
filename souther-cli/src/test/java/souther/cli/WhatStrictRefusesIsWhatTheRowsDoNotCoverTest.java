@@ -714,6 +714,46 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 "the account decides the verdict and `--strict` decides the exit");
     }
 
+    /**
+     * A class no row is in at a position nothing the behavior reads is counted and not refused
+     * over: the count keeps the class, and a strict run passes.
+     */
+    @Test
+    void aClassAtAPositionNothingReadsIsCountedAndNotRefusedOver() throws Exception {
+        Run run = examples("""
+                module example.equip
+
+                data OneHanded
+                data TwoHanded
+                data Grip = OneHanded | TwoHanded
+                data Upgradable
+                data NotUpgradable
+                data Upgrade = Upgradable | NotUpgradable
+                data Weapon = { grip: Grip, upgrade: Upgrade }
+                data Equipped
+                data Refused
+
+                behavior equip : (weapon: Weapon) -> Equipped | Refused
+
+                let equip (weapon) =
+                    match weapon.grip with
+                        | OneHanded -> Equipped
+                        | TwoHanded -> Refused
+
+                example equip
+                    | "one-handed" : (Weapon { grip = OneHanded, upgrade = NotUpgradable })
+                        -> Equipped
+                    | "two-handed" : (Weapon { grip = TwoHanded, upgrade = NotUpgradable })
+                        -> Refused
+                """, "--strict");
+
+        assertEquals(0, run.code(), run.out() + run.err());
+        assertTrue(run.out().contains("equivalence partitions 3/4"), run.out());
+        assertTrue(run.out().contains("weapon.upgrade holds 2 classes and nothing this behavior"
+                + " states reads it, so no row is owed at any of them"), run.out());
+        assertTrue(run.out().contains("adequacy: satisfied"), run.out());
+    }
+
     /** The same finding on the other surface, refused under its own code. */
     @Test
     void aCompileRefusesTheSameFinding() throws Exception {

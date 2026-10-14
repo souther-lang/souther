@@ -261,11 +261,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
     private static final String READS_THE_NAMES = "the rule for a field access, read along the"
             + " projection's names rather than down the stack";
 
-    /** The value a field is taken off, walked for the positions it stands at. */
-    private static final String TAKEN_OFF = "walks the value a field is taken off, along what it is"
-            + " taken off in turn: a projection is read whole where it is met, and what is left"
-            + " under it is its base";
-
     /** One access and its target. */
     private static final String ONE = "handed one access, and asks whether its target is a place"
             + " through the reading of places, which reads a projection's names itself";
@@ -465,13 +460,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "inputs/ElementProjection$Reading", "steps", "(" + core + "L" + c
                 + "types/BindingId;L" + c + "inputs/BindingTrail;)Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
-        row(out, c + "inputs/InputDemand", "walk", "(" + core + reads + "L" + c + "check/Symbols;L"
-                + c + "check/DeclarationNewtypes;Ljava/util/Set;)V",
-                Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "inputs/InputUses$Walk", "whole", "(" + core + reads + ")V",
                 Reading.EACH_SUBEXPRESSION, ASKS_EACH);
-        row(out, c + "inputs/InputUses$Walk", "namesOnly", "(" + core + reads + ")V",
-                Reading.STRUCTURE, TAKEN_OFF);
+        row(out, c + "inputs/InputUses$Walk", "takenOff", "(" + core + reads + ")V",
+                Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "inputs/InputUses$Walk", "fieldOf", "(" + core + ")" + core,
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "inputs/InputPath", "introducing", "(" + core + "L" + c

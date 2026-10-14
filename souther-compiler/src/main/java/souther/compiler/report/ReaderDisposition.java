@@ -89,7 +89,9 @@ public sealed interface ReaderDisposition {
      * classes than this behavior's body tells apart, and that combinations those classes take part
      * in are unknown because no row reaches a combination the behavior never tells apart. What that
      * is worth is the author's: a value passed through untouched is as ordinary as an input wider
-     * than it needs to be.
+     * than it needs to be. A position nothing the behavior states reads is one of these too, and
+     * the widest: no row is owed at its classes, and whether the behavior takes it at all is the
+     * author's to weigh.
      */
     record ReconsiderWhatThisBehaviorNeedsToDistinguish(Subject subject)
             implements ReaderDisposition {}

@@ -440,6 +440,7 @@ final class IndexEdges {
         names(out, Bodies.LoweredBody.class, "fn");
         names(out, Bodies.Assumptions.class, "behavior");
         names(out, Adequacy.InputsOf.class, "behavior");
+        names(out, Adequacy.ReadsOf.class, "behavior");
         names(out, Bodies.BehaviorAritiesForBody.class, "fn");
         names(out, Bodies.BehaviorsReached.class, "behavior");
         names(out, Bodies.BodyForInvariantDischarge.class, "fn");

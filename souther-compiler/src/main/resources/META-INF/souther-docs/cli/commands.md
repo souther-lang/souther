@@ -522,7 +522,8 @@ A position nothing the behavior states reads — not its body and not a clause o
 at any of its classes, since a row at one of them gives the answer a row at any other gives. Its
 classes stay in the count, and a `·` line says why none of them is asked for; in the JSON the
 position's `use` is `not_read`. A value the body reads without deciding anything on it, such as one
-copied into the answer, is read, and each of its classes is owed a row as before.
+copied into the answer, is read, and each of its classes is owed a row. So is a position whose
+reading this compiler could not settle.
 
 How many rows are waiting for a `let` is reported and never gated on:
 waiting is the normal state of a model being written, and an injected behavior's recorded row is the

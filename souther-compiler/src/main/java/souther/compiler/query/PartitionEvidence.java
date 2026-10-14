@@ -569,7 +569,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
     public boolean owesARowPerClassAt(AxisId at) {
         for (AxisCoverage axis : axes()) {
             if (axis.at().equals(at)) {
-                return axis.use().owesARowPerClass();
+                return axis.owesARowPerClass();
             }
         }
         return true;
@@ -1146,12 +1146,10 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * ({@link ObligationAssessment#worthSearching}). A state added to {@link Measurement}
          * arrives here as a compile error rather than as a silent nothing.
          *
-         * <p>And none at a position nothing the behavior states reads ({@link InputUse}). The
-         * classes are still the model's and still counted; a row at one of them gives the answer a
-         * row at any other gives, so it is owed nothing it could check.
+         * <p>And none where no row is owed per class ({@link #owesARowPerClass}).
          */
         public List<AxisClass> owed() {
-            if (!use.owesARowPerClass()) {
+            if (!owesARowPerClass()) {
                 return List.of();
             }
             return switch (reached) {
@@ -1167,6 +1165,19 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                 // Nothing to read the classes against, which a composed row would not settle.
                 case Measurement.FailedToMeasure<Reached> _ -> List.of();
             };
+        }
+
+        /**
+         * Whether a row is owed at each class of this position, which is what every reader of the
+         * classes as obligations asks: the rows owed here, the findings about a class no row is
+         * in, the case of an input that is a class of this position, and the line said about it.
+         *
+         * <p>Not where nothing the behavior states reads the position ({@link InputUse}). The
+         * classes are still the model's and still counted; a row at one of them gives the answer a
+         * row at any other gives, so it is owed nothing it could check.
+         */
+        public boolean owesARowPerClass() {
+            return use.owesARowPerClass();
         }
 
         /** The classes of this position the rows did not reach, where they were counted. */
