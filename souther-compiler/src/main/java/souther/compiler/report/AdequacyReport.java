@@ -15,7 +15,6 @@ import souther.compiler.publish.MaterialisationRegionWord;
 import souther.compiler.publish.RegionSlotWord;
 import souther.compiler.publish.ThroughStepWord;
 import souther.compiler.types.CanonicalNameOrder;
-import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ExpansionSite;
 import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.OccurrenceLineage;
@@ -1127,7 +1126,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 : CoveredOnlyByRowsThatDoNotHold.rulesOf(decision)) {
             about.add(taken.obligation().display());
         }
-        CoverageSites.Plan plan = placesOf(compilation, module);
+        if (about.isEmpty()) {
+            return Map.of();
+        }
+        DecisionRuleReading.Places places =
+                DecisionRuleReading.Places.of(placesOf(compilation, module), behavior);
         Map<DecisionReading.Ruled, List<ShownCondition>> out = new LinkedHashMap<>();
         for (DecisionReading.Ruled rule : decision.read().found()) {
             // The rules a finding is about, which are the ones a page describes condition by
@@ -1137,7 +1140,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 continue;
             }
             List<ShownCondition> shown = new ArrayList<>();
-            for (DecisionRuleReading read : DecisionRuleReading.of(rule, plan, behavior)) {
+            for (DecisionRuleReading read : DecisionRuleReading.of(rule, places)) {
                 shown.add(shown(compilation, read));
             }
             out.put(rule, List.copyOf(shown));
@@ -1177,7 +1180,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (about.isEmpty()) {
             return Map.of();
         }
-        CoverageSites.Plan plan = placesOf(compilation, module);
+        DecisionRuleReading.Places places =
+                DecisionRuleReading.Places.of(placesOf(compilation, module), behavior);
         Map<ObligationIdentity.OfACombinationOfDecisions, List<List<ShownCondition>>> out =
                 new LinkedHashMap<>();
         for (ObligationIdentity.OfACombinationOfDecisions combination : about) {
@@ -1190,7 +1194,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             for (InteractionRequirements.Way way : ways) {
                 List<ShownCondition> shown = new ArrayList<>();
                 for (DecisionRuleReading each
-                        : DecisionRuleReading.ofAWay(way.claims(), plan, behavior)) {
+                        : DecisionRuleReading.ofAWay(way.claims(), places)) {
                     shown.add(shown(compilation, each));
                 }
                 read.add(shown);
@@ -1264,40 +1268,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     /** One condition, with where a reader is sent for it and the calls it was reached through. */
     private static ShownCondition shown(Compilation compilation, DecisionRuleReading read) {
-        ExpansionLineage within = switch (read) {
-            case DecisionRuleReading.AComparisonCameOut(var _, var _, var copy) -> copy;
-            case DecisionRuleReading.AnApplicationAnswered(var _, var _, var copy) -> copy;
-            case DecisionRuleReading.AForkTookAnArm(var _, var copy) -> copy;
-            case DecisionRuleReading.AConditionIsNotShown _,
-                    DecisionRuleReading.AnOutcomeIsNotPlaced _,
-                    DecisionRuleReading.AForkIsNotPlaced _ -> ExpansionLineage.ORIGINAL;
-        };
-        List<ACall> through = new ArrayList<>();
-        while (within instanceof ExpansionLineage.Expansion copy) {
-            ExpansionSite.Direct called = switch (copy.at()) {
-                case ExpansionSite.Direct direct -> direct;
-                case ExpansionSite.Supplied supplied -> supplied.application();
-            };
-            Citation at = called instanceof ExpansionSite.Written(var origin)
-                    ? Sites.appliedAt(compilation.db(), origin).value() : null;
-            through.add(new ACall(copy.expanded().name(), at));
-            within = copy.within();
-        }
-        return new ShownCondition(read, whereItIsWritten(compilation, read), through.reversed());
-    }
-
-    /**
-     * One call of the model's own values a condition was reached through.
-     *
-     * @param called what was called, as the model names it
-     * @param at     where the call is written, or null where it is no call the author wrote — a
-     *               name standing where a value goes, which has no place a page can send anyone to
-     */
-    public record ACall(String called, Citation at) {
-
-        public ACall {
-            Objects.requireNonNull(called, "a call is a call of something");
-        }
+        return new ShownCondition(read, whereItIsWritten(compilation, read),
+                Sites.callsThrough(compilation.db(), read.within()));
     }
 
     /**
@@ -1313,7 +1285,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *                for every copy, and a value called twice is two copies a path can take two
      *                ways
      */
-    public record ShownCondition(DecisionRuleReading read, Citation at, List<ACall> through) {
+    public record ShownCondition(DecisionRuleReading read, Citation at,
+                                 List<Sites.ACall> through) {
 
         public ShownCondition {
             java.util.Objects.requireNonNull(read, "a condition shown is some condition");
@@ -3468,7 +3441,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                              SourceId declaredIn, SourceRendering rendering) {
         for (int i = 0; i < ways.size(); i++) {
             if (ways.size() > 1) {
-                out.append(i == 0 ? "          either\n" : "          or\n");
+                out.append(String.format(i == 0 ? "          either%n" : "          or%n"));
             }
             for (ShownCondition read : ways.get(i)) {
                 out.append(String.format("          · %s%n", said(read, declaredIn, rendering)));
@@ -3784,7 +3757,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
         List<String> calls = new ArrayList<>();
         // The nearest call first, which is the one the construct is written in.
-        for (ACall call : shown.through().reversed()) {
+        for (Sites.ACall call : shown.through().reversed()) {
             calls.add("`" + call.called() + "`"
                     + (call.at() == null ? "" : " at " + call.at().said(rendering, declaredIn)));
         }

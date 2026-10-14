@@ -16,11 +16,16 @@ import souther.compiler.sites.WrittenApplications;
 import souther.compiler.sites.WrittenCondition;
 import souther.compiler.sites.WrittenConditions;
 import souther.compiler.sites.WrittenForks;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ExpansionSite;
+import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Where a module's source was written, occurrence by occurrence.
@@ -492,8 +497,51 @@ public final class Sites {
         };
     }
 
+    /**
+     * One call of the model's own values a construct was reached through.
+     *
+     * @param called what was called, as the model names it
+     * @param at     where the call is written, or null where it is no call the author wrote — a
+     *               name standing where a value goes — or one this compilation holds no place for
+     */
+    public record ACall(String called, Citation at) {
+
+        public ACall {
+            Objects.requireNonNull(called, "a call is a call of something");
+        }
+    }
+
+    /**
+     * The calls {@code within} was made through, outermost first, and none for a construct where it
+     * is written.
+     *
+     * <p>One walk for every surface that says which copy of a construct a condition is of. The
+     * page writes the calls out and a warning marks them, and two walks would be free to disagree
+     * about which call a condition was reached through.
+     *
+     * <p>A block a call handed over is named by the application that ran it, which is in the code
+     * of the value it was handed to. A block handed to one of the language's own operations is not
+     * among these: a construct of the model is read out of such a copy before it gets here
+     * ({@link ModelOccurrence#statedAt}).
+     */
+    public static List<ACall> callsThrough(Db db, ExpansionLineage within) {
+        List<ACall> out = new ArrayList<>();
+        for (ExpansionLineage at = within; at instanceof ExpansionLineage.Expansion copy;
+                at = copy.within()) {
+            ExpansionSite.Direct called = switch (copy.at()) {
+                case ExpansionSite.Direct direct -> direct;
+                case ExpansionSite.Supplied supplied -> supplied.application();
+            };
+            Answer<Citation> written = called instanceof ExpansionSite.Written(var origin)
+                    ? appliedAt(db, origin) : Answer.absent();
+            out.add(new ACall(copy.expanded().name(),
+                    written.present() ? written.value() : null));
+        }
+        return out.reversed();
+    }
+
     /** Where the module that wrote {@code origin} says the call stands. */
-    public static Answer<Citation> appliedAt(Db db, SourceConstructOrigin origin) {
+    private static Answer<Citation> appliedAt(Db db, SourceConstructOrigin origin) {
         if (origin.module() == null) {
             return Answer.absent();
         }

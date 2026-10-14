@@ -72,7 +72,6 @@ import souther.compiler.check.SumCases;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.types.ExpansionLineage;
-import souther.compiler.types.ExpansionSite;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 import souther.compiler.observe.Disposition;
@@ -140,6 +139,7 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -8037,9 +8037,12 @@ public final class Adequacy {
                 return Answer.absent();
             }
             List<Report> reports = new ArrayList<>();
+            // The sites a rule's conditions are resolved against, filed once per behavior: a
+            // behavior's rules are as many warnings, and each is read against the same sites.
+            Map<String, DecisionRuleReading.Places> places = new HashMap<>();
             for (Finding finding : found) {
                 if (finding.isAdequacyGap()) {
-                    reports.add(warning(db, name, finding));
+                    reports.add(warning(db, name, finding, places));
                 }
             }
             return Answer.of(true, reports);
@@ -8082,8 +8085,12 @@ public final class Adequacy {
          * that a scan for the keys this names finds them — a key built by concatenation is one nothing
          * can see is used. Which findings get here is {@link Finding#isAdequacyGap}'s answer and not
          * this method's.
+         *
+         * @param places the sites each behavior's rules are read against, filled as they are first
+         *               asked for and shared by every warning this build makes
          */
-        private static Report warning(Db db, String module, Finding finding) {
+        private static Report warning(Db db, String module, Finding finding,
+                                      Map<String, DecisionRuleReading.Places> places) {
             About said = finding.about();
             souther.compiler.diag.Diagnostic.Builder built = pointedAt(placeOf(db, module, finding))
                     .say(switch (said) {
@@ -8318,9 +8325,13 @@ public final class Adequacy {
                 // The sentence above says only which behavior, so a rule whose conditions were
                 // dropped here would be a finding two of which a reader cannot act on.
                 case About.ARuleNoRowTakes(var behavior, var ruled) -> {
-                    Bodies.Elaborated checked = db.ask(new Bodies.Observable(module)).value();
-                    for (DecisionRuleReading read : DecisionRuleReading.of(ruled,
-                            checked == null ? CoverageSites.Plan.NONE : checked.plan(), behavior)) {
+                    DecisionRuleReading.Places sites = places.computeIfAbsent(behavior, _ -> {
+                        Bodies.Elaborated checked = db.ask(new Bodies.Observable(module)).value();
+                        return DecisionRuleReading.Places.of(
+                                checked == null ? CoverageSites.Plan.NONE : checked.plan(),
+                                behavior);
+                    });
+                    for (DecisionRuleReading read : DecisionRuleReading.of(ruled, sites)) {
                         said(db, built, read);
                     }
                 }
@@ -8520,18 +8531,10 @@ public final class Adequacy {
         private static <M extends ExampleMessage & Supporting> void inEachCall(
                 Db db, Diagnostic.Builder built, ExpansionLineage within,
                 Function<String, M> said) {
-            while (within instanceof ExpansionLineage.Expansion copy) {
-                ExpansionSite.Direct called = switch (copy.at()) {
-                    case ExpansionSite.Direct direct -> direct;
-                    case ExpansionSite.Supplied supplied -> supplied.application();
-                };
-                if (called instanceof ExpansionSite.Written(var origin)) {
-                    Citation at = Sites.appliedAt(db, origin).value();
-                    if (at != null) {
-                        label(built, at, said.apply(copy.expanded().name()));
-                    }
+            for (Sites.ACall call : Sites.callsThrough(db, within)) {
+                if (call.at() != null) {
+                    label(built, call.at(), said.apply(call.called()));
                 }
-                within = copy.within();
             }
         }
 

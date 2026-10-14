@@ -1,6 +1,7 @@
 package souther.compiler.diag.msg;
 
 import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.diag.Localizable;
 
 /** What an example row, the file it is written in, and the fakes it runs against are told. */
 public sealed interface ExampleMessage extends Message {
@@ -415,7 +416,7 @@ public sealed interface ExampleMessage extends Message {
             implements ExampleMessage, Supporting {}
 
     /** The same for an arm, which is named, so the call says which one. */
-    record TheRuleGoesThroughAnArmInThisCall(souther.compiler.diag.Localizable arm, String called)
+    record TheRuleGoesThroughAnArmInThisCall(Localizable arm, String called)
             implements ExampleMessage, Supporting {}
 
     /** A condition of the rule with nothing to send a reader to, so that a rule is never described
