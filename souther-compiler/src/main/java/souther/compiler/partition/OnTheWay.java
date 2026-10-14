@@ -179,6 +179,8 @@ public sealed interface OnTheWay {
         private final int hash;
 
         /**
+         * The condition {@code condition}, come out one of {@code alternatives}.
+         *
          * @param alternatives what each alternative asks, in the order they are kept; two or more
          * @param stated       the statement read, where one proposition says it
          */
@@ -217,9 +219,9 @@ public sealed interface OnTheWay {
 
         @Override
         public boolean equals(Object other) {
-            return this == other || other instanceof OneOf that && hash == that.hash
+            return this == other || (other instanceof OneOf that && hash == that.hash
                     && condition.equals(that.condition) && Objects.equals(anchor, that.anchor)
-                    && alternatives.equals(that.alternatives) && stated.equals(that.stated);
+                    && alternatives.equals(that.alternatives) && stated.equals(that.stated));
         }
 
         @Override

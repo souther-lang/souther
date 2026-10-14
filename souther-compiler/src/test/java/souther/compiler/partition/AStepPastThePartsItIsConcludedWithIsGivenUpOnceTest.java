@@ -8,6 +8,7 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyUnread;
+import souther.compiler.semantics.ConditionJoin;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,9 +45,13 @@ class AStepPastThePartsItIsConcludedWithIsGivenUpOnceTest {
     /** A statement on each of {@code applications} applications, each a truth of its own: that
      *  many parts and the one holding them. */
     private static Derivation onEach(int applications) {
+        return onEach("x", applications);
+    }
+
+    private static Derivation onEach(String named, int applications) {
         List<Derivation> each = new ArrayList<>();
         for (int i = 0; i < applications; i++) {
-            each.add(truth("x" + i));
+            each.add(truth(named + i));
         }
         return new Derivation.OnEachApplication(each);
     }
@@ -91,6 +96,26 @@ class AStepPastThePartsItIsConcludedWithIsGivenUpOnceTest {
 
         assertTrue(Proposition.stopsIn(past).contains(PAST_THE_PARTS),
                 () -> "stopped at the figure: " + Proposition.stopsIn(past));
+    }
+
+    /**
+     * A search from a node holds what it asks of a node and, where it is measured, that the node
+     * has nothing below: both are parts, so both are counted. Each within the figure, the two
+     * together past it.
+     */
+    @Test
+    void whatASearchSaysOfNothingBelowIsCountedWithWhatItAsksOfANode() {
+        int half = MOST / 2;
+        Derivation atANode = onEach("node", half);
+        Derivation searched = new Derivation.ATreeSearched(TermPath.of("t"), List.of("children"),
+                atANode, Optional.of(List.of(onEach("below", half))), truth("unfolded"),
+                ConditionJoin.EITHER);
+
+        assertInstanceOf(Proposition.OnAnApplication.class,
+                new Conclusion(Optional.empty()).of(atANode), "what it asks of a node is within");
+        Proposition.Unread past = assertInstanceOf(Proposition.Unread.class,
+                new Conclusion(Optional.empty()).of(searched));
+        assertEquals(PAST_THE_PARTS, past.why());
     }
 
     /** A reading asking again is handed the step given up, and not the statement it gave up. */

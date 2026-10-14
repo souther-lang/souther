@@ -147,12 +147,9 @@ public final class Conclusion {
         if (known != null) {
             return known;
         }
-        long out = 1 + switch (stated) {
-            case Proposition.All all -> partsIn(all.parts());
-            case Proposition.Any any -> partsIn(any.parts());
-            case Proposition.OnAnApplication applications -> partsIn(applications.each());
-            case Proposition.Some some -> partsIn(some.ofTheElement());
-            case Proposition.SomeReachable reached -> partsIn(reached.atANode());
+        // Its parts, and the statements a count or a sum in it is taken over, which a reader of the
+        // number walks as much as a part.
+        long out = 1 + partsIn(stated.partsHeld()) + switch (stated) {
             case Proposition.Compared compared -> switch (compared.relation()) {
                 case Relation.Affine affine -> {
                     long held = 0;
@@ -163,9 +160,11 @@ public final class Conclusion {
                 }
                 case Relation.Ordered _ -> 0;
             };
-            case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
-                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
-                 Proposition.Unread _, Proposition.Carried _ -> 0;
+            case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
+                 Proposition.Some _, Proposition.SomeReachable _, Proposition.Always _,
+                 Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
+                 Proposition.SameValue _, Proposition.LastToHold _, Proposition.Unread _,
+                 Proposition.Carried _ -> 0;
         };
         long kept = Math.min(out, PARTS.maximum() + 1L);
         shared.parts.put(stated, kept);

@@ -8,7 +8,7 @@ import souther.compiler.meaning.AnswerAsAnInput;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
-import souther.compiler.meaning.WhyUnread;
+import souther.compiler.observe.Figure;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import java.util.ArrayList;
@@ -445,42 +445,14 @@ public final class AnAnswerComposed {
     }
 
     /**
-     * The figure a part declined for {@code why} stopped at, or null where it stopped at none of
-     * this compiler's budgets.
-     *
-     * <p>Every reason named, so a reason added is placed here by whoever adds it: one that stops at
-     * a figure and is not said here would be a demand no value is written toward, with no figure
-     * for somebody to raise. How far a container is written out is a figure, and not one of these
-     * budgets, so it is none here.
+     * The budget a part declined for {@code why} stopped at, or null where it stopped at none of
+     * the composing stage's budgets — read off the figure the reason says it stopped at
+     * ({@link WhyNotTaken#figure}). How far a container is written out is a figure and no budget,
+     * and a value is not composed past it here.
      */
     private static CompositionBudget stoppedAt(WhyNotTaken why) {
-        return switch (why) {
-            case WhyNotTaken.MoreWaysThanAreRead _ -> CompositionBudget.READINGS_OF_ONE_CONDITION;
-            case WhyNotTaken.MoreAlternativesThanAreTried _ ->
-                    CompositionBudget.ALTERNATIVES_A_PATH_TRIES;
-            case WhyNotTaken.OutsideDomain _ -> null;
-            case WhyNotTaken.MeaningUnread(WhyUnread unread) -> switch (unread) {
-                case WhyUnread.MoreReadingsThanAreMade _ ->
-                        CompositionBudget.READINGS_OF_ONE_CONDITION;
-                case WhyUnread.MoreTotalReadingsThanAreMade _ ->
-                        CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION;
-                case WhyUnread.MorePartsThanAreConcluded _ ->
-                        CompositionBudget.PARTS_A_DERIVATION_CONCLUDES;
-                case WhyUnread.AtNoPosition _, WhyUnread.NoMeasureOfItsSize _,
-                     WhyUnread.OutsideTheLinearFragment _, WhyUnread.NotArithmetic _,
-                     WhyUnread.ANumberNotHeld _, WhyUnread.NoNumberOnARun _,
-                     WhyUnread.TwoElementsOfOneContainer _, WhyUnread.NoLawFor _,
-                     WhyUnread.NoWordsFor _, WhyUnread.NotProvedOfItsBody _,
-                     WhyUnread.NoFormOfWhatItAnswers _,
-                     WhyUnread.ANumberOfWhatAnOperationAnswers _,
-                     WhyUnread.AClauseOfAnInvariant _, WhyUnread.AnInvariantNotReached _,
-                     WhyUnread.InACalledBody _, WhyUnread.WhatARecursiveHelperAnswers _,
-                     WhyUnread.MoreElementsThanAreWrittenOut _,
-                     WhyUnread.SeveralValuesNotGoneInto _,
-                     WhyUnread.CopiesStateDifferentThings _, WhyUnread.NotMetByTheReading _ ->
-                        null;
-            };
-        };
+        return why.figure().orElse(null) instanceof Figure.Budget(CompositionBudget budget)
+                ? budget : null;
     }
 
     /**

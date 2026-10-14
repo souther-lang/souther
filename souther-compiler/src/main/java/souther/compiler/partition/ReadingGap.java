@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.WrittenOutElements;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
@@ -8,13 +7,13 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RunSensitivity;
-import souther.compiler.observe.WorkFigure;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Why a reading of a number came to none.
@@ -215,30 +214,52 @@ public sealed interface ReadingGap {
      */
     record ReachNotRead(Why why) implements ReadingGap {
 
-        /** What kept what the way turns on from being read off the row. */
+        /**
+         * What kept what the way turns on from being read off the row.
+         *
+         * <p>A word for each reason that stops at a figure, each holding the reason it says. The
+         * figure is the reason's ({@link WhyUnread#figure}) and is not worked out here, so a word
+         * and the reason it says cannot name two figures.
+         */
         public enum Why {
 
             /** A part of it is one nothing read. */
-            A_PART_NOT_READ,
+            A_PART_NOT_READ(null),
 
             /** A part of it would be read once for more applications than a reading makes. */
-            MORE_READINGS_THAN_ARE_MADE,
+            MORE_READINGS_THAN_ARE_MADE(WhyUnread.PAST_THE_READINGS),
 
             /** A part of it would be read once more where the reading had made as many readings
              *  in all, along every way, as it makes. */
-            MORE_TOTAL_READINGS_THAN_ARE_MADE,
+            MORE_TOTAL_READINGS_THAN_ARE_MADE(WhyUnread.PAST_THE_TOTAL_READINGS),
 
             /** A part of it states, written out, more parts than a step of the reading is
              *  concluded with. */
-            MORE_PARTS_THAN_ARE_CONCLUDED,
+            MORE_PARTS_THAN_ARE_CONCLUDED(WhyUnread.PAST_THE_PARTS),
 
             /** A part of it is about a container holding more than a walk writes out. */
-            MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT,
+            MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT(WhyUnread.PAST_THE_ELEMENTS),
 
             /** It is no value the row writes: what a dependency answered, a case nothing here
              *  puts to a row, or an element of a container made of the input's in another order
              *  or of other elements. */
-            NO_VALUE_OF_THE_ROW
+            NO_VALUE_OF_THE_ROW(null);
+
+            private final WhyUnread says;
+
+            Why(WhyUnread says) {
+                this.says = says;
+            }
+
+            /** The reason that stopped at a figure this word says, or null where it says none. */
+            public WhyUnread says() {
+                return says;
+            }
+
+            /** The figure the part was declined at, or none. */
+            public Optional<Figure> figure() {
+                return says == null ? Optional.empty() : says.figure();
+            }
         }
 
         public ReachNotRead {
@@ -247,62 +268,39 @@ public sealed interface ReadingGap {
             }
         }
 
-        /** A part declined at how many readings are made, one way down or in all, at how many
-         *  parts a step states or at how far a container is written out, is one a run allowing
-         *  more may read. */
+        /** A part declined at a figure is one a run allowing more may read. */
         @Override
         public RunSensitivity runSensitivity() {
-            return switch (why) {
-                case MORE_READINGS_THAN_ARE_MADE, MORE_TOTAL_READINGS_THAN_ARE_MADE,
-                     MORE_PARTS_THAN_ARE_CONCLUDED, MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT ->
-                        RunSensitivity.MAY_CHANGE;
-                case A_PART_NOT_READ, NO_VALUE_OF_THE_ROW -> RunSensitivity.UNAFFECTED;
-            };
+            return why.figure().isPresent() ? RunSensitivity.MAY_CHANGE
+                    : RunSensitivity.UNAFFECTED;
         }
 
-        /** The figure each of the four a wider run may read past was declined at. Each is fixed
-         *  where it is declared, so the figure is the one there is. */
+        /** The figure a part a wider run may read past was declined at, which its reason says. */
         @Override
         public List<Figure> figures() {
-            return switch (why) {
-                case MORE_READINGS_THAN_ARE_MADE ->
-                        List.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure());
-                case MORE_TOTAL_READINGS_THAN_ARE_MADE ->
-                        List.of(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.figure());
-                case MORE_PARTS_THAN_ARE_CONCLUDED ->
-                        List.of(CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.figure());
-                case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> List.of(
-                        WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(WrittenOutElements.MOST_WALKED));
-                case A_PART_NOT_READ, NO_VALUE_OF_THE_ROW -> List.of();
-            };
+            return why.figure().map(List::of).orElseGet(List::of);
         }
 
-        /** Why a statement whose reading stopped at {@code unread} could not be read off a row, or
-         *  that it is no value of one where nothing in it stopped. */
+        /**
+         * Why a statement whose reading stopped at {@code unread} could not be read off a row, or
+         * that it is no value of one where nothing in it stopped.
+         *
+         * @throws IllegalStateException where {@code unread} stopped at a figure no word says, which
+         *                               would otherwise be said as a part no wider run reads
+         */
         public static ReachNotRead of(WhyUnread unread) {
-            return new ReachNotRead(switch (unread) {
-                case null -> Why.NO_VALUE_OF_THE_ROW;
-                case WhyUnread.MoreReadingsThanAreMade _ -> Why.MORE_READINGS_THAN_ARE_MADE;
-                case WhyUnread.MoreTotalReadingsThanAreMade _ ->
-                        Why.MORE_TOTAL_READINGS_THAN_ARE_MADE;
-                case WhyUnread.MorePartsThanAreConcluded _ -> Why.MORE_PARTS_THAN_ARE_CONCLUDED;
-                case WhyUnread.MoreElementsThanAreWrittenOut _ ->
-                        Why.MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT;
-                // Every other reason named, so one added that stops at a figure is placed here
-                // rather than said as a part nothing read with no figure to raise.
-                case WhyUnread.AtNoPosition _, WhyUnread.NoMeasureOfItsSize _,
-                     WhyUnread.OutsideTheLinearFragment _, WhyUnread.NotArithmetic _,
-                     WhyUnread.ANumberNotHeld _, WhyUnread.NoNumberOnARun _,
-                     WhyUnread.TwoElementsOfOneContainer _, WhyUnread.NoLawFor _,
-                     WhyUnread.NoWordsFor _, WhyUnread.NotProvedOfItsBody _,
-                     WhyUnread.NoFormOfWhatItAnswers _,
-                     WhyUnread.ANumberOfWhatAnOperationAnswers _,
-                     WhyUnread.AClauseOfAnInvariant _, WhyUnread.AnInvariantNotReached _,
-                     WhyUnread.InACalledBody _, WhyUnread.WhatARecursiveHelperAnswers _,
-                     WhyUnread.SeveralValuesNotGoneInto _,
-                     WhyUnread.CopiesStateDifferentThings _, WhyUnread.NotMetByTheReading _ ->
-                        Why.A_PART_NOT_READ;
-            });
+            if (unread == null) {
+                return new ReachNotRead(Why.NO_VALUE_OF_THE_ROW);
+            }
+            for (Why each : Why.values()) {
+                if (unread.equals(each.says())) {
+                    return new ReachNotRead(each);
+                }
+            }
+            if (unread.figure().isPresent()) {
+                throw new IllegalStateException("no word says a part stopped at " + unread);
+            }
+            return new ReachNotRead(Why.A_PART_NOT_READ);
         }
     }
 

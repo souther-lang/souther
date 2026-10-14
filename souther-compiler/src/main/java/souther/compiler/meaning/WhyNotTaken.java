@@ -1,8 +1,12 @@
 package souther.compiler.meaning;
 
+import souther.compiler.observe.Figure;
+import souther.compiler.partition.CompositionBudget;
+
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -25,6 +29,21 @@ import java.util.Set;
  * so none stands in for another.
  */
 public sealed interface WhyNotTaken {
+
+    /**
+     * The figure of this compiler's work taking the condition stopped at, or none where it stopped
+     * at none: the one place that says which, as {@link WhyUnread#figure} is for the reading.
+     */
+    default Optional<Figure> figure() {
+        return switch (this) {
+            case MeaningUnread(WhyUnread why) -> why.figure();
+            case MoreWaysThanAreRead _ ->
+                    Optional.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure());
+            case MoreAlternativesThanAreTried _ ->
+                    Optional.of(CompositionBudget.ALTERNATIVES_A_PATH_TRIES.figure());
+            case OutsideDomain _ -> Optional.empty();
+        };
+    }
 
     /**
      * Why a reader declined all of {@code declined} without asking its parts: {@code because}, and

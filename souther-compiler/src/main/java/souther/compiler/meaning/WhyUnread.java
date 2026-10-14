@@ -3,13 +3,18 @@ package souther.compiler.meaning;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.NonAffineOperation;
+import souther.compiler.inputs.WrittenOutElements;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.observe.Figure;
+import souther.compiler.observe.WorkFigure;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.types.ValueName;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Why part of a condition was read as nothing.
@@ -31,6 +36,51 @@ import java.util.Objects;
  * every reader that says it in its own words has to say.
  */
 public sealed interface WhyUnread {
+
+    /** A part read more times than the reading of one condition makes along one way down. */
+    WhyUnread PAST_THE_READINGS = new MoreReadingsThanAreMade();
+
+    /** A part read once more where the reading had made as many readings in all as it makes. */
+    WhyUnread PAST_THE_TOTAL_READINGS = new MoreTotalReadingsThanAreMade();
+
+    /** A part whose step states more parts, written out, than a step is concluded with. */
+    WhyUnread PAST_THE_PARTS = new MorePartsThanAreConcluded();
+
+    /** A part about a container holding more than a walk writes out. */
+    WhyUnread PAST_THE_ELEMENTS = new MoreElementsThanAreWrittenOut();
+
+    /**
+     * The figure of this compiler's work the part stopped at, or none where it stopped at none.
+     *
+     * <p>A reason that stops at a figure holds nothing beside it, since the figure is fixed where it
+     * is declared, so each is one value, made above: a reader's word for one holds that value as
+     * what it says, and makes no reason of its own.
+     *
+     * <p>The one place that says which. A reader that says a part stopped at a figure — what a
+     * report owes, what a wider run may read past, which budget a composer names — asks this, so a
+     * reason that stops at a figure is one every such reader says the figure of. Each reader
+     * telling the reasons apart for itself, a reason added was one of them said as a part no
+     * further reading would read.
+     */
+    default Optional<Figure> figure() {
+        return switch (this) {
+            case MoreReadingsThanAreMade _ ->
+                    Optional.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure());
+            case MoreTotalReadingsThanAreMade _ ->
+                    Optional.of(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.figure());
+            case MorePartsThanAreConcluded _ ->
+                    Optional.of(CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.figure());
+            case MoreElementsThanAreWrittenOut _ -> Optional.of(
+                    WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(WrittenOutElements.MOST_WALKED));
+            case AtNoPosition _, NoMeasureOfItsSize _, OutsideTheLinearFragment _,
+                 NotArithmetic _, ANumberNotHeld _, NoNumberOnARun _,
+                 TwoElementsOfOneContainer _, NoLawFor _, NoWordsFor _, NotProvedOfItsBody _,
+                 NoFormOfWhatItAnswers _, ANumberOfWhatAnOperationAnswers _,
+                 AClauseOfAnInvariant _, AnInvariantNotReached _, InACalledBody _,
+                 WhatARecursiveHelperAnswers _, SeveralValuesNotGoneInto _,
+                 CopiesStateDifferentThings _, NotMetByTheReading _ -> Optional.empty();
+        };
+    }
 
     /** What a part of a condition is about stands at no position of the input. */
     record AtNoPosition(Place what) implements WhyUnread {

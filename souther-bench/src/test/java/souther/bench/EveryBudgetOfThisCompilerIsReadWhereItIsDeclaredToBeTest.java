@@ -184,11 +184,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/ElementsWrittenAlike$Choices;",
                     "says the figure the walk stopped at beside the ways it looked along, which"
                             + " the way composed as it stands says of what it wrote alike"),
-            Map.entry("souther.compiler.partition.AnAnswerComposed#stoppedAt("
-                            + "Lsouther/compiler/meaning/WhyNotTaken;)"
-                            + "Lsouther/compiler/partition/CompositionBudget;",
-                    "names the figure each part the reading gave up stopped at, which the ways"
-                            + " an answer is composed along say they stopped at"),
             Map.entry("souther.compiler.partition.CardinalityComposer#handingOn("
                             + "Ljava/util/List;Ljava/util/List;Ljava/util/List;"
                             + "Lsouther/compiler/partition/NumericSet;"
@@ -630,10 +625,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Collection;)"
                             + "Lsouther/compiler/partition/Generator$UnresolvedCombination$Reason;",
                     "the word a search stopped by these comes back with"),
-            Map.entry("souther.compiler.inputs.BlockReason$RuleReadingStopped#figures()"
-                            + "Ljava/util/List;",
-                    "the figure a statement read more times than are made stopped at, handed to"
-                            + " whoever is told the reason"),
             Map.entry("souther.compiler.report.Reasons#said("
                             + "Lsouther/compiler/publish/CanonicalSelection;)Ljava/lang/String;",
                     "what a figure is called where a reader meets one"),
@@ -644,12 +635,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.query.EstablishmentGap$Composition#runSensitivity()"
                             + "Lsouther/compiler/observe/RunSensitivity;",
                     "asks each figure of a gap whether a wider run goes past it"),
-            // The figure a reading declined at, said where the reading says a wider run may read
-            // past it: fixed where it is declared, so the gap names it rather than carrying it.
-            Map.entry("souther.compiler.partition.ReadingGap$ReachNotRead#figures()"
-                            + "Ljava/util/List;",
-                    "names the figure a part was declined at, for a reader told a wider run may"
-                            + " read past it"),
             // A budget as the figure a reader is told stopped something: what it is called, what
             // it counts and what it stands at, read off the budget and handed on with it.
             Map.entry("souther.compiler.observe.Figure$Budget#name()Ljava/lang/String;",
@@ -668,6 +653,15 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.query.Weakening#figures()Ljava/util/List;",
                     "names the budget a decision's reading stopped at, for a reader told a wider"
                             + " run may read past it"),
+            // Which figure each reason a part was not read or a condition not taken in stopped at,
+            // said once for every reader that names the figure: a gap on the way, a rule that
+            // drew no line, a composer of an answer.
+            Map.entry("souther.compiler.meaning.WhyUnread#figure()Ljava/util/Optional;",
+                    "the figure each reason a part was not read stopped at, which every reader"
+                            + " naming the figure reads"),
+            Map.entry("souther.compiler.meaning.WhyNotTaken#figure()Ljava/util/Optional;",
+                    "the figure each reason a condition was not taken in stopped at, the same"
+                            + " way"),
             Map.entry("souther.compiler.report.AdequacyReport#whyDeclined("
                             + "Lsouther/compiler/meaning/WhyNotTaken;)Ljava/lang/String;",
                     "what the figure a path stopped taking a disjunction at counts, in the words"

@@ -47,7 +47,8 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
      */
     private static final int WITHIN = 31 - Integer.numberOfLeadingZeros(MOST + 2);
 
-    private static String model(int calls) {
+    /** A chain of {@code calls} calls of the helper, each on what the call before it left. */
+    static String model(int calls) {
         List<String> caps = new ArrayList<>();
         List<String> takes = new ArrayList<>();
         List<String> fills = new ArrayList<>();
@@ -107,40 +108,21 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
     }
 
     private static List<WhyUnread> whysIn(Proposition stated) {
-        List<WhyUnread> out = new ArrayList<>();
-        whysIn(stated, out);
-        return out;
+        return Proposition.stopsIn(stated);
     }
 
-    private static void whysIn(Proposition stated, List<WhyUnread> out) {
-        switch (stated) {
-            case Proposition.Unread unread -> out.add(unread.why());
-            case Proposition.All all -> all.parts().forEach(part -> whysIn(part, out));
-            case Proposition.Any any -> any.parts().forEach(part -> whysIn(part, out));
-            case Proposition.OnAnApplication on -> on.each().forEach(each -> whysIn(each, out));
-            case Proposition.Some some -> whysIn(some.ofTheElement(), out);
-            default -> { }
-        }
+    /** The parts {@code stated} comes to written out, each as many times as it is held. */
+    private static long partsIn(Proposition stated) {
+        return 1 + stated.partsHeld().stream()
+                .mapToLong(ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest::partsIn)
+                .sum();
     }
 
-    private static int partsIn(Proposition stated) {
-        return switch (stated) {
-            case Proposition.All all -> 1 + all.parts().stream()
-                    .mapToInt(ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest::partsIn)
-                    .sum();
-            case Proposition.Any any -> 1 + any.parts().stream()
-                    .mapToInt(ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest::partsIn)
-                    .sum();
-            default -> 1;
-        };
-    }
-
-    private static int largest(Read read) {
+    private static long largest(Read read) {
         return read.stated().stream()
-                .mapToInt(ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest::partsIn)
+                .mapToLong(ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest::partsIn)
                 .max().orElseThrow();
     }
-
 
     @Test
     void withinTheFigureNoConditionIsGivenUpForIt() {
