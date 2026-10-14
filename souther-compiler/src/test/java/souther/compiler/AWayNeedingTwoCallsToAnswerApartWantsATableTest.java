@@ -8,6 +8,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
 import souther.compiler.query.RuleSearch;
 import souther.compiler.query.RuleSettlement;
+import souther.compiler.query.SettledAt;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
@@ -51,12 +52,12 @@ class AWayNeedingTwoCallsToAnswerApartWantsATableTest {
         assertEquals(3, pick.ruleSettlements().size(),
                 () -> "the first call above five, the second, and neither: "
                         + pick.ruleSettlements());
-        assertTrue(pick.ruleSettlements().values().stream()
+        assertTrue(pick.ruleSettlements().values().stream().map(SettledAt::settlement)
                         .anyMatch(settled -> reasons(settled).contains(
                                 Generator.UnresolvedCombination.Reason.A_TABLE_IS_WHAT_THIS_NEEDS)),
                 () -> "the way through the two calls answering apart wants a table: "
                         + pick.ruleSettlements());
-        assertFalse(pick.ruleSettlements().values().stream()
+        assertFalse(pick.ruleSettlements().values().stream().map(SettledAt::settlement)
                         .anyMatch(settled -> settled.requirement()
                                 instanceof RuleRequirement.Excluded),
                 () -> "and no way is one the model rules out: " + pick.ruleSettlements());

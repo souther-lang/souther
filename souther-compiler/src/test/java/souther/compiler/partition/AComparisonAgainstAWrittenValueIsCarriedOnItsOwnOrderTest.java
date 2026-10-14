@@ -280,7 +280,8 @@ class AComparisonAgainstAWrittenValueIsCarriedOnItsOwnOrderTest {
 
         List<OnTheWay> stating(boolean holding) {
             return ReachingCuts.stating(Condition.of(body, reads, rules.symbols(),
-                    rules.newtypes(), new ConditionNumbering(module, behavior)), read, holding,
+                    rules.newtypes(), new ConditionNumbering(module, behavior,
+                            ConditionOccurrence.Reading.DIVIDING)), read, holding,
                     WhatConditionsState.of(read));
         }
     }

@@ -1,6 +1,8 @@
 package souther.compiler.query;
 
 import souther.compiler.check.CoverageObligation;
+import souther.compiler.partition.OnTheWay;
+import souther.compiler.types.ModelOccurrence;
 import souther.compiler.diag.Citation;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ReadingPolicy;
@@ -93,6 +95,7 @@ final class Coverages {
                        souther.compiler.inputs.Quantities reading,
                        java.util.Map<souther.compiler.partition.ConditionOccurrence,
                                souther.compiler.diag.Citation> conditionsMet,
+                       Map<OnTheWay, Set<ModelOccurrence>> saidAt,
                        Map<Integer, Citation> rulesReachedAt) {}
 
     /**
@@ -212,6 +215,9 @@ final class Coverages {
                 // not inside it. A report points at a condition and an answer says which condition
                 // it is, and the two are kept apart so that moving one leaves the other alone.
                 guards.conditionsMet(),
+                // And which calls of a helper put each entry on a way, so a sentence about what a
+                // search went without names the calls it was met at.
+                guards.saidAt(),
                 // And the same for the rules it places itself, which is every rule written where
                 // this compilation holds no file to open.
                 reaches.reachedAt());
@@ -245,7 +251,8 @@ final class Coverages {
         // question says, and where it says it is what the reading got to rather than what the fork
         // is about.
         sets.forks().forEach(each ->
-                each.filed().forEach((at, why) -> found.unclassified(each.cited(), at, why)));
+                each.filed().forEach((at, why) ->
+                        found.unclassified(each.cited(), List.of(), at, why)));
         return clauses.noLine().and(guards.noLine()).and(filed.noLine()).and(found.found());
     }
 
@@ -964,7 +971,7 @@ final class Coverages {
                         : item);
             }
             out.add(new BorderAssessment(border.border(), items, border.beside(),
-                    tellingApart(border, search)));
+                    tellingApart(border, search), border.readAt()));
         }
         return new LineReadings(out);
     }
@@ -1696,12 +1703,17 @@ final class Coverages {
         for (DomainPoint point : a.items().keySet()) {
             kept.put(point, together(a.at(point), b.at(point)));
         }
+        List<ModelOccurrence> readAt = new ArrayList<>(a.readAt());
+        b.readAt().stream().filter(copy -> !readAt.contains(copy)).forEach(readAt::add);
         return new BorderAssessment(a.border(), kept, besides(a.beside(), b.beside()),
                 // Both readings' searches and neither standing for the other. A row is composed in
                 // one reading's region and at the positions that reading names, so the reading
                 // travels with it — folded to one here, a row would arrive beside the other
                 // reading's line and its input would be read at positions that line has none of.
-                a.toldApart().and(b.toldApart()));
+                a.toldApart().and(b.toldApart()),
+                // And both readings' copies, which is what tells the calls of a helper that read
+                // one line apart.
+                readAt);
     }
 
     /**

@@ -603,6 +603,12 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
         return authoredLine().declaredLine();
     }
 
+    /** The copy of the comparison this line was read at, where it was read at one. */
+    @Override
+    default List<ModelOccurrence> readAt() {
+        return comparisonAt().map(List::of).orElse(List.of());
+    }
+
     /**
      * Which comparison a row has to get an answer out of, for a rule that meeting takes more than
      * writing the value.

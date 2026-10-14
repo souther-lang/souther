@@ -23,7 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class ACutIsProvedEmptyOnlyWhereEveryWayOfWritingItIsTest {
 
     private static final OnTheWay.TakenIn CUT = new OnTheWay.TakenIn(
-            new ConditionReportAnchor.WhereTheReadingMetIt("m", new ConditionOccurrence("f", 0)),
+            new ConditionReportAnchor.WhereTheReadingMetIt("m",
+                    new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 0)),
             new RowDemand.Relational(new TakenConstraint.Affine(
                     LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("r").then("deadline"))),
                     Rel.GE)));

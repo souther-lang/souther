@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.core.Core;
+import souther.compiler.diag.Citation;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Paths;
 import souther.compiler.flow.ValueArrivals;
@@ -10,9 +11,12 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.Proposition;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The rules of the decision one body states.
@@ -45,14 +49,23 @@ import java.util.Map;
  * @param found       the rules, in the order the reading holds the ways, each with what a run down
  *                    its path would be seen doing
  * @param enumeration whether every way was written down
+ * @param metAt       where this reading met each condition it places itself, which is what a
+ *                    report about one of them is sent to
+ *                    ({@link ConditionReportAnchor.WhereTheReadingMetIt}). This reading's own: a
+ *                    condition is named by the reading that met it, and the same name from
+ *                    another reading is another condition
  */
-public record DecisionReading(String behavior, List<Ruled> found, Enumeration enumeration) {
+public record DecisionReading(String behavior, List<Ruled> found, Enumeration enumeration,
+                              Map<ConditionOccurrence, Citation> metAt) {
 
     /** The figure this reading stops at, read here rather than written here. */
     private static final CompositionBudget PATHS_READ = CompositionBudget.PATHS_OF_A_DECISION_READ;
 
     public DecisionReading {
         found = List.copyOf(found);
+        // In the order the reading met them, which is an order nobody reads and the one a copy
+        // that kept none would replace with the run's.
+        metAt = Collections.unmodifiableMap(new LinkedHashMap<>(metAt));
     }
 
     /**
@@ -62,23 +75,54 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
      * where they are written. Held inside the rule, one body stating one rule in two places would
      * state two.
      *
-     * @param shownBy every condition the path consulted, in the order it met them, said as what a
-     *                run through it would be seen doing
-     * @param states  the same conditions in the words a composer of a row works from, which is what
-     *                a row standing in this rule would have to satisfy of the input
-     * @param demands what the same conditions ask of the answers a row stands the dependencies in
-     *                with, which is the other half of what such a row has to be. Two accounts
-     *                because a row writes at a position and stands a dependency in, and what a
-     *                search may assume about the one is not what it may pin the other to
-     * @param whole   whether every condition on the way was one this reading has words for. A path
-     *                that is not is a rule this compiler read less of than the body states, which is
-     *                a weakening of the measurement rather than a rule the body does not have
+     * @param steps every condition the path consulted, in the order it met them, each with what it
+     *              states and asks. What the way is said as, states and asks is read off these
+     * @param whole whether every condition on the way was one this reading has words for. A path
+     *              that is not is a rule this compiler read less of than the body states, which is
+     *              a weakening of the measurement rather than a rule the body does not have
      */
-    public record Ruled(DecisionRule rule, List<ShownBy> shownBy, WayToTheBorder states,
-                        AnswersDemanded demands, boolean whole) {
+    public record Ruled(DecisionRule rule, List<RuleStep> steps, boolean whole) {
 
         public Ruled {
-            shownBy = List.copyOf(shownBy);
+            steps = List.copyOf(steps);
+        }
+
+        /** Every condition the path consulted, said as what a run through it would be seen
+         *  doing. */
+        public List<ShownBy> shownBy() {
+            return steps.stream().map(RuleStep::shown).toList();
+        }
+
+        /** The same conditions in the words a composer of a row works from, which is what a row
+         *  standing in this rule would have to satisfy of the input. */
+        public WayToTheBorder states() {
+            return new WayToTheBorder(steps.stream()
+                    .flatMap(each -> each.states().stream()).toList());
+        }
+
+        /**
+         * What the same conditions ask of the answers a row stands the dependencies in with, which
+         * is the other half of what such a row has to be.
+         *
+         * <p>Two accounts because a row writes at a position and stands a dependency in, and what a
+         * search may assume about the one is not what it may pin the other to.
+         */
+        public AnswersDemanded demands() {
+            List<AnswerDemand> stated = new ArrayList<>();
+            List<DemandGap.Unstated> declined = new ArrayList<>();
+            Set<ConditionOccurrence> takenUp = new LinkedHashSet<>();
+            for (RuleStep each : steps) {
+                stated.addAll(each.demands().stated());
+                declined.addAll(each.demands().declined());
+                takenUp.addAll(each.demands().takenUp());
+            }
+            return stated.isEmpty() && declined.isEmpty()
+                    ? AnswersDemanded.NOTHING : new AnswersDemanded(stated, declined, takenUp);
+        }
+
+        /** The conditions of this way whose statements or demands {@code gap} is about. */
+        public List<RuleStep> stepsThatSaid(ConditionGap gap) {
+            return steps.stream().filter(each -> each.said(gap)).toList();
         }
     }
 
@@ -194,7 +238,8 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
         Core body = analysis.core();
         // The conditions of this body take their names here, and one register serves every scope: a
         // condition met under a binding and the same condition met outside it are one condition.
-        ConditionNumbering numbering = new ConditionNumbering(read.symbols().module(), behavior);
+        ConditionNumbering numbering = new ConditionNumbering(read.symbols().module(), behavior,
+                ConditionOccurrence.Reading.DECIDING);
         // What a build of a value comes to is what its template does: a value that never answers
         // leaves nothing after its build reached. What is inside the template is not counted as a
         // way of this body — a value takes no input, so it is no rule a row can be written for.
@@ -205,14 +250,14 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
                 analysis.templates()::bodyOf);
         if (!(arrivals.waysAt(body) instanceof Paths.Held<DecisionPath> held)) {
             return new DecisionReading(behavior, List.of(),
-                    new Enumeration.StoppedAtAFigure(PATHS_READ));
+                    new Enumeration.StoppedAtAFigure(PATHS_READ), Map.of());
         }
         List<Ruled> found = new ArrayList<>();
         for (Arrival<DecisionPath> way : held.arrivals()) {
-            found.add(new Ruled(way.path().rule(), way.path().shownBy(), way.path().states(),
-                    way.path().demands(), way.isComplete()));
+            found.add(new Ruled(way.path().rule(), way.path().steps(), way.isComplete()));
         }
-        return new DecisionReading(behavior, found, new Enumeration.Complete());
+        return new DecisionReading(behavior, found, new Enumeration.Complete(),
+                numbering.metAt());
     }
 
     /** What this body's conditions decide, made once for the whole reading of it. */

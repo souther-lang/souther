@@ -199,13 +199,13 @@ sealed interface Condition {
             if (joined != null) {
                 // The whole node is named before its operands are, so that the order the names come
                 // in is the order a reader meets the conditions in.
-                ConditionOccurrence met = numbering.met();
+                ConditionOccurrence met = numbering.met(binary.occurrence());
                 made = new Joined(met,
                         numbering.anchorOf(binary.origin(), binary.pos(), met), joined,
                         of(binary.left(), reads, symbols, newtypes, numbering),
                         of(binary.right(), reads, symbols, newtypes, numbering), binary, reads);
             } else if (comparison != null) {
-                ConditionOccurrence met = numbering.met();
+                ConditionOccurrence met = numbering.met(binary.occurrence());
                 made = new Compares(comparison, binary.occurrence(), met,
                         numbering.anchorOf(binary.origin(), binary.pos(), met), reads);
             }

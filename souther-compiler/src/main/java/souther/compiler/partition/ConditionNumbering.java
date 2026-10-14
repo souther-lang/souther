@@ -5,12 +5,18 @@ import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.sites.WrittenCondition;
+import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The conditions one reading of a body met, and the name each of them goes by.
@@ -76,28 +82,42 @@ final class ConditionNumbering {
 
     private final String module;
     private final String behavior;
+    /** Which reading of the body this is, which the names it hands out say beside their number. */
+    private final ConditionOccurrence.Reading reading;
     private final Map<Site, Condition> read = new HashMap<>();
     /** The name each arm of each fork goes by. Beside {@link #read} because an arm is not a fold of
      *  a subtree: what is met is the fork and which of its arms, and there is no node of its own to
      *  be at. A {@code match} and an attempt both, since an arm of either is met the same way. */
     private final Map<Core, Map<Integer, ConditionOccurrence>> arms = new IdentityHashMap<>();
     private final Map<ConditionOccurrence, Citation> metAt;
+    /** Which construct of the model, in which copy of it, each condition named here is. Shared with
+     *  every place this reading reads, as the names are. */
+    private final Map<ConditionOccurrence, ModelOccurrence> stands;
+    /** The copies each entry put on a way was said by, shared with every place this reading
+     *  reads. */
+    private final Map<OnTheWay, Set<ModelOccurrence>> saidAt;
     /** How many names this reading has handed out, shared with every place it reads. */
     private final int[] next;
     /** What this reading names inside the body of each call of a recursive helper it reads, by the
      *  call, shared with every place it reads. */
     private final Map<CallContext, ConditionNumbering> within;
 
-    ConditionNumbering(String module, String behavior) {
-        this(module, behavior, new LinkedHashMap<>(), new int[1], new HashMap<>());
+    ConditionNumbering(String module, String behavior, ConditionOccurrence.Reading reading) {
+        this(module, behavior, reading, new LinkedHashMap<>(), new LinkedHashMap<>(),
+                new LinkedHashMap<>(), new int[1], new HashMap<>());
     }
 
-    private ConditionNumbering(String module, String behavior,
-                               Map<ConditionOccurrence, Citation> metAt, int[] next,
+    private ConditionNumbering(String module, String behavior, ConditionOccurrence.Reading reading,
+                               Map<ConditionOccurrence, Citation> metAt,
+                               Map<ConditionOccurrence, ModelOccurrence> stands,
+                               Map<OnTheWay, Set<ModelOccurrence>> saidAt, int[] next,
                                Map<CallContext, ConditionNumbering> within) {
         this.module = module;
         this.behavior = behavior;
+        this.reading = reading;
         this.metAt = metAt;
+        this.stands = stands;
+        this.saidAt = saidAt;
         this.next = next;
         this.within = within;
     }
@@ -113,7 +133,8 @@ final class ConditionNumbering {
     ConditionNumbering within(CallContext context) {
         return context.equals(CallContext.OF_THE_BODY) ? this
                 : within.computeIfAbsent(context,
-                        _ -> new ConditionNumbering(module, behavior, metAt, next, within));
+                        _ -> new ConditionNumbering(module, behavior, reading, metAt, stands,
+                                saidAt, next, within));
     }
 
     /** What this reading already made of the condition at {@code at} under {@code reads}, or null
@@ -127,9 +148,29 @@ final class ConditionNumbering {
         read.put(new Site(at, reads), condition);
     }
 
-    /** The name of the condition being recognised now. */
+    /** The name of the condition being recognised now, where no construct of the model is it. */
     ConditionOccurrence met() {
-        return new ConditionOccurrence(behavior, next[0]++);
+        return new ConditionOccurrence(behavior, reading, next[0]++);
+    }
+
+    /**
+     * The name of the condition being recognised now, it being {@code written}.
+     *
+     * <p>Which copy of the model's construct it is, is filed in the same act. A helper's condition
+     * is one construct written once and met once per call, and the names already tell those apart;
+     * what a reader is shown to tell them apart by is the call each copy was made at, and that is
+     * the occurrence's to say. Paired with a name anywhere else, it would be this correspondence
+     * made a second time by something that had not done the recognising.
+     *
+     * <p>Nothing is filed where the model states nothing at the construct — one the source never
+     * wrote, or one inside the language's own operations ({@link ModelOccurrence#statedAt}).
+     */
+    ConditionOccurrence met(ConstructOccurrence written) {
+        ConditionOccurrence met = met();
+        if (written.isWritten()) {
+            ModelOccurrence.statedAt(written).ifPresent(stated -> stands.put(met, stated));
+        }
+        return met;
     }
 
     /**
@@ -142,10 +183,10 @@ final class ConditionNumbering {
      * two ways, and nothing downstream could tell the two apart. So it is raised here rather than
      * resolved by keeping one of them.
      */
-    ConditionOccurrence metEntering(Core fork, int part) {
+    ConditionOccurrence metEntering(Core fork, ConstructOccurrence written, int part) {
         Map<Integer, ConditionOccurrence> named =
                 arms.computeIfAbsent(fork, _ -> new LinkedHashMap<>());
-        ConditionOccurrence already = named.putIfAbsent(part, met());
+        ConditionOccurrence already = named.putIfAbsent(part, met(written));
         if (already != null) {
             throw new IllegalStateException(
                     "this reading has already named arm " + part + " of a fork: " + already);
@@ -191,6 +232,51 @@ final class ConditionNumbering {
 
     /** Where this reading met each condition it places itself. */
     Map<ConditionOccurrence, Citation> metAt() {
-        return Map.copyOf(metAt);
+        return Collections.unmodifiableMap(new LinkedHashMap<>(metAt));
+    }
+
+    /**
+     * {@code entries}, filed as what {@code condition} put on the way.
+     *
+     * <p>Filed by the entry and under the copy of the condition, because an entry is a value and
+     * two conditions may put one value on the way — a helper called twice with the same arguments
+     * asks one thing of a row twice, and that is one thing to compose against
+     * ({@link OnTheWay.TakenIn}). What a reader is owed about such an entry is every call it was
+     * asked at. Inside an alternative as much as beside one.
+     *
+     * @return {@code entries}, so a walk files what it puts on the way where it puts it
+     */
+    List<OnTheWay> said(ConditionOccurrence condition, List<OnTheWay> entries) {
+        ModelOccurrence copy = stands.get(condition);
+        if (copy != null) {
+            file(entries, copy);
+        }
+        return entries;
+    }
+
+    /** The same, for entering an arm of a fork written as {@code fork}. */
+    List<OnTheWay> saidEntering(ConstructOccurrence fork, List<OnTheWay> entries) {
+        if (fork.isWritten()) {
+            ModelOccurrence.statedAt(fork).ifPresent(copy -> file(entries, copy));
+        }
+        return entries;
+    }
+
+    private void file(List<OnTheWay> entries, ModelOccurrence copy) {
+        for (OnTheWay each : entries) {
+            saidAt.computeIfAbsent(each, _ -> new LinkedHashSet<>()).add(copy);
+            if (each instanceof OnTheWay.OneOf several) {
+                several.alternatives().forEach(one -> file(one, copy));
+            }
+        }
+    }
+
+    /** The copies of the model's constructs each entry this reading put on a way was said by, in
+     *  the order the walk met them. */
+    Map<OnTheWay, Set<ModelOccurrence>> saidAt() {
+        Map<OnTheWay, Set<ModelOccurrence>> out = new LinkedHashMap<>();
+        saidAt.forEach((entry, copies) ->
+                out.put(entry, Collections.unmodifiableSet(new LinkedHashSet<>(copies))));
+        return Collections.unmodifiableMap(out);
     }
 }

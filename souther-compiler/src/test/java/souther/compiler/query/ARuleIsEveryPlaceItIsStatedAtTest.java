@@ -115,15 +115,14 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
 
         /** {@code way} standing as a second place of {@code rule}. */
         static DecisionReading.Ruled under(DecisionRule rule, DecisionReading.Ruled way) {
-            return new DecisionReading.Ruled(rule, way.shownBy(), way.states(), way.demands(),
-                    way.whole());
+            return new DecisionReading.Ruled(rule, way.steps(), way.whole());
         }
 
         /** The body's reading with {@code more} beside its own ways. */
         DecisionReading with(DecisionReading.Ruled... more) {
             List<DecisionReading.Ruled> found = new ArrayList<>(read.found());
             found.addAll(Arrays.asList(more));
-            return new DecisionReading(read.behavior(), found, read.enumeration());
+            return new DecisionReading(read.behavior(), found, read.enumeration(), read.metAt());
         }
     }
 
@@ -192,23 +191,55 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
      */
     @Test
     void aRuleIsExcludedOnlyWhereEveryPlaceIs() {
-        RuleSettlement excluded = RuleSettlement.provedNothingTakesIt(
+        DecisionReading.Ruled at = compiled().answering();
+        SettledAt excluded = new SettledAt(at, RuleSettlement.provedNothingTakesIt(
                 RuleSearch.CameToNothing.of(List.of(new Generator.UnresolvedCombination(
                         List.of("a rule of the decision"),
-                        Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE))));
-        RuleSettlement elsewhere = RuleSettlement.of(
+                        Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE)))));
+        SettledAt elsewhere = new SettledAt(at, RuleSettlement.of(
                 new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
-                CompositionAccount.NOTHING);
+                CompositionAccount.NOTHING));
 
         assertInstanceOf(RuleRequirement.Unsettled.AComposedRowWentElsewhere.class,
                 Adequacy.DecisionSearch.acrossThePlaces(List.of(excluded, elsewhere))
-                        .requirement(), "one place a row may take settles nothing away");
+                        .settlement().requirement(),
+                "one place a row may take settles nothing away");
         assertInstanceOf(RuleRequirement.Unsettled.AComposedRowWentElsewhere.class,
                 Adequacy.DecisionSearch.acrossThePlaces(List.of(elsewhere, excluded))
-                        .requirement(), "whichever place was met first");
+                        .settlement().requirement(), "whichever place was met first");
         assertTrue(Adequacy.DecisionSearch.acrossThePlaces(List.of(excluded, excluded))
-                .requirement() instanceof RuleRequirement.Excluded);
+                .settlement().requirement() instanceof RuleRequirement.Excluded);
         assertNull(Adequacy.DecisionSearch.acrossThePlaces(Arrays.asList(excluded, null)),
                 "a place not searched for is not one the model leaves no row");
+    }
+
+    /**
+     * The rule's answer comes with the place it was searched at, whichever place that is and in
+     * whichever order the places were met.
+     *
+     * <p>What the search went without is a list of that place's conditions, so an answer carried
+     * apart from its place would be explained by the place a reader is shown — the first — while it
+     * was arrived at somewhere else.
+     */
+    @Test
+    void theAnswerOfARuleKeepsThePlaceItCameFrom() {
+        Compiled body = compiled();
+        DecisionReading.Ruled first = body.answering();
+        DecisionReading.Ruled second = Compiled.under(first.rule(), body.read().found().stream()
+                .filter(each -> !each.equals(first)).findFirst().orElseThrow());
+        SettledAt nothingTried = new SettledAt(first, RuleSettlement.nothingToTryWith(
+                new Generator.UnresolvedCombination(List.of("a rule of the decision"),
+                        Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
+                CompositionAccount.NOTHING));
+        SettledAt composed = new SettledAt(second, RuleSettlement.of(
+                new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
+                CompositionAccount.NOTHING));
+
+        assertEquals(composed, Adequacy.DecisionSearch.acrossThePlaces(
+                        List.of(nothingTried, composed)),
+                "the place that established more is the answer, and its place with it");
+        assertEquals(composed, Adequacy.DecisionSearch.acrossThePlaces(
+                        List.of(composed, nothingTried)),
+                "whichever place was met first");
     }
 }

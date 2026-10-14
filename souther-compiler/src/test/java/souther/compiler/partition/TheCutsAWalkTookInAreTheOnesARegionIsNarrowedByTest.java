@@ -106,7 +106,7 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
 
     /** A condition this reading met, named by nothing but which of them it is. */
     private static ConditionOccurrence met(int which) {
-        return new ConditionOccurrence("b", which);
+        return new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, which);
     }
 
     /** Where a report about it would point, which nothing here reads. */

@@ -65,7 +65,8 @@ class ATruthInsideAnAnswerIsWrittenWhereItIsComposedTest {
         return new AnswerDemand.ATruth(
                 new InjectedAnswer(Evaluations.of(
                         new ValueName.Behavior("example.answered", "look"), 0), List.of()),
-                new ConditionReportAnchor.WhereTheReadingMetIt("m", new ConditionOccurrence("b", 0)),
+                new ConditionReportAnchor.WhereTheReadingMetIt("m",
+                        new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0)),
                 OK, held);
     }
 

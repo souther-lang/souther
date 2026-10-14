@@ -1,6 +1,7 @@
 package souther.compiler.diag.msg;
 
 import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.diag.Localizable;
 
 /** What an example row, the file it is written in, and the fakes it runs against are told. */
 public sealed interface ExampleMessage extends Message {
@@ -401,6 +402,40 @@ public sealed interface ExampleMessage extends Message {
     /** A condition of the rule with nothing to send a reader to, so that a rule is never described
      *  by fewer conditions than it turns on. */
     record OneConditionOfTheRuleIsNotShown() implements ExampleMessage, Supporting {}
+
+    /**
+     * The call of a helper a condition of that rule is written in, where the rule takes the
+     * condition holding in the copy this call made.
+     *
+     * <p>Put at the call and not at the condition. A helper called more than once is one place in
+     * the source, and the conditions of its copies marked there alike are conditions a reader
+     * cannot tell apart; the call is what each copy was made at.
+     *
+     * @param called what was called
+     */
+    record TheRuleTakesItHoldingInThisCall(String called) implements ExampleMessage, Supporting {}
+
+    /** The same, where the rule takes it failing. */
+    record TheRuleTakesItFailingInThisCall(String called) implements ExampleMessage, Supporting {}
+
+    /** The same, of an arm of a fork the helper writes. */
+    record TheRuleGoesThroughItsArmInThisCall(Localizable arm, String called)
+            implements ExampleMessage, Supporting {}
+
+    /** A call the copy a condition of that rule stands in was made through, further out than the
+     *  call of the helper that writes the condition — or that call, where the condition has
+     *  nothing to say of its own. */
+    record TheRuleGoesThroughThisCall(String called) implements ExampleMessage, Supporting {}
+
+    /**
+     * The call of a helper a reading of that line was made in, where the helper writes the
+     * comparison that draws it.
+     *
+     * @param read   which reading, in the words the reading's note says it in
+     * @param called what was called
+     */
+    record TheLineIsReadInThisCall(String read, String called)
+            implements ExampleMessage, Supporting {}
 
     /**
      * No row is at one of the points a border owes, the rule that drew it having a name.

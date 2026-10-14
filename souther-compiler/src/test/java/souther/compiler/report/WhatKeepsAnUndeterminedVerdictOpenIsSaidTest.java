@@ -376,6 +376,6 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
                                                 new WrittenOwner.Body("m", "b"), 0, 0,
                                                 SourceConstruct.IF)),
                                 new RuleReportAnchor.ByTheModuleThatWroteIt()),
-                        new FilingCoordinate.AtPosition(TermPath.of(term)), why)));
+                        List.of(), new FilingCoordinate.AtPosition(TermPath.of(term)), why)));
     }
 }

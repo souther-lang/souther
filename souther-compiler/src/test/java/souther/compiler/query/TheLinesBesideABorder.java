@@ -122,14 +122,16 @@ final class TheLinesBesideABorder {
     /** And one holding a condition nothing turned into something a row can be held against. */
     static WayToTheBorder aWayWithAConditionNobodyRead() {
         return new WayToTheBorder(List.of(
-                new OnTheWay.Declined(new ConditionOccurrence("f", 0), anchor(),
+                new OnTheWay.Declined(
+                        new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 0),
+                        anchor(),
                         new WhyNotTaken.OutsideDomain(
                                 WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER))));
     }
 
     private static ConditionReportAnchor anchor() {
         return new ConditionReportAnchor.WhereTheReadingMetIt("m",
-                new ConditionOccurrence("f", 0));
+                new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 0));
     }
 
     /** What the rows are weighed by: {@code x} at minus two and {@code y} at one. */

@@ -116,7 +116,8 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
                 inputs.dependencies());
         InputReading read = inputs.reading(rules);
         return ReachingCuts.stating(Condition.of(body, reads, rules.symbols(), rules.newtypes(),
-                new ConditionNumbering(module, behavior)), read, holding,
+                new ConditionNumbering(module, behavior, ConditionOccurrence.Reading.DIVIDING)),
+                read, holding,
                 WhatConditionsState.of(read));
     }
 

@@ -172,7 +172,7 @@ class ANumberIsWrittenWhereTheReadingAnsweredForThePlaceTest {
     /** Which question a report about the condition under test would put. */
     private static final ConditionReportAnchor WHERE =
             new ConditionReportAnchor.WhereTheReadingMetIt("m",
-                    new ConditionOccurrence("b", 0));
+                    new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0));
 
     /** The condition the row is composed under, which a report about it would be the subject of. */
     private static OnTheWay.TakenIn onTheWayOver(TermPath at) {

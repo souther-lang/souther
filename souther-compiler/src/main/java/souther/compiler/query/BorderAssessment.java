@@ -10,7 +10,9 @@ import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.PointRole;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
+import souther.compiler.types.ModelOccurrence;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -44,9 +46,15 @@ import java.util.Set;
  * ({@link Border#roleOf}) and is asked of it rather than kept here: a role is what a point is and
  * two points of one border can be the same one, so a measure keyed on the role would hold one entry
  * where there are two.
+ *
+ * @param readAt the copies of the comparison that drew the line this was read at, in the order they
+ *               were read. One per call of a helper that writes it, and what a reader is shown to
+ *               tell those calls apart by — the comparison is one place for every call of it, and
+ *               {@link #border} is the first copy's alone where two copies were read as one line
  */
 public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
-                               AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart)
+                               AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart,
+                               List<ModelOccurrence> readAt)
         implements RuleCitations {
 
     /** One reading of a line, before anybody asked for a row that would tell it from the lines
@@ -54,6 +62,18 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
     public BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
                             AnotherLineTheRowsAllow beside) {
         this(border, items, beside, ARowTellingTheLinesApart.notAsked());
+    }
+
+    /**
+     * One reading of a line, read at the copy of the comparison {@code border} was drawn by.
+     *
+     * <p>Every reading starts as one copy's. Two of them are one line only where they cut one
+     * quantity at one place, and a line read at two calls of a helper is then read at both copies
+     * ({@link #readAt}).
+     */
+    public BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
+                            AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart) {
+        this(border, items, beside, toldApart, border.origin().readAt());
     }
 
     /**
@@ -193,6 +213,7 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
             agrees(border, point, items.get(point));
         }
         items = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(items));
+        readAt = List.copyOf(readAt);
     }
 
     /**

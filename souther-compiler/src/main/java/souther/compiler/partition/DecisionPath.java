@@ -125,40 +125,45 @@ final class DecisionPath {
         return rule.hashCode();
     }
 
-    /** What this path states about the input, which is what a search composes a row against. */
-    WayToTheBorder states() {
-        return new WayToTheBorder(consulted.stream()
-                .flatMap(each -> each.states().stream()).toList());
+    /**
+     * Each condition this path consulted, with what it states about the input and asks of the
+     * answers, in the order the walk met them.
+     *
+     * <p>What a rule's way states and asks is these one after another; kept apart here, so that what
+     * a search goes without can be traced to the condition that said it.
+     */
+    List<RuleStep> steps() {
+        return consulted.stream()
+                .map(each -> new RuleStep(each.shown(), each.states(), demands(each)))
+                .toList();
     }
 
     /**
-     * What this path asks of the answers a row stands the dependencies in with.
+     * What one consulted condition asks of the answers a row stands the dependencies in with.
      *
      * <p>Read here, where what a condition came out as and where a report about it asks for its
      * place are one entry. Worked out from the rule alone, a demand would have no anchor and the
      * one it was given would be whichever the two lists happened to line up at.
      */
-    AnswersDemanded demands() {
+    private static AnswersDemanded demands(Consulted each) {
         List<AnswerDemand> stated = new ArrayList<>();
         List<DemandGap.Unstated> declined = new ArrayList<>();
         Set<ConditionOccurrence> takenUp = new LinkedHashSet<>();
-        for (Consulted each : consulted) {
-            Asked asked = asked(each);
-            switch (asked) {
-                case Asked.Stated(var demand) -> stated.add(demand);
-                case Asked.NotStated(var why) ->
-                        declined.add(new DemandGap.Unstated(each.anchor(), why));
-                case Asked.OfTheInput _ -> { }
-            }
-            // Which condition it is, the way the reading names one, and taken off the walk's own
-            // entry for the same consulted condition. A decline is the only entry that names one,
-            // and it is the only entry this has anything to reconcile with: what the walk took in
-            // it took in, and there is nothing there for the answer side to answer for.
-            if (!(asked instanceof Asked.OfTheInput)) {
-                for (OnTheWay state : each.states()) {
-                    if (state instanceof OnTheWay.Declined left) {
-                        takenUp.add(left.condition());
-                    }
+        Asked asked = asked(each);
+        switch (asked) {
+            case Asked.Stated(var demand) -> stated.add(demand);
+            case Asked.NotStated(var why) ->
+                    declined.add(new DemandGap.Unstated(each.anchor(), why));
+            case Asked.OfTheInput _ -> { }
+        }
+        // Which condition it is, the way the reading names one, and taken off the walk's own entry
+        // for the same consulted condition. A decline is the only entry that names one, and it is
+        // the only entry this has anything to reconcile with: what the walk took in it took in, and
+        // there is nothing there for the answer side to answer for.
+        if (!(asked instanceof Asked.OfTheInput)) {
+            for (OnTheWay state : each.states()) {
+                if (state instanceof OnTheWay.Declined left) {
+                    takenUp.add(left.condition());
                 }
             }
         }
@@ -366,10 +371,5 @@ final class DecisionPath {
     /** The rule this path is, which is its columns and what each came out as. */
     DecisionRule rule() {
         return rule;
-    }
-
-    /** Where a run down this path is seen, one entry per column in the order it met them. */
-    List<ShownBy> shownBy() {
-        return consulted.stream().map(Consulted::shown).toList();
     }
 }

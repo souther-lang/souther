@@ -11,6 +11,8 @@ import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Classification;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.partition.BehaviorInputs;
+import souther.compiler.partition.ConditionOccurrence;
+import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.partition.Replacement;
@@ -96,6 +98,8 @@ import souther.compiler.partition.ReachingCuts;
 import souther.compiler.partition.Realization;
 import souther.compiler.partition.RowDemand;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ExpansionSite;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.WhereACaseOfAnInputIsOwed;
 import souther.compiler.partition.PointRole;
@@ -2271,6 +2275,7 @@ public final class Adequacy {
     record BodyDivided(souther.compiler.partition.Partitions.Partitioning geometry,
                        java.util.Map<souther.compiler.partition.ConditionOccurrence,
                                souther.compiler.diag.Citation> conditionsMet,
+                       Map<OnTheWay, Set<ModelOccurrence>> saidAt,
                        Map<Integer, Citation> rulesReachedAt) {}
 
     /**
@@ -2304,6 +2309,51 @@ public final class Adequacy {
                 souther.compiler.diag.Citation>> compute(Db db) {
             Answer<BodyDivided> read = db.ask(new Dividing(name, behavior));
             return read.present() ? Answer.of(read.value().conditionsMet()) : Answer.absent();
+        }
+    }
+
+    /**
+     * Which calls of a helper put each entry on a way the reading that divided one behavior walked.
+     *
+     * <p>Beside {@link ConditionsMet} and read off the same reading, for a reader writing a sentence
+     * about what a search went without: a condition of a helper is written at one place for every
+     * call of it, and the calls are what tell its copies apart.
+     */
+    public record EntriesSaidAt(String name, String behavior)
+            implements Key<Map<OnTheWay, Set<ModelOccurrence>>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<OnTheWay, Set<ModelOccurrence>>> compute(Db db) {
+            Answer<BodyDivided> read = db.ask(new Dividing(name, behavior));
+            return read.present() ? Answer.of(read.value().saidAt()) : Answer.absent();
+        }
+    }
+
+    /**
+     * Where the reading of one behavior's decision met each condition it places itself.
+     *
+     * <p>The same question as {@link ConditionsMet}, of the other reading that names conditions. The
+     * two count what they meet each in its own order, so a condition of this reading is placed by
+     * this reading or by nothing — asked of the other, its number would name some other condition.
+     */
+    public record ConditionsDecidedMet(String name, String behavior)
+            implements Key<Map<ConditionOccurrence, Citation>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<ConditionOccurrence, Citation>> compute(Db db) {
+            Map<String, DecisionEvidence> decisions = db.ask(new Decides(name)).value();
+            DecisionEvidence read = decisions == null ? null : decisions.get(behavior);
+            return read == null ? Answer.absent() : Answer.of(read.read().metAt());
         }
     }
 
@@ -2404,7 +2454,7 @@ public final class Adequacy {
                     db.ask(new Front.Adequacy()).value().measures()
                             .allowanceForBehaviorDistinctions());
             return Answer.of(new BodyDivided(read.geometry(), read.conditionsMet(),
-                    read.rulesReachedAt()));
+                    read.saidAt(), read.rulesReachedAt()));
         }
     }
 
@@ -2425,7 +2475,7 @@ public final class Adequacy {
      * reading that may be wrong anywhere along it. Both leave the rule where it was.
      */
     public record DecisionSearch(String name, String behavior)
-            implements Key<Map<DecisionRule, RuleSettlement>> {
+            implements Key<Map<DecisionRule, SettledAt>> {
 
         @Override
         public String module() {
@@ -2433,7 +2483,7 @@ public final class Adequacy {
         }
 
         @Override
-        public Answer<Map<DecisionRule, RuleSettlement>> compute(Db db) {
+        public Answer<Map<DecisionRule, SettledAt>> compute(Db db) {
             Map<String, DecisionEvidence> decisions = db.ask(new Decides(name)).value();
             DecisionEvidence evidence = decisions == null ? null : decisions.get(behavior);
             Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(name));
@@ -2488,20 +2538,21 @@ public final class Adequacy {
             // Asked once, because what it answers is one list and asking it per rule would walk the
             // rules once for every rule.
             Set<DecisionRule> toSettle = new LinkedHashSet<>(evidence.notTakenByRows());
-            Map<DecisionRule, RuleSettlement> out = new LinkedHashMap<>();
+            Map<DecisionRule, SettledAt> out = new LinkedHashMap<>();
             for (souther.compiler.partition.DecisionReading.Stated stated
                     : evidence.read().stated()) {
                 if (!toSettle.contains(stated.rule())) {
                     continue;
                 }
                 boolean everyRowAborts = evidence.unanswered().containsKey(stated.rule());
-                List<RuleSettlement> atEach = new ArrayList<>();
+                List<SettledAt> atEach = new ArrayList<>();
                 for (souther.compiler.partition.DecisionReading.Ruled each
                         : stated.occurrences()) {
-                    atEach.add(whatSettles(each, probe, taken, declared, unreachedArms,
-                            everyRowAborts));
+                    RuleSettlement here = whatSettles(each, probe, taken, declared, unreachedArms,
+                            everyRowAborts);
+                    atEach.add(here == null ? null : new SettledAt(each, here));
                 }
-                RuleSettlement settled = acrossThePlaces(atEach);
+                SettledAt settled = acrossThePlaces(atEach);
                 if (settled != null) {
                     out.put(stated.rule(), settled);
                 }
@@ -2518,18 +2569,21 @@ public final class Adequacy {
          * place that established the most, the first of them where two established as much, and
          * nothing where a place was not searched for because every row of the rule aborts.
          *
+         * <p>With the place each answer came from, which is what the answer is explained by.
+         *
          * @param atEach what each place came to, null for a place not searched for
          */
-        static RuleSettlement acrossThePlaces(List<RuleSettlement> atEach) {
-            RuleSettlement excluded = null;
-            RuleSettlement established = null;
+        static SettledAt acrossThePlaces(List<SettledAt> atEach) {
+            SettledAt excluded = null;
+            SettledAt established = null;
             boolean unsearched = false;
-            for (RuleSettlement here : atEach) {
+            for (SettledAt here : atEach) {
                 if (here == null) {
                     unsearched = true;
-                } else if (here.requirement() instanceof RuleRequirement.Excluded) {
+                } else if (here.settlement().requirement() instanceof RuleRequirement.Excluded) {
                     excluded = excluded == null ? here : excluded;
-                } else if (established == null || establishes(here) > establishes(established)) {
+                } else if (established == null || establishes(here.settlement())
+                        > establishes(established.settlement())) {
                     established = here;
                 }
             }
@@ -5241,7 +5295,7 @@ public final class Adequacy {
                 return new RowsForRules(asked, Map.of(),
                         Generator.UnresolvedCombination.Reason.THE_ROWS_WERE_NOT_READ);
             }
-            Map<DecisionRule, RuleSettlement> settled =
+            Map<DecisionRule, SettledAt> settled =
                     db.ask(new DecisionSearch(module, behavior)).value();
             if (settled == null) {
                 return new RowsForRules(asked, Map.of(), null);
@@ -5252,9 +5306,9 @@ public final class Adequacy {
             Set<DecisionRule> wasAsked = new HashSet<>(asked);
             Map<DecisionRule, Generator.GeneratedRow> out = new LinkedHashMap<>();
             boolean stopped = false;
-            for (Map.Entry<DecisionRule, RuleSettlement> each : settled.entrySet()) {
+            for (Map.Entry<DecisionRule, SettledAt> each : settled.entrySet()) {
                 if (!wasAsked.contains(each.getKey())
-                        || !(each.getValue().requirement()
+                        || !(each.getValue().settlement().requirement()
                                 instanceof RuleRequirement.Required(var stoodBy))) {
                     continue;
                 }
@@ -7447,7 +7501,7 @@ public final class Adequacy {
                     || decision.notTakenByRows().isEmpty()) {
                 return;
             }
-            Map<DecisionRule, RuleSettlement> settled =
+            Map<DecisionRule, SettledAt> settled =
                     db.ask(new DecisionSearch(module, behavior)).value();
             if (settled == null) {
                 return;
@@ -7465,11 +7519,11 @@ public final class Adequacy {
             // stands, and a row taking it at any of them takes it. A reader is shown the first.
             for (souther.compiler.partition.DecisionReading.Stated stated
                     : decision.read().stated()) {
-                RuleSettlement came = settled.get(stated.rule());
+                SettledAt came = settled.get(stated.rule());
                 boolean owed = came == null
                         ? notTaken.contains(stated.rule())
                                 && decision.unanswered().containsKey(stated.rule())
-                        : came.requirement() instanceof RuleRequirement.Required;
+                        : came.settlement().requirement() instanceof RuleRequirement.Required;
                 if (owed) {
                     out.add(Finding.by(new FindingSubject.OfABehavior(behavior),
                             decision.at(stated),
@@ -8175,6 +8229,19 @@ public final class Adequacy {
                             Math.min(readings.size(),
                                     BorderObligationPointAssessment.READINGS_SAID))) {
                         built.hint(new ExampleMessage.TheLineAsReadAt(read.at(), read.asks()));
+                        // And the call of the helper each copy it was read at was made at, marked
+                        // there: the line is one place for every call, and the call is what tells
+                        // its readings apart.
+                        for (ModelOccurrence copy : read.readAt()) {
+                            if (copy.lineage() instanceof ExpansionLineage.Expansion made
+                                    && made.at() instanceof ExpansionSite.Written(var wrote)) {
+                                Citation call = Sites.placeIfKnown(db, wrote);
+                                if (call != null) {
+                                    label(built, call, new ExampleMessage.TheLineIsReadInThisCall(
+                                            read.at(), made.expanded().saidIn(module)));
+                                }
+                            }
+                        }
                     }
                     if (readings.size() > BorderObligationPointAssessment.READINGS_SAID) {
                         built.hint(new ExampleMessage.MoreReadingsOfTheLine(
@@ -8224,9 +8291,16 @@ public final class Adequacy {
                 // dropped here would be a finding two of which a reader cannot act on.
                 case About.ARuleNoRowTakes(var behavior, var ruled) -> {
                     Bodies.Elaborated checked = db.ask(new Bodies.Observable(module)).value();
-                    for (DecisionRuleReading read : DecisionRuleReading.of(ruled,
-                            checked == null ? CoverageSites.Plan.NONE : checked.plan(), behavior)) {
+                    CoverageSites.Plan plan =
+                            checked == null ? CoverageSites.Plan.NONE : checked.plan();
+                    for (ShownBy each : ruled.shownBy()) {
+                        DecisionRuleReading read = DecisionRuleReading.of(each, plan, behavior);
                         said(db, built, read);
+                        // And the call of the helper the condition is in, where it is in one. A
+                        // helper called three times is one place in the source, and three
+                        // conditions marked there alike are three a reader cannot tell apart.
+                        each.copy().ifPresent(
+                                copy -> calledAt(db, module, built, read, copy.lineage()));
                     }
                 }
                 // Which of the two this arm is, is already settled: a row is there. What is left is
@@ -8396,6 +8470,59 @@ public final class Adequacy {
                         DecisionRuleReading.AnOutcomeIsNotPlaced _,
                         DecisionRuleReading.AForkIsNotPlaced _ ->
                         built.hint(new ExampleMessage.OneConditionOfTheRuleIsNotShown());
+            }
+        }
+
+        /**
+         * The calls the copy a condition of the rule stands in was made through, each marked.
+         *
+         * <p>The call of the helper the condition is written in says which way the rule takes it
+         * in that call, and every call further out says the rule goes through it. Marked at the
+         * calls, because the condition's own marker is at the helper — one place for every call of
+         * it — and what tells the copies apart is the call each was made at.
+         *
+         * <p>A call nothing places is not marked: it was not written where this compilation can
+         * show it, and the condition's own marker still is.
+         */
+        private static void calledAt(Db db, String module,
+                                     souther.compiler.diag.Diagnostic.Builder built,
+                                     DecisionRuleReading read, ExpansionLineage copy) {
+            boolean innermost = true;
+            ExpansionLineage at = copy;
+            while (at instanceof ExpansionLineage.Expansion made) {
+                String called = made.expanded().saidIn(module);
+                Citation call = made.at() instanceof ExpansionSite.Written(var wrote)
+                        ? Sites.placeIfKnown(db, wrote) : null;
+                if (call != null && !innermost) {
+                    label(built, call, new ExampleMessage.TheRuleGoesThroughThisCall(called));
+                } else if (call != null) {
+                    switch (read) {
+                        case DecisionRuleReading.AComparisonCameOut(var _, var held) ->
+                                inThisCall(built, call, held, called);
+                        case DecisionRuleReading.AnApplicationAnswered(var _, var held) ->
+                                inThisCall(built, call, held, called);
+                        case DecisionRuleReading.AForkTookAnArm(var arm) -> label(built, call,
+                                new ExampleMessage.TheRuleGoesThroughItsArmInThisCall(
+                                        phraseFor(arm), called));
+                        case DecisionRuleReading.AConditionIsNotShown _,
+                                DecisionRuleReading.AnOutcomeIsNotPlaced _,
+                                DecisionRuleReading.AForkIsNotPlaced _ ->
+                                label(built, call,
+                                        new ExampleMessage.TheRuleGoesThroughThisCall(called));
+                    }
+                }
+                innermost = false;
+                at = made.within();
+            }
+        }
+
+        /** The call a condition of the rule is in, with which way the rule takes it there. */
+        private static void inThisCall(souther.compiler.diag.Diagnostic.Builder built,
+                                       Citation call, boolean held, String called) {
+            if (held) {
+                label(built, call, new ExampleMessage.TheRuleTakesItHoldingInThisCall(called));
+            } else {
+                label(built, call, new ExampleMessage.TheRuleTakesItFailingInThisCall(called));
             }
         }
 

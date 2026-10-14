@@ -64,9 +64,10 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
         DecisionCondition.AComparison column = new DecisionCondition.AComparison(form, Rel.GT);
         return new DecisionPath.Consulted(new DecidedCondition.Compared(column, held),
                 new ShownBy.NothingIsRecorded(column),
-                List.of(new OnTheWay.Declined(new ConditionOccurrence("b", against),
-                        new ConditionReportAnchor.WhereTheReadingMetIt(
-                                "b", new ConditionOccurrence("b", against)),
+                List.of(new OnTheWay.Declined(
+                        new ConditionOccurrence("b", ConditionOccurrence.Reading.DECIDING, against),
+                        new ConditionReportAnchor.WhereTheReadingMetIt("b", new ConditionOccurrence(
+                                "b", ConditionOccurrence.Reading.DECIDING, against)),
                         new WhyNotTaken.OutsideDomain(
                                 WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER))));
     }

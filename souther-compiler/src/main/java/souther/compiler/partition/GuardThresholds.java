@@ -17,6 +17,7 @@ import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
@@ -51,6 +52,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -92,6 +94,8 @@ public final class GuardThresholds {
      * {@code c} on the low side and are two different rules about it — so it is read where the
      * operator is still in hand, and which values arrive is asked of the reading of the whole body.
      *
+     * @param saidAt       which copies of the model's constructs put each entry on a way, which the
+     *                     same walk files
      * @param armsNamed    the case each arm of a {@code match} is, which the same walk names
      * @param dependencies which positions each construct deciding a fork may turn on, which the
      *                     same walk reads
@@ -102,12 +106,13 @@ public final class GuardThresholds {
                          ReachingCuts reaching,
                          List<ComparisonReadings.ForkMet> forks,
                          Map<ConditionOccurrence, Citation> conditionsMet,
+                         Map<OnTheWay, Set<ModelOccurrence>> saidAt,
                          ArmsNamed armsNamed,
                          ForkDependencies dependencies) {
 
         public static final Guards NONE =
                 new Guards(List.of(), RulesWithNoLine.NONE, List.of(), ReachingCuts.NONE,
-                        List.of(), Map.of(), ArmsNamed.NONE, ForkDependencies.NONE);
+                        List.of(), Map.of(), Map.of(), ArmsNamed.NONE, ForkDependencies.NONE);
 
         public Guards {
             evidence = List.copyOf(evidence);
@@ -324,7 +329,7 @@ public final class GuardThresholds {
                             each.failing())));
         }
         return new Guards(found, withoutALine.found(), between, cuts.made(),
-                comparisons.forks(), comparisons.conditionsMet(),
+                comparisons.forks(), comparisons.conditionsMet(), comparisons.saidAt(),
                 comparisons.armsNamed(), comparisons.dependencies());
     }
 
@@ -746,7 +751,7 @@ public final class GuardThresholds {
         // Which question places this comparison, asked once here. The two readers below say the
         // same thing about one rule, and asking apiece would let them come to say two.
         RuleReportAnchor anchor = reaches.anchorOf(wrote, where);
-        publish(behavior, wrote, anchor, read, withoutALine);
+        publish(behavior, stated, wrote, anchor, read, withoutALine);
         // The geometry itself is not this reader's own — {@link ComparisonGeometry} reads it the
         // same way a clause does. Only where a line's origin comes from is: a guard's is where
         // the run meets the comparison, which is this reading's own place to say.
@@ -776,11 +781,15 @@ public final class GuardThresholds {
      * relating two positions — a sentence saying no measure is short of anything, over a model
      * missing a border.
      */
-    private static void publish(String behavior, SourceConstructOrigin wrote,
-                                RuleReportAnchor anchor,
+    private static void publish(String behavior, ModelOccurrence stated,
+                                SourceConstructOrigin wrote, RuleReportAnchor anchor,
                                 ComparisonAssessment read, RulesWithNoLine.Gathered out) {
         RuleCitation cited =
                 new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor);
+        // And the copy of the comparison this reading was made at, beside the rule and not in it:
+        // a comparison written in a helper is one rule read once per call, and the call is what a
+        // reader tells those readings apart by.
+        List<ModelOccurrence> readAt = List.of(stated);
         // What each place is left with, and which places there are, are the assessment's one
         // answer. A rule that was read is filed at its quantity's coordinates and says one thing
         // there, because the quantity is one subject; a reading that stopped has none, and each
@@ -791,9 +800,9 @@ public final class GuardThresholds {
         // reading stopped there is nothing that was determined and nothing that could have been.
         read.whatEachPlaceIsLeftWith().forEach(left -> {
             if (left.why() instanceof BlockReason.RuleReadingStopped stopped) {
-                out.unclassified(cited, left.at(), stopped);
+                out.unclassified(cited, readAt, left.at(), stopped);
             } else {
-                out.add(cited, left.at(), left.why());
+                out.add(RuleWithoutALine.of(cited, readAt, left.at(), left.why()));
             }
         });
     }

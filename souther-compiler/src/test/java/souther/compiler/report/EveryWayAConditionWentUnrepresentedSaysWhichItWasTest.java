@@ -181,7 +181,7 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
     /** Which question a report about the condition under test would put. */
     private static ConditionReportAnchor where() {
         return new ConditionReportAnchor.WhereTheReadingMetIt("m",
-                new ConditionOccurrence("f", 0));
+                new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 0));
     }
 
     /** The leaves of a seal, which is what its ways are. */

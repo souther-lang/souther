@@ -110,7 +110,7 @@ class APointTheRulesLeaveNoValueAtIsCountedAsAnsweredTest {
     void theRulesOfTheDecisionThatProofReachesAreSaidAsAnsweredToo() {
         assertTrue(report().contains("· no row is owed at 2 decision rules"),
                 () -> "the two ways the guards close between them are owed no row:\n" + report());
-        assertFalse(report().contains("nothing could show a row can be written at 2 decision"),
+        assertFalse(report().contains("nothing could show a row can be written at a decision"),
                 () -> "nothing was composed because there is nothing to compose, which is the"
                         + " model's answer and not this compiler's:\n" + report());
     }

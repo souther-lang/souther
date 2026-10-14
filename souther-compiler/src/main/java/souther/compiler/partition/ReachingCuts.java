@@ -271,7 +271,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                                    InputReads reads, ConditionNumbering numbering) {
         InputDomain inputs = read.domain();
         RuleReadingSource ruleSource = read.rules();
-        ConditionOccurrence met = numbering.metEntering(match, part);
+        ConditionOccurrence met = numbering.metEntering(match, match.occurrence(), part);
         ConditionReportAnchor at =
                 numbering.anchorOfArm(match.origin(), part, arm.pos(), met);
         // The selection whole, and not one narrowing made out of it: a case over several leaves
@@ -462,7 +462,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
     static List<OnTheWay> attempting(Core.IfConstructed attempt, int part, SourcePos at,
                                      InputReading read, InputReads reads,
                                      ConditionNumbering numbering) {
-        ConditionOccurrence met = numbering.metEntering(attempt, part);
+        ConditionOccurrence met = numbering.metEntering(attempt, attempt.occurrence(), part);
         return armStated(WhatConditionsState.of(read).arm(attempt, part, reads).proposition(),
                 met, numbering.anchorOfArm(attempt.origin(), part, at, met), read);
     }

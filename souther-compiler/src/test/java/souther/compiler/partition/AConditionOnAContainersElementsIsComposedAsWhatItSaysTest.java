@@ -199,7 +199,8 @@ class AConditionOnAContainersElementsIsComposedAsWhatItSaysTest {
         InputReading reading = inputs.reading(rules());
         List<OnTheWay> stated = ReachingCuts.stating(Condition.of(analysis.core(), reads,
                         rules().symbols(), rules().newtypes(),
-                        new ConditionNumbering(module(), behavior)),
+                        new ConditionNumbering(module(), behavior,
+                                ConditionOccurrence.Reading.DIVIDING)),
                 reading, true, WhatConditionsState.of(reading));
         assertEquals(1, stated.size(), () -> "one condition: " + stated);
         return stated;

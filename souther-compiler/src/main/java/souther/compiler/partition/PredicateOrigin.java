@@ -3,6 +3,9 @@ package souther.compiler.partition;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.types.ModelOccurrence;
+
+import java.util.List;
 
 /**
  * One reading of a predicate applied in a behavior's body.
@@ -55,5 +58,12 @@ public record PredicateOrigin(PredicateOccurrence occurrence, RuleRef.Predicate 
     @Override
     public RuleCitation cited() {
         return new RuleCitation.Written(rule, anchor);
+    }
+
+    /** None: which reading of a predicate this is, is told by {@link #occurrence}, which names no
+     *  copy of the model's code. */
+    @Override
+    public List<ModelOccurrence> readAt() {
+        return List.of();
     }
 }
