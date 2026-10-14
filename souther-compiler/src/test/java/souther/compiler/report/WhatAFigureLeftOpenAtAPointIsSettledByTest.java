@@ -65,11 +65,11 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
                 () -> human(report));
         assertTrue(human(report).contains("""
                   what keeps it open
-                    may change in a wider run     1
-                    unaffected by a wider run     0
-                      the comparison = 3 (in the region, above) — a figure of this compiler's \
-                stopped the search, and no option sets it: write a row there, or a rule that \
-                leaves no value there
+                    stopped at a figure of this compiler     1
+                    stopped at no figure                     0
+                      the comparison = 3 (in the region, above) — the search stopped at how many \
+                values a point is tried with (VALUES_A_POINT_IS_TRIED_WITH, 8), which no option \
+                sets: write a row there, or a rule that leaves no value there
                 """), human(report));
         assertFalse(human(report).contains("allowing more"), human(report));
     }

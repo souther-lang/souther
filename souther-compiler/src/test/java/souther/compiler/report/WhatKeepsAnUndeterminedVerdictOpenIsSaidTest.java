@@ -103,10 +103,10 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
      * told what keeps the verdict open is told only what is still out of reach.
      */
     @Test
-    void whatKeepsItOpenIsWhatAWiderRunDoesNotReach() {
+    void whatKeepsItOpenIsWhatNoFigureStopped() {
         AdequacyReport report = measured();
 
-        assertEquals(new AdequacyReport.UnderAWiderRun(0, 1), report.underAWiderRun(),
+        assertEquals(new AdequacyReport.HeldOpen(0, 1), report.heldOpen(),
                 () -> "what keeps it open: " + report.whatKeepsTheVerdictOpen());
     }
 
@@ -140,8 +140,8 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
         assertTrue(human.contains("""
                 adequacy: undetermined
                   what keeps it open
-                    may change in a wider run     0
-                    unaffected by a wider run     1
+                    stopped at a figure of this compiler     0
+                    stopped at no figure                     1
                 """), human);
     }
 
@@ -224,7 +224,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
 
         assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED, report.adequacy(),
                 () -> report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
-        assertEquals(new AdequacyReport.UnderAWiderRun(0, 0), report.underAWiderRun());
+        assertEquals(new AdequacyReport.HeldOpen(0, 0), report.heldOpen());
         assertFalse(report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)).contains("what keeps it open"),
                 report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertTrue(root.get("keptOpenBy").isEmpty(), root.get("keptOpenBy").toString());

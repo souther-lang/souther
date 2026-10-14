@@ -83,6 +83,7 @@ import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.observe.Disposition;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.query.Bodies;
@@ -2227,47 +2228,114 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
-     * How much of that a run of this compiler allowed more could answer, and how much it could not.
+     * How much of that a figure of this compiler's stopped, and how much nothing was compared
+     * against one for.
      *
-     * <p>The question a reader of {@code undetermined} has and the report could not answer. The
-     * word means a measure that could have found a gap and was not made, which is as true of a
-     * space too large to walk as of a rule this compiler has no reading for — and the first is a
-     * number away while nothing anybody writes reaches the second. Told apart nowhere, a person
-     * reading a model that forks on a list it computed was left to work out for themselves that
-     * measuring again would find exactly the same thing.
+     * <p>The question a reader of {@code undetermined} has. The word means a measure that could
+     * have found a gap and was not made, which is as true of a space too large to walk as of a rule
+     * this compiler has no reading for — and the first is a figure while nothing anybody writes
+     * reaches the second. Told apart nowhere, a person reading a model that forks on a list it
+     * computed was left to work out for themselves that measuring again would find exactly the same
+     * thing.
+     *
+     * <p>Split on the figures each fact carries and not on how a wider run would meet it. The line
+     * under each one names the figures, and a count of figures a line then names none of would
+     * send a reader looking for them; and no option of this compiler sets a figure, so the split
+     * offers no run to ask for.
      *
      * <p>Counted over the facts and not over the words a document writes for them. Two facts a
      * document calls the same thing can differ here — a pattern too large to build and a rule about
      * a value made from this one are both {@code rule_unread} — so a count taken off the printed
      * words would be a count of something else.
      *
-     * @param mayChange how many of them an allowance of this compiler's stopped
-     * @param unaffected how many no allowance stopped, which is what allowing more does not reach.
-     *                   Not "how many it had no reading for": a measure nobody made and a point
-     *                   nothing showed a row writable at are both here and neither is a reading.
-     *                   Which kind of thing each was, is what the kind beside it says
+     * @param atAFigure  how many of them a figure of this compiler's stopped, each named under it
+     * @param atNoFigure how many nothing was compared against a figure for. Not "how many it had
+     *                   no reading for": a measure nobody made and a point nothing showed a row
+     *                   writable at are both here and neither is a reading. Which kind of thing
+     *                   each was, is what the kind beside it says
      */
-    public record UnderAWiderRun(int mayChange, int unaffected) {
+    public record HeldOpen(int atAFigure, int atNoFigure) {
 
         /** Whether there is anything to say, which is whether anything is open at all. */
         public boolean isEmpty() {
-            return mayChange == 0 && unaffected == 0;
+            return atAFigure == 0 && atNoFigure == 0;
         }
     }
 
-    /** {@link #whatKeepsTheVerdictOpen()}, split by whether a wider run could answer it. */
-    public UnderAWiderRun underAWiderRun() {
-        int mayChange = 0;
-        int unaffected = 0;
+    /** {@link #whatKeepsTheVerdictOpen()}, split by whether a figure of this compiler's stopped
+     *  it. */
+    public HeldOpen heldOpen() {
+        int atAFigure = 0;
+        int atNoFigure = 0;
         for (AdequacyUncertainty each : whatKeepsTheVerdictOpen()) {
-            // A switch with no default, so a third answer is a compile error here rather than one
-            // more thing silently counted among what no allowance reaches.
-            switch (each.runSensitivity()) {
-                case MAY_CHANGE -> mayChange++;
-                case UNAFFECTED -> unaffected++;
+            if (each.figures().isEmpty()) {
+                atNoFigure++;
+            } else {
+                atAFigure++;
             }
         }
-        return new UnderAWiderRun(mayChange, unaffected);
+        return new HeldOpen(atAFigure, atNoFigure);
+    }
+
+    /**
+     * Every copy of a helper this report's pages name, with the calls it was made at.
+     *
+     * <p>Gathered from every page rather than the one an entry is about: an entry that holds a
+     * verdict open names a rule or a point and not the page it was found on, and a copy one page
+     * names is the same copy on any other.
+     */
+    private Map<ModelOccurrence, CopyShown> everyCopyShown() {
+        Map<ModelOccurrence, CopyShown> out = new LinkedHashMap<>();
+        for (ModuleReport module : modules) {
+            out.putAll(module.owedByDeclarations().conditionPlaces().copies());
+            for (BehaviorReport behavior : module.behaviors()) {
+                out.putAll(behavior.conditionPlaces().copies());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Where each point a behavior is owed was read: every copy any reading of its line was made in.
+     *
+     * <p>Every reading and not the one that stopped. A point is owed once whatever readings of its
+     * line reach it, and which of them a stopped showing was stopped at is not carried; naming one
+     * would say a call was the cause where nothing said so.
+     */
+    private Map<BorderObligationPoint, List<ModelOccurrence>> whereEachPointIsRead() {
+        Map<BorderObligationPoint, List<ModelOccurrence>> out = new LinkedHashMap<>();
+        for (ModuleReport module : modules) {
+            for (BehaviorReport behavior : module.behaviors()) {
+                if (behavior.partition() == null) {
+                    continue;
+                }
+                for (BorderObligationPointAssessment point : behavior.account()) {
+                    List<ModelOccurrence> readAt =
+                            out.computeIfAbsent(point.point(), each -> new ArrayList<>());
+                    for (BorderObligationPointAssessment.ReadingSaid said : point.readingsSaid()) {
+                        for (ModelOccurrence copy : said.readAt()) {
+                            if (!readAt.contains(copy)) {
+                                readAt.add(copy);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /** The copies what {@code subject} is about was read in, where it is a rule or a point. */
+    private static List<ModelOccurrence> readAt(
+            Subject subject, Map<BorderObligationPoint, List<ModelOccurrence>> pointsReadAt) {
+        return switch (subject) {
+            case Subject.AtARule it -> it.question().readAt();
+            case Subject.AtAPoint it -> pointsReadAt.getOrDefault(it.point(), List.of());
+            case Subject.OfAModule _, Subject.OfABehavior _, Subject.OfASource _,
+                 Subject.OfARow _, Subject.AtASpelledPosition _, Subject.AtAPosition _,
+                 Subject.AtAnInput _, Subject.AtABorder _, Subject.OfAMeasure _,
+                 Subject.OfAnAxisMeasure _, Subject.AtAFork _, Subject.AtAnArm _ -> List.of();
+        };
     }
 
     /**
@@ -2547,22 +2615,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         out.append(String.format("adequacy: %s%n",
                 adequacy().name().toLowerCase(Locale.ROOT).replace('_', ' ')));
         // And what it is open on, split by the one thing a reader of `undetermined` wants to know:
-        // whether measuring again allowing more would answer any of it. The word covers a space too
-        // large to walk and a rule this compiler has no reading for alike, and the first is a number
-        // away while nothing anybody writes reaches the second.
+        // whether a figure of this compiler's is what stopped it. The word covers a space too large
+        // to walk and a rule this compiler has no reading for alike, and the first is a figure the
+        // line below names while nothing anybody writes reaches the second. No option sets those
+        // figures, so the split is not offered as a run to ask for.
         //
         // Under the verdict and not under the measurement line above, because it is read from what
         // that verdict rests on. What left the whole report weaker than it looks is the other
         // question and is said per module, where the measures are.
-        UnderAWiderRun open = underAWiderRun();
+        HeldOpen open = heldOpen();
         if (!open.isEmpty()) {
             // Read once for the lines below rather than per line: the places are a fold over every
             // page this report holds, and folding it again per opening is that walk once per thing
-            // said about it.
+            // said about it. So are the calls each copy was made at, and the copies each point was
+            // read in.
             PublishedRuleHandle.WhereARuleIs places = rulePlaces();
+            Map<ModelOccurrence, CopyShown> copies = everyCopyShown();
+            Map<BorderObligationPoint, List<ModelOccurrence>> pointsReadAt = whereEachPointIsRead();
             out.append("  what keeps it open\n");
-            out.append(String.format("    may change in a wider run   %3d%n", open.mayChange()));
-            out.append(String.format("    unaffected by a wider run   %3d%n", open.unaffected()));
+            out.append(String.format("    stopped at a figure of this compiler   %3d%n",
+                    open.atAFigure()));
+            out.append(String.format("    stopped at no figure                   %3d%n",
+                    open.atNoFigure()));
             // And which they are. The counts alone told a reader how many things held the verdict
             // open and nothing about what they were, with no mark in the body to find them by; the
             // lines below name each one and say where it leaves them, both read from what the
@@ -2577,8 +2651,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // for the kind: those are for a consumer keyed on this report, and a person reading
                 // a line is owed a sentence. What kind of thing it is comes out in what is said to
                 // do about it, which is read from the same fact the word is.
-                out.append(String.format("      %s — %s%n",
+                //
+                // And the calls of a helper it was read at, after what it is about. One rule of a
+                // helper read alike at two calls is one fact, and two facts at one rule and one
+                // position read alike but for the calls.
+                out.append(String.format("      %s%s — %s%n",
                         said(each.subject(), rendering, places),
+                        inCopies(readAt(each.subject(), pointsReadAt), copies, rendering, null),
                         next(ReaderDisposition.of(each))));
             }
         }
@@ -8102,12 +8181,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /** What a reader does next with one thing holding the verdict open. */
     private static String next(ReaderDisposition disposition) {
         return switch (disposition) {
-            // The figure is named where the entry is said, and nothing a run is given sets it.
-            case ReaderDisposition.StoppedAtAFigure it -> it.aRowThereSettlesIt()
-                    ? "a figure of this compiler's stopped the search, and no option sets it:"
-                            + " write a row there, or a rule that leaves no value there"
-                    : "a figure of this compiler's stopped it, and no option sets it:"
-                            + " read which figure where it is said";
+            // The figures named here, as what stopped carried them, and nothing a run is given sets
+            // them.
+            case ReaderDisposition.StoppedAtAFigure it -> (it.aRowThereSettlesIt()
+                    ? "the search stopped at " : "stopped at ") + figuresSaid(it.figures())
+                    + ", which no option sets" + (it.aRowThereSettlesIt()
+                            ? ": write a row there, or a rule that leaves no value there" : "");
             case ReaderDisposition.LookAtTheRule _ -> "read the rule and what stopped it";
             // Without the word for it. What the document calls a weakening is for a consumer keyed
             // on this report; a person reading a line is owed a sentence, and the words a build
@@ -8125,6 +8204,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     "weigh what this behavior needs to tell apart";
             case ReaderDisposition.Settled _ -> "nothing";
         };
+    }
+
+    /**
+     * Figures as a line says them: what each counts, then its name and what it stood at.
+     *
+     * <p>The name beside the words, because the words are for a reader and the name is what the
+     * figure is declared as — the one a person asking this compiler's maintainers about it can be
+     * found by.
+     */
+    private static String figuresSaid(List<Figure> figures) {
+        return figures.stream()
+                .map(each -> each.counts() + " (" + each.name() + ", " + each.most() + ")")
+                .collect(Collectors.joining("; "));
     }
 
     /**

@@ -39,8 +39,14 @@ public enum WorkFigure {
     /** How much of a sibling arm a fork carries for a run replacing an arm. */
     NODES_A_FORK_CARRIES("how much of the arm beside it a fork carries for a run replacing it"),
 
-    /** How much code one method may hold, which is the JVM's figure and not this compiler's. */
-    CODE_ONE_METHOD_HOLDS("how much code one method of the JVM holds"),
+    /** How many readings of a combination a search for a row at it tries. */
+    READINGS_OF_A_COMBINATION_TRIED("how many readings of a combination a search for a row tries"),
+
+    /** How many rows composed for one reading of a combination are run. */
+    RUNS_FOR_ONE_READING("how many rows composed for one reading of a combination are run"),
+
+    /** How many candidates a walk repairing a row builds. */
+    CANDIDATES_A_REPAIR_BUILDS("how many candidates a walk repairing a row builds"),
 
     /** States one machine for the values a position admits may have. */
     ADMITTED_VALUES_ONE_MACHINE(
