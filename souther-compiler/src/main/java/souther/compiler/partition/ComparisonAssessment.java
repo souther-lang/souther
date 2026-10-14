@@ -81,8 +81,9 @@ sealed interface ComparisonAssessment {
          *  roles. */
         ACROSS_THE_VALUE,
 
-        /** One value put in a class of its own, which has no sides: the values either side of it
-         *  are one class. */
+        /** One value singled out: on a position a class of its own, whose values either side are
+         *  one class, and on a quantity over positions that counts, a line with the values either
+         *  side of it. */
         AT_THE_VALUE,
 
         /** A value the quantity does not hold, which puts nothing in a class of its own. */
@@ -858,9 +859,10 @@ sealed interface ComparisonAssessment {
         // The line is placed, and what stands beside it is asked here, once. A rule that could not
         // be told where the values part is neither a rule drawing nowhere nor one drawing
         // somewhere: it is one whose sides were not worked out, and it is said so at the position
-        // rather than read as less. Every reader of the line below holds the seam this asked for.
-        ExactAnswer<Seam> parted = cutting.seam();
-        if (parted instanceof ExactAnswer.Unheld<Seam> unheld) {
+        // rather than read as less. Every place the line parts the values is asked, which is two
+        // for a rule naming a value, and every reader of the line below holds the seams this
+        // asked for.
+        if (cutting.seams() instanceof ExactAnswer.Unheld<List<Seam>> unheld) {
             return sideNotWorkedOut(cutting, unheld.why());
         }
         // The line and not one of its points. A rule drawing where the quantity never reaches
@@ -882,9 +884,10 @@ sealed interface ComparisonAssessment {
             UndividedByARelation relation = relationOf(cutting);
             return new AcrossPositions(cutting, at, kind, relation, relation.undivided(read));
         }
-        Seam seam = ((ExactAnswer.Held<Seam>) parted).value();
-        ExactAnswer<Optional<Place>> value = cutting.singles() ? cutting.singledValue(seam)
-                : ExactAnswer.held(cutting.dividedValue(seam));
+        // Read off the one place its value is read at, which is not taken as held: an answer that
+        // was not is what the position is told, as for every other side that was not worked out.
+        ExactAnswer<Optional<Place>> value = cutting.seam().flatMap(seam -> cutting.singles()
+                ? cutting.singledValue(seam) : ExactAnswer.held(cutting.dividedValue(seam)));
         return switch (value) {
             case ExactAnswer.Unheld<Optional<Place>> unheld ->
                     sideNotWorkedOut(cutting, unheld.why());
@@ -1119,9 +1122,15 @@ sealed interface ComparisonAssessment {
     /**
      * Whether this line is one a border is built on.
      *
-     * <p>Only where the rule orders the values around it. A value singled out has no sides — the
-     * values either side of it are one class — so there is nothing for a border to owe a row away
-     * from, and a rule that names a value the quantity does not hold names no place at all.
+     * <p>On a position, only where the rule orders the values around it. A value of a position
+     * singled out is a class of its own there, and the values either side of it are one class, so
+     * there is nothing for a border to owe a row away from.
+     *
+     * <p>On a quantity over positions, a value singled out as well, where the quantity has values
+     * beside it ({@link BorderQuantity#singlesWithSides}). No position holds it as a class, so the
+     * line is the only place the rule is measured at: the rows where the quantity comes to the
+     * value, and the nearest ones where it comes to the values either side of it. A rule that names
+     * a value the quantity does not hold names no place at all, on either.
      */
     default boolean drawsABorder() {
         return switch (this) {

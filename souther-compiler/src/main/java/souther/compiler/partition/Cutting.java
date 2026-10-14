@@ -1645,6 +1645,21 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * Every place it parts that quantity's values, in the quantity's own units.
+     *
+     * <p>A rule that names a value parts the values on both sides of it, and {@link #seam} answers
+     * one of them. Asked where the question is whether the line's sides were worked out at all.
+     */
+    ExactAnswer<List<Seam>> seams() {
+        return Seam.eachOf(claim, this::seamTowards);
+    }
+
+    /** Where the values part on {@code side} of this line, in the quantity's own units. */
+    ExactAnswer<Seam> seamTowards(Towards side) {
+        return Seam.where(of, at, side);
+    }
+
+    /**
      * The position this cuts, where what it cuts is one position's own values. Null for every other
      * quantity, which is what tells a caller whether an axis is divided by this rule.
      *

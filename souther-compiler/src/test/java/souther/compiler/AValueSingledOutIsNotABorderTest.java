@@ -12,7 +12,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A value a rule singles out is not a border, and no border is built on it.
+ * A value a rule singles out of a position is not a border, and no border is built on it.
  *
  * <p>A border has an order across it: rows are owed either side, and each side has a role a document
  * names ({@code ON} and {@code OFF}). {@code x == c} and {@code x /= c} place the same thing and it
@@ -151,16 +151,15 @@ class AValueSingledOutIsNotABorderTest {
     }
 
     /**
-     * An equality over two positions singles one out of neither, so nothing is drawn.
+     * An equality over two positions singles one out of neither.
      *
-     * <p>It puts the whole of one arm on the place the two meet, and that arm is a row the branch
-     * measure already asks for. Read off the operator alone, {@code a == b} raised a question about
-     * a value singled out at {@code a} that no rule wrote.
+     * <p>Read off the operator alone, {@code a == b} raised a question about a value singled out at
+     * {@code a} that no rule wrote. Where the two meet is a line on how far apart they stand, which
+     * is the quantity's and no position's ({@code AValueSingledOutOnAQuantityOverPositionsIsALineTest}).
      */
     @Test
     void anEqualityBetweenTwoPositionsSinglesNothingOut() {
         assertEquals(List.of(), classes("r.a == r.other"));
-        assertEquals(0, borders("r.a == r.other"));
-        assertEquals(0, borders("r.a /= r.other"));
+        assertEquals(List.of(), classes("r.a /= r.other"));
     }
 }
