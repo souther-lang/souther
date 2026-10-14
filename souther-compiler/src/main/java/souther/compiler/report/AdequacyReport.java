@@ -15,6 +15,7 @@ import souther.compiler.publish.MaterialisationRegionWord;
 import souther.compiler.publish.RegionSlotWord;
 import souther.compiler.publish.ThroughStepWord;
 import souther.compiler.types.CanonicalNameOrder;
+import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ExpansionSite;
 import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.OccurrenceLineage;
@@ -31,6 +32,7 @@ import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.BoundaryLine;
+import souther.compiler.partition.InteractionRequirements;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.partition.QuantityKey;
@@ -589,6 +591,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *                  an obligation and a rule nothing could show a row for is owed none, while a
      *                  page or a document that showed only the findings would say a rule count and
      *                  put fewer lines under it than the count
+     * @param combinationReadings how a page tells a reader which combination of the body's
+     *                  decisions a line is about, one list of conditions per way a run can make
+     *                  it. For the combinations a line names and no others, for the reason a rule's
+     *                  are
      * @param rowPlaces where each row of the module that does not hold is shown, for the lines that
      *                  name what only such rows cover. The module's and not this behavior's: a row
      *                  of another behavior can be what covers an arm of this one, and a report
@@ -605,6 +611,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  Map<RuleSite, Citation> partPlaces,
                                  Map<DecisionReading.Ruled, List<ShownCondition>> ruleReadings,
                                  Map<DecisionRule, RuleSettlement> ruleSettlements,
+                                 Map<ObligationIdentity.OfACombinationOfDecisions,
+                                         List<List<ShownCondition>>> combinationReadings,
                                  Map<RowRef, WhereARowIs.Shown> rowPlaces) {
         public BehaviorReport {
             reported = List.copyOf(reported);
@@ -614,6 +622,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             partPlaces = Map.copyOf(partPlaces);
             ruleReadings = Map.copyOf(ruleReadings);
             ruleSettlements = Map.copyOf(ruleSettlements);
+            combinationReadings = Map.copyOf(combinationReadings);
             rowPlaces = Map.copyOf(rowPlaces);
         }
 
@@ -641,6 +650,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             if (read == null) {
                 throw new IllegalStateException("this report was not assembled with a rule of `"
                         + name + "` that one of its lines is about");
+            }
+            return read;
+        }
+
+        /**
+         * How this report tells a reader which combination of the body's decisions a line is
+         * about: the conditions of each way a run can make it, the ways that read alike said once.
+         *
+         * <p>Worked out when the report was assembled, for the reason {@link #readingsOf} gives. A
+         * combination this report was not assembled with is two of this compiler's answers
+         * disagreeing, and a line with nothing under it is the line a reader could not tell from
+         * the one beside it.
+         */
+        public List<List<ShownCondition>> waysOf(
+                ObligationIdentity.OfACombinationOfDecisions combination) {
+            List<List<ShownCondition>> read = combinationReadings.get(combination);
+            if (read == null) {
+                throw new IllegalStateException("this report was not assembled with a combination"
+                        + " of `" + name + "`'s decisions that one of its lines is about");
             }
             return read;
         }
@@ -998,7 +1026,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     ruleReadings(compilation, name, behavior.name(),
                             decisions == null ? null : decisions.get(behavior.name()),
                             reported),
-                    requirements, rowPlaces));
+                    requirements,
+                    combinationReadings(compilation, name, behavior.name(),
+                            evidence.combinations(), reported),
+                    rowPlaces));
         }
         Adequacy.DeclaredBoundaries declared =
                 compilation.db().ask(new Adequacy.DeclaredBorders(name)).value();
@@ -1107,11 +1138,81 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
             List<ShownCondition> shown = new ArrayList<>();
             for (DecisionRuleReading read : DecisionRuleReading.of(rule, plan, behavior)) {
-                shown.add(new ShownCondition(read, whereItIsWritten(compilation, read)));
+                shown.add(shown(compilation, read));
             }
             out.put(rule, List.copyOf(shown));
         }
         return out;
+    }
+
+    /**
+     * How a page says each combination of {@code behavior}'s decisions one of its lines is about:
+     * the ones no row makes and the ones only rows that do not hold make.
+     *
+     * <p>Which those are is the findings' answer and the witnesses', as it is for a rule, and what
+     * each is said by is the ways the measure holds it under. The requirement and not the
+     * conditions it is told apart by: those are in the terms the account keys on, and the ways are
+     * the places a run is seen at, which are what the author wrote.
+     *
+     * <p>A way that reads like one before it is said once, whatever order its conditions came in.
+     * Two ways are two places a body records the same decisions, and where those places are one
+     * construct of the model a reader would be shown one list twice.
+     */
+    private static Map<ObligationIdentity.OfACombinationOfDecisions, List<List<ShownCondition>>>
+            combinationReadings(Compilation compilation, String module, String behavior,
+                                CombinationCriterion criterion, List<ReportedFinding> reported) {
+        if (!(criterion instanceof CombinationCriterion.Interactions(var meetings))) {
+            return Map.of();
+        }
+        Set<ObligationIdentity.OfACombinationOfDecisions> about = new LinkedHashSet<>();
+        for (ReportedFinding each : reported) {
+            if (each.about() instanceof About.ACombinationNoRowMakes(var combination)) {
+                about.add(combination);
+            }
+        }
+        for (CoveredOnlyByRowsThatDoNotHold.Covered<ObligationIdentity.OfACombinationOfDecisions>
+                made : CoveredOnlyByRowsThatDoNotHold.combinationsOf(criterion)) {
+            about.add(made.obligation());
+        }
+        if (about.isEmpty()) {
+            return Map.of();
+        }
+        CoverageSites.Plan plan = placesOf(compilation, module);
+        Map<ObligationIdentity.OfACombinationOfDecisions, List<List<ShownCondition>>> out =
+                new LinkedHashMap<>();
+        for (ObligationIdentity.OfACombinationOfDecisions combination : about) {
+            List<InteractionRequirements.Way> ways = meetings.asked().ways().get(combination);
+            if (ways == null) {
+                throw new IllegalStateException("a line of `" + behavior + "` is about a"
+                        + " combination its measure states no way to: " + combination);
+            }
+            List<List<ShownCondition>> read = new ArrayList<>();
+            for (InteractionRequirements.Way way : ways) {
+                List<ShownCondition> shown = new ArrayList<>();
+                for (DecisionRuleReading each
+                        : DecisionRuleReading.ofAWay(way.claims(), plan, behavior)) {
+                    shown.add(shown(compilation, each));
+                }
+                read.add(shown);
+            }
+            out.put(combination, distinctWays(read));
+        }
+        return out;
+    }
+
+    /**
+     * {@code ways} with each that reads like one before it left out, the first of them kept in the
+     * order it came in.
+     *
+     * <p>Like as sets. A combination is the decisions it settles and not the order a way met them
+     * in, so two ways naming the same conditions in two orders are one thing to tell a reader.
+     */
+    static List<List<ShownCondition>> distinctWays(List<List<ShownCondition>> ways) {
+        Map<Set<ShownCondition>, List<ShownCondition>> distinct = new LinkedHashMap<>();
+        for (List<ShownCondition> way : ways) {
+            distinct.putIfAbsent(Set.copyOf(way), List.copyOf(way));
+        }
+        return List.copyOf(distinct.values());
     }
 
     /**
@@ -1149,10 +1250,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static Citation whereItIsWritten(Compilation compilation, DecisionRuleReading read) {
         return switch (read) {
-            case DecisionRuleReading.AComparisonCameOut(var comparison, var _) -> comparison.at();
-            case DecisionRuleReading.AnApplicationAnswered(var application, var _) ->
+            case DecisionRuleReading.AComparisonCameOut(var comparison, var _, var _) ->
+                    comparison.at();
+            case DecisionRuleReading.AnApplicationAnswered(var application, var _, var _) ->
                     application.writtenAt();
-            case DecisionRuleReading.AForkTookAnArm(var arm) ->
+            case DecisionRuleReading.AForkTookAnArm(var arm, var _) ->
                     Sites.placeOf(compilation.db(), arm.anchor());
             case DecisionRuleReading.AConditionIsNotShown _,
                     DecisionRuleReading.AnOutcomeIsNotPlaced _,
@@ -1160,19 +1262,62 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
     }
 
+    /** One condition, with where a reader is sent for it and the calls it was reached through. */
+    private static ShownCondition shown(Compilation compilation, DecisionRuleReading read) {
+        ExpansionLineage within = switch (read) {
+            case DecisionRuleReading.AComparisonCameOut(var _, var _, var copy) -> copy;
+            case DecisionRuleReading.AnApplicationAnswered(var _, var _, var copy) -> copy;
+            case DecisionRuleReading.AForkTookAnArm(var _, var copy) -> copy;
+            case DecisionRuleReading.AConditionIsNotShown _,
+                    DecisionRuleReading.AnOutcomeIsNotPlaced _,
+                    DecisionRuleReading.AForkIsNotPlaced _ -> ExpansionLineage.ORIGINAL;
+        };
+        List<ACall> through = new ArrayList<>();
+        while (within instanceof ExpansionLineage.Expansion copy) {
+            ExpansionSite.Direct called = switch (copy.at()) {
+                case ExpansionSite.Direct direct -> direct;
+                case ExpansionSite.Supplied supplied -> supplied.application();
+            };
+            Citation at = called instanceof ExpansionSite.Written(var origin)
+                    ? Sites.appliedAt(compilation.db(), origin).value() : null;
+            through.add(new ACall(copy.expanded().name(), at));
+            within = copy.within();
+        }
+        return new ShownCondition(read, whereItIsWritten(compilation, read), through.reversed());
+    }
+
     /**
-     * One condition of a rule, with where a reader is sent for it.
+     * One call of the model's own values a condition was reached through.
+     *
+     * @param called what was called, as the model names it
+     * @param at     where the call is written, or null where it is no call the author wrote — a
+     *               name standing where a value goes, which has no place a page can send anyone to
+     */
+    public record ACall(String called, Citation at) {
+
+        public ACall {
+            Objects.requireNonNull(called, "a call is a call of something");
+        }
+    }
+
+    /**
+     * One condition of a rule or of a combination, with where a reader is sent for it.
      *
      * <p>The place beside the reading and not inside it. What each condition of a rule is is the
      * same for a page and for a warning; where a page can send a reader is a question only a page
      * asks, and it is answered where the plan that numbered the places is in reach.
      *
-     * @param at where the construct that drew it is written, or null where there is none
+     * @param at      where the construct that drew it is written, or null where there is none
+     * @param through the calls of the model's own values it was reached through, outermost first,
+     *                and none where it stands in the body itself. Where it is written is one place
+     *                for every copy, and a value called twice is two copies a path can take two
+     *                ways
      */
-    public record ShownCondition(DecisionRuleReading read, Citation at) {
+    public record ShownCondition(DecisionRuleReading read, Citation at, List<ACall> through) {
 
         public ShownCondition {
             java.util.Objects.requireNonNull(read, "a condition shown is some condition");
+            through = List.copyOf(through);
         }
     }
 
@@ -3268,27 +3413,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * How many of the combinations the body settles a value by the rows were seen making.
      *
      * <p>The count and the gaps beside it, which the findings under the behavior name one to a
-     * line. What a combination is of is not printed here: the decisions are held in the terms the
-     * account keys on, and a line spelling them would show an author comparisons they did not
-     * write.
+     * line.
      *
      * <p>The meetings the measure would not walk are said beside the count rather than folded into
      * it. What they hold is combinations nobody counted, and a reader told only the ratio would
      * take a behavior measured in part for one measured in full.
      *
-     * <p>Every meeting the count holds and no row makes, said one to a line under it the way an
-     * arm or a decision rule with no row is. What a combination is of stays unsaid for the reason
-     * the count above does: the decisions are held in the terms the account keys on, and a line
-     * spelling them out would show an author comparisons they did not write.
-     *
-     * <p>So a behavior with more than one such meeting is shown that many identical lines. What
-     * tells one from another — which decisions, come out which ways — is not carried out to a
-     * reader here; an arm has {@link ArmVocabulary#label} and a decision rule has {@link
-     * BehaviorReport#readingsOf} because both are written against places or conditions this
-     * account already has words for, and a meeting has neither yet. Naming one is a further
-     * question this leaves open rather than one it answers wrongly: what this settles is that a
-     * strict build's own count of gaps and the marks printed under it agree, which held for every
-     * other kind and had stopped holding for this one.
+     * <p>Every meeting the count holds and no row makes, and every one only rows that do not hold
+     * make, said one to a line the way an arm or a decision rule is — and under it which
+     * combination it is, so that two of them are two things to act on. Said by the places a run
+     * making it is seen at and never by the decisions the account keys it on, which are in terms
+     * that would show an author comparisons they did not write ({@link BehaviorReport#waysOf}).
      */
     private void interaction(StringBuilder out, BehaviorReport behavior,
                              InteractionEvidence meetings,
@@ -3306,9 +3441,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         meetings.counted(),
                         ReasonProse.of(meetings.made().why()).sentence(), held)));
         for (ReportedFinding f : behavior.reported()) {
-            if (f.finding().about() instanceof About.ACombinationNoRowMakes) {
+            if (f.finding().about() instanceof About.ACombinationNoRowMakes(var combination)) {
                 out.append(String.format("      %s %smakes this combination of the decisions%s%n",
                         mark(f.finding()), noRow(f.finding()), onAPremise(f.finding())));
+                ways(out, behavior.waysOf(combination), declaredIn, rendering);
             }
         }
         for (CoveredOnlyByRowsThatDoNotHold.Covered<ObligationIdentity.OfACombinationOfDecisions>
@@ -3316,6 +3452,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             out.append(String.format("      %s this combination of the decisions: %s%n",
                     onlyRowsThatDoNotHold(marks, covered.by(),"makes", "make"),
                     rowsThatDoNotHold(covered.by(), behavior.rowPlace(), rendering, declaredIn)));
+            ways(out, behavior.waysOf(covered.obligation()), declaredIn, rendering);
+        }
+    }
+
+    /**
+     * Which combination a line is about, one condition to a line.
+     *
+     * <p>Where a run can make it more than one way, each way under a word that says it is one of
+     * them. The combination is one requirement however many places record it, and a run makes it by
+     * doing all of some one way — so the ways are alternatives, and a list run together would read
+     * as one way a run has to do all of.
+     */
+    private static void ways(StringBuilder out, List<List<ShownCondition>> ways,
+                             SourceId declaredIn, SourceRendering rendering) {
+        for (int i = 0; i < ways.size(); i++) {
+            if (ways.size() > 1) {
+                out.append(i == 0 ? "          either\n" : "          or\n");
+            }
+            for (ShownCondition read : ways.get(i)) {
+                out.append(String.format("          · %s%n", said(read, declaredIn, rendering)));
+            }
         }
     }
 
@@ -3591,25 +3748,29 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
-     * One condition of a rule, as a page writes it.
+     * One condition of a rule or of a combination, as a page writes it.
      *
      * <p>Which construct and which way, and never the proposition the account keys the condition
      * on: a rule holding {@code n <= 100} denied is a body whose author wrote {@code n > 100}, and
      * a page spelling the first would be showing them a comparison they did not write.
+     *
+     * <p>And which copy of it, by the calls it was reached through. The construct is written once
+     * for every call of the value it is in, so a path that goes one way in one call and the other
+     * way in the next is otherwise said the same as the path the other way round.
      *
      * <p>Exhaustive with no {@code default}, so a shape added to the reading is one somebody words
      * rather than one that goes quiet.
      */
     private static String said(ShownCondition shown, SourceId declaredIn,
                                SourceRendering rendering) {
-        return switch (shown.read()) {
-            case DecisionRuleReading.AComparisonCameOut(var _, var held) ->
+        String condition = switch (shown.read()) {
+            case DecisionRuleReading.AComparisonCameOut(var _, var held, var _) ->
                     "the comparison at " + shown.at().said(rendering, declaredIn)
                             + (held ? " holds" : " does not hold");
-            case DecisionRuleReading.AnApplicationAnswered(var _, var held) ->
+            case DecisionRuleReading.AnApplicationAnswered(var _, var held, var _) ->
                     "the operation applied at " + shown.at().said(rendering, declaredIn)
                             + (held ? " answers true" : " answers false");
-            case DecisionRuleReading.AForkTookAnArm(var arm) ->
+            case DecisionRuleReading.AForkTookAnArm(var arm, var _) ->
                     "it goes through `" + ArmVocabulary.label(arm) + "` ("
                             + shown.at().said(rendering, declaredIn) + ")";
             // Every shape with nothing to send a reader to. What differs between them is which
@@ -3621,6 +3782,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     DecisionRuleReading.AForkIsNotPlaced _ ->
                     "one condition of it is one this compiler has nothing to send you to";
         };
+        List<String> calls = new ArrayList<>();
+        // The nearest call first, which is the one the construct is written in.
+        for (ACall call : shown.through().reversed()) {
+            calls.add("`" + call.called() + "`"
+                    + (call.at() == null ? "" : " at " + call.at().said(rendering, declaredIn)));
+        }
+        return calls.isEmpty() ? condition
+                : condition + ", in the call of " + String.join(" in the call of ", calls);
     }
 
     /**

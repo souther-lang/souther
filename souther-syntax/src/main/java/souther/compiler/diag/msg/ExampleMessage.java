@@ -398,6 +398,26 @@ public sealed interface ExampleMessage extends Message {
     record TheRuleGoesThroughThisArm(souther.compiler.diag.Localizable arm)
             implements ExampleMessage, Supporting {}
 
+    /**
+     * One condition of that rule standing in a value the body calls, marked at the call the rule
+     * went through: the condition as {@link TheRuleTakesThisConditionHolding} says it, in this call
+     * of {@code called}.
+     *
+     * <p>Beside the mark on the construct and not instead of it. The construct is written once for
+     * every call of the value, so a rule that comes out one way in one call and the other way in
+     * the next has two marks there saying both, and what pairs each with its call is this.
+     */
+    record TheRuleTakesAConditionHoldingInThisCall(String called)
+            implements ExampleMessage, Supporting {}
+
+    /** The same, where the rule takes it failing. */
+    record TheRuleTakesAConditionFailingInThisCall(String called)
+            implements ExampleMessage, Supporting {}
+
+    /** The same for an arm, which is named, so the call says which one. */
+    record TheRuleGoesThroughAnArmInThisCall(souther.compiler.diag.Localizable arm, String called)
+            implements ExampleMessage, Supporting {}
+
     /** A condition of the rule with nothing to send a reader to, so that a rule is never described
      *  by fewer conditions than it turns on. */
     record OneConditionOfTheRuleIsNotShown() implements ExampleMessage, Supporting {}

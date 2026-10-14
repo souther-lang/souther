@@ -36,6 +36,7 @@ import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.msg.DeadBranchMessage;
 import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.diag.msg.Supporting;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.Localizable;
@@ -70,6 +71,8 @@ import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ExpansionSite;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 import souther.compiler.observe.Disposition;
@@ -8469,17 +8472,30 @@ public final class Adequacy {
         private static void said(Db db, souther.compiler.diag.Diagnostic.Builder built,
                                  DecisionRuleReading read) {
             switch (read) {
-                case DecisionRuleReading.AComparisonCameOut(var comparison, var held) ->
-                        label(built, comparison.at(), held
-                                ? new ExampleMessage.TheRuleTakesThisConditionHolding()
-                                : new ExampleMessage.TheRuleTakesThisConditionFailing());
-                case DecisionRuleReading.AnApplicationAnswered(var application, var held) ->
-                        label(built, application.writtenAt(), held
-                                ? new ExampleMessage.TheRuleTakesThisConditionHolding()
-                                : new ExampleMessage.TheRuleTakesThisConditionFailing());
-                case DecisionRuleReading.AForkTookAnArm(var arm) ->
-                        label(built, Sites.placeOf(db, arm.anchor()),
-                                new ExampleMessage.TheRuleGoesThroughThisArm(phraseFor(arm)));
+                case DecisionRuleReading.AComparisonCameOut(var comparison, var held, var within) -> {
+                    label(built, comparison.at(), held
+                            ? new ExampleMessage.TheRuleTakesThisConditionHolding()
+                            : new ExampleMessage.TheRuleTakesThisConditionFailing());
+                    inEachCall(db, built, within, called -> held
+                            ? new ExampleMessage.TheRuleTakesAConditionHoldingInThisCall(called)
+                            : new ExampleMessage.TheRuleTakesAConditionFailingInThisCall(called));
+                }
+                case DecisionRuleReading.AnApplicationAnswered(var application, var held,
+                                                               var within) -> {
+                    label(built, application.writtenAt(), held
+                            ? new ExampleMessage.TheRuleTakesThisConditionHolding()
+                            : new ExampleMessage.TheRuleTakesThisConditionFailing());
+                    inEachCall(db, built, within, called -> held
+                            ? new ExampleMessage.TheRuleTakesAConditionHoldingInThisCall(called)
+                            : new ExampleMessage.TheRuleTakesAConditionFailingInThisCall(called));
+                }
+                case DecisionRuleReading.AForkTookAnArm(var arm, var within) -> {
+                    label(built, Sites.placeOf(db, arm.anchor()),
+                            new ExampleMessage.TheRuleGoesThroughThisArm(phraseFor(arm)));
+                    inEachCall(db, built, within, called ->
+                            new ExampleMessage.TheRuleGoesThroughAnArmInThisCall(
+                                    phraseFor(arm), called));
+                }
                 // Every shape with nothing to send a reader to, said as one note. What differs
                 // between them is which part of this compiler fell short, which is not something
                 // an author acts on — and a note is written for each so that the rule is never
@@ -8488,6 +8504,34 @@ public final class Adequacy {
                         DecisionRuleReading.AnOutcomeIsNotPlaced _,
                         DecisionRuleReading.AForkIsNotPlaced _ ->
                         built.hint(new ExampleMessage.OneConditionOfTheRuleIsNotShown());
+            }
+        }
+
+        /**
+         * The calls of the model's own values a condition was reached through, each marked with
+         * what the rule takes in it.
+         *
+         * <p>The mark on the construct is the same for every copy of it, so a rule through a value
+         * called twice — one way in one call, the other way in the next — would have both marks on
+         * one construct and nothing saying which call each was in. A call that is no call the
+         * author wrote has nowhere to be marked and is left unmarked: the condition is already
+         * marked where it is written.
+         */
+        private static <M extends ExampleMessage & Supporting> void inEachCall(
+                Db db, Diagnostic.Builder built, ExpansionLineage within,
+                Function<String, M> said) {
+            while (within instanceof ExpansionLineage.Expansion copy) {
+                ExpansionSite.Direct called = switch (copy.at()) {
+                    case ExpansionSite.Direct direct -> direct;
+                    case ExpansionSite.Supplied supplied -> supplied.application();
+                };
+                if (called instanceof ExpansionSite.Written(var origin)) {
+                    Citation at = Sites.appliedAt(db, origin).value();
+                    if (at != null) {
+                        label(built, at, said.apply(copy.expanded().name()));
+                    }
+                }
+                within = copy.within();
             }
         }
 

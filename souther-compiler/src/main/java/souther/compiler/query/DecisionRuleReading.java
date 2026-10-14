@@ -1,13 +1,19 @@
 package souther.compiler.query;
 
+import souther.compiler.coverage.ControlClaim;
+import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.partition.DecisionCondition;
 import souther.compiler.partition.ShownBy;
+import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * One condition of a decision rule, as a reader is told about it.
@@ -45,12 +51,14 @@ public sealed interface DecisionRuleReading {
      * @param comparison which comparison of the model, which is what a reader is sent to
      * @param held       whether the path took it holding — of the comparison as written, not of the
      *                   proposition the rule is keyed on
+     * @param within     which copy of it, as {@link AForkTookAnArm#within} says
      */
-    record AComparisonCameOut(CoverageSites.ComparisonSite comparison, boolean held)
-            implements DecisionRuleReading {
+    record AComparisonCameOut(CoverageSites.ComparisonSite comparison, boolean held,
+                              ExpansionLineage within) implements DecisionRuleReading {
 
         public AComparisonCameOut {
             Objects.requireNonNull(comparison, "a comparison of the model is some site");
+            Objects.requireNonNull(within, "a comparison is where it is written or in some copy");
         }
     }
 
@@ -59,12 +67,14 @@ public sealed interface DecisionRuleReading {
      *
      * @param application where the code answering it stands, which is what a reader is sent to
      * @param held        whether the path took it answering true
+     * @param within      which copy of it, as {@link AForkTookAnArm#within} says
      */
-    record AnApplicationAnswered(CoverageSites.AnswerSite application, boolean held)
-            implements DecisionRuleReading {
+    record AnApplicationAnswered(CoverageSites.AnswerSite application, boolean held,
+                                 ExpansionLineage within) implements DecisionRuleReading {
 
         public AnApplicationAnswered {
             Objects.requireNonNull(application, "an application of the model is some site");
+            Objects.requireNonNull(within, "an application is where it is written or in some copy");
         }
     }
 
@@ -90,11 +100,20 @@ public sealed interface DecisionRuleReading {
      * <p>The site and not the fork and a number. Which arm a reader is told about is a thing the
      * coverage sites already have words for, and a sentence built from the number would be a second
      * naming of one arm, free to call it something the branch account does not.
+     *
+     * @param arm    which arm of the model, which is what a reader is sent to
+     * @param within which copy of the fork: the calls of the model's own values the path went
+     *               through to reach it, and {@link ExpansionLineage#ORIGINAL} where it stands in
+     *               the body itself. The site is one per construct, and a value called twice is one
+     *               construct standing in two places — a path through both copies, one each way,
+     *               said by the sites alone reads the same as the path the other way round
      */
-    record AForkTookAnArm(CoverageSites.ArmSite arm) implements DecisionRuleReading {
+    record AForkTookAnArm(CoverageSites.ArmSite arm, ExpansionLineage within)
+            implements DecisionRuleReading {
 
         public AForkTookAnArm {
             Objects.requireNonNull(arm, "an arm of the model is some site");
+            Objects.requireNonNull(within, "a fork is where it is written or in some copy");
         }
     }
 
@@ -159,6 +178,50 @@ public sealed interface DecisionRuleReading {
     }
 
     /**
+     * What a run that came one way to a combination of a body's decisions would be seen doing, one
+     * reading per place, in the order the way holds them.
+     *
+     * <p>Read off the places and not off the decisions the combination is told apart by. Those are
+     * held in the terms a search steers a row by, and a sentence made of them would name input
+     * positions the way this compiler spells them; the places are the comparisons, applications and
+     * arms the author wrote, and each is resolved by the rule a decision rule's conditions are, on
+     * the construct of the model the place is a materialisation of.
+     *
+     * <p>A copy of a construct said once. One arm can stand for several conditions — a run down it
+     * brought every truth of the condition out the way the arm says — and a sentence for each would
+     * be the same sentence.
+     */
+    static List<DecisionRuleReading> ofAWay(List<ControlClaim> claims, CoverageSites.Plan plan,
+                                            String behavior) {
+        Set<DecisionRuleReading> out = new LinkedHashSet<>();
+        for (ControlClaim claim : claims) {
+            out.add(switch (claim.at()) {
+                case ControlPlace.Outcome(var occurrence, var _, var held) ->
+                        outcomeOf(plan, behavior, copyOf(occurrence), held);
+                case ControlPlace.Arm(var arm, var _, var _) ->
+                        armOf(plan, behavior, copyOf(arm.fork()), arm.part());
+            });
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * The construct {@code occurrence} is, in the copy of the model it stands in.
+     *
+     * <p>A construct inside one of the language's own operations is no construct of the model, and
+     * a place there is still a place a run is recorded at — {@code Int.max} draws a line of its own
+     * and its arms are owed. It is found by its origin as any construct is, and the copy it stands
+     * in is the copy the call of the operation stands in, which is what tells two such calls apart.
+     */
+    private static ModelOccurrence copyOf(ConstructOccurrence occurrence) {
+        return ModelOccurrence.statedAt(occurrence)
+                .orElseGet(() -> new ModelOccurrence(occurrence.origin(),
+                        ModelOccurrence.operationCalledAround(occurrence)
+                                .map(ModelOccurrence::lineage)
+                                .orElse(ExpansionLineage.ORIGINAL)));
+    }
+
+    /**
      * The site of one construct answering a truth, or the fact that this run has no site for it.
      *
      * <p>Matched on the construct the source wrote, for the reason {@link #armOf} gives. A
@@ -168,12 +231,12 @@ public sealed interface DecisionRuleReading {
                                                  ModelOccurrence construct, boolean held) {
         for (CoverageSites.ComparisonSite site : plan.comparisons(behavior)) {
             if (site.obligation().origin().equals(construct.origin())) {
-                return new AComparisonCameOut(site, held);
+                return new AComparisonCameOut(site, held, construct.lineage());
             }
         }
         for (CoverageSites.AnswerSite site : plan.answers(behavior)) {
             if (site.application().origin().equals(construct.origin())) {
-                return new AnApplicationAnswered(site, held);
+                return new AnApplicationAnswered(site, held, construct.lineage());
             }
         }
         return new AnOutcomeIsNotPlaced(construct, held);
@@ -185,14 +248,15 @@ public sealed interface DecisionRuleReading {
      * <p>Matched on the construct the source wrote, which is what the two trees agree about. A
      * helper carrying a fork stands in the running tree once per call site and those differ in
      * their lineage, while the arm a row is owed for is the construct — so an occurrence is the
-     * wrong grain to match on here and would find nothing for the copies.
+     * wrong grain to match on here and would find nothing for the copies. Which copy it was is
+     * kept beside the site rather than matched on.
      */
     private static DecisionRuleReading armOf(CoverageSites.Plan plan, String behavior,
                                              ModelOccurrence fork, int part) {
         for (CoverageSites.ArmSite site : plan.arms(behavior)) {
             if (site.obligation().part() == part
                     && site.obligation().origin().equals(fork.origin())) {
-                return new AForkTookAnArm(site);
+                return new AForkTookAnArm(site, fork.lineage());
             }
         }
         return new AForkIsNotPlaced(fork, part);

@@ -493,7 +493,7 @@ public final class Sites {
     }
 
     /** Where the module that wrote {@code origin} says the call stands. */
-    private static Answer<Citation> appliedAt(Db db, SourceConstructOrigin origin) {
+    public static Answer<Citation> appliedAt(Db db, SourceConstructOrigin origin) {
         if (origin.module() == null) {
             return Answer.absent();
         }

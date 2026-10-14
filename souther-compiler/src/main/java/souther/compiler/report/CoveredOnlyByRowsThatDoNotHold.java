@@ -90,13 +90,26 @@ public record CoveredOnlyByRowsThatDoNotHold(
             }
         }
         List<Covered<DecisionReading.Stated>> rules = rulesOf(behavior.evidence().decision());
+        List<Covered<ObligationIdentity.OfACombinationOfDecisions>> meetings =
+                combinationsOf(behavior.evidence().combinations());
+        return new CoveredOnlyByRowsThatDoNotHold(classes, cells, points, arms, rules, meetings);
+    }
+
+    /**
+     * The combinations of a body's decisions only rows that do not hold make, where those are what
+     * the behavior is held to.
+     *
+     * <p>Asked on its own as well, for the reason {@link #rulesOf} is: a combination a page names is
+     * one it is handed the reading of.
+     */
+    static List<Covered<ObligationIdentity.OfACombinationOfDecisions>> combinationsOf(
+            CombinationCriterion criterion) {
         List<Covered<ObligationIdentity.OfACombinationOfDecisions>> meetings = new ArrayList<>();
-        if (behavior.evidence().combinations() instanceof CombinationCriterion.Interactions(
-                InteractionEvidence measured)) {
+        if (criterion instanceof CombinationCriterion.Interactions(InteractionEvidence measured)) {
             measured.made().made().map(InteractionEvidence.RowsMeeting::made).orElseGet(Map::of)
                     .forEach((combination, by) -> only(by, combination, meetings));
         }
-        return new CoveredOnlyByRowsThatDoNotHold(classes, cells, points, arms, rules, meetings);
+        return meetings;
     }
 
     /**
