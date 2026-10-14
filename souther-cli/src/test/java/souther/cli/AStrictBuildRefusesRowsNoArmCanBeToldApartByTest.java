@@ -7,6 +7,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -44,6 +45,37 @@ class AStrictBuildRefusesRowsNoArmCanBeToldApartByTest {
 
     @Test
     void everyArmRewrittenAsItsSiblingIsAGapTheStrictBuildRefuses() throws Exception {
+        Ran ran = run("--strict");
+
+        assertTrue(ran.out().contains("replacement 0/4"),
+                "each of the four arms as its sibling, none told apart: " + ran.out());
+        assertEquals(1, ran.code(), "and the strict build refuses over them: " + ran.out());
+    }
+
+    /**
+     * Each of the four says which arm answered as which, and the fork it is an arm of: the two
+     * {@code if}s are told apart by where each is written, and the two rewrites at one of them by
+     * which arm is rewritten.
+     */
+    @Test
+    void eachGapNamesTheArmAndTheArmItAnsweredAs() throws Exception {
+        String report = run("--strict").out();
+
+        assertEquals(List.of(
+                        "! no row would come out differently if `then` (7:5) answered as `else`",
+                        "! no row would come out differently if `else` (7:5) answered as `then`",
+                        "! no row would come out differently if `then` (8:10) answered as `else`",
+                        "! no row would come out differently if `else` (8:10) answered as `then`"),
+                report.lines().map(String::strip)
+                        .filter(line -> line.startsWith("! no row would come out differently"))
+                        .toList(),
+                report);
+    }
+
+    private record Ran(int code, String out) {}
+
+    /** {@code souther examples} over the model with {@code flag}, and what it printed. */
+    private static Ran run(String flag) throws Exception {
         Path file = Files.createTempDirectory("souther-strict").resolve("addon.sou");
         Files.writeString(file, MODEL);
         PrintStream originalOut = System.out;
@@ -51,14 +83,10 @@ class AStrictBuildRefusesRowsNoArmCanBeToldApartByTest {
         System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
         int code;
         try {
-            code = Main.dispatch(new String[] {"examples", file.toString(), "--strict"});
+            code = Main.dispatch(new String[] {"examples", file.toString(), flag});
         } finally {
             System.setOut(originalOut);
         }
-        String report = out.toString(StandardCharsets.UTF_8);
-
-        assertTrue(report.contains("replacement 0/4"),
-                "each of the four arms as its sibling, none told apart: " + report);
-        assertEquals(1, code, "and the strict build refuses over them: " + report);
+        return new Ran(code, out.toString(StandardCharsets.UTF_8));
     }
 }

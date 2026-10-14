@@ -109,8 +109,10 @@ import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.query.About;
 import souther.compiler.query.CombinationCriterion;
 import souther.compiler.query.DecisionEvidence;
+import souther.compiler.query.Db;
 import souther.compiler.query.InteractionEvidence;
 import souther.compiler.query.ReplacementEvidence;
+import souther.compiler.query.ReplacementAsWritten;
 import souther.compiler.query.ReplacementReportAnchor;
 import souther.compiler.query.Replacements;
 import souther.compiler.query.DecisionRuleReading;
@@ -1134,37 +1136,53 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (about.isEmpty()) {
             return Map.of();
         }
-        DecisionRuleReading.Places places =
-                DecisionRuleReading.Places.of(placesOf(compilation, module), behavior);
+        DecisionRuleReading.Places places = placesFor(compilation.db(), module, behavior);
         Map<DecisionReading.Ruled, List<ShownCondition>> out = new LinkedHashMap<>();
         for (DecisionReading.Ruled rule : decision.read().found()) {
-            if (!about.contains(rule)) {
-                continue;
+            if (about.contains(rule)) {
+                out.put(rule, conditionsOf(compilation.db(), module, places, rule));
             }
-            List<ShownCondition> shown = new ArrayList<>();
-            // One line per place the way consulted a condition at, naming every call it was
-            // consulted at there: one condition written twice is consulted at two places, and a
-            // helper's condition met at two calls is one place met twice.
-            for (RuleStep step : rule.steps()) {
-                Map<Optional<Citation>, DecisionRuleReading> readAt = new LinkedHashMap<>();
-                Map<Optional<Citation>, List<List<CallSite>>> callsAt = new LinkedHashMap<>();
-                for (ShownBy each : step.seen()) {
-                    DecisionRuleReading read = DecisionRuleReading.of(each, places);
-                    Optional<Citation> at =
-                            Optional.ofNullable(whereItIsWritten(compilation, read));
-                    readAt.putIfAbsent(at, read);
-                    List<List<CallSite>> calls = callsAt.computeIfAbsent(at,
-                            _ -> new ArrayList<>());
-                    each.copy().ifPresent(copy ->
-                            calls.add(callsOf(compilation, module,
-                                    StepOfACopy.of(copy.lineage()))));
-                }
-                readAt.forEach((at, read) ->
-                        shown.add(new ShownCondition(read, at.orElse(null), callsAt.get(at))));
-            }
-            out.put(rule, List.copyOf(shown));
         }
         return out;
+    }
+
+    /**
+     * Where the places of {@code behavior}'s plan are, which naming the arm a condition goes
+     * through takes.
+     */
+    static DecisionRuleReading.Places placesFor(Db db, String module, String behavior) {
+        return DecisionRuleReading.Places.of(placesOf(db, module), behavior);
+    }
+
+    /**
+     * Every condition {@code rule} turns on, as a reader is told it: one per place the way
+     * consulted a condition at, naming every call it was consulted at there. One condition written
+     * twice is consulted at two places, and a helper's condition met at two calls is one place met
+     * twice.
+     *
+     * <p>The one reading of a rule for every reader that says one — a page under its count, and a
+     * row composed for it — so that the two say a rule by the same conditions.
+     */
+    static List<ShownCondition> conditionsOf(Db db, String module,
+                                             DecisionRuleReading.Places places,
+                                             DecisionReading.Ruled rule) {
+        List<ShownCondition> shown = new ArrayList<>();
+        for (RuleStep step : rule.steps()) {
+            Map<Optional<Citation>, DecisionRuleReading> readAt = new LinkedHashMap<>();
+            Map<Optional<Citation>, List<List<CallSite>>> callsAt = new LinkedHashMap<>();
+            for (ShownBy each : step.seen()) {
+                DecisionRuleReading read = DecisionRuleReading.of(each, places);
+                Optional<Citation> at = Optional.ofNullable(whereItIsWritten(db, read));
+                readAt.putIfAbsent(at, read);
+                List<List<CallSite>> calls = callsAt.computeIfAbsent(at,
+                        _ -> new ArrayList<>());
+                each.copy().ifPresent(copy ->
+                        calls.add(callsOf(db, module, StepOfACopy.of(copy.lineage()))));
+            }
+            readAt.forEach((at, read) ->
+                    shown.add(new ShownCondition(read, at.orElse(null), callsAt.get(at))));
+        }
+        return List.copyOf(shown);
     }
 
     /**
@@ -1199,31 +1217,44 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (about.isEmpty()) {
             return Map.of();
         }
-        DecisionRuleReading.Places places =
-                DecisionRuleReading.Places.of(placesOf(compilation, module), behavior);
+        DecisionRuleReading.Places places = placesFor(compilation.db(), module, behavior);
         Map<ObligationIdentity.OfACombinationOfDecisions, List<List<ShownCondition>>> out =
                 new LinkedHashMap<>();
         for (ObligationIdentity.OfACombinationOfDecisions combination : about) {
-            List<InteractionRequirements.Way> ways = meetings.asked().ways().get(combination);
-            if (ways == null) {
-                throw new IllegalStateException("a line of `" + behavior + "` is about a"
-                        + " combination its measure states no way to: " + combination);
-            }
-            List<List<ShownCondition>> read = new ArrayList<>();
-            for (InteractionRequirements.Way way : ways) {
-                List<ShownCondition> shown = new ArrayList<>();
-                for (DecisionRuleReading.Seen each
-                        : DecisionRuleReading.ofAWay(way.claims(), places)) {
-                    shown.add(new ShownCondition(each.read(),
-                            whereItIsWritten(compilation, each.read()),
-                            each.through().isEmpty() ? List.of()
-                                    : List.of(callsOf(compilation, module, each.through()))));
-                }
-                read.add(shown);
-            }
-            out.put(combination, distinctWays(read));
+            out.put(combination, waysOf(compilation.db(), module, places, meetings, combination));
         }
         return out;
+    }
+
+    /**
+     * Every way to {@code combination} the measure holds it under, each as the conditions a run
+     * along it is seen at, as a reader is told them — and a way that reads like one before it said
+     * once.
+     *
+     * <p>The one reading of a combination for every reader that says one, as
+     * {@link #conditionsOf} is for a rule.
+     */
+    static List<List<ShownCondition>> waysOf(Db db, String module,
+                                             DecisionRuleReading.Places places,
+                                             InteractionEvidence meetings,
+                                             ObligationIdentity.OfACombinationOfDecisions combination) {
+        List<InteractionRequirements.Way> ways = meetings.asked().ways().get(combination);
+        if (ways == null) {
+            throw new IllegalStateException("a line of `" + combination.behavior() + "` is about"
+                    + " a combination its measure states no way to: " + combination);
+        }
+        List<List<ShownCondition>> read = new ArrayList<>();
+        for (InteractionRequirements.Way way : ways) {
+            List<ShownCondition> shown = new ArrayList<>();
+            for (DecisionRuleReading.Seen each
+                    : DecisionRuleReading.ofAWay(way.claims(), places)) {
+                shown.add(new ShownCondition(each.read(), whereItIsWritten(db, each.read()),
+                        each.through().isEmpty() ? List.of()
+                                : List.of(callsOf(db, module, each.through()))));
+            }
+            read.add(shown);
+        }
+        return distinctWays(read);
     }
 
     /**
@@ -1268,7 +1299,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (ModelOccurrence copy : copies) {
             out.computeIfAbsent(copy, _ -> new CopyShown(
                     Sites.placeIfKnown(compilation.db(), copy.origin()),
-                    callsOf(compilation, module, StepOfACopy.of(copy.lineage()))));
+                    callsOf(compilation.db(), module, StepOfACopy.of(copy.lineage()))));
         }
         return out;
     }
@@ -1331,11 +1362,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *
      * @param steps the steps of the copy, outermost first, as a lineage holds them
      */
-    private static List<CallSite> callsOf(Compilation compilation, String module,
-                                          List<StepOfACopy> steps) {
+    private static List<CallSite> callsOf(Db db, String module, List<StepOfACopy> steps) {
         List<CallSite> out = new ArrayList<>();
         for (StepOfACopy step : steps.reversed()) {
-            Answer<Citation> made = Sites.whereMade(compilation.db(), step);
+            Answer<Citation> made = Sites.whereMade(db, step);
             out.add(new CallSite(step, Sites.calledIn(step, module),
                     made.present() ? made.value() : null));
         }
@@ -1432,13 +1462,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * measure came to no answer states rules all the same, and asking that table for one of their
      * arms is a page failing on an arm it was never assembled with.
      */
-    private static Citation whereItIsWritten(Compilation compilation, DecisionRuleReading read) {
+    private static Citation whereItIsWritten(Db db, DecisionRuleReading read) {
         return switch (read) {
             case DecisionRuleReading.AComparisonCameOut(var comparison, var _) -> comparison.at();
             case DecisionRuleReading.AnApplicationAnswered(var application, var _) ->
                     application.writtenAt();
             case DecisionRuleReading.AForkTookAnArm(var _, var shownAt) ->
-                    Sites.placeOf(compilation.db(), shownAt);
+                    Sites.placeOf(db, shownAt);
             case DecisionRuleReading.AConditionIsNotShown _,
                     DecisionRuleReading.AnOutcomeIsNotPlaced _,
                     DecisionRuleReading.AForkIsNotPlaced _ -> null;
@@ -1471,9 +1501,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
 
     /** Where this compilation numbered the places a run through each construct is recorded. */
-    private static CoverageSites.Plan placesOf(Compilation compilation, String module) {
-        Bodies.Elaborated checked =
-                compilation.db().ask(new Bodies.Observable(module)).value();
+    private static CoverageSites.Plan placesOf(Db db, String module) {
+        Bodies.Elaborated checked = db.ask(new Bodies.Observable(module)).value();
         return checked == null ? CoverageSites.Plan.NONE : checked.plan();
     }
 
@@ -2521,7 +2550,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         onlyBy, marks);
                 branch(out, behavior, module.declaredIn(), rendering, onlyBy, marks);
                 decision(out, behavior, module.declaredIn(), rendering, onlyBy, marks);
-                replacement(out, behavior);
+                replacement(out, behavior, module.module(), module.declaredIn(), rendering);
                 // Under the behavior it names, because a reason printed at the module's foot is
                 // read as belonging to whichever behavior came last. That was survivable while the
                 // only reasons naming one were rare; a position that could not be read is not.
@@ -3611,7 +3640,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * sibling. A rewrite left open is counted out of the number and said beside it, since nothing
      * showed it to be a gap; one shown to be is said under the line, one to a line.
      */
-    private void replacement(StringBuilder out, BehaviorReport behavior) {
+    private void replacement(StringBuilder out, BehaviorReport behavior, String module,
+                             SourceId declaredIn, SourceRendering rendering) {
         ReplacementEvidence replacement = behavior.evidence().replacement();
         if (replacement == null) {
             return;
@@ -3627,14 +3657,32 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 : String.format("   %d left open", rewrites.undecided());
         out.append(String.format("    replacement %d/%d%s%n", rewrites.noticed(),
                 rewrites.noticed() + rewrites.unnoticed(), open));
+        // Each said by what tells it from the others of the body, in RewriteVocabulary's words. An
+        // arm's by the arm and the arm it answered as, with the fork's place once: both arms are of
+        // the one fork. A fork in code this build holds no source of has no place here to give, and
+        // the place the finding is shown at is the behavior's, which is not where the fork is. The
+        // body answering one value is told from another by the value, and said by the row that
+        // came to it.
         for (ReportedFinding f : behavior.reported()) {
             if (f.finding().about() instanceof About.ARewriteNoRowTellsApart(
-                    var _, var rewrite, var _, var _, var _)) {
-                out.append(String.format("      %s %s%n", mark(f.finding()), switch (rewrite) {
-                    case Replacement.OfAnArm _ ->
-                            "no row would come out differently if an arm answered as its sibling";
-                    case Replacement.ByOneAnswer _ ->
-                            "no row would come out differently if the body answered one value";
+                    var _, var written, var reportAt, var _, var _)) {
+                out.append(String.format("      %s %s%n", mark(f.finding()), switch (written) {
+                    case ReplacementAsWritten.OfAnArm rewrite -> switch (reportAt) {
+                        case ReplacementReportAnchor.AtTheFork _ -> String.format(
+                                "no row would come out differently if `%s` (%s) answered as `%s`",
+                                RewriteVocabulary.rewritten(rewrite),
+                                f.at().said(rendering, declaredIn),
+                                RewriteVocabulary.answeredAs(rewrite));
+                        case ReplacementReportAnchor.AtTheBehavior _ -> String.format(
+                                "no row would come out differently if `%s` answered as `%s` %s",
+                                RewriteVocabulary.rewritten(rewrite),
+                                RewriteVocabulary.answeredAs(rewrite),
+                                RewriteVocabulary.outOfSight(rewrite, module));
+                    };
+                    case ReplacementAsWritten.ByOneAnswer one -> String.format(
+                            "no row would come out differently if the body always answered what"
+                                    + " `%s` answers",
+                            RewriteVocabulary.answeredBy(one, rendering));
                 }));
             }
         }
@@ -4045,8 +4093,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>Exhaustive with no {@code default}, so a shape added to the reading is one somebody words
      * rather than one that goes quiet.
      */
-    private static String said(ShownCondition shown, SourceId declaredIn,
-                               SourceRendering rendering) {
+    static String said(ShownCondition shown, SourceId declaredIn, SourceRendering rendering) {
         // And which call of the helper it is in, after what it is. A helper called three times is
         // one place in the source, and three conditions of a rule sent there alike are three a
         // reader cannot tell apart.
@@ -7635,9 +7682,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // show an author a comparison they did not write. Two rules of one behavior are shown
             // alike here and are told apart by `obligationId`, which is what that field is for.
             case About.ARuleNoRowTakes(var behavior, var _) -> words(behavior);
-            // The behavior whose body it is a rewrite of, for the reason a rule's subject is the
-            // behavior: which arm and sibling is a part number the author did not write, and is
-            // told apart by `obligationId`.
+            // The behavior whose body it is a rewrite of. A subject names something the document
+            // holds, and no entry of it is called by a rewrite's words; which rewrite it is, is
+            // `obligationId`, and where an arm's is shown at its fork, the place beside it.
             case About.ARewriteNoRowTellsApart(var behavior, var _, var _, var _, var _) ->
                     words(behavior);
             case About.ACaseNoRowExpects(var _, var missing) -> words(missing.name());

@@ -54,9 +54,10 @@ public final class ReplacementReading {
         record Noticed(RowIdentity by) implements Standing {}
 
         /** A row's run of the rewrite answered differently from the body, and no row came out
-         *  differently under it; {@code lookFor} is the rewrite as a search for a row telling it
-         *  apart is put to it. */
-        record Unnoticed(RowIdentity shownBy, ReplacementOwed lookFor) implements Standing {}
+         *  differently under it; {@code shownBy} is that row with the source it is written in,
+         *  which a row written without a name is told from another source's by, and
+         *  {@code lookFor} is the rewrite as a search for a row telling it apart is put to it. */
+        record Unnoticed(RowRef shownBy, ReplacementOwed lookFor) implements Standing {}
 
         /** No row came out differently under the rewrite and no run showed it answering
          *  differently: what is left to ask is whether any input would. */
@@ -80,16 +81,21 @@ public final class ReplacementReading {
     }
 
     /** One rewrite, where a report about it is shown, and what the rows came to about it. */
-    public record Account(Replacement replacement, ReplacementReportAnchor reportAt,
+    public record Account(ReplacementAsWritten written, ReplacementReportAnchor reportAt,
                           Standing standing) {
 
         public Account {
-            Objects.requireNonNull(replacement, "an account is of some rewrite");
+            Objects.requireNonNull(written, "an account is of some rewrite");
             Objects.requireNonNull(reportAt, "and is shown somewhere");
             Objects.requireNonNull(standing, "an account says what the rows came to");
-            if (!reportAt.shows(replacement)) {
-                throw new IllegalArgumentException(replacement + " is not shown at " + reportAt);
+            if (!reportAt.shows(written.replacement())) {
+                throw new IllegalArgumentException(written + " is not shown at " + reportAt);
             }
+        }
+
+        /** Which rewrite this is an account of. */
+        public Replacement replacement() {
+            return written.replacement();
         }
     }
 
@@ -183,7 +189,8 @@ public final class ReplacementReading {
                 at.probes().add(probe);
             }
         }
-        occurrences.forEach((replaced, at) -> out.add(new Account(replaced, at.reportAt(),
+        occurrences.forEach((replaced, at) -> out.add(new Account(
+                ReplacementAsWritten.OfAnArm.in(plan, replaced), at.reportAt(),
                 armStanding(replaced, at.probes(), carried, stated, wentThrough))));
         // One answer only where no arm has a rewrite that is another program. Which family a body
         // invites is the body's: one with a fork is asked about the fork, arm by arm, whichever of
@@ -238,7 +245,7 @@ public final class ReplacementReading {
                 });
             }
         }
-        RowIdentity shownBy = null;
+        RowOutcome shownBy = null;
         boolean unknown = false;
         List<List<ObservedValue>> seenThrough = new ArrayList<>();
         for (RowOutcome row : rows) {
@@ -269,7 +276,7 @@ public final class ReplacementReading {
                 return new Standing.Noticed(row.identity());
             }
             if (shownBy == null && run.changed() == AnswerChange.CHANGED) {
-                shownBy = row.identity();
+                shownBy = row;
             }
         }
         if (unknown) {
@@ -279,7 +286,8 @@ public final class ReplacementReading {
                 replaced.with(), where,
                 replacements.replacing(replaced.fork(), replaced.part(), replaced.with()),
                 seenThrough);
-        return shownBy != null ? new Standing.Unnoticed(shownBy, lookFor)
+        return shownBy != null
+                ? new Standing.Unnoticed(RowRef.of(shownBy), lookFor)
                 : new Standing.Open(lookFor);
     }
 
@@ -316,7 +324,8 @@ public final class ReplacementReading {
                 distinct.add(value);
                 Replacement.ByOneAnswer rewrite = new Replacement.ByOneAnswer(value,
                         RowRef.of(answered.get(i)));
-                out.add(new Account(rewrite, new ReplacementReportAnchor.AtTheBehavior(),
+                out.add(new Account(new ReplacementAsWritten.ByOneAnswer(rewrite),
+                        new ReplacementReportAnchor.AtTheBehavior(),
                         oneAnswerStanding(rewrite, rows, answered, values, comparing)));
             }
         }
@@ -350,7 +359,7 @@ public final class ReplacementReading {
         // A row whose own answer was another value is a run the rewrite answers differently.
         for (int i = 0; i < answered.size(); i++) {
             if (!comparing.same(values.get(i), always)) {
-                return new Standing.Unnoticed(answered.get(i).identity(),
+                return new Standing.Unnoticed(RowRef.of(answered.get(i)),
                         new ReplacementOwed.ByOneAnswer(rewrite));
             }
         }

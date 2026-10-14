@@ -351,31 +351,48 @@ public sealed interface ExampleMessage extends Message {
     record WriteARowAtThatInput(String input) implements ExampleMessage, Supporting {}
 
     /**
-     * No row of the behavior would come out differently if the arm pointed at answered as another
-     * arm of its fork.
+     * No row of the behavior would come out differently if one arm of the fork pointed at answered
+     * as another.
      *
-     * <p>The behavior and not the arms. Where the arm is, is where this is pointed; which sibling it
-     * was rewritten as is a part number, and a sentence spelling it would name something the author
-     * did not write.
+     * <p>Both arms, in the phrases an arm is said in elsewhere. Where the fork is, is where this is
+     * pointed, and a fork has more than one arm there: which arm was rewritten and which it answered
+     * as is what tells this rewrite from the others at the same fork.
      */
     @Code(DiagnosticCode.E1939)
-    record NoRowTellsTheArmFromItsSibling(String behavior) implements ExampleMessage, Reported {}
-
-    /**
-     * No row of the behavior would come out differently if an arm it reaches in code this build
-     * holds no source of answered as another arm of its fork.
-     *
-     * <p>Pointed at the behavior, since there is no fork here to point at, so the sentence says
-     * which arm it is about rather than calling it this one.
-     */
-    @Code(DiagnosticCode.E1939)
-    record NoRowTellsAnArmOutOfSightFromItsSibling(String behavior)
+    record NoRowTellsTheArmFromItsSibling(Localizable arm, Localizable sibling, String behavior)
             implements ExampleMessage, Reported {}
 
-    /** No row of the behavior would come out differently if its body answered one value whatever
-     *  it was given. */
+    /**
+     * No row of the behavior would come out differently if one arm of a fork it reaches in code
+     * this build holds no source of answered as another.
+     *
+     * <p>Pointed at the behavior, since there is no fork here to point at, so the sentence says
+     * which arms it is about and which definition wrote the fork: two forks out of sight are told
+     * apart by that and by nothing a reader here could be sent to.
+     */
     @Code(DiagnosticCode.E1939)
-    record NoRowTellsTheBodyFromOneAnswer(String behavior) implements ExampleMessage, Reported {}
+    record NoRowTellsAnArmOutOfSightFromItsSibling(Localizable arm, Localizable sibling,
+                                                   String definition, String behavior)
+            implements ExampleMessage, Reported {}
+
+    /**
+     * No row of the behavior would come out differently if its body answered, whatever it was
+     * given, the value one of its rows came to.
+     *
+     * <p>The row and not the value. Two of these at one behavior are two values, and the row that
+     * came to each is how a reader is sent to it without the value written out in a form of its
+     * own.
+     */
+    @Code(DiagnosticCode.E1939)
+    record NoRowTellsTheBodyFromOneAnswer(String row, String behavior)
+            implements ExampleMessage, Reported {}
+
+    /**
+     * Marked at the row that came to the value, beside the sentence about it. A row written without
+     * a name is numbered within its source, so the number alone can be another source's row; where
+     * it is written is what this mark adds.
+     */
+    record TheValueIsTheOneThisRowCameTo() implements ExampleMessage, Supporting {}
 
     /** What to do where a written row shows the rewrite answering differently: write down the
      *  answer it gives. */

@@ -73,7 +73,7 @@ public record BorderAccount(String module, GenerationScope scope,
         }
 
         /** What this point asks of a row, as a report writes it — of a declaration's line only. */
-        String said() {
+        public String said() {
             if (declaredAxis == null) {
                 throw new IllegalStateException("what a body's own line is on is not something"
                         + " anybody wrote: " + point.point());

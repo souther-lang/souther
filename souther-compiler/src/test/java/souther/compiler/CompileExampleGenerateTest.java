@@ -1232,7 +1232,8 @@ class CompileExampleGenerateTest {
         // value of them was refused, and the rule this compiler could not read is why those were
         // the values — so the sentence is the one the search can stand behind rather than the one
         // that reads as the model refusing what it states.
-        assertTrue(block.contains("// no row for `else` in `label`: every value tried was refused"
+        assertTrue(block.contains("// no row for `else` (13:20) in `label`: every value tried was"
+                + " refused"
                 + " at construction, and what was tried was not everything the rules leave, and"
                 + " invariant C #1 at `c` gave none of them"), block);
     }

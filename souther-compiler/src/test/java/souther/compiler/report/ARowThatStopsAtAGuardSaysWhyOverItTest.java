@@ -87,13 +87,25 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
 
     /** The line just over the row named {@code name}. */
     private static String over(String block, String name) {
+        // The row for `name`, named by it or with it said over an unnamed row — a row composed for
+        // a class and for the decision rule the class is reached by is for two things, and is
+        // named for neither — and every comment over that row.
         List<String> lines = block.lines().toList();
-        for (int at = 1; at < lines.size(); at++) {
-            if (lines.get(at).startsWith("    | \"" + name + "\"")) {
-                return lines.get(at - 1);
+        for (int at = 0; at < lines.size(); at++) {
+            if (lines.get(at).startsWith("    | \"" + name + "\"")
+                    || lines.get(at).equals("// fills " + name)) {
+                int row = at;
+                while (!lines.get(row).startsWith("    | ")) {
+                    row++;
+                }
+                int top = row;
+                while (top > 0 && lines.get(top - 1).startsWith("//")) {
+                    top--;
+                }
+                return String.join("\n", lines.subList(top, row));
             }
         }
-        throw new AssertionError("no row is named " + name + " in " + block);
+        throw new AssertionError("no row is offered for " + name + " in " + block);
     }
 
     /** The guard where it is written: its line in the source the row is offered for. */
@@ -126,9 +138,9 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
     @Test
     void aRowPastTheGuardHasNothingSaidOverIt() {
         String block = offered(GOES_ON);
-        assertFalse(over(block, "kind=Express").startsWith("// stops at"),
+        assertFalse(over(block, "kind=Express").contains("// stops at"),
                 () -> "nothing over a row that went on: " + block);
-        assertTrue(over(block, "amount=x <= 0").startsWith("// stops at the guard at"),
+        assertTrue(over(block, "amount=x <= 0").contains("// stops at the guard at"),
                 () -> "and the row that does stop is said to: " + block);
     }
 
