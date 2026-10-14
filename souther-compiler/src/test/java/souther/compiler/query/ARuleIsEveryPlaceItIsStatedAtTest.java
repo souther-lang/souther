@@ -2,11 +2,19 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.partition.AnswersDemanded;
 import souther.compiler.partition.CompositionAccount;
+import souther.compiler.partition.ConditionGap;
+import souther.compiler.partition.ConditionOccurrence;
+import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.MeasuredInput;
+import souther.compiler.partition.OnTheWay;
+import souther.compiler.partition.ReachabilityGap;
+import souther.compiler.partition.RuleStep;
 import souther.compiler.partition.WhereNothingIsAnswered;
 
 import java.util.ArrayList;
@@ -241,5 +249,52 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
         assertEquals(composed, Adequacy.DecisionSearch.acrossThePlaces(
                         List.of(composed, nothingTried)),
                 "whichever place was met first");
+    }
+
+    /**
+     * What the search of a rule went without is the place it answered from's, and nothing of the
+     * place beside it.
+     *
+     * <p>Two places of one rule whose ways each decline a condition of their own. The place that
+     * established more answers for the rule, and the conditions it went without are its way's:
+     * explained by the other place's way, the rule would be said to have gone without a condition
+     * the search never met.
+     */
+    @Test
+    void whatASearchWentWithoutIsThePlaceItAnsweredFrom() {
+        Compiled body = compiled();
+        DecisionReading.Ruled first = body.answering();
+        OnTheWay.Declined declinedFirst = declined(0);
+        OnTheWay.Declined declinedSecond = declined(1);
+        DecisionReading.Ruled one = new DecisionReading.Ruled(first.rule(),
+                List.of(new RuleStep(first.steps().getFirst().shown(), List.of(declinedFirst),
+                        AnswersDemanded.NOTHING)), true);
+        DecisionReading.Ruled other = new DecisionReading.Ruled(first.rule(),
+                List.of(new RuleStep(first.steps().getFirst().shown(), List.of(declinedSecond),
+                        AnswersDemanded.NOTHING)), true);
+        SettledAt nothingTried = new SettledAt(one, RuleSettlement.nothingToTryWith(
+                new Generator.UnresolvedCombination(List.of("a rule of the decision"),
+                        Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
+                CompositionAccount.NOTHING));
+        SettledAt composed = new SettledAt(other, RuleSettlement.of(
+                new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
+                CompositionAccount.NOTHING));
+
+        for (List<SettledAt> met : List.of(List.of(nothingTried, composed),
+                List.of(composed, nothingTried))) {
+            assertEquals(List.of(new ConditionGap.OfTheInput(
+                            new ReachabilityGap.Unstated(declinedSecond))),
+                    Adequacy.DecisionSearch.acrossThePlaces(met).leftOut(),
+                    "the conditions of the place that answered, and none of the other's");
+        }
+    }
+
+    /** A condition of the decision's reading declined for a reason, named {@code which}. */
+    private static OnTheWay.Declined declined(int which) {
+        ConditionOccurrence condition =
+                new ConditionOccurrence("f", ConditionOccurrence.Reading.DECIDING, which);
+        return new OnTheWay.Declined(condition,
+                new ConditionReportAnchor.WhereTheReadingMetIt("example.ruled", condition),
+                new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER));
     }
 }

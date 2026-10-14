@@ -9,14 +9,13 @@ import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * The conditions one reading of a body met, and the name each of them goes by.
@@ -93,9 +92,10 @@ final class ConditionNumbering {
     /** Which construct of the model, in which copy of it, each condition named here is. Shared with
      *  every place this reading reads, as the names are. */
     private final Map<ConditionOccurrence, ModelOccurrence> stands;
-    /** The copies each entry put on a way was said by, shared with every place this reading
-     *  reads. */
-    private final Map<OnTheWay, Set<ModelOccurrence>> saidAt;
+    /** The copy that made each entry this reading put on a way, by the entry itself, shared with
+     *  every place this reading reads. Two equal entries are two entries here, each made by its
+     *  own copy. */
+    private final Map<OnTheWay, ModelOccurrence> madeBy;
     /** How many names this reading has handed out, shared with every place it reads. */
     private final int[] next;
     /** What this reading names inside the body of each call of a recursive helper it reads, by the
@@ -104,20 +104,20 @@ final class ConditionNumbering {
 
     ConditionNumbering(String module, String behavior, ConditionOccurrence.Reading reading) {
         this(module, behavior, reading, new LinkedHashMap<>(), new LinkedHashMap<>(),
-                new LinkedHashMap<>(), new int[1], new HashMap<>());
+                new IdentityHashMap<>(), new int[1], new HashMap<>());
     }
 
     private ConditionNumbering(String module, String behavior, ConditionOccurrence.Reading reading,
                                Map<ConditionOccurrence, Citation> metAt,
                                Map<ConditionOccurrence, ModelOccurrence> stands,
-                               Map<OnTheWay, Set<ModelOccurrence>> saidAt, int[] next,
+                               Map<OnTheWay, ModelOccurrence> madeBy, int[] next,
                                Map<CallContext, ConditionNumbering> within) {
         this.module = module;
         this.behavior = behavior;
         this.reading = reading;
         this.metAt = metAt;
         this.stands = stands;
-        this.saidAt = saidAt;
+        this.madeBy = madeBy;
         this.next = next;
         this.within = within;
     }
@@ -134,7 +134,7 @@ final class ConditionNumbering {
         return context.equals(CallContext.OF_THE_BODY) ? this
                 : within.computeIfAbsent(context,
                         _ -> new ConditionNumbering(module, behavior, reading, metAt, stands,
-                                saidAt, next, within));
+                                madeBy, next, within));
     }
 
     /** What this reading already made of the condition at {@code at} under {@code reads}, or null
@@ -238,11 +238,10 @@ final class ConditionNumbering {
     /**
      * {@code entries}, filed as what {@code condition} put on the way.
      *
-     * <p>Filed by the entry and under the copy of the condition, because an entry is a value and
-     * two conditions may put one value on the way — a helper called twice with the same arguments
-     * asks one thing of a row twice, and that is one thing to compose against
-     * ({@link OnTheWay.TakenIn}). What a reader is owed about such an entry is every call it was
-     * asked at. Inside an alternative as much as beside one.
+     * <p>Filed by the entry itself and not by what it says. An entry is a value, and two copies of
+     * a helper on two ways that never meet can put equal values on them; filed by the value, a way
+     * through one would be told it met the other. What each way met is read off its own entries
+     * when the way is recorded ({@link #saidOnTheWay}), and this is how it can be.
      *
      * @return {@code entries}, so a walk files what it puts on the way where it puts it
      */
@@ -264,19 +263,39 @@ final class ConditionNumbering {
 
     private void file(List<OnTheWay> entries, ModelOccurrence copy) {
         for (OnTheWay each : entries) {
-            saidAt.computeIfAbsent(each, _ -> new LinkedHashSet<>()).add(copy);
+            madeBy.putIfAbsent(each, copy);
             if (each instanceof OnTheWay.OneOf several) {
                 several.alternatives().forEach(one -> file(one, copy));
             }
         }
     }
 
-    /** The copies of the model's constructs each entry this reading put on a way was said by, in
-     *  the order the walk met them. */
-    Map<OnTheWay, Set<ModelOccurrence>> saidAt() {
-        Map<OnTheWay, Set<ModelOccurrence>> out = new LinkedHashMap<>();
-        saidAt.forEach((entry, copies) ->
-                out.put(entry, Collections.unmodifiableSet(new LinkedHashSet<>(copies))));
-        return Collections.unmodifiableMap(out);
+    /**
+     * Which copies put each of {@code ways}' entries on them, read off the entries themselves.
+     *
+     * <p>The ways one line is reached by, and no other: an entry is told the copy that made it,
+     * and two equal entries on these ways made by two copies are told both.
+     */
+    SaidOnTheWay saidOnTheWay(List<List<OnTheWay>> ways) {
+        Map<OnTheWay, List<ModelOccurrence>> entries = new LinkedHashMap<>();
+        for (List<OnTheWay> way : ways) {
+            told(way, entries);
+        }
+        return new SaidOnTheWay(entries, Map.of(), Map.of());
+    }
+
+    private void told(List<OnTheWay> way, Map<OnTheWay, List<ModelOccurrence>> into) {
+        for (OnTheWay each : way) {
+            ModelOccurrence copy = madeBy.get(each);
+            if (copy != null) {
+                List<ModelOccurrence> copies = into.computeIfAbsent(each, _ -> new ArrayList<>());
+                if (!copies.contains(copy)) {
+                    copies.add(copy);
+                }
+            }
+            if (each instanceof OnTheWay.OneOf several) {
+                several.alternatives().forEach(one -> told(one, into));
+            }
+        }
     }
 }

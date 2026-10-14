@@ -9,6 +9,7 @@ import souther.compiler.flow.ValueArrivals;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -120,9 +121,29 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
                     ? AnswersDemanded.NOTHING : new AnswersDemanded(stated, declined, takenUp);
         }
 
-        /** The conditions of this way whose statements or demands {@code gap} is about. */
-        public List<RuleStep> stepsThatSaid(ConditionGap gap) {
-            return steps.stream().filter(each -> each.said(gap)).toList();
+        /**
+         * Which copies of the model's code put each thing on this way: the copy each step stands
+         * in, for everything that step states and asks.
+         *
+         * <p>Read off the steps, which are where the two were made together, and never by looking
+         * a value up among them afterwards.
+         */
+        public SaidOnTheWay saidOnTheWay() {
+            Map<OnTheWay, List<ModelOccurrence>> entries = new LinkedHashMap<>();
+            Map<AnswerDemand, List<ModelOccurrence>> stated = new LinkedHashMap<>();
+            Map<DemandGap.Unstated, List<ModelOccurrence>> unstated = new LinkedHashMap<>();
+            for (RuleStep each : steps) {
+                ModelOccurrence copy = each.shown().copy().orElse(null);
+                if (copy == null) {
+                    continue;
+                }
+                SaidOnTheWay.filed(each.states(), copy, entries);
+                each.demands().stated().forEach(demand ->
+                        stated.computeIfAbsent(demand, _ -> new ArrayList<>()).add(copy));
+                each.demands().declined().forEach(demand ->
+                        unstated.computeIfAbsent(demand, _ -> new ArrayList<>()).add(copy));
+            }
+            return new SaidOnTheWay(entries, stated, unstated);
         }
     }
 

@@ -1,7 +1,6 @@
 package souther.compiler.query;
 
 import souther.compiler.check.CoverageObligation;
-import souther.compiler.partition.OnTheWay;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.diag.Citation;
 import souther.compiler.check.ElementBindings;
@@ -95,7 +94,6 @@ final class Coverages {
                        souther.compiler.inputs.Quantities reading,
                        java.util.Map<souther.compiler.partition.ConditionOccurrence,
                                souther.compiler.diag.Citation> conditionsMet,
-                       Map<OnTheWay, Set<ModelOccurrence>> saidAt,
                        Map<Integer, Citation> rulesReachedAt) {}
 
     /**
@@ -215,9 +213,6 @@ final class Coverages {
                 // not inside it. A report points at a condition and an answer says which condition
                 // it is, and the two are kept apart so that moving one leaves the other alone.
                 guards.conditionsMet(),
-                // And which calls of a helper put each entry on a way, so a sentence about what a
-                // search went without names the calls it was met at.
-                guards.saidAt(),
                 // And the same for the rules it places itself, which is every rule written where
                 // this compilation holds no file to open.
                 reaches.reachedAt());
@@ -970,8 +965,11 @@ final class Coverages {
                                 border.border().label(point)))
                         : item);
             }
+            // And who put on the way what the search went along, which is what says at which calls
+            // of a helper a reader meets what the search went without.
             out.add(new BorderAssessment(border.border(), items, border.beside(),
-                    tellingApart(border, search), border.readAt()));
+                    tellingApart(border, search), border.readAt(),
+                    reaching.saidOnTheWayTo(border.border().origin())));
         }
         return new LineReadings(out);
     }
@@ -1712,8 +1710,8 @@ final class Coverages {
                 // reading's line and its input would be read at positions that line has none of.
                 a.toldApart().and(b.toldApart()),
                 // And both readings' copies, which is what tells the calls of a helper that read
-                // one line apart.
-                readAt);
+                // one line apart, and what put things on each one's way.
+                readAt, a.saidOnTheWay().and(b.saidOnTheWay()));
     }
 
     /**

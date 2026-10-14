@@ -66,14 +66,16 @@ import java.util.Set;
  * built from.
  */
 public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
+                           Lookup<ALine, SaidOnTheWay> saidByLine,
                            Lookup<ModelOccurrence, ConditionOnTheWay> byTruth,
                            Lookup<ModelOccurrence, ConditionOnTheWay> byFork) {
 
     public static final ReachingCuts NONE = new ReachingCuts(Lookup.built(_ -> { }),
-            Lookup.built(_ -> { }), Lookup.built(_ -> { }));
+            Lookup.built(_ -> { }), Lookup.built(_ -> { }), Lookup.built(_ -> { }));
 
     public ReachingCuts {
         Objects.requireNonNull(byLine, "what a walk collected, line by line");
+        Objects.requireNonNull(saidByLine, "who put what on each line's way");
         Objects.requireNonNull(byTruth, "what a walk collected, truth by truth");
         Objects.requireNonNull(byFork, "what a walk collected, fork by fork");
     }
@@ -205,6 +207,19 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         List<OnTheWay> found =
                 byLine.get(new ALine(comparison.read().states(), comparison.part()));
         return new WayToTheBorder(found == null ? List.of() : found);
+    }
+
+    /**
+     * Which copies of the model's code put each entry on the way to the line {@code origin} drew
+     * ({@link #wayTo}), told when the ways to it were walked and of those ways alone.
+     */
+    public SaidOnTheWay saidOnTheWayTo(LineOrigin origin) {
+        if (!(origin instanceof LineOrigin.ComparisonOrigin comparison)) {
+            return SaidOnTheWay.NONE;
+        }
+        SaidOnTheWay said =
+                saidByLine.get(new ALine(comparison.read().states(), comparison.part()));
+        return said == null ? SaidOnTheWay.NONE : said;
     }
 
     /**
@@ -557,7 +572,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
     static final class Collected {
 
         private final Map<ALine, List<OnTheWay>> byLine = new LinkedHashMap<>();
-        private final Map<ModelOccurrence, ConditionOnTheWay> byTruth = new LinkedHashMap<>();
+        private final Map<ALine, SaidOnTheWay> saidByLine = new LinkedHashMap<>();        private final Map<ModelOccurrence, ConditionOnTheWay> byTruth = new LinkedHashMap<>();
         private final Map<ModelOccurrence, ConditionOnTheWay> byFork = new LinkedHashMap<>();
 
         /**
@@ -592,7 +607,14 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
          * where the line decides it is read in.
          */
         void reached(ModelOccurrence states, List<OnTheWay> assumed,
-                     Map<WhereAPartDecides, List<OnTheWay>> whereEachDecides) {
+                     Map<WhereAPartDecides, List<OnTheWay>> whereEachDecides,
+                     SaidOnTheWay said) {
+            // And who put each entry there, beside the entries: every way that reaches the line
+            // is one a row may come by, so what each says put an entry on it is said of the line.
+            saidByLine.merge(new ALine(states, Optional.empty()), said, SaidOnTheWay::and);
+            whereEachDecides.keySet().forEach(part ->
+                    saidByLine.merge(new ALine(states, Optional.of(part)), said,
+                            SaidOnTheWay::and));
             // A comparison inside a non-recursive helper is read once per call of it and each of
             // those calls is a construct of its own. A comparison inside a closure is the one the
             // author wrote, met through each copy an application of the closure makes. A run
@@ -627,6 +649,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
 
         ReachingCuts made() {
             return new ReachingCuts(Lookup.built(put -> byLine.forEach(put::put)),
+                    Lookup.built(put -> saidByLine.forEach(put::put)),
                     Lookup.built(put -> byTruth.forEach(put::put)),
                     Lookup.built(put -> byFork.forEach(put::put)));
         }

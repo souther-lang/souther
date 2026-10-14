@@ -40,7 +40,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -94,8 +93,6 @@ import java.util.function.Supplier;
  * operation handing it over still stands, and for no position where that operation is expanded
  * ({@link ArmsNamed}).
  *
- * @param saidAt       which copies of the model's constructs put each entry on a way, so that what
- *                     a search went without is said at the calls of a helper it was met in
  * @param armsNamed    the case each arm of each {@code match} is, where the value matched stands
  *                     at a position
  * @param dependencies which positions each construct deciding a fork the tree that runs names no
@@ -103,7 +100,6 @@ import java.util.function.Supplier;
  */
 record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                           Map<ConditionOccurrence, Citation> conditionsMet,
-                          Map<OnTheWay, Set<ModelOccurrence>> saidAt,
                           List<TruthMet> truths, List<ForkDecided> decided,
                           ArmsNamed armsNamed, ForkDependencies dependencies) {
 
@@ -111,7 +107,6 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         comparisons = List.copyOf(comparisons);
         forks = List.copyOf(forks);
         conditionsMet = Map.copyOf(conditionsMet);
-        saidAt = Collections.unmodifiableMap(new LinkedHashMap<>(saidAt));
         truths = List.copyOf(truths);
         decided = List.copyOf(decided);
     }
@@ -248,16 +243,19 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   method holds it
      * @param context    where it was read: the body the reading was handed, or a helper's body
      *                   read at a call of it
+     * @param saidOnTheWay which copies of the model's code put each entry on these ways, told when
+     *                   the ways were walked and of these ways alone
      */
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
                    List<OnTheWay> assumed, BoundaryPolicy.Standing standing,
                    Map<WhereAPartDecides, List<OnTheWay>> whereEachDecides,
-                   ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context) {
+                   ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context,
+                   SaidOnTheWay saidOnTheWay) {
 
         Reading {
             if (occurrence == null || statement == null || at == null || metOn == null
-                    || runsAs == null || context == null) {
+                    || runsAs == null || context == null || saidOnTheWay == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
@@ -407,8 +405,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         readings, forks, numbering);
             }
         }
-        return new ComparisonReadings(readings, forks, numbering.metAt(), numbering.saidAt(),
-                truths, decided, armsNamed.named(), dependencies.read());
+        return new ComparisonReadings(readings, forks, numbering.metAt(), truths, decided,
+                armsNamed.named(), dependencies.read());
     }
 
     /** How one build of a value was reached: what stood on the way to it, and whether what it
@@ -507,9 +505,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                         ComparisonAssessment.ofAnApplication(answered, where,
                                                 in.read());
                             }));
+            Map<WhereAPartDecides, List<OnTheWay>> decides =
+                    whereEachDecides(e, standing, reads, in, numbering);
+            List<List<OnTheWay>> ways = new ArrayList<>();
+            ways.add(assumed);
+            ways.addAll(decides.values());
             out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing,
-                    whereEachDecides(e, standing, reads, in, numbering),
-                    applying.elementsMetOn(), stated.written(), in.context()));
+                    decides, applying.elementsMetOn(), stated.written(), in.context(),
+                    numbering.saidOnTheWay(ways)));
         }
         switch (e) {
             // The right operand runs only where the left came out the way that leaves the answer

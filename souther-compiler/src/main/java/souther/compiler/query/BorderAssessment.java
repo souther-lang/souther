@@ -8,12 +8,14 @@ import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.PointRole;
+import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -51,10 +53,12 @@ import java.util.Set;
  *               were read. One per call of a helper that writes it, and what a reader is shown to
  *               tell those calls apart by — the comparison is one place for every call of it, and
  *               {@link #border} is the first copy's alone where two copies were read as one line
+ * @param saidOnTheWay which copies put each entry on the way the line's points were searched along,
+ *               of that way alone; nobody where no search was made
  */
 public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
                                AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart,
-                               List<ModelOccurrence> readAt)
+                               List<ModelOccurrence> readAt, SaidOnTheWay saidOnTheWay)
         implements RuleCitations {
 
     /** One reading of a line, before anybody asked for a row that would tell it from the lines
@@ -73,7 +77,7 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
      */
     public BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
                             AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart) {
-        this(border, items, beside, toldApart, border.origin().readAt());
+        this(border, items, beside, toldApart, border.origin().readAt(), SaidOnTheWay.NONE);
     }
 
     /**
@@ -214,6 +218,7 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
         }
         items = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(items));
         readAt = List.copyOf(readAt);
+        Objects.requireNonNull(saidOnTheWay, "who put what on the way, or nobody");
     }
 
     /**

@@ -310,7 +310,7 @@ final class AReportOfOneBorder {
                 souther.compiler.query.ClaimAnnotations.NONE, List.of(), java.util.Map.of(),
                 AdequacyReport.ConditionsShown.NONE, rulePlaces(lines), java.util.Map.of(),
                 java.util.Map.of(),
-                java.util.Map.of(), Map.of());
+                java.util.Map.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", WeakeningSet.none(),
                 List.of(new AdequacyReport.ModuleReport("example.wide",
                         new SourceId("wide.sou"), List.of(behavior), List.of(),

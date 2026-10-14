@@ -12,7 +12,6 @@ import souther.compiler.observe.Classification;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.ConditionOccurrence;
-import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.partition.Replacement;
@@ -2276,7 +2275,6 @@ public final class Adequacy {
     record BodyDivided(souther.compiler.partition.Partitions.Partitioning geometry,
                        java.util.Map<souther.compiler.partition.ConditionOccurrence,
                                souther.compiler.diag.Citation> conditionsMet,
-                       Map<OnTheWay, Set<ModelOccurrence>> saidAt,
                        Map<Integer, Citation> rulesReachedAt) {}
 
     /**
@@ -2310,28 +2308,6 @@ public final class Adequacy {
                 souther.compiler.diag.Citation>> compute(Db db) {
             Answer<BodyDivided> read = db.ask(new Dividing(name, behavior));
             return read.present() ? Answer.of(read.value().conditionsMet()) : Answer.absent();
-        }
-    }
-
-    /**
-     * Which calls of a helper put each entry on a way the reading that divided one behavior walked.
-     *
-     * <p>Beside {@link ConditionsMet} and read off the same reading, for a reader writing a sentence
-     * about what a search went without: a condition of a helper is written at one place for every
-     * call of it, and the calls are what tell its copies apart.
-     */
-    public record EntriesSaidAt(String name, String behavior)
-            implements Key<Map<OnTheWay, Set<ModelOccurrence>>> {
-
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<Map<OnTheWay, Set<ModelOccurrence>>> compute(Db db) {
-            Answer<BodyDivided> read = db.ask(new Dividing(name, behavior));
-            return read.present() ? Answer.of(read.value().saidAt()) : Answer.absent();
         }
     }
 
@@ -2455,7 +2431,7 @@ public final class Adequacy {
                     db.ask(new Front.Adequacy()).value().measures()
                             .allowanceForBehaviorDistinctions());
             return Answer.of(new BodyDivided(read.geometry(), read.conditionsMet(),
-                    read.saidAt(), read.rulesReachedAt()));
+                    read.rulesReachedAt()));
         }
     }
 
@@ -8294,16 +8270,19 @@ public final class Adequacy {
                     Bodies.Elaborated checked = db.ask(new Bodies.Observable(module)).value();
                     CoverageSites.Plan plan =
                             checked == null ? CoverageSites.Plan.NONE : checked.plan();
-                    Set<List<Object>> marked = new HashSet<>();
+                    // And the calls of the helpers the conditions are in, one mark per call. A
+                    // helper called three times is one place in the source, and three conditions
+                    // marked there alike are three a reader cannot tell apart; what tells them
+                    // apart is the call, and a call is one place whatever number of the rule's
+                    // conditions its copy holds.
+                    Map<Citation, CallMarks> calls = new LinkedHashMap<>();
                     for (ShownBy each : ruled.shownBy()) {
                         DecisionRuleReading read = DecisionRuleReading.of(each, plan, behavior);
                         said(db, built, read);
-                        // And the call of the helper the condition is in, where it is in one. A
-                        // helper called three times is one place in the source, and three
-                        // conditions marked there alike are three a reader cannot tell apart.
-                        each.copy().ifPresent(copy -> calledAt(db, module, built, read,
-                                copy.lineage(), marked));
+                        each.copy().ifPresent(copy ->
+                                calledAt(db, module, read, copy.lineage(), calls));
                     }
+                    calls.forEach((call, marks) -> marks.markedAt(built, call));
                 }
                 // Which of the two this arm is, is already settled: a row is there. What is left is
                 // the answer, so the hint says how it is written rather than what might be wrong.
@@ -8476,7 +8455,8 @@ public final class Adequacy {
         }
 
         /**
-         * The calls the copy a condition of the rule stands in was made through, each marked.
+         * What the calls the copy a condition of the rule stands in was made through say of it,
+         * each filed under the call.
          *
          * <p>The call of the helper the condition is written in says which way the rule takes it
          * in that call, and every call further out says the rule goes through it. Marked at the
@@ -8486,57 +8466,65 @@ public final class Adequacy {
          * <p>A call nothing places is not marked: it was not written where this compilation can
          * show it, and the condition's own marker still is.
          *
-         * <p>Each mark once. Two conditions of one copy taken the same way, and every call further
-         * out of a copy holding several, would put one sentence at one place again for each; a
-         * reader shown it twice is shown nothing more.
-         *
-         * @param marked the places and sentences this warning has already marked
+         * @param calls what each call has been told so far, which every condition of the rule adds
+         *              to and which is marked once all of them have
          */
-        private static void calledAt(Db db, String module,
-                                     souther.compiler.diag.Diagnostic.Builder built,
-                                     DecisionRuleReading read, ExpansionLineage copy,
-                                     Set<List<Object>> marked) {
+        private static void calledAt(Db db, String module, DecisionRuleReading read,
+                                     ExpansionLineage copy, Map<Citation, CallMarks> calls) {
             boolean innermost = true;
             ExpansionLineage at = copy;
             while (at instanceof ExpansionLineage.Expansion made) {
                 String called = made.expanded().saidIn(module);
                 Citation call = made.at() instanceof ExpansionSite.Written(var wrote)
                         ? Sites.placeIfKnown(db, wrote) : null;
-                if (call != null && !innermost) {
-                    markOnce(built, call, new ExampleMessage.TheRuleGoesThroughThisCall(called),
-                            marked);
-                } else if (call != null) {
-                    switch (read) {
-                        case DecisionRuleReading.AComparisonCameOut(var _, var held) when held ->
-                                markOnce(built, call,
-                                        new ExampleMessage.TheRuleTakesItHoldingInThisCall(called),
-                                        marked);
-                        case DecisionRuleReading.AnApplicationAnswered(var _, var held)
-                                when held -> markOnce(built, call,
-                                new ExampleMessage.TheRuleTakesItHoldingInThisCall(called), marked);
-                        case DecisionRuleReading.AComparisonCameOut _,
-                                DecisionRuleReading.AnApplicationAnswered _ -> markOnce(built, call,
-                                new ExampleMessage.TheRuleTakesItFailingInThisCall(called), marked);
-                        case DecisionRuleReading.AForkTookAnArm(var arm) -> markOnce(built, call,
-                                new ExampleMessage.TheRuleGoesThroughItsArmInThisCall(
-                                        phraseFor(arm), called), marked);
-                        case DecisionRuleReading.AConditionIsNotShown _,
-                                DecisionRuleReading.AnOutcomeIsNotPlaced _,
-                                DecisionRuleReading.AForkIsNotPlaced _ -> markOnce(built, call,
-                                new ExampleMessage.TheRuleGoesThroughThisCall(called), marked);
-                    }
+                if (call != null) {
+                    calls.computeIfAbsent(call, _ -> new CallMarks(called, new ArrayList<>()))
+                            .said().add(innermost ? takenAt(read, called)
+                                    : new ExampleMessage.TheRuleGoesThroughThisCall(called));
                 }
                 innermost = false;
                 at = made.within();
             }
         }
 
-        /** {@code said} at {@code call}, where this warning has not marked it there already. */
-        private static <M extends ExampleMessage & Supporting> void markOnce(
-                souther.compiler.diag.Diagnostic.Builder built, Citation call, M said,
-                Set<List<Object>> marked) {
-            if (marked.add(List.of(call, said))) {
-                label(built, call, said);
+        /** Which way the rule takes {@code read} in a call of {@code called}, in the words a mark
+         *  at that call says it in. */
+        private static Supporting takenAt(DecisionRuleReading read, String called) {
+            return switch (read) {
+                case DecisionRuleReading.AComparisonCameOut(var _, var held) -> held
+                        ? new ExampleMessage.TheRuleTakesItHoldingInThisCall(called)
+                        : new ExampleMessage.TheRuleTakesItFailingInThisCall(called);
+                case DecisionRuleReading.AnApplicationAnswered(var _, var held) -> held
+                        ? new ExampleMessage.TheRuleTakesItHoldingInThisCall(called)
+                        : new ExampleMessage.TheRuleTakesItFailingInThisCall(called);
+                case DecisionRuleReading.AForkTookAnArm(var arm) ->
+                        new ExampleMessage.TheRuleGoesThroughItsArmInThisCall(phraseFor(arm),
+                                called);
+                case DecisionRuleReading.AConditionIsNotShown _,
+                        DecisionRuleReading.AnOutcomeIsNotPlaced _,
+                        DecisionRuleReading.AForkIsNotPlaced _ ->
+                        new ExampleMessage.TheRuleGoesThroughThisCall(called);
+            };
+        }
+
+        /**
+         * What one call is told by the conditions of a rule, and the one mark it is given.
+         *
+         * <p>One mark per call, because a call is one place. Where everything it is told says one
+         * thing, that is the mark; where the conditions of its copy go different ways, a mark at
+         * the call cannot say which condition went which way — the conditions are marked at the
+         * helper, alike for every call — so it says only that the rule goes through the call.
+         *
+         * @param called what was called
+         * @param said   what each condition of the rule that stands in a copy made at it says
+         */
+        private record CallMarks(String called, List<Supporting> said) {
+
+            void markedAt(Diagnostic.Builder built, Citation call) {
+                List<Supporting> distinct = said.stream().distinct().toList();
+                label(built, call, (ExampleMessage & Supporting) (distinct.size() == 1
+                        ? distinct.getFirst()
+                        : new ExampleMessage.TheRuleGoesThroughThisCall(called)));
             }
         }
 

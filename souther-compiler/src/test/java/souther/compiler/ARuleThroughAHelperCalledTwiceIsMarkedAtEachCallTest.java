@@ -104,10 +104,11 @@ class ARuleThroughAHelperCalledTwiceIsMarkedAtEachCallTest {
     }
 
     /**
-     * A helper whose copy holds two conditions, both of which the rule takes holding.
+     * A helper whose copy holds two conditions.
      *
-     * <p>One sentence at one call says it once: the rule takes the helper's conditions holding in
-     * that call, which is one thing to tell a reader however many conditions the copy holds.
+     * <p>A call is one place and is marked once, whatever number of the rule's conditions its copy
+     * holds: with what they all say where they say one thing, and with the rule going through the
+     * call where they go different ways — which a mark at the call cannot tell apart.
      */
     private static final String TWO_CONDITIONS_A_CALL = """
             module example.inside
@@ -126,23 +127,34 @@ class ARuleThroughAHelperCalledTwiceIsMarkedAtEachCallTest {
             """;
 
     @Test
-    void aCallIsMarkedWithEachSentenceOnce() {
+    void aCallIsMarkedOnce() {
         Compilation compilation = Compilation.ofSource(TWO_CONDITIONS_A_CALL, "Main");
         compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
         compilation.answerEverything();
         int calls = 0;
+        boolean wentDifferentWays = false;
         for (Located each : compilation.warnings()) {
             List<LabeledRegion> labels = each.diagnostic().secondary().stream()
                     .filter(label -> label.said()
                             instanceof ExampleMessage.TheRuleTakesItHoldingInThisCall
                             || label.said()
-                            instanceof ExampleMessage.TheRuleTakesItFailingInThisCall)
+                            instanceof ExampleMessage.TheRuleTakesItFailingInThisCall
+                            || label.said()
+                            instanceof ExampleMessage.TheRuleGoesThroughItsArmInThisCall
+                            || label.said()
+                            instanceof ExampleMessage.TheRuleGoesThroughThisCall)
                     .toList();
             calls += labels.size();
-            assertEquals(labels.size(), new HashSet<>(labels).size(),
-                    () -> "no place is marked with one sentence twice: " + labels);
+            Set<DiagnosticPlace> places = new HashSet<>();
+            labels.forEach(label -> places.add(label.place()));
+            assertEquals(labels.size(), places.size(),
+                    () -> "each call is marked once: " + labels);
+            wentDifferentWays |= labels.stream().anyMatch(label -> label.said()
+                    instanceof ExampleMessage.TheRuleGoesThroughThisCall);
         }
         assertTrue(calls > 0, "the rules through the helper's two conditions are warned about");
+        assertTrue(wentDifferentWays, "and some rule takes the two conditions of one call"
+                + " different ways, which is what one mark per call has to settle");
     }
 
     private static String called(LabeledRegion label) {

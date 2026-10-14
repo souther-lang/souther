@@ -52,7 +52,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
-import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -94,8 +93,6 @@ public final class GuardThresholds {
      * {@code c} on the low side and are two different rules about it — so it is read where the
      * operator is still in hand, and which values arrive is asked of the reading of the whole body.
      *
-     * @param saidAt       which copies of the model's constructs put each entry on a way, which the
-     *                     same walk files
      * @param armsNamed    the case each arm of a {@code match} is, which the same walk names
      * @param dependencies which positions each construct deciding a fork may turn on, which the
      *                     same walk reads
@@ -106,13 +103,12 @@ public final class GuardThresholds {
                          ReachingCuts reaching,
                          List<ComparisonReadings.ForkMet> forks,
                          Map<ConditionOccurrence, Citation> conditionsMet,
-                         Map<OnTheWay, Set<ModelOccurrence>> saidAt,
                          ArmsNamed armsNamed,
                          ForkDependencies dependencies) {
 
         public static final Guards NONE =
                 new Guards(List.of(), RulesWithNoLine.NONE, List.of(), ReachingCuts.NONE,
-                        List.of(), Map.of(), Map.of(), ArmsNamed.NONE, ForkDependencies.NONE);
+                        List.of(), Map.of(), ArmsNamed.NONE, ForkDependencies.NONE);
 
         public Guards {
             evidence = List.copyOf(evidence);
@@ -256,7 +252,8 @@ public final class GuardThresholds {
                     // emitted tree made of that construct has nothing to say about it — so a copy
                     // per materialisation would be one account under several names, and whoever
                     // asked would have to pick one of them with nothing to pick by.
-                    cuts.reached(stated, each.assumed(), each.whereEachDecides());
+                    cuts.reached(stated, each.assumed(), each.whereEachDecides(),
+                            each.saidOnTheWay());
                     switch (each.standing()) {
                         case BoundaryPolicy.Standing.Admitted admitted ->
                                 // The same reading on the narrower region a row at the line is in:
@@ -329,7 +326,7 @@ public final class GuardThresholds {
                             each.failing())));
         }
         return new Guards(found, withoutALine.found(), between, cuts.made(),
-                comparisons.forks(), comparisons.conditionsMet(), comparisons.saidAt(),
+                comparisons.forks(), comparisons.conditionsMet(),
                 comparisons.armsNamed(), comparisons.dependencies());
     }
 
