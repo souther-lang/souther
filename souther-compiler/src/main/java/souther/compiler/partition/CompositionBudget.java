@@ -84,7 +84,10 @@ public enum CompositionBudget {
 
     /** How many values of an element of a type that has only so many are read for the counts its
      *  container is composed for, each read for every statement the counts are of. Past it the
-     *  values left are not offered, and the container is composed of the ones read. */
+     *  values left are not offered, and the container is composed of the ones read. The same
+     *  values are what the most a count of a set's elements comes to is read off; past it that
+     *  count keeps the most the set holds, and the points between are searched rather than
+     *  refused. */
     VALUES_AN_ELEMENT_IS_CHOSEN_AMONG(256),
 
     /** How many ways down to the number a total is read from are tried. Its own figure and not

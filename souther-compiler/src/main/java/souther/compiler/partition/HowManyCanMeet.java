@@ -1,14 +1,13 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
-import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
+import souther.compiler.inputs.PositionId;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
@@ -17,23 +16,21 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.CountDomain;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
-import souther.compiler.types.ValueName;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The most elements of a container a count of them meeting a statement comes to, where something
  * says there is a most.
  *
  * <p>Two things say it. The count is of elements the container holds, so it is never more than the
- * most the container holds — which a set or a map has where its element or key has few enough
- * values, and any container has where its rules cap its size. And a set holds each value of its
+ * most the container holds ({@link Quantities#mostHeldAt}) — which a set or a map has where its
+ * element or key has few enough values, and any container has where its rules cap its size. And a set holds each value of its
  * element once, so where its element has only so many values the count is never more than how many
  * of those meet the statement; a set of records of two truths, counted for one of them, holds at
  * most the two records where that one is true.
@@ -50,89 +47,88 @@ import java.util.Optional;
  * which may leave values the rules refuse elsewhere; a value too many makes the bound looser and
  * never wrong.
  *
+ * <p>Listed and walked as the composer lists and walks them ({@link ElementsOfAParameter}), under
+ * the same figure. Where the figure stops the listing, the count keeps the most the container
+ * holds, and the composer looking for a row between the two stops at the same figure and says so.
+ *
  * <p>A value is counted unless the statement fails of it. One the statement could not be read of
  * may meet it.
  */
 final class HowManyCanMeet {
 
-    /** How many values of the element are read before the second bound is given up on. */
-    private static final int MOST_VALUES =
-            CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.maximum();
-
     private HowManyCanMeet() {
     }
 
-    /** The most {@code counted} comes to as {@code read} has its container, or none where nothing
-     *  says. */
+    /**
+     * The most {@code counted} comes to as {@code read} has its container, or none where nothing
+     * says.
+     *
+     * <p>Worked out once for each count a reading reads. The answer is a function of which count
+     * it is and of the reading, and a count is cut at every comparison written about it, each of
+     * which would otherwise list the element's values and walk a row for each again.
+     */
     static Optional<Count> of(CountedElements counted, InputReading read) {
+        return read.derived(Known.class, _ -> new Known()).ends
+                .computeIfAbsent(counted.identity(), _ -> workedOut(counted, read));
+    }
+
+    /** The ends worked out for the counts one reading reads, by which count each is. */
+    private static final class Known {
+        private final Map<CountedElements.Identity, Optional<Count>> ends =
+                new ConcurrentHashMap<>();
+    }
+
+    private static Optional<Count> workedOut(CountedElements counted, InputReading read) {
         TermPath container = counted.container();
         Position at = read.domain().at(container);
         if (at == null) {
             return Optional.empty();
         }
-        Optional<Count> mostHeld = mostHeld(container, at.type(), read);
-        Optional<Count> meeting = ofTheValuesMeeting(counted, at.type(), read);
-        if (mostHeld.isPresent() && meeting.isPresent()) {
-            return mostHeld.get().compareTo(meeting.get()) <= 0 ? mostHeld : meeting;
-        }
-        return mostHeld.isPresent() ? mostHeld : meeting;
+        int mostHeld = read.quantities().mostHeldAt(new PositionId(container));
+        long held = mostHeld == Integer.MAX_VALUE ? Long.MAX_VALUE : mostHeld;
+        long most = Math.min(held, ofTheValuesMeeting(counted, at.type(), read, held));
+        return most == Long.MAX_VALUE ? Optional.empty() : Optional.of(Count.of(most));
     }
 
     /**
-     * The most the container at {@code container} holds, or none where nothing says.
+     * How many values of the element of a set at a parameter the statement does not fail of, or
+     * {@link Long#MAX_VALUE} where that is no bound on the count.
      *
-     * <p>Read off the number that is how many it holds, as a rule taking {@code Set.size} of it
-     * reads it, so what its rules leave that number and what its type leaves it are both in the
-     * answer ({@link InputDomain#of}). Not {@link Quantities#mostHeldAt}, which answers where a
-     * rule names the size and leaves the type's end out where none does.
+     * <p>The walk stops once as many as {@code held} meet it, past which the count is bounded by
+     * the container and not by these.
      */
-    private static Optional<Count> mostHeld(TermPath container, Type type, InputReading read) {
-        RuleReadingSource source = read.rules();
-        ValueName.Stdlib size = NumericMeasures.takenOf(type, source.inners());
-        NumericTerm.TakenOf held = size == null ? null : NumericTerm.TakenOf.asItStands(size,
-                container, type, source.inners(), source.symbols());
-        if (held == null || !(held.takenAs() instanceof TakenAs.HowManyItHolds)) {
-            return Optional.empty();
-        }
-        NumericDomain.Bounds runs = read.quantities().runsBetween(held);
-        int most = runs == null ? Integer.MAX_VALUE : CountDomain.mostFrom(runs.max());
-        return most == Integer.MAX_VALUE ? Optional.empty() : Optional.of(Count.of(most));
-    }
-
-    /** How many values of the element of a set at a parameter the statement does not fail of, or
-     *  none where that is no bound on the count. */
-    private static Optional<Count> ofTheValuesMeeting(CountedElements counted, Type type,
-                                                      InputReading read) {
+    private static long ofTheValuesMeeting(CountedElements counted, Type type, InputReading read,
+                                           long held) {
         TermPath container = counted.container();
         RuleReadingSource source = read.rules();
-        if (!container.steps().isEmpty()
-                || !(TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
+        if (!(TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
                         source.sums()) instanceof Shape.Sequence(Shape.Sequence.Kind kind,
                                 Type element))
                 || kind != Shape.Sequence.Kind.SET
                 || !saysOnlyOfTheElement(counted.meeting(), container.element())) {
-            return Optional.empty();
+            return Long.MAX_VALUE;
         }
-        ValuesOfAnElement.Listed listed = ValuesOfAnElement.of(element, container.element(),
+        ElementsOfAParameter values = ElementsOfAParameter.of(container, type, element,
                 RuleReadingContext.of(source, read.domain().policy(), read.domain().machines()),
-                MOST_VALUES, _ -> null);
-        if (listed == null || !listed.all()) {
-            return Optional.empty();
+                _ -> null);
+        if (values == null || !values.listed().all()) {
+            return Long.MAX_VALUE;
         }
-        BehaviorInputs where = new BehaviorInputs(List.of(container.head()), List.of(type), source,
-                read.domain().policy());
         long meet = 0;
-        for (ObservedValue value : listed.values()) {
+        for (ObservedValue value : values.listed().values()) {
+            if (meet >= held) {
+                return held;
+            }
             AStatementAtARow.HowManyAtARow one = counted.perElement().howManyMeetIn(container,
-                    CardinalityComposer.aRowHolding(where, List.of(value)));
+                    values.holding(List.of(value)));
             if (one == null) {
-                return Optional.empty();
+                return Long.MAX_VALUE;
             }
             if (one.meet() + one.unread() > 0) {
                 meet++;
             }
         }
-        return Optional.of(Count.of(meet));
+        return meet;
     }
 
     /**

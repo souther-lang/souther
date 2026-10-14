@@ -2,19 +2,28 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.Case;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.ACarriedValue;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.WhyUnread;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -35,6 +44,9 @@ class AStatementBoundsACountOnlyWhereItSaysOnlyOfTheElementTest {
     private static final TermPath N = ELEMENT.then("n");
     private static final TermPath C = ELEMENT.then("c");
     private static final TermPath B = TermPath.of("b");
+    private static final TermPath K = ELEMENT.then("k");
+    private static final CasesLeft HOT = CasesLeft.ofEach(List.of(Refinement.of(new Case.SumCase(
+            TypeSymbols.declared(new TypeKey("probe", "Hot")), true))));
 
     @Test
     void eachFormIsTheElementsOwnOrNot() {
@@ -46,7 +58,19 @@ class AStatementBoundsACountOnlyWhereItSaysOnlyOfTheElementTest {
                 new Case(new Proposition.SameValue(new DecisionSubject.AnInput(N),
                         new DecisionSubject.AnInput(C), true), true),
                 new Case(Proposition.all(List.of(truth(N), truth(C))), true),
+                new Case(Proposition.any(List.of(truth(N), truth(C))), true),
+                new Case(new Proposition.InCases(new DecisionSubject.AnInput(K), HOT, true), true),
                 new Case(compared(new NumericTerm.ValueOf(N)), true),
+                new Case(ordered(new NumericTerm.ValueOf(N)), true),
+                new Case(new Proposition.InCases(new DecisionSubject.AnInput(B), HOT, true), false),
+                new Case(ordered(new NumericTerm.ValueOf(B)), false),
+                new Case(ordered(NumericTerm.Multiplicity.of(XS, N)), false),
+                new Case(new Proposition.OnAnApplication(List.of(truth(N), truth(C))), false),
+                new Case(new Proposition.SomeReachable(N, N, List.of("next"), truth(N),
+                        Optional.empty(), true), false),
+                new Case(new Proposition.Unread(Optional.empty(), 0,
+                        new WhyUnread.NotMetByTheReading(), false, true), false),
+                new Case(new Proposition.Carried(ACarriedValue.made(), true), false),
                 new Case(truth(B), false),
                 new Case(Proposition.any(List.of(truth(N), truth(B))), false),
                 new Case(new Proposition.SameValue(new DecisionSubject.AnInput(N),
@@ -63,6 +87,11 @@ class AStatementBoundsACountOnlyWhereItSaysOnlyOfTheElementTest {
 
     private static Proposition truth(TermPath at) {
         return new Proposition.Truth(new DecisionSubject.AnInput(at), true);
+    }
+
+    private static Proposition ordered(NumericTerm term) {
+        return new Proposition.Compared(new Relation.Ordered(new DecisionAtom.OfTheInput(term),
+                Count.of(2), Rel.GT), true);
     }
 
     private static Proposition compared(NumericTerm term) {

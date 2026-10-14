@@ -77,6 +77,8 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
               invariant (value == "a" || value == "b") && %s
             data Flags = { c: Bool, n: Bool }
             data Bag = { items: Set<Flags> }
+            data Wide = { a: Bool, b: Bool, c: Bool, d: Bool, e: Bool, f: Bool, g: Bool, h: Bool,
+                          i: Bool }
             """.formatted(ARuleNoReadingTakesIn.about("value"));
 
     /**
@@ -304,16 +306,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
      * draws one there too, and the element's own numbers may.
      */
     private static void assertEndsAt(String model, int most, String said) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "p");
-        assertNotNull(read, () -> said + ": the model under test compiles");
-        BorderAssessment line = read.get("f").stream()
-                .filter(each -> each.shape() == BoundaryTarget.Shape.COUNT_OF_ELEMENTS
-                        && each.value().equals(Integer.toString(most)))
-                .findFirst().orElseThrow(() -> new AssertionError(said + ": no line on the count at "
-                        + most + " among " + read.get("f")));
+        BorderAssessment line = countLineOf(model, most, said);
         assertEquals(new ItemAssessment.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
                 line.items().get(new DomainPoint.BesideTheLine(Towards.ABOVE)), said);
         assertEquals(new ItemAssessment.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
@@ -323,6 +316,47 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
         assertTrue(line.items().get(new DomainPoint.BesideTheLine(Towards.BELOW))
                 instanceof ItemAssessment.Owed, () -> said + " " + line.items());
     }
+
+    /** The line on the count of {@code f} at {@code value}, and not a line drawn there on
+     *  anything else. */
+    private static BorderAssessment countLineOf(String model, int value, String said) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "p");
+        assertNotNull(read, () -> said + ": the model under test compiles");
+        return read.get("f").stream()
+                .filter(each -> each.shape() == BoundaryTarget.Shape.COUNT_OF_ELEMENTS
+                        && each.value().equals(Integer.toString(value)))
+                .findFirst().orElseThrow(() -> new AssertionError(said + ": no line on the count at "
+                        + value + " among " + read.get("f")));
+    }
+
+    /**
+     * An element with more values than are listed leaves the count the most its set holds, and a
+     * point past how many of its values meet the statement is searched for: what the search comes
+     * back with names the figure the listing stopped at, so a reader is told why the point was not
+     * refused.
+     */
+    @Test
+    void anElementListedOnlyInPartLeavesThePointsBeyondItsValuesSearchedUnderTheFigure() {
+        String model = MODEL.formatted(TYPES, "Set<Wide>",
+                "Set.size(Set.filter(x -> x.a, s))", WIDE_PAST_ITS_VALUES_MEETING);
+        BorderAssessment line = countLineOf(model, WIDE_PAST_ITS_VALUES_MEETING, "Set<Wide>");
+
+        assertTrue(line.items().get(new DomainPoint.AtTheLine())
+                instanceof ItemAssessment.Owed owed
+                && owed.searches().each().stream().anyMatch(each ->
+                        each instanceof ItemAssessment.Attempt.Stopped stopped
+                        && stopped.stoppedBy().written().contains(
+                                CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG)),
+                () -> String.valueOf(line.items().get(new DomainPoint.AtTheLine())));
+    }
+
+    /** Past the values of {@code Wide} meeting {@code x.a}, which are half of its values, and
+     *  short of all of them. */
+    private static final int WIDE_PAST_ITS_VALUES_MEETING =
+            CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.maximum() + 1;
 
     /**
      * A set of as many elements as there are values of the element meeting the statement is
