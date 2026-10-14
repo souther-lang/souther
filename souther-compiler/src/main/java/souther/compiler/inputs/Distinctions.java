@@ -121,7 +121,7 @@ public final class Distinctions {
      * something the position does not hold, and a division this can only half describe is one it
      * does not make.
      */
-    static List<Case> ofValues(ValueSet admitted, Type type, NewtypeInners inners) {
+    public static List<Case> ofValues(ValueSet admitted, Type type, NewtypeInners inners) {
         if (!(admitted instanceof ValueSet.Finite finite) || finite.values().isEmpty()) {
             return List.of();
         }

@@ -90,6 +90,7 @@ import souther.compiler.partition.AxisId;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.ClassOfAPosition;
+import souther.compiler.partition.Border;
 import souther.compiler.partition.HeldOutcome;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.LevelRealizer;
@@ -5960,21 +5961,23 @@ public final class Adequacy {
          * search finds it — the point's standing, under what the way to the comparison leaves, put
          * to the realizer — so a row held to this is held to the same demand a row at the point is.
          *
-         * <p>Empty where the border offers no such point or nothing was found there. Which is
-         * that this compiler has no demand to hand over, and never that the comparison does not
-         * come out that way.
+         * <p>Nothing found where the border offers no such point or nothing was found there. Which
+         * is that this compiler has no demand to hand over, and never that the comparison does not
+         * come out that way — that is said only where the rules leave no value on the side it
+         * comes out on ({@link Border#theRulesLeaveNothingWhereItComesOut}).
          */
         private static HeldOutcome.Of heldBy(MeasuredInput subject,
                                              List<BorderAssessment> edges,
                                              ReachingCuts reaching) {
-            Map<ControlPlace, Optional<HeldOutcome>> found = new LinkedHashMap<>();
+            Map<ControlPlace, HeldOutcome.Bringing> found = new LinkedHashMap<>();
             return place -> found.computeIfAbsent(place, asked -> switch (asked) {
                 case ControlPlace.Outcome outcome -> holding(subject, edges, reaching, outcome);
                 // An arm a run is seen taking where its fork's condition is a truth nothing else
                 // records: what that truth coming out the way the arm is taken on asks of a row.
-                case ControlPlace.Arm arm -> ModelOccurrence.statedAt(arm.arm().fork())
-                        .flatMap(fork -> reaching.heldAtTheArm(fork, arm.arm().part(),
-                                subject.quantities().region()));
+                case ControlPlace.Arm arm -> HeldOutcome.Bringing.of(
+                        ModelOccurrence.statedAt(arm.arm().fork())
+                                .flatMap(fork -> reaching.heldAtTheArm(fork, arm.arm().part(),
+                                        subject.quantities().region())));
             });
         }
 
@@ -5986,10 +5989,10 @@ public final class Adequacy {
          * {@link PointRole#OFF} or {@link PointRole#OUT} one it fails at. For a truth, what it
          * coming out that way asks of a row ({@link ReachingCuts#heldAt}).
          */
-        private static Optional<HeldOutcome> holding(MeasuredInput subject,
-                                                     List<BorderAssessment> edges,
-                                                     ReachingCuts reaching,
-                                                     ControlPlace.Outcome outcome) {
+        private static HeldOutcome.Bringing holding(MeasuredInput subject,
+                                                    List<BorderAssessment> edges,
+                                                    ReachingCuts reaching,
+                                                    ControlPlace.Outcome outcome) {
             for (BorderAssessment edge : edges) {
                 // Only a line whose sides are which way the comparison comes out. A line of a
                 // statement of several is not: the other relations may settle the statement on
@@ -5999,10 +6002,15 @@ public final class Adequacy {
                         || !comparison.recordedAt().contains(outcome.at())) {
                     continue;
                 }
+                // Asked before the way to it, since it holds wherever the comparison is reached:
+                // the rules leave its values the same range on every way.
+                if (edge.border().theRulesLeaveNothingWhereItComesOut(outcome.held())) {
+                    return new HeldOutcome.Bringing.TheRulesLeaveNoValueThere();
+                }
                 if (!(souther.compiler.partition.Reachability.of(reaching.wayTo(comparison),
                         subject.quantities().region())
                         instanceof souther.compiler.partition.Reachability.Reaching able)) {
-                    return Optional.empty();   // nothing takes the way to it
+                    return new HeldOutcome.Bringing.NothingFound();   // nothing takes the way to it
                 }
                 List<PointRole> onThatSide = outcome.held()
                         ? List.of(PointRole.ON, PointRole.IN)
@@ -6017,8 +6025,9 @@ public final class Adequacy {
                         if (new LevelRealizer().realize(quantity.standingAt(owed.criterion()),
                                 able.region(), subject.witnessSearch())
                                 instanceof Realization.Found at) {
-                            return Optional.of(new HeldOutcome(List.of(new RowDemand.AtAPoint(
-                                    at.fixing(), quantity.asksOfEachTerm(owed.criterion()))),
+                            return new HeldOutcome.Bringing.Found(new HeldOutcome(
+                                    List.of(new RowDemand.AtAPoint(at.fixing(),
+                                            quantity.asksOfEachTerm(owed.criterion()))),
                                     able));
                         }
                     }
@@ -6027,9 +6036,9 @@ public final class Adequacy {
             // No point of a border brings it out that way, and the outcome may be an operation's
             // truth a fork's condition asks: what that coming out the way asked demands of a row,
             // composed past the way to it.
-            return ModelOccurrence.statedAt(outcome.occurrence())
+            return HeldOutcome.Bringing.of(ModelOccurrence.statedAt(outcome.occurrence())
                     .flatMap(answers -> reaching.heldAt(answers, outcome.held(),
-                            subject.quantities().region()));
+                            subject.quantities().region())));
         }
 
         private static souther.compiler.partition.FillResult rowsFor(

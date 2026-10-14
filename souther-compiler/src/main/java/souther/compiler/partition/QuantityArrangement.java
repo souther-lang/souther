@@ -350,6 +350,24 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
                 || (to != null && facing(seam, Towards.BELOW).compareTo(to.at()) > 0);
     }
 
+    /**
+     * Whether the rules leave no value on {@code side} of {@code seam}: the first value the seam
+     * leaves that way is already past where {@code ends} leave off.
+     *
+     * <p>Asked of the ends and not of the runs. A run the order holds nothing in is not kept, and
+     * neither is a place outside the ends, so an arrangement with no run beside a line has not said
+     * there is nothing further out. The ends are one range with nothing missing from its middle,
+     * so a first value past them is every value that way past them.
+     */
+    static boolean nothingLeftBeyond(Seam seam, Towards side, DomainEnds ends) {
+        if (side == Towards.ABOVE) {
+            Bound to = ends.boundAt(EndSide.UPPER);
+            return to != null && facing(seam, Towards.ABOVE).compareTo(to.at()) > 0;
+        }
+        Bound from = ends.boundAt(EndSide.LOWER);
+        return from != null && facing(seam, Towards.BELOW).compareTo(from.at()) < 0;
+    }
+
     /** Where {@code seam} leaves off on {@code side}, as a place to hold against an end. */
     private static CutPosition facing(Seam seam, Towards side) {
         Level leaves = seam.leaving(side);

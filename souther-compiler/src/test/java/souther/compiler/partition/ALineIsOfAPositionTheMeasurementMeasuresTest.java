@@ -159,7 +159,7 @@ class ALineIsOfAPositionTheMeasurementMeasuresTest {
         MeasuredInput subject = measuring("days");
         Border mine = subject.partitioning().along(bounding("fee", "days")).get(0);
 
-        Border asked = new Border(mine.cut(), mine.origin(), mine.answers());
+        Border asked = new Border(mine.cut(), mine.origin(), mine.answers(), mine.leftNothing());
         assertNotSame(mine, asked, "a border put together again, equal to the one it stands for");
 
         assertSame(mine, subject.at(asked).border(),

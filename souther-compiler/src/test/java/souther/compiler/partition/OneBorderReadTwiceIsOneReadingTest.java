@@ -146,7 +146,7 @@ class OneBorderReadTwiceIsOneReadingTest {
                     ? new PointAnswer.InRegion(in.criterion(), reversed(in.claims()))
                     : answer);
         }
-        return new Border(border.cut(), border.origin(), answers);
+        return new Border(border.cut(), border.origin(), answers, border.leftNothing());
     }
 
     private static List<RegionClaim> reversed(List<RegionClaim> claims) {

@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.FieldDomains;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
@@ -29,17 +31,32 @@ import java.util.List;
  */
 final class PartitionClasses {
 
-    /** The classes a type states, before any rule is crossed with them. What a witness varies over
-     *  and what a generator offers for a bare position, which are asked of a type and not of a
-     *  position of one. */
+    /**
+     * The classes a type states, before any rule of a position is crossed with them. What a witness
+     * varies over and what a generator offers for a bare position, which are asked of a type and not
+     * of a position of one.
+     *
+     * <p>Where the type states no division, the values its own rules name: {@code data Code =
+     * String invariant value == "a" || value == "b"} divides into its two strings as
+     * {@code data Code = A | B} does into its cases, and a position of it is read that way
+     * ({@link Distinctions#ofValues}), so a set of it is built from both. Asked only of a value
+     * with no parts, since a rule names the whole of nothing else, and read off the reading every
+     * other question about the type's rules asks rather than off the clauses again.
+     */
     static List<PartitionClass> of(Type type, RuleReadingContext reading,
                                    java.util.Set<TypeSymbol> expanding) {
         RuleReadingSource ruleSource = reading.source();
         TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
-        return of(Distinctions.ofType(view.shape(), ruleSource.symbols(), ruleSource.kinds(),
-                        ruleSource.sums()),
-                view, reading, expanding);
+        List<Case> cases = Distinctions.ofType(view.shape(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums());
+        if (cases.isEmpty() && view.shape() instanceof Shape.Scalar
+                && !view.wrappers().isEmpty()
+                && view.wrappers().getFirst() instanceof TypeSymbol.AtModule named) {
+            cases = Distinctions.ofValues(FieldDomains.of(named, reading)
+                    .admits(RuleKey.THE_VALUE).approximation(), type, ruleSource.inners());
+        }
+        return of(cases, view, reading, expanding);
     }
 
     /**

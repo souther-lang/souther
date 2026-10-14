@@ -454,19 +454,13 @@ final class CardinalityTransfer {
             RuleKey path = part.path();
             OccurrenceCounts counts = part.counts();
             return switch (part.type()) {
-                case Type.Prim prim -> switch (prim) {
-                    // As many as it has values, which is a question with an answer of its own.
-                    // Written here as a number, the count and the values would be two records of one
-                    // fact with nothing holding them together.
-                    case BOOL -> howManyValues(part.type(), source.inners(), source.kinds(),
-                            source.sums());
-                    case INT -> part.values().wholeValuesAt(path);
-                    // Spaced too finely to count between two ends, or not spaced at all. A string
-                    // bounded in length and a date bounded at both ends are finite and are not
-                    // counted here: what it would take is a reading of each carrier's own values,
-                    // and nothing asks yet.
-                    case STRING, DECIMAL, RATIONAL, DATE, TIME, DATETIME, INSTANT ->
-                            Cardinality.UNKNOWN;
+                // What the carrier leaves, and no more than the rules name where they name a few.
+                // Both bound the same values, so the narrower holds: a string held to two of them
+                // has two values however many strings there are.
+                case Type.Prim prim -> switch (ofTheCarrier(prim, part)) {
+                    case Cardinality.None it -> it;
+                    case Cardinality.Standing it -> Cardinality.Standing.narrower(it,
+                            part.values().namedValuesAt(path));
                 };
                 case Type.Ref ref -> opening(ref, part);
                 // A `None` is a value of it whatever it wraps, so this is the one position that is
@@ -509,6 +503,24 @@ final class CardinalityTransfer {
                 // type on the strength of a form this never decided.
                 case Type.Open _, Type.Erroneous _, Type.FnOf _, Type.Nothing _, Type.Never _ ->
                         Cardinality.UNKNOWN;
+            };
+        }
+
+        /** How many values {@code prim} may be at {@code part}, read off how its values are spaced
+         *  and nothing else. */
+        private Cardinality ofTheCarrier(Type.Prim prim, Part part) {
+            return switch (prim) {
+                // As many as it has values, which is a question with an answer of its own.
+                // Written here as a number, the count and the values would be two records of one
+                // fact with nothing holding them together.
+                case BOOL -> howManyValues(part.type(), source.inners(), source.kinds(),
+                        source.sums());
+                case INT -> part.values().wholeValuesAt(part.path());
+                // Spaced too finely to count between two ends, or not spaced at all. A string
+                // bounded in length and a date bounded at both ends are finite and are not
+                // counted here: what it would take is a reading of each carrier's own values,
+                // and nothing asks yet.
+                case STRING, DECIMAL, RATIONAL, DATE, TIME, DATETIME, INSTANT -> Cardinality.UNKNOWN;
             };
         }
 

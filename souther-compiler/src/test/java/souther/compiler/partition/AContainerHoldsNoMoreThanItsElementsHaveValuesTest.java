@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ARuleNoReadingTakesIn;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
@@ -17,11 +18,13 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -54,7 +57,17 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
             data Order = List<Service>
               invariant List.length(value) == 3
               invariant List.allDistinctBy(x -> x, value)
-            """;
+            data Code = String
+              invariant value == "a" || value == "b"
+            data Twice = String
+              invariant value == "a" || value == "a"
+            data Narrow = Code
+              invariant value.value /= "a"
+            data Odd = Int
+              invariant value == 1 || value == 3 || value == 7
+            data Loose = String
+              invariant (value == "a" || value == "b") && %s
+            """.formatted(ARuleNoReadingTakesIn.about("value"));
 
     /**
      * A list kept apart is told apart by its order as well, so the lists of the three cases each
@@ -104,7 +117,16 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
                 // The rules of the element's own declaration.
                 new Case("Set<Slot>", "Set.size(s)", 5),
                 new Case("Picked", "Set.size(s.value)", 3),
-                new Case("Map<Service, Int>", "Map.size(s)", 3))) {
+                new Case("Map<Service, Int>", "Map.size(s)", 3),
+                // The values its rules name, which is a count of them and not of how they are
+                // written, under every name the element wears, and of a number as of a string.
+                new Case("Set<Code>", "Set.size(s)", 2),
+                new Case("Map<Code, Int>", "Map.size(s)", 2),
+                new Case("Set<Twice>", "Set.size(s)", 1),
+                new Case("Set<Narrow>", "Set.size(s)", 1),
+                new Case("Set<Odd>", "Set.size(s)", 3),
+                // Beside a rule nothing reads, which may refuse one of them and add none.
+                new Case("Set<Loose>", "Set.size(s)", 2))) {
             BorderAssessment line = lineOf(MODEL.formatted(TYPES, each.type(), each.size(),
                     each.most()), "p", Integer.toString(each.most()));
 
@@ -124,6 +146,61 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
         }
     }
 
+    private static final String GUARDED = """
+            module p
+            %s
+            behavior f : (s: %s) -> Int
+            let f (s) = {
+                guard Set.size(s) >= %d else 0
+
+                1
+            }
+            """;
+
+    /**
+     * A guard asking a set for more than its element has values is one no row goes past, and each
+     * way past it is said as the rules leaving no value that way — not as a way nothing here could
+     * hold a row to, which would leave an author looking for a row nobody can write.
+     *
+     * <p>And one asking for as many as there are is not: a row may well go past it, so where one
+     * stops there the way was looked for.
+     */
+    @Test
+    void aGuardAskingForMoreValuesThanThereAreIsOneTheRulesLetNoRowPast() {
+        RepairShortfall.WayPast leftNoValue = new RepairShortfall.WayPast.NotSearchable(
+                RepairShortfall.Barrier.THE_RULES_LEAVE_NO_VALUE_THAT_WAY);
+        for (String type : List.of("Set<Code>", "Set<Bool>")) {
+            List<RepairShortfall> stops = stopsOf(GUARDED.formatted(TYPES, type, 3));
+            assertFalse(stops.isEmpty(), () -> type + " has rows stopped at the guard");
+            for (RepairShortfall stop : stops) {
+                assertTrue(stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast(var ways)
+                        && ways.stream().allMatch(leftNoValue::equals),
+                        () -> type + " " + stop);
+            }
+            for (RepairShortfall stop : stopsOf(GUARDED.formatted(TYPES, type, 2))) {
+                assertTrue(stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast(var ways)
+                        && ways.stream().noneMatch(leftNoValue::equals),
+                        () -> type + " " + stop);
+            }
+        }
+    }
+
+    /** What stopped each row offered for {@code f}, for the rows something stopped. */
+    private static List<RepairShortfall> stopsOf(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), "p");
+        assertNotNull(all, "the model under test compiles");
+        List<RepairShortfall> out = new ArrayList<>();
+        for (FillResult.Offer offer : all.get("f").composed().offers()) {
+            if (offer.stop() != null) {
+                out.add(offer.stop());
+            }
+        }
+        return out;
+    }
+
     /**
      * A list holds a value over again, and an element with a number in it has no end of values, so
      * neither says where the size stops.
@@ -133,6 +210,8 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
         record Case(String type, String size) {}
         for (Case each : List.of(
                 new Case("List<Service>", "List.length(s)"),
+                new Case("List<Code>", "List.length(s)"),
+                new Case("Set<String>", "Set.size(s)"),
                 new Case("Set<Payload>", "Set.size(s)"),
                 new Case("Set<Int>", "Set.size(s)"),
                 new Case("Map<String, Service>", "Map.size(s)"))) {
