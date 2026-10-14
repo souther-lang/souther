@@ -5401,15 +5401,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * happened to make. Where an author did put them in an order, two of them at one place are told
      * apart by nothing they wrote — so the sort by place is stable over this and the tie falls back
      * to it rather than to the walk.
-     *
-     * <p>The vocabulary's own order, which is a set of words and says nothing about a model. What
-     * an author wrote is asked of the places.
      */
     private static List<ReportedReason.Stop> steady(List<ReportedReason.Stop> these) {
         List<ReportedReason.Stop> out = new ArrayList<>(these);
-        out.sort(Comparator.comparing(ReportedReason.Stop::reason)
-                .thenComparing(ReportedReason.Stop::about, RuleSite.IN_A_STEADY_ORDER)
-                .thenComparing(ReportedReason.Stop::sentTo, RuleSite.IN_A_STEADY_ORDER));
+        out.sort(ReportedReason.Stop.IN_A_STEADY_ORDER);
         return out;
     }
 

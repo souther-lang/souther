@@ -7,6 +7,7 @@ import souther.compiler.inputs.RuleSite;
 import souther.compiler.publish.SourceOrdered;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -42,6 +43,18 @@ public final class ReportedReason {
      *               about the whole of it
      */
     public record Stop(UndividedPosition.Reason reason, RuleSite about, RuleSite sentTo) {
+
+        /**
+         * These in a steady order, which two of them are equal in only where they are equal: the
+         * word in the vocabulary's own order, then what it is about, then where it sends a reader.
+         *
+         * <p>The vocabulary's order is a set of words and says nothing about a model. What an author
+         * wrote is asked of the places.
+         */
+        public static final Comparator<Stop> IN_A_STEADY_ORDER =
+                Comparator.comparing(Stop::reason)
+                        .thenComparing(Stop::about, RuleSite.IN_A_STEADY_ORDER)
+                        .thenComparing(Stop::sentTo, RuleSite.IN_A_STEADY_ORDER);
 
         public Stop {
             if (reason == null || about == null || sentTo == null) {

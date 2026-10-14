@@ -109,6 +109,12 @@ public record RuleReasons(List<Said> said) {
      */
     public record Said(RuleSite about, RuleSite sentTo, BlockReason.RuleReadingStopped reason) {
 
+        /** The reason, what it is about and where it sends a reader, each by the whole of it. */
+        static final Comparator<Said> IN_A_STEADY_ORDER =
+                Comparator.comparing(Said::reason, BlockReason.RuleReadingStopped.IN_A_STEADY_ORDER)
+                        .thenComparing(Said::about, RuleSite.IN_A_STEADY_ORDER)
+                        .thenComparing(Said::sentTo, RuleSite.IN_A_STEADY_ORDER);
+
         public Said {
             if (about == null || sentTo == null || reason == null) {
                 throw new IllegalArgumentException(
@@ -154,10 +160,7 @@ public record RuleReasons(List<Said> said) {
         Map<Object, Said> once = new LinkedHashMap<>();
         these.forEach(each -> once.merge(each.fact(), each, Said::together));
         List<Said> sorted = new ArrayList<>(once.values());
-        sorted.sort(Comparator.comparing(Said::reason,
-                        BlockReason.RuleReadingStopped.IN_A_STEADY_ORDER)
-                .thenComparing(Said::about, RuleSite.IN_A_STEADY_ORDER)
-                .thenComparing(Said::sentTo, RuleSite.IN_A_STEADY_ORDER));
+        sorted.sort(Said.IN_A_STEADY_ORDER);
         return new RuleReasons(List.copyOf(sorted));
     }
 
