@@ -1334,7 +1334,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // it: the side runs to an end of the range, and the range ends at a value the declarations
         // leave.
         HeldValues held = of instanceof BorderQuantity.OfACoordinate coordinate
-                ? HeldValues.of(region, coordinate.term(), coordinate.of()) : HeldValues.NONE;
+                ? HeldValues.of(region, coordinate.of()) : HeldValues.NONE;
         return new Border.Values() {
             @Override
             public boolean extendTo(Level level) {

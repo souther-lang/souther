@@ -74,7 +74,7 @@ final class OrderedClasses {
         }
         Endpoint min = within == null ? null : within.min();
         Endpoint max = within == null ? null : within.max();
-        HeldValues held = HeldValues.of(reading.region(), term, orders);
+        HeldValues held = HeldValues.of(reading.region(), orders);
         List<PartitionClass> classes = new ArrayList<>();
         if (runs.isEmpty()) {
             if (!values.isEmpty()) {

@@ -19,10 +19,10 @@ import java.math.BigInteger;
  * is one they refuse.
  *
  * <p>The one place that question is answered. Whether a line is drawn at a value, whether a run
- * between lines is a class, and whether a border owes a row at a point or in a run each ask it, of
- * the same facts: asked apart, each reader read some of them, and a position held to {@code "a"} or
- * {@code "b"} had a line drawn at {@code "a0"}, a run between two lines was a class nothing can
- * stand in, and a border owed a row at a value the declarations refuse.
+ * between lines is a class, and whether a border owes a row at a point or in a run each ask it, and
+ * each has to come to the same answer of the same facts: a reader asking some of them alone would
+ * draw a line at {@code "a0"} on a position held to {@code "a"} or {@code "b"}, keep a class
+ * nothing can stand in, or owe a row at a value the declarations refuse, while the others did not.
  *
  * <p>Neither is where the value runs. A range is convex and the order's own reading already holds
  * it; what is here is what a range cannot say — the values between its ends that are not values of
@@ -42,14 +42,14 @@ record HeldValues(Carrier on, Congruences class_, ValueSet named) {
     static final HeldValues NONE = new HeldValues(null, null, ValueSet.ANY);
 
     /**
-     * What the declarations {@code region} reads hold {@code term} to, on the order {@code orders}
-     * answers it on.
+     * What the declarations {@code region} reads hold the number {@code orders} is of to, on the
+     * order it is answered on.
      *
      * <p>A position's own value and nothing taken of it: a string held to {@code "a"} or
      * {@code "b"} has lengths nobody named.
      */
-    static HeldValues of(SearchRegion region, NumericTerm.FromOnePosition term, TermOrders orders) {
-        if (!(term instanceof NumericTerm.ValueOf value)) {
+    static HeldValues of(SearchRegion region, TermOrders orders) {
+        if (!(orders.term() instanceof NumericTerm.ValueOf value)) {
             return NONE;
         }
         HeldValues held = new HeldValues(orders.answered(), region.valueClassAt(value),

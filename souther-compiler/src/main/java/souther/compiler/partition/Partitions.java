@@ -1193,7 +1193,7 @@ public final class Partitions {
         TermOrders orders = reading.ordersOf(axis.term());
         // What the declarations hold the value to, which the range alone cannot say: a point inside
         // the range they refuse is one the rules refuse.
-        HeldValues heldTo = HeldValues.of(reading.region(), axis.term(), orders);
+        HeldValues heldTo = HeldValues.of(reading.region(), orders);
         List<Border> out = new ArrayList<>();
         // Every place the rules part this position's values, collected before any border is built.
         // What a comparison's border owes away from its line is a run of the arrangement they make

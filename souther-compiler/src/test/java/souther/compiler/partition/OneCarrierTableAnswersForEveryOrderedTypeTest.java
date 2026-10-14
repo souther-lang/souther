@@ -516,8 +516,8 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
      * <p>The same question an interval asks, reached by the other reader. An equality names a value
      * rather than a place to cut, so what is left over is a class too, and the value that stands for
      * it has to be one the position holds and not one of the values it excludes. Over two decimals
-     * there is one between them; over two adjacent moments the number between them is written back
-     * as one of the two, so the class has nothing to offer and says so.
+     * there is one between them; over two adjacent moments there is none, so what is left is no
+     * class at all and no row is asked for there.
      *
      * <p>Reachable because this branch taught the reader to see a date-time constant at all: before
      * it, an equality against one was not read and there was no such class.
@@ -542,12 +542,9 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
 
         String moment = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.matrix", "singledMoment", SourceRendering.namedByIdentity(compilation.texts())).text();
-        assertTrue(moment.contains("no row for `x=/= 2026-08-01T00:00:00,"
-                        + " 2026-08-01T00:00:01`"),
-                "the position holds nothing but the two singled out: " + moment);
-        assertFalse(moment.contains("=/= 2026-08-01T00:00:00,"
-                        + " 2026-08-01T00:00:01 x x = "),
-                "and neither of them is offered under that class's name: " + moment);
+        assertFalse(moment.contains("=/= 2026-08-01T00:00:00, 2026-08-01T00:00:01"),
+                "the position holds nothing but the two singled out, so nothing is left to be"
+                        + " a class: " + moment);
     }
 
     /** What the measures answered for each named behavior. */
