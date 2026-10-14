@@ -8544,8 +8544,7 @@ public final class Adequacy {
          * construct added to the language arrives here as a case with no phrase rather than as one
          * quietly answered with a neighbour's.
          */
-        private static Localizable phraseFor(
-                souther.compiler.coverage.CoverageSites.Site arm) {
+        private static Localizable phraseFor(CoverageSites.Site arm) {
             return phraseFor(arm.construct(), arm.outcome());
         }
 

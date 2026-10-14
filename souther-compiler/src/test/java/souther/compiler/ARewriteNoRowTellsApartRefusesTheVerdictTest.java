@@ -8,10 +8,7 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -149,32 +146,6 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
                         .filter(line -> line.startsWith("! no row would come out differently"))
                         .toList(),
                 () -> "and the arms under it: " + page);
-    }
-
-    /**
-     * And the document's subject for each is the same words, where the arm's own subject is the
-     * word an arm is written by; which rewrite it is stays `obligationId`'s.
-     */
-    @Test
-    void theDocumentSaysEachRewriteByItsArms() {
-        Compilation compilation = compiled(NOTHING_HELD);
-        JsonNode document = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(compilation.texts())));
-        List<String> subjects = new ArrayList<>();
-        for (JsonNode module : document.get("modules")) {
-            for (JsonNode behavior : module.get("behaviors")) {
-                for (JsonNode finding : behavior.get("findings")) {
-                    if ("rewrite_unnoticed".equals(finding.get("kind").asString())) {
-                        subjects.add(finding.get("subject").asString());
-                    }
-                }
-            }
-        }
-
-        assertEquals(List.of("case OutOfPocket answering as case Advance",
-                        "case Advance answering as case OutOfPocket",
-                        "case CompanyCard answering as case OutOfPocket"),
-                subjects, document::toString);
     }
 
     @Test

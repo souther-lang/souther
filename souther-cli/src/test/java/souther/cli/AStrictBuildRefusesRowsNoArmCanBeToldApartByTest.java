@@ -45,22 +45,11 @@ class AStrictBuildRefusesRowsNoArmCanBeToldApartByTest {
 
     @Test
     void everyArmRewrittenAsItsSiblingIsAGapTheStrictBuildRefuses() throws Exception {
-        Path file = Files.createTempDirectory("souther-strict").resolve("addon.sou");
-        Files.writeString(file, MODEL);
-        PrintStream originalOut = System.out;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        int code;
-        try {
-            code = Main.dispatch(new String[] {"examples", file.toString(), "--strict"});
-        } finally {
-            System.setOut(originalOut);
-        }
-        String report = out.toString(StandardCharsets.UTF_8);
+        Ran ran = run("--strict");
 
-        assertTrue(report.contains("replacement 0/4"),
-                "each of the four arms as its sibling, none told apart: " + report);
-        assertEquals(1, code, "and the strict build refuses over them: " + report);
+        assertTrue(ran.out().contains("replacement 0/4"),
+                "each of the four arms as its sibling, none told apart: " + ran.out());
+        assertEquals(1, ran.code(), "and the strict build refuses over them: " + ran.out());
     }
 
     /**
@@ -70,17 +59,7 @@ class AStrictBuildRefusesRowsNoArmCanBeToldApartByTest {
      */
     @Test
     void eachGapNamesTheArmAndTheArmItAnsweredAs() throws Exception {
-        Path file = Files.createTempDirectory("souther-strict").resolve("addon.sou");
-        Files.writeString(file, MODEL);
-        PrintStream originalOut = System.out;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            Main.dispatch(new String[] {"examples", file.toString(), "--strict"});
-        } finally {
-            System.setOut(originalOut);
-        }
-        String report = out.toString(StandardCharsets.UTF_8);
+        String report = run("--strict").out();
 
         assertEquals(List.of(
                         "! no row would come out differently if `then` (7:5) answered as `else`",
@@ -94,24 +73,33 @@ class AStrictBuildRefusesRowsNoArmCanBeToldApartByTest {
     }
 
     /**
-     * A row generated for one of them is offered under the same words, so a reader can tell which
-     * gap each row is for.
+     * A row generated for one of them is offered under the words the report says the arms in. Not
+     * the fork's place: a row's name stays in the source, where a coordinate would go stale, so
+     * rows for the same pair of arms at the two {@code if}s are offered under one name.
      */
     @Test
     void aRowGeneratedForAGapIsNamedByTheArms() throws Exception {
+        String generated = run("--generate").out();
+
+        assertTrue(generated.contains("\"then answering as else\""),
+                "a row named for the arm and the arm it answers as: " + generated);
+    }
+
+    private record Ran(int code, String out) {}
+
+    /** {@code souther examples} over the model with {@code flag}, and what it printed. */
+    private static Ran run(String flag) throws Exception {
         Path file = Files.createTempDirectory("souther-strict").resolve("addon.sou");
         Files.writeString(file, MODEL);
         PrintStream originalOut = System.out;
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
+        int code;
         try {
-            Main.dispatch(new String[] {"examples", "--generate", file.toString()});
+            code = Main.dispatch(new String[] {"examples", file.toString(), flag});
         } finally {
             System.setOut(originalOut);
         }
-        String generated = out.toString(StandardCharsets.UTF_8);
-
-        assertTrue(generated.contains("\"then answering as else\""),
-                "a row named for the arm and the arm it answers as: " + generated);
+        return new Ran(code, out.toString(StandardCharsets.UTF_8));
     }
 }

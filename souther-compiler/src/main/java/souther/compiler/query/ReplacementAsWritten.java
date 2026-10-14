@@ -1,7 +1,6 @@
 package souther.compiler.query;
 
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.coverage.OutcomeName;
 import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.partition.Replacement;
 
@@ -34,12 +33,6 @@ public sealed interface ReplacementAsWritten {
             Objects.requireNonNull(replacement, "a rewrite is some rewrite");
             Objects.requireNonNull(arm, "the arm rewritten means something");
             Objects.requireNonNull(sibling, "and so does the arm it answers as");
-            // Both are outcomes of the one fork, so both have to be arms that fork can have.
-            if (!OutcomeName.of(replacement.fork().kind(), arm).isArm()
-                    || !OutcomeName.of(replacement.fork().kind(), sibling).isArm()) {
-                throw new IllegalArgumentException(arm + " and " + sibling
-                        + " are not two arms of " + replacement.fork());
-            }
         }
 
         /** {@code replacement} as {@code plan}'s walk met its two arms. */

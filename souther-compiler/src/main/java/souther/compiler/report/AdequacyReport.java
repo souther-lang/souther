@@ -7651,16 +7651,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // show an author a comparison they did not write. Two rules of one behavior are shown
             // alike here and are told apart by `obligationId`, which is what that field is for.
             case About.ARuleNoRowTakes(var behavior, var _) -> words(behavior);
-            // The arm and the arm it answers as, in the words an arm's subject is written in. Two
-            // rewrites of the same pair at two forks read alike here and are told apart by where
-            // each is shown and by `obligationId`. The body answering one value is about no arm,
-            // and is said by the behavior whose body it is.
-            case About.ARewriteNoRowTellsApart(var behavior, var written, var _, var _, var _) ->
-                    switch (written) {
-                        case ReplacementAsWritten.OfAnArm rewrite ->
-                                words(ArmVocabulary.label(rewrite));
-                        case ReplacementAsWritten.ByOneAnswer _ -> words(behavior);
-                    };
+            // The behavior whose body it is a rewrite of. A subject names something the document
+            // holds, and no entry of it is called by a rewrite's words; which rewrite it is, is
+            // `obligationId`, and where an arm's is shown at its fork, the place beside it.
+            case About.ARewriteNoRowTellsApart(var behavior, var _, var _, var _, var _) ->
+                    words(behavior);
             case About.ACaseNoRowExpects(var _, var missing) -> words(missing.name());
             case About.ACaseNothingWasSeenToProduce(var missing) -> words(missing.name());
             case About.AClassNoRowIsIn(var missing) ->
