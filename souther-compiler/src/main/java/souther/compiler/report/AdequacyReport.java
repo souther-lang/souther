@@ -4381,9 +4381,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * up rather than held: what the condition carries is which question places it, and this is
      * where that question was put. Said without one where nothing places it, which is a reader told
      * what was left out and not where — the alternative is a reader told neither. The calls after
-     * it, in the order they were met.
+     * it, in the order they were met, and every other place the same was asked at after that, each
+     * with its calls.
      *
-     * @param callsOf the calls of a helper each gap was met at, one list per copy
+     * @param copiesOf each copy what a gap is about was read off, with where its construct is
+     *                 written and the calls it was made at
      */
     private static List<String> saidOnce(List<ConditionGap> gaps,
                                          Function<ConditionGap, List<CopyShown>> copiesOf,
