@@ -1197,9 +1197,10 @@ public final class Partitions {
                 ? reading.region().valueClassAt(place) : null;
         List<Border> out = new ArrayList<>();
         // Every place the rules part this position's values, collected before any border is built.
-        // What each border owes away from its line is a run of the arrangement they make together,
-        // and a border built without them reads its two sides to the end of the order — so a row in
-        // the partition after next answered for a point inside the one this border bounds.
+        // What a comparison's border owes away from its line is a run of the arrangement they make
+        // together, and one built without them would read its two sides to the end of the order —
+        // so a row in the partition after next would answer for a point inside the one it bounds.
+        // A bound reads none of them: its run is what the rules leave.
         // Every place the rules part this position's values: the ones its cuts stand at, and the
         // ones no cut stands at because the position holds no value there. A border built from the
         // cuts alone read its two sides past exactly the lines that were left out.

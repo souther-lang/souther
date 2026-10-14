@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
@@ -163,7 +162,7 @@ class ATypeWritingAboutBothOfItsNumbersMeasuresBothTest {
 
         assertEquals(List.of("v: EXACT_VALUES_TOO_COSTLY"), notReadIn(source, "onC"),
                 "only the format is unread, and for a reason of its own reading");
-        assertTrue(report(source).contains("String.length(v) = 2"),
+        assertTrue(linesIn(source, "formatted", "onC").contains("String.length(v) = 2"),
                 "and the length keeps the line its rule draws");
     }
 
@@ -197,13 +196,6 @@ class ATypeWritingAboutBothOfItsNumbersMeasuresBothTest {
         List<BorderAssessment> lines = read.get(behavior);
         assertNotNull(lines, () -> behavior + " draws lines in " + module + ": " + read.keySet());
         return lines.stream().map(BorderAssessment::label).sorted().toList();
-    }
-
-    private static String report(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** What {@code behavior} left unread, as the number it is about and the reason. */

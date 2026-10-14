@@ -141,8 +141,7 @@ class AChoiceOfBoundsLeavesTheLineTheAlternativesLeaveTest {
     void andWhatTheChoiceLeavesIsWhereTheLinesAreAndNotWhichValuesStandThere() {
         List<String> lines = linesOf("n == 2 || n == 5");
 
-        assertEquals(List.of("border      borders 2   obligations 0/0"),
-                lines.stream().filter(each -> each.startsWith("border")).toList(),
+        assertEquals(List.of("declarations   borders 2"), declaredBorders(lines),
                 "the outermost ends of the two named values are the lines the rules draw");
         assertEquals(List.of("2 < n <= 5", "2 <= n < 5"),
                 lines.stream().filter(each -> each.contains("IN point n in "))
@@ -166,12 +165,18 @@ class AChoiceOfBoundsLeavesTheLineTheAlternativesLeaveTest {
     @Test
     void andOneLineIsDrawnOnceWhateverElseTheRuleSaysBesideIt() {
         assertEquals(
-                List.of("border      borders 1   obligations 0/0"),
-                linesOf("(String.length(s) >= 2 || String.length(s) >= 3)"
-                        + " && String.length(s) >= 1").stream()
-                        .filter(each -> each.startsWith("border")).toList(),
+                List.of("declarations   borders 1"),
+                declaredBorders(linesOf("(String.length(s) >= 2 || String.length(s) >= 3)"
+                        + " && String.length(s) >= 1")),
                 "the length stops at two, and the bound written beside the choice is not a second"
                         + " rule drawing the same line");
+    }
+
+    /** How many lines the declarations drew, as the header of their block counts them. */
+    private static List<String> declaredBorders(List<String> report) {
+        return report.stream().filter(each -> each.startsWith("declarations"))
+                .map(each -> each.substring(0, each.indexOf("   obligations")))
+                .toList();
     }
 
     /** What the document says the model draws on the position each clause is about. */

@@ -785,8 +785,9 @@ public final class AffineForms {
      * a newtype's construction around one is taken off. Answered here instead, this walk would hold
      * a second account of what a date is written as.
      *
-     * <p>A carrier that counts nothing has no constant to be: a string is ordered and stands no
-     * measurable distance from another, which is the carrier's own answer and not a case here.
+     * <p>A carrier that writes no constant has none to be: a string is ordered and stands no
+     * measurable distance from another, and a case names which case a value is. Both are the
+     * carrier's own answers ({@link Carrier#writesAConstant}) and not cases here.
      *
      * <p>Null where the carrier writes no literal at this expression, and the walk goes on to read
      * it as arithmetic or as a leaf. Treated as "not affine" instead, an expression a carrier does
@@ -795,7 +796,7 @@ public final class AffineForms {
     private static <A, E> LinearForm<A> literal(Core e, E at, Reading<A, E> reading) {
         Carrier carrier =
                 Carrier.ofValue(e.type(), reading.declarations());
-        if (carrier == null || !carrier.counts()) {
+        if (carrier == null || !carrier.writesAConstant()) {
             return null;
         }
         // The expression as this walk stands at it: a name in front of it is read by this walk,

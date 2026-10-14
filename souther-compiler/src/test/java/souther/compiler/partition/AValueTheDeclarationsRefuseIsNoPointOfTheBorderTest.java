@@ -91,7 +91,7 @@ class AValueTheDeclarationsRefuseIsNoPointOfTheBorderTest {
     void aMemberAnotherRuleRefusesLeavesTheNextMemberToTry() {
         String model = MULTIPLES_OF_A_THOUSAND.formatted(
                 "Int.floorMod(value, 1000) == 0 && Int.floorMod(value, 3000) /= 1000");
-        for (String label : List.of("1950000 < t", "0 < t <= 1950000")) {
+        for (String label : List.of("1950000 < t", "0 < t")) {
             List<String> rows = rowsAt(model, label);
             assertEquals(1, rows.size(), label + " " + rows);
             long at = Long.parseLong(rows.getFirst().replaceAll("[^0-9]", ""));

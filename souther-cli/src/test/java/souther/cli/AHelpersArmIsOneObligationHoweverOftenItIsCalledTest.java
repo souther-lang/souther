@@ -261,9 +261,12 @@ class AHelpersArmIsOneObligationHoweverOftenItIsCalledTest {
                     | "left large" : (Left, Amount(500)) -> Large
                 """);
 
-        // The record's own minimum, and the two the guard draws at 100.
-        assertTrue(report.contains("border      borders 2   obligations 3/5"),
+        // The line the guard draws at 100, once for both calls of the helper. The type's own
+        // minimum is the declarations' line and is counted there.
+        assertTrue(report.contains("border      borders 1   obligations 2/4"),
                 () -> "one line per rule, not one per reading of it:\n" + report);
+        assertTrue(report.contains("declarations   borders 1 "),
+                () -> "and the type's minimum is the declarations' one line:\n" + report);
         // One mark and one reading under it, however many calls of the helper met the line: the
         // guard is one rule and the row it asks for is one row.
         assertEquals(1, count(report, "read as twice/a: = 100"),

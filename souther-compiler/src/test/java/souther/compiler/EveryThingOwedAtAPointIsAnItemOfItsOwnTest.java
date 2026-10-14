@@ -43,8 +43,8 @@ class EveryThingOwedAtAPointIsAnItemOfItsOwnTest {
     /**
      * One position whose line is stopped in two places.
      *
-     * <p>Two helpers compare the same position at the same value, so the region beside the
-     * declaration's line runs up to a line each of them drew. The values coincide; the rules do not.
+     * <p>Two helpers compare the same position at the same value, so the region above the body's
+     * own line at four runs up to a line each of them drew. The values coincide; the rules do not.
      */
     private static final String TWO_STOPS = """
             module example.stops
@@ -58,16 +58,15 @@ class EveryThingOwedAtAPointIsAnItemOfItsOwnTest {
 
             behavior tally : (worked: Hours) -> Int
 
-            let tally (worked) = over(worked) + also(worked)
+            let tally (worked) = if worked.value > 4 then over(worked) + also(worked) else 0
             """;
 
     /**
      * A point of one line owed twice is two items, and what tells them apart is the far side.
      *
-     * <p>The declaration is owed a run beside each of its ends, and the run stops at whichever
-     * helper's line reaches the position — two of them, at one value. Same line, same role, two
-     * things to be told about, which is what {@link souther.compiler.partition.RegionBasis}
-     * carries.
+     * <p>The line at four is owed a run above it, and the run stops at whichever helper's line
+     * reaches the position — two of them, at one value. Same line, same role, two things to be told
+     * about, which is what {@link souther.compiler.partition.RegionBasis} carries.
      */
     @Test
     void aPointOwedTwiceIsTwoItemsOfTheOffering() {

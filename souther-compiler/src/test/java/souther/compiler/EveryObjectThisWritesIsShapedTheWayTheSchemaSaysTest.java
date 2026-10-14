@@ -233,9 +233,9 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
                 "the branch forbids what it does not name, rather than naming what it forbids");
         Set<String> named = new LinkedHashSet<>();
         notOwed.get("properties").propertyNames().forEach(named::add);
-        assertEquals(Set.of("point", "location", "notOwed"), named,
+        assertEquals(Set.of("point", "location", "notOwed", "stops"), named,
                 "and what it names is which point of the border it is, where on the quantity it is,"
-                        + " and why no row is owed there");
+                        + " why no row is owed there, and where else that was settled");
     }
 
     /**
