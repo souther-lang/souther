@@ -118,7 +118,7 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
         Demand other = new Demand.Owed(new Criterion.AtTheLevel(at("1")));
 
         assertFalse(asked.sameAs(other), "a row at zero is no row at one");
-        assertFalse(asked.sameAs(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT)),
+        assertFalse(asked.sameAs(new Demand.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE)),
                 "and a point nobody is owed a row at is not a point asking for one");
     }
 

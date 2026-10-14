@@ -231,7 +231,7 @@ class AMembershipIsComposedIntoTheRowTest {
         Generator.BoundaryAttempt.Unresolved none = assertInstanceOf(
                 Generator.BoundaryAttempt.Unresolved.class,
                 composedPast("paired", false, Generator.CandidateCheck.ANY));
-        assertNotEquals(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE,
+        assertNotEquals(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE,
                 none.why().reason(), "nothing here proved the model leaves no row");
         assertEquals(List.of(), none.unrepresented().onTheWay(),
                 () -> "the condition was read and composed against: " + none.unrepresented());

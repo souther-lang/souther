@@ -96,7 +96,7 @@ final class TermRealizations {
                 case Built built -> built.rest();
                 case Stopped stopped -> stopped.met();
                 case Unexhausted some -> some.met();
-                case NoNumberTheRulesAdmit _, None _ -> CompositionShortfall.NONE;
+                case NoNumberTheDeclarationsAdmit _, None _ -> CompositionShortfall.NONE;
             };
         }
 
@@ -194,8 +194,8 @@ final class TermRealizations {
          * The rules admit no number of what was asked about, which is walked and not guessed.
          *
          * <p><b>About the numbers and not about the values.</b> Nothing was built because there was
-         * nothing to build for: the walk went over every number the question holds and the rules
-         * left none of them standing. A walk that had numbers and built at none of them is not
+         * nothing to build for: the walk went over every number the question holds and the
+         * declarations — the types and the rules written on them — left none of them standing. A walk that had numbers and built at none of them is not
          * this — what that shows is about this compiler, and what this shows is about the model.
          *
          * <p><b>And about the question this attempt was for.</b> A location asked for a class and
@@ -206,10 +206,10 @@ final class TermRealizations {
          * <p>Not a word a reader may print. What somebody is owed a row at is an obligation and a
          * search runs at a combination, so one of these settles the combination it came from and
          * the obligation is settled by what every combination of it came to. Published from here,
-         * a class one combination of leaves nothing would be a class the rules leave nothing in,
-         * while another combination of it goes on admitting values.
+         * a class one combination of leaves nothing would be a class the declarations leave
+         * nothing in, while another combination of it goes on admitting values.
          */
-        record NoNumberTheRulesAdmit() implements Realization {}
+        record NoNumberTheDeclarationsAdmit() implements Realization {}
 
         /**
          * Nothing here writes a value answering it, and no budget of this compiler's is why.
@@ -225,7 +225,7 @@ final class TermRealizations {
          * try. Nothing here can tell them apart, so a walk that ran to the end of what it was
          * handed may have run to the end of one candidate — and this word is the one that says so
          * rather than the one that settles the class. What licenses a sentence about the model is
-         * {@link Generator.UnresolvedCombination.Reason#THE_RULES_LEAVE_NOTHING_THERE}, and
+         * {@link Generator.UnresolvedCombination.Reason#NO_VALUE_CAN_STAND_THERE}, and
          * nothing reaches it by counting what a walk refused.
          *
          * <p>The word is how a reader downstream treats it and {@code detail} is what happened in
@@ -1577,7 +1577,7 @@ final class TermRealizations {
         // could be built at a number this walked past: this is about the numbers, not the values.
         if (tried.numbers().isEmpty() && tried.rest() instanceof Remainder.Exhausted
                 && walkedTheWholeQuestion) {
-            return new Realization.NoNumberTheRulesAdmit();
+            return new Realization.NoNumberTheDeclarationsAdmit();
         }
         return last instanceof Realization.None none ? none
                 : new Realization.None(

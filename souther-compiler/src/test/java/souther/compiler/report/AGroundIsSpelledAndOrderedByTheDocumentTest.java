@@ -32,7 +32,7 @@ class AGroundIsSpelledAndOrderedByTheDocumentTest {
     /** The array a document writes, in the order it writes it. The whole of the contract this file
      *  is about, written as what a reader of the document sees. */
     private static final List<String> AS_THE_DOCUMENT_WRITES_THEM =
-            List.of("the_rules_prove_it", "a_row_is_at_it", "a_value_was_built");
+            List.of("it_is_proved", "a_row_is_at_it", "a_value_was_built");
 
     @Test
     void theDocumentsOrderIsTheOneWrittenDownHere() {

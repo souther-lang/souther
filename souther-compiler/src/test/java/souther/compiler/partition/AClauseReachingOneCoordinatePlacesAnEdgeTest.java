@@ -317,8 +317,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                       · no line: invariant Span #1 — it relates the value here to another value rather than dividing the values here, about `v.startsAt`
                       · no line: invariant Span #1 — it relates the value here to another value rather than dividing the values here, about `v.endsAt`
                     border      borders 1   obligations 0/0
-                      · no OFF point is owed at v.startsAt = v.endsAt (invariant Span #1): excluded — the rules leave no value there
-                      · no OUT point is owed at v.startsAt = v.endsAt (invariant Span #1): excluded — the rules leave no value there
+                      · no OFF point is owed at v.startsAt = v.endsAt (invariant Span #1): excluded — no value can stand there
+                      · no OUT point is owed at v.startsAt = v.endsAt (invariant Span #1): excluded — no value can stand there
                 """), report);
     }
 
@@ -342,8 +342,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                       · no line: invariant Floor #1 — it relates the value here to another value rather than dividing the values here, about `v.n`
                       · no line: invariant Floor #1 — it relates the value here to another value rather than dividing the values here, about `v.min`
                     border      borders 1   obligations 0/0
-                      · no OFF point is owed at v.n = v.min (invariant Floor #1): excluded — the rules leave no value there
-                      · no OUT point is owed at v.n = v.min (invariant Floor #1): excluded — the rules leave no value there
+                      · no OFF point is owed at v.n = v.min (invariant Floor #1): excluded — no value can stand there
+                      · no OUT point is owed at v.n = v.min (invariant Floor #1): excluded — no value can stand there
                 """), report);
     }
 

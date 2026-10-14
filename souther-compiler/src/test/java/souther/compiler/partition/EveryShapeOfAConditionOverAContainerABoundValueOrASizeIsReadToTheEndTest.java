@@ -153,7 +153,7 @@ class EveryShapeOfAConditionOverAContainerABoundValueOrASizeIsReadToTheEndTest {
                     unread.add(name + " is no column coming out " + holding + ": "
                             + column.whys());
                 }
-                if (WhatTheRulesLeave.admits(stated, holding, read)
+                if (WhatTheDeclarationsLeave.whetherRuledOut(stated, holding, read)
                         instanceof AWayThrough.NotRuledOut(var notAsked) && !notAsked.isEmpty()) {
                     unread.add(name + " leaves a way unasked coming out " + holding + ": "
                             + notAsked);

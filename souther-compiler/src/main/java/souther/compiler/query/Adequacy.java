@@ -5966,8 +5966,8 @@ public final class Adequacy {
          *
          * <p>Nothing found where the border offers no such point or nothing was found there. Which
          * is that this compiler has no demand to hand over, and never that the comparison does not
-         * come out that way — that is said only where the rules leave no value on the side it
-         * comes out on ({@link Border#theRulesLeaveNothingWhereItComesOut}).
+         * come out that way — that is said only where no value stands on the side it comes out
+         * on ({@link Border#noValueStandsWhereItComesOut}).
          */
         private static HeldOutcome.Of heldBy(MeasuredInput subject,
                                              List<BorderAssessment> edges,
@@ -6006,9 +6006,9 @@ public final class Adequacy {
                     continue;
                 }
                 // Asked before the way to it, since it holds wherever the comparison is reached:
-                // the rules leave its values the same range on every way.
-                if (edge.border().theRulesLeaveNothingWhereItComesOut(outcome.held())) {
-                    return new HeldOutcome.Bringing.TheRulesLeaveNoValueThere();
+                // its values are the same range on every way.
+                if (edge.border().noValueStandsWhereItComesOut(outcome.held())) {
+                    return new HeldOutcome.Bringing.NoValueCanStandThere();
                 }
                 if (!(souther.compiler.partition.Reachability.of(reaching.wayTo(comparison),
                         subject.quantities().region())

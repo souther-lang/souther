@@ -94,7 +94,7 @@ class WhatShowsARowCanBeWrittenIsAllOfThemAndNotAChoiceTest {
         for (ItemAssessment.Owed owed : points) {
             ItemAssessment.WritabilityEvidence evidence = owed.writabilityEvidence();
             assertEquals(owed.projection() == ItemAssessment.WritabilityProjection.PROVEN,
-                    evidence.has(Ground.THE_RULES_PROVE_IT),
+                    evidence.has(Ground.IT_IS_PROVED),
                     "the rules ground is the projection having proven it, and both the reading that"
                             + " came to nothing and the reading nobody made leave it out");
             assertEquals(owed.hasRowWitness(), evidence.has(Ground.A_ROW_IS_AT_IT),
@@ -107,6 +107,33 @@ class WhatShowsARowCanBeWrittenIsAllOfThemAndNotAChoiceTest {
             assertEquals(!evidence.grounds().isEmpty(), evidence.known(),
                     "known is having a ground, and empty is the whole of what unknown was");
         }
+    }
+
+    /** A position no rule is written about, compared against a number. */
+    private static final String NO_RULE = """
+            module example.unruled
+
+            data Ok
+
+            behavior f : (n: Int) -> Ok
+
+            let f (n) = if n >= 3 then Ok else Ok
+            """;
+
+    /**
+     * A point is proved where no rule is written, and the ground says it is proved and not what
+     * proved it.
+     *
+     * <p>The type alone leaves the points of an {@code Int} inside what it admits. A ground naming
+     * the rules would send a reader looking for one here.
+     */
+    @Test
+    void aPointNoRuleIsWrittenAboutIsProvedAllTheSame() {
+        List<ItemAssessment.Owed> points = owedPointsOf(NO_RULE, "example.unruled", "f");
+        assertFalse(points.isEmpty(), "the comparison owes rows, or this asserts nothing");
+        assertTrue(points.stream().anyMatch(owed -> owed.writabilityEvidence()
+                        .has(Ground.IT_IS_PROVED)),
+                () -> "a point of an unruled position is proved: " + points);
     }
 
     /**
@@ -123,7 +150,7 @@ class WhatShowsARowCanBeWrittenIsAllOfThemAndNotAChoiceTest {
                 .filter(grounds -> grounds.size() > 1).toList();
         assertFalse(found.isEmpty(),
                 "the corpus reaches a point more than one thing shows, or this asserts nothing");
-        assertTrue(found.stream().anyMatch(grounds -> grounds.contains(Ground.THE_RULES_PROVE_IT)
+        assertTrue(found.stream().anyMatch(grounds -> grounds.contains(Ground.IT_IS_PROVED)
                         && grounds.contains(Ground.A_ROW_IS_AT_IT)),
                 "including a point the rules prove that a row also stands at, which is the pair a"
                         + " verdict reported as the row alone");
@@ -171,7 +198,7 @@ class WhatShowsARowCanBeWrittenIsAllOfThemAndNotAChoiceTest {
             assertEquals(ItemAssessment.WritabilityProjection.NOT_COMPUTED, owed.projection(),
                     "the question was not put to the line, which is not the same as having been put"
                             + " and come to nothing");
-            assertFalse(owed.writabilityEvidence().has(Ground.THE_RULES_PROVE_IT),
+            assertFalse(owed.writabilityEvidence().has(Ground.IT_IS_PROVED),
                     "so nothing about the line is standing on the proofs of its two ends");
         }
     }
@@ -204,7 +231,7 @@ class WhatShowsARowCanBeWrittenIsAllOfThemAndNotAChoiceTest {
                     "and the row ground is the `hit` this document already carries");
             // As words and not as constants. What a consumer meets is the array, and an order read
             // back off the type would agree with the writer however either of them moved.
-            assertEquals(List.of("the_rules_prove_it", "a_row_is_at_it", "a_value_was_built")
+            assertEquals(List.of("it_is_proved", "a_row_is_at_it", "a_value_was_built")
                             .stream().filter(grounds::contains).toList(),
                     List.copyOf(grounds), "the array is in the order the document promises");
         }

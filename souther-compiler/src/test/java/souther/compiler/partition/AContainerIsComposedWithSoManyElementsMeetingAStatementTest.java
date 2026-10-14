@@ -362,7 +362,7 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
             boolean belowNone = "out".equals(item.path("point").asString())
                     && "below".equals(item.at("/location/side").asString());
             if (belowNone) {
-                assertEquals("the_rules_refuse_it", item.path("notOwed").asString(),
+                assertEquals("no_value_can_stand_there", item.path("notOwed").asString(),
                         () -> "no count is below none: " + item);
                 continue;
             }

@@ -132,7 +132,7 @@
         "axis" : "value",
         "against" : "0",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -201,7 +201,7 @@
         "axis" : "value",
         "against" : "0 < value <= 20",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -260,7 +260,7 @@
         "axis" : "value",
         "against" : "20",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -329,7 +329,7 @@
         "axis" : "value",
         "against" : "0 <= value < 20",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -397,7 +397,7 @@
         "axis" : "value",
         "against" : "0",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -466,7 +466,7 @@
         "axis" : "value",
         "against" : "0 < value <= 20",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -525,7 +525,7 @@
         "axis" : "value",
         "against" : "20",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -594,7 +594,7 @@
         "axis" : "value",
         "against" : "0 <= value < 20",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -662,7 +662,7 @@
         "axis" : "value",
         "against" : "0",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it", "a_value_was_built" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it", "a_value_was_built" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -738,7 +738,7 @@
         "axis" : "value",
         "against" : "0 < value <= 24",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -804,7 +804,7 @@
         "axis" : "value",
         "against" : "24",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it", "a_value_was_built" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it", "a_value_was_built" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -880,7 +880,7 @@
         "axis" : "value",
         "against" : "0 <= value < 24",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -1215,7 +1215,7 @@
             "relation" : "=",
             "against" : "0",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -1224,7 +1224,7 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there"
           }, {
             "point" : "in",
             "location" : {
@@ -1234,7 +1234,7 @@
             "relation" : "in",
             "against" : "0 < straws <= 20",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -1243,7 +1243,7 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there"
           } ]
         }, {
           "besides" : [ ],
@@ -1311,7 +1311,7 @@
             "relation" : "=",
             "against" : "20",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -1320,7 +1320,7 @@
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there"
           }, {
             "point" : "in",
             "location" : {
@@ -1330,7 +1330,7 @@
             "relation" : "in",
             "against" : "0 <= straws < 20",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -1339,7 +1339,7 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there"
           } ]
         }, {
           "besides" : [ ],
@@ -1407,7 +1407,7 @@
             "relation" : "=",
             "against" : "0",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -1416,7 +1416,7 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there"
           }, {
             "point" : "in",
             "location" : {
@@ -1426,7 +1426,7 @@
             "relation" : "in",
             "against" : "0 < bars <= 20",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -1435,7 +1435,7 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there"
           } ]
         }, {
           "besides" : [ ],
@@ -1503,7 +1503,7 @@
             "relation" : "=",
             "against" : "20",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -1512,7 +1512,7 @@
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there"
           }, {
             "point" : "in",
             "location" : {
@@ -1522,7 +1522,7 @@
             "relation" : "in",
             "against" : "0 <= bars < 20",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -1531,7 +1531,7 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there"
           } ]
         }, {
           "besides" : [ {
@@ -2435,7 +2435,7 @@
             "relation" : "=",
             "against" : "0",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -2444,7 +2444,7 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there"
           }, {
             "point" : "in",
             "location" : {
@@ -2454,7 +2454,7 @@
             "relation" : "in",
             "against" : "0 < from <= 24",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -2463,7 +2463,7 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there"
           } ]
         }, {
           "besides" : [ ],
@@ -2531,7 +2531,7 @@
             "relation" : "=",
             "against" : "24",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
             "status" : "complete",
             "hit" : false
           }, {
@@ -2540,7 +2540,7 @@
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there"
           }, {
             "point" : "in",
             "location" : {
@@ -2550,7 +2550,7 @@
             "relation" : "in",
             "against" : "0 <= from < 24",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -2559,7 +2559,7 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there"
           } ]
         }, {
           "besides" : [ ],
@@ -2627,7 +2627,7 @@
             "relation" : "=",
             "against" : "0",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
             "status" : "complete",
             "hit" : false
           }, {
@@ -2636,7 +2636,7 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there"
           }, {
             "point" : "in",
             "location" : {
@@ -2646,7 +2646,7 @@
             "relation" : "in",
             "against" : "0 < until <= 24",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -2655,7 +2655,7 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there"
           } ]
         }, {
           "besides" : [ ],
@@ -2723,7 +2723,7 @@
             "relation" : "=",
             "against" : "24",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -2732,7 +2732,7 @@
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there"
           }, {
             "point" : "in",
             "location" : {
@@ -2742,7 +2742,7 @@
             "relation" : "in",
             "against" : "0 <= until < 24",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -2751,7 +2751,7 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there"
           } ]
         }, {
           "besides" : [ {

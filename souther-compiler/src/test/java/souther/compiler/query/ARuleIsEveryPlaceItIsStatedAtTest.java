@@ -204,7 +204,7 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
         SettledAt excluded = new SettledAt(at, RuleSettlement.provedNothingTakesIt(
                 RuleSearch.CameToNothing.of(List.of(new Generator.UnresolvedCombination(
                         List.of("a rule of the decision"),
-                        Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE)))));
+                        Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE)))));
         SettledAt elsewhere = new SettledAt(at, RuleSettlement.of(
                 new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
                 CompositionAccount.NOTHING));
@@ -238,7 +238,7 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
                 .filter(each -> !each.equals(first)).findFirst().orElseThrow());
         SettledAt nothingTried = new SettledAt(first, RuleSettlement.nothingToTryWith(
                 new Generator.UnresolvedCombination(List.of("a rule of the decision"),
-                        Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
+                        Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE),
                 CompositionAccount.NOTHING));
         SettledAt composed = new SettledAt(second, RuleSettlement.of(
                 new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
@@ -275,7 +275,7 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
                         AnswersDemanded.NOTHING, SaidOnTheWay.NONE)), true);
         SettledAt nothingTried = new SettledAt(one, RuleSettlement.nothingToTryWith(
                 new Generator.UnresolvedCombination(List.of("a rule of the decision"),
-                        Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
+                        Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE),
                 CompositionAccount.NOTHING));
         SettledAt composed = new SettledAt(other, RuleSettlement.of(
                 new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),

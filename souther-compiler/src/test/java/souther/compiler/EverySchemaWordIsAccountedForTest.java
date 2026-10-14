@@ -288,7 +288,7 @@ class EverySchemaWordIsAccountedForTest {
         spelling.put("OnePositionCannotBeBoth", "the_way_needs_one_position_to_be_two");
         spelling.put("AnArmNothingReaches", "an_arm_nothing_reaches");
         spelling.put("AConditionNeverComesOutThatWay", "a_condition_never_comes_out_that_way");
-        spelling.put("TheRulesLeaveNoValueForIt", "the_rules_leave_no_value_for_it");
+        spelling.put("NoValueCanTakeIt", "no_value_can_take_it");
         spelling.put("AComposedRowWentElsewhere", "a_composed_row_went_elsewhere");
         spelling.put("AComposedRowWasShortOfTheWay", "a_composed_row_was_short_of_the_way");
         spelling.put("CouldNotTellWhereTheRowWent", "the_rule_the_row_took_could_not_be_told");

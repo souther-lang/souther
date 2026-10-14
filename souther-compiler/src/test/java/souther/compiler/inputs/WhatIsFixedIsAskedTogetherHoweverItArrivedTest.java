@@ -402,7 +402,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
 
         EmptyInput why = read.inputs().quantities(read.rules()).emptiness().orElseThrow();
 
-        assertEquals(new EmptyInput.ProvedByTheRules(
+        assertEquals(new EmptyInput.ProvedByTheDeclarations(
                         new Emptiness.AtAField(new Emptiness.AtAField.Where.In("p.x"),
                                 new Emptiness.EmptyOrderedInterval())),
                 why);
@@ -424,7 +424,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         EmptyInput why = read.inputs().quantities(read.rules())
                 .given(fixing(X, 4, Y, 4)).emptiness().orElseThrow();
 
-        assertEquals(new EmptyInput.ProvedByTheRules(new Emptiness.ConflictingRules()), why);
+        assertEquals(new EmptyInput.ProvedByTheDeclarations(new Emptiness.ConflictingRules()), why);
     }
 
     /** A field whose own type the rules leave no value of, so the proof names that field. */

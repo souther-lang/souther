@@ -130,7 +130,7 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
                         + " written"),
                 () -> "the word the search for the way came to: " + said);
         assertFalse(said.contains(GeneratedRows.why(
-                        Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE)),
+                        Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE)),
                 () -> "and not the model's word: " + said);
     }
 

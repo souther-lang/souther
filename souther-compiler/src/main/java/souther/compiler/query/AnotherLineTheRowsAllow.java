@@ -594,13 +594,13 @@ public sealed interface AnotherLineTheRowsAllow {
      * values could show.
      *
      * <p>Not {@link Undecided} either, which is a question this compiler could not settle. This one
-     * is settled by a proof read off the rules ({@link NotOwedReason#THE_RULES_REFUSE_IT} at every
-     * point the border has on its refused side), and nothing a row is written at or a search tries
-     * would change it — so a verdict may rest on it, and a search that found nothing there is never
-     * taken for it.
+     * is settled by a proof read off the model ({@link NotOwedReason#NO_VALUE_CAN_STAND_THERE} at
+     * every point the border has on its refused side), and nothing a row is written at or a search
+     * tries would change it — so a verdict may rest on it, and a search that found nothing there is
+     * never taken for it.
      *
      * @param family the lines one step from this one, which are not owed a row
-     * @param because what the rules say of the refused side, which is the proof
+     * @param because what the model says of the refused side, which is the proof
      */
     record NotApplicable(List<QuantityKey> family, NotOwedReason because)
             implements AnotherLineTheRowsAllow {
@@ -611,8 +611,8 @@ public sealed interface AnotherLineTheRowsAllow {
                 throw new IllegalArgumentException("lines not owed a row are some lines, and a family"
                         + " with none is a question that does not arise");
             }
-            if (because != NotOwedReason.THE_RULES_REFUSE_IT) {
-                throw new IllegalArgumentException("only the rules refusing a side is a proof that"
+            if (because != NotOwedReason.NO_VALUE_CAN_STAND_THERE) {
+                throw new IllegalArgumentException("only no value standing on a side is a proof that"
                         + " no row is there to write: " + because);
             }
         }
@@ -690,12 +690,12 @@ public sealed interface AnotherLineTheRowsAllow {
             // nothing to be told from, which is the same fact the reasons above are.
             return new NoSuchQuestion(Reason.THE_LINE_IS_ON_ONE_POSITION);
         }
-        // And a side to refuse a row on. Where the rules leave no value on the side the border
-        // refuses, nothing a row is written at could rule a line of the family out, and that is a
-        // proof read off the rules rather than anything the rows or a search came to — so it is
-        // asked before either of them, and whether the points are met is beside the point.
-        if (theRulesRefuseTheFarSide(border)) {
-            return new NotApplicable(family, NotOwedReason.THE_RULES_REFUSE_IT);
+        // And a side to refuse a row on. Where no value stands on the side the border refuses,
+        // nothing a row is written at could rule a line of the family out, and that is a proof read
+        // off the model rather than anything the rows or a search came to — so it is asked before
+        // either of them, and whether the points are met is beside the point.
+        if (noValueStandsOnTheFarSide(border)) {
+            return new NotApplicable(family, NotOwedReason.NO_VALUE_CAN_STAND_THERE);
         }
         // And the rows have met its points. Asked sooner, a border the rows have not caught up with
         // would be held open on what the points already say — and one whose kept side the rules
@@ -760,18 +760,17 @@ public sealed interface AnotherLineTheRowsAllow {
     }
 
     /**
-     * Whether the rules are shown to leave no value at any point the border has on the side it
-     * refuses.
+     * Whether no value is shown to stand at any point the border has on the side it refuses.
      *
      * <p>Every such point, and at least one. The point beside the line out there and the run past it
      * are the whole of that side as far as a row at this border goes: a value past where the run
-     * stops is decided by another rule before it reaches this one, and is no row here. So where both
-     * are refused by the rules there is no row the model refuses at this border. A point owed nothing
+     * stops is decided by another rule before it reaches this one, and is no row here. So where no
+     * value stands at either there is no row the model refuses at this border. A point owed nothing
      * for any other reason — an order naming no value beside the line — is not that proof, and
      * neither is a point whose place could not be worked out: the question is then put as it is
      * everywhere else.
      */
-    private static boolean theRulesRefuseTheFarSide(Border border) {
+    private static boolean noValueStandsOnTheFarSide(Border border) {
         boolean any = false;
         for (DomainPoint point : border.answers().keySet()) {
             if (border.roleOf(point).inside()) {
@@ -779,7 +778,7 @@ public sealed interface AnotherLineTheRowsAllow {
             }
             any = true;
             if (!(border.demand(point) instanceof Demand.NotOwed(var why))
-                    || why != NotOwedReason.THE_RULES_REFUSE_IT) {
+                    || why != NotOwedReason.NO_VALUE_CAN_STAND_THERE) {
                 return false;
             }
         }

@@ -58,10 +58,10 @@ import java.util.function.Supplier;
  * @param cut     where the line is: what is cut, and where on it
  * @param origin  the rule that drew it, as this reading met it
  * @param answers one entry per point the line has, and no other
- * @param leftNothing the sides of the line the rules leave no value on, where the rule orders the
- *                    values and a side is where it comes out one way. Neither where none is shown
- *                    to be, which is not a side shown to hold something — see
- *                    {@link #theRulesLeaveNothingWhereItComesOut}
+ * @param leftNothing the sides of the line no value stands on, where the rule orders the values
+ *                    and a side is where it comes out one way. Neither where none is shown to be,
+ *                    which is not a side shown to hold something — see
+ *                    {@link #noValueStandsWhereItComesOut}
  */
 public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, PointAnswer> answers,
                      Sides leftNothing) {
@@ -193,10 +193,11 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     /**
-     * Whether the rules leave no value on the side of this line where its rule comes out
-     * {@code holding}, so that the comparison never comes out that way.
+     * Whether no value stands on the side of this line where its rule comes out {@code holding},
+     * so that the comparison never comes out that way — whether a rule or the type alone ends the
+     * values short of it.
      *
-     * <p>A proof read off where the rules leave off, and not off the points. Every point on a side
+     * <p>A proof read off where the values leave off, and not off the points. Every point on a side
      * can be refused while values lie further out: the run beside the line can be one the order
      * holds nothing in, and the point against it can be outside the class of numbers the values
      * are held to. The range the rules leave has no hole in its middle, so a side starting past
@@ -204,7 +205,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      *
      * <p>False wherever that was not shown, which is not a side shown to hold something.
      */
-    public boolean theRulesLeaveNothingWhereItComesOut(boolean holding) {
+    public boolean noValueStandsWhereItComesOut(boolean holding) {
         for (Towards side : Towards.values()) {
             DomainPoint region = new DomainPoint.InTheRegion(side);
             if (answers.containsKey(region) && roleOf(region).inside() == holding) {
@@ -1153,7 +1154,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     private static PointAnswer runOf(LevelSpace space, QuantityArrangement.Run run, Level except,
                                      Towards away) {
         if (run == null) {
-            return new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
+            return new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE);
         }
         Criterion.Within inside = new Criterion.Within(run.values(), except, away);
         // What the run is owed to, from the same reading that said what it asks: the line this point
@@ -1176,7 +1177,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         }
         return notWorkedOut != null
                 ? new PointAnswer.NotWorkedOut(notWorkedOut)
-                : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
+                : new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE);
     }
 
     /** The level a point against the line stands at, or null where no row is owed there. */
@@ -1196,7 +1197,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * <p><b>The point beside a line is the carrier's neighbour of it, and what the rules leave is
      * asked of that neighbour and does not move it.</b> With {@code value} held to the multiples of
      * a thousand, the number beside {@code 1950000} is {@code 1950001}: no value of the type, so no
-     * row is owed there ({@link NotOwedReason#THE_RULES_REFUSE_IT}). The nearest value the type does
+     * row is owed there ({@link NotOwedReason#NO_VALUE_CAN_STAND_THERE}). The nearest value the type does
      * hold, {@code 1951000}, is a row of the run that side of the line owes and is chosen there, from
      * the members of the class. Taken the other way and the neighbour read off what the rules leave,
      * the border's points and the runs between its lines would be two readings of one order — a run
@@ -1219,7 +1220,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                     if (held.value()) {
                         return admitted(reach, cut)
                                 ? new PointAnswer.AtLine(new Criterion.AtTheLevel(cut))
-                                : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
+                                : new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE);
                     }
                 }
             }
@@ -1234,7 +1235,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         }
         return admitted(reach, at.get())
                 ? new PointAnswer.AtLine(new Criterion.AtTheLevel(at.get()))
-                : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
+                : new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE);
     }
 
     /**
@@ -1333,7 +1334,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                 : new DomainPoint.AtTheLine();
         PointAnswer on = againstABound(space, cut, kept, holdsHere, admissible);
         demands.put(inside, on);
-        demands.put(outside, new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
+        demands.put(outside, new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE));
         // The partition the bound bounds, without the value against the line.
         //
         // Found by the point and not by the cut, and short of a point by the cut. The two are one
@@ -1348,7 +1349,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                     runOf(space, held.value().endmost(kept), against, kept);
         });
         demands.put(new DomainPoint.InTheRegion(kept.opposite()),
-                new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
+                new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE));
     }
 
     /**

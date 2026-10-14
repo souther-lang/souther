@@ -249,10 +249,10 @@ public sealed interface ItemAssessment {
          */
         public enum Ground {
 
-            /** The rules reaching the value prove the point is inside what they admit. The one ground
-             *  that is about the model rather than about this run, so it stands whatever a search
-             *  afterwards makes of the point. */
-            THE_RULES_PROVE_IT,
+            /** The model proves the point is inside what it admits, whether a rule or the type alone
+             *  is what shows it. The one ground that is about the model rather than about this run,
+             *  so it stands whatever a search afterwards makes of the point. */
+            IT_IS_PROVED,
 
             /** A row this compilation read stands at the point, which is a value that went through
              *  the decoder. The only ground that costs nothing to find. */
@@ -280,7 +280,7 @@ public sealed interface ItemAssessment {
                                              boolean valueWasBuilt) {
             EnumSet<Ground> grounds = EnumSet.noneOf(Ground.class);
             if (projection.proves()) {
-                grounds.add(Ground.THE_RULES_PROVE_IT);
+                grounds.add(Ground.IT_IS_PROVED);
             }
             if (rowIsAtIt) {
                 grounds.add(Ground.A_ROW_IS_AT_IT);
@@ -528,8 +528,8 @@ public sealed interface ItemAssessment {
                 for (souther.compiler.partition.ReachabilityGap gap : account.onTheWay()) {
                     if (gap instanceof souther.compiler.partition.ReachabilityGap
                             .ProvedImpossible) {
-                        throw new IllegalArgumentException("a row stands where the rules leave"
-                                + " nothing standing: " + gap.anchor());
+                        throw new IllegalArgumentException("a row stands where no value can"
+                                + " stand: " + gap.anchor());
                     }
                 }
                 return account;

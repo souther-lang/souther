@@ -155,12 +155,12 @@ class ARowIsLookedForUnderEveryCaseItCanBeWrittenUnderTest {
      * nothing, and that is the model's answer about the rule rather than a search that gave up.
      */
     @Test
-    void whereEveryCaseLeavesTheRuleNothingTheRulesAreSaidToLeaveNothing() {
+    void whereEveryCaseLeavesTheRuleNothingNoValueIsSaidToStandThere() {
         for (String cases : new String[] {"P | Q", "Q | P"}) {
             String said = report(aboveTen(cases).replace("data Q = { ...C }",
                     "data Q = { ...C }\n    invariant deadline <= 8"));
 
-            assertTrue(said.contains("no row is owed at 1 decision rule — the rules leave no value"
+            assertTrue(said.contains("no row is owed at 1 decision rule — no value can stand"
                     + " at a rule of the decision"), cases + "\n" + said);
             assertFalse(said.contains(NOTHING_COULD_SHOW), cases + "\n" + said);
         }

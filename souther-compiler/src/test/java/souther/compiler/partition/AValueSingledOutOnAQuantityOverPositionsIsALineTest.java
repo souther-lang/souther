@@ -314,7 +314,7 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
         Map<DomainPoint, String> out = new LinkedHashMap<>();
         line.items().forEach((point, item) -> out.put(point, switch (item) {
             case ItemAssessment.NotOwed notOwed
-                    when notOwed.reason() == NotOwedReason.THE_RULES_REFUSE_IT -> REFUSED;
+                    when notOwed.reason() == NotOwedReason.NO_VALUE_CAN_STAND_THERE -> REFUSED;
             case ItemAssessment.Owed owed -> owed.searches().each().stream()
                     .filter(ItemAssessment.Attempt.Certified.class::isInstance)
                     .map(ItemAssessment.Attempt.Certified.class::cast)

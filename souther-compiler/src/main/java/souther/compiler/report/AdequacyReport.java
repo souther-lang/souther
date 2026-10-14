@@ -2933,11 +2933,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * What a reader is told about a point no row can be written at.
      *
      * <p>Said as what the model settles, which is what it is. No figure of this compiler's is named
-     * and no work is handed to anybody: the rules on the way to the point leave it no value, and
-     * which rules those are is under the point, one line per reading.
+     * and no work is handed to anybody: no value can stand at the point, and what was read on the
+     * way to it is under the point, one line per reading. Which part of the model leaves it
+     * nothing is not said — a rule, or a type with too few values and no rule written.
      */
     private static String cannotBeWritten(String point) {
-        return "no row can stand at the " + point + " — the rules leave no value there";
+        return "no row can stand at the " + point + " — " + NoValue.standsThere();
     }
 
     /**
@@ -3023,7 +3024,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /** What a reader is told about a claim nothing settled, in this report's own words. */
-    private String unproven(ClaimAnnotations.Why why) {
+    static String unproven(ClaimAnnotations.Why why) {
         return switch (why) {
             case A_RULE_WENT_UNREAD -> "a rule about this position went unread";
             case THE_RULES_LEAVE_THE_POSITION_NOTHING ->
@@ -3435,9 +3436,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /** What settled a point nobody is owed a row at, in the words the report promises its reader. */
-    private String whyNotOwed(NotOwedReason reason) {
+    static String whyNotOwed(NotOwedReason reason) {
         return switch (reason) {
-            case THE_RULES_REFUSE_IT -> "excluded — the rules leave no value there";
+            // Not what proved it: a reader told a rule refuses the point goes looking for one, and
+            // a Set<Bool> asked for three elements has none to find.
+            case NO_VALUE_CAN_STAND_THERE -> "excluded — " + NoValue.standsThere();
             case THE_CARRIER_NAMES_NO_NEIGHBOUR ->
                     "this order names no value there, so the point cannot be written";
         };
@@ -4162,15 +4165,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     new Said(3, 0,
                             "a row was composed and run, and nothing watched where it went");
             // The model's own answers, after the ones that are about what this compiler managed.
-            case RuleRequirement.Excluded.OnePositionCannotBeBoth _ ->
-                    new Said(4, 0, "its way would need one position to be two things at once,"
-                            + " which no value is");
-            case RuleRequirement.Excluded.AnArmNothingReaches _ ->
-                    new Said(5, 0, "its way goes through an arm the rules leave nothing for, which"
-                            + " is an arm the branch count is made without");
-            case RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
-                    new Said(6, 0, "its way goes past a condition that comes out the other way"
-                            + " for every row");
+            case RuleRequirement.Excluded.OnePositionCannotBeBoth one -> new Said(4, 0, readOff(one));
+            case RuleRequirement.Excluded.AnArmNothingReaches arm -> new Said(5, 0, readOff(arm));
+            case RuleRequirement.Excluded.AConditionNeverComesOutThatWay never ->
+                    new Said(6, 0, readOff(never));
             // In the words the composings were said in, which are the model's. The other two here
             // are read off the rules before anything is composed and have nothing of a search to
             // say; this one is what the composings themselves proved, so what they came back with
@@ -4179,7 +4177,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // Every word of them and not one, in the order the search holds them in. Two ways of
             // standing the dependencies in may prove it with different words, and a sentence that
             // said one of them would be saying whichever the walk met first.
-            case RuleRequirement.Excluded.TheRulesLeaveNoValueForIt _ ->
+            case RuleRequirement.Excluded.NoValueCanTakeIt _ ->
                     proved(((RuleSearch.CameToNothing) came.search()), rendering, places);
             case RuleRequirement.Required _ ->
                     throw new IllegalArgumentException(
@@ -4188,7 +4186,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
-     * What a rule the composings proved the rules leave no value for is said as.
+     * What a rule the readings settled before anything was composed is said as.
+     *
+     * <p>That no value takes its way, and not what showed it. An arm nothing reaches may be one no
+     * case the source wrote takes, one a condition on entering it leaves empty, or one whose cases a
+     * rule refuses, and a reader does the same about the rule whichever it was.
+     */
+    static String readOff(RuleRequirement.Excluded excluded) {
+        return switch (excluded) {
+            case RuleRequirement.Excluded.OnePositionCannotBeBoth _ ->
+                    "its way would need one position to be two things at once, so "
+                            + NoValue.goesThatWay();
+            case RuleRequirement.Excluded.AnArmNothingReaches _ ->
+                    "its way goes through an arm, but " + NoValue.reaches("that arm")
+                            + ", so the branch count is made without it";
+            case RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
+                    "its way goes past a condition that comes out the other way for every row, so "
+                            + NoValue.goesThatWay();
+            case RuleRequirement.Excluded.NoValueCanTakeIt _ ->
+                    throw new IllegalArgumentException(
+                            "what the composings proved is said in the words they came back with");
+        };
+    }
+
+    /**
+     * What a rule the composings proved no value takes is said as.
      *
      * <p>A clause per word and never one per way. How many ways came back with a word is how many
      * ways of standing the dependencies in there were, which is no part of what the rule says; what
@@ -5105,7 +5127,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /** The category a search came back with, where the class it was about said nothing itself. */
-    private static String whyUnresolved(Generator.UnresolvedCombination why) {
+    static String whyUnresolved(Generator.UnresolvedCombination why) {
         String at = why.subject();
         return switch (why.reason()) {
             case NOTHING_COMPOSES_ONE -> "nothing here could build a representative for " + at;
@@ -5114,8 +5136,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // what was tried came from the rules beside it — and an author told the line above
             // would go looking for the rule that refuses those values, which is not what happened.
             case NOT_ALL_CANDIDATES_COULD_BE_OFFERED ->
-                    "every value tried at " + at + " was refused, and what was tried was not"
-                            + " everything the rules leave";
+                    "every value tried at " + at + " was refused, but the values offered were not"
+                            + " shown to be exhaustive";
             // What the row is short of, and not what the model is short of. A row that stands
             // nothing in for a dependency its target requires is one nothing applies, so it is
             // held back rather than handed over to be pasted and refused.
@@ -5151,15 +5173,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // the search may walk would see the same line again.
             case THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE ->
                     "a value was found for " + at + " and this block offers as many rows as it may";
-            case THE_RULES_LEAVE_NOTHING_THERE ->
-                    "the rules leave no value at " + at;
+            case NO_VALUE_CAN_STAND_THERE ->
+                    NoValue.standsAt(at);
             // What the model settles, said as that. A class under one case of a sum and a class
             // under another are classes of positions that are not in one value, so there is no row
             // to go looking for.
             case ONE_POSITION_CANNOT_BE_BOTH ->
-                    at + " would need one position to be two things at once, which no value is";
+                    at + " would need one position to be two things at once, so "
+                            + NoValue.standsThere();
             case A_CONDITION_NEVER_COMES_OUT_THAT_WAY ->
-                    at + " is past a condition that comes out the other way for every row";
+                    at + " is past a condition that comes out the other way for every row, so "
+                            + NoValue.goesThatWay();
             // What the body states, said as the body's and not as the model's. Nothing proves the
             // inputs there do not arise; what is known is that a row there is refused.
             case EVERY_ROW_THERE_REACHES_AN_UNREACHABLE ->
@@ -7394,8 +7418,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RuleRequirement.Excluded.AnArmNothingReaches _ -> "an_arm_nothing_reaches";
             case RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
                     "a_condition_never_comes_out_that_way";
-            case RuleRequirement.Excluded.TheRulesLeaveNoValueForIt _ ->
-                    "the_rules_leave_no_value_for_it";
+            case RuleRequirement.Excluded.NoValueCanTakeIt _ -> "no_value_can_take_it";
             case RuleRequirement.Unsettled.AComposedRowWentElsewhere _ ->
                     "a_composed_row_went_elsewhere";
             case RuleRequirement.Unsettled.AComposedRowWasShortOfTheWay _ ->
@@ -8595,7 +8618,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *  second would silently be the first. */
     public static String wire(ItemAssessment.WritabilityEvidence.Ground ground) {
         return switch (ground) {
-            case THE_RULES_PROVE_IT -> "the_rules_prove_it";
+            case IT_IS_PROVED -> "it_is_proved";
             case A_ROW_IS_AT_IT -> "a_row_is_at_it";
             case A_VALUE_WAS_BUILT -> "a_value_was_built";
         };

@@ -285,7 +285,7 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
         assertTrue(year.contains("measurement: complete"), year);
         assertTrue(year.contains("no ON point is owed at Date.year((b -366 days)) = 999999999"),
                 year);
-        assertTrue(year.contains("excluded — the rules leave no value there"), year);
+        assertTrue(year.contains("excluded — no value can stand there"), year);
         assertFalse(year.contains("read as f/Date.year((b -366 days)): = 999999999"), year);
 
         // One a year less is one it takes, at the last date it can be moved from.

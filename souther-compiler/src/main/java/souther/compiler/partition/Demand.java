@@ -66,6 +66,6 @@ public sealed interface Demand {
      * to rather than on every point nobody is owed.
      */
     default boolean excluded() {
-        return this instanceof NotOwed not && not.reason() == NotOwedReason.THE_RULES_REFUSE_IT;
+        return this instanceof NotOwed not && not.reason() == NotOwedReason.NO_VALUE_CAN_STAND_THERE;
     }
 }
