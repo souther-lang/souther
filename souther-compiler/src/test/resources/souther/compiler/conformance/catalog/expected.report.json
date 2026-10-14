@@ -10551,7 +10551,7 @@
             "behavior" : "restockAnyZone",
             "conditions" : [ {
               "kind" : "statement",
-              "condition" : "reachable zone from zone through [zones] [!Affine[form=LinearForm[constant=-3, coefs={zone.count=1}], proposition=GE]]",
+              "condition" : "reachable zone from zone through [zones] [!Affine[form=LinearForm[constant=-3, coefs={zone.count=1}], proposition=GE]] none below [!Affine[form=LinearForm[constant=0, coefs={List.length(zone.zones)=1}], proposition=GT]]",
               "outcome" : "held"
             } ]
           },
@@ -10561,7 +10561,7 @@
             "behavior" : "restockAnyZone",
             "conditions" : [ {
               "kind" : "statement",
-              "condition" : "reachable zone from zone through [zones] [!Affine[form=LinearForm[constant=-3, coefs={zone.count=1}], proposition=GE]]",
+              "condition" : "reachable zone from zone through [zones] [!Affine[form=LinearForm[constant=-3, coefs={zone.count=1}], proposition=GE]] none below [!Affine[form=LinearForm[constant=0, coefs={List.length(zone.zones)=1}], proposition=GT]]",
               "outcome" : "denied"
             } ]
           },
@@ -10777,7 +10777,7 @@
             "behavior" : "everyZoneStocked",
             "conditions" : [ {
               "kind" : "statement",
-              "condition" : "reachable zone from zone through [zones] [!Affine[form=LinearForm[constant=-3, coefs={zone.count=1}], proposition=GE]]",
+              "condition" : "reachable zone from zone through [zones] [!Affine[form=LinearForm[constant=-3, coefs={zone.count=1}], proposition=GE]] none below [!Affine[form=LinearForm[constant=0, coefs={List.length(zone.zones)=1}], proposition=GT]]",
               "outcome" : "denied"
             } ]
           },
@@ -10787,7 +10787,7 @@
             "behavior" : "everyZoneStocked",
             "conditions" : [ {
               "kind" : "statement",
-              "condition" : "reachable zone from zone through [zones] [!Affine[form=LinearForm[constant=-3, coefs={zone.count=1}], proposition=GE]]",
+              "condition" : "reachable zone from zone through [zones] [!Affine[form=LinearForm[constant=-3, coefs={zone.count=1}], proposition=GE]] none below [!Affine[form=LinearForm[constant=0, coefs={List.length(zone.zones)=1}], proposition=GT]]",
               "outcome" : "held"
             } ]
           },

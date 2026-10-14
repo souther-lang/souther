@@ -21,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.UnaryOperator;
 
 /**
  * What the conditions of one body decide, as the columns of its decision table.
@@ -142,7 +143,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
      * is the column, so it is what the condition states ({@link #columnOf}).
      */
     private DecidedCondition asOneColumn(Condition condition, boolean held) {
-        return columnOf(states.statedBy(condition), held, condition.occurrence());
+        return columnOf(states.statedBy(condition), held, condition.occurrence(), states::denied);
     }
 
     /**
@@ -152,9 +153,13 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
      * <p>Where part of it was not read, the column is named by the condition that met it, with what
      * stopped each part: a statement only partly read is no column two conditions could share.
      *
-     * @param met the condition that met it, which names a column nothing could read
+     * @param met     the condition that met it, which names a column nothing could read
+     * @param denying what holds exactly where a statement does not; the reading's own, so a
+     *                condition asked both ways stands for one column with one value
+     *                ({@link ConditionMeanings#denied})
      */
-    static DecidedCondition columnOf(Proposition stated, boolean held, ConditionOccurrence met) {
+    static DecidedCondition columnOf(Proposition stated, boolean held, ConditionOccurrence met,
+                                     UnaryOperator<Proposition> denying) {
         List<WhyUnread> stops = Proposition.stopsIn(stated);
         if (!stops.isEmpty()) {
             return new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(met,
@@ -172,7 +177,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
                                       boolean holds, var _) when overDecisionAtoms(form) ->
                     new DecidedCondition.Compared(new DecisionCondition.AComparison(
                             decisionForm(form), proposition), holds == held);
-            default -> DecisionCondition.AStatement.of(stated, held);
+            default -> DecisionCondition.AStatement.of(stated, denying.apply(stated), held);
         };
     }
 
@@ -325,8 +330,8 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
         }
         // Otherwise the column is what entering the arm states: which case a value the body
         // computed is of, under what.
-        return new Read(columnOf(states.entered(match, part, reads), true, metAt(onTheWay)),
-                entered);
+        return new Read(columnOf(states.entered(match, part, reads), true, metAt(onTheWay),
+                states::denied), entered);
     }
 
     /**
@@ -340,7 +345,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
                     ConditionNumbering numbering) {
         ReachingCuts.Stating entered = states.attempting(attempt, part, at, reads, numbering);
         return new Read(columnOf(states.entered(attempt, part, reads), true,
-                metAt(entered.entries())), entered);
+                metAt(entered.entries()), states::denied), entered);
     }
 
     /**

@@ -8,7 +8,7 @@ import souther.compiler.meaning.AnswerAsAnInput;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
-import souther.compiler.meaning.WhyUnread;
+import souther.compiler.observe.Figure;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import java.util.ArrayList;
@@ -445,6 +445,17 @@ public final class AnAnswerComposed {
     }
 
     /**
+     * The budget a part declined for {@code why} stopped at, or null where it stopped at none of
+     * the composing stage's budgets — read off the figure the reason says it stopped at
+     * ({@link WhyNotTaken#figure}). How far a container is written out is a figure and no budget,
+     * and a value is not composed past it here.
+     */
+    private static CompositionBudget stoppedAt(WhyNotTaken why) {
+        return why.figure().orElse(null) instanceof Figure.Budget(CompositionBudget budget)
+                ? budget : null;
+    }
+
+    /**
      * Whether some way of taking {@code reads} is one a value is composed toward.
      *
      * <p>An alternative no way of which is written toward is passed over and the others are
@@ -471,12 +482,10 @@ public final class AnAnswerComposed {
                             : new Ways.Stopped(stoppedBy);
                 }
             } else if (each instanceof DemandReading.Read.Unread(var whys)
-                    && whys.stream().allMatch(why -> why instanceof WhyNotTaken.MoreWaysThanAreRead
-                            || why instanceof WhyNotTaken.MeaningUnread(
-                                    WhyUnread.MoreReadingsThanAreMade _))) {
-                // Only where the figure is every reason: a part also left for a reason more
+                    && whys.stream().allMatch(why -> stoppedAt(why) != null)) {
+                // Only where a figure is every reason: a part also left for a reason more
                 // reading does not change is one no value is written toward either way.
-                stoppedBy.add(CompositionBudget.READINGS_OF_ONE_CONDITION);
+                whys.forEach(why -> stoppedBy.add(stoppedAt(why)));
                 return new Ways.Stopped(stoppedBy);
             } else if (!composedAgainst(each)) {
                 return new Ways.Unwritable();

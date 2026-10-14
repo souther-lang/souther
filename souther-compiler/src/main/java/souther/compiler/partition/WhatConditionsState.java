@@ -5,8 +5,10 @@ import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.meaning.Proposition;
 
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -43,6 +45,7 @@ final class WhatConditionsState {
     private final Map<ANode, Pullback.Pulled> truths = new HashMap<>();
     private final Map<ANode, Pullback.Pulled> presences = new HashMap<>();
     private final Map<ANode, List<Pullback.Pulled>> arms = new HashMap<>();
+    private final Map<Proposition, Proposition> denials = new IdentityHashMap<>();
 
     private WhatConditionsState(InputReading read) {
         this.read = read;
@@ -116,6 +119,18 @@ final class WhatConditionsState {
     Pullback.Pulled arm(Core fork, int part, InputReads reads) {
         return arms.computeIfAbsent(new ANode(fork, reads),
                 _ -> Pullback.ofTheArms(fork, reads, read, Optional.empty())).get(part);
+    }
+
+    /**
+     * What holds exactly where {@code stated} does not, made once for each statement kept here.
+     *
+     * <p>Kept by the statement it is the denial of, as the statement is kept by its node. A
+     * condition coming out each way is asked for both, and a denial is made whole each time it is
+     * asked: two of them are equal and two values, and a reader matching one against the other
+     * compares them part by part, down every condition inside.
+     */
+    Proposition denied(Proposition stated) {
+        return denials.computeIfAbsent(stated, Proposition::denied);
     }
 
     private void heldTo(InputReading asked) {

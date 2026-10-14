@@ -826,23 +826,27 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * where a part of it stopped at something each place it is filed at words for itself.
      *
      * <p>A part the place words is asked first: where one is in the statement, an author is sent to
-     * it before a step this compiler has not taken beside it. Then a part declined at how many
-     * readings are made, and one declined at how far a container is written out, since a run
-     * allowed more may read either, and then any other part.
+     * it before a step this compiler has not taken beside it. Then a part declined at a figure, in
+     * the order the words for them are declared, since a run allowed more may read any of them;
+     * and then any other part.
+     *
+     * @throws IllegalStateException where a part stopped at a figure no word says, which would
+     *                               otherwise be said as a part no wider run reads
      */
     static BlockReason.WhatItStatesIsNoLine whatItStates(Proposition stated,
                                                          List<WhyUnread> stops) {
         if (stops.stream().anyMatch(Cutting::wordedByThePlace)) {
             return null;
         }
-        if (stops.stream().anyMatch(WhyUnread.MoreReadingsThanAreMade.class::isInstance)) {
-            return new BlockReason.WhatItStatesIsNoLine(
-                    BlockReason.WhatItStatesIsNoLine.Why.MORE_READINGS_THAN_ARE_MADE);
+        for (BlockReason.WhatItStatesIsNoLine.Why each
+                : BlockReason.WhatItStatesIsNoLine.Why.values()) {
+            if (each.says() != null && stops.contains(each.says())) {
+                return new BlockReason.WhatItStatesIsNoLine(each);
+            }
         }
-        if (stops.stream().anyMatch(WhyUnread.MoreElementsThanAreWrittenOut.class::isInstance)) {
-            return new BlockReason.WhatItStatesIsNoLine(
-                    BlockReason.WhatItStatesIsNoLine.Why.MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT);
-        }
+        stops.stream().filter(why -> why.figure().isPresent()).findFirst().ifPresent(why -> {
+            throw new IllegalStateException("no word says a part stopped at " + why);
+        });
         if (!stops.isEmpty()) {
             return new BlockReason.WhatItStatesIsNoLine(
                     BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ);
@@ -875,8 +879,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  WhyUnread.ANumberOfWhatAnOperationAnswers _,
                  WhyUnread.WhatARecursiveHelperAnswers _, WhyUnread.AtNoPosition _,
                  WhyUnread.NoMeasureOfItsSize _ -> true;
-            case WhyUnread.MoreReadingsThanAreMade _, WhyUnread.MoreElementsThanAreWrittenOut _,
-                 WhyUnread.SeveralValuesNotGoneInto _, WhyUnread.ANumberNotHeld _,
+            case WhyUnread.MoreReadingsThanAreMade _, WhyUnread.MoreTotalReadingsThanAreMade _,
+                 WhyUnread.MorePartsThanAreConcluded _,
+                 WhyUnread.MoreElementsThanAreWrittenOut _, WhyUnread.SeveralValuesNotGoneInto _, WhyUnread.ANumberNotHeld _,
                  WhyUnread.AClauseOfAnInvariant _, WhyUnread.AnInvariantNotReached _,
                  WhyUnread.InACalledBody _, WhyUnread.CopiesStateDifferentThings _,
                  WhyUnread.NotMetByTheReading _ -> false;
