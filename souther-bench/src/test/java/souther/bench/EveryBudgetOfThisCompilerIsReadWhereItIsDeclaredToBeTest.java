@@ -128,6 +128,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "how many elements a container composed for a count holds, how many"
                             + " containers are offered for one, and how many ways of sharing its"
                             + " elements out are looked at"),
+            // The values an element is listed at for the most a count of them comes to. Past the
+            // figure the count keeps the most its container holds, and a point between the two
+            // is searched for, where a search that finds nothing says so under its own figures.
+            Map.entry("souther.compiler.partition.HowManyCanMeet#<clinit>()V",
+                    "how many values of an element are listed for the most a count of them comes"
+                            + " to; past it the count keeps the most its container holds, and the"
+                            + " points beyond that are searched rather than refused"),
             Map.entry("souther.compiler.partition.ACountHandedOn#<clinit>()V",
                     "how far a count handed on is looked for, which the composer says as that"
                             + " figure where none was found below it"),

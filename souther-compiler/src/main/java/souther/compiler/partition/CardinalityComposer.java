@@ -645,8 +645,8 @@ final class CardinalityComposer {
     }
 
     /** A row holding {@code values} as the container {@code where} reads, and nothing else. */
-    private static BorderQuantity.Observation aRowHolding(BehaviorInputs where,
-                                                          List<ObservedValue> values) {
+    static BorderQuantity.Observation aRowHolding(BehaviorInputs where,
+                                                  List<ObservedValue> values) {
         return new StandingAtAPoint.DiscoveringRow(where, new ObservedInputs(
                 List.of(new ObservedValue.Sequence(values)), new Generator.Watched.NoAccount(),
                 new AnswerObservation.NotAnswered()));
