@@ -71,9 +71,10 @@ class WhoAsksAReadingAboutAPlaceSaysWhichPlanItIsOfTest {
                     "the claims name arms of one plan and say which, and this holds the reading to"
                             + " being that plan's before it looks any of them up. Both halves are"
                             + " handed in, so a caller is what could put two modules' together"),
-            new Licence("souther.compiler.query.Replacements.Readings.compute -> at", 1,
+            new Licence("souther.compiler.query.Adequacy.unreachedIn -> at", 1,
                     "whether a way through an arm is one nothing arrives at, asked of places of the"
-                            + " module's own plan; the reading is held to that plan's numbering"
+                            + " module's own plan for the measure of rewrites and for the rows"
+                            + " composed alike; the reading is held to that plan's numbering"
                             + " before any place is looked up, since an answer from another plan"
                             + " would prove a rewrite the same where nothing was proven"),
             new Licence("souther.compiler.partition.ProducedCases.produce -> at", 1,

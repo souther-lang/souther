@@ -2,7 +2,9 @@ package souther.compiler.coverage;
 
 import souther.compiler.types.SourceConstructOrigin;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,6 +12,7 @@ import java.util.Objects;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.function.Predicate;
 
 /**
@@ -181,5 +184,134 @@ public record ArmReplacements(SequencedMap<Integer, AtSite> bySite) {
             }
         });
         return sites;
+    }
+
+    /**
+     * One rewrite a run can be asked for: arm {@code part} of {@code fork} answering as its sibling
+     * {@code with}, at {@code replacing}'s sites ({@link #replacing}).
+     */
+    public record Rewrite(SourceConstructOrigin fork, int part, int with,
+                          SequencedMap<Integer, Integer> replacing) {
+
+        public Rewrite {
+            Objects.requireNonNull(fork, "an arm is an arm of some fork");
+            replacing = Collections.unmodifiableSequencedMap(new TreeMap<>(replacing));
+        }
+    }
+
+    /**
+     * Every rewrite a run that went through {@code sites} can be run under: each sibling the
+     * classes carry at one of those sites, once per arm and sibling however many of its sites the
+     * run passed, in the order of the sites and then of the siblings.
+     *
+     * <p>What a recording is run again under, which is more than a row is asked
+     * ({@link #askedOfARun}): a sibling some other site of the arm does not carry, and one that is
+     * the arm under another spelling, are run here too. The runs are made before the rows are read
+     * and before anything proves a way is never taken, and every rewrite a row is asked has to
+     * have a run among them.
+     */
+    public List<Rewrite> through(Set<Integer> sites) {
+        List<Rewrite> out = new ArrayList<>();
+        Set<OfAnArm> seen = new HashSet<>();
+        for (int site : new TreeSet<>(sites)) {
+            AtSite at = bySite.get(site);
+            if (at == null) {
+                continue;
+            }
+            for (int with : new TreeSet<>(at.siblings().keySet())) {
+                if (at.siblings().get(with) instanceof Sibling.Carried
+                        && seen.add(new OfAnArm(at.fork(), at.part(), with))) {
+                    out.add(new Rewrite(at.fork(), at.part(), with,
+                            replacing(at.fork(), at.part(), with)));
+                }
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** One rewrite of one arm, apart from where it is run. */
+    private record OfAnArm(SourceConstructOrigin fork, int part, int with) {}
+
+    /** What one rewrite of an arm comes to as a question a row through the arm is asked. */
+    public sealed interface Asked {
+
+        /** The sibling the arm is rewritten as. */
+        int with();
+
+        /** It can be run, at every site of the arm, as {@code rewrite}. */
+        record Runs(Rewrite rewrite) implements Asked {
+
+            @Override
+            public int with() {
+                return rewrite.with();
+            }
+        }
+
+        /**
+         * Some site of the arm does not carry the sibling, so no run is the rewrite: a run at the
+         * sites that do is a program the author could not write.
+         */
+        record NotRun(int with, Sibling.Why why) implements Asked {}
+    }
+
+    /**
+     * Every rewrite of arm {@code part} of {@code fork} that is another program, and what each comes
+     * to as a question: in the order of the siblings.
+     *
+     * <p>A rewrite stands at every site of the arm at once, so it is the arm under another spelling
+     * only where it is at each of them: where every site either lacks the sibling or has it proven
+     * to part from the arm only on ways {@code unreached} answers for. And it can be run only where
+     * every site having the sibling carries it.
+     *
+     * <p>The one answer to which rewrites a row through the arm is asked, whoever asks: the measure
+     * of the rows written and the composer choosing a row to offer put the same questions.
+     */
+    public List<Asked> askedOf(SourceConstructOrigin fork, int part,
+                               Predicate<ControlPlace.Arm> unreached) {
+        List<AtSite> sites = ofArm(fork, part);
+        Set<Integer> withs = new TreeSet<>();
+        sites.forEach(at -> withs.addAll(at.siblings().keySet()));
+        List<Asked> out = new ArrayList<>();
+        for (int with : withs) {
+            if (sites.stream().allMatch(at -> !at.siblings().containsKey(with)
+                    || at.siblings().get(with).differs().provenAway(unreached))) {
+                continue;
+            }
+            Sibling.Why left = null;
+            for (AtSite at : sites) {
+                if (left == null
+                        && at.siblings().get(with) instanceof Sibling.NotCarried(var why, var _)) {
+                    left = why;
+                }
+            }
+            out.add(left != null ? new Asked.NotRun(with, left)
+                    : new Asked.Runs(new Rewrite(fork, part, with, replacing(fork, part, with))));
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * The rewrites a row whose run is {@code run} is asked and can be run under: those of each arm
+     * of {@code arms} the run was recorded at ({@link #askedOf}), once per arm and sibling, in the
+     * order of {@code arms} and then of the siblings.
+     */
+    public List<Rewrite> askedOfARun(List<CoverageSites.ArmSite> arms, AlignedObservation run,
+                                     Predicate<ControlPlace.Arm> unreached) {
+        List<Rewrite> out = new ArrayList<>();
+        Set<OfAnArm> seen = new HashSet<>();
+        for (CoverageSites.ArmSite arm : arms) {
+            if (arm.place().probe().isEmpty() || !run.lit(arm.place().probe().get())) {
+                continue;
+            }
+            SourceConstructOrigin fork = arm.obligation().origin();
+            int part = arm.obligation().part();
+            for (Asked each : askedOf(fork, part, unreached)) {
+                if (each instanceof Asked.Runs(Rewrite rewrite)
+                        && seen.add(new OfAnArm(fork, part, rewrite.with()))) {
+                    out.add(rewrite);
+                }
+            }
+        }
+        return List.copyOf(out);
     }
 }

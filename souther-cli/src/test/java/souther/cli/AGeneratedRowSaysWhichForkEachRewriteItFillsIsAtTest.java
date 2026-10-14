@@ -44,13 +44,17 @@ class AGeneratedRowSaysWhichForkEachRewriteItFillsIsAtTest {
                 | (Date("1969-10-02"), Date("1970-01-01"), Megabytes(0)) -> Megabytes(0)
             """;
 
-    /** Two {@code if}s side by side, which one row with a negative `n` goes through the `then` of. */
+    /**
+     * Two {@code if}s side by side on one condition, so every row goes through the {@code then}
+     * of both or the {@code else} of both: whichever row a block hands for one rewrite of a
+     * {@code then} is the row for the other.
+     */
     private static final String SIDE_BY_SIDE = """
             behavior f : (n: Int, a: Int) -> Int
 
             let f (n, a) = {
                 let x = if n < 0 then a else 0
-                let y = if n < 10 then a else 0
+                let y = if n < 0 then a else 0
                 x + y
             }
 

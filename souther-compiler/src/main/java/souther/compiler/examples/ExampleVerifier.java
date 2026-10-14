@@ -68,13 +68,11 @@ import souther.compiler.meta.Readback;
 import souther.compiler.meta.ReadbackReasons;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -1546,27 +1544,15 @@ public final class ExampleVerifier {
             return List.of();
         }
         List<ReplacedRun> out = new ArrayList<>();
-        Set<List<Object>> asked = new HashSet<>();
         boolean givenUp = false;
-        for (int site : new TreeSet<>(seen.arms())) {
-            ArmReplacements.AtSite at = replacements.bySite().get(site);
-            if (at == null) {
-                continue;
-            }
-            for (int with : new TreeSet<>(at.siblings().keySet())) {
-                if (!(at.siblings().get(with) instanceof ArmReplacements.Sibling.Carried)
-                        || !asked.add(List.of(at.fork(), at.part(), with))) {
-                    continue;
-                }
-                Optional<ReplacedRun> ran = givenUp ? Optional.empty()
-                        : replacedRun(target, sig, outCases, row, state.reached,
-                                state.disposition, at.fork(), at.part(), with,
-                                replacements.replacing(at.fork(), at.part(), with));
-                givenUp = ran.isEmpty();
-                out.add(ran.orElseGet(() -> new ReplacedRun(at.fork(), at.part(), with,
-                        new AnswerObservation.RanOut(), AnswerChange.COULD_NOT_TELL,
-                        ReplacedRun.Noticed.COULD_NOT_TELL)));
-            }
+        for (ArmReplacements.Rewrite each : replacements.through(seen.arms())) {
+            Optional<ReplacedRun> ran = givenUp ? Optional.empty()
+                    : replacedRun(target, sig, outCases, row, state.reached, state.disposition,
+                            each.fork(), each.part(), each.with(), each.replacing());
+            givenUp = ran.isEmpty();
+            out.add(ran.orElseGet(() -> new ReplacedRun(each.fork(), each.part(), each.with(),
+                    new AnswerObservation.RanOut(), AnswerChange.COULD_NOT_TELL,
+                    ReplacedRun.Noticed.COULD_NOT_TELL)));
         }
         return out;
     }
