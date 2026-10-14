@@ -76,17 +76,19 @@ class ARuleOfADecisionAFigureStoppedSaysTheFigureTest {
     void atTheFigureTheRuleIsComposedFor() {
         for (String model : List.of(aString(CHARACTERS), aList(ELEMENTS))) {
             Compilation compilation = measured(model);
+            AdequacyReport report = AdequacyReport.of(compilation);
+            String page = human(report);
 
-            assertEquals(List.of(), ruleLines(human(compilation)),
-                    () -> "a value of Big is built here: " + human(compilation));
-            assertEquals(List.of(), shortfalls(compilation),
+            assertEquals(List.of(), ruleLines(page), () -> "a value of Big is built here: " + page);
+            assertEquals(List.of(), shortfalls(report, compilation),
                     "and the document has no shortfall to say of the rule");
         }
     }
 
     private static void assertSaysTheFigure(String model, CompositionBudget figure) {
         Compilation compilation = measured(model);
-        String page = human(compilation);
+        AdequacyReport report = AdequacyReport.of(compilation);
+        String page = human(report);
         List<String> lines = ruleLines(page);
 
         assertEquals(1, lines.size(), () -> "the rule through case Some is the one: " + page);
@@ -94,7 +96,7 @@ class ARuleOfADecisionAFigureStoppedSaysTheFigureTest {
                 () -> "the rule's own line opens on the figure its search stopped at: "
                         + lines.get(0));
 
-        List<JsonNode> said = shortfalls(compilation);
+        List<JsonNode> said = shortfalls(report, compilation);
         assertEquals(1, said.size(), () -> "one word the search came back with: " + said);
         List<String> figures = new ArrayList<>();
         JsonNode written = said.get(0).get("figures");
@@ -112,9 +114,9 @@ class ARuleOfADecisionAFigureStoppedSaysTheFigureTest {
         return compilation;
     }
 
-    private static String human(Compilation compilation) {
-        return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+    /** The page of a report, which is built once per compilation and read twice. */
+    private static String human(AdequacyReport report) {
+        return report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     /** The lines the page says a rule of the decision nothing could show a row for in. */
@@ -126,8 +128,8 @@ class ARuleOfADecisionAFigureStoppedSaysTheFigureTest {
     }
 
     /** Every word the document says a rule's search came back with, over every rule. */
-    private static List<JsonNode> shortfalls(Compilation compilation) {
-        JsonNode behaviors = JSON.readTree(AdequacyReport.of(compilation)
+    private static List<JsonNode> shortfalls(AdequacyReport report, Compilation compilation) {
+        JsonNode behaviors = JSON.readTree(report
                         .json(SourceRendering.namedByIdentity(compilation.texts())))
                 .get("modules").get(0).get("behaviors");
         List<JsonNode> found = new ArrayList<>();
