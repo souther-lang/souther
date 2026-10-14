@@ -25,9 +25,9 @@ import java.util.Objects;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A steady order calls two values one exactly where they are one.
@@ -152,7 +152,8 @@ class ASteadyOrderTellsApartWhateverEqualityTellsApartTest {
     void anOrderThatLeavesOutAComponentIsCaught() {
         Comparator<Kept> byTheReasonAlone =
                 Comparator.comparing(Kept::reason, StoppedReading.IN_A_STEADY_ORDER);
-        assertFalse(whereItIsNoOrder(byTheReasonAlone, values.of(Kept.class)).isEmpty());
+        assertTrue(whereItIsNoOrder(byTheReasonAlone, values.of(Kept.class)).stream()
+                .anyMatch(each -> each.startsWith("called one: ")));
     }
 
     /** And a component nothing says how to make is refused rather than passed over. */
@@ -161,14 +162,14 @@ class ASteadyOrderTellsApartWhateverEqualityTellsApartTest {
         assertThrows(AssertionError.class, () -> values.of(Unmade.class));
     }
 
-    private record Kept(StoppedReading reason, boolean twice) {
+    record Kept(StoppedReading reason, boolean twice) {
 
         Kept {
             Objects.requireNonNull(reason, "kept for some reason");
         }
     }
 
-    private record Unmade(Thread runs) {
+    record Unmade(Thread runs) {
     }
 
     /** An owner by which module wrote it and what it names, never the two run together. */
