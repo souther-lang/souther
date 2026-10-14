@@ -827,8 +827,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *
      * <p>A part the place words is asked first: where one is in the statement, an author is sent to
      * it before a step this compiler has not taken beside it. Then a part declined at how many
-     * readings are made, and one declined at how far a container is written out, since a run
-     * allowed more may read either, and then any other part.
+     * readings one way down makes, one declined at how many are made in all, one declined at how
+     * many parts a step states, and one declined at how far a container is written out, since a
+     * run allowed more may read any of them, and then any other part.
      */
     static BlockReason.WhatItStatesIsNoLine whatItStates(Proposition stated,
                                                          List<WhyUnread> stops) {
@@ -838,6 +839,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (stops.stream().anyMatch(WhyUnread.MoreReadingsThanAreMade.class::isInstance)) {
             return new BlockReason.WhatItStatesIsNoLine(
                     BlockReason.WhatItStatesIsNoLine.Why.MORE_READINGS_THAN_ARE_MADE);
+        }
+        if (stops.stream().anyMatch(WhyUnread.MoreTotalReadingsThanAreMade.class::isInstance)) {
+            return new BlockReason.WhatItStatesIsNoLine(
+                    BlockReason.WhatItStatesIsNoLine.Why.MORE_TOTAL_READINGS_THAN_ARE_MADE);
+        }
+        if (stops.stream().anyMatch(WhyUnread.MorePartsThanAreConcluded.class::isInstance)) {
+            return new BlockReason.WhatItStatesIsNoLine(
+                    BlockReason.WhatItStatesIsNoLine.Why.MORE_PARTS_THAN_ARE_CONCLUDED);
         }
         if (stops.stream().anyMatch(WhyUnread.MoreElementsThanAreWrittenOut.class::isInstance)) {
             return new BlockReason.WhatItStatesIsNoLine(
@@ -875,8 +884,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  WhyUnread.ANumberOfWhatAnOperationAnswers _,
                  WhyUnread.WhatARecursiveHelperAnswers _, WhyUnread.AtNoPosition _,
                  WhyUnread.NoMeasureOfItsSize _ -> true;
-            case WhyUnread.MoreReadingsThanAreMade _, WhyUnread.MoreElementsThanAreWrittenOut _,
-                 WhyUnread.SeveralValuesNotGoneInto _, WhyUnread.ANumberNotHeld _,
+            case WhyUnread.MoreReadingsThanAreMade _, WhyUnread.MoreTotalReadingsThanAreMade _,
+                 WhyUnread.MorePartsThanAreConcluded _,
+                 WhyUnread.MoreElementsThanAreWrittenOut _, WhyUnread.SeveralValuesNotGoneInto _, WhyUnread.ANumberNotHeld _,
                  WhyUnread.AClauseOfAnInvariant _, WhyUnread.AnInvariantNotReached _,
                  WhyUnread.InACalledBody _, WhyUnread.CopiesStateDifferentThings _,
                  WhyUnread.NotMetByTheReading _ -> false;

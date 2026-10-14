@@ -290,6 +290,59 @@ public enum CompositionBudget {
     READINGS_OF_ONE_CONDITION(256),
 
     /**
+     * How many readings the reading of what one condition means makes in all: every case, value
+     * and application it is split into, along every way down and under every rule tried, counted
+     * together.
+     *
+     * <p>Beside {@link #READINGS_OF_ONE_CONDITION} and not in place of it. That one is the product
+     * along one way down, so ways that each stay under it can come to more than it in all — a
+     * value chosen by cases holds the conditions that chose it, and a helper called on what the
+     * last call answered reads every condition before it again, once more on each way. This one
+     * is what bounds that.
+     *
+     * <p><b>Reaching it gives the part up and says so</b>, as the other does: the part is carried
+     * out as one nothing read, naming this as why
+     * ({@link souther.compiler.meaning.WhyUnread.MoreTotalReadingsThanAreMade}). Counted before a
+     * split is read, so a reading that stops here never built the readings it stopped short of.
+     */
+    TOTAL_READINGS_OF_ONE_CONDITION(512),
+
+    /**
+     * How many parts the statement one step of a reading concludes comes to, written out: every
+     * part it holds counted as many times as it holds it, however many of them are one value.
+     *
+     * <p>Beside the readings and not in place of them. A reading stated more than once — a
+     * condition where it holds and denied where it does not, the arms of a match each beside the
+     * denial of every arm before it — makes a statement that grows with how deep such steps stand
+     * inside one another, so a few readings can come to more parts than any figure; and every
+     * reader of a statement walks it written out.
+     *
+     * <p><b>Reaching it gives the step up and says so.</b> The step is concluded as a part nothing
+     * read, naming this as why ({@link souther.compiler.meaning.WhyUnread.MorePartsThanAreConcluded}).
+     * Counted at each step as it is concluded, so a step is made of parts each within the figure;
+     * what the step itself builds before it is counted is not bounded by this.
+     */
+    PARTS_A_DERIVATION_CONCLUDES(4096),
+
+    /**
+     * How many parts of a disjunction one reading of a condition takes alone, to know which of them
+     * a path leaves: every part, however deep inside another part it stands, counted against one
+     * figure for the reading.
+     *
+     * <p>Counted across the nesting and not per disjunction. A disjunction of two parts never
+     * reaches a figure of its own; what grows is how many times over the nesting takes it — a
+     * value chosen by cases and read in a condition carries the condition that chose it, so each
+     * helper called on what the last one answered puts every condition before it into the next.
+     *
+     * <p><b>Reaching it gives the disjunction up and says so.</b> A part not taken may be the one
+     * that leaves nothing, so neither a part left alone nor none left is taken from the parts that
+     * were, and the disjunction is carried out as one a path did not take in, naming this as why
+     * ({@link souther.compiler.meaning.WhyNotTaken.MoreAlternativesThanAreTried}): an arm under it
+     * is left unsettled, never shown unreached on a search that did not finish.
+     */
+    ALTERNATIVES_A_PATH_TRIES(1024),
+
+    /**
      * How deep a construction plan descends.
      *
      * <p><b>Reaching it stops no search: what it shortens is the plan.</b> The composing runs
@@ -448,6 +501,13 @@ public enum CompositionBudget {
             case PATHS_OF_A_DECISION_READ -> "how many paths through one body a decision is read for";
             case READINGS_OF_ONE_CONDITION ->
                     "how many times one condition is read, once per value or case";
+            case TOTAL_READINGS_OF_ONE_CONDITION ->
+                    "how many times one condition is read in all, along every case and value";
+            case PARTS_A_DERIVATION_CONCLUDES ->
+                    "how many parts what one step of a reading states comes to, written out";
+            case ALTERNATIVES_A_PATH_TRIES ->
+                    "how many parts of one of several things a path takes alone, to know which of"
+                            + " them it leaves";
             case NUMBERS_OF_A_SET_TRIED -> "how many of the numbers a class admits are tried";
             case CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL ->
                     "how many code points of a class a string is searched for in full";
@@ -504,6 +564,8 @@ public enum CompositionBudget {
                  LEVELS_A_SIDE_IS_ASKED_AT, TIMES_THE_RULES_ARE_ASKED_AGAIN,
                  VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,
                  PATHS_OF_A_DECISION_READ, READINGS_OF_ONE_CONDITION,
+                 TOTAL_READINGS_OF_ONE_CONDITION, PARTS_A_DERIVATION_CONCLUDES,
+                 ALTERNATIVES_A_PATH_TRIES,
                  WAYS_A_WAY_IS_LOOKED_ALONG,
                  DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,
                  CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,

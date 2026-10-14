@@ -4450,6 +4450,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         case A_PART_NOT_READ -> "a part of the way that was not read";
                         case MORE_READINGS_THAN_ARE_MADE -> "a part of the way reading which took"
                                 + " more readings than are made";
+                        case MORE_TOTAL_READINGS_THAN_ARE_MADE -> "a part of the way reading which"
+                                + " took more readings in all than are made";
+                        case MORE_PARTS_THAN_ARE_CONCLUDED -> "a part of the way whose statement"
+                                + " comes to more parts than a step is concluded with";
                         case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> "a part of the way about a"
                                 + " container holding more than is written out";
                         case NO_VALUE_OF_THE_ROW -> "something the row does not write";
@@ -5025,6 +5029,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyNotTaken.MoreWaysThanAreRead _ -> "a condition on some or every element that"
                     + " comes to more ways an element may meet it than this compiler takes one by"
                     + " one";
+            // The same kind: read, in a path's words, and stopped at a figure.
+            case WhyNotTaken.MoreAlternativesThanAreTried _ -> "a condition that is one of"
+                    + " several things, inside one another past "
+                    + CompositionBudget.ALTERNATIVES_A_PATH_TRIES.counts();
         };
     }
 
@@ -5100,6 +5108,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // Its own words: nothing the author wrote is wanting, and raising a figure lifts it.
             case WhyUnread.MoreReadingsThanAreMade _ -> "a condition that would be read once for each"
                     + " of more values or cases than this compiler reads one by one";
+            case WhyUnread.MoreTotalReadingsThanAreMade _ -> "a condition whose values or cases,"
+                    + " counted along every way together, come to more readings than this compiler"
+                    + " makes of one condition";
+            case WhyUnread.MorePartsThanAreConcluded _ -> "a condition whose statement, with"
+                    + " every part written out as often as it is held, comes to more parts than"
+                    + " this compiler concludes one step of a reading with";
             case WhyUnread.MoreElementsThanAreWrittenOut _ -> "a condition about a container"
                     + " holding more than this compiler writes out one element at a time";
             // Not a figure: nothing was counted, and the reading did not go in.
@@ -5732,6 +5746,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         case AN_ANSWER_NOT_READ -> "called_body_not_read";
                     };
                     case WhyUnread.MoreReadingsThanAreMade _ -> "more_readings_than_are_made";
+                    case WhyUnread.MoreTotalReadingsThanAreMade _ ->
+                            "more_total_readings_than_are_made";
+                    case WhyUnread.MorePartsThanAreConcluded _ ->
+                            "more_parts_than_are_concluded";
                     case WhyUnread.MoreElementsThanAreWrittenOut _ ->
                             "more_elements_than_are_written_out";
                     case WhyUnread.SeveralValuesNotGoneInto _ -> "several_values_not_gone_into";
@@ -5762,6 +5780,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyNotTaken.MoreWaysThanAreRead _ -> {
                 out.put("kind", "past_a_figure");
                 out.put("reason", "more_ways_than_are_read");
+            }
+            case WhyNotTaken.MoreAlternativesThanAreTried _ -> {
+                out.put("kind", "past_a_figure");
+                out.put("reason", "more_alternatives_than_are_tried");
             }
         }
         return out;

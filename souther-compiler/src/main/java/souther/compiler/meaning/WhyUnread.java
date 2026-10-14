@@ -238,6 +238,29 @@ public sealed interface WhyUnread {
     record MoreReadingsThanAreMade() implements WhyUnread {}
 
     /**
+     * A part that would be read once more where the reading of what its condition means had made
+     * as many readings in all as it makes — every case, value and application of every way down
+     * counted together, where {@link MoreReadingsThanAreMade} counts one way down. A figure of
+     * this compiler's work was reached, and nothing is said of the model.
+     *
+     * <p>Its own reason and not that one, because the two are two figures: a reader told the
+     * wrong one would raise a figure that stopped nothing.
+     */
+    record MoreTotalReadingsThanAreMade() implements WhyUnread {}
+
+    /**
+     * A step of the reading whose statement, written out with every part it holds as many times as
+     * it holds it, comes to more parts than a step is concluded with. A figure of this compiler's
+     * work was reached, and nothing is said of the model.
+     *
+     * <p>Not a count of readings: one reading can be stated more than once — a condition is stated
+     * where it holds and denied where it does not, and an arm of a match is stated beside the
+     * denial of every arm before it — so a statement grows with how deep such steps stand inside
+     * one another, however few readings it was made of.
+     */
+    record MorePartsThanAreConcluded() implements WhyUnread {}
+
+    /**
      * A part about a container holding more occurrences than a walk writes out, counted at every
      * level the walk passes. A figure of this compiler's work was reached — the one bounding how
      * far a container is written out, and not how many times a condition is read — and nothing is

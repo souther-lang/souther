@@ -20,6 +20,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
@@ -62,7 +63,9 @@ import java.util.function.Function;
  * only as the closure it was written with; a value being none of some cases, two values being one,
  * a place on an order, a count of elements, a place this tree does not read, and a part nothing
  * read. Each is left out with the limit of {@link Known} it meets, which is the sound answer with
- * less: a path that took nothing in has ruled nothing out.
+ * less: a path that took nothing in has ruled nothing out. And one of several things whose parts,
+ * counted with every disjunction inside them, come to more than one reading of a condition takes
+ * alone is left out for that figure, and not for a limit of {@code Known}.
  */
 final class MeaningAssumptions {
 
@@ -127,12 +130,40 @@ final class MeaningAssumptions {
     /** Why each part of what was stated that a path does not hold was not taken in; empty where
      *  every part is one a path holds. */
     private final List<WhyNotTaken> notTaken = new ArrayList<>();
+    /** How many more parts of a disjunction this reading takes alone, shared by every part taken
+     *  alone inside another. */
+    private final Tries tries;
 
-    private MeaningAssumptions(Terms terms, InputPlaces places, Denotations at, Known known) {
+    private MeaningAssumptions(Terms terms, InputPlaces places, Denotations at, Known known,
+                               Tries tries) {
         this.terms = terms;
         this.places = places;
         this.at = at;
         this.known = known;
+        this.tries = tries;
+    }
+
+    /**
+     * How many parts of a disjunction one reading of a condition takes alone
+     * ({@link CompositionBudget#ALTERNATIVES_A_PATH_TRIES}).
+     *
+     * <p>One count for the whole reading and not one per disjunction. A part taken alone holds
+     * disjunctions of its own, each of whose parts is taken alone again, so what grows is the
+     * nesting: a disjunction of two parts never reaches a count kept for it alone, however many
+     * times over the nesting takes it.
+     */
+    private static final class Tries {
+
+        private int left = CompositionBudget.ALTERNATIVES_A_PATH_TRIES.maximum();
+
+        /** Whether another part may be taken alone, counting it where it may. */
+        boolean another() {
+            if (left == 0) {
+                return false;
+            }
+            left--;
+            return true;
+        }
     }
 
     /** What {@code k} comes to once what {@code stated} states comes out {@code positive}, read
@@ -140,7 +171,7 @@ final class MeaningAssumptions {
     static Predicates.Assumed assumed(Proposition stated, boolean positive, Known k, Terms terms,
                                       InputPlaces places, Denotations at) {
         Proposition asked = positive ? stated : stated.denied();
-        MeaningAssumptions taking = new MeaningAssumptions(terms, places, at, k);
+        MeaningAssumptions taking = new MeaningAssumptions(terms, places, at, k, new Tries());
         taking.take(asked);
         // Read to the end only where every part was taken in: a part a path cannot hold leaves an
         // arm under it unsettled for this reader's reach, which is not a fact about the model.
@@ -480,14 +511,32 @@ final class MeaningAssumptions {
      *
      * <p>A part taken only in part and still leaving nothing is dropped all the same: what it left
      * out would only have narrowed further.
+     *
+     * <p>The parts after a second one left are not taken: two left already decline it, whichever
+     * the rest come to.
+     *
+     * <p>And none past the count this reading takes alone ({@link Tries}). A part not taken
+     * may be the one that leaves something or the one that leaves nothing, so what the parts
+     * taken came to settles nothing — not even none left, which is a proof that no run arrives —
+     * and the whole is declined for the count rather than for what a path knows. So is a choice
+     * between two left where one of them declined a disjunction for the count: that part may
+     * leave nothing, and which of them holds may be no choice at all.
      */
     private void takingOneOf(Proposition.Any any) {
         List<MeaningAssumptions> left = new ArrayList<>();
         for (Proposition part : any.parts()) {
-            MeaningAssumptions alone = new MeaningAssumptions(terms, places, at, known);
+            if (!tries.another()) {
+                WhyNotTaken.declinedWhole(new WhyNotTaken.MoreAlternativesThanAreTried(), any)
+                        .forEach(this::notTaken);
+                return;
+            }
+            MeaningAssumptions alone = new MeaningAssumptions(terms, places, at, known, tries);
             alone.take(part);
             if (!alone.known.reachesNothing()) {
                 left.add(alone);
+                if (left.size() == 2) {
+                    break;
+                }
             }
         }
         switch (left.size()) {
@@ -501,9 +550,14 @@ final class MeaningAssumptions {
                 taken |= only.taken;
                 only.notTaken.forEach(this::notTaken);
             }
-            default -> WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
-                    WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), any)
-                    .forEach(this::notTaken);
+            default -> {
+                boolean cutShort = left.stream().anyMatch(each -> each.notTaken.contains(
+                        new WhyNotTaken.MoreAlternativesThanAreTried()));
+                WhyNotTaken.declinedWhole(cutShort ? new WhyNotTaken.MoreAlternativesThanAreTried()
+                        : new WhyNotTaken.OutsideDomain(
+                                WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), any)
+                        .forEach(this::notTaken);
+            }
         }
     }
 

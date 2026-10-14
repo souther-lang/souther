@@ -284,6 +284,12 @@ final class Pullback {
      * another helper is a recursion through two, which is read as neither.
      */
     private final Set<ValueName.Helper> recursing = new HashSet<>();
+    /**
+     * How many more readings this reading of a condition makes in all
+     * ({@link CompositionBudget#TOTAL_READINGS_OF_ONE_CONDITION}), across every case, value and
+     * application it is split into and every rule tried on each.
+     */
+    private long readingsLeft = CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum();
 
     /** What a value a walk or a recursion hands back to itself is supposed to be. */
     private sealed interface Supposed permits Carried, Descending, Reaching {}
@@ -818,6 +824,38 @@ final class Pullback {
     private static final CompositionBudget READINGS = CompositionBudget.READINGS_OF_ONE_CONDITION;
 
     /**
+     * Why {@code more} readings of the condition, made at one place where it splits, are not
+     * made — or null where they are, taken from what this reading has left to make.
+     *
+     * <p>Asked before any of them is read, so that what stops is the reading and not a count of
+     * what was read; and asked of the readings a rule tried and gave up as much as of the ones it
+     * kept, which were made all the same.
+     *
+     * <p>Two figures, each of its own. How many readings one way down comes to is
+     * {@link #READINGS}: a reading of {@code reads} split into {@code more} is that many times as
+     * many. How many are made in all, along every way, is the other: a value chosen by cases holds
+     * the conditions that chose it, so ways that each stay under the first can come to more than
+     * any figure in all.
+     */
+    private WhyUnread splitInto(InputReads reads, long more) {
+        if (more > 0 && reads.readings() > READINGS.maximum() / more) {
+            return new WhyUnread.MoreReadingsThanAreMade();
+        }
+        return made(more);
+    }
+
+    /** Why {@code more} readings are not made in all — or null where they are, taken from what is
+     *  left ({@link #splitInto}, for a split no way down counts). */
+    private WhyUnread made(long more) {
+        if (more > readingsLeft) {
+            readingsLeft = 0;
+            return new WhyUnread.MoreTotalReadingsThanAreMade();
+        }
+        readingsLeft -= more;
+        return null;
+    }
+
+    /**
      * The position of the input whose holding something is what the container {@code container}
      * holding something comes to, or empty where there is none.
      *
@@ -981,9 +1019,9 @@ final class Pullback {
                                               WhyUnread.AtNoPosition.Place nowhere) {
         Denotation chosen = chosenAt(value);
         if (chosen != null) {
-            long most = READINGS.maximum();
-            if (value.at().readings() * readingsOf(value, most) > most) {
-                return new WhichCase.Unread(new WhyUnread.MoreReadingsThanAreMade());
+            WhyUnread past = splitInto(value.at(), readingsOf(value, READINGS.maximum()));
+            if (past != null) {
+                return new WhichCase.Unread(past);
             }
             return answeredByItsArms(chosen, nowhere);
         }
@@ -2494,8 +2532,10 @@ final class Pullback {
             DeclaredArgument named = closureIn(law);
             List<Derivation> ofEach = new ArrayList<>();
             if (named == null) {
-                if (occurrences.size() > READINGS.maximum()) {
-                    return new WrittenOutRead.Stops(new WhyUnread.MoreReadingsThanAreMade());
+                WhyUnread past = occurrences.size() > READINGS.maximum()
+                        ? new WhyUnread.MoreReadingsThanAreMade() : made(occurrences.size());
+                if (past != null) {
+                    return new WrittenOutRead.Stops(past);
                 }
                 for (ReadMeaning.Occurrence occurrence : occurrences) {
                     Denotation value = occurrence.value();
@@ -2534,6 +2574,10 @@ final class Pullback {
                             new WhyUnread.MoreElementsThanAreWrittenOut());
                 }
             }
+            WhyUnread past = made(applications.size());
+            if (past != null) {
+                return new WrittenOutRead.Stops(past);
+            }
             InputReads outer = application;
             try {
                 for (InputReads.Applications.Made one : applications) {
@@ -2556,8 +2600,9 @@ final class Pullback {
                                                            List<ReadMeaning.Occurrence> occurrences,
                                                            Denotation closure, Core.Block block,
                                                            LawProposition<DeclaredArgument> law) {
-            if (reads.readings() > READINGS.maximum() / occurrences.size()) {
-                return new WrittenOutRead.Stops(new WhyUnread.MoreReadingsThanAreMade());
+            WhyUnread past = splitInto(reads, occurrences.size());
+            if (past != null) {
+                return new WrittenOutRead.Stops(past);
             }
             List<Derivation> ofEach = new ArrayList<>();
             InputReads outer = application;
@@ -3225,8 +3270,9 @@ final class Pullback {
          */
         private Sized sumOverWrittenOut(DeclaredArgument at, List<Denotation> values,
                                         LawNumber<DeclaredArgument> ofTheElement) {
-            if (reads.readings() * values.size() > READINGS.maximum()) {
-                return new Sized.NotSized(new WhyUnread.MoreReadingsThanAreMade());
+            WhyUnread past = splitInto(reads, values.size());
+            if (past != null) {
+                return new Sized.NotSized(past);
             }
             DeclaredArgument named = closureIn(ofTheElement);
             Denotation closure = named == null ? null : reads.denotes(applied.argument(named),
@@ -4394,9 +4440,9 @@ final class Pullback {
         return switch (inside) {
             case Inside.AChoice(Denotation chosen) -> {
                 int arms = Choice.of(Core.withoutStanding(chosen.value())).arms().size();
-                if (reads.readings() * arms > READINGS.maximum()) {
-                    yield partOf(at, new Derivation.Stopped(
-                            new WhyUnread.MoreReadingsThanAreMade(), fixed));
+                WhyUnread past = splitInto(reads, arms);
+                if (past != null) {
+                    yield partOf(at, new Derivation.Stopped(past, fixed));
                 }
                 Core choice = chosen.value();
                 yield new Derivation.AComparisonOfAChoice(byItsCases(chosen, at,
@@ -4406,9 +4452,9 @@ final class Pullback {
                     new Derivation.ABehaviorsBody(behavior,
                             again.apply(on -> on.taking(call, body, 1)));
             case Inside.OneOfTheValues(Core.Read name, List<Denotation> values) -> {
-                if (reads.readings() * values.size() > READINGS.maximum()) {
-                    yield partOf(at, new Derivation.Stopped(
-                            new WhyUnread.MoreReadingsThanAreMade(), fixed));
+                WhyUnread past = splitInto(reads, values.size());
+                if (past != null) {
+                    yield partOf(at, new Derivation.Stopped(past, fixed));
                 }
                 List<Derivation> each = new ArrayList<>();
                 for (Denotation value : values) {
@@ -4422,9 +4468,9 @@ final class Pullback {
             // library proved its body answers ({@link Choice#casesOf}).
             case Inside.ACallDefinedByCases(Core call, ValueName.Stdlib operation,
                                             List<Choice.ADefinitionCase> cases, InputReads where) -> {
-                if (reads.readings() * cases.size() > READINGS.maximum()) {
-                    yield partOf(at, new Derivation.Stopped(
-                            new WhyUnread.MoreReadingsThanAreMade(), fixed));
+                WhyUnread past = splitInto(reads, cases.size());
+                if (past != null) {
+                    yield partOf(at, new Derivation.Stopped(past, fixed));
                 }
                 List<Derivation.MatchArms.Arm> each = new ArrayList<>();
                 for (Choice.ADefinitionCase one : cases) {
@@ -5197,9 +5243,9 @@ final class Pullback {
         // Each case of one side is compared with each of the other's, on every application this
         // reading is one of: counted before any is made.
         long most = READINGS.maximum();
-        if (reads.readings() * readingsOf(left, most) * readingsOf(right, most) > most) {
-            return partOf(at, new Derivation.Stopped(new WhyUnread.MoreReadingsThanAreMade(),
-                    false));
+        WhyUnread past = splitInto(reads, readingsOf(left, most) * readingsOf(right, most));
+        if (past != null) {
+            return partOf(at, new Derivation.Stopped(past, false));
         }
         return new Derivation.AComparisonOfAChoice(
                 comparedCase(left, right, stated.claim().statedRelation(), at));

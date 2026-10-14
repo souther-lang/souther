@@ -284,12 +284,14 @@ public sealed interface BlockReason {
                 case SeveralLinesInOneRule _ -> 15;
                 case WhatItStatesIsNoLine(WhatItStatesIsNoLine.Why why) -> switch (why) {
                     case MORE_READINGS_THAN_ARE_MADE -> 16;
-                    case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> 17;
-                    case A_PART_NOT_READ -> 18;
-                    case A_NUMBER_NO_POSITION_HOLDS -> 19;
-                    case NO_RELATION_OF_NUMBERS -> 20;
+                    case MORE_TOTAL_READINGS_THAN_ARE_MADE -> 17;
+                    case MORE_PARTS_THAN_ARE_CONCLUDED -> 18;
+                    case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> 19;
+                    case A_PART_NOT_READ -> 20;
+                    case A_NUMBER_NO_POSITION_HOLDS -> 21;
+                    case NO_RELATION_OF_NUMBERS -> 22;
                 };
-                case RelationNotShownToReachEveryValue _ -> 21;
+                case RelationNotShownToReachEveryValue _ -> 23;
             };
         }
 
@@ -379,7 +381,8 @@ public sealed interface BlockReason {
                 // they were declined at how many of them are made or how far a container they
                 // read is written out.
                 case WhatItStatesIsNoLine(var why) -> switch (why) {
-                    case MORE_READINGS_THAN_ARE_MADE, MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT ->
+                    case MORE_READINGS_THAN_ARE_MADE, MORE_TOTAL_READINGS_THAN_ARE_MADE,
+                         MORE_PARTS_THAN_ARE_CONCLUDED, MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT ->
                             RunSensitivity.MAY_CHANGE;
                     case A_PART_NOT_READ, A_NUMBER_NO_POSITION_HOLDS, NO_RELATION_OF_NUMBERS ->
                             RunSensitivity.UNAFFECTED;
@@ -419,10 +422,14 @@ public sealed interface BlockReason {
                 // and nothing hands it another ({@code TextExtents}), so which limit refused is
                 // the whole of what varies.
                 case OrderedExtentTooCostly it -> List.of(TextExtents.refusedAt(it.stopped()));
-                // Each of the two is one figure, declared where it is counted.
+                // Each of the four is one figure, declared where it is counted.
                 case WhatItStatesIsNoLine(var why) -> switch (why) {
                     case MORE_READINGS_THAN_ARE_MADE ->
                             List.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure());
+                    case MORE_TOTAL_READINGS_THAN_ARE_MADE ->
+                            List.of(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.figure());
+                    case MORE_PARTS_THAN_ARE_CONCLUDED ->
+                            List.of(CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.figure());
                     case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> List.of(
                             WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(WrittenOutElements.MOST_WALKED));
                     case A_PART_NOT_READ, A_NUMBER_NO_POSITION_HOLDS, NO_RELATION_OF_NUMBERS ->
@@ -1247,8 +1254,18 @@ public sealed interface BlockReason {
              *  a figure of this compiler's work was reached. */
             MORE_READINGS_THAN_ARE_MADE,
 
+            /** A part read once more where the reading had made as many readings in all, along
+             *  every way, as it makes: a figure of this compiler's work was reached, and not the
+             *  one above. */
+            MORE_TOTAL_READINGS_THAN_ARE_MADE,
+
+            /** A part whose statement, written out, comes to more parts than a step of the reading
+             *  is concluded with: a figure of this compiler's work was reached, and not either of
+             *  the ones above. */
+            MORE_PARTS_THAN_ARE_CONCLUDED,
+
             /** A part about a container holding more than a walk writes out: a figure of this
-             *  compiler's work was reached, and not the one above. */
+             *  compiler's work was reached, and none of the ones above. */
             MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT,
 
             /** Some other part of what it states was not read. */
