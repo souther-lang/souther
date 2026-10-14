@@ -62,14 +62,19 @@ class WhoseARowIsIsDecidedInOnePlaceTest {
                         List.of("souther.compiler.query.BorderObligationPointAssessment#across"),
                         // The declarations' account, asked of the gathered point. The arm is read
                         // once to ask it and the owners are the arm's own answer.
+                        // A point no row is owed at is asked the same two questions, of the point
+                        // the model made for it, by the accounts of what is left out.
                         ATTRIBUTION + "$TheDeclarations#instanceof ASKS",
-                        List.of("souther.compiler.query.BorderObligationPointAssessment#ownersIn"),
+                        List.of("souther.compiler.partition.LeftOutPoint#ownersIn",
+                                "souther.compiler.query.BorderObligationPointAssessment#ownersIn"),
                         ATTRIBUTION + "$TheDeclarations#ownersIn CALLS",
-                        List.of("souther.compiler.query.BorderObligationPointAssessment#ownersIn"),
+                        List.of("souther.compiler.partition.LeftOutPoint#ownersIn",
+                                "souther.compiler.query.BorderObligationPointAssessment#ownersIn"),
                         // And the reading's own account, the same way.
                         ATTRIBUTION + "$TheReading#instanceof ASKS",
-                        List.of("souther.compiler.query.BorderObligationPointAssessment"
-                                + "#owedToTheReading"),
+                        List.of("souther.compiler.partition.LeftOutPoint#owedToTheReading",
+                                "souther.compiler.query.BorderObligationPointAssessment"
+                                        + "#owedToTheReading"),
                         // The behavior's account still names both arms in one switch, because it
                         // answers for the whole question where it walks the points: a producer
                         // naming one of them would be a point whose arm neither account holds.
@@ -78,10 +83,13 @@ class WhoseARowIsIsDecidedInOnePlaceTest {
                         // Two points of one line are compared as values, which is what a reading
                         // holds ({@code OwedPoint}).
                         ATTRIBUTION + "#equals CALLS",
-                        List.of("souther.compiler.partition.OwedPoint#equals"),
-                        // And the classifier itself, which the rule above is about.
+                        List.of("souther.compiler.partition.LeftOutPoint#equals",
+                                "souther.compiler.partition.OwedPoint#equals"),
+                        // And the classifier itself, which the rule above is about: where the
+                        // point is made, whether a row is owed at it or not.
                         ATTRIBUTION + "#of CALLS",
-                        List.of("souther.compiler.partition.Border#owes"))),
+                        List.of("souther.compiler.partition.Border#leavesOut",
+                                "souther.compiler.partition.Border#owes"))),
                 reachesFromOutside());
     }
 

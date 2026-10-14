@@ -127,24 +127,26 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
     void whatAnImportedTypesLineLeavesOutIsTheProducersAlone() {
         Compilation both = compiled(PRODUCER, CONSUMER);
 
-        assertEquals(List.of(), linesOf(both, "example.consumer"),
+        assertEquals(List.of(), declared(both, "example.consumer").lines(),
                 "the consumer carries the type and drew none of its lines");
-        List<Adequacy.DeclaredLine> producers = linesOf(both, "example.producer");
+        assertEquals(List.of(), declared(both, "example.consumer").excluded(),
+                "and none of what they leave out is its fact");
+        List<Adequacy.DeclaredLine> producers = declared(both, "example.producer").lines();
         assertEquals(1, producers.size(), () -> "one clause, one line: " + producers);
         assertEquals(List.of("label"), producers.get(0).carriedBy(),
                 "read by the producer's own behavior, and the consumer's reading is not one of its");
         assertEquals(List.of(PointRole.OFF, PointRole.OUT),
-                producers.get(0).notOwed().stream()
-                        .map(Adequacy.DeclaredLine.PointLeftOut::role).toList(),
+                declared(both, "example.producer").excluded().stream()
+                        .map(Adequacy.DeclaredExclusion::role).toList(),
                 "no string is shorter than the line and still a Sku");
     }
 
-    /** The lines the module's declarations drew, in the order the query answers them. */
-    private static List<Adequacy.DeclaredLine> linesOf(Compilation compilation, String module) {
+    /** What the module's declarations are owed and drew, as the query answers it. */
+    private static Adequacy.DeclaredBoundaries declared(Compilation compilation, String module) {
         Adequacy.DeclaredBoundaries account =
                 compilation.db().ask(new Adequacy.DeclaredBorders(module)).value();
         assertNotNull(account, "the model under test compiles");
-        return account.lines();
+        return account;
     }
 
     /** What each of the module's debts asks a row for, as a report writes it. */

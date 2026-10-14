@@ -14,9 +14,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -156,41 +158,78 @@ class WhatADeclarationsLineLeavesOutIsSaidOnceTest {
     }
 
     /**
-     * A point a line leaves out at some readings and not at others is said once, with where.
+     * One point of one line, owed at one position and left out at another, is two points: the one
+     * no row is owed at is told apart by where its region stops.
      *
      * <p>The region above {@code Failures}' line at 0 holds every value above it where a bare
      * {@code Failures} is read, and nothing where {@code Parcel}'s own clause holds the field at 0.
      * So the IN point is owed at {@code b} and left out at {@code a}: one line, read two ways, and
-     * both readings are right. Refused as two readings disagreeing, the model got no report at all.
+     * both readings are right. The point below the line is left out by the bound alone, wherever
+     * the type is read, and is said with nothing after the rule.
      */
     @Test
-    void aPointLeftOutAtSomeReadingsIsSaidWithThem() {
+    void aPointLeftOutWhereARecordEmptiesTheRegionIsToldApartByWhereItStops() {
         Compilation compilation = compiled(NARROWED);
         List<String> declarations = block(human(compilation), "declarations");
 
-        int in = declarations.indexOf("· no IN point is owed at value = 0 (invariant Failures #1):"
-                + " excluded — no value can stand there");
-        assertTrue(in >= 0, () -> "" + declarations);
-        assertEquals("· at a/p.failures", declarations.get(in + 1),
-                "left out where the record holds the field at 0, and only there");
-        int off = declarations.indexOf("· no OFF point is owed at value = 0 (invariant Failures"
-                + " #1): excluded — no value can stand there");
-        assertTrue(off >= 0 && !declarations.get(off + 1).startsWith("· at "),
+        assertTrue(declarations.contains("· no IN point is owed at value = 0 (invariant Failures #1"
+                        + " where the values stop at 0): excluded — no value can stand there"),
+                () -> "" + declarations);
+        assertTrue(declarations.contains("? undecided whether a row is at the IN point value in"
+                        + " 0 < value (invariant Failures #1) — no row names this behavior"),
+                () -> "and the same role of the same line, where nothing stops the region, is owed: "
+                        + declarations);
+        assertTrue(declarations.contains("· no OFF point is owed at value = 0 (invariant Failures"
+                        + " #1): excluded — no value can stand there"),
                 () -> "below the line nothing is a Failures wherever it is read: " + declarations);
 
         JsonNode document = JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts())));
-        List<String> onlyAt = new ArrayList<>();
+        List<String> stops = new ArrayList<>();
         document.get("modules").get(0).get("declarations").forEach(entry ->
-                entry.get("excluded").forEach(each -> {
-                    if (each.has("onlyAt")) {
-                        each.get("onlyAt").forEach(at -> onlyAt.add(each.get("point").asString()
-                                + " " + at.get("behavior").asString() + "/"
-                                + at.get("axis").asString()));
-                    }
-                }));
-        assertEquals(List.of("in a/p.failures"), onlyAt);
+                entry.get("excluded").forEach(each -> each.get("pointId").get("stops")
+                        .forEach(at -> stops.add(each.get("point").asString() + " "
+                                + at.get("kind").asString()))));
+        assertEquals(List.of("in at_the_domain", "in at_the_domain"), stops,
+                "the IN point of each line at 0 is left out where the values stop, and nothing"
+                        + " else is settled anywhere but by its own line");
         DocumentShape.assertShapedLikeTheSchema(document);
+    }
+
+    /**
+     * What the declarations say does not turn on the order the behaviors reading their lines are
+     * declared in.
+     *
+     * <p>Every reading of one point is one point and is gathered whole, so which behavior met it
+     * first decides nothing about it.
+     */
+    @Test
+    void whatTheDeclarationsSayDoesNotTurnOnTheOrderOfTheBehaviors() {
+        List<String> declaredFirst = block(human(compiled(NARROWED)), "declarations");
+        List<String> declaredSecond = block(human(compiled(NARROWED.replace("""
+                behavior a : (p: Parcel) -> Int
+                let a (p) = 1
+
+                behavior b : (f: Failures) -> Int
+                let b (f) = 1
+                """, """
+                behavior b : (f: Failures) -> Int
+                let b (f) = 1
+
+                behavior a : (p: Parcel) -> Int
+                let a (p) = 1
+                """))), "declarations");
+
+        assertFalse(declaredFirst.isEmpty(), "the model draws lines");
+        assertEquals(Set.copyOf(withoutReadings(declaredFirst)),
+                Set.copyOf(withoutReadings(declaredSecond)),
+                () -> declaredFirst + "\n" + declaredSecond);
+    }
+
+    /** The lines of a block that say what a point is, without the readings listed under them,
+     *  whose order is the order the behaviors are in. */
+    private static List<String> withoutReadings(List<String> block) {
+        return block.stream().filter(each -> !each.startsWith("· read as ")).toList();
     }
 
     private static final String NARROWED = """

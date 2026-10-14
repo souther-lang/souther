@@ -48,6 +48,7 @@ import souther.compiler.meaning.WhyUnread;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.DomainPoint;
+import souther.compiler.partition.LeftOutPoint;
 import souther.compiler.partition.FarEnd;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputUse;
@@ -459,6 +460,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         public List<Adequacy.DeclaredLine> declaredLines() {
             return owedByDeclarations.owed() == null
                     ? List.of() : owedByDeclarations.owed().lines();
+        }
+
+        /** The points no row is owed at that are the declarations' fact, each once. Empty where
+         *  nobody could be asked, for the reason {@link #debts()} is. */
+        public List<Adequacy.DeclaredExclusion> declaredExclusions() {
+            return owedByDeclarations.owed() == null
+                    ? List.of() : owedByDeclarations.owed().excluded();
         }
 
         /**
@@ -1078,6 +1086,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         List<BorderAssessment> lines = new ArrayList<>();
         owed.owed().forEach(each -> lines.addAll(each.debt().met().values()));
         owed.lines().forEach(each -> lines.add(each.read()));
+        owed.excluded().forEach(each -> lines.add(each.read()));
         return lines;
     }
 
@@ -1896,7 +1905,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         List<Adequacy.DeclaredLine> lines = module.declaredLines();
         ObligationSummary<Adequacy.DeclaredDebt> account =
                 ObligationSummary.of(debts, each -> each.debt().owed());
-        if (!debts.isEmpty() || !lines.isEmpty()) {
+        if (!debts.isEmpty() || !lines.isEmpty() || !module.declaredExclusions().isEmpty()) {
             out.append(String.format("  declarations   borders %d   obligations %d/%d%s%n",
                     lines.size(), account.met().size(), account.counted(), refuted(account)));
         }
@@ -1940,27 +1949,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     rowsThatDoNotHold(covered.by(), module.owedByDeclarations().rowPlace(),
                             rendering, null)));
         }
-        // And the points the declarations' lines leave nobody owing, once per line, in the words a
+        // And the points no row is owed at that are the declarations' fact, once each, in the words a
         // behavior's own are said in. They are not obligations and are in neither number above.
-        // A line with no level in the declaration's words is named by its rule, as a debt on it is.
+        // A line with no level in the declaration's words is named by its rule, as a debt on it is;
+        // and what settled the point besides the line is named after the rule, since a point the
+        // bound leaves out on its own and the same point a record's clause empties as well are two
+        // facts.
+        for (Adequacy.DeclaredExclusion each : module.declaredExclusions()) {
+            String rule = RuleHandleProse.said(each.read().describe(places), rendering, null)
+                    + each.stoppedAt();
+            out.append(String.format("      · no %s point%s%s: %s%n", each.role(), each.whichSide(),
+                    each.namesItsLevel() ? " is owed at " + each.said() + " (" + rule + ")"
+                            : " of " + rule + " is owed",
+                    whyNotOwed(each.point().reason())));
+        }
+        // The roles a line has no point in, which its own rule settles alone.
         for (Adequacy.DeclaredLine each : lines) {
             String rule = RuleHandleProse.said(each.read().describe(places), rendering, null);
-            String owed = each.namesItsLevel()
-                    ? " is owed at " + each.said() + " (" + rule + ")" : " of " + rule + " is owed";
             String exists = each.namesItsLevel()
                     ? " exists at " + each.said() + " (" + rule + ")" : " of " + rule + " exists";
-            // Where it is left out at some readings and not others, which ones: the rest of the
-            // region beside the line ends where each reading's other rules say.
-            for (Adequacy.DeclaredLine.PointLeftOut p : each.notOwed()) {
-                out.append(String.format("      · no %s point%s%s: %s%n",
-                        p.role(), p.whichSide(), owed, whyNotOwed(p.reason())));
-                p.onlyAt().forEach(at -> out.append(String.format("          · at %s%n", at)));
-            }
-            for (Adequacy.DeclaredLine.RoleLeftOut r : each.noPoint()) {
-                out.append(String.format("      · no %s point%s: %s%n",
-                        r.role(), exists, whyNoPoint(r.why())));
-                r.onlyAt().forEach(at -> out.append(String.format("          · at %s%n", at)));
-            }
+            each.noPoint().forEach((role, none) -> out.append(String.format(
+                    "      · no %s point%s: %s%n", role, exists, whyNoPoint(none.why()))));
         }
         Map<String, List<Adequacy.Finding>> byDeclaration = new LinkedHashMap<>();
         for (ReportedFinding each : module.declarations()) {
@@ -3416,14 +3425,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // What the model itself answered, which is not a row anybody is behind on. Named by the
         // reason rather than left blank: a point the rules refuse and a point this language cannot
         // write down are counted out for opposite reasons, and a reader acts on them differently.
-        // Of this behavior's own lines only. What a declaration's line leaves out is the same at
-        // every behavior carrying the type, and is said once where the declarations are.
-        for (BorderAssessment.Point p : BorderAssessment.pointsOf(lines)) {
-            if (p.item() instanceof ItemAssessment.NotOwed not) {
-                out.append(String.format("      · no %s point%s is owed at %s (%s): %s%n",
-                        p.role(), p.border().border().whichSide(p.at()), p.border().label(),
-                        RuleHandleProse.said(p.border().describe(places), rendering, declaredIn),
-                        whyNotOwed(not.reason())));
+        // The points the model says are this body's, by the rule its account is read by: a point
+        // only declarations settled is theirs, and is said once where the declarations are.
+        for (BorderAssessment line : behavior.lines()) {
+            for (LeftOutPoint left : line.border().leavesOut()) {
+                if (left.owedToTheReading()) {
+                    DomainPoint at = left.point().point();
+                    out.append(String.format("      · no %s point%s is owed at %s (%s): %s%n",
+                            line.border().roleOf(at), line.border().whichSide(at), line.label(),
+                            RuleHandleProse.said(line.describe(places), rendering, declaredIn),
+                            whyNotOwed(left.point().reason())));
+                }
             }
         }
         // And a word of the technique this line has no point in at all, which is not the same news.
@@ -6560,7 +6572,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // sent to is exactly what {@link FindingSubject} was introduced
             // to keep.
             declarations(m.putArray("declarations"), module.declarations(), module.debts(),
-                    module.declaredLines(), sources, module.owedByDeclarations().rulePlace(),
+                    module.declaredLines(), module.declaredExclusions(), sources,
+                    module.owedByDeclarations().rulePlace(),
                     module.owedByDeclarations().rowPlace());
             ArrayNode behaviors = m.putArray("behaviors");
             for (BehaviorReport behavior : module.behaviors()) {
@@ -7662,8 +7675,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private void declarations(ArrayNode out, List<ReportedFinding> written,
                               List<Adequacy.DeclaredDebt> owed, List<Adequacy.DeclaredLine> lines,
-                              DocumentSources sources, PublishedRuleHandle.WhereARuleIs places,
-                              WhereARowIs rowsAt) {
+                              List<Adequacy.DeclaredExclusion> excluded, DocumentSources sources,
+                              PublishedRuleHandle.WhereARuleIs places, WhereARowIs rowsAt) {
         // What the declarations are owed, under the declaration each is owed to, and not only what
         // they are short of. A line a row already stands at has no finding, so a section written
         // from the findings alone publishes the gaps and nothing else — a reader could not tell a
@@ -7687,14 +7700,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             ? it.declarations() : List.of();
             byOwners.computeIfAbsent(owners, _ -> new Entry()).found.add(each);
         }
-        // And the lines that leave some point unowed, under the same owners. A line every point of
-        // which is owed has nothing to publish here that its obligations do not.
+        // Every line the declarations drew, under the declarations that wrote it: the catalogue the
+        // human block's `borders` counts, whatever became of its points.
         for (Adequacy.DeclaredLine each : lines) {
-            if (!each.notOwed().isEmpty()) {
-                byOwners.computeIfAbsent(each.owners().stream()
-                                .map(Adequacy.DeclaredDebt.Owner::declaration).toList(),
-                        _ -> new Entry()).lines.add(each);
-            }
+            byOwners.computeIfAbsent(each.owners().stream()
+                            .map(Adequacy.DeclaredDebt.Owner::declaration).toList(),
+                    _ -> new Entry()).lines.add(each);
+        }
+        // And every point no row is owed at that is theirs, under whose fact it is — which, as for
+        // a debt, can be a pair of declarations where a second one settled it as well.
+        for (Adequacy.DeclaredExclusion each : excluded) {
+            byOwners.computeIfAbsent(each.owners().stream()
+                            .map(Adequacy.DeclaredDebt.Owner::declaration).toList(),
+                    _ -> new Entry()).excluded.add(each);
         }
         byOwners.forEach((owners, entry) -> {
             ObjectNode one = out.addObject();
@@ -7707,40 +7725,60 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             each -> each.debt().point(), Adequacy.DeclaredDebt::axis, (a, _) -> a)),
                     sources, places, rowsAt);
             findings(DocumentPart.FINDINGS.putArray(one), entry.found, sources, places);
-            excluded(one.putArray("excluded"), entry.lines);
+            lines(one.putArray("lines"), entry.lines);
+            excluded(one.putArray("excluded"), entry.excluded);
         });
     }
 
     /**
-     * The points the declarations' lines leave nobody owing, once per line however many positions
-     * read it.
+     * The lines the declarations drew, each once however many positions read it, and the roles each
+     * has no point in.
      *
-     * <p>Identified the way an obligation is, by the line, its level and where on the quantity the
-     * point is, so that a consumer holding a point of a behavior's {@code boundaries} finds it here
-     * by the same parts. Not among the obligations: none of these is a row anybody is short of.
+     * <p>Identified by the line and its level, which is what an obligation's id names a line by.
+     * What a row is owed at on one is under {@code obligations}, and what no row is owed at is under
+     * {@code excluded}, each filed by whose the point is; this is the line itself.
      */
-    private static void excluded(ArrayNode out, List<Adequacy.DeclaredLine> lines) {
+    private static void lines(ArrayNode out, List<Adequacy.DeclaredLine> lines) {
         for (Adequacy.DeclaredLine line : lines) {
-            for (Adequacy.DeclaredLine.PointLeftOut point : line.notOwed()) {
-                ObjectNode one = out.addObject();
-                ObjectNode id = one.putObject("pointId");
-                authoredLineId(id.putObject("line"), line.line().line());
-                level(id.putObject("level"), line.line().at());
-                location(id.putObject("location"), point.at());
-                one.put("point", word(point.role()));
-                ruleId(one.putObject("ruleId"), line.line().provenance());
-                one.put("label", line.said());
-                one.put("notOwed", word(point.reason()));
-                // Which readings it is left out at, where that is not every one of them.
-                if (!point.onlyAt().isEmpty()) {
-                    ArrayNode at = one.putArray("onlyAt");
-                    for (Adequacy.DeclaredLine.ReadAt each : point.onlyAt()) {
-                        ObjectNode read = at.addObject();
-                        read.put("behavior", each.behavior());
-                        read.put("axis", each.position());
-                    }
-                }
-            }
+            ObjectNode one = out.addObject();
+            ObjectNode id = one.putObject("lineId");
+            authoredLineId(id.putObject("line"), line.line().line());
+            level(id.putObject("level"), line.line().at());
+            ruleId(one.putObject("ruleId"), line.line().provenance());
+            one.put("label", line.said());
+            ArrayNode none = one.putArray("noPoint");
+            line.noPoint().forEach((role, answer) -> {
+                ObjectNode each = none.addObject();
+                each.put("point", word(role));
+                each.put("why", word(answer.why()));
+            });
+        }
+    }
+
+    /**
+     * The points no row is owed at that are these declarations' fact, each once however many
+     * positions read it.
+     *
+     * <p>Identified the way the model tells them apart: the line, its level and where on the
+     * quantity the point is, and where else it was settled ({@code stops}, written as an
+     * obligation's {@code stops} is). The same point of the same line is two entries where it was
+     * settled in two places, and filed under whose fact each is, which can be a pair of
+     * declarations as a debt's can. Not among the obligations: none of these is a row anybody is
+     * short of.
+     */
+    private static void excluded(ArrayNode out, List<Adequacy.DeclaredExclusion> excluded) {
+        for (Adequacy.DeclaredExclusion each : excluded) {
+            ObjectNode one = out.addObject();
+            ObjectNode id = one.putObject("pointId");
+            authoredLineId(id.putObject("line"), each.point().line().line());
+            level(id.putObject("level"), each.point().line().at());
+            location(id.putObject("location"), each.point().point());
+            ArrayNode stops = id.putArray("stops");
+            each.point().stops().forEach(end -> farEnd(stops.addObject(), end));
+            one.put("point", word(each.role()));
+            ruleId(one.putObject("ruleId"), each.point().line().provenance());
+            one.put("label", each.said());
+            one.put("notOwed", word(each.point().reason()));
         }
     }
 
@@ -7749,6 +7787,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         private final List<Adequacy.DeclaredDebt> owed = new ArrayList<>();
         private final List<ReportedFinding> found = new ArrayList<>();
         private final List<Adequacy.DeclaredLine> lines = new ArrayList<>();
+        private final List<Adequacy.DeclaredExclusion> excluded = new ArrayList<>();
 
         /**
          * What a report calls this set, taken from whoever already says it.

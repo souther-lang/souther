@@ -1901,13 +1901,81 @@
               "name",
               "obligations",
               "findings",
+              "lines",
               "excluded"
             ],
             "additionalProperties": false,
             "properties": {
+              "lines": {
+                "type": "array",
+                "description": "Every line these declarations drew that some behavior of the module reads, once each however many positions carry the type — what the human-readable report counts as the declarations' `borders`. What a row is owed at on one is under `obligations` and what no row is owed at is under `excluded`, each filed by whose the point is, which need not be the declarations that drew the line.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "lineId",
+                    "ruleId",
+                    "label",
+                    "noPoint"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "lineId": {
+                      "type": "object",
+                      "description": "Which line, by the two parts an `obligationId` names a line by.",
+                      "required": [
+                        "line",
+                        "level"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "line": {
+                          "$ref": "#/$defs/authoredLineId"
+                        },
+                        "level": {
+                          "$ref": "#/$defs/level"
+                        }
+                      }
+                    },
+                    "ruleId": {
+                      "$ref": "#/$defs/ruleId"
+                    },
+                    "label": {
+                      "type": "string",
+                      "description": "Where the line is, in the words the declaration wrote for what it is on. A rendering and never a key."
+                    },
+                    "noPoint": {
+                      "type": "array",
+                      "description": "The roles the line has no point in, which its own rule settles: `the_class_at_the_line_holds_one_value` is a rule naming one value, which puts that value in a class of its own and leaves no row in it away from the line. Empty where the line has a point in every role.",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "point",
+                          "why"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "point": {
+                            "enum": [
+                              "on",
+                              "off",
+                              "in",
+                              "out"
+                            ]
+                          },
+                          "why": {
+                            "enum": [
+                              "the_class_at_the_line_holds_one_value"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
               "excluded": {
                 "type": "array",
-                "description": "The points these declarations' lines leave no row owed at, once per line however many positions carry the type. A fact the declarations settled and not an obligation: none of these is in `obligations`, and none is a row anybody is short of. The same points are items of each behavior's `partition.boundaries` that reads the line, with `notOwed` there as here — that array is every line as each position met it, and this is the declaration's account of what its lines leave out.",
+                "description": "The points no row is owed at that are these declarations' fact, once each however many positions carry the type. Filed by whose the point is, as `obligations` are: a point a type's bound leaves out on its own is the type's, and the same point of the same bound where a record's clause on the field empties the region beside it is the type's and the record's together, and is a second entry under that pair. A fact the declarations settled and not an obligation: none of these is in `obligations`, and none is a row anybody is short of.",
                 "items": {
                   "type": "object",
                   "required": [
@@ -1921,11 +1989,12 @@
                   "properties": {
                     "pointId": {
                       "type": "object",
-                      "description": "Which point of which line, in the parts an `obligationId` names a point by. A point no row is owed at has no run to be stopped, so there is no `stops`.",
+                      "description": "Which point: the line and its level and where on the quantity, which an `obligationId` names a point by, and where else it was settled. Two entries that differ only in `stops` are two points — the run above a type's bound holds values where nothing else stops it, and is empty where a record's clause holds the field at the bound.",
                       "required": [
                         "line",
                         "level",
-                        "location"
+                        "location",
+                        "stops"
                       ],
                       "additionalProperties": false,
                       "properties": {
@@ -1937,6 +2006,13 @@
                         },
                         "location": {
                           "$ref": "#/$defs/location"
+                        },
+                        "stops": {
+                          "type": "array",
+                          "description": "Where else it was settled, each written as an obligation's `stops` is: the far end of the empty run beside the line, or an end the rules leave the position at that refuses the value. Empty where the line alone settled it. A set: the order carries no meaning.",
+                          "items": {
+                            "$ref": "#/$defs/obligationId/properties/stops"
+                          }
                         }
                       }
                     },
@@ -1962,28 +2038,6 @@
                         "the_carrier_names_no_neighbour"
                       ],
                       "description": "Why no row is owed at the point, in the words a behavior's `boundaries` item uses for the same answer."
-                    },
-                    "onlyAt": {
-                      "type": "array",
-                      "minItems": 1,
-                      "description": "The readings of the line the point is left out at, present only where it is not left out at every one. A point in the region beside a line is left out where that region holds no value, and where the region ends is each reading's: a record's own clause on the field can end it at one position and not at another. Absent, the point is left out wherever the line is read.",
-                      "items": {
-                        "type": "object",
-                        "required": [
-                          "behavior",
-                          "axis"
-                        ],
-                        "additionalProperties": false,
-                        "properties": {
-                          "behavior": {
-                            "type": "string"
-                          },
-                          "axis": {
-                            "type": "string",
-                            "description": "The position, as the reading names the left of the line."
-                          }
-                        }
-                      }
                     }
                   }
                 }

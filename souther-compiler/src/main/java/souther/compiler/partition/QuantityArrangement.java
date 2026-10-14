@@ -26,13 +26,20 @@ import java.util.Map;
  *
  * @param partings where the values part and which lines the model wrote there, in the order the
  *                 values are in
- * @param runs     the runs between them, one more than there are partings
+ * @param runs     the runs between them the rules leave something in. With {@code empty}, one more
+ *                 than there are partings
+ * @param empty    the runs between them the rules leave nothing in, with what stops each at either
+ *                 end. No row is owed in one, and what says so is what stopped it: a point beside a
+ *                 line whose run is empty is left out by that line and by whatever ends the run on
+ *                 the far side, which is the same answer a run with values in it gives about whom a
+ *                 row there is owed to
  */
-public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
+public record QuantityArrangement(List<Parting> partings, List<Run> runs, List<Run> empty) {
 
     public QuantityArrangement {
         partings = List.copyOf(partings);
         runs = List.copyOf(runs);
+        empty = List.copyOf(empty);
     }
 
     /**
@@ -211,13 +218,14 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
         ordered.sort(QuantityArrangement::inOrderOfTheValues);
 
         List<Run> runs = new ArrayList<>();
+        List<Run> empty = new ArrayList<>();
         Parting under = null;
         for (Parting parting : ordered) {
-            keep(space, runs, runBetween(under, parting, ends));
+            keep(space, runs, empty, runBetween(under, parting, ends));
             under = parting;
         }
-        keep(space, runs, runBetween(under, null, ends));
-        return new QuantityArrangement(ordered, runs);
+        keep(space, runs, empty, runBetween(under, null, ends));
+        return new QuantityArrangement(ordered, runs, empty);
     }
 
     /** The run between two of the places the values part, held to what the rules leave either
@@ -317,15 +325,43 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
                 .findFirst().orElse(null);
     }
 
+    /**
+     * The run on one side of a line the rules leave nothing in, or null where the run there has
+     * values or there is none.
+     *
+     * <p>Asked where {@link #beside} found nothing, by a reader that has to say why no row is owed
+     * there: what stops this run is what left the side empty.
+     */
+    public Run emptyBeside(java.util.Collection<Parting> parted, Towards side) {
+        for (Parting each : parted) {
+            for (Run run : empty) {
+                if (is(side == Towards.ABOVE ? run.values().lower().seam()
+                        : run.values().upper().seam(), each)) {
+                    return run;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** The same of the run at one end of what the rules leave ({@link #endmost}). */
+    public Run emptyEndmost(Towards inward) {
+        return empty.stream()
+                .filter(each -> (inward == Towards.ABOVE
+                        ? each.values().lower() : each.values().upper()).seam() == null)
+                .findFirst().orElse(null);
+    }
+
     private static boolean is(Seam one, Parting other) {
         return one != null && other != null && one.key().equals(other.key());
     }
 
-    /** A run, unless what the rules leave has nothing in it. */
-    private static void keep(LevelSpace space, List<Run> runs, Run run) {
+    /** A run among the runs, or among the empty ones where what the rules leave has nothing in it. */
+    private static void keep(LevelSpace space, List<Run> runs, List<Run> empty, Run run) {
         Level first = run.values().first();
         Level last = run.values().last();
         if (first != null && last != null && space.compare(first, last) > 0) {
+            empty.add(run);
             return;
         }
         runs.add(run);

@@ -148,7 +148,8 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
         assertTrue(answers.get(new DomainPoint.AtTheLine()) instanceof PointAnswer.AtLine,
                 () -> "" + answers);
         for (Towards side : Towards.values()) {
-            assertEquals(new PointAnswer.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR),
+            assertEquals(new PointAnswer.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR,
+                            List.of()),
                     answers.get(new DomainPoint.BesideTheLine(side)), () -> "" + answers);
             assertTrue(answers.get(new DomainPoint.InTheRegion(side)) instanceof PointAnswer.InRegion,
                     () -> "" + answers);
