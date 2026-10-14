@@ -259,28 +259,22 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
             /** The reason it is published as. */
             Why why();
 
-            /** The figures it was stopped at, as each stood where it was reached; none where no
-             *  figure of this compiler's is carried. */
+            /** The figures it was stopped at, as each stood where it was reached; none exactly
+             *  where nothing it was stopped at is a figure of this compiler's. */
             List<Figure> figures();
 
             /** Whether a run that allows more could get past it. */
             RunSensitivity runSensitivity();
 
-            /** {@code why}, stopped at {@code figures} where there are any, and at an allowance
-             *  that carries none where there are not. */
-            static Way atAnAllowance(Why why, Collection<? extends Figure> figures) {
-                return figures.isEmpty() ? new AtAnAllowanceNotCarried(why)
-                        : new AtFigures(why, List.copyOf(figures));
-            }
-
-            /** Several meetings of one reason as one way. */
+            /** Several meetings of one reason as one way: at no allowance where any of them is, and
+             *  otherwise at every figure any of them was stopped at. */
             private static Way together(Why why, List<Way> met) {
                 if (met.stream().anyMatch(AtNoAllowance.class::isInstance)) {
                     return new AtNoAllowance(why);
                 }
                 Set<Figure> figures = new LinkedHashSet<>();
                 met.forEach(each -> figures.addAll(each.figures()));
-                return atAnAllowance(why, figures);
+                return new AtFigures(why, List.copyOf(figures));
             }
 
             /**
@@ -291,7 +285,7 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
 
                 public AtFigures {
                     Objects.requireNonNull(why, "a way left open is published as some reason");
-                    figures = List.copyOf(figures);
+                    figures = Figure.inOrder(figures);
                     if (figures.isEmpty()) {
                         throw new IllegalArgumentException(
                                 "a way stopped at figures names one: " + why);
@@ -323,34 +317,6 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
                 @Override
                 public RunSensitivity runSensitivity() {
                     return RunSensitivity.UNAFFECTED;
-                }
-            }
-
-            /**
-             * Stopped where a run allowing more could get further, at something that does not
-             * carry out which figure it was.
-             *
-             * <p>Two places come here. A run that did not come back is told apart from one that
-             * came back only by what it answered, and what it answered does not say which of a
-             * run's allowances it went past — or whether it went past one at all rather than
-             * stopping of its own accord. And a search for a row is held to bounds of its own
-             * beside the composing's figures, which are written where the search is and are no
-             * figure a reader is handed.
-             */
-            record AtAnAllowanceNotCarried(Why why) implements Way {
-
-                public AtAnAllowanceNotCarried {
-                    Objects.requireNonNull(why, "a way left open is published as some reason");
-                }
-
-                @Override
-                public List<Figure> figures() {
-                    return List.of();
-                }
-
-                @Override
-                public RunSensitivity runSensitivity() {
-                    return RunSensitivity.MAY_CHANGE;
                 }
             }
         }

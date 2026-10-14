@@ -1,5 +1,9 @@
 package souther.compiler.observe;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
 /**
  * Whether a program answered one input differently from another program, which is what a
  * replacement of a body is shown to matter by.
@@ -43,6 +47,36 @@ public enum AnswerChange {
                         !Limits.UNBOUNDED.admits(before) || !Limits.UNBOUNDED.admits(after)
                                 ? COULD_NOT_TELL
                                 : same.of(before, after) ? SAME : CHANGED;
+            };
+        };
+    }
+
+    /**
+     * The figures that left {@link #between} unable to say, each as it stood where it was reached:
+     * a run that went past one, or an answer a figure kept from being read in full. None where
+     * nothing that stopped it was a figure — a run that answered nothing, an answer nothing could
+     * read, the host's stack — and none where it could say.
+     *
+     * <p>Read off the same cases {@code between} reads, so the figures are of the answers it was
+     * handed and not of another reading of them.
+     */
+    public static List<Figure> untoldAt(AnswerObservation was, AnswerObservation now) {
+        return switch (was) {
+            case AnswerObservation.NotAnswered _ -> List.of();
+            case AnswerObservation.RanOut(Optional<Figure> limit) -> limit.stream().toList();
+            case AnswerObservation.Answered(ObservedValue before) -> switch (now) {
+                case AnswerObservation.NotAnswered _ -> List.of();
+                case AnswerObservation.RanOut(Optional<Figure> limit) -> limit.stream().toList();
+                case AnswerObservation.Answered(ObservedValue after) -> {
+                    List<Figure> out = new ArrayList<>();
+                    for (ObservedValue each : List.of(before, after)) {
+                        Incompleteness.Cause stopped = Limits.UNBOUNDED.stoppedBy(each);
+                        if (stopped != null) {
+                            stopped.figure().ifPresent(out::add);
+                        }
+                    }
+                    yield Figure.inOrder(out);
+                }
             };
         };
     }

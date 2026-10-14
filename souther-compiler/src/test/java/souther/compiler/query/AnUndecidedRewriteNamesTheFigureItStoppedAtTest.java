@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
@@ -10,6 +11,7 @@ import souther.compiler.partition.Budgets;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.regex.PatternPlan;
 
+import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -58,6 +60,40 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
     }
 
     /**
+     * A search with runs to spare, cut short by a bound a search for a row holds itself to: four
+     * positions of four cases each are more candidates than a walk repairing a row builds, and that
+     * is named at the number written where the walk compared against it. Nothing the body answers
+     * tells the rewrite apart, so the walk runs to the bound.
+     */
+    @Test
+    void aSearchCutShortByItsOwnBoundNamesTheBound() {
+        ReplacementEvidence.Undecided.Way reached = wayOf(
+                undecided(compiled(List.of("""
+                        module example.runs
+
+                        data Ok = { odd: Bool }
+                        data P
+                        data Q
+                        data R
+                        data S
+                        data C = P | Q | R | S
+
+                        behavior f : (a: C, b: C, c: C, d: C, x: Int) -> Ok
+                            constructs Ok
+
+                        let f (a, b, c, d, x) = Ok { odd = x * x == 2 }
+
+                        example f
+                            | (P, P, P, P, 5) -> Ok { odd = false }
+                        """), Budgets.measures().rewriteRuns())),
+                ReplacementEvidence.Undecided.Why.A_COMPOSING_FIGURE_REACHED);
+
+        assertEquals(new ReplacementEvidence.Undecided.Way.AtFigures(
+                        ReplacementEvidence.Undecided.Why.A_COMPOSING_FIGURE_REACHED,
+                        List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(64))), reached);
+    }
+
+    /**
      * A body asking whether a list holds more than this compiler composes for one: composing stops
      * at what a proposed collection holds, and that is the figure named.
      */
@@ -85,6 +121,47 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
         assertTrue(named.figures().contains(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS),
                 () -> "what a proposed collection holds is what stopped it: " + named.figures());
         assertEquals(RunSensitivity.MAY_CHANGE, named.runSensitivity());
+    }
+
+    /**
+     * A rewrite under which the row's run goes round until it has spent its steps: the run did not
+     * come back, and the way it was left open names the steps a run may take, at the number this
+     * run held it to.
+     */
+    @Test
+    void aRunThatSpentItsStepsNamesTheSteps() {
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module example.loops
+                data N = Int
+                data Out = Int
+                partial let spin (n: Int): Int = if n == 0 then 0 else spin(n - 1)
+                behavior f : (n: N) -> Out constructs Out
+                let f (n) = if n.value > 0 then Out(spin(n.value)) else Out(0)
+                example f
+                  | "below nought": (N(-2)) -> Out(0)
+                """), ModulePath.EMPTY)
+                .withEvaluationPolicy(EvaluationPolicy.of(100_000)
+                        .withCompilerTimeout(Duration.ofSeconds(30)));
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        ReplacementEvidence its = compilation.db()
+                .ask(new Replacements.Measured(compilation.modules().getFirst())).value()
+                .get("f");
+
+        List<ReplacementEvidence.Undecided.Way> notBack = its.measured().made()
+                .orElseThrow(() -> new AssertionError("the rewrites were measured: " + its))
+                .rewrites().stream()
+                .map(ReplacementEvidence.Rewrite::outcome)
+                .filter(ReplacementEvidence.Undecided.class::isInstance)
+                .map(ReplacementEvidence.Undecided.class::cast)
+                .flatMap(each -> each.why().ways().stream())
+                .filter(each -> each.why()
+                        == ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK)
+                .toList();
+        assertEquals(List.of(new ReplacementEvidence.Undecided.Way.AtFigures(
+                        ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK,
+                        List.of(WorkFigure.EVALUATION_STEPS.at(100_000)))), notBack,
+                () -> "the rewrite that loops names the steps it spent: " + its);
     }
 
     private static ReplacementEvidence.Undecided.Way wayOf(ReplacementEvidence.Undecided open,

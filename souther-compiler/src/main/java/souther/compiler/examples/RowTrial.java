@@ -359,7 +359,8 @@ public final class RowTrial {
                 // accord: given more it might answer, so it is said to have run out rather than to
                 // have answered nothing.
                 return Optional.of(RunLimits.reached(e)
-                        ? new AnswerObservation.RanOut() : new AnswerObservation.NotAnswered());
+                        ? new AnswerObservation.RanOut(RunLimits.figureOf(e, steps))
+                        : new AnswerObservation.NotAnswered());
             }
         } finally {
             EvaluationContext.end();

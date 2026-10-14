@@ -81,14 +81,13 @@ public sealed interface Weakening {
      * <p>Not every {@link RunSensitivity#MAY_CHANGE} has one. A border left out because nothing
      * watched the runs ({@link ABorderNotHeldAgainstTheLinesBesideIt.Why#NOTHING_WATCHED_THE_RUNS})
      * was stopped by what this build was asked to record, which is a way of running and not a
-     * figure. A rewrite left open at an allowance whose figure is not carried out of the place it
-     * was reached ({@link ReplacementEvidence.Undecided.Way.AtAnAllowanceNotCarried}) has none to
-     * name, and nor has an observation a code says was cut short ({@link ObservationIncomplete}):
-     * the code says a limit stopped it and not which. Both say so rather than borrowing one.
+     * figure. It is the one: every other stop a wider run may get past was compared against a
+     * figure, and carries it.
      */
     default List<Figure> figures() {
         return switch (this) {
-            case ObservationIncomplete _, OutputCasesUnreadable _, InputCasesUnreadable _,
+            case ObservationIncomplete it -> it.met().figures();
+            case OutputCasesUnreadable _, InputCasesUnreadable _,
                  ItemsPlaceNotWorkedOut _, ABorderNotHeldAgainstTheLinesBesideIt _,
                  BodyNotInEvaluation _, BoundaryNotDerived _, InputNotRead _,
                  ProofContradicted _, ArmsUnsettled _, DecisionOfRowUnreadable _,

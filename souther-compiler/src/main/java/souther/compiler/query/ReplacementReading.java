@@ -130,12 +130,18 @@ public final class ReplacementReading {
      * <p>Which siblings there are is {@code carried}, what the classes the rows ran in hold, and
      * not the plan's: a fork a method could not hold its siblings in was written without them, and
      * a rewrite there is one no run could be asked for.
+     *
+     * <p>{@code stoppedAt} is what stopped a row as written that came to no verdict, where a figure
+     * did, as the run that met it said: a rewrite such a row leaves open is left open at that
+     * figure.
      */
     public static List<Account> of(String behavior, CoverageSites.Plan plan,
                                    ArmReplacements carried,
                                    Function<RowOutcome, Set<ArmProbe>> wentThrough,
                                    Predicate<ControlPlace.Arm> unreached,
-                                   List<RowOutcome> rows, Comparing comparing) {
+                                   List<RowOutcome> rows,
+                                   Function<RowOutcome, List<Figure>> stoppedAt,
+                                   Comparing comparing) {
         // The rows that state their answer, which are the only evidence about a rewrite there is.
         // A row whose answer is owed ran, and what it ran to is an observation and not what the
         // model owes there — so it is evidence for neither the body nor the rewrite, on either side
@@ -186,7 +192,7 @@ public final class ReplacementReading {
             }
         }
         occurrences.forEach((replaced, at) -> out.add(new Account(replaced, at.reportAt(),
-                armStanding(replaced, at.probes(), carried, stated, wentThrough))));
+                armStanding(replaced, at.probes(), carried, stated, wentThrough, stoppedAt))));
         // One answer only where no arm has a rewrite that is another program. Which family a body
         // invites is the body's: one with a fork is asked about the fork, arm by arm, whichever of
         // its arms the rows stating an answer happen to reach — read off what they reached
@@ -231,7 +237,8 @@ public final class ReplacementReading {
      */
     private static Standing armStanding(Replacement.OfAnArm replaced, List<ArmProbe> where,
                                         ArmReplacements replacements, List<RowOutcome> rows,
-                                        Function<RowOutcome, Set<ArmProbe>> wentThrough) {
+                                        Function<RowOutcome, Set<ArmProbe>> wentThrough,
+                                        Function<RowOutcome, List<Figure>> stoppedAt) {
         // Every site, since a rewrite stands at all of them at once: a site the JVM could not hold
         // the sibling at leaves it unasked whatever a wider run lets the other forks carry.
         List<ArmReplacements.Sibling.Why> notCarried = new ArrayList<>();
@@ -251,6 +258,9 @@ public final class ReplacementReading {
         }
         RowIdentity shownBy = null;
         boolean unknown = false;
+        // What stopped the runs that left a row untold, where it was a figure. One is enough to
+        // leave the rewrite to a wider run: a row that comes back there may be the row that tells.
+        Set<Figure> untoldAt = new HashSet<>();
         List<List<ObservedValue>> seenThrough = new ArrayList<>();
         for (RowOutcome row : rows) {
             if (where.stream().noneMatch(wentThrough.apply(row)::contains)) {
@@ -260,6 +270,7 @@ public final class ReplacementReading {
             // on, and is not run again: there is no way it came out to compare another with.
             if (row.disposition() != Disposition.HELD && row.disposition() != Disposition.FAILED) {
                 unknown = true;
+                untoldAt.addAll(stoppedAt.apply(row));
                 continue;
             }
             seenThrough.add(row.inputs());
@@ -274,6 +285,7 @@ public final class ReplacementReading {
                             + " and carries no run of it: " + row.replaced()));
             if (run.noticed() == ReplacedRun.Noticed.COULD_NOT_TELL) {
                 unknown = true;
+                untoldAt.addAll(run.untoldAt());
                 continue;
             }
             if (run.noticed() == ReplacedRun.Noticed.YES) {
@@ -283,12 +295,15 @@ public final class ReplacementReading {
                 shownBy = row.identity();
             }
         }
-        // What stopped those runs is not carried past what they answered, so this names no figure
-        // ({@link ReplacementEvidence.Undecided.Way.AtAnAllowanceNotCarried}).
+        // Where no figure stopped any of them — a run that stopped of its own accord, nothing that
+        // could run it, the host's stack — every run of this compiler leaves the rewrite as open.
         if (unknown) {
-            return new Standing.CannotBeAsked(
-                    new ReplacementEvidence.Undecided.Way.AtAnAllowanceNotCarried(
-                            ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK));
+            return new Standing.CannotBeAsked(untoldAt.isEmpty()
+                    ? new ReplacementEvidence.Undecided.Way.AtNoAllowance(
+                            ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK)
+                    : new ReplacementEvidence.Undecided.Way.AtFigures(
+                            ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK,
+                            Figure.inOrder(untoldAt)));
         }
         ReplacementOwed lookFor = new ReplacementOwed.OfAnArm(replaced.fork(), replaced.part(),
                 replaced.with(), where,

@@ -74,18 +74,10 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
      * What a wider run may answer and nothing here names a figure for, and why.
      *
      * <p>A border nothing watched the runs for was stopped by how this build was asked to run, which
-     * is no figure. An observation a code says was cut short is said by the code alone, which says
-     * a limit stopped it and not which. A run that did not come back is told only by what it
-     * answered, which does not say which allowance it went past. And a search for a row is held to
-     * bounds of its own beside the composing's figures, which are no figure a reader is handed.
+     * is no figure. It is the one.
      */
     private static Set<String> wideningWithoutAFigure() {
-        return Set.of(
-                "ABorderNotHeldAgainstTheLinesBesideIt NOTHING_WATCHED_THE_RUNS",
-                "ObservationIncomplete VALUE_TRUNCATED",
-                "ObservationIncomplete ROW_EVALUATION_LIMIT_REACHED",
-                "RewriteUndecided A_COMPOSING_FIGURE_REACHED",
-                "RewriteUndecided A_RUN_DID_NOT_COME_BACK");
+        return Set.of("ABorderNotHeldAgainstTheLinesBesideIt NOTHING_WATCHED_THE_RUNS");
     }
 
     @Test
@@ -117,7 +109,7 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
     @Test
     void anArmThatHoldsWhatStoppedItNamesWhatThatNames() {
         for (Incompleteness.Code code : Incompleteness.Code.values()) {
-            ReadingGap gap = ReadingGap.of(code);
+            ReadingGap gap = ReadingGap.of(causeOf(code));
             assertEquals(gap.figures(),
                     new Weakening.BorderValueUnreadable(border(), gap).figures(), code::name);
         }
@@ -136,9 +128,6 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
         }
         Set<String> swept = new LinkedHashSet<>();
         everyWeakening().values().forEach(each -> swept.add(each.getClass().getSimpleName()));
-        // The two that hold what stopped them are asked separately above.
-        swept.add("BorderValueUnreadable");
-        swept.add("ModelReadingIncomplete");
 
         assertEquals(sealed, swept);
     }
@@ -153,14 +142,19 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
     }
 
     /**
-     * Every arm with what it holds, by a label saying which. The two that hold what stopped them are
-     * left out, as their figures are what they hold's to name.
+     * Every arm with what it holds, by a label saying which; the ones that hold what stopped them
+     * once for each stop they can hold.
      */
     private static Map<String, Weakening> everyWeakening() {
         Map<String, Weakening> out = new LinkedHashMap<>();
         for (Incompleteness.Code code : Incompleteness.Code.values()) {
             out.put("ObservationIncomplete " + code, Weakening.ObservationIncomplete.of(
-                    Incompleteness.of(code, Incompleteness.Scope.BEHAVIOR, "b")));
+                    Incompleteness.atPosition(causeOf(code), "b", "x")));
+            out.put("BorderValueUnreadable " + code,
+                    new Weakening.BorderValueUnreadable(border(), ReadingGap.of(causeOf(code))));
+        }
+        for (ClosureGap gap : closureGaps()) {
+            out.put("ModelReadingIncomplete " + gap, new Weakening.ModelReadingIncomplete(gap));
         }
         out.put("OutputCasesUnreadable", new Weakening.OutputCasesUnreadable("b"));
         out.put("InputCasesUnreadable", new Weakening.InputCasesUnreadable("b", 0));
@@ -235,18 +229,29 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
 
     /**
      * What the search carries out of each way it ends: the runs it was allowed where it ran out of
-     * them, the composing's figures or none where composing stopped — a bound of the search's own
-     * is no figure — and nothing elsewhere.
+     * them; the composing's figure, or a bound of the search's own, where composing stopped; the
+     * limit a run went past where one did, and none where every run that did not come back stopped
+     * at something no run allows; and nothing elsewhere.
      */
     private static List<List<Figure>> carriedFor(ReplacementDisposition.Ended ended) {
         return switch (ended) {
             case RUNS_A_REWRITE_MAY_TAKE -> List.of(
                     List.of(WorkFigure.RUNS_REPLACING_AN_ARM.at(4)));
             case A_FIGURE_OF_THE_COMPOSING -> List.of(
-                    List.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS), List.of());
-            case EVERY_ROW_ANSWERED_ALIKE, NOTHING_WAS_COMPOSED, A_RUN_DID_NOT_COME_BACK,
-                 ROWS_A_BLOCK_MAY_HOLD, NOTHING_RAN -> List.of(List.of());
+                    List.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS),
+                    List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(64)));
+            case A_RUN_DID_NOT_COME_BACK -> List.of(
+                    List.of(WorkFigure.EVALUATION_STEPS.at(100)), List.of());
+            case EVERY_ROW_ANSWERED_ALIKE, NOTHING_WAS_COMPOSED, ROWS_A_BLOCK_MAY_HOLD,
+                 NOTHING_RAN -> List.of(List.of());
         };
+    }
+
+    /** What happened under {@code code}, at a figure exactly where the code says one decides. */
+    private static Incompleteness.Cause causeOf(Incompleteness.Code code) {
+        return code.runSensitivity() == RunSensitivity.MAY_CHANGE
+                ? Incompleteness.Cause.at(code, WorkFigure.EVALUATION_STEPS.at(100))
+                : Incompleteness.Cause.of(code);
     }
 
     /** One of each way a reading of the model is left open. */

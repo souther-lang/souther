@@ -12,7 +12,10 @@ import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.observe.Comparisons;
 import souther.compiler.observe.Expectation;
 import souther.compiler.observe.Figure;
+import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.RowRef;
+import souther.compiler.observe.Target;
 import souther.compiler.observe.Position;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.ValueTypes;
@@ -28,6 +31,7 @@ import souther.compiler.partition.RewriteSearch;
 import souther.compiler.reach.Reachability;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -89,11 +93,13 @@ public final class Replacements {
             ArmReplacements inTheClasses = carried;
             return Adequacy.answerEveryBehavior(prepared.value(), behavior -> {
                 Sig sig = sigs.value().get(behavior.name());
-                List<RowOutcome> rows =
-                        Adequacy.RowReadings.readingFor(byTarget, behavior.name()).rowsSeen();
+                Adequacy.RowReading reading =
+                        Adequacy.RowReadings.readingFor(byTarget, behavior.name());
+                List<RowOutcome> rows = reading.rowsSeen();
                 if (sig == null) {
                     return List.of();
                 }
+                Map<RowRef, List<Figure>> stoppedAt = figuresStoppingEachRow(reading);
                 Position at = Position.at(sig.outputType());
                 // What the model's own rules prove no run arrives at, with what the rows did taken
                 // in: a row through an arm shows the proof of it wrong, and a proof shown wrong
@@ -110,6 +116,7 @@ public final class Replacements {
                         && arrives.answers().at(arm) instanceof Reachability.Unreachable;
                 return ReplacementReading.of(behavior.name(), checked.plan(), inTheClasses,
                         row -> Adequacy.armsSeenIn(row, numbering), unreached, rows,
+                        row -> stoppedAt.getOrDefault(RowRef.of(row), List.of()),
                         new ReplacementReading.Comparing() {
 
                             @Override
@@ -125,6 +132,23 @@ public final class Replacements {
                             }
                         });
             });
+        }
+
+        /**
+         * The figures each row the reading went without was stopped at, as the run that stopped it
+         * said where it stopped it. Read off what the reading already went without, keyed by the
+         * row, so a rewrite such a row leaves open names what the measure names.
+         */
+        private static Map<RowRef, List<Figure>> figuresStoppingEachRow(
+                Adequacy.RowReading reading) {
+            Map<RowRef, List<Figure>> out = new HashMap<>();
+            for (Incompleteness.Met gap : reading.gaps()) {
+                if (gap.fact().target() instanceof Target.OfRow(RowRef row)
+                        && !gap.figures().isEmpty()) {
+                    out.put(row, gap.figures());
+                }
+            }
+            return out;
         }
     }
 
@@ -306,12 +330,19 @@ public final class Replacements {
                         ReplacementEvidence.Undecided.Why.NO_ROW_ANSWERED_DIFFERENTLY);
                 case NOTHING_WAS_COMPOSED -> new ReplacementEvidence.Undecided.Way.AtNoAllowance(
                         ReplacementEvidence.Undecided.Why.NOTHING_WAS_COMPOSED);
-                case RUNS_A_REWRITE_MAY_TAKE -> ReplacementEvidence.Undecided.Way.atAnAllowance(
+                // Each a figure the search was compared against, carried from where it was.
+                case RUNS_A_REWRITE_MAY_TAKE -> new ReplacementEvidence.Undecided.Way.AtFigures(
                         ReplacementEvidence.Undecided.Why.RUNS_SPENT, figures);
-                case A_FIGURE_OF_THE_COMPOSING -> ReplacementEvidence.Undecided.Way.atAnAllowance(
+                case A_FIGURE_OF_THE_COMPOSING -> new ReplacementEvidence.Undecided.Way.AtFigures(
                         ReplacementEvidence.Undecided.Why.A_COMPOSING_FIGURE_REACHED, figures);
-                case A_RUN_DID_NOT_COME_BACK -> ReplacementEvidence.Undecided.Way.atAnAllowance(
-                        ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK, figures);
+                // A figure where one of the runs went past one, and none where every run that did
+                // not come back stopped at something no run allows: one it could not be applied
+                // in, one that answered nothing, the host's stack.
+                case A_RUN_DID_NOT_COME_BACK -> figures.isEmpty()
+                        ? new ReplacementEvidence.Undecided.Way.AtNoAllowance(
+                                ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK)
+                        : new ReplacementEvidence.Undecided.Way.AtFigures(
+                                ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK, figures);
                 case NOTHING_RAN -> new ReplacementEvidence.Undecided.Way.AtNoAllowance(
                         ReplacementEvidence.Undecided.Why.NOTHING_RAN);
                 // The measure's search is asked for on the measure's behalf, which no block's

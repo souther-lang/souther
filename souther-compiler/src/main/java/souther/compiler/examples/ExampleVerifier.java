@@ -1580,9 +1580,8 @@ public final class ExampleVerifier {
                                 state.disposition, at.fork(), at.part(), with,
                                 replacements.replacing(at.fork(), at.part(), with));
                 givenUp = ran.isEmpty();
-                out.add(ran.orElseGet(() -> new ReplacedRun(at.fork(), at.part(), with,
-                        new AnswerObservation.RanOut(), AnswerChange.COULD_NOT_TELL,
-                        ReplacedRun.Noticed.COULD_NOT_TELL)));
+                out.add(ran.orElseGet(() -> ranOut(at.fork(), at.part(), with,
+                        Optional.of(WorkFigure.COMPILER_TIME.at(within(deadline))))));
             }
         }
         return out;
@@ -1607,11 +1606,19 @@ public final class ExampleVerifier {
                 new Deadline.Work.Replaced(target.name(), row.pos(), row.identity()), work)) {
             case Deadline.Outcome.Finished(RowState state) -> {
                 FixtureReader reader = newFixtureReader();
+                ReplacedRun.Noticed noticed = noticed(asWritten, state.disposition);
+                // Where the row could not be held to the replaced run, what stopped that run, at
+                // the number this run held it to: a limit it went past, or none where what stopped
+                // it was no figure.
+                List<Figure> untold = noticed == ReplacedRun.Noticed.COULD_NOT_TELL
+                        && state.disposition == Disposition.INCOMPLETE
+                        ? leftUndecidedBy(state.failurePhase).figure().stream().toList()
+                        : List.of();
                 yield Optional.of(new ReplacedRun(fork, part, with,
                         state.reached.answer(reader::observed),
                         reader.change(written.answer(reader::structured),
                                 state.reached.answer(reader::structured), sig.outputType()),
-                        noticed(asWritten, state.disposition)));
+                        noticed, untold));
             }
             case Deadline.Outcome.Overran(Runnable abandon) -> {
                 abandon.run();
@@ -1625,9 +1632,7 @@ public final class ExampleVerifier {
                 // A budget or the stack running out is the replaced program's to have done, and
                 // says nothing either way about whether the row would notice it.
                 if (RunLimits.reached(cause)) {
-                    yield Optional.of(new ReplacedRun(fork, part, with,
-                            new AnswerObservation.RanOut(), AnswerChange.COULD_NOT_TELL,
-                            ReplacedRun.Noticed.COULD_NOT_TELL));
+                    yield Optional.of(ranOut(fork, part, with, RunLimits.figureOf(cause, policy)));
                 }
                 if (cause instanceof RuntimeException re) {
                     throw re;
@@ -1635,6 +1640,15 @@ public final class ExampleVerifier {
                 throw new IllegalStateException(cause);
             }
         };
+    }
+
+    /** A replaced run that ran out, at {@code limit}: where it was a figure, the one figure that
+     *  left the row untold. */
+    private static ReplacedRun ranOut(SourceConstructOrigin fork, int part, int with,
+                                      Optional<Figure> limit) {
+        return new ReplacedRun(fork, part, with, new AnswerObservation.RanOut(limit),
+                AnswerChange.COULD_NOT_TELL, ReplacedRun.Noticed.COULD_NOT_TELL,
+                limit.stream().toList());
     }
 
     /**
