@@ -60,7 +60,7 @@
         <souther.java.minimum>25</souther.java.minimum>
         <souther.jvm.stack>4m</souther.jvm.stack>
         <maven.compiler.release>${souther.java.minimum}</maven.compiler.release>
-        <raoh.version>0.8.0</raoh.version>
+        <raoh.version>0.9.0</raoh.version>
         <jspecify.version>1.0.1</jspecify.version>
         <!-- Where compiled classes go, named so the `m2e` profile below can send the editor's
              somewhere else. A build outside the editor uses the Maven defaults. -->
@@ -72,8 +72,8 @@
              into. A build that is not the hook leaves it at the root module's sources, which do
              not exist, so the goal has nothing to read. -->
         <checkstyle.staged.dir>${project.basedir}/src/main/java</checkstyle.staged.dir>
-        <checkstyle.version>14.1.0</checkstyle.version>
-        <nullaway.version>0.14.1</nullaway.version>
+        <checkstyle.version>14.3.0</checkstyle.version>
+        <nullaway.version>0.14.2</nullaway.version>
         <!-- What NullAway is asked for, written once. The gate below and the `lint` profile both
              ask, and a gate configured differently in each is a gate whose answer depends on which
              build asked. -->
