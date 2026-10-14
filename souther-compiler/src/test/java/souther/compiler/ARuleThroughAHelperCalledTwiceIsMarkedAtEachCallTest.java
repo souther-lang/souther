@@ -103,6 +103,48 @@ class ARuleThroughAHelperCalledTwiceIsMarkedAtEachCallTest {
         assertTrue(warned > 0, "the points of the helper's line are warned about");
     }
 
+    /**
+     * A helper whose copy holds two conditions, both of which the rule takes holding.
+     *
+     * <p>One sentence at one call says it once: the rule takes the helper's conditions holding in
+     * that call, which is one thing to tell a reader however many conditions the copy holds.
+     */
+    private static final String TWO_CONDITIONS_A_CALL = """
+            module example.inside
+
+            data Score = Int
+
+            behavior both : (a: Int, b: Int) -> Score
+                constructs Score
+
+            let mid (n: Int): Int = if n > 0 && n < 10 then 1 else 0
+
+            let both (a, b) = Score(mid(a) + mid(b))
+
+            example both
+                | "neither" : (0, 0) -> Score(0)
+            """;
+
+    @Test
+    void aCallIsMarkedWithEachSentenceOnce() {
+        Compilation compilation = Compilation.ofSource(TWO_CONDITIONS_A_CALL, "Main");
+        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
+        compilation.answerEverything();
+        int calls = 0;
+        for (Located each : compilation.warnings()) {
+            List<LabeledRegion> labels = each.diagnostic().secondary().stream()
+                    .filter(label -> label.said()
+                            instanceof ExampleMessage.TheRuleTakesItHoldingInThisCall
+                            || label.said()
+                            instanceof ExampleMessage.TheRuleTakesItFailingInThisCall)
+                    .toList();
+            calls += labels.size();
+            assertEquals(labels.size(), new HashSet<>(labels).size(),
+                    () -> "no place is marked with one sentence twice: " + labels);
+        }
+        assertTrue(calls > 0, "the rules through the helper's two conditions are warned about");
+    }
+
     private static String called(LabeledRegion label) {
         return switch (label.said()) {
             case ExampleMessage.TheRuleTakesItHoldingInThisCall(var called) -> called;

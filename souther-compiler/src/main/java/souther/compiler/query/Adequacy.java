@@ -38,6 +38,7 @@ import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.msg.DeadBranchMessage;
 import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.diag.msg.Supporting;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.Localizable;
@@ -8293,14 +8294,15 @@ public final class Adequacy {
                     Bodies.Elaborated checked = db.ask(new Bodies.Observable(module)).value();
                     CoverageSites.Plan plan =
                             checked == null ? CoverageSites.Plan.NONE : checked.plan();
+                    Set<List<Object>> marked = new HashSet<>();
                     for (ShownBy each : ruled.shownBy()) {
                         DecisionRuleReading read = DecisionRuleReading.of(each, plan, behavior);
                         said(db, built, read);
                         // And the call of the helper the condition is in, where it is in one. A
                         // helper called three times is one place in the source, and three
                         // conditions marked there alike are three a reader cannot tell apart.
-                        each.copy().ifPresent(
-                                copy -> calledAt(db, module, built, read, copy.lineage()));
+                        each.copy().ifPresent(copy -> calledAt(db, module, built, read,
+                                copy.lineage(), marked));
                     }
                 }
                 // Which of the two this arm is, is already settled: a row is there. What is left is
@@ -8483,10 +8485,17 @@ public final class Adequacy {
          *
          * <p>A call nothing places is not marked: it was not written where this compilation can
          * show it, and the condition's own marker still is.
+         *
+         * <p>Each mark once. Two conditions of one copy taken the same way, and every call further
+         * out of a copy holding several, would put one sentence at one place again for each; a
+         * reader shown it twice is shown nothing more.
+         *
+         * @param marked the places and sentences this warning has already marked
          */
         private static void calledAt(Db db, String module,
                                      souther.compiler.diag.Diagnostic.Builder built,
-                                     DecisionRuleReading read, ExpansionLineage copy) {
+                                     DecisionRuleReading read, ExpansionLineage copy,
+                                     Set<List<Object>> marked) {
             boolean innermost = true;
             ExpansionLineage at = copy;
             while (at instanceof ExpansionLineage.Expansion made) {
@@ -8494,21 +8503,27 @@ public final class Adequacy {
                 Citation call = made.at() instanceof ExpansionSite.Written(var wrote)
                         ? Sites.placeIfKnown(db, wrote) : null;
                 if (call != null && !innermost) {
-                    label(built, call, new ExampleMessage.TheRuleGoesThroughThisCall(called));
+                    markOnce(built, call, new ExampleMessage.TheRuleGoesThroughThisCall(called),
+                            marked);
                 } else if (call != null) {
                     switch (read) {
-                        case DecisionRuleReading.AComparisonCameOut(var _, var held) ->
-                                inThisCall(built, call, held, called);
-                        case DecisionRuleReading.AnApplicationAnswered(var _, var held) ->
-                                inThisCall(built, call, held, called);
-                        case DecisionRuleReading.AForkTookAnArm(var arm) -> label(built, call,
+                        case DecisionRuleReading.AComparisonCameOut(var _, var held) when held ->
+                                markOnce(built, call,
+                                        new ExampleMessage.TheRuleTakesItHoldingInThisCall(called),
+                                        marked);
+                        case DecisionRuleReading.AnApplicationAnswered(var _, var held)
+                                when held -> markOnce(built, call,
+                                new ExampleMessage.TheRuleTakesItHoldingInThisCall(called), marked);
+                        case DecisionRuleReading.AComparisonCameOut _,
+                                DecisionRuleReading.AnApplicationAnswered _ -> markOnce(built, call,
+                                new ExampleMessage.TheRuleTakesItFailingInThisCall(called), marked);
+                        case DecisionRuleReading.AForkTookAnArm(var arm) -> markOnce(built, call,
                                 new ExampleMessage.TheRuleGoesThroughItsArmInThisCall(
-                                        phraseFor(arm), called));
+                                        phraseFor(arm), called), marked);
                         case DecisionRuleReading.AConditionIsNotShown _,
                                 DecisionRuleReading.AnOutcomeIsNotPlaced _,
-                                DecisionRuleReading.AForkIsNotPlaced _ ->
-                                label(built, call,
-                                        new ExampleMessage.TheRuleGoesThroughThisCall(called));
+                                DecisionRuleReading.AForkIsNotPlaced _ -> markOnce(built, call,
+                                new ExampleMessage.TheRuleGoesThroughThisCall(called), marked);
                     }
                 }
                 innermost = false;
@@ -8516,13 +8531,12 @@ public final class Adequacy {
             }
         }
 
-        /** The call a condition of the rule is in, with which way the rule takes it there. */
-        private static void inThisCall(souther.compiler.diag.Diagnostic.Builder built,
-                                       Citation call, boolean held, String called) {
-            if (held) {
-                label(built, call, new ExampleMessage.TheRuleTakesItHoldingInThisCall(called));
-            } else {
-                label(built, call, new ExampleMessage.TheRuleTakesItFailingInThisCall(called));
+        /** {@code said} at {@code call}, where this warning has not marked it there already. */
+        private static <M extends ExampleMessage & Supporting> void markOnce(
+                souther.compiler.diag.Diagnostic.Builder built, Citation call, M said,
+                Set<List<Object>> marked) {
+            if (marked.add(List.of(call, said))) {
+                label(built, call, said);
             }
         }
 
