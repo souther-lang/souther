@@ -237,7 +237,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     /** The conditions on this way a row is past one of several ways of
      *  ({@link OnTheWay#alternatives}), in the order the walk met them. */
     public List<OnTheWay> severalWays() {
-        return onTheWay.stream().filter(each -> !each.alternatives().isEmpty()).toList();
+        return onTheWay.stream().filter(OnTheWay::ofSeveralWays).toList();
     }
 
     /**
@@ -300,8 +300,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
 
                 @Override
                 public List<List<OnTheWay>> alternatives(OnTheWay entry) {
-                    List<List<OnTheWay>> several = entry.alternatives();
-                    return several.isEmpty() ? null : several;
+                    return entry.ofSeveralWays() ? entry.alternatives() : null;
                 }
 
                 @Override

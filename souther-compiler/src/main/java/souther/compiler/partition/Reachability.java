@@ -198,7 +198,7 @@ public sealed interface Reachability {
                 unsplit = List.copyOf(unsplit);
                 along = List.copyOf(along);
                 if (unsplit.isEmpty() || figure == null
-                        || unsplit.stream().anyMatch(each -> each.alternatives().isEmpty())) {
+                        || !unsplit.stream().allMatch(OnTheWay::ofSeveralWays)) {
                     throw new IllegalArgumentException("a way looked along whole past a figure has"
                             + " a condition of several ways on it, and a figure it met");
                 }

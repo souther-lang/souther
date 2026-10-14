@@ -67,6 +67,11 @@ public sealed interface OnTheWay {
         return List.of();
     }
 
+    /** Whether {@link #alternatives} is not empty, asked without making them. */
+    default boolean ofSeveralWays() {
+        return false;
+    }
+
     /**
      * A condition a search can compose a row against, and what it came to.
      *
@@ -147,17 +152,21 @@ public sealed interface OnTheWay {
          */
         @Override
         public List<List<OnTheWay>> alternatives() {
-            CasesLeft left = position.narrowing();
-            if (left.only() != null) {
+            if (!ofSeveralWays()) {
                 return List.of();
             }
             List<List<OnTheWay>> out = new ArrayList<>();
-            for (Refinement each : left.atoms()) {
+            for (Refinement each : position.narrowing().atoms()) {
                 out.add(List.of(new Narrowed(anchor,
                         DeclaredInput.narrowedTo(position, CasesLeft.of(each)), crossings,
                         onItsOrder)));
             }
             return List.copyOf(out);
+        }
+
+        @Override
+        public boolean ofSeveralWays() {
+            return position.narrowing().only() == null;
         }
     }
 
@@ -224,6 +233,11 @@ public sealed interface OnTheWay {
             if (alternatives.size() < 2) {
                 throw new IllegalArgumentException("one of several ways is two or more");
             }
+        }
+
+        @Override
+        public boolean ofSeveralWays() {
+            return true;
         }
     }
 

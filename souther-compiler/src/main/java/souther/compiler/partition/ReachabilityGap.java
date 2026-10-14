@@ -66,7 +66,7 @@ public sealed interface ReachabilityGap {
             implements ReachabilityGap {
 
         public LookedAlongWhole {
-            if (condition == null || figure == null || condition.alternatives().isEmpty()) {
+            if (condition == null || figure == null || !condition.ofSeveralWays()) {
                 throw new IllegalArgumentException(
                         "a way looked along whole is past some condition, at some figure");
             }

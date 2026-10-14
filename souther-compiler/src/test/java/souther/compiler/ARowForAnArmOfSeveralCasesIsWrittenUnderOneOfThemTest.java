@@ -154,7 +154,12 @@ class ARowForAnArmOfSeveralCasesIsWrittenUnderOneOfThemTest {
                 limited.contains("C") ? "\n    invariant d <= 5" : "", arms);
     }
 
-    /** One case of the arm leaves the rule nothing, and the row is written under the other. */
+    /**
+     * One case of the arm leaves the rule nothing. The number the rule reads is a name the cases
+     * share, so the line is read under each case, and the readings under a case the way along it
+     * does not take are answered as such rather than composed; the rule is composed under the
+     * other case whichever of the two is held to five.
+     */
     @Test
     void aRuleOnlyOneCaseOfTheArmTakesIsComposedUnderThatCase() {
         for (String limited : new String[] {"B", "C"}) {

@@ -1471,6 +1471,9 @@ final class Coverages {
         // against and never what the answer keeps; the account it was built from is what travels.
         souther.compiler.partition.Reachability reaching =
                 souther.compiler.partition.Reachability.of(within, rules.region());
+        // Where the reading's numbers are written, which is the same at every point of it.
+        List<RealizationTarget.OfANumber> read = quantity.numbers().stream()
+                .map(RealizationTarget::of).toList();
         // Once for the border rather than once for each of its points. What the positions of this
         // input admit is the same answer at every point of it, and working it out where it is spent
         // walks every position of the input at every point a row is searched for.
@@ -1524,15 +1527,6 @@ final class Coverages {
                                 .A_CONDITION_NEVER_COMES_OUT_THAT_WAY);
                     }
                 }
-                // A reading of the line under a case the way does not take. A line at a name the
-                // cases of a sum share is read under each case, and no row along this way is the
-                // case this reading's numbers stand under — which is the same word, settled by
-                // the model before any value is put to the point.
-                if (able.writing(quantity.numbers().stream().map(RealizationTarget::of).toList())
-                        instanceof Reachability.Written.OffTheWay) {
-                    return noRowTakes(label, within,
-                            Generator.UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH);
-                }
                 // Where a condition on the way came out one of several ways, a row is looked for
                 // along each of them first, each narrower than the way whole. A row standing along
                 // one is a row of the way. Where none stands, what the point came to is what the
@@ -1567,6 +1561,15 @@ final class Coverages {
             private Looked lookedAlong(Criterion criterion, String label,
                                        UnaryOperator<SearchRegion> narrowing,
                                        Reachability.Reaching able) {
+                // A reading of the line under a case this way does not take. A line at a name the
+                // cases of a sum share is read under each case, and a way split at the cases a
+                // narrowing leaves is looked along each of them, so no row along this one is the
+                // case the reading's numbers stand under. The model settles that before any value
+                // is put to the point, and the values are not spent finding it out.
+                if (able.writing(read) instanceof Reachability.Written.OffTheWay) {
+                    return noRowTakes(label, within,
+                            Generator.UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH);
+                }
                 SearchRegion region = narrowing.apply(able.region());
                 // Where a row would have to stand is asked of the quantity, and finding one there of
                 // the realizer. What it composes is a candidate and no part of the item: another row
