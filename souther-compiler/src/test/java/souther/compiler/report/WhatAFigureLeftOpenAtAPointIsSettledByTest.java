@@ -7,6 +7,9 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -19,34 +22,33 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * more has nothing to do it with. What they can do is write a row at the point, or a rule that
  * leaves no value there.
  *
- * <p>The model here is one this compiler cannot build sets of beyond one element for: it offers a
- * date for an element and steps nothing from it. Rows up to four dates are written, and the region
- * past four is left to the search, which stops at how many values a point is tried with.
+ * <p>The model here is one this compiler cannot build sets of beyond one element for: between two
+ * decimals there is no next one, so it offers one decimal for an element and steps nothing from it.
+ * Rows up to four decimals are written, and the region past four is left to the search, which stops
+ * at how many values a point is tried with.
  */
 class WhatAFigureLeftOpenAtAPointIsSettledByTest {
 
     private static final String MODEL = """
-            module probe.dates
+            module probe.sizes
 
-            behavior h : (s: Set<Date>) -> Int
+            behavior h : (s: Set<Decimal>) -> Int
             let h (s) = if Set.size(s) == 3 then 1 else 0
 
             example h
                 | "none"  : ([]) -> 0
-                | "one"   : ([Date("2026-01-01")]) -> 0
-                | "two"   : ([Date("2026-01-01"), Date("2026-01-02")]) -> 0
-                | "three" : ([Date("2026-01-01"), Date("2026-01-02"), Date("2026-01-03")]) -> 1
-                | "four"  : ([Date("2026-01-01"), Date("2026-01-02"), Date("2026-01-03"),
-                              Date("2026-01-04")]) -> 0
-            %s""";
+            %s%s%s%s%s""";
 
-    private static final String FIVE = """
-                | "five"  : ([Date("2026-01-01"), Date("2026-01-02"), Date("2026-01-03"),
-                              Date("2026-01-04"), Date("2026-01-05")]) -> 0
-            """;
+    /** A row of a set of {@code size} decimals, from nought up. */
+    private static String row(String name, int size, int answer) {
+        return "    | \"%s\" : ([%s]) -> %d\n".formatted(name, IntStream.range(0, size)
+                .mapToObj(i -> i + ".5m").collect(Collectors.joining(", ")), answer);
+    }
 
     private static AdequacyReport measured(String rows) {
-        Compilation compilation = Compilation.ofSource(MODEL.formatted(rows), "Main");
+        Compilation compilation = Compilation.ofSource(MODEL.formatted(
+                row("one", 1, 0), row("two", 2, 0), row("three", 3, 1), row("four", 4, 0), rows),
+                "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation);
@@ -77,7 +79,7 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
     /** And a row written there settles it. */
     @Test
     void aRowWrittenThereSettlesIt() {
-        AdequacyReport report = measured(FIVE);
+        AdequacyReport report = measured(row("five", 5, 0));
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, report.adequacy(),
                 () -> human(report));
