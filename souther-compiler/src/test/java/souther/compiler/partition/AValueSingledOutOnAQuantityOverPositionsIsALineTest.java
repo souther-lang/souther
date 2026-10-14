@@ -132,6 +132,30 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
     }
 
     /**
+     * Two decimals held equal are a line too, with no point one step either side: a decimal order
+     * names no next value, so what the rule tells apart from where they meet is the run either way.
+     */
+    @Test
+    void twoDecimalsHeldEqualAreALineWithRunsAndNoNearestValue() {
+        Border line = onlyLine("""
+                module m
+
+                behavior both : (a: Decimal, b: Decimal) -> Int
+                let both (a, b) = if %s then 1 else 0
+                """, "a == b");
+        Map<DomainPoint, PointAnswer> answers = line.answers();
+
+        assertTrue(answers.get(new DomainPoint.AtTheLine()) instanceof PointAnswer.AtLine,
+                () -> "" + answers);
+        for (Towards side : Towards.values()) {
+            assertEquals(new PointAnswer.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR),
+                    answers.get(new DomainPoint.BesideTheLine(side)), () -> "" + answers);
+            assertTrue(answers.get(new DomainPoint.InTheRegion(side)) instanceof PointAnswer.InRegion,
+                    () -> "" + answers);
+        }
+    }
+
+    /**
      * A disequality places the line an equality does with the roles turned: the row where the two
      * meet is outside what the rule holds at, and the ones beside it inside.
      */

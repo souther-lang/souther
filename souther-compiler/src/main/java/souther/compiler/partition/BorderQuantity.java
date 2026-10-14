@@ -1329,11 +1329,13 @@ public sealed interface BorderQuantity
      * as a class, still has values beside it a row can be owed at.
      *
      * <p>Where the quantity counts to a number. A count, a remainder and a form over several
-     * positions do, and so does how far two counting positions stand apart: the values one step
-     * either side of the one named are the nearest rows that do not meet it. Two strings stand no
-     * number apart, and the only value their distance takes is where they meet
-     * ({@link LevelSpace#onlyWhereTheyMeet}), so a rule holding them equal names that one value and
-     * no order, and a row where one sorts below the other is beside nothing the rule wrote.
+     * positions do, and so does how far two counting positions stand apart: the numbers either
+     * side of the one named are values the quantity comes to, so the rows there are rows the rule
+     * tells apart from it — the nearest ones where the order steps, and the runs either way where
+     * it is dense and names no nearest one. Two strings stand no number apart, and the only value
+     * their distance takes is where they meet ({@link LevelSpace#onlyWhereTheyMeet}), so a rule
+     * holding them equal names that one value and no order, and a row where one sorts below the
+     * other is beside nothing the rule wrote.
      */
     default boolean singlesWithSides() {
         return switch (this) {

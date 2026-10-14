@@ -865,7 +865,6 @@ sealed interface ComparisonAssessment {
         if (cutting.seams() instanceof ExactAnswer.Unheld<List<Seam>> unheld) {
             return sideNotWorkedOut(cutting, unheld.why());
         }
-        ExactAnswer<Seam> parted = cutting.seam();
         // The line and not one of its points. A rule drawing where the quantity never reaches
         // divides the position into nothing, and a reader told that the rule went unread would go
         // looking for a limit of this compiler that is not there.
@@ -885,9 +884,10 @@ sealed interface ComparisonAssessment {
             UndividedByARelation relation = relationOf(cutting);
             return new AcrossPositions(cutting, at, kind, relation, relation.undivided(read));
         }
-        Seam seam = ((ExactAnswer.Held<Seam>) parted).value();
-        ExactAnswer<Optional<Place>> value = cutting.singles() ? cutting.singledValue(seam)
-                : ExactAnswer.held(cutting.dividedValue(seam));
+        // Read off the one place its value is read at, which is not taken as held: an answer that
+        // was not is what the position is told, as for every other side that was not worked out.
+        ExactAnswer<Optional<Place>> value = cutting.seam().flatMap(seam -> cutting.singles()
+                ? cutting.singledValue(seam) : ExactAnswer.held(cutting.dividedValue(seam)));
         return switch (value) {
             case ExactAnswer.Unheld<Optional<Place>> unheld ->
                     sideNotWorkedOut(cutting, unheld.why());

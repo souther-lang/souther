@@ -9,6 +9,7 @@ import souther.compiler.numeric.Towards;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 /**
  * Where a rule parts one quantity's values: the last value on one side and the first on the other.
@@ -319,7 +320,7 @@ public record Seam(CutPosition at, Level below, Level above) {
      * end rather than by handing one level to all of them, which left a run with the same value at
      * both ends and a reader that could no longer tell which side of the line it lay.
      */
-    Seam mappedBy(java.util.function.UnaryOperator<Level> onto) {
+    Seam mappedBy(UnaryOperator<Level> onto) {
         Level line = at.asALevelOfTheQuantity();
         if (line == null) {
             // A line at a place the quantity has no value for has nothing to read on another order:
@@ -356,7 +357,7 @@ public record Seam(CutPosition at, Level below, Level above) {
      *               answer where the reader has one to ask
      */
     public String asARuleAbout(
-            java.util.function.Function<ExactRatio, String> muchOf,
+            Function<ExactRatio, String> muchOf,
             Towards side) {
         ExactRatio.Terms rule = at.asARule();
         if (rule == null) {
