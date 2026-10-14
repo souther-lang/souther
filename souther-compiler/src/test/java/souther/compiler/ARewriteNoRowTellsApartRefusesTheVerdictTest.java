@@ -8,7 +8,10 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -115,9 +118,8 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
         // Every row holds nothing, so none of them answers differently under the rewrite and the
         // row the hint names is one the search composed.
         assertTrue(said.stream().anyMatch(each -> each.startsWith(
-                        "No row of `refund` would come out differently if this arm answered as"
-                                + " another arm of its"
-                                + " fork.")
+                        "No row of `refund` would come out differently if the `case OutOfPocket`"
+                                + " arm of this fork answered as the `case Advance` arm.")
                         && each.contains("Amount(")),
                 () -> "what a build is told: " + said);
     }
@@ -134,9 +136,45 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
         // the body answering one value, which is asked of a body with no arm to rewrite.
         assertTrue(page.contains("replacement 0/3"), () -> "three rewrites, told apart by no row: "
                 + page);
-        assertTrue(page.contains(
-                        "! no row would come out differently if an arm answered as its sibling"),
-                () -> "and the arm under it: " + page);
+        // Each by the case it rewrites and the case it answers as, at the one `match` they are arms
+        // of — the case names the author wrote, and not which number each case is.
+        assertEquals(List.of(
+                        "! no row would come out differently if `case OutOfPocket` (16:21)"
+                                + " answered as `case Advance`",
+                        "! no row would come out differently if `case Advance` (16:21)"
+                                + " answered as `case OutOfPocket`",
+                        "! no row would come out differently if `case CompanyCard` (16:21)"
+                                + " answered as `case OutOfPocket`"),
+                page.lines().map(String::strip)
+                        .filter(line -> line.startsWith("! no row would come out differently"))
+                        .toList(),
+                () -> "and the arms under it: " + page);
+    }
+
+    /**
+     * And the document's subject for each is the same words, where the arm's own subject is the
+     * word an arm is written by; which rewrite it is stays `obligationId`'s.
+     */
+    @Test
+    void theDocumentSaysEachRewriteByItsArms() {
+        Compilation compilation = compiled(NOTHING_HELD);
+        JsonNode document = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        List<String> subjects = new ArrayList<>();
+        for (JsonNode module : document.get("modules")) {
+            for (JsonNode behavior : module.get("behaviors")) {
+                for (JsonNode finding : behavior.get("findings")) {
+                    if ("rewrite_unnoticed".equals(finding.get("kind").asString())) {
+                        subjects.add(finding.get("subject").asString());
+                    }
+                }
+            }
+        }
+
+        assertEquals(List.of("case OutOfPocket answering as case Advance",
+                        "case Advance answering as case OutOfPocket",
+                        "case CompanyCard answering as case OutOfPocket"),
+                subjects, document::toString);
     }
 
     @Test

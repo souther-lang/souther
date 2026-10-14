@@ -111,6 +111,7 @@ import souther.compiler.query.CombinationCriterion;
 import souther.compiler.query.DecisionEvidence;
 import souther.compiler.query.InteractionEvidence;
 import souther.compiler.query.ReplacementEvidence;
+import souther.compiler.query.ReplacementAsWritten;
 import souther.compiler.query.ReplacementReportAnchor;
 import souther.compiler.query.Replacements;
 import souther.compiler.query.DecisionRuleReading;
@@ -2521,7 +2522,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         onlyBy, marks);
                 branch(out, behavior, module.declaredIn(), rendering, onlyBy, marks);
                 decision(out, behavior, module.declaredIn(), rendering, onlyBy, marks);
-                replacement(out, behavior);
+                replacement(out, behavior, module.declaredIn(), rendering);
                 // Under the behavior it names, because a reason printed at the module's foot is
                 // read as belonging to whichever behavior came last. That was survivable while the
                 // only reasons naming one were rare; a position that could not be read is not.
@@ -3611,7 +3612,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * sibling. A rewrite left open is counted out of the number and said beside it, since nothing
      * showed it to be a gap; one shown to be is said under the line, one to a line.
      */
-    private void replacement(StringBuilder out, BehaviorReport behavior) {
+    private void replacement(StringBuilder out, BehaviorReport behavior, SourceId declaredIn,
+                             SourceRendering rendering) {
         ReplacementEvidence replacement = behavior.evidence().replacement();
         if (replacement == null) {
             return;
@@ -3627,13 +3629,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 : String.format("   %d left open", rewrites.undecided());
         out.append(String.format("    replacement %d/%d%s%n", rewrites.noticed(),
                 rewrites.noticed() + rewrites.unnoticed(), open));
+        // Each arm said in the word the branch measure says it in, and the fork's place once: both
+        // arms are of the one fork, and what tells two rewrites at it apart is which arm answered
+        // as which. A fork in code this build holds no source of has no place here to give, and
+        // the place the finding is shown at is the behavior's, which is not where the fork is.
         for (ReportedFinding f : behavior.reported()) {
             if (f.finding().about() instanceof About.ARewriteNoRowTellsApart(
-                    var _, var rewrite, var _, var _, var _)) {
-                out.append(String.format("      %s %s%n", mark(f.finding()), switch (rewrite) {
-                    case Replacement.OfAnArm _ ->
-                            "no row would come out differently if an arm answered as its sibling";
-                    case Replacement.ByOneAnswer _ ->
+                    var _, var written, var reportAt, var _, var _)) {
+                out.append(String.format("      %s %s%n", mark(f.finding()), switch (written) {
+                    case ReplacementAsWritten.OfAnArm rewrite -> switch (reportAt) {
+                        case ReplacementReportAnchor.AtTheFork _ -> String.format(
+                                "no row would come out differently if `%s` (%s) answered as `%s`",
+                                ArmVocabulary.rewritten(rewrite),
+                                f.at().said(rendering, declaredIn),
+                                ArmVocabulary.answeredAs(rewrite));
+                        case ReplacementReportAnchor.AtTheBehavior _ -> String.format(
+                                "no row would come out differently if `%s` answered as `%s` in a"
+                                        + " fork this build holds no source of",
+                                ArmVocabulary.rewritten(rewrite),
+                                ArmVocabulary.answeredAs(rewrite));
+                    };
+                    case ReplacementAsWritten.ByOneAnswer _ ->
                             "no row would come out differently if the body answered one value";
                 }));
             }
@@ -7635,11 +7651,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // show an author a comparison they did not write. Two rules of one behavior are shown
             // alike here and are told apart by `obligationId`, which is what that field is for.
             case About.ARuleNoRowTakes(var behavior, var _) -> words(behavior);
-            // The behavior whose body it is a rewrite of, for the reason a rule's subject is the
-            // behavior: which arm and sibling is a part number the author did not write, and is
-            // told apart by `obligationId`.
-            case About.ARewriteNoRowTellsApart(var behavior, var _, var _, var _, var _) ->
-                    words(behavior);
+            // The arm and the arm it answers as, in the words an arm's subject is written in. Two
+            // rewrites of the same pair at two forks read alike here and are told apart by where
+            // each is shown and by `obligationId`. The body answering one value is about no arm,
+            // and is said by the behavior whose body it is.
+            case About.ARewriteNoRowTellsApart(var behavior, var written, var _, var _, var _) ->
+                    switch (written) {
+                        case ReplacementAsWritten.OfAnArm rewrite ->
+                                words(ArmVocabulary.label(rewrite));
+                        case ReplacementAsWritten.ByOneAnswer _ -> words(behavior);
+                    };
             case About.ACaseNoRowExpects(var _, var missing) -> words(missing.name());
             case About.ACaseNothingWasSeenToProduce(var missing) -> words(missing.name());
             case About.AClassNoRowIsIn(var missing) ->

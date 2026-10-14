@@ -255,7 +255,7 @@ public final class Replacements {
                         ? db.ask(new Witnesses(name, named)).value() : Map.of();
                 List<ReplacementEvidence.Rewrite> rewrites = new ArrayList<>();
                 for (ReplacementReading.Account each : accounts) {
-                    rewrites.add(new ReplacementEvidence.Rewrite(each.replacement(),
+                    rewrites.add(new ReplacementEvidence.Rewrite(each.written(),
                             each.reportAt(), outcomeOf(each.standing(),
                                     searched == null ? null : searched.get(each.replacement()))));
                 }

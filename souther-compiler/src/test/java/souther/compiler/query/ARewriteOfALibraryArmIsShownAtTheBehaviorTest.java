@@ -6,8 +6,10 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.partition.Replacement;
+import souther.compiler.report.AdequacyReport;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -163,6 +165,20 @@ class ARewriteOfALibraryArmIsShownAtTheBehaviorTest {
                 () -> "and every one of them shown at the behavior: " + ofTheLanguage);
     }
 
+    /**
+     * The page names the two arms of a fork it holds no source of and gives no place for it: the
+     * place the finding is shown at is the behavior's, which is not where the fork is.
+     */
+    @Test
+    void thePageNamesTheArmsAndSaysTheForkIsOutOfSight() {
+        Compilation c = measured();
+        String page = AdequacyReport.of(c).human(SourceRendering.namedByIdentity(c.texts()));
+
+        assertTrue(page.contains("no row would come out differently if `then` answered as `else`"
+                        + " in a fork this build holds no source of"),
+                () -> "what the page says: " + page);
+    }
+
     /** The sentence says which arm, since the behavior it is pointed at is not one. */
     @Test
     void theBuildIsToldTheArmIsInCodeItHoldsNoSourceOf() {
@@ -173,12 +189,12 @@ class ARewriteOfALibraryArmIsShownAtTheBehaviorTest {
                 .map(d -> Messages.render(d.said(), Locale.ENGLISH))
                 .toList();
 
-        assertTrue(said.contains("No row of `keepInTheLibrary` would come out differently if an"
-                        + " arm it reaches in code this build holds no source of answered as"
-                        + " another arm of its fork."),
+        assertTrue(said.contains("No row of `keepInTheLibrary` would come out differently if the"
+                        + " `then` arm of a fork it reaches in code this build holds no source of"
+                        + " answered as the `else` arm."),
                 () -> "what a build is told: " + said);
-        assertTrue(said.contains("No row of `keepHere` would come out differently if this arm"
-                        + " answered as another arm of its fork."),
+        assertTrue(said.contains("No row of `keepHere` would come out differently if the `then`"
+                        + " arm of this fork answered as the `else` arm."),
                 () -> "and the arm a reader can open is this one: " + said);
     }
 }

@@ -80,16 +80,21 @@ public final class ReplacementReading {
     }
 
     /** One rewrite, where a report about it is shown, and what the rows came to about it. */
-    public record Account(Replacement replacement, ReplacementReportAnchor reportAt,
+    public record Account(ReplacementAsWritten written, ReplacementReportAnchor reportAt,
                           Standing standing) {
 
         public Account {
-            Objects.requireNonNull(replacement, "an account is of some rewrite");
+            Objects.requireNonNull(written, "an account is of some rewrite");
             Objects.requireNonNull(reportAt, "and is shown somewhere");
             Objects.requireNonNull(standing, "an account says what the rows came to");
-            if (!reportAt.shows(replacement)) {
-                throw new IllegalArgumentException(replacement + " is not shown at " + reportAt);
+            if (!reportAt.shows(written.replacement())) {
+                throw new IllegalArgumentException(written + " is not shown at " + reportAt);
             }
+        }
+
+        /** Which rewrite this is an account of. */
+        public Replacement replacement() {
+            return written.replacement();
         }
     }
 
@@ -183,7 +188,8 @@ public final class ReplacementReading {
                 at.probes().add(probe);
             }
         }
-        occurrences.forEach((replaced, at) -> out.add(new Account(replaced, at.reportAt(),
+        occurrences.forEach((replaced, at) -> out.add(new Account(
+                ReplacementAsWritten.OfAnArm.in(plan, replaced), at.reportAt(),
                 armStanding(replaced, at.probes(), carried, stated, wentThrough))));
         // One answer only where no arm has a rewrite that is another program. Which family a body
         // invites is the body's: one with a fork is asked about the fork, arm by arm, whichever of
@@ -316,7 +322,8 @@ public final class ReplacementReading {
                 distinct.add(value);
                 Replacement.ByOneAnswer rewrite = new Replacement.ByOneAnswer(value,
                         RowRef.of(answered.get(i)));
-                out.add(new Account(rewrite, new ReplacementReportAnchor.AtTheBehavior(),
+                out.add(new Account(new ReplacementAsWritten.ByOneAnswer(rewrite),
+                        new ReplacementReportAnchor.AtTheBehavior(),
                         oneAnswerStanding(rewrite, rows, answered, values, comparing)));
             }
         }

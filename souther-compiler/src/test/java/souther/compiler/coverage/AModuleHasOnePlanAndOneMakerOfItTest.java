@@ -159,6 +159,10 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
             // the places of the arms on each way.
             "method fromOneValue(java.lang.String) :"
                     + " souther.compiler.coverage.ArmReplacements$Differs",
+            // What an arm means, asked by the construct and the part a source wrote and answered
+            // with an outcome: a value about the source, measured or not.
+            "method outcomeOf(souther.compiler.coverage.CoverageSites$AsWritten) :"
+                    + " souther.compiler.coverage.SourceOutcome$Arm",
             // What a number means, which is the half of a plan that outlives the graph.
             "method numbering() : souther.compiler.coverage.SiteNumbering",
             "method identity() : souther.compiler.coverage.NumberingIdentity",

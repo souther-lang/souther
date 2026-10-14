@@ -36,6 +36,7 @@ import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.query.OfferedRow;
 import souther.compiler.query.Offering;
 import souther.compiler.query.OfferingRequest;
+import souther.compiler.query.ReplacementAsWritten;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -408,6 +409,25 @@ public final class GeneratedRows {
     }
 
     /**
+     * The same for the rewrites of an arm the search looked for a row telling apart: the arm and
+     * the arm it answers as, in the words the report writes for them. The body answering one value
+     * is about no arm, and a row for it goes unnamed.
+     */
+    private static Map<Replacement, String> rewriteNames(Adequacy.Filling filling) {
+        Map<Replacement, String> out = new LinkedHashMap<>();
+        if (filling == null) {
+            return out;
+        }
+        for (Adequacy.GenerationDisposition each : filling.generation()) {
+            if (each.finding().about() instanceof About.ARewriteNoRowTellsApart(
+                    var _, ReplacementAsWritten.OfAnArm rewrite, var _, var _, var _)) {
+                out.put(rewrite.replacement(), ArmVocabulary.label(rewrite));
+            }
+        }
+        return out;
+    }
+
+    /**
      * What a row is offered under, one name per thing it was composed for.
      *
      * <p>Every one of them and not a name made by joining them. A row that answers two arms answers
@@ -415,7 +435,8 @@ public final class GeneratedRows {
      * fault as naming a row for everything it turns out to settle, arriving from the other side.
      */
     private static List<String> named(List<Generator.Purpose> purposes,
-                                      Map<ArmProbe, String> arms) {
+                                      Map<ArmProbe, String> arms,
+                                      Map<Replacement, String> rewrites) {
         List<String> out = new ArrayList<>();
         for (Generator.Purpose purpose : purposes) {
             if (purpose instanceof Generator.Purpose.ForAnArm(ArmProbe probe)) {
@@ -424,6 +445,11 @@ public final class GeneratedRows {
                 // a second vocabulary for an arm.
                 if (arms.containsKey(probe)) {
                     out.add(arms.get(probe));
+                }
+            } else if (purpose instanceof Generator.Purpose.ForAReplacement(var owed)) {
+                // The same for a rewrite, which the report names by the arms it is about.
+                if (rewrites.containsKey(owed.replacement())) {
+                    out.add(rewrites.get(owed.replacement()));
                 }
             } else {
                 out.addAll(purpose.labels());
@@ -451,11 +477,12 @@ public final class GeneratedRows {
         Map<String, List<Offered>> out = new LinkedHashMap<>();
         offering.rowsByBehavior().forEach((behavior, rows) -> {
             Map<ArmProbe, String> arms = armNames(offering.searched().get(behavior));
+            Map<Replacement, String> rewrites = rewriteNames(offering.searched().get(behavior));
             List<Offered> here = new ArrayList<>();
             for (OfferedRow row : rows) {
                 Offered offered = new Offered(row.key().inputs(),
                         standingIn(offering.request().module(), row), List.of(), List.of());
-                for (String name : named(row.namedFor(), arms)) {
+                for (String name : named(row.namedFor(), arms, rewrites)) {
                     offered = offered.and(name);
                 }
                 // Whose search a stop was said only where the row goes by more than one name: a
@@ -801,14 +828,13 @@ public final class GeneratedRows {
             // on, written the one way round that makes a comparison and its denial one column —
             // and printing that would show an author a comparison they did not write.
             case About.ARuleNoRowTakes(var behavior, var _) -> "a decision rule of " + behavior;
-            // Which rewrite, as far as words about one go: which sibling an arm answered as is a
-            // part number the author did not write.
-            case About.ARewriteNoRowTellsApart(var behavior, var replacement, var _, var _,
-                    var _) ->
-                    switch (replacement) {
-                        case Replacement.OfAnArm _ ->
-                                "an arm of " + behavior + " answering as another arm of its fork";
-                        case Replacement.ByOneAnswer _ ->
+            // Which rewrite: the arm and the arm it answered as, in the words the report writes for
+            // an arm.
+            case About.ARewriteNoRowTellsApart(var behavior, var written, var _, var _, var _) ->
+                    switch (written) {
+                        case ReplacementAsWritten.OfAnArm rewrite ->
+                                ArmVocabulary.label(rewrite) + " in " + behavior;
+                        case ReplacementAsWritten.ByOneAnswer _ ->
                                 "the body of " + behavior + " answering one value";
                     };
             // The behavior again, and for the same reason: what the combination is of is written

@@ -432,6 +432,8 @@ public final class CoverageSites {
         private final ArmReplacements replacements;
         /** For each body, where it could answer other than one value. */
         private final Map<String, ArmReplacements.Differs> oneValue;
+        /** What every arm the walk met means, whether or not a run through it is recorded. */
+        private final Map<AsWritten, SourceOutcome.Arm> armsAsWritten;
 
         /**
          * Made where the bodies are walked, and nowhere a caller can reach.
@@ -458,7 +460,8 @@ public final class CoverageSites {
              Methods methods,
              IdentityHashMap<Core, int[][]> carried,
              ArmReplacements replacements,
-             Map<String, ArmReplacements.Differs> oneValue) {
+             Map<String, ArmReplacements.Differs> oneValue,
+             Map<AsWritten, SourceOutcome.Arm> armsAsWritten) {
             // Half of what a numbering could get wrong is the key's own answer now: an occurrence
             // names a comparison and nothing else, so there is no number to put on an `&&` or on
             // arithmetic, which is what would have had the emitter copy half a `long` off the
@@ -520,6 +523,7 @@ public final class CoverageSites {
             this.carried = carried;
             this.replacements = replacements;
             this.oneValue = Map.copyOf(oneValue);
+            this.armsAsWritten = Map.copyOf(armsAsWritten);
         }
 
         /**
@@ -556,6 +560,29 @@ public final class CoverageSites {
 
         Map<String, ArmReplacements.Differs> oneValue() {
             return oneValue;
+        }
+
+        /**
+         * What arm {@code arm} of its fork means, whether or not a run through it is recorded.
+         *
+         * <p>Apart from the sites. A sibling an arm is rewritten as is a way through the fork the
+         * author wrote, and it may be one nothing records — an arm no row could reach has no site
+         * — while a report about the rewrite still has to say which arm it is.
+         *
+         * @throws IllegalArgumentException where the walk met no such arm: whatever names it was
+         *                                  made from some other plan's bodies
+         */
+        public SourceOutcome.Arm outcomeOf(AsWritten arm) {
+            SourceOutcome.Arm outcome = armsAsWritten.get(arm);
+            if (outcome == null) {
+                throw new IllegalArgumentException("this plan met no arm " + arm.part() + " of "
+                        + arm.origin());
+            }
+            return outcome;
+        }
+
+        Map<AsWritten, SourceOutcome.Arm> armsAsWritten() {
+            return armsAsWritten;
         }
 
         IdentityHashMap<Core, int[][]> carried() {
@@ -706,7 +733,7 @@ public final class CoverageSites {
                 Set.of(), new LinkedHashMap<>(),
                 ComparisonCatalog.of(ModuleBodies.none()),
                 SiteNumbering.of(NumberingIdentity.forThePlanOfNothing()), Methods.NONE,
-                new IdentityHashMap<>(), ArmReplacements.NONE, Map.of());
+                new IdentityHashMap<>(), ArmReplacements.NONE, Map.of(), Map.of());
 
         /**
          * Whether one run of the behavior can pass {@code node} more than once.
@@ -990,7 +1017,7 @@ public final class CoverageSites {
         return new Plan(List.copyOf(sites), List.copyOf(guards), walk.byNode,
                 byComparison, armsByNode, answered, walk.mayRepeat, Map.copyOf(walk.reachedAt),
                 comparisons, numbering, found.methods(), walk.carried,
-                new ArmReplacements(bySite), oneValue);
+                new ArmReplacements(bySite), oneValue, walk.armsAsWritten);
     }
 
     /** The arm {@code raw} addresses, where an arm was numbered at all. */
@@ -1138,6 +1165,8 @@ public final class CoverageSites {
                 new IdentityHashMap<>();
         /** For each body, where it could answer other than one value. */
         private final Map<String, DraftDiffers> oneValue = new LinkedHashMap<>();
+        /** What every arm met means, measured or not. */
+        private final Map<AsWritten, SourceOutcome.Arm> armsAsWritten = new LinkedHashMap<>();
         /** How many nodes each subtree an arm's size was asked of is, counted once: an arm holding
          *  a chain of conditions holds every arm further down it. */
         private final IdentityHashMap<Core, Integer> sizes = new IdentityHashMap<>();
@@ -1603,6 +1632,15 @@ public final class CoverageSites {
             // is what lowering rewrites and carries whatever position it was built from, so it is
             // the fork that is asked and not the arm.
             ArmReportAnchor anchor = anchorOf(owner, origin);
+            // What the arm means, before whether it is measured is asked: a rewrite can name it as
+            // the sibling it answers as either way. A helper spliced in twice meets one arm twice,
+            // and an arm that meant two things at two calls would be two arms under one name.
+            SourceOutcome.Arm before =
+                    armsAsWritten.putIfAbsent(new AsWritten(origin, part), outcome);
+            if (before != null && !before.equals(outcome)) {
+                throw new IllegalStateException("arm " + part + " of " + origin + " is " + before
+                        + " where one call reaches it and " + outcome + " where another does");
+            }
             // The arm is made either way. Whether a run through it can be recorded is the second
             // question and only the probe turns on it — an arm nothing could record is still an arm,
             // and the readings that judge one need to be able to name it.

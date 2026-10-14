@@ -351,25 +351,27 @@ public sealed interface ExampleMessage extends Message {
     record WriteARowAtThatInput(String input) implements ExampleMessage, Supporting {}
 
     /**
-     * No row of the behavior would come out differently if the arm pointed at answered as another
-     * arm of its fork.
+     * No row of the behavior would come out differently if one arm of the fork pointed at answered
+     * as another.
      *
-     * <p>The behavior and not the arms. Where the arm is, is where this is pointed; which sibling it
-     * was rewritten as is a part number, and a sentence spelling it would name something the author
-     * did not write.
+     * <p>Both arms, in the phrases an arm is said in elsewhere. Where the fork is, is where this is
+     * pointed, and a fork has more than one arm there: which arm was rewritten and which it answered
+     * as is what tells this rewrite from the others at the same fork.
      */
     @Code(DiagnosticCode.E1939)
-    record NoRowTellsTheArmFromItsSibling(String behavior) implements ExampleMessage, Reported {}
+    record NoRowTellsTheArmFromItsSibling(Localizable arm, Localizable sibling, String behavior)
+            implements ExampleMessage, Reported {}
 
     /**
-     * No row of the behavior would come out differently if an arm it reaches in code this build
-     * holds no source of answered as another arm of its fork.
+     * No row of the behavior would come out differently if one arm of a fork it reaches in code
+     * this build holds no source of answered as another.
      *
      * <p>Pointed at the behavior, since there is no fork here to point at, so the sentence says
-     * which arm it is about rather than calling it this one.
+     * which arms it is about and that the fork is out of sight.
      */
     @Code(DiagnosticCode.E1939)
-    record NoRowTellsAnArmOutOfSightFromItsSibling(String behavior)
+    record NoRowTellsAnArmOutOfSightFromItsSibling(Localizable arm, Localizable sibling,
+                                                   String behavior)
             implements ExampleMessage, Reported {}
 
     /** No row of the behavior would come out differently if its body answered one value whatever

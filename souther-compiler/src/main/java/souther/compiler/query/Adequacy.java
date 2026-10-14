@@ -14,7 +14,6 @@ import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.MeaningsOfABodyReading;
-import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.RulesTaken;
@@ -28,9 +27,11 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.OutcomeName;
 import souther.compiler.coverage.RunBodies;
 import souther.compiler.coverage.RunRecord;
 import souther.compiler.coverage.SiteNumbering;
+import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Reachability;
 import souther.compiler.diag.Diagnostic;
@@ -139,6 +140,7 @@ import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.WayIn;
 import souther.compiler.types.Type;
+import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
@@ -7484,7 +7486,7 @@ public final class Adequacy {
                         var lookFor)) {
                     out.add(Finding.by(new FindingSubject.OfABehavior(behavior), each,
                             new About.ARewriteNoRowTellsApart(behavior,
-                                    each.rewrite().replacement(), each.rewrite().reportAt(),
+                                    each.rewrite().written(), each.rewrite().reportAt(),
                                     shownBy, lookFor)));
                 }
             }
@@ -8238,18 +8240,25 @@ public final class Adequacy {
                                 new ExampleMessage.NoRowIsInThatCombinationOfClasses(
                                         twoClasses(combination), combination.behavior());
                         // The behavior, and the rewrite by which sentence it is: an arm's is
-                        // pointed at the fork where there is one here to point at, and which
-                        // sibling it answered as is a part number the author did not write.
-                        case About.ARewriteNoRowTellsApart(var behavior, var replacement,
-                                var reportAt, var _, var _) -> switch (replacement) {
-                            case Replacement.OfAnArm _ -> switch (reportAt) {
-                                case ReplacementReportAnchor.AtTheFork _ ->
-                                        new ExampleMessage.NoRowTellsTheArmFromItsSibling(behavior);
-                                case ReplacementReportAnchor.AtTheBehavior _ ->
-                                        new ExampleMessage.NoRowTellsAnArmOutOfSightFromItsSibling(
-                                                behavior);
-                            };
-                            case Replacement.ByOneAnswer _ ->
+                        // pointed at the fork where there is one here to point at, and says the arm
+                        // and the sibling it answered as in the phrases an arm is said in.
+                        case About.ARewriteNoRowTellsApart(var behavior, var written,
+                                var reportAt, var _, var _) -> switch (written) {
+                            case ReplacementAsWritten.OfAnArm(var rewrite, var arm, var sibling) -> {
+                                SourceConstruct construct = rewrite.fork().kind();
+                                yield switch (reportAt) {
+                                    case ReplacementReportAnchor.AtTheFork _ ->
+                                            new ExampleMessage.NoRowTellsTheArmFromItsSibling(
+                                                    phraseFor(construct, arm),
+                                                    phraseFor(construct, sibling), behavior);
+                                    case ReplacementReportAnchor.AtTheBehavior _ ->
+                                            new ExampleMessage
+                                                    .NoRowTellsAnArmOutOfSightFromItsSibling(
+                                                    phraseFor(construct, arm),
+                                                    phraseFor(construct, sibling), behavior);
+                                };
+                            }
+                            case ReplacementAsWritten.ByOneAnswer _ ->
                                     new ExampleMessage.NoRowTellsTheBodyFromOneAnswer(behavior);
                         };
                         // Kinds no build is told about under any code. Listed rather than
@@ -8537,21 +8546,29 @@ public final class Adequacy {
          */
         private static Localizable phraseFor(
                 souther.compiler.coverage.CoverageSites.Site arm) {
-            return switch (arm.name()) {
+            return phraseFor(arm.construct(), arm.outcome());
+        }
+
+        /**
+         * The same phrase for an outcome of a construct, where no site of it is in hand — the
+         * sibling a rewrite names is often an arm nothing records a run through.
+         */
+        private static Localizable phraseFor(SourceConstruct construct, SourceOutcome outcome) {
+            return switch (OutcomeName.of(construct, outcome)) {
                 case THEN -> Localizable.of("arm.then");
                 case ELSE -> Localizable.of("arm.else");
                 case CONTINUED -> Localizable.of("arm.continued");
                 case KEPT -> Localizable.of("arm.kept");
                 case DROPPED -> Localizable.of("arm.dropped");
                 case CONSTRUCTED -> Localizable.of("arm.constructed");
-                case CASE -> Localizable.of("arm.case", casesOf(arm));
-                case DEPARTURE -> clauseOf(arm)
+                case CASE -> Localizable.of("arm.case", casesOf(outcome));
+                case DEPARTURE -> clauseOf(outcome)
                         .map(c -> Localizable.of("arm.departure.clause", c))
                         .orElseGet(() -> Localizable.of("arm.departure"));
                 // Not an arm, so no warning is about one. Reaching this is the branch measure and
                 // this sentence disagreeing about what it counts.
                 case COMPARISON -> throw new IllegalStateException(
-                        "no arm was unreached here: " + arm);
+                        "no arm was unreached here: " + outcome + " of " + construct);
             };
         }
 
@@ -8702,18 +8719,17 @@ public final class Adequacy {
             }
         }
 
-        private static String casesOf(souther.compiler.coverage.CoverageSites.Site arm) {
-            return arm.outcome() instanceof souther.compiler.coverage.SourceOutcome.Matched matched
+        private static String casesOf(SourceOutcome outcome) {
+            return outcome instanceof SourceOutcome.Matched matched
                     ? matched.cases().stream()
-                            .map(souther.compiler.types.TypeSymbol::name)
-                            .collect(java.util.stream.Collectors.joining(" | "))
+                            .map(TypeSymbol::name)
+                            .collect(Collectors.joining(" | "))
                     : "";
         }
 
-        private static java.util.Optional<String> clauseOf(
-                souther.compiler.coverage.CoverageSites.Site arm) {
-            return arm.outcome() instanceof souther.compiler.coverage.SourceOutcome.Failed(
-                    souther.compiler.coverage.SourceOutcome.FailedBy.Construction(var clause))
+        private static Optional<String> clauseOf(SourceOutcome outcome) {
+            return outcome instanceof SourceOutcome.Failed(
+                    SourceOutcome.FailedBy.Construction(var clause))
                     ? clause : Optional.empty();
         }
 
