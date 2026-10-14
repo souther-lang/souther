@@ -47,9 +47,12 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
     /** Two decisions and a position free of both, which is eight rows in all. */
     private static final String ONE_FREE = shipping("rush: Bool");
 
-    /** The same with a second position free of both, which is more values than a reading may run
-     *  for. */
-    private static final String TWO_FREE = shipping("rush: Bool, gift: Bool");
+    /**
+     * The same with three positions free of both, which is more values than a reading may run for
+     * even beside the rows the searches for each class ran before it: a row run already costs a
+     * reading nothing, so values another search watched are not the ones it stops in front of.
+     */
+    private static final String THREE_FREE = shipping("rush: Bool, gift: Bool, wrap: Bool");
 
     private static String shipping(String free) {
         return """
@@ -83,14 +86,14 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
     /**
      * A combination the bound stopped in front of an unrun candidate says the search stopped.
      *
-     * <p>Two positions left to choose is four values, and a reading may be run for three. The fourth
-     * is a set of values nothing has been watched at: what the three that were run came to is those
-     * candidates' news, and offered as the combination's answer it stands for a space this search
-     * never entered.
+     * <p>Three positions left to choose is eight values, and a reading may be run for three beside
+     * whatever was run already. What is left is a set of values nothing has been watched at: what
+     * the ones that were run came to is those candidates' news, and offered as the combination's
+     * answer it stands for a space this search never entered.
      */
     @Test
     void aCombinationLeftWithAnUnrunCandidateSaysTheSearchStopped() {
-        Model model = Model.of(TWO_FREE, "shippingFee");
+        Model model = Model.of(THREE_FREE, "shippingFee");
         FillResult filled = fill(model, _ -> missed(model));
 
         assertEquals(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,

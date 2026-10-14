@@ -87,7 +87,7 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             // A choice among rows that all stand at the item, which ends with one taken whatever
             // it comes to, so nothing is left owed for reaching it.
             Map.entry("souther.compiler.partition.Generator.MOST_ROWS_OFFERED_FOR_THE_ARMS",
-                    "how many rows standing at one point are looked through for one its arms"
+                    "how many rows meeting one requirement are looked through for one its arms"
                             + " answer differently on; reaching it stops no search, since a row"
                             + " is taken either way")));
 

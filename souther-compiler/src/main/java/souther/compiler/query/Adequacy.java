@@ -155,7 +155,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -6232,27 +6231,13 @@ public final class Adequacy {
                 unreachedIn(db.ask(new Arrived(module)).value(), behavior, checked);
         ArmReplacements carried = trials.carried();
         RowTrials.OfBehavior application = trials.forBehavior(behavior, sig);
-        // What each row came to, and each row under each rewrite, once. A search runs a row to
-        // choose it and its reader runs the row it was handed to see where it stands, and the
-        // searches of one behavior's points compose many of the same rows: each is one row in one
-        // environment, and a run of it answers the same every time.
-        Map<RowToRun, Generator.ObservedRun> ran = new ConcurrentHashMap<>();
-        record Replaced(RowToRun ran, Map<Integer, Integer> replacing) {}
-        Map<Replaced, Optional<AnswerObservation>> replaced = new ConcurrentHashMap<>();
-        return new Generator.Trial() {
+        // Each row once, for every search that holds this: a search runs a row to choose it, its
+        // reader runs the row it was handed to see where it stands, and the searches of one
+        // behavior's points compose many of the same rows.
+        return Generator.once(new Generator.Trial() {
 
             @Override
             public Generator.ObservedRun run(RowToRun row) {
-                Generator.ObservedRun already = ran.get(row);
-                if (already != null) {
-                    return already;
-                }
-                Generator.ObservedRun now = runOnce(row);
-                ran.put(row, now);
-                return now;
-            }
-
-            private Generator.ObservedRun runOnce(RowToRun row) {
                 List<RowTrials.AnsweredWith> standing = requires.standingIn(row.answers());
                 if (standing == null) {
                     // A row short of a stand-in the behavior requires is a row nothing applies,
@@ -6277,16 +6262,9 @@ public final class Adequacy {
             @Override
             public Optional<AnswerObservation> runReplacing(RowToRun row,
                                                             Map<Integer, Integer> replacing) {
-                Replaced asked = new Replaced(row, replacing);
-                Optional<AnswerObservation> already = replaced.get(asked);
-                if (already != null) {
-                    return already;
-                }
                 List<RowTrials.AnsweredWith> standing = requires.standingIn(row.answers());
-                Optional<AnswerObservation> now = standing == null ? Optional.empty()
+                return standing == null ? Optional.empty()
                         : application.runReplacing(valuesOf(row), standing, replacing);
-                replaced.put(asked, now);
-                return now;
             }
 
             @Override
@@ -6303,7 +6281,7 @@ public final class Adequacy {
                 return row.inputs().stream()
                         .map(FixtureTemplate::value).toList();
             }
-        };
+        });
     }
 
     /**

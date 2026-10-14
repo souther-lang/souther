@@ -23,15 +23,57 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The row composed for a point of a line is one the rewrites of the arms it goes through answer
- * differently on, where one is among the rows that stand there.
+ * A row composed for what a search was asked — a point of a line, a class — is one the rewrites of
+ * the arms it goes through answer differently on, where one is among the rows that meet it.
  *
  * <p>The model the question came from. The amount is read by no rule, so every row at a point of
  * the dates stands there whatever it holds; composed from its first value, every row answered
  * nothing, and the arm answering the amount could not be told from the arms answering nothing until
  * a second round composed more rows.
  */
-class ARowAtAPointIsOneItsArmsAnswerDifferentlyOnTest {
+class AGeneratedRowIsOneItsArmsAnswerDifferentlyOnTest {
+
+    /** A fork on the cases of a sum, one arm answering what the row holds and one answering 0. */
+    private static final String BONUS = """
+            module example.bonus
+
+            data Gold
+            data Plain
+            data Kind = Gold | Plain
+            data Points = Int
+
+            behavior bonus : (kind: Kind, earned: Points) -> Points
+
+            let bonus (kind, earned) = match kind with
+                | Gold -> earned
+                | Plain -> Points(0)
+            """;
+
+    /** A row of that block, as it is offered. */
+    private static final Pattern CASE_ROW = Pattern.compile(
+            "\\(([A-Za-z]+), Points\\((-?[0-9]+)\\)\\)\\s*-> <\\?>");
+
+    /**
+     * The rows composed for the cases of the sum, answered, tell each arm from the other: the row
+     * for the case answering what it holds holds something to answer.
+     */
+    @Test
+    void theRowsForEachCaseAnsweredTellTheArmsApart() {
+        String block = blockOf(BONUS, "example.bonus");
+        StringBuilder rows = new StringBuilder();
+        for (String line : block.lines().filter(line -> !line.startsWith("//")).toList()) {
+            Matcher row = CASE_ROW.matcher(line);
+            rows.append(!row.find() ? line : line.replace("<?>", "Points("
+                    + (row.group(1).equals("Gold") ? row.group(2) : "0") + ")")).append('\n');
+        }
+        Compilation compilation = compiled(BONUS + "\n" + rows);
+        String page = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+
+        assertTrue(page.contains("replacement 2/2"), () -> rows + "\n" + page);
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
+                AdequacyReport.of(compilation).adequacy(), () -> rows + "\n" + page);
+    }
 
     private static final String ADDON = """
             module example.addon
