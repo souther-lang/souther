@@ -120,7 +120,8 @@ final class AStatementAtARow {
             case Proposition.Any any -> any.parts().stream().allMatch(AStatementAtARow::askable);
             case Proposition.Some some -> askable(some.ofTheElement());
             case Proposition.Compared compared -> switch (compared.relation()) {
-                case Relation.Affine affine -> WhatTheRulesLeave.ofTheInput(affine.form()) != null
+                case Relation.Affine affine ->
+                        WhatTheDeclarationsLeave.ofTheInput(affine.form()) != null
                         || (countIn(affine) instanceof Quantity.HowManyMeet count
                                 && askable(count.ofTheElement()));
                 case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _, Rel _) ->
@@ -223,7 +224,8 @@ final class AStatementAtARow {
             case Proposition.Compared compared -> {
                 switch (compared.relation()) {
                     case Relation.Affine affine -> {
-                        LinearForm<NumericTerm> form = WhatTheRulesLeave.ofTheInput(affine.form());
+                        LinearForm<NumericTerm> form =
+                                WhatTheDeclarationsLeave.ofTheInput(affine.form());
                         if (form != null) {
                             into.addAll(form.coefs().keySet());
                         }
@@ -1090,7 +1092,8 @@ final class AStatementAtARow {
         static OneRelation of(Relation relation, String behavior, Quantities quantities) {
             return switch (relation) {
                 case Relation.Affine affine -> {
-                    LinearForm<NumericTerm> form = WhatTheRulesLeave.ofTheInput(affine.form());
+                    LinearForm<NumericTerm> form =
+                            WhatTheDeclarationsLeave.ofTheInput(affine.form());
                     if (form == null) {
                         throw new IllegalStateException("a relation put to rows is over the"
                                 + " input's own numbers: " + affine);

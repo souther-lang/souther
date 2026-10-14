@@ -23,20 +23,22 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Whether any value arrives at an arm of a {@code match}, decided once for every reader that asks.
+ * What proves no value arrives at an arm of a {@code match}, decided once for every reader that
+ * asks.
  *
  * <p>Three things can show it does not, and they are weighed in this order here and nowhere else.
  * A scrutinee the source wrote is of the cases written, and an arm none of them takes is entered by
- * nothing, whatever the rules leave. Otherwise what entering the arm states ({@link
- * MeaningsOfABody}) is put to what the declarations and rules leave the input
- * ({@link WhatTheRulesLeave}), wherever the scrutinee stands: a position of the input, or a value
- * the body works out whose cases are read off the input. A body with no reading of what its arms
- * state has the one reading it has, the rules of the position the scrutinee stands at.
+ * nothing, whatever the declarations leave. Otherwise what entering the arm states ({@link
+ * MeaningsOfABody}) is put to what the declarations leave the input
+ * ({@link WhatTheDeclarationsLeave}), wherever the scrutinee stands: a position of the input, or a
+ * value the body works out whose cases are read off the input. A body with no reading of what its
+ * arms state has the one reading it has, the rules of the position the scrutinee stands at — a
+ * case is refused only by a rule written on it, since every case a type declares holds a value.
  *
  * <p>Not ruled out is no proof that anything arrives: it is empty here, and what a reader does with
  * an arm nothing ruled out is its own.
  */
-public final class WhatTheRulesLeaveAnArm {
+public final class WhatTheDeclarationsLeaveAnArm {
 
     private final Core.Match match;
     private final InputReads reads;
@@ -46,9 +48,9 @@ public final class WhatTheRulesLeaveAnArm {
     private final Set<TypeSymbol> written;
     private final Optional<ModelOccurrence> construct;
 
-    private WhatTheRulesLeaveAnArm(Core.Match match, InputReads reads, Symbols symbols,
-                                   DeclarationNewtypes newtypes, MeaningsOfABody meanings,
-                                   InputReading read) {
+    private WhatTheDeclarationsLeaveAnArm(Core.Match match, InputReads reads, Symbols symbols,
+                                          DeclarationNewtypes newtypes, MeaningsOfABody meanings,
+                                          InputReading read) {
         this.match = match;
         this.reads = reads;
         this.newtypes = newtypes;
@@ -60,10 +62,10 @@ public final class WhatTheRulesLeaveAnArm {
 
     /** The arms of {@code match}, read in {@code reads} against what {@code read} leaves the
      *  input. */
-    public static WhatTheRulesLeaveAnArm of(Core.Match match, InputReads reads, Symbols symbols,
-                                            DeclarationNewtypes newtypes,
-                                            MeaningsOfABody meanings, InputReading read) {
-        return new WhatTheRulesLeaveAnArm(match, reads, symbols, newtypes, meanings, read);
+    public static WhatTheDeclarationsLeaveAnArm of(Core.Match match, InputReads reads,
+                                                   Symbols symbols, DeclarationNewtypes newtypes,
+                                                   MeaningsOfABody meanings, InputReading read) {
+        return new WhatTheDeclarationsLeaveAnArm(match, reads, symbols, newtypes, meanings, read);
     }
 
     /** What shows no value arrives at arm {@code index}, or empty where nothing does. */
@@ -84,7 +86,7 @@ public final class WhatTheRulesLeaveAnArm {
         }
         return meanings.at(new MeaningsOfABody.Site(construct.get(),
                         new MeaningsOfABody.Part.OfACase(index)))
-                .map(stated -> WhatTheRulesLeave.admits(stated, true, read))
+                .map(stated -> WhatTheDeclarationsLeave.whetherRuledOut(stated, true, read))
                 .flatMap(answer -> answer instanceof AWayThrough.RuledOut(var why)
                         ? Optional.of(new WhyNoValueTakesTheArm.ByWhatItStates(why))
                         : Optional.empty());

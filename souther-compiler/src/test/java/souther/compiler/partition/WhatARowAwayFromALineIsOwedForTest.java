@@ -29,7 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class WhatARowAwayFromALineIsOwedForTest {
 
-    /** One clause, read at a behavior that cuts the same number and at one that does not. */
+    /** One clause, read at a behavior that draws two lines of its own above it and at one that
+     *  draws none. */
     private static final String AMOUNT = """
             module example.owed
 
@@ -42,7 +43,7 @@ class WhatARowAwayFromALineIsOwedForTest {
             data Ok
 
             behavior guarded : (a: Amount) -> Size
-            let guarded (a) = if a.value <= 100 then Small else Large
+            let guarded (a) = if a.value >= 200 then Large else if a.value >= 100 then Large else Small
 
             behavior bare : (a: Amount) -> Ok
             let bare (a) = Ok
@@ -89,17 +90,36 @@ class WhatARowAwayFromALineIsOwedForTest {
     /**
      * A run that stops at another rule's line is owed to that rule.
      *
-     * <p>{@code guarded} compares against a hundred, so the run above {@code Amount}'s floor stops
-     * there. A row inside it answers for the floor and for the comparison at once, and the second is
-     * what a reading of the same clause somewhere else does not have.
+     * <p>{@code guarded} compares against a hundred and against two hundred, so the run above its
+     * line at a hundred stops at the other. A row inside it answers for both comparisons at once.
      */
     @Test
     void aRunStoppingAtALineIsOwedToThatLine() {
-        FarEnd end = onlyBasis(AMOUNT, "example.owed", "guarded", "a = 0", PointRole.IN);
+        FarEnd end = onlyBasis(AMOUNT, "example.owed", "guarded", "a = 100", PointRole.IN);
 
         assertInstanceOf(FarEnd.AtALine.class, end, "the run stops at a line somebody wrote");
-        assertEquals("100", ((FarEnd.AtALine) end).where().at().written().spelled(),
-                "which is the comparison's, at a hundred");
+        assertEquals("200", ((FarEnd.AtALine) end).where().at().written().spelled(),
+                "which is the other comparison's, at two hundred");
+    }
+
+    /**
+     * A clause's run is not stopped by a body's line, so it is the same run wherever the clause is
+     * read.
+     *
+     * <p>{@code guarded} draws two lines above {@code Amount}'s floor and {@code bare} draws none,
+     * and the run above the floor goes as far as the order does at both: what the clause owes away
+     * from its line is what the rules leave, which no comparison in a body moves.
+     */
+    @Test
+    void aClausesRunIsTheSameAtABehaviorThatDrawsLinesInsideIt() {
+        Border guarded = borderAt(AMOUNT, "example.owed", "guarded", "a = 0").border();
+        Border bare = borderAt(AMOUNT, "example.owed", "bare", "a = 0").border();
+
+        assertEquals(new FarEnd.AtTheOrderEnd(Towards.ABOVE),
+                onlyBasis(AMOUNT, "example.owed", "guarded", "a = 0", PointRole.IN));
+        assertEquals(bare.answer(PointRole.IN), guarded.answer(PointRole.IN),
+                "the run and what stops it are one answer at both");
+        assertEquals(bare.owes(), guarded.owes(), "so both readings owe the same points");
     }
 
     /** And where nothing stops it, the run is owed to the line and to the order's own end. */
@@ -147,7 +167,7 @@ class WhatARowAwayFromALineIsOwedForTest {
                 "the two stop in different places, so a row in one is no row in the other");
     }
 
-    /** Two rules of one behavior cutting at one number, with a clause's line below them. */
+    /** Two rules of one behavior cutting at one number, with a line of the body's below them. */
     private static final String TWICE_AT_ONE_PLACE = """
             module example.twice
 
@@ -160,7 +180,7 @@ class WhatARowAwayFromALineIsOwedForTest {
 
             behavior twice : (a: Amount) -> Size
                 ensures Small -> a.value <= 10
-            let twice (a) = if a.value <= 10 then Small else Large
+            let twice (a) = if a.value <= 5 then Small else if a.value <= 10 then Small else Large
 
             example twice
                 | "x" : (Amount(1)) -> Small
@@ -169,15 +189,16 @@ class WhatARowAwayFromALineIsOwedForTest {
     /**
      * A run stopping where two of a body's rules drew a line is owed to each of them.
      *
-     * <p>Each is enough on its own: taking either comparison away leaves the run stopping at ten.
-     * So there are two rows to write there and not one — the values are the same values, and a row
-     * inside answers both, but what an author is told about and what a verdict counts are the two
-     * rules, since either can be moved without the other.
+     * <p>The run above the line at five stops at ten, and each of the two rules there is enough on
+     * its own: taking either away leaves the run stopping at ten. So there are two rows to write
+     * there and not one — the values are the same values, and a row inside answers both, but what
+     * an author is told about and what a verdict counts are the two rules, since either can be moved
+     * without the other.
      */
     @Test
     void aRunTwoRulesStopIsOwedToEachOfThem() {
-        PointAnswer answer = borderAt(TWICE_AT_ONE_PLACE, "example.twice", "twice", "a = 0")
-                .border().answer(PointRole.IN);
+        PointAnswer answer = borderAt(TWICE_AT_ONE_PLACE, "example.twice", "twice", "a = 5")
+                .border().answer(PointRole.OUT);
 
         assertEquals(2, answer.bases().size(),
                 () -> "two comparisons stop the run at ten: " + answer.bases());

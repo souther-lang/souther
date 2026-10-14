@@ -34,8 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the least the order has, it is inside the run, and nothing between choosing it and building the row
  * is able to say the declarations refuse it — the rules a placement is held against are the
  * arithmetic ones, and a place that is a string is handed back unheld
- * ({@code LevelRealizer.theRulesHaveNotRefused}). So the row goes out, comes back refused where it is
- * built, and a reader is told every value was tried at a run holding all but one of them.
+ * ({@code LevelRealizer.theDeclarationsHaveNotRefused}). So the row goes out, comes back refused
+ * where it is built, and a reader is told every value was tried at a run holding all but one of
+ * them.
  *
  * <p>What the run cannot say is exactly this. {@code String.length(value) >= 1} is a rule about
  * another number of the same position, so it is nowhere in the run of the order the boundary is on —

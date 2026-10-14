@@ -131,10 +131,12 @@ public record RepairShortfall(List<Generator.Purpose> soughtFor, CoverageSites.A
         NOTHING_HOLDS_A_ROW_TO_IT,
 
         /**
-         * A part of it is a comparison coming out on a side the rules leave no value on. No row
-         * goes this way, which is the model's to say and not a search that stopped.
+         * A part of it is a comparison coming out on a side no value can stand on. No row goes
+         * this way, which is the model's to say and not a search that stopped — and whether a rule
+         * or the type alone leaves the side empty is not said, since a reader does the same about
+         * either.
          */
-        THE_RULES_LEAVE_NO_VALUE_THAT_WAY,
+        NO_VALUE_CAN_GO_THAT_WAY,
 
         /**
          * Holding the row to it would compose afresh a parameter the row writes as the value the
@@ -148,6 +150,21 @@ public record RepairShortfall(List<Generator.Purpose> soughtFor, CoverageSites.A
          * There is nothing left to ask of a row, so the ways the reading wrote down are not every
          * way the guard has.
          */
-        THE_ROW_ALREADY_DOES_ALL_OF_IT
+        THE_ROW_ALREADY_DOES_ALL_OF_IT;
+
+        /**
+         * Whether this is the model settling that no row goes the way, as against this compiler
+         * not looking.
+         *
+         * <p>Exhaustive, so a barrier added is one somebody says which of the two it is. Only the
+         * first may be said as no value going that way; the rest are no proof of anything.
+         */
+        public boolean provesNoRowGoes() {
+            return switch (this) {
+                case NO_VALUE_CAN_GO_THAT_WAY -> true;
+                case NOTHING_HOLDS_A_ROW_TO_IT, IT_WOULD_REWRITE_A_STATED_VALUE,
+                     THE_ROW_ALREADY_DOES_ALL_OF_IT -> false;
+            };
+        }
     }
 }

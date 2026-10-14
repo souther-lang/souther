@@ -161,7 +161,8 @@ class ACandidateOnAnOrderWithNoStepComesFromAllThreeThingsThatNarrowItTest {
         @Override
         public Optional<EmptyInput> emptiness() {
             return standing != null && apart.has(standing)
-                    ? Optional.of(new EmptyInput.ProvedByTheRules(new Emptiness.ConflictingRules()))
+                    ? Optional.of(new EmptyInput.ProvedByTheDeclarations(
+                            new Emptiness.ConflictingRules()))
                     : Optional.empty();
         }
 

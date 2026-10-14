@@ -65,7 +65,7 @@ class TheBlockAnsweredIsTheFixedPointOfTheAccountTest {
                     | Small | Large -> if cost.value > 50 then No else Yes
 
             example judge
-                | "small and cheap" : (Small, Amount(10)) -> Yes
+                | "small and free" : (Small, Amount(0)) -> Yes
             """;
 
     /** What each derivation is short of, in the report's own words. */
@@ -76,8 +76,8 @@ class TheBlockAnsweredIsTheFixedPointOfTheAccountTest {
             "! no row goes through `then`",
             "! no row takes a decision rule",
             "! no row is at the ON point (comparison",
-            "! no row is at an IN point (invariant Amount #1)",
-            "! no row is at the ON point value = 0 (invariant Amount #1)");
+            "! no row is at the IN point value in 0 < value <= 100 (invariant Amount #1)",
+            "! no row is at the ON point value = 100 (invariant Amount #1)");
 
     @Test
     void everythingTheBlockOffersAnsweredLeavesNothingOwed() {

@@ -996,7 +996,8 @@ public sealed interface BorderQuantity
                         + " [" + said(some.ofTheElement()) + "]";
                 case Proposition.Compared compared -> switch (compared.relation()) {
                     case Relation.Affine affine -> {
-                        LinearForm<NumericTerm> form = WhatTheRulesLeave.ofTheInput(affine.form());
+                        LinearForm<NumericTerm> form =
+                                WhatTheDeclarationsLeave.ofTheInput(affine.form());
                         Rel rel = compared.holds() ? affine.proposition()
                                 : affine.proposition().denied();
                         Quantity.HowManyMeet count = AStatementAtARow.countIn(affine);

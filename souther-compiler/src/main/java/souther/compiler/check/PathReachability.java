@@ -15,7 +15,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Unsettlement;
-import souther.compiler.partition.WhatTheRulesLeaveAnArm;
+import souther.compiler.partition.WhatTheDeclarationsLeaveAnArm;
 import souther.compiler.partition.WhereAClosureIsApplied;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.inputs.NumericTerm;
@@ -428,8 +428,8 @@ public final class PathReachability {
      *  against. A condition narrows a path; a case is refused or left by the rules themselves. */
     private final InputDomain read;
     /** The same input with what its rules leave the numbers there, which is what an arm is asked
-     *  of ({@link WhatTheRulesLeaveAnArm}) — the one reading {@code NumberWays} asks it of too, so
-     *  the two cannot answer about different inputs. */
+     *  of ({@link WhatTheDeclarationsLeaveAnArm}) — the one reading {@code NumberWays} asks it of
+     *  too, so the two cannot answer about different inputs. */
     private final InputReading reading;
     private final Symbols symbols;
 
@@ -996,8 +996,8 @@ public final class PathReachability {
         // asks, wherever the scrutinee stands: a position of the input, a value the source wrote,
         // or a value the body works out whose cases are read off the input. What this adds is the
         // witness, which only a scrutinee at a position of the input can have.
-        WhatTheRulesLeaveAnArm ruling =
-                WhatTheRulesLeaveAnArm.of(match, reads, symbols, newtypes, meanings, reading);
+        WhatTheDeclarationsLeaveAnArm ruling = WhatTheDeclarationsLeaveAnArm.of(match, reads,
+                symbols, newtypes, meanings, reading);
         TermPath path = positionOf(match.scrutinee(), reads);
         // The reading this walk was given, which is the one held here. Which location the name
         // stands for is the environment's answer and what the rules leave there is the reading's,

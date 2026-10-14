@@ -83,7 +83,7 @@ class ASearchThatSettlesThePointOwesNoAccountOfTheWayToItTest {
     @Test
     void aSearchThatProvedThereIsNothingThereOwesNothing() {
         assertEquals(List.of(), came(
-                Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE)
+                Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE)
                 .unaccountedFor());
     }
 

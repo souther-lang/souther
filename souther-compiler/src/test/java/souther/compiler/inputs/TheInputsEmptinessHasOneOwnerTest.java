@@ -144,7 +144,8 @@ class TheInputsEmptinessHasOneOwnerTest {
         SearchRegion crossed = asked.region().assuming(
                 new LinearForm<>(ExactRatio.ZERO, coefs), Rel.LE).taken();
 
-        assertEquals(Optional.of(new EmptyInput.ProvedByTheRules(new Emptiness.ConflictingRules())),
+        assertEquals(Optional.of(
+                        new EmptyInput.ProvedByTheDeclarations(new Emptiness.ConflictingRules())),
                 crossed.emptiness());
     }
 
@@ -248,7 +249,7 @@ class TheInputsEmptinessHasOneOwnerTest {
     private static Emptiness why(String source) {
         Read read = read(source, "take");
         EmptyInput held = read.inputs().quantities(read.rules()).emptiness().orElseThrow();
-        return ((EmptyInput.ProvedByTheRules) held).why();
+        return ((EmptyInput.ProvedByTheDeclarations) held).why();
     }
 
     private record Read(InputDomain inputs, RuleReadingSource rules) {}

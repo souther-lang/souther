@@ -110,7 +110,7 @@ class APointTriedWithSeveralValuesIsAnsweredByWhatWasBuiltTest {
             assertFalse(said.isEmpty(), () -> "this model has points nothing established a row at:\n"
                     + model);
             for (String each : said) {
-                assertFalse(each.contains("the rules leave no value at"),
+                assertFalse(each.contains("no value can stand at"),
                         () -> "a point this stopped asking about is not one nothing can stand at: "
                                 + each);
                 // And the line says which of the two it was, since what an author does about them

@@ -40,8 +40,8 @@ class AWayNotRuledOutIsNeverAProofTest {
         return new Proposition.Unread(Optional.empty(), ordinal, why, false, true);
     }
 
-    private static AWayThrough admits(Proposition stated, boolean want) {
-        return WhatTheRulesLeave.admits(stated, want, null);
+    private static AWayThrough whetherRuledOut(Proposition stated, boolean want) {
+        return WhatTheDeclarationsLeave.whetherRuledOut(stated, want, null);
     }
 
     private static List<WhyNotTaken> notAsked(AWayThrough way) {
@@ -53,7 +53,7 @@ class AWayNotRuledOutIsNeverAProofTest {
     void aPartNothingReadRulesOutNeitherWay() {
         for (boolean want : List.of(true, false)) {
             assertEquals(List.of(new WhyNotTaken.MeaningUnread(NO_SIZE)),
-                    notAsked(admits(unread(0, NO_SIZE), want)), "wanting " + want);
+                    notAsked(whetherRuledOut(unread(0, NO_SIZE), want)), "wanting " + want);
         }
     }
 
@@ -67,7 +67,7 @@ class AWayNotRuledOutIsNeverAProofTest {
                 unread(0, NO_SIZE)));
 
         assertEquals(List.of(new WhyNotTaken.MeaningUnread(NO_SIZE)),
-                notAsked(admits(either, true)));
+                notAsked(whetherRuledOut(either, true)));
     }
 
     /** A conjunction with a part that never holds is ruled out, whatever else is in it: that is a
@@ -77,7 +77,7 @@ class AWayNotRuledOutIsNeverAProofTest {
         Proposition both = new Proposition.All(List.of(unread(0, NO_SIZE),
                 new Proposition.Always(false)));
 
-        assertInstanceOf(AWayThrough.RuledOut.class, admits(both, true));
+        assertInstanceOf(AWayThrough.RuledOut.class, whetherRuledOut(both, true));
     }
 
     /**
@@ -92,8 +92,9 @@ class AWayNotRuledOutIsNeverAProofTest {
                 unread(0, NO_SIZE), unread(1, NOT_LINEAR))), true);
         assertEquals(List.of(new WhyNotTaken.MeaningUnread(NO_SIZE),
                         new WhyNotTaken.MeaningUnread(NOT_LINEAR)),
-                notAsked(WhatTheRulesLeave.admits(some, true, read)));
-        assertEquals(List.of(), notAsked(WhatTheRulesLeave.admits(some, false, read)),
+                notAsked(WhatTheDeclarationsLeave.whetherRuledOut(some, true, read)));
+        assertEquals(List.of(),
+                notAsked(WhatTheDeclarationsLeave.whetherRuledOut(some, false, read)),
                 "no element meeting it is a container holding none, which the rules leave");
     }
 
@@ -121,9 +122,10 @@ class AWayNotRuledOutIsNeverAProofTest {
 
         assertEquals(List.of(new WhyNotTaken.MeaningUnread(NO_SIZE),
                         new WhyNotTaken.MeaningUnread(NOT_LINEAR)),
-                notAsked(admits(both, true)));
+                notAsked(whetherRuledOut(both, true)));
         assertEquals(List.of(new WhyNotTaken.MeaningUnread(NO_SIZE),
                         new WhyNotTaken.MeaningUnread(NOT_LINEAR)),
-                notAsked(admits(both, false)), "and failing, each part is a way it can fail");
+                notAsked(whetherRuledOut(both, false)),
+                "and failing, each part is a way it can fail");
     }
 }

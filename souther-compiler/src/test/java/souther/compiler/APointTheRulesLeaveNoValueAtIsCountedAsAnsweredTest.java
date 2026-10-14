@@ -62,7 +62,7 @@ class APointTheRulesLeaveNoValueAtIsCountedAsAnsweredTest {
                         line.contains("nothing could show a row can be written")),
                 () -> "nothing here was stopped and no search fell short, so there is no open"
                         + " question to name: " + said);
-        assertTrue(said.stream().anyMatch(line -> line.contains("the rules leave no value at")),
+        assertTrue(said.stream().anyMatch(line -> line.contains("no value can stand at")),
                 () -> "no row is at the line the guards close between them, which is the rules'"
                         + " answer and not a search that stopped: " + said);
     }
@@ -127,7 +127,7 @@ class APointTheRulesLeaveNoValueAtIsCountedAsAnsweredTest {
         List<String> said = about("comparison@6:13");
 
         assertFalse(said.stream().anyMatch(line -> line.contains("no row can stand at")
-                        || line.contains("the rules leave no value at")),
+                        || line.contains("no value can stand at")),
                 () -> "the declarations leave this border's distance every value it has: " + said);
         assertEquals(4, said.stream()
                         .filter(line -> line.contains("undecided whether a row is at")).count(),

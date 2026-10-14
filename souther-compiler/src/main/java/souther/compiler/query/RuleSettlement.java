@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.Generator;
 
 /**
@@ -35,7 +36,7 @@ import souther.compiler.partition.Generator;
  *                    each of them comes back with says only what happened and not what was left out
  */
 public record RuleSettlement(RuleRequirement requirement, RuleSearch search,
-                             souther.compiler.partition.CompositionAccount account) {
+                             CompositionAccount account) {
 
     public RuleSettlement {
         if (requirement == null) {
@@ -60,7 +61,7 @@ public record RuleSettlement(RuleRequirement requirement, RuleSearch search,
                  RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
                     search instanceof RuleSearch.NotMade;
             // And the one the composings themselves proved, which is what they came back with.
-            case RuleRequirement.Excluded.TheRulesLeaveNoValueForIt _ ->
+            case RuleRequirement.Excluded.NoValueCanTakeIt _ ->
                     search instanceof RuleSearch.CameToNothing;
             // The inquiry having had no candidate is that same shape without the proof.
             case RuleRequirement.Unsettled.NothingWasComposedToTry _ ->
@@ -83,19 +84,19 @@ public record RuleSettlement(RuleRequirement requirement, RuleSearch search,
     /** A rule the readings settled, which nothing was composed for. */
     public static RuleSettlement read(RuleRequirement.Excluded requirement) {
         return new RuleSettlement(requirement, new RuleSearch.NotMade(),
-                souther.compiler.partition.CompositionAccount.NOTHING);
+                CompositionAccount.NOTHING);
     }
 
     /** A search that had a candidate to try the rule with, whatever it then settled. */
     public static RuleSettlement of(RuleRequirement requirement,
-                                    souther.compiler.partition.CompositionAccount account) {
+                                    CompositionAccount account) {
         return new RuleSettlement(requirement, new RuleSearch.Composed(), account);
     }
 
     /** A search whose composing produced no candidate, in the words the composing came back with. */
     public static RuleSettlement nothingToTryWith(
             Generator.UnresolvedCombination why,
-            souther.compiler.partition.CompositionAccount account) {
+            CompositionAccount account) {
         if (why == null) {
             throw new IllegalArgumentException("a composing that came to nothing says what of");
         }
@@ -104,16 +105,16 @@ public record RuleSettlement(RuleRequirement requirement, RuleSearch search,
     }
 
     /**
-     * A rule every way of standing the dependencies in proved the rules leave no value for, in the
-     * words those composings came back with.
+     * A rule every way of standing the dependencies in proved no value takes, in the words those
+     * composings came back with.
      *
      * <p>The universal is the caller's to establish
      * ({@link Adequacy.DecisionSearch#provedByEveryWay}) and is not a claim this value makes: what
      * is held is what each composing said, the way a point holds its searches.
      */
     public static RuleSettlement provedNothingTakesIt(RuleSearch.CameToNothing proofs) {
-        return new RuleSettlement(new RuleRequirement.Excluded.TheRulesLeaveNoValueForIt(), proofs,
-                souther.compiler.partition.CompositionAccount.NOTHING);
+        return new RuleSettlement(new RuleRequirement.Excluded.NoValueCanTakeIt(), proofs,
+                CompositionAccount.NOTHING);
     }
 
     /**

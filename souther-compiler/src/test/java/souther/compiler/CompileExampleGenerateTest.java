@@ -1226,7 +1226,7 @@ class CompileExampleGenerateTest {
 
         // One against the line and one away from it, so neither kind is answering for the other.
         assertTrue(block.contains("// no row for `s = 5` in `label`"), block);
-        assertTrue(block.contains("// no row for `1 < s < 5` in `label`"), block);
+        assertTrue(block.contains("// no row for `1 <= s < 4` in `label`"), block);
         // And what the block says about the rest of the account, beside the points rather than in
         // place of them. The arm is looked for at the classes the way into it leaves and every
         // value of them was refused, and the rule this compiler could not read is why those were
@@ -1234,7 +1234,7 @@ class CompileExampleGenerateTest {
         // that reads as the model refusing what it states.
         assertTrue(block.contains("// no row for `else` (13:20) in `label`: every value tried was"
                 + " refused"
-                + " at construction, and what was tried was not everything the rules leave, and"
+                + " at construction, but the values offered were not shown to be exhaustive, and"
                 + " invariant C #1 at `c` gave none of them"), block);
     }
 

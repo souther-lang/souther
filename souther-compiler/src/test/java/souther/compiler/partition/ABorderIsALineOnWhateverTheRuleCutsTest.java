@@ -286,8 +286,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
 
         assertTrue(report.contains("the ON point (comparison@14:71)"), report);
         assertTrue(report.contains("read as f/3 * a + 5 * b: = 7"
-                        + " — the rules leave no value at 3 * a + 5 * b = 7"), report);
-        assertFalse(report.contains("nothing composed one: the rules leave no value"),
+                        + " — no value can stand at 3 * a + 5 * b = 7"), report);
+        assertFalse(report.contains("nothing composed one: no value can stand"),
                 "a proof does not arrive under the opening a failed search gets:\n" + report);
     }
 
@@ -376,7 +376,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         String report = report(dense("a.value * 2m + b.value * 4m <= 9m"));
 
         assertTrue(report.contains("read as f/2 * a + 4 * b: = 9"), report);
-        assertFalse(report.contains("the rules leave no value at 2 * a + 4 * b"),
+        assertFalse(report.contains("no value can stand at 2 * a + 4 * b"),
                 "nothing walked the whole of this box, so nothing was proved about it:\n" + report);
     }
 
@@ -756,7 +756,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
                 """);
 
         assertTrue(report.contains("read as f/a + b: = 10000000000000001"), report);
-        assertFalse(report.contains("the rules leave no value at a + b = 10000000000000001"),
+        assertFalse(report.contains("no value can stand at a + b = 10000000000000001"),
                 "the box holds exactly one pair at this line, so nothing proves it holds none:\n"
                         + report);
     }

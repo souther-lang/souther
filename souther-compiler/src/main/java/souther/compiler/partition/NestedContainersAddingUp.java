@@ -114,7 +114,7 @@ final class NestedContainersAddingUp {
         }
         if (!(within.projectionOf(new NumericTerm.ValueOf(run))
                 instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds runs))) {
-            return none(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
+            return none(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
         }
         ContainersAddingUp.Ends ends = ContainersAddingUp.Ends.of(
                 runs == null ? NumericDomain.Bounds.OPEN : runs, elements);
@@ -138,7 +138,7 @@ final class NestedContainersAddingUp {
             DeclaredBounds.CountRange howMany = ContainersAddingUp.howMany(view, here, within,
                     reading, at == 0 ? alsoHolding : null);
             if (howMany == null) {
-                return none(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
+                return none(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
             }
             boolean innermost = at == chain.size() - 1;
             // What each element is asked to hold is the number at the leaves in the innermost
@@ -191,7 +191,7 @@ final class NestedContainersAddingUp {
         long fewest = leaves(counts, 0, false);
         long most = leaves(counts, 0, true);
         if (fewest > most) {
-            return none(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
+            return none(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
         }
         ContainersAddingUp.asFarAs(ContainersAddingUp.countsAdmitted(
                 new DeclaredBounds.CountRange(saturated(fewest), saturated(most)), null),

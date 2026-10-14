@@ -1202,9 +1202,9 @@ final class ReadQuantities implements Quantities {
             return null;
         }
         // What the declarations were read to prove. Where they admit no value there are no lines
-        // owed, which a range cannot say, so a reader drawing lines asks projectionOfTheRules; a
-        // caller looking for somewhere to put a value asks the region face. Both keep the
-        // difference ({@link #projectionOf}).
+        // owed, which a range cannot say, so a reader drawing lines asks
+        // projectionOfTheDeclarations; a caller looking for somewhere to put a value asks the
+        // region face. Both keep the difference ({@link #projectionOf}).
         return switch (projectionOf(form, false)) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) -> bounds;
             case NumericDomain.FormProjection.NothingIsLeft _ -> NumericDomain.Bounds.OPEN;
@@ -1212,7 +1212,7 @@ final class ReadQuantities implements Quantities {
     }
 
     @Override
-    public NumericDomain.FormProjection projectionOfTheRules(NumericTerm term) {
+    public NumericDomain.FormProjection projectionOfTheDeclarations(NumericTerm term) {
         return projectionOf(LinearForm.atom(term), false);
     }
 
@@ -1532,7 +1532,7 @@ final class ReadQuantities implements Quantities {
         // neither position's own range holds it.
         return switch (viability(under, null)) {
             case Viability.ProvedImpossible it ->
-                    Optional.of(new EmptyInput.ProvedByTheRules(it.why()));
+                    Optional.of(new EmptyInput.ProvedByTheDeclarations(it.why()));
             // Neither of these is a proof. One says nothing showed the input empty and the other
             // says this reading did not look, and a caller that read either as "there is a value"
             // would be reading the absence of a proof as one.

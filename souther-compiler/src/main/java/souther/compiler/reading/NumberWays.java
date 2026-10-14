@@ -1,6 +1,5 @@
 package souther.compiler.reading;
 
-import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
@@ -14,12 +13,10 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.meaning.WhyNotTaken;
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Rel;
 import souther.compiler.partition.MeaningsOfABodyReading;
-import souther.compiler.partition.WhatTheRulesLeave;
-import souther.compiler.partition.WhatTheRulesLeaveAnArm;
-import souther.compiler.numeric.Place;
-import souther.compiler.numeric.Towards;
+import souther.compiler.partition.WhatTheDeclarationsLeave;
+import souther.compiler.partition.WhatTheDeclarationsLeaveAnArm;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.ValueName;
@@ -88,8 +85,9 @@ final class NumberWays implements ComparisonWays {
     }
 
     /**
-     * A fork of the model is entered where what its condition states can come out that way under
-     * the input's rules ({@link WhatTheRulesLeave}). So is a fork in a copy of one of the
+     * A fork of the model is entered where the input's declarations do not prove that what its
+     * condition states never comes out that way ({@link WhatTheDeclarationsLeave}) — which is not a
+     * proof that a value takes it. So is a fork in a copy of one of the
      * language's operations: it states nothing of the model, and what its condition states, read
      * where the copy stands, is what the operation's body says at the call
      * ({@link MeaningsOfABodyReading#ofACopiedCondition}) — read by the rules a model's conditions
@@ -104,7 +102,7 @@ final class NumberWays implements ComparisonWays {
         }
         if (construct.isEmpty()) {
             return insideACopyOfTheLibrary(fork)
-                    ? Optional.of(WhatTheRulesLeave.admits(MeaningsOfABodyReading
+                    ? Optional.of(WhatTheDeclarationsLeave.whetherRuledOut(MeaningsOfABodyReading
                             .ofACopiedCondition(fork.cond(), reads, numbers.reading()), want,
                             numbers.reading()))
                     : Optional.empty();
@@ -114,7 +112,7 @@ final class NumberWays implements ComparisonWays {
         MeaningsOfABody.Site site =
                 new MeaningsOfABody.Site(construct.get(), MeaningsOfABody.Part.Asked.CONDITION);
         return Optional.of(meanings.at(site)
-                .map(proposition -> WhatTheRulesLeave.admits(proposition, want,
+                .map(proposition -> WhatTheDeclarationsLeave.whetherRuledOut(proposition, want,
                         numbers.reading()))
                 .orElseGet(() -> new AWayThrough.NotRuledOut(List.of(
                         new WhyNotTaken.MeaningUnread(meanings.whyNothingAt(site))))));
@@ -129,8 +127,8 @@ final class NumberWays implements ComparisonWays {
 
     @Override
     public Predicate<Core.Case> mayTake(Core.Match match) {
-        WhatTheRulesLeaveAnArm arms = WhatTheRulesLeaveAnArm.of(match, reads, symbols, newtypes,
-                meanings, numbers.reading());
+        WhatTheDeclarationsLeaveAnArm arms = WhatTheDeclarationsLeaveAnArm.of(match, reads,
+                symbols, newtypes, meanings, numbers.reading());
         return arm -> arms.ruledOut(match.cases().indexOf(arm)).isEmpty();
     }
 
@@ -141,7 +139,7 @@ final class NumberWays implements ComparisonWays {
                         ? numbers.of(binary, reads) : null;
         ComparedNumber.DrawnLine drawn = said == null ? null : said.line();
         if (drawn != null) {
-            return leaves(drawn, want);
+            return !ruledOut(drawn, want);
         }
         // A case of a sum no order counts, which the value either is or is not.
         CaseCompared compared = CaseCompared.of(e, numbers.reading(), reads);
@@ -149,34 +147,19 @@ final class NumberWays implements ComparisonWays {
                 : ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy);
     }
 
-    /** Whether the values the rules leave the number include one the comparison comes out
-     *  {@code want} at. */
-    private boolean leaves(ComparedNumber.DrawnLine drawn, boolean want) {
-        NumericDomain.Bounds runs = quantities.runsBetween(drawn.term());
-        return switch (drawn.claim()) {
-            case ComparisonClaim.Cut cut -> {
-                // Which side the way needs, which is the side the comparison is true on.
-                boolean upIsTrue = cut.satisfyingSide() == Towards.ABOVE;
-                yield WhatTheRulesLeave.anythingBeyond(runs, drawn.at(), upIsTrue == want,
-                        cut.holdsAtTheValue() == want);
-            }
-            // The value itself where the way is the one the comparison holds at, and everything else
-            // where it is the other. What is left over is empty only where the run is that one value
-            // and nothing else.
-            case ComparisonClaim.Singled singled -> singled.holdsAtTheValue() == want
-                    ? holds(runs, drawn.at()) : notOnlyOneValue(runs, drawn.at());
-        };
-    }
-
-    /** Whether the run holds the value the comparison named. */
-    private static boolean holds(NumericDomain.Bounds runs, Place at) {
-        return WhatTheRulesLeave.anythingBeyond(runs, at, true, true)
-                && WhatTheRulesLeave.anythingBeyond(runs, at, false, true);
-    }
-
-    /** Whether the run holds anything but the value the comparison named. */
-    private static boolean notOnlyOneValue(NumericDomain.Bounds runs, Place at) {
-        return WhatTheRulesLeave.anythingBeyond(runs, at, true, false)
-                || WhatTheRulesLeave.anythingBeyond(runs, at, false, false);
+    /**
+     * Whether the run the declarations leave the number proves the comparison never comes out
+     * {@code want}.
+     *
+     * <p>The relation the way needs is the one the comparison states, or its denial where the way
+     * is the other one, and what a run's ends rule out of a relation is the one table there is of it
+     * ({@link WhatTheDeclarationsLeave#ruledOutByBounds}). {@link #comesOut} answers in the
+     * positive, so it reads the denial of this: not ruled out, which is no proof a value comes out
+     * that way.
+     */
+    private boolean ruledOut(ComparedNumber.DrawnLine drawn, boolean want) {
+        Rel stated = drawn.claim().statedRelation();
+        return WhatTheDeclarationsLeave.ruledOutByBounds(quantities.runsBetween(drawn.term()),
+                want ? stated : stated.denied(), drawn.at());
     }
 }

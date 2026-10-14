@@ -246,7 +246,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
 
     private static WritabilityKnowledge established() {
         return new WritabilityKnowledge.Established(ItemAssessment.WritabilityEvidence.of(
-                Set.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT)));
+                Set.of(ItemAssessment.WritabilityEvidence.Ground.IT_IS_PROVED)));
     }
 
     private static WritabilityKnowledge.Prevented prevented() {

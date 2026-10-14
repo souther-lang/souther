@@ -397,7 +397,7 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
 
         assertTrue(!past.isEmpty(), () -> report);
         for (String line : past) {
-            assertTrue(!line.contains("the rules leave no value"),
+            assertTrue(!line.contains("no value can"),
                     () -> "nothing past the count is said to be what the rules leave: " + line);
         }
     }

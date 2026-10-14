@@ -194,7 +194,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
                     "no OFF point is owed"), report);
             assertTrue(report.contains(
                     "no OUT point is owed"), report);
-            assertTrue(report.contains("excluded — the rules leave no value there"), report);
+            assertTrue(report.contains("excluded — no value can stand there"), report);
             assertFalse(report.contains("no row is at the OFF point"), report);
         }
         // Asked of the value the line is named by, which is how a bound is written now: a line a
@@ -289,9 +289,9 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
         Border bound = borderOf(new LineOrigin.InvariantOrigin(
                         theOnlyStatement(),
                         souther.compiler.numeric.EndSide.LOWER, true));
-        assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+        assertEquals(new Demand.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                 bound.demand(PointRole.OFF));
-        assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+        assertEquals(new Demand.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                 bound.demand(PointRole.OUT));
         assertEquals("in 5 < h.a", bound.demand(PointRole.IN).criterion().asked(bound.cut().of()),
                 "and the run the bound bounds, without the edge itself, is inside it");

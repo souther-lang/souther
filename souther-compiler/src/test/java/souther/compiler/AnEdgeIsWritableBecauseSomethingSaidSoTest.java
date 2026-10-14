@@ -74,7 +74,7 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
         ItemAssessment.WritabilityEvidence evidence = at.writabilityEvidence();
         assertTrue(evidence.has(ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT),
                 "and a value at it went through the decoder");
-        assertTrue(evidence.has(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
+        assertTrue(evidence.has(ItemAssessment.WritabilityEvidence.Ground.IT_IS_PROVED),
                 "which the rules already proved, and the two stand together rather than one of them"
                         + " standing for both");
     }
@@ -128,7 +128,7 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
 
         assertInstanceOf(ItemAssessment.Coverage.NoHit.class,
 at.coverage().made().orElseThrow());
-        assertEquals(List.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
+        assertEquals(List.of(ItemAssessment.WritabilityEvidence.Ground.IT_IS_PROVED),
                 at.writabilityEvidence().grounds().written(),
                 "every rule of `Amount` was read, so 0 is a value it holds, and that is the whole"
                         + " of what showed it");
@@ -369,7 +369,7 @@ at.coverage().made().orElseThrow());
 
         ItemAssessment.Owed unbuilt = assessmentAt(HOLED, "example.holed", "f", "1",
                 Adequacy.Level.WITNESS);
-        assertEquals(List.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
+        assertEquals(List.of(ItemAssessment.WritabilityEvidence.Ground.IT_IS_PROVED),
                 unbuilt.writabilityEvidence().grounds().written(),
                 "and the rules prove it whether or not anything was built, which is the one ground"
                         + " left when nothing was");

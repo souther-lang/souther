@@ -40,7 +40,7 @@ class AValueTheDeclarationsRefuseIsNoPointOfTheBorderTest {
                 "Int.floorMod(value, 1000) >= 0 && Int.floorMod(value, 1000) <= 0",
                 "Int.floorMod(value, -1000) == 0")) {
             BorderAssessment line = lineAt(clause, "1950000");
-            assertEquals(new ItemAssessment.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+            assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                     line.items().get(new DomainPoint.BesideTheLine(Towards.ABOVE)), clause);
             assertTrue(line.items().get(new DomainPoint.AtTheLine())
                     instanceof ItemAssessment.Owed, clause);
@@ -63,7 +63,7 @@ class AValueTheDeclarationsRefuseIsNoPointOfTheBorderTest {
     @Test
     void aDivisorWrittenAsConstantArithmeticIsTheClassItComesTo() {
         BorderAssessment line = lineAt("Int.floorMod(value, 100 * 10) == 0", "1950000");
-        assertEquals(new ItemAssessment.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+        assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                 line.items().get(new DomainPoint.BesideTheLine(Towards.ABOVE)));
     }
 
@@ -73,7 +73,7 @@ class AValueTheDeclarationsRefuseIsNoPointOfTheBorderTest {
         String model = MULTIPLES_OF_A_THOUSAND.formatted("Int.floorMod(value, 1000) == 7");
         assertEquals(List.of("T(1950007)"), rowsAt(model, "1950000 < t"));
         assertEquals(List.of("T(1949007)"), rowsAt(model, "0 <= t <= 1950000"));
-        assertEquals(new ItemAssessment.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+        assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                 lineAt("Int.floorMod(value, 1000) == 7", "1950000").items()
                         .get(new DomainPoint.AtTheLine()),
                 "the line itself is a number outside the class, and no row is written at it");
@@ -91,7 +91,7 @@ class AValueTheDeclarationsRefuseIsNoPointOfTheBorderTest {
     void aMemberAnotherRuleRefusesLeavesTheNextMemberToTry() {
         String model = MULTIPLES_OF_A_THOUSAND.formatted(
                 "Int.floorMod(value, 1000) == 0 && Int.floorMod(value, 3000) /= 1000");
-        for (String label : List.of("1950000 < t", "0 < t <= 1950000")) {
+        for (String label : List.of("1950000 < t", "0 < t")) {
             List<String> rows = rowsAt(model, label);
             assertEquals(1, rows.size(), label + " " + rows);
             long at = Long.parseLong(rows.getFirst().replaceAll("[^0-9]", ""));

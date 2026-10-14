@@ -60,7 +60,7 @@ class ACountHeldAgainstANumberOfTheRowIsNotProvedImpossibleByTheValueTriedTest {
         List<String> proved = new ArrayList<>();
         for (String shape : SHAPES) {
             List<String> kinds = kinds(shape);
-            if (kinds.contains("TheRulesLeaveNoValueForIt")) {
+            if (kinds.contains("NoValueCanTakeIt")) {
                 proved.add(shape + ": " + kinds);
             }
         }

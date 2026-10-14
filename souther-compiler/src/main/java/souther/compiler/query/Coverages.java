@@ -1778,11 +1778,9 @@ final class Coverages {
                     // (ADR-0091).
                     case Realization.Impossible _ -> new Searching(answered, null, SearchOutcomes.of(
                             new ItemAssessment.Attempt.Unresolved(
-                                    new souther.compiler.partition.Generator.UnresolvedCombination(
-                                            java.util.List.of(label),
-                                            souther.compiler.partition.Generator
-                                                    .UnresolvedCombination.Reason
-                                                    .THE_RULES_LEAVE_NOTHING_THERE), within)),
+                                    new Generator.UnresolvedCombination(List.of(label),
+                                            Generator.UnresolvedCombination.Reason
+                                                    .NO_VALUE_CAN_STAND_THERE), within)),
                             Optional.empty());
                     // A walk that reached no placement. Where a budget of this compiler's is why it
                     // reached none, that travels: the point is one this declined to look further

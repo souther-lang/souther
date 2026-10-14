@@ -131,7 +131,7 @@ class AProofIsTheModelsAnswerAndOneSearchOfManyDoesNotMakeItTest {
     }
 
     private static ItemAssessment.Attempt proof() {
-        return came(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
+        return came(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
     }
 
     private static ItemAssessment.Attempt came(Generator.UnresolvedCombination.Reason to) {
