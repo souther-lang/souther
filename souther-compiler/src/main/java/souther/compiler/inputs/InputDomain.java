@@ -1713,7 +1713,7 @@ public final class InputDomain {
         // is one they admit. Nothing is read for a value whose own rules contradict — there is no
         // value of it for a rule to have named.
         List<Case> named = nothingExists ? List.of()
-                : Distinctions.ofValues(admitted.approximation(), type, source.inners());
+                : Distinctions.leftBy(declared, admitted, type, source.inners());
         BlockReason.ReadingStopReason why = admitted.whyPartial() != null
                 ? Crossing.stopped(admitted.whyPartial()) : here;
         if (why != null) {

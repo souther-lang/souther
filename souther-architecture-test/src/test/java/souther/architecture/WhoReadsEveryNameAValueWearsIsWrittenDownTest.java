@@ -71,6 +71,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
 
     private static final String HELD = "L" + CHECK + "FieldDomains$Held;";
 
+    private static final String ADMITTED = "Lsouther/compiler/values/AdmissibleSet;";
+
     private static final String REALIZATION = "L" + PARTITION + "TermRealizations$Realization;";
 
     private static final String THE_SPINE = TYPE_OPS + "#newtypeSpine";
@@ -240,7 +242,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(L" + PARTITION + "ConstructionPlan$Slot;)L" + PARTITION + "FixtureTemplate;",
                     THE_POSITION),
             row(PARTITION + "ValuesOfAnElement", "valuesOf",
-                    "(" + TYPE + "L" + INPUTS + "TermPath;" + SOURCE
+                    "(" + TYPE + "L" + INPUTS + "TermPath;" + ADMITTED + CONTEXT
                             + "ILjava/util/function/Function;Ljava/util/Set;)Ljava/util/List;",
                     THE_POSITION),
             row(PARTITION + "Witnesses", "differing",
@@ -249,6 +251,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "Witnesses", "holdingAt",
                     "(" + TYPE + "Ljava/util/Map;" + CONTEXT + ")L" + PARTITION
                             + "FixtureTemplate;",
+                    THE_POSITION),
+            row(PARTITION + "Witnesses", "placed",
+                    "(" + TYPE + ADMITTED + CONTEXT + "Ljava/util/Set;)L" + PARTITION
+                            + "Witnesses$Placed;",
                     THE_POSITION),
             row(PARTITION + "Witnesses", "varied",
                     "(" + TYPE + "I" + CONTEXT + ")L" + PARTITION + "FixtureTemplate;",

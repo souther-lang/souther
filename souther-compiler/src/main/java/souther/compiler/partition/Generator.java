@@ -2929,25 +2929,45 @@ public final class Generator {
             return out;
         }
 
-        /** One of them. */
+        /**
+         * One of them.
+         *
+         * <p>A part the rules leave no value for bars the way whatever the other parts say, since
+         * the way is all of them at once. It is said in place of a part nothing here could hold a
+         * row to, which would send an author looking for a row nobody can write.
+         */
         private WayPastTheGuard wayOn(AlignedObservation seen, List<ControlClaim> way,
                                       Set<String> against) {
             List<HeldOutcome> demands = new ArrayList<>();
+            RepairShortfall.Barrier barred = null;
             for (ControlClaim each : way) {
                 if (each.satisfiedBy(seen)) {
                     continue;
                 }
-                Optional<HeldOutcome> holds = holding.at(each.at());
-                if (holds.isEmpty()) {
-                    return new WayPastTheGuard.Barred(
-                            RepairShortfall.Barrier.NOTHING_HOLDS_A_ROW_TO_IT);
+                switch (holding.at(each.at())) {
+                    case HeldOutcome.Bringing.TheRulesLeaveNoValueThere _ -> {
+                        return new WayPastTheGuard.Barred(
+                                RepairShortfall.Barrier.THE_RULES_LEAVE_NO_VALUE_THAT_WAY);
+                    }
+                    case HeldOutcome.Bringing.NothingFound _ -> {
+                        if (barred == null) {
+                            barred = RepairShortfall.Barrier.NOTHING_HOLDS_A_ROW_TO_IT;
+                        }
+                    }
+                    case HeldOutcome.Bringing.Found(HeldOutcome holds) -> {
+                        if (holds.demands().stream()
+                                .anyMatch(demand -> writesAnyOf(demand, against))) {
+                            if (barred == null) {
+                                barred = RepairShortfall.Barrier.IT_WOULD_REWRITE_A_STATED_VALUE;
+                            }
+                        } else {
+                            demands.add(holds);
+                        }
+                    }
                 }
-                if (holds.get().demands().stream()
-                        .anyMatch(demand -> writesAnyOf(demand, against))) {
-                    return new WayPastTheGuard.Barred(
-                            RepairShortfall.Barrier.IT_WOULD_REWRITE_A_STATED_VALUE);
-                }
-                demands.add(holds.get());
+            }
+            if (barred != null) {
+                return new WayPastTheGuard.Barred(barred);
             }
             return demands.isEmpty()
                     ? new WayPastTheGuard.Barred(

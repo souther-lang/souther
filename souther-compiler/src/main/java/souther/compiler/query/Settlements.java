@@ -30,6 +30,8 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 
@@ -108,33 +110,58 @@ public record Settlements(List<ObligationIdentity> requested,
      * a row for. What is shown then is what the measurement saw, and that is the measurement's to
      * say.
      */
-    public Map<ObligationIdentity, InputOfARowForALine> shownFor(Set<RowKey> kept) {
-        Map<ObligationIdentity, InputOfARowForALine> out = new LinkedHashMap<>();
+    public Map<ObligationIdentity, Shown> shownFor(Set<RowKey> kept) {
+        Map<ObligationIdentity, Shown> out = new LinkedHashMap<>();
         for (ObligationIdentity item : requested) {
             RowKey composed = composedFor.get(item);
             boolean composedKept = composed != null && kept.contains(composed);
+            RowKey row = null;
             InputOfARowForALine at = null;
             if (composedKept && byRow.get(composed).get(item).settles()) {
+                row = composed;
                 at = composedAt.get(item);
             } else {
                 for (RowKey rowKey : byRow.keySet()) {
                     if (kept.contains(rowKey) && byRow.get(rowKey).get(item).settles()) {
+                        row = rowKey;
                         at = standsAt.getOrDefault(rowKey, Map.of()).get(item);
                         break;
                     }
                 }
                 // Nothing kept is shown to settle it, and the row composed for it is what a person
                 // was offered there — the one piece of work anybody was handed, whether or not its
-                // reading could tell.
-                if (at == null && composedKept) {
+                // reading could tell. Asked of the row and not of its input: a kept row that settles
+                // the line and stands at no input the line's reading names is still the row for it,
+                // and the row composed for it, kept for something else, does not take its place.
+                if (row == null && composedKept) {
+                    row = composed;
                     at = composedAt.get(item);
                 }
             }
-            if (at != null) {
-                out.put(item, at);
+            if (row != null) {
+                out.put(item, new Shown(row, Optional.ofNullable(at)));
             }
         }
         return Collections.unmodifiableMap(out);
+    }
+
+    /**
+     * The row a person is handed for a line, and where it stands on the line.
+     *
+     * <p>One answer and not two. Which row a line is shown at and the input it is shown at there
+     * are decided together, by the order above; asked apart, a reader saying which row is for the
+     * line and a reader saying where it stands could each pick a row the other did not.
+     *
+     * @param rowKey the row of the block that is handed for the line
+     * @param at     the positions the line's reading names, at the values that row writes — none
+     *               where the line's reading names none, as a point in a region does not
+     */
+    public record Shown(RowKey rowKey, Optional<InputOfARowForALine> at) {
+
+        public Shown {
+            Objects.requireNonNull(rowKey, "a line is shown at some row");
+            Objects.requireNonNull(at, "and at some input of it, or at none this can name");
+        }
     }
 
     /** What the row {@code rowKey} addresses would do about {@code item}, for a reader holding

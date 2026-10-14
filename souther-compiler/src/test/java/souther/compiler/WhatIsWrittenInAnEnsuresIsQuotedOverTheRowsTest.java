@@ -58,8 +58,9 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
             """;
 
     private static String block(String source) {
-        return GeneratedRows.of(compiled(source), null, null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+        Compilation compilation = compiled(source);
+        return GeneratedRows.of(compilation, null, null,
+                SourceRendering.namedByIdentity(compilation.texts())).text();
     }
 
     private static Compilation compiled(String source) {
@@ -89,11 +90,23 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                 //     ensures asked = NotFound -> id.value > 0
 
                 example findTodo
-                    | "id=0 <= x <= 0" : (TodoId(0)) -> <?>
-                    | "id=0 < x"       : (TodoId(1)) -> <?>
-                    | (TodoId(2))                    -> <?>
+                // fills id=0 <= x <= 0
+                // fills a decision rule (the comparison at 16:33 does not hold)
+                // fills value = 0
+                // fills OFF point of ensures findTodo (asked)
+                // fills OFF point of comparison@0:16:33
+                    | (TodoId(0)) -> <?>
+                // fills id=0 < x
+                // fills a decision rule (the comparison at 16:33 holds)
+                // fills ON point of ensures findTodo (asked)
+                // fills ON point of comparison@0:16:33
+                    | (TodoId(1)) -> <?>
+                // fills IN point of ensures findTodo (asked)
+                // fills IN point of comparison@0:16:33
+                    | (TodoId(2)) -> <?>
 
                 example echo
+                // fills value in 0 < value
                     | (TodoId(1)) -> <?>
                 """, block(TODO));
     }

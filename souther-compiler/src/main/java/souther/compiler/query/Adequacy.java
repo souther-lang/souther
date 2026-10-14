@@ -14,7 +14,6 @@ import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.MeaningsOfABodyReading;
-import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.RulesTaken;
@@ -30,9 +29,11 @@ import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.OutcomeName;
 import souther.compiler.coverage.RunBodies;
 import souther.compiler.coverage.RunRecord;
 import souther.compiler.coverage.SiteNumbering;
+import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Reachability;
 import souther.compiler.diag.Diagnostic;
@@ -92,6 +93,7 @@ import souther.compiler.partition.AxisId;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.ClassOfAPosition;
+import souther.compiler.partition.Border;
 import souther.compiler.partition.HeldOutcome;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.LevelRealizer;
@@ -141,6 +143,7 @@ import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.WayIn;
 import souther.compiler.types.Type;
+import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
@@ -5961,21 +5964,23 @@ public final class Adequacy {
          * search finds it — the point's standing, under what the way to the comparison leaves, put
          * to the realizer — so a row held to this is held to the same demand a row at the point is.
          *
-         * <p>Empty where the border offers no such point or nothing was found there. Which is
-         * that this compiler has no demand to hand over, and never that the comparison does not
-         * come out that way.
+         * <p>Nothing found where the border offers no such point or nothing was found there. Which
+         * is that this compiler has no demand to hand over, and never that the comparison does not
+         * come out that way — that is said only where the rules leave no value on the side it
+         * comes out on ({@link Border#theRulesLeaveNothingWhereItComesOut}).
          */
         private static HeldOutcome.Of heldBy(MeasuredInput subject,
                                              List<BorderAssessment> edges,
                                              ReachingCuts reaching) {
-            Map<ControlPlace, Optional<HeldOutcome>> found = new LinkedHashMap<>();
+            Map<ControlPlace, HeldOutcome.Bringing> found = new LinkedHashMap<>();
             return place -> found.computeIfAbsent(place, asked -> switch (asked) {
                 case ControlPlace.Outcome outcome -> holding(subject, edges, reaching, outcome);
                 // An arm a run is seen taking where its fork's condition is a truth nothing else
                 // records: what that truth coming out the way the arm is taken on asks of a row.
-                case ControlPlace.Arm arm -> ModelOccurrence.statedAt(arm.arm().fork())
-                        .flatMap(fork -> reaching.heldAtTheArm(fork, arm.arm().part(),
-                                subject.quantities().region()));
+                case ControlPlace.Arm arm -> HeldOutcome.Bringing.of(
+                        ModelOccurrence.statedAt(arm.arm().fork())
+                                .flatMap(fork -> reaching.heldAtTheArm(fork, arm.arm().part(),
+                                        subject.quantities().region())));
             });
         }
 
@@ -5987,10 +5992,10 @@ public final class Adequacy {
          * {@link PointRole#OFF} or {@link PointRole#OUT} one it fails at. For a truth, what it
          * coming out that way asks of a row ({@link ReachingCuts#heldAt}).
          */
-        private static Optional<HeldOutcome> holding(MeasuredInput subject,
-                                                     List<BorderAssessment> edges,
-                                                     ReachingCuts reaching,
-                                                     ControlPlace.Outcome outcome) {
+        private static HeldOutcome.Bringing holding(MeasuredInput subject,
+                                                    List<BorderAssessment> edges,
+                                                    ReachingCuts reaching,
+                                                    ControlPlace.Outcome outcome) {
             for (BorderAssessment edge : edges) {
                 // Only a line whose sides are which way the comparison comes out. A line of a
                 // statement of several is not: the other relations may settle the statement on
@@ -6000,10 +6005,15 @@ public final class Adequacy {
                         || !comparison.recordedAt().contains(outcome.at())) {
                     continue;
                 }
+                // Asked before the way to it, since it holds wherever the comparison is reached:
+                // the rules leave its values the same range on every way.
+                if (edge.border().theRulesLeaveNothingWhereItComesOut(outcome.held())) {
+                    return new HeldOutcome.Bringing.TheRulesLeaveNoValueThere();
+                }
                 if (!(souther.compiler.partition.Reachability.of(reaching.wayTo(comparison),
                         subject.quantities().region())
                         instanceof souther.compiler.partition.Reachability.Reaching able)) {
-                    return Optional.empty();   // nothing takes the way to it
+                    return new HeldOutcome.Bringing.NothingFound();   // nothing takes the way to it
                 }
                 List<PointRole> onThatSide = outcome.held()
                         ? List.of(PointRole.ON, PointRole.IN)
@@ -6018,8 +6028,9 @@ public final class Adequacy {
                         if (new LevelRealizer().realize(quantity.standingAt(owed.criterion()),
                                 able.region(), subject.witnessSearch())
                                 instanceof Realization.Found at) {
-                            return Optional.of(new HeldOutcome(List.of(new RowDemand.AtAPoint(
-                                    at.fixing(), quantity.asksOfEachTerm(owed.criterion()))),
+                            return new HeldOutcome.Bringing.Found(new HeldOutcome(
+                                    List.of(new RowDemand.AtAPoint(at.fixing(),
+                                            quantity.asksOfEachTerm(owed.criterion()))),
                                     able));
                         }
                     }
@@ -6028,9 +6039,9 @@ public final class Adequacy {
             // No point of a border brings it out that way, and the outcome may be an operation's
             // truth a fork's condition asks: what that coming out the way asked demands of a row,
             // composed past the way to it.
-            return ModelOccurrence.statedAt(outcome.occurrence())
+            return HeldOutcome.Bringing.of(ModelOccurrence.statedAt(outcome.occurrence())
                     .flatMap(answers -> reaching.heldAt(answers, outcome.held(),
-                            subject.quantities().region()));
+                            subject.quantities().region())));
         }
 
         private static souther.compiler.partition.FillResult rowsFor(
@@ -7524,7 +7535,7 @@ public final class Adequacy {
                         var lookFor)) {
                     out.add(Finding.by(new FindingSubject.OfABehavior(behavior), each,
                             new About.ARewriteNoRowTellsApart(behavior,
-                                    each.rewrite().replacement(), each.rewrite().reportAt(),
+                                    each.rewrite().written(), each.rewrite().reportAt(),
                                     shownBy, lookFor)));
                 }
             }
@@ -8277,20 +8288,33 @@ public final class Adequacy {
                         case About.ACombinationOfTwoClassesNoRowIsIn(var combination) ->
                                 new ExampleMessage.NoRowIsInThatCombinationOfClasses(
                                         twoClasses(combination), combination.behavior());
-                        // The behavior, and the rewrite by which sentence it is: an arm's is
-                        // pointed at the fork where there is one here to point at, and which
-                        // sibling it answered as is a part number the author did not write.
-                        case About.ARewriteNoRowTellsApart(var behavior, var replacement,
-                                var reportAt, var _, var _) -> switch (replacement) {
-                            case Replacement.OfAnArm _ -> switch (reportAt) {
-                                case ReplacementReportAnchor.AtTheFork _ ->
-                                        new ExampleMessage.NoRowTellsTheArmFromItsSibling(behavior);
-                                case ReplacementReportAnchor.AtTheBehavior _ ->
-                                        new ExampleMessage.NoRowTellsAnArmOutOfSightFromItsSibling(
-                                                behavior);
-                            };
-                            case Replacement.ByOneAnswer _ ->
-                                    new ExampleMessage.NoRowTellsTheBodyFromOneAnswer(behavior);
+                        // The behavior, and the rewrite by what ReplacementAsWritten says tells it
+                        // from the others: an arm's is pointed at the fork where there is one here
+                        // to point at, and says the arm and the sibling it answered as in the
+                        // phrases an arm is said in — and the definition that wrote the fork where
+                        // there is not. One of the body answering one value says the row that came
+                        // to that value, and is marked there below.
+                        case About.ARewriteNoRowTellsApart(var behavior, var written,
+                                var reportAt, var _, var _) -> switch (written) {
+                            case ReplacementAsWritten.OfAnArm rewrite -> {
+                                SourceConstruct construct = rewrite.replacement().fork().kind();
+                                yield switch (reportAt) {
+                                    case ReplacementReportAnchor.AtTheFork _ ->
+                                            new ExampleMessage.NoRowTellsTheArmFromItsSibling(
+                                                    phraseFor(construct, rewrite.arm()),
+                                                    phraseFor(construct, rewrite.sibling()),
+                                                    behavior);
+                                    case ReplacementReportAnchor.AtTheBehavior _ ->
+                                            new ExampleMessage
+                                                    .NoRowTellsAnArmOutOfSightFromItsSibling(
+                                                    phraseFor(construct, rewrite.arm()),
+                                                    phraseFor(construct, rewrite.sibling()),
+                                                    rewrite.writtenBy().saidIn(module), behavior);
+                                };
+                            }
+                            case ReplacementAsWritten.ByOneAnswer(var rewrite) ->
+                                    new ExampleMessage.NoRowTellsTheBodyFromOneAnswer(
+                                            rewrite.answeredBy().identity().shown(), behavior);
                         };
                         // Kinds no build is told about under any code. Listed rather than
                         // defaulted, so that one added later has to be answered here rather than
@@ -8308,15 +8332,27 @@ public final class Adequacy {
                 case About.ACaseNoRowExpects(var _, var missing) ->
                         built.hint(new ExampleMessage.WriteARowExpectingThatCase(missing.name()));
                 // The row the two answer differently on: one composed, written as it would be
-                // offered, or one the module writes, whose answer is what is left to write down.
-                case About.ARewriteNoRowTellsApart(var _, var _, var _, var shownBy, var _) ->
-                        built.hint(switch (shownBy) {
-                            case ReplacementEvidence.ShownBy.AComposedRow(var inputs) ->
-                                    new ExampleMessage.WriteARowAtThatInput(
-                                            "(" + String.join(", ", inputs) + ")");
-                            case ReplacementEvidence.ShownBy.AWrittenRow(var row) ->
-                                    new ExampleMessage.WriteDownTheAnswerOfThatRow(row.shown());
-                        });
+                // offered, or one the module writes, whose answer is what is left to write down —
+                // marked where it is written, since a row written without a name is numbered
+                // within its source and the number alone can be another source's row. And the
+                // body answering one value marks the row that came to that value, for the same
+                // reason.
+                case About.ARewriteNoRowTellsApart(var _, var written, var _, var shownBy,
+                        var _) -> {
+                    if (written instanceof ReplacementAsWritten.ByOneAnswer(var rewrite)) {
+                        label(built, whereItIsWritten(db, module, rewrite.answeredBy()),
+                                new ExampleMessage.TheValueIsTheOneThisRowCameTo());
+                    }
+                    switch (shownBy) {
+                        case ReplacementEvidence.ShownBy.AComposedRow(var inputs) ->
+                                built.hint(new ExampleMessage.WriteARowAtThatInput(
+                                        "(" + String.join(", ", inputs) + ")"));
+                        case ReplacementEvidence.ShownBy.AWrittenRow(var row) ->
+                                label(built, whereItIsWritten(db, module, row),
+                                        new ExampleMessage.WriteDownTheAnswerOfThatRow(
+                                                row.identity().shown()));
+                    }
+                }
                 // The input the two lines part company at, where one was worked out. Said as a hint
                 // rather than in the sentence: the sentence is about the two lines, and this is the
                 // one row that settles which of them the model draws.
@@ -8575,23 +8611,30 @@ public final class Adequacy {
          * construct added to the language arrives here as a case with no phrase rather than as one
          * quietly answered with a neighbour's.
          */
-        private static Localizable phraseFor(
-                souther.compiler.coverage.CoverageSites.Site arm) {
-            return switch (arm.name()) {
+        private static Localizable phraseFor(CoverageSites.Site arm) {
+            return phraseFor(arm.construct(), arm.outcome());
+        }
+
+        /**
+         * The same phrase for an outcome of a construct, where no site of it is in hand — the
+         * sibling a rewrite names is often an arm nothing records a run through.
+         */
+        private static Localizable phraseFor(SourceConstruct construct, SourceOutcome outcome) {
+            return switch (OutcomeName.of(construct, outcome)) {
                 case THEN -> Localizable.of("arm.then");
                 case ELSE -> Localizable.of("arm.else");
                 case CONTINUED -> Localizable.of("arm.continued");
                 case KEPT -> Localizable.of("arm.kept");
                 case DROPPED -> Localizable.of("arm.dropped");
                 case CONSTRUCTED -> Localizable.of("arm.constructed");
-                case CASE -> Localizable.of("arm.case", casesOf(arm));
-                case DEPARTURE -> clauseOf(arm)
+                case CASE -> Localizable.of("arm.case", casesOf(outcome));
+                case DEPARTURE -> clauseOf(outcome)
                         .map(c -> Localizable.of("arm.departure.clause", c))
                         .orElseGet(() -> Localizable.of("arm.departure"));
                 // Not an arm, so no warning is about one. Reaching this is the branch measure and
                 // this sentence disagreeing about what it counts.
                 case COMPARISON -> throw new IllegalStateException(
-                        "no arm was unreached here: " + arm);
+                        "no arm was unreached here: " + outcome + " of " + construct);
             };
         }
 
@@ -8742,18 +8785,39 @@ public final class Adequacy {
             }
         }
 
-        private static String casesOf(souther.compiler.coverage.CoverageSites.Site arm) {
-            return arm.outcome() instanceof souther.compiler.coverage.SourceOutcome.Matched matched
+        /**
+         * Where {@code row} is written, asked of the rows {@code module}'s reading saw — which is
+         * every row a finding about a rewrite can name, since each was read and ran.
+         *
+         * <p>Asked here, where a reader is about to be sent there, and not carried in the finding:
+         * a finding holds what it is about, and where a row stands is the source's to say.
+         *
+         * @throws Sites.NothingPlacesIt where no row of the reading is {@code row}
+         */
+        private static Citation whereItIsWritten(Db db, String module, RowRef row) {
+            Map<String, RowReading> readings = db.ask(new RowReadings(module)).value();
+            RowReading reading = readings == null ? null : readings.get(row.behavior());
+            if (reading != null) {
+                for (RowOutcome each : reading.rowsSeen()) {
+                    if (RowRef.of(each).equals(row)) {
+                        return Citation.of(each.at());
+                    }
+                }
+            }
+            throw new Sites.NothingPlacesIt(row);
+        }
+
+        private static String casesOf(SourceOutcome outcome) {
+            return outcome instanceof SourceOutcome.Matched matched
                     ? matched.cases().stream()
-                            .map(souther.compiler.types.TypeSymbol::name)
-                            .collect(java.util.stream.Collectors.joining(" | "))
+                            .map(TypeSymbol::name)
+                            .collect(Collectors.joining(" | "))
                     : "";
         }
 
-        private static java.util.Optional<String> clauseOf(
-                souther.compiler.coverage.CoverageSites.Site arm) {
-            return arm.outcome() instanceof souther.compiler.coverage.SourceOutcome.Failed(
-                    souther.compiler.coverage.SourceOutcome.FailedBy.Construction(var clause))
+        private static Optional<String> clauseOf(SourceOutcome outcome) {
+            return outcome instanceof SourceOutcome.Failed(
+                    SourceOutcome.FailedBy.Construction(var clause))
                     ? clause : Optional.empty();
         }
 

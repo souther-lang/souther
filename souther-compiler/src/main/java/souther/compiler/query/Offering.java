@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.partition.ObligationIdentity;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -40,7 +41,7 @@ public final class Offering {
     private final SequencedMap<String, Adequacy.Filling> searched;
     private final BorderAccount account;
     private final Set<ObligationIdentity> answered;
-    private final Map<ObligationIdentity, InputOfARowForALine> shownAt;
+    private final Map<ObligationIdentity, Settlements.Shown> shownAt;
 
     /**
      * @param request  what was asked for, which is what settles which rows are here
@@ -52,15 +53,16 @@ public final class Offering {
      *                 rows, which is not the same as a request that asked and found none
      * @param answered what the rows here settle: every item one of them would answer if it were
      *                 written, whichever row it was composed for
-     * @param shownAt  the input of the row a person is handed for each line, for the lines one of
-     *                 these rows is offered for. Decided here because it is decided by what is
-     *                 offered: the row composed for a line goes when another row already answers
-     *                 it, so an input read off the search is one from before that was settled
+     * @param shownAt  the row a person is handed for each line and the input it stands at there,
+     *                 for the lines one of these rows is offered for. Decided here because it is
+     *                 decided by what is offered: the row composed for a line goes when another row
+     *                 already answers it, so an input read off the search is one from before that
+     *                 was settled
      */
     Offering(OfferingRequest request, SequencedMap<String, List<OfferedRow>> rowsByBehavior,
              SequencedMap<String, Adequacy.Filling> searched, BorderAccount account,
              Set<ObligationIdentity> answered,
-             Map<ObligationIdentity, InputOfARowForALine> shownAt) {
+             Map<ObligationIdentity, Settlements.Shown> shownAt) {
         this.shownAt = Collections.unmodifiableMap(new LinkedHashMap<>(shownAt));
         this.request = request;
         this.rowsByBehavior =
@@ -98,14 +100,34 @@ public final class Offering {
 
     /**
      * The input of the row a person is handed for {@code item}'s line, or null where no row here is
-     * offered for it.
+     * offered for it — or where one is and stands at no input the line's reading names, as a row
+     * at a point in a region does not. Which row it is, either way, is {@link #linesShownAt}'s.
      *
      * <p>The one place a report may name for such a line. What a search composed is a candidate and
      * what is left after the reduction is the work, and only the second of those is in front of a
      * person.
      */
     public InputOfARowForALine shownAt(ObligationIdentity item) {
-        return shownAt.get(item);
+        Settlements.Shown shown = shownAt.get(item);
+        return shown == null ? null : shown.at().orElse(null);
+    }
+
+    /**
+     * The lines {@code row} is the row a person is handed for, in the order they were asked about.
+     *
+     * <p>The same answer as {@link #shownAt}, asked from the row's side: a row standing at a line
+     * is not composed for it — what a line is owed is answered in the account, and a row named for
+     * whichever line it happened to be offered at would be renamed by an edit that did not touch it
+     * — so this is how a block says over a row which lines it is for, without naming it after one.
+     */
+    public List<ObligationIdentity> linesShownAt(RowKey row) {
+        List<ObligationIdentity> out = new ArrayList<>();
+        shownAt.forEach((item, shown) -> {
+            if (shown.rowKey().equals(row) && item instanceof ObligationIdentity.OfALine) {
+                out.add(item);
+            }
+        });
+        return List.copyOf(out);
     }
 
     /** How many pieces of work this offers, which is what a block says at the top of it. */

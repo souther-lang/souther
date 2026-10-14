@@ -81,9 +81,7 @@ class AContainerIsWrittenForItsLengthAndItsTotalTest {
         assertTrue(offered.contains("| ("),
                 () -> "and rows are offered: " + offered);
 
-        String row = offered.lines().filter(line -> line.contains("\"ns=2 <= x\"")).findFirst()
-                .orElseThrow(() -> new AssertionError(
-                        "a row is offered at the class of two or more elements: " + offered));
+        String row = rowFor(offered, "ns=2 <= x");
         List<Integer> held = elementsOf(row);
 
         assertTrue(held.size() >= 2,
@@ -91,6 +89,27 @@ class AContainerIsWrittenForItsLengthAndItsTotalTest {
                         + row);
         assertTrue(held.stream().mapToInt(Integer::intValue).sum() < 10,
                 () -> "and comes to what the other number's class asks of it: " + row);
+    }
+
+    /**
+     * The row offered for {@code label}: named by it, or with it said over an unnamed row — a row
+     * for a class and for a point of a line besides is for several things and named for none.
+     */
+    private static String rowFor(String block, String label) {
+        List<String> lines = block.lines().toList();
+        for (int at = 0; at < lines.size(); at++) {
+            if (lines.get(at).startsWith("    | \"" + label + "\"")) {
+                return lines.get(at);
+            }
+            if (lines.get(at).equals("// fills " + label)) {
+                for (int row = at; row < lines.size(); row++) {
+                    if (lines.get(row).startsWith("    | ")) {
+                        return lines.get(row);
+                    }
+                }
+            }
+        }
+        throw new AssertionError("a row is offered at the class " + label + ": " + block);
     }
 
     /** The numbers a written row holds, which is what the container it offers comes to. */

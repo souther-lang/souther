@@ -59,6 +59,7 @@ import souther.compiler.partition.ReadTogether;
 import souther.compiler.partition.InputClassifications;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.Reachability;
+import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.partition.WayToTheBorder;
 
 import java.util.ArrayList;
@@ -1411,11 +1412,33 @@ final class Coverages {
      * debt by construction, and a pair that is not says the two identities have come apart.
      */
     static List<BorderAssessment> merged(LineReadings readings) {
-        java.util.SequencedMap<BoundaryLine, BorderAssessment> out = new java.util.LinkedHashMap<>();
+        SequencedMap<BoundaryLine, List<BorderAssessment>> byLine = new LinkedHashMap<>();
         for (BorderAssessment each : readings.each()) {
-            out.merge(BoundaryLine.of(each.border()), each, Coverages::asOneLine);
+            byLine.computeIfAbsent(BoundaryLine.of(each.border()), _ -> new ArrayList<>())
+                    .add(each);
         }
-        return List.copyOf(out.values());
+        List<BorderAssessment> out = new ArrayList<>();
+        for (List<BorderAssessment> ofOneLine : byLine.values()) {
+            out.add(asOneLine(ofOneLine));
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * Every reading of one line, as the one line they are readings of: two at a time, in the order
+     * they were read, and what put things on each one's way at once ({@link SaidOnTheWay#allOf}).
+     */
+    private static BorderAssessment asOneLine(List<BorderAssessment> ofOneLine) {
+        BorderAssessment kept = ofOneLine.getFirst();
+        if (ofOneLine.size() == 1) {
+            return kept;
+        }
+        for (BorderAssessment next : ofOneLine.subList(1, ofOneLine.size())) {
+            kept = asOneLine(kept, next);
+        }
+        return new BorderAssessment(kept.border(), kept.items(), kept.beside(), kept.toldApart(),
+                kept.readAt(), SaidOnTheWay.allOf(
+                        ofOneLine.stream().map(BorderAssessment::saidOnTheWay).toList()));
     }
 
     /**
@@ -1784,6 +1807,9 @@ final class Coverages {
      * <p>Point by point rather than border by border. Two readings of one line can have seen
      * different things at different points, and one answer for the whole border would settle a
      * point from what happened at another.
+     *
+     * <p>Everything but what put things on the ways, which stays {@code a}'s: that is put together
+     * for every reading of the line at once, by {@link #asOneLine(List)}.
      */
     private static BorderAssessment asOneLine(BorderAssessment a, BorderAssessment b) {
         if (!a.border().obligation().equals(b.border().obligation())) {
@@ -1803,8 +1829,9 @@ final class Coverages {
                 // reading's line and its input would be read at positions that line has none of.
                 a.toldApart().and(b.toldApart()),
                 // And both readings' copies, which is what tells the calls of a helper that read
-                // one line apart, and what put things on each one's way.
-                readAt, a.saidOnTheWay().and(b.saidOnTheWay()));
+                // one line apart. What put things on each one's way is put together once for every
+                // reading of the line, by whoever holds them all.
+                readAt, a.saidOnTheWay());
     }
 
     /**

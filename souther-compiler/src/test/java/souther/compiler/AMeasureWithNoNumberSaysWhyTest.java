@@ -260,7 +260,7 @@ class AMeasureWithNoNumberSaysWhyTest {
                     branch      not applicable (this body owes no arm)
                     decision    rules 1   taken 1
                     replacement 0/1
-                      ! no row would come out differently if the body answered one value
+                      ! no row would come out differently if the body always answered what `classify #1 in 0` answers
                   sift                     implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   axes 2   equivalence partitions 0/0   (2 not measured: no row names this behavior)

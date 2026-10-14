@@ -6,6 +6,8 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -105,6 +107,28 @@ public final class OccurrenceValues {
         } catch (ArithmeticException tooMany) {
             return Cardinality.UNKNOWN;
         }
+    }
+
+    /**
+     * How many values the rules name at {@code path}, or {@link Cardinality#UNKNOWN} where they
+     * name no finite set of them.
+     *
+     * <p>Off the set the reading admits there, which is an upper bound however much of the rules
+     * was read ({@link AdmissibleSet}): a rule that went unread can refuse one of the values named
+     * and never add one. So the count is good as an end whether or not the set is exact, and that
+     * every value in it can be built is a different question, which this does not answer.
+     *
+     * <p>A set naming nothing is a reading that admits nothing, and that is a proof the declaration
+     * carries and asks before this ({@link FieldDomains#holdsNothing}) — a count of none is not
+     * something to read off a size.
+     */
+    public Cardinality.Standing namedValuesAt(RuleKey path) {
+        if (seeded == null
+                || !(seeded.admitted().get(path) instanceof ValueSet.Finite finite)
+                || finite.values().isEmpty()) {
+            return Cardinality.UNKNOWN;
+        }
+        return Cardinality.atMost(finite.values().size());
     }
 
     /** The number an end stops at, or null where it stops at nothing whole. */

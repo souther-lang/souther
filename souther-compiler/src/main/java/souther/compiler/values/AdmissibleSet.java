@@ -1,5 +1,6 @@
 package souther.compiler.values;
 
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
@@ -150,6 +151,52 @@ public record AdmissibleSet(ValueSet approximation, Completeness completeness) {
     /** These values, with {@code why} standing between them and the rules. */
     public static AdmissibleSet wider(ValueSet values, Set<Widening> why) {
         return new AdmissibleSet(values, new Completeness.Wider(why));
+    }
+
+    /**
+     * What this and {@code other} leave one position together, so far as that can be said without
+     * building anything.
+     *
+     * <p>For a caller holding two readings of one position — a record's rules about a field and
+     * another record's about the same field — and no allowance to meet them with. A finite set is
+     * kept to the values the other also has, which is exact; where neither is finite, either one
+     * is still an upper bound, and the one kept is said to be wider than what the two leave
+     * ({@link Widening.ExactValuesTooCostly}), since the set they leave together was not built.
+     */
+    public AdmissibleSet narrower(AdmissibleSet other) {
+        if (other.approximation.isAny()) {
+            return new AdmissibleSet(approximation, both(completeness, other.completeness));
+        }
+        if (approximation.isAny()) {
+            return new AdmissibleSet(other.approximation, both(completeness, other.completeness));
+        }
+        ValueSet.Finite finite = approximation instanceof ValueSet.Finite it ? it
+                : other.approximation instanceof ValueSet.Finite it ? it : null;
+        if (finite == null) {
+            Set<Widening> why = new LinkedHashSet<>(reasons(both(completeness,
+                    other.completeness)));
+            why.add(new Widening.ExactValuesTooCostly());
+            return wider(approximation, why);
+        }
+        ValueSet against = finite == approximation ? other.approximation : approximation;
+        Set<Value> kept = new LinkedHashSet<>();
+        for (Value each : finite.values()) {
+            if (against.has(each)) {
+                kept.add(each);
+            }
+        }
+        return new AdmissibleSet(ValueSet.oneOf(kept), both(completeness, other.completeness));
+    }
+
+    /** Read in full only where both were, and short of whatever either was short of. */
+    private static Completeness both(Completeness one, Completeness other) {
+        Set<Widening> why = new LinkedHashSet<>(reasons(one));
+        why.addAll(reasons(other));
+        return why.isEmpty() ? READ_IN_FULL : new Completeness.Wider(why);
+    }
+
+    private static Set<Widening> reasons(Completeness completeness) {
+        return completeness instanceof Completeness.Wider wider ? wider.why() : Set.of();
     }
 
     /**

@@ -7,10 +7,13 @@ import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.GeneratedRows;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -115,9 +118,8 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
         // Every row holds nothing, so none of them answers differently under the rewrite and the
         // row the hint names is one the search composed.
         assertTrue(said.stream().anyMatch(each -> each.startsWith(
-                        "No row of `refund` would come out differently if this arm answered as"
-                                + " another arm of its"
-                                + " fork.")
+                        "No row of `refund` would come out differently if the `case OutOfPocket`"
+                                + " arm of this fork answered as the `case Advance` arm.")
                         && each.contains("Amount(")),
                 () -> "what a build is told: " + said);
     }
@@ -134,9 +136,19 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
         // the body answering one value, which is asked of a body with no arm to rewrite.
         assertTrue(page.contains("replacement 0/3"), () -> "three rewrites, told apart by no row: "
                 + page);
-        assertTrue(page.contains(
-                        "! no row would come out differently if an arm answered as its sibling"),
-                () -> "and the arm under it: " + page);
+        // Each by the case it rewrites and the case it answers as, at the one `match` they are arms
+        // of — the case names the author wrote, and not which number each case is.
+        assertEquals(List.of(
+                        "! no row would come out differently if `case OutOfPocket` (16:21)"
+                                + " answered as `case Advance`",
+                        "! no row would come out differently if `case Advance` (16:21)"
+                                + " answered as `case OutOfPocket`",
+                        "! no row would come out differently if `case CompanyCard` (16:21)"
+                                + " answered as `case OutOfPocket`"),
+                page.lines().map(String::strip)
+                        .filter(line -> line.startsWith("! no row would come out differently"))
+                        .toList(),
+                () -> "and the arms under it: " + page);
     }
 
     @Test
@@ -159,6 +171,65 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
                         + Adequacy.accountOf(compilation.db(), "example.total"));
         assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED,
                 AdequacyReport.of(compilation).adequacy());
+    }
+
+    /**
+     * Two values the rows came to are two rewrites of the body, and each is said by the row that
+     * came to it — on the page, in what a build is told, and on a row composed for it. Said as
+     * "one value", the two were one line twice.
+     */
+    @Test
+    void eachValueTheBodyCouldAnswerIsSaidByTheRowThatCameToIt() {
+        String doubled = """
+                module example.doubled
+
+                data Ok = { n: Int }
+                data Err
+                data Outcome = Ok | Err
+
+                behavior doubled : (n: Int) -> Outcome
+
+                let doubled (n) = Ok { n = n * 2 }
+
+                example doubled
+                    | "zero" : (0) -> Ok
+                    | "one" : (1) -> Ok
+                """;
+        Compilation compilation = compiled(doubled);
+        String page = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertEquals(List.of(
+                        "! no row would come out differently if the body always answered what"
+                                + " `doubled zero` answers",
+                        "! no row would come out differently if the body always answered what"
+                                + " `doubled one` answers"),
+                page.lines().map(String::strip)
+                        .filter(line -> line.startsWith("! no row would come out differently"))
+                        .toList(),
+                page);
+
+        Compilation warned = Compilation.ofSource(doubled, "Main");
+        warned.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
+        warned.answerEverything();
+        List<String> said = warned.warnings().stream()
+                .map(Located::diagnostic)
+                .filter(d -> "E1939".equals(d.code().toString()))
+                .map(d -> Messages.render(d.said(), Locale.ENGLISH))
+                .toList();
+        assertEquals(List.of(
+                        "No row of `doubled` would come out differently if its body answered what"
+                                + " row `zero` answers whatever it was given.",
+                        "No row of `doubled` would come out differently if its body answered what"
+                                + " row `one` answers whatever it was given."),
+                said);
+
+        String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
+                        OfferingRequest.overTheModule("example.doubled")),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
+                compilation.db()).text();
+        assertTrue(block.contains("\"the body answering what doubled zero answers\"")
+                        && block.contains("\"the body answering what doubled one answers\""),
+                () -> "a row composed for each says which: " + block);
     }
 
     @Test

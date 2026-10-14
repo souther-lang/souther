@@ -11,6 +11,7 @@ import souther.compiler.reach.Reachability;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -206,8 +207,19 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
      */
     @Test
     void theModelAsksForWhatTheModelWithoutThatGuardAsksFor() {
-        assertEquals(rowsAskedOf(ONE_GUARD), rowsAskedOf(TWO_GUARDS),
+        assertEquals(work(rowsAskedOf(ONE_GUARD)), work(rowsAskedOf(TWO_GUARDS)),
                 "a guard whose departure nothing takes draws no line");
+    }
+
+    /**
+     * The block less the lines that say a decision rule. A rule is said by every condition its way
+     * consults, and the second guard is one the way past the first consults whether or not it
+     * divides anything — so the two models' rules read differently while the rows asked for, and
+     * the classes each is for, are the same.
+     */
+    private static String work(String block) {
+        return block.lines().filter(line -> !line.startsWith("// fills a decision rule"))
+                .collect(Collectors.joining("\n"));
     }
 
     /**

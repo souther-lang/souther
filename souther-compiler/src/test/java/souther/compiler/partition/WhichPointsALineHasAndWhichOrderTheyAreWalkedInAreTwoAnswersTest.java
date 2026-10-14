@@ -98,7 +98,8 @@ class WhichPointsALineHasAndWhichOrderTheyAreWalkedInAreTwoAnswersTest {
         for (DomainPoint point : backwards) {
             filledBackwards.put(point, asBuilt.answer(point));
         }
-        Border rebuilt = new Border(asBuilt.cut(), asBuilt.origin(), filledBackwards);
+        Border rebuilt = new Border(asBuilt.cut(), asBuilt.origin(), filledBackwards,
+                asBuilt.leftNothing());
 
         assertEquals(Border.pointsOf(asBuilt.origin()),
                 List.copyOf(rebuilt.answers().keySet()),

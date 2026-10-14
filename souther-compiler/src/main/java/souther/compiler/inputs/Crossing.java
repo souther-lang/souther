@@ -103,7 +103,7 @@ final class Crossing {
      * distinctions are the position's own: taking them away on the strength of a set that does not
      * fit them would leave a position with none because two readings of it did not line up.
      */
-    private static List<Case> admits(List<Case> declared, AdmissibleSet admitted) {
+    static List<Case> admits(List<Case> declared, AdmissibleSet admitted) {
         if (declared.isEmpty() || admitted.approximation().isAny()) {
             return declared;
         }

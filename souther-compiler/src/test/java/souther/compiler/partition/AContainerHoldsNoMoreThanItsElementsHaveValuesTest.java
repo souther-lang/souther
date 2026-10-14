@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ARuleNoReadingTakesIn;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
@@ -19,9 +20,11 @@ import souther.compiler.types.TypeSymbols;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -54,7 +57,25 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
             data Order = List<Service>
               invariant List.length(value) == 3
               invariant List.allDistinctBy(x -> x, value)
-            """;
+            data Code = String
+              invariant value == "a" || value == "b"
+            data Twice = String
+              invariant value == "a" || value == "a"
+            data Narrow = Code
+              invariant value.value /= "a"
+            data Wrapped = Code
+            data Kept = Code
+              invariant value.value /= "z"
+            data Item = { code: Code, active: Bool }
+            data Few = Service
+              invariant value == Support || value == Security
+            data Pick = { s: Service, n: Bool }
+              invariant s == Support || s == Security
+            data Odd = Int
+              invariant value == 1 || value == 3 || value == 7
+            data Loose = String
+              invariant (value == "a" || value == "b") && %s
+            """.formatted(ARuleNoReadingTakesIn.about("value"));
 
     /**
      * A list kept apart is told apart by its order as well, so the lists of the three cases each
@@ -104,7 +125,24 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
                 // The rules of the element's own declaration.
                 new Case("Set<Slot>", "Set.size(s)", 5),
                 new Case("Picked", "Set.size(s.value)", 3),
-                new Case("Map<Service, Int>", "Map.size(s)", 3))) {
+                new Case("Map<Service, Int>", "Map.size(s)", 3),
+                // The values its rules name, which is a count of them and not of how they are
+                // written, under every name the element wears, and of a number as of a string.
+                new Case("Set<Code>", "Set.size(s)", 2),
+                new Case("Map<Code, Int>", "Map.size(s)", 2),
+                new Case("Set<Twice>", "Set.size(s)", 1),
+                new Case("Set<Narrow>", "Set.size(s)", 1),
+                // A name over it reads the rules of the name beneath, whether or not it writes
+                // any of its own, so both values are offered under it.
+                new Case("Set<Wrapped>", "Set.size(s)", 2),
+                new Case("Set<Kept>", "Set.size(s)", 2),
+                new Case("Set<Odd>", "Set.size(s)", 3),
+                // Whatever the shape: cases of an enumeration its rules hold to a few, and a
+                // record whose rules hold one field to a few of them, built from those alone.
+                new Case("Set<Few>", "Set.size(s)", 2),
+                new Case("Set<Pick>", "Set.size(s)", 4),
+                // Beside a rule nothing reads, which may refuse one of them and add none.
+                new Case("Set<Loose>", "Set.size(s)", 2))) {
             BorderAssessment line = lineOf(MODEL.formatted(TYPES, each.type(), each.size(),
                     each.most()), "p", Integer.toString(each.most()));
 
@@ -124,6 +162,97 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
         }
     }
 
+    private static final String GUARDED = """
+            module p
+            %s
+            behavior f : (s: %s) -> Int
+            let f (s) = {
+                guard %s else 0
+
+                1
+            }
+            """;
+
+    /**
+     * A guard asking a set for more than its element has values is one no row goes past, and each
+     * way past it is said as the rules leaving no value that way — not as a way nothing here could
+     * hold a row to, which would leave an author looking for a row nobody can write.
+     *
+     * <p>Both ways of writing that, and none of the guards a row does go past: as many as there
+     * are, fewer, and a set of an element with no end of values. A row going past one of those is
+     * looked for and offered, and no way past it is said to be one the rules leave nothing on.
+     */
+    @Test
+    void aGuardAskingForMoreValuesThanThereAreIsOneTheRulesLetNoRowPast() {
+        RepairShortfall.WayPast leftNoValue = new RepairShortfall.WayPast.NotSearchable(
+                RepairShortfall.Barrier.THE_RULES_LEAVE_NO_VALUE_THAT_WAY);
+        record Case(String type, String guard, boolean past) {}
+        for (Case each : List.of(
+                new Case("Set<Code>", "Set.size(s) >= 3", false),
+                new Case("Set<Code>", "Set.size(s) > 2", false),
+                new Case("Set<Bool>", "Set.size(s) >= 3", false),
+                new Case("Set<Code>", "Set.size(s) >= 2", true),
+                new Case("Set<Code>", "Set.size(s) <= 2", true),
+                new Case("Set<Code>", "Set.size(s) < 2", true),
+                new Case("Set<String>", "Set.size(s) >= 3", true))) {
+            List<FillResult.Offer> offers =
+                    offersOf(GUARDED.formatted(TYPES, each.type(), each.guard()));
+            String said = each.type() + " " + each.guard();
+            List<RepairShortfall> stops = offers.stream().map(FillResult.Offer::stop)
+                    .filter(Objects::nonNull).toList();
+            if (each.past()) {
+                assertTrue(offers.stream().anyMatch(offer -> offer.stop() == null),
+                        () -> said + ": a row goes past it " + offers);
+                for (RepairShortfall stop : stops) {
+                    assertTrue(stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast(var ways)
+                            && ways.stream().noneMatch(leftNoValue::equals), () -> said + stop);
+                }
+            } else {
+                assertFalse(stops.isEmpty(), () -> said + ": rows stop at the guard");
+                assertEquals(offers.size(), stops.size(), () -> said + ": none goes past");
+                for (RepairShortfall stop : stops) {
+                    assertTrue(stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast(var ways)
+                            && ways.stream().allMatch(leftNoValue::equals), () -> said + stop);
+                }
+            }
+        }
+    }
+
+    /**
+     * A record holding such a value is built twice over for a count of the records meeting a
+     * statement about another of its fields: the two differ at the value, which the statement
+     * says nothing of, and each is one the record's rules leave.
+     */
+    @Test
+    void recordsMeetingAStatementDifferAtAValueTheStatementDoesNotRead() {
+        record Case(String type, String count) {}
+        for (Case each : List.of(
+                new Case("Set<Item>", "Set.size(Set.filter(x -> x.active, s))"),
+                // The values the record's rules leave its field, which are not the first of its
+                // type's: a value of each kind of the type was one the record refuses.
+                new Case("Set<Pick>", "Set.size(Set.filter(x -> x.n, s))"),
+                new Case("List<Pick>", "List.length(List.filter(x -> x.n, s))"))) {
+            BorderAssessment line =
+                    lineOf(MODEL.formatted(TYPES, each.type(), each.count(), 2), "p", "2");
+
+            assertTrue(line.items().get(new DomainPoint.AtTheLine())
+                    instanceof ItemAssessment.Owed owed
+                    && owed.searches().each().stream()
+                            .anyMatch(ItemAssessment.Attempt.Certified.class::isInstance),
+                    () -> each.type() + " " + line.items().get(new DomainPoint.AtTheLine()));
+        }
+    }
+
+    /** Every row offered for {@code f}, with what stopped it where something did. */
+    private static List<FillResult.Offer> offersOf(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), "p");
+        assertNotNull(all, "the model under test compiles");
+        return all.get("f").composed().offers();
+    }
+
     /**
      * A list holds a value over again, and an element with a number in it has no end of values, so
      * neither says where the size stops.
@@ -133,6 +262,8 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
         record Case(String type, String size) {}
         for (Case each : List.of(
                 new Case("List<Service>", "List.length(s)"),
+                new Case("List<Code>", "List.length(s)"),
+                new Case("Set<String>", "Set.size(s)"),
                 new Case("Set<Payload>", "Set.size(s)"),
                 new Case("Set<Int>", "Set.size(s)"),
                 new Case("Map<String, Service>", "Map.size(s)"))) {
@@ -190,7 +321,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
         // made from and those are as many as are asked for.
         int many = CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum() + 2;
         for (String type : List.of("Huge", "Wide")) {
-            for (FixtureTemplate each : Witnesses.distinctValuesOf(declared(type), many, null,
+            for (FixtureTemplate each : Witnesses.distinctValuesOf(declared(type), many,
                     reading, Set.of())) {
                 assertTrue(each.text().split(", ").length
                         <= CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum(),
@@ -201,7 +332,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
 
     @Test
     void noStringAnElementIsOfferedHoldsMoreThanAProposalHolds() {
-        for (FixtureTemplate each : Witnesses.distinctValuesOf(declared("Long"), 4, null,
+        for (FixtureTemplate each : Witnesses.distinctValuesOf(declared("Long"), 4,
                 pastTheFigures(), Set.of())) {
             assertTrue(each.text().length() <= CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS
                     .maximum() + "Long(\"\")".length(), () -> each.text().length() + " long");

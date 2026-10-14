@@ -213,12 +213,7 @@ public final class DeclaredBounds {
      */
     public static Range of(TypeView view, RuleReadingContext reading, Carrier carrier,
                            ValueName measure) {
-        return of(outermostOf(view), reading, carrier, measure);
-    }
-
-    /** The name a position is written under on the outside, or null where it wears none. */
-    private static TypeSymbol outermostOf(TypeView view) {
-        return view.wrappers().isEmpty() ? null : view.wrappers().getFirst();
+        return of(view.outermostName(), reading, carrier, measure);
     }
 
     /** The same, read off the name a position is written under on the outside — null where it
@@ -351,7 +346,7 @@ public final class DeclaredBounds {
      */
     public static CountRange countsHeld(TypeView view, RuleReadingContext reading,
                                         FieldDomains.Held held) {
-        return countsHeld(view.declared(), outermostOf(view), reading, held);
+        return countsHeld(view.declared(), view.outermostName(), reading, held);
     }
 
     /**
