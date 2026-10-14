@@ -169,6 +169,39 @@ class ACaseComparedWithAValueIsReadAsAMatchOnItTest {
         return out;
     }
 
+    /**
+     * A case written under a newtype over the enumeration is the case written bare: held equal to
+     * the value it asks which case it is, and an order on the cases is a line either way.
+     */
+    @Test
+    void aCaseUnderANewtypeIsTheCaseWrittenBare() {
+        String head = DECLARATIONS.formatted(AS_DECLARED)
+                .replace("data Account = { status: Status }",
+                        "data Why = Reason\ndata Account = { status: Status }")
+                .replace("(account: Account, reason: Reason)", "(account: Account, reason: Why)")
+                .replace("constructs Account", "constructs Account, Why");
+        String rows = """
+
+                example apply
+                    | (Account { status = Active }, Why(WrongPassword)) -> Account { status = Locked }
+                    | (Account { status = Locked }, Why(WrongPassword)) -> Account { status = Locked }
+                    | (Account { status = Active }, Why(Expired)) -> Account { status = Active }
+                    | (Account { status = Active }, Why(Closed)) -> Account { status = Active }
+                """;
+        Measured equal = measuredSource(head + """
+                let apply (account, reason) =
+                    if reason == Why(WrongPassword) then lock(account) else account
+                """ + rows);
+        assertEquals(OWED_BY_THE_MATCH, equal.owed());
+        assertEquals(List.of(), equal.borders());
+        Measured ordered = measuredSource(head + """
+                let apply (account, reason) =
+                    if reason < Why(Expired) then lock(account) else account
+                """ + rows);
+        assertEquals(OWED_BY_THE_MATCH, ordered.owed());
+        assertFalse(ordered.borders().isEmpty(), "a `<` asks the order, and the line is on it");
+    }
+
     /** An order on the cases is a line, and the way past it reads the account nowhere. */
     @Test
     void anOrderOnTheCasesStillDrawsItsLine() {

@@ -4,6 +4,7 @@ import souther.compiler.core.Core;
 
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * The comparisons of one body, each read once.
@@ -36,17 +37,15 @@ public final class ComparedNumbers {
 
     /** What each comparison came to and what it was read under, shared by every reader of one
      *  body. */
-    private final Map<Core.Binary, Read> said;
-
-    private record Read(InputReads under, ComparedNumber said) { }
+    private final Map<Core.Binary, Read<ComparedNumber>> said;
 
     /** Which case each comparison asks a value to be, and what it was read under. */
-    private final Map<Core.Binary, CaseRead> cases;
+    private final Map<Core.Binary, Read<CaseCompared>> cases;
 
-    private record CaseRead(InputReads under, CaseCompared said) { }
+    private record Read<T>(InputReads under, T said) { }
 
-    private ComparedNumbers(InputReading read, Map<Core.Binary, Read> said,
-                            Map<Core.Binary, CaseRead> cases) {
+    private ComparedNumbers(InputReading read, Map<Core.Binary, Read<ComparedNumber>> said,
+                            Map<Core.Binary, Read<CaseCompared>> cases) {
         this.read = read;
         this.said = said;
         this.cases = cases;
@@ -72,19 +71,7 @@ public final class ComparedNumbers {
      * what the check below is comparing.
      */
     public ComparedNumber of(Core.Binary comparison, InputReads at) {
-        Read had = said.get(comparison);
-        if (had != null) {
-            if (!had.under().equals(at)) {
-                throw new IllegalStateException(
-                        "one comparison read under two environments, at " + comparison.pos()
-                                + ": what a name reads there is settled by the walk, and two"
-                                + " readers of it have arrived with different answers");
-            }
-            return had.said();
-        }
-        ComparedNumber made = ComparedNumber.of(comparison, read, at);
-        said.put(comparison, new Read(at, made));
-        return made;
+        return once(said, comparison, at, () -> ComparedNumber.of(comparison, read, at));
     }
 
     /**
@@ -96,7 +83,14 @@ public final class ComparedNumbers {
      * in its declarations.
      */
     public CaseCompared caseOf(Core.Binary comparison, InputReads at) {
-        CaseRead had = cases.get(comparison);
+        return once(cases, comparison, at, () -> CaseCompared.of(comparison, read, at));
+    }
+
+    /** What {@code kept} holds of {@code comparison}, read by {@code reading} the first time it is
+     *  asked — and refused where a second reader arrives under another environment. */
+    private static <T> T once(Map<Core.Binary, Read<T>> kept, Core.Binary comparison,
+                              InputReads at, Supplier<T> reading) {
+        Read<T> had = kept.get(comparison);
         if (had != null) {
             if (!had.under().equals(at)) {
                 throw new IllegalStateException(
@@ -106,8 +100,8 @@ public final class ComparedNumbers {
             }
             return had.said();
         }
-        CaseCompared made = CaseCompared.of(comparison, read, at);
-        cases.put(comparison, new CaseRead(at, made));
+        T made = reading.get();
+        kept.put(comparison, new Read<>(at, made));
         return made;
     }
 }

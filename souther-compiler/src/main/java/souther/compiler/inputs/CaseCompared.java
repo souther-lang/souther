@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.BooleanMeaning;
+import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
@@ -67,10 +68,11 @@ public record CaseCompared(TermPath at, TypeSymbol named, List<TypeSymbol> leave
         if (!(reads.pathOf(value, read.newtypes()) instanceof PathResolution.At(TermPath at))) {
             return null;
         }
-        // Followed as far as a value an order would read it ({@link ComparedNumber}), so that a name
-        // for a choice of cases, read under the arm the walk took, is the case that arm answers.
-        if (!(Core.withoutStanding(reads.standingValue(written, read.symbols(), read.newtypes())
-                .value()) instanceof Core.UnitValue unit)) {
+        // Read as an order reads the value written against it ({@link Carrier#bare}): followed past
+        // names, so that a name for a choice of cases read under the arm the walk took is the case
+        // that arm answers, and past a newtype built around the case.
+        if (!(Core.withoutStanding(Carrier.bare(reads.standingValue(written, read.symbols(),
+                read.newtypes()), read.symbols()).value()) instanceof Core.UnitValue unit)) {
             return null;
         }
         // The cases under the last name the position wears, which are what a value there is.

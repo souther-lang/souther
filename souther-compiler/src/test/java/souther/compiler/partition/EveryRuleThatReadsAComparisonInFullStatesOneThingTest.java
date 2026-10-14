@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -46,8 +47,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EveryRuleThatReadsAComparisonInFullStatesOneThingTest {
 
     private static final String INPUT = """
-            data Box = { xs: List<Int>, tags: Set<String>, m: Map<String, Int>, s: String }
+            data Low
+            data Mid
+            data High
+            data Grade = Low | Mid | High
+            data Level = Grade
+            data Box = { xs: List<Int>, tags: Set<String>, m: Map<String, Int>, s: String,
+                         g: Grade, l: Level }
             """;
+
+    /**
+     * A case held equal to a value of an enumeration, or not, is read in full only as which case
+     * the value is — written bare or under a newtype over the enumeration, on either side.
+     *
+     * <p>Read as a count on the order the cases are declared in, it would be one thing by that rule
+     * and another by the rule that reads which case it is, and which was tried first would decide
+     * whether the model draws a line beside the next case declared.
+     */
+    @Test
+    void everyRuleThatReadsACaseHeldEqualInFullStatesWhichCaseTheValueIs() {
+        for (String condition : List.of("b.g == Mid", "b.g /= Mid", "Mid == b.g",
+                "b.l == Level(Mid)", "Level(Mid) /= b.l")) {
+            Reading reading = reading(condition);
+            List<Proposition> inFull = Pullback.byEachRule(reading.comparison(), reading.reads(),
+                    reading.read()).stream()
+                    .filter(stated -> !(stated instanceof Proposition.Unread))
+                    .toList();
+            assertFalse(inFull.isEmpty(), () -> condition + " is read in full");
+            for (Proposition each : inFull) {
+                assertInstanceOf(Proposition.InCases.class, each,
+                        () -> condition + " is read by every rule as which case it is: " + inFull);
+            }
+        }
+    }
 
     private static final List<String> SIZES_AGAINST_NOUGHT = List.of(
             "List.length(b.xs) > 0", "List.length(b.xs) >= 1", "List.length(b.xs) /= 0",

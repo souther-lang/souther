@@ -151,8 +151,9 @@ final class CoverageNaming implements Naming<Outcome> {
      * steered there by which case it hands in, and the order the cases are declared in has nothing
      * to do with it.
      *
-     * <p>Null where it leaves no case, which the admission of the way has already said: a way no
-     * value comes out is not one this is asked to name.
+     * <p>Null where it leaves no case. No value comes out that way; where the declarations were
+     * not read to rule the way out, it is left unnamed, which keeps what it is about open, rather
+     * than named as a set of cases no value is.
      */
     private static Condition casesLeft(CaseCompared compared, boolean held) {
         List<TypeSymbol> left = compared.leavesWhere(held);

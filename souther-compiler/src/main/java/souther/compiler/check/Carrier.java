@@ -287,6 +287,26 @@ public sealed interface Carrier extends ValueOrder {
     }
 
     /**
+     * Whether a value written out on this order is a constant of the arithmetic over the input's
+     * numbers.
+     *
+     * <p>Every order that counts but an enumeration's. A case written out names which case a value
+     * is, and the place it takes in the order its cases are declared in is no quantity a comparison
+     * with it is about: {@code l == Level(Mid)} asks which case {@code l} is. Read as the count
+     * {@code 1}, it would be a line on that order — and the same case written bare, which stands on
+     * no carrier at all, would not, so one comparison would be read two ways by how it was spelled.
+     *
+     * <p>A switch with nothing to fall through to: a ninth carrier says for itself whether a value
+     * written on it is a number to add.
+     */
+    default boolean writesAConstant() {
+        return switch (this) {
+            case Whole _, Dense _, Days _, Seconds _, SecondsOfDay _, Nanos _ -> true;
+            case Ordinal _, Text _ -> false;
+        };
+    }
+
+    /**
      * Whether a rule can weigh a value on this order by a number.
      *
      * <p>Apart from {@link #counts}, and further in. A date counts to a number and the number counts
@@ -642,9 +662,13 @@ public sealed interface Carrier extends ValueOrder {
      *
      * <p>What a construction wraps is followed where the construction was written, so a name inside
      * it is the value it was given: {@code Code(c)} under {@code let c = "x"} is {@code "x"}.
+     *
+     * <p>The one taking off, for every reader asking what value a comparison was written against:
+     * which case {@code Level(Mid)} is, asked of a case compared with a value, is asked here too,
+     * or the order would read the case and the reading of cases would not.
      */
-    private static ValueStanding.Standing<?, ?> bare(ValueStanding.Standing<?, ?> written,
-                                                     Symbols symbols) {
+    static ValueStanding.Standing<?, ?> bare(ValueStanding.Standing<?, ?> written,
+                                             Symbols symbols) {
         ValueStanding.Standing<?, ?> at = written;
         // A value written down is the value it is whatever type it stands as.
         while (Core.withoutStanding(at.value()) instanceof Core.Construct nd
