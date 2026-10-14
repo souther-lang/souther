@@ -15,7 +15,6 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -207,8 +206,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
                         : made.stream().map(FixtureTemplate::text)
                                 .map(WhatARuleOnAStringIsMeasuredAtTest::bare).toList().toString());
             }
-            Partitions.bordersOf(axis, reading, reading.runsBetween(axis.term()), ValueSet.ANY,
-                            new LinesRead())
+            Partitions.bordersOf(axis, reading, reading.runsBetween(axis.term()), new LinesRead())
                     .forEach(border -> border.answers().keySet().stream()
                             .filter(DomainPoint::againstTheLine)
                             .filter(point -> border.demand(point).criterion() != null)

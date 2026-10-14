@@ -13,7 +13,6 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
-import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -110,8 +109,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
         List<String> out = new ArrayList<>();
         for (Axis axis : p.axes()) {
             for (Border border
-                    : Partitions.bordersOf(axis, reading, reading.runsBetween(axis.term()),
-                            ValueSet.ANY, new LinesRead())) {
+                    : Partitions.bordersOf(axis, reading, reading.runsBetween(axis.term()), new LinesRead())) {
               for (PointRole role : List.of(PointRole.ON, PointRole.OFF)) {
                 if (!(border.demand(role).criterion()
                         instanceof Criterion.AtTheLevel each)) {

@@ -158,6 +158,47 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     }
 
     /**
+     * A rule naming a value the declarations refuse draws no line, the same as one naming a value
+     * outside the range: no row stands at it, so it parts the position's values nowhere.
+     *
+     * <p>Of a string held to a few values, of the element of a list of them, and of a number held
+     * to a class of whole numbers. Against the same rule over a position that holds the value,
+     * which draws it.
+     */
+    @Test
+    void aValueTheDeclarationsRefuseDrawsNoLine() {
+        String code = "value == \"a\" || value == \"b\"";
+        assertFalse(bordersOf(naming("Code", "String", code, "c.value == \"a0\""))
+                .containsKey("c = a0"));
+        assertFalse(bordersOf(naming("List<Code>", "String", code,
+                "List.any(x -> x.value == \"a0\", c)")).containsKey("c[*] = a0"));
+        assertFalse(bordersOf(naming("Code", "Int",
+                "value >= 0 && value <= 10000 && Int.floorMod(value, 1000) == 0",
+                "c.value == 1500")).containsKey("c = 1500"));
+        assertTrue(bordersOf(naming("Code", "String",
+                        "value == \"a\" || value == \"a0\" || value == \"b\"", "c.value == \"a0\""))
+                .containsKey("c = a0"));
+    }
+
+    /** A behavior over {@code type}, built of a {@code Code} on {@code carrier} held by
+     *  {@code rule}, deciding on {@code condition}. */
+    private static String naming(String type, String carrier, String rule, String condition) {
+        return """
+                module example.owed
+
+                data Code = %s
+                    invariant %s
+
+                data Ok
+                data No
+                data Verdict = Ok | No
+
+                behavior take : (c: %s) -> Verdict
+                let take (c) = if %s then No else Ok
+                """.formatted(carrier, rule, type, condition);
+    }
+
+    /**
      * What the rules name are values of the position and not of a number taken of it.
      *
      * <p>A string held to {@code "a"} or {@code "b"} is one character long, and a point at a length

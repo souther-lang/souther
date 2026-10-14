@@ -1,24 +1,19 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NarrowedBounds;
-import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
-import souther.compiler.values.ValueSet;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -669,27 +664,22 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      */
     public static Border at(BoundaryTarget target, LineOrigin origin, NumericDomain.Bounds within,
                             ExactAnswer<List<Parting>> parted, NarrowedBounds narrowed) {
-        return at(target, origin, within, null, ValueSet.ANY, parted, narrowed);
+        return at(target, origin, within, HeldValues.NONE, parted, narrowed);
     }
 
     /**
-     * The same, told the class of whole numbers the declarations leave the quantity's value in, or
-     * null where they leave it no class, and the values the position's rules admit.
+     * The same, told what the declarations hold the quantity's value to besides where it runs.
      *
-     * <p>The ends of a range say nothing of the values between them, so a point inside the range
-     * that is not of the class, or not among the values the rules name, is one the rules refuse all
-     * the same — and so is a run holding none of those values. {@code "a"} and {@code "b"} have
-     * {@code "aa"} between them on the order of the strings, and none of a position holding one of
-     * the two.
-     *
-     * @param admits what the position's rules leave its value, put only where the quantity is that
-     *               value ({@link BorderQuantity#valuesOn})
+     * <p>The ends of a range say nothing of the values between them, so a point inside the range the
+     * declarations refuse is refused all the same — and so is a run they leave nothing in.
+     * {@code "a"} and {@code "b"} have {@code "aa"} between them on the order of the strings, and none
+     * of a position holding one of the two.
      */
-    public static Border at(BoundaryTarget target, LineOrigin origin, NumericDomain.Bounds within,
-                            Congruences class_, ValueSet admits,
-                            ExactAnswer<List<Parting>> parted, NarrowedBounds narrowed) {
+    static Border at(BoundaryTarget target, LineOrigin origin, NumericDomain.Bounds within,
+                     HeldValues heldTo, ExactAnswer<List<Parting>> parted,
+                     NarrowedBounds narrowed) {
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
-        Admissible admissible = new Admissible(reach, class_, admits, target.of().valuesOn());
+        Admissible admissible = new Admissible(reach, heldTo);
         LevelSpace space = target.levels();
         Level cut = target.at();
         if (!reaches(cut, () -> seamOf(space, cut, origin), origin.lineFacts().claim(),
@@ -782,9 +772,12 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             case ComparisonClaim.Singled _ -> {
                 // The value itself, and never a value the order names near it: what such a rule
                 // names is that value, and a row at the value beside it is a row the rule is not
-                // about.
-                demands.put(new DomainPoint.AtTheLine(),
-                        new PointAnswer.AtLine(new Criterion.AtTheLevel(cut)));
+                // about. Asked of what the rules leave as every other point is, and refused where
+                // they refuse the value rather than moved to one they do not.
+                demands.put(new DomainPoint.AtTheLine(), admitted(reach, cut)
+                        ? new PointAnswer.AtLine(new Criterion.AtTheLevel(cut))
+                        : new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE,
+                                refusing(ends, cut)));
                 for (Towards side : Towards.values()) {
                     demands.put(new DomainPoint.BesideTheLine(side),
                             pointAt(space, cut, side, false, reach, ends));
@@ -1367,68 +1360,32 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     /**
-     * What the rules leave a quantity's value, as far as they were read: the range it runs in, the
-     * class of whole numbers it is held to, and the values they name.
+     * What the rules leave a quantity's value, as far as they were read: the range it runs in, and
+     * what the declarations hold it to inside that ({@link HeldValues}).
      *
-     * <p>All three are consequences of the declarations, so a value outside any of them is one the
-     * rules refuse. A value inside all three is not shown to be a value the rules leave — another
-     * rule may refuse it, and the values named are only what the rules that were read name — which
-     * is why this is asked only for the refusal ({@link #admits}, {@link #admitsNothingIn}) and
-     * never read as the presence of a row.
-     *
-     * <p>The values are a position's and are put only to levels on the position's own order. A
-     * value is a value of one order, and put to a level of another a set says it holds no such
-     * value — which reads as a refusal nobody made.
+     * <p>Both are consequences of the declarations, so a value outside either is one the rules
+     * refuse. A value inside both is not shown to be a value the rules leave — another rule may
+     * refuse it — which is why this is asked only for the refusal ({@link #admits},
+     * {@link #admitsNothingIn}) and never read as the presence of a row.
      *
      * @param bounds the range the value runs in
-     * @param necessary the class every value is of, or null where none is known
-     * @param values the values the position's rules admit
-     * @param on the order those values are on, or null where the quantity is no position's value
-     *           and the values say nothing of it
+     * @param held   what the declarations hold the value to besides where it runs
      */
-    private record Admissible(NumericDomain.Bounds bounds, Congruences necessary,
-                              ValueSet values, Carrier on) {
+    private record Admissible(NumericDomain.Bounds bounds, HeldValues held) {
 
-        /** Whether a row may be written at {@code level} as far as these three say. */
+        /** Whether a row may be written at {@code level} as far as these two say. */
         boolean admits(Level level) {
-            if (namesValues() && level instanceof Level.OnACarrier at && at.of().equals(on)
-                    && !on.admitted(values, at.at())) {
+            if (held.refuses(level)) {
                 return false;
             }
             ExactRatio number = level.asANumber();
-            if (number == null) {
-                return bounds.admits(level.asAPlace());
-            }
-            return bounds.admits(number) && inTheClass(number);
+            return number == null ? bounds.admits(level.asAPlace()) : bounds.admits(number);
         }
 
-        /**
-         * Whether the values named leave nothing in {@code part}, so far as that is said without
-         * building anything.
-         *
-         * <p>Not of a run with an end that is no place of the position — one in a written form's
-         * units — which the values say nothing of.
-         */
+        /** Whether the rules leave nothing in {@code part}: of the range, what the declarations hold
+         *  the value to ({@link HeldValues}). */
         boolean admitsNothingIn(LevelInterval part) {
-            if (!namesValues()) {
-                return false;
-            }
-            OrderedInterval run = LevelRealizer.runOf(part, on);
-            return run != null && on.admitsNothingIn(values, run);
-        }
-
-        /** Whether the values say anything here: of a position's value, and naming fewer than
-         *  every value, which most positions' rules do not and which refuses nothing. */
-        private boolean namesValues() {
-            return on != null && !values.isAny();
-        }
-
-        private boolean inTheClass(ExactRatio number) {
-            if (necessary == null || !number.isWhole()
-                    || !(number.floor() instanceof ExactAnswer.Held<BigInteger> whole)) {
-                return true;
-            }
-            return whole.value().mod(necessary.modulus()).equals(necessary.residue());
+            return held.leaveNothingIn(part, bounds);
         }
     }
 

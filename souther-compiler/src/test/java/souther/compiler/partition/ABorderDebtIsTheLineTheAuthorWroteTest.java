@@ -29,7 +29,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.values.ValueSet;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -446,7 +445,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                 .filter(a -> a.path().toString().equals(path)).findFirst().orElseThrow();
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);
         return Partitions.bordersOf(axis, reading,
-                reading.runsBetween(axis.term()), ValueSet.ANY, new LinesRead());
+                reading.runsBetween(axis.term()), new LinesRead());
     }
 
     /** A newtype's own clause, reached through the record that holds it. */

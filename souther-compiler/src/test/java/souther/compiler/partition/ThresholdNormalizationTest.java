@@ -19,7 +19,6 @@ import souther.compiler.query.ReadAs;
 
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Towards;
-import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -321,7 +320,7 @@ class ThresholdNormalizationTest {
     private static List<String> pointsAgainstTheLines(Axis axis,
                                                       souther.compiler.inputs.Quantities reading,
                                                       NumericDomain.Bounds within) {
-        return Partitions.bordersOf(axis, reading, within, ValueSet.ANY, new LinesRead()).stream()
+        return Partitions.bordersOf(axis, reading, within, new LinesRead()).stream()
                 .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                         .filter(role -> border.demand(role).criterion() != null)
                         .map(role -> role + " "
