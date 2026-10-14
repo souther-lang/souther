@@ -31,11 +31,13 @@ import souther.compiler.partition.RewriteSearch;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -98,13 +100,14 @@ public final class Replacements {
                 if (sig == null) {
                     return List.of();
                 }
-                Map<RowRef, List<Figure>> stoppedAt = figuresStoppingEachRow(reading);
+                Map<RowRef, ReplacementDisposition.Met> stoppedAt = howEachRowWasStopped(reading);
                 Position at = Position.at(sig.outputType());
                 Predicate<ControlPlace.Arm> unreached =
                         Adequacy.unreachedIn(arrived, behavior.name(), checked);
                 return ReplacementReading.of(behavior.name(), checked.plan(), inTheClasses,
                         row -> Adequacy.armsSeenIn(row, numbering), unreached, rows,
-                        row -> stoppedAt.getOrDefault(RowRef.of(row), List.of()),
+                        row -> stoppedAt.getOrDefault(RowRef.of(row),
+                                ReplacementDisposition.Met.AT_NO_FIGURE),
                         new ReplacementReading.Comparing() {
 
                             @Override
@@ -123,19 +126,33 @@ public final class Replacements {
         }
 
         /**
-         * The figures each row the reading went without was stopped at, as the run that stopped it
-         * said where it stopped it. Read off what the reading already went without, keyed by the
-         * row, so a rewrite such a row leaves open names what the measure names.
+         * How each row the reading went without was stopped: the figures the runs that stopped it
+         * said they stopped it at, and whether anything no figure decides stopped it as well. Read
+         * off what the reading already went without, keyed by the row, so a rewrite such a row
+         * leaves open names what the measure names.
+         *
+         * <p>Every gap of a row, and not the last one met: a row cut short at one figure and
+         * unreadable for another reason is both, and the second is what a wider run meets again.
+         * A row the reading went without for nothing it recorded stopped of its own accord, which
+         * is no figure ({@link ReplacementDisposition.Met#AT_NO_FIGURE}, asked where the row is).
          */
-        private static Map<RowRef, List<Figure>> figuresStoppingEachRow(
+        private static Map<RowRef, ReplacementDisposition.Met> howEachRowWasStopped(
                 Adequacy.RowReading reading) {
-            Map<RowRef, List<Figure>> out = new HashMap<>();
+            // One row is one meeting, however many gaps it holds: a wider run gets past it only
+            // where every one of them was a figure.
+            Map<RowRef, List<Figure>> figures = new HashMap<>();
+            Set<RowRef> atNoFigure = new HashSet<>();
             for (Incompleteness.Met gap : reading.gaps()) {
-                if (gap.fact().target() instanceof Target.OfRow(RowRef row)
-                        && !gap.figures().isEmpty()) {
-                    out.put(row, gap.figures());
+                if (gap.fact().target() instanceof Target.OfRow(RowRef row)) {
+                    figures.computeIfAbsent(row, _ -> new ArrayList<>()).addAll(gap.figures());
+                    if (gap.figures().isEmpty()) {
+                        atNoFigure.add(row);
+                    }
                 }
             }
+            Map<RowRef, ReplacementDisposition.Met> out = new HashMap<>();
+            figures.forEach((row, at) -> out.put(row,
+                    ReplacementDisposition.Met.once(at, atNoFigure.contains(row))));
             return out;
         }
     }
@@ -292,7 +309,7 @@ public final class Replacements {
                         new ReplacementEvidence.Undecided(why);
                 case ReplacementReading.Standing.Open(var lookFor) -> searched == null
                         ? new ReplacementEvidence.Undecided(
-                                new ReplacementEvidence.Undecided.Way.AtNoAllowance(
+                                ReplacementEvidence.Undecided.Way.atNoAllowance(
                                         ReplacementEvidence.Undecided.Why.NOTHING_RAN))
                         : switch (searched.disposition()) {
                             case ReplacementDisposition.Witnessed _ ->
@@ -306,38 +323,38 @@ public final class Replacements {
         }
 
         /**
-         * Every way a search that found nothing ended, each said as itself and with the figures it
-         * was stopped at there: which figure a wider run would have to raise is what a reader of an
-         * undecided rewrite acts on, and ranking one way over another would hand them one of two.
+         * Every way a search that found nothing ended, each said as itself and as it was met
+         * there: which figure a wider run would have to raise is what a reader of an undecided
+         * rewrite acts on, and ranking one way over another would hand them one of two.
+         *
+         * <p>None of how a way was met is dropped. One met at a figure by one run and at something
+         * no run allows by another is said as both: the figure is one a wider run gets past, and
+         * the rest is what it meets again.
          */
         static List<ReplacementEvidence.Undecided.Way> whyNoneFound(
-                Map<ReplacementDisposition.Ended, List<Figure>> ended) {
+                Map<ReplacementDisposition.Ended, ReplacementDisposition.Met> ended) {
             List<ReplacementEvidence.Undecided.Way> out = new ArrayList<>();
-            ended.forEach((each, figures) -> out.add(switch (each) {
-                case EVERY_ROW_ANSWERED_ALIKE -> new ReplacementEvidence.Undecided.Way.AtNoAllowance(
-                        ReplacementEvidence.Undecided.Why.NO_ROW_ANSWERED_DIFFERENTLY);
-                case NOTHING_WAS_COMPOSED -> new ReplacementEvidence.Undecided.Way.AtNoAllowance(
-                        ReplacementEvidence.Undecided.Why.NOTHING_WAS_COMPOSED);
-                // Each a figure the search was compared against, carried from where it was.
-                case RUNS_A_REWRITE_MAY_TAKE -> new ReplacementEvidence.Undecided.Way.AtFigures(
-                        ReplacementEvidence.Undecided.Why.RUNS_SPENT, figures);
-                case A_FIGURE_OF_THE_COMPOSING -> new ReplacementEvidence.Undecided.Way.AtFigures(
-                        ReplacementEvidence.Undecided.Why.A_COMPOSING_FIGURE_REACHED, figures);
-                // A figure where one of the runs went past one, and none where every run that did
-                // not come back stopped at something no run allows: one it could not be applied
-                // in, one that answered nothing, the host's stack.
-                case A_RUN_DID_NOT_COME_BACK -> figures.isEmpty()
-                        ? new ReplacementEvidence.Undecided.Way.AtNoAllowance(
-                                ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK)
-                        : new ReplacementEvidence.Undecided.Way.AtFigures(
-                                ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK, figures);
-                case NOTHING_RAN -> new ReplacementEvidence.Undecided.Way.AtNoAllowance(
-                        ReplacementEvidence.Undecided.Why.NOTHING_RAN);
-                // The measure's search is asked for on the measure's behalf, which no block's
-                // row limit stops ({@link RewriteSearch.For#THE_MEASURE}).
-                case ROWS_A_BLOCK_MAY_HOLD -> throw new IllegalStateException(
-                        "a search for the measure stopped at the rows a block may hold");
-            }));
+            ended.forEach((each, met) -> out.add(new ReplacementEvidence.Undecided.Way(
+                    switch (each) {
+                        case EVERY_ROW_ANSWERED_ALIKE ->
+                                ReplacementEvidence.Undecided.Why.NO_ROW_ANSWERED_DIFFERENTLY;
+                        case NOTHING_WAS_COMPOSED ->
+                                ReplacementEvidence.Undecided.Why.NOTHING_WAS_COMPOSED;
+                        case RUNS_A_REWRITE_MAY_TAKE ->
+                                ReplacementEvidence.Undecided.Why.RUNS_SPENT;
+                        case A_FIGURE_OF_THE_COMPOSING ->
+                                ReplacementEvidence.Undecided.Why.A_COMPOSING_FIGURE_REACHED;
+                        // A figure where one of the runs went past one, and something no run
+                        // allows where one stopped at that: one it could not be applied in, one
+                        // that answered nothing, the host's stack.
+                        case A_RUN_DID_NOT_COME_BACK ->
+                                ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK;
+                        case NOTHING_RAN -> ReplacementEvidence.Undecided.Why.NOTHING_RAN;
+                        // The measure's search is asked for on the measure's behalf, which no
+                        // block's row limit stops ({@link RewriteSearch.For#THE_MEASURE}).
+                        case ROWS_A_BLOCK_MAY_HOLD -> throw new IllegalStateException(
+                                "a search for the measure stopped at the rows a block may hold");
+                    }, met)));
             return out;
         }
     }

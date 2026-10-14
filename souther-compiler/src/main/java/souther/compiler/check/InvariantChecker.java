@@ -4,7 +4,6 @@ import souther.compiler.values.AdmissibleValues;
 import souther.compiler.values.StringFacts;
 import souther.compiler.values.StringMachineAnswers;
 import souther.compiler.values.Allowance;
-import souther.compiler.observe.Figure;
 import souther.compiler.values.ConjoinedAdmissibleValues;
 import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
@@ -2120,7 +2119,7 @@ public final class InvariantChecker {
         List<Direct> out = new ArrayList<>();
         // Sets in the order they were filed: one finding is filed by every rule that comes to it, and
         // a list asked whether it holds one already is asked across everything filed before.
-        SequencedSet<FieldDomains.NoLine> noLines = new LinkedHashSet<>();
+        SequencedMap<Object, FieldDomains.NoLine> noLines = new LinkedHashMap<>();
         SequencedMap<HandOver, FieldDomains.WithoutAnEnd> withoutAnEnd = new LinkedHashMap<>();
         SequencedMap<Candidate, Set<InvariantStatementId>> aboutOneCoordinate = new LinkedHashMap<>();
         Map<RuleKey, SequencedSet<TypeSymbol.AtModule>> narrowers = new LinkedHashMap<>();
@@ -2150,7 +2149,7 @@ public final class InvariantChecker {
                                 raised, took, rules, raisedByPart, standing, partsNaming))));
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
-        return new Reading(List.copyOf(out), List.copyOf(noLines),
+        return new Reading(List.copyOf(out), List.copyOf(noLines.values()),
                 List.copyOf(withoutAnEnd.values()),
                 // Made once each, from the statements gathered under them: a candidate rebuilt as
                 // the walk met another statement copied what it had so far every time.
@@ -2285,7 +2284,7 @@ public final class InvariantChecker {
     private void direct(ClauseExpr.Part said, InvariantStatementId statement,
                         Written of, PartId<RuleRef.Invariant> part, Denotations at,
                         Coordinates byName, List<Direct> out,
-                        SequencedSet<FieldDomains.NoLine> noLines,
+                        SequencedMap<Object, FieldDomains.NoLine> noLines,
                         SequencedMap<HandOver, FieldDomains.WithoutAnEnd> withoutAnEnd,
                         SequencedMap<Candidate, Set<InvariantStatementId>> naming,
                         Map<RuleKey, SequencedSet<TypeSymbol.AtModule>> narrowers,
@@ -3108,7 +3107,7 @@ public final class InvariantChecker {
     private void noLineDrawn(CanonicalForm read, Core clause, PartId<RuleRef.Invariant> part,
                             Denotations at,
                             Coordinates byName, Arrivals answering, Set<RuleKey> notShown,
-                            SequencedSet<FieldDomains.NoLine> out) {
+                            SequencedMap<Object, FieldDomains.NoLine> out) {
         if (!(read.comparison().claim() instanceof ComparisonClaim.Cut)) {
             return;
         }
@@ -3216,7 +3215,7 @@ public final class InvariantChecker {
     private void restricting(Core clause, ClauseOccurrence at, RuleRef.Invariant from,
                              Written of, PartId<RuleRef.Invariant> part,
                              Coordinates byName, RulesRead rules,
-                             SequencedSet<FieldDomains.NoLine> noLines, RunsRead runs) {
+                             SequencedMap<Object, FieldDomains.NoLine> noLines, RunsRead runs) {
         ReadByClauses.OfAPart account = of.adoptedAt(at);
         ReadByClauses.OfARule rule = rules.ruleIn(from);
         if (account == null || rule == null) {
@@ -3272,18 +3271,26 @@ public final class InvariantChecker {
         }
     }
 
-    /** Both lists, the second's after the first's, each reason once. */
+    /**
+     * Both lists, the second's after the first's, each reason once — and a reason in both, met at
+     * every figure either met it at ({@link BlockReason#factOf}).
+     */
     private static List<BlockReason.RuleReadingStopped> alsoSaying(
             List<BlockReason.RuleReadingStopped> these,
             List<BlockReason.RuleReadingStopped> those) {
-        List<BlockReason.RuleReadingStopped> out = new ArrayList<>(these);
-        those.stream().filter(each -> !out.contains(each)).forEach(out::add);
-        return List.copyOf(out);
+        Map<Object, BlockReason.RuleReadingStopped> out = new LinkedHashMap<>();
+        these.forEach(each -> out.merge(BlockReason.factOf(each), each, BlockReason::together));
+        those.forEach(each -> out.merge(BlockReason.factOf(each), each, BlockReason::together));
+        return List.copyOf(out.values());
     }
 
-    /** One finding per rule and reason, however many readers arrive at it. */
-    private static void add(SequencedSet<FieldDomains.NoLine> noLines, FieldDomains.NoLine said) {
-        noLines.add(said);
+    /**
+     * One finding per rule and reason, however many readers arrive at it, and filed where the first
+     * of them was: a second met at another figure is the same finding, met at both.
+     */
+    private static void add(SequencedMap<Object, FieldDomains.NoLine> noLines,
+                            FieldDomains.NoLine said) {
+        noLines.merge(said.key(), said, FieldDomains.NoLine::together);
     }
 
     /**
@@ -3342,7 +3349,7 @@ public final class InvariantChecker {
                 // standing with nothing about the rule to say. What was not made is the position's
                 // group of them, which this rule is no more answerable for than the one beside it.
                 case AdmittedStrings.NotPublished it ->
-                        byPosition.put(position, new Run.NotPublished(it.stoppedAt()));
+                        byPosition.put(position, new Run.NotPublished(it.why()));
             }
         });
         return new RunsRead(byPosition);
@@ -3449,15 +3456,10 @@ public final class InvariantChecker {
          * to name one with — what it says is that the question about this conjunct stands, and the
          * one word for why is the position's ({@link BlockReason.RulesNotHandedOnAsSets}).
          *
-         * @param stoppedAt the figures the position's sets stopped at, which are the position's
-         *                  and carried here only to be said in that word
+         * @param why the position's word for it, which is the position's and carried here only to
+         *            be said
          */
-        record NotPublished(List<Figure> stoppedAt) implements Run {
-
-            public NotPublished {
-                stoppedAt = List.copyOf(stoppedAt);
-            }
-        }
+        record NotPublished(BlockReason.RulesNotHandedOnAsSets why) implements Run {}
     }
 
     /** What one conjunct's rules about strings came to, per position. */
@@ -3515,8 +3517,7 @@ public final class InvariantChecker {
          * list only by giving the position's shortfall a rule to be filed against.
          */
         BlockReason.RulesNotHandedOnAsSets notPublishedAt(FactSubject position) {
-            return byPosition.get(position) instanceof Run.NotPublished it
-                    ? new BlockReason.RulesNotHandedOnAsSets(it.stoppedAt()) : null;
+            return byPosition.get(position) instanceof Run.NotPublished it ? it.why() : null;
         }
 
     }
@@ -3574,8 +3575,8 @@ public final class InvariantChecker {
     /** One finding, kept once. A coordinate reached twice is one place with one thing to say. */
     private static void file(Coordinate where, PartId<RuleRef.Invariant> part, Core clause,
                              BlockReason.RuleWithoutLineReason why,
-                             SequencedSet<FieldDomains.NoLine> out) {
-        out.add(new FieldDomains.NoLine(where.at(), part, clause, why));
+                             SequencedMap<Object, FieldDomains.NoLine> out) {
+        add(out, new FieldDomains.NoLine(where.at(), part, clause, why));
     }
 
     /**

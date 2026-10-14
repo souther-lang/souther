@@ -16,7 +16,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -138,18 +137,44 @@ public final class StandingAtAPoint {
         /**
          * The readings ran past what one point is tried against, and the rest were not tried.
          *
-         * @param limit how many readings of one row a point is tried against, as it stood where the
-         *              walk stopped: a figure of this compiler's, and what a run allowing more
-         *              would raise
+         * @param limits how many readings of one row a point is tried against, as each stood where
+         *               a walk stopped, each once and in {@link Figure#inOrder}: a figure of this
+         *               compiler's, and what a run allowing more would raise. More than one where
+         *               the rows of one point were walked under more than one
          */
-        record StoppedAtTheLimit(Figure limit) implements ReadingsTried {
+        record StoppedAtTheLimit(List<Figure> limits) implements ReadingsTried {
 
             public StoppedAtTheLimit {
-                Objects.requireNonNull(limit, "a walk stopped at a limit says which");
+                limits = Figure.inOrder(limits);
+                if (limits.isEmpty()) {
+                    throw new IllegalArgumentException("a walk stopped at a limit says which");
+                }
+            }
+
+            /** Stopped at one limit, which is how a walk meets it. */
+            public StoppedAtTheLimit(Figure limit) {
+                this(List.of(limit));
             }
         }
 
         ReadingsTried EVERY_ONE = new EveryOne();
+
+        /**
+         * What two walks over the rows of one point tried between them: every reading where both
+         * tried every one, and otherwise every limit either stopped at — a row stopped at one is
+         * not read past it because another row was not.
+         */
+        default ReadingsTried and(ReadingsTried other) {
+            if (!(this instanceof StoppedAtTheLimit mine)) {
+                return other;
+            }
+            if (!(other instanceof StoppedAtTheLimit theirs)) {
+                return this;
+            }
+            List<Figure> both = new ArrayList<>(mine.limits());
+            both.addAll(theirs.limits());
+            return new StoppedAtTheLimit(both);
+        }
     }
 
     /**
@@ -292,8 +317,8 @@ public final class StandingAtAPoint {
             // And where none of them stood there, whether there were others to try. Asked of the
             // rows that came to nothing and of no others: a row that stood at the point was answered
             // by the reading that stood, and the readings after it are not ones this went without.
-            if (!stands && readings.whether() instanceof ReadingsTried.StoppedAtTheLimit atLimit) {
-                readTo = atLimit;
+            if (!stands) {
+                readTo = readTo.and(readings.whether());
             }
             unreadable.addAll(stopped);
         }
@@ -413,9 +438,7 @@ public final class StandingAtAPoint {
                     case ValuesAtARow.CouldNotTell it -> unreadable.addAll(it.why());
                 }
             }
-            if (readings.whether() instanceof ReadingsTried.StoppedAtTheLimit atLimit) {
-                readTo = atLimit;
-            }
+            readTo = readTo.and(readings.whether());
         }
         return new RowsRead(read, unreadable, readTo, unwatched);
     }

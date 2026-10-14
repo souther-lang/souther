@@ -449,7 +449,9 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                         "a reading owing nothing at a point it owes one at: " + role);
             }
             coverage.add(owed.coverage());
-            searched = searched.plus(owed.searches());
+            // Each search as made by the reading it was made for, which is what says where it
+            // was read: a point read at three calls and stopped at one was stopped at that one.
+            searched = searched.plus(owed.searches().readAt(reading.readAt()));
             projection = projection.and(owed.projection());
         }
         return new ObligationAssessment(asked.criterion(),

@@ -58,14 +58,31 @@ public sealed interface EstablishmentGap {
     RunSensitivity runSensitivity();
 
     /**
-     * The figures of this compiler's a wider run would widen to close the gap, as each stood where
-     * it was compared: empty exactly where {@link #runSensitivity} is
-     * {@link RunSensitivity#UNAFFECTED}.
+     * Every figure of this compiler's the establishing reached, as each stood where it was
+     * compared: some wherever {@link #runSensitivity} is {@link RunSensitivity#MAY_CHANGE}.
      *
-     * <p>A gap something beside a figure holds open is not closed by widening the figure, so a
-     * reader of one is told no figure to widen even where a figure was reached on the way.
+     * <p>What was reached and not what widening would close, which is {@link #runSensitivity}'s
+     * question. A gap something beside a figure holds open is not closed by widening the figure,
+     * and the figure was reached on the way all the same — a reader told it stopped at none would
+     * widen none, and meet the figure the day the other thing is lifted.
      */
     List<Figure> figures();
+
+    /**
+     * What tells this gap from another: the codes an observation met with the figures it was
+     * stopped at left out, and a composing's whole account, whose budgets are figures fixed where
+     * they are declared and so are what it is.
+     *
+     * <p>For a reader that holds gaps by what they are. Two observations stopped by one code at two
+     * figures are one thing that stopped a showing, met at both ({@link
+     * WritabilityKnowledge.Prevented#of}, which puts them together).
+     */
+    default Object fact() {
+        return switch (this) {
+            case Observation it -> it.causes();
+            case Composition it -> it;
+        };
+    }
 
     /**
      * An observation of the value did not come back whole, so where it stands could not be read.
@@ -128,9 +145,10 @@ public sealed interface EstablishmentGap {
                     ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
         }
 
+        /** Every figure a limit stopped one of them at, whether or not the rest are limits too. */
         @Override
         public List<Figure> figures() {
-            return runSensitivity() == RunSensitivity.MAY_CHANGE ? stoppedAt : List.of();
+            return stoppedAt;
         }
     }
 
@@ -230,14 +248,12 @@ public sealed interface EstablishmentGap {
                     ? RunSensitivity.UNAFFECTED : RunSensitivity.MAY_CHANGE;
         }
 
-        /** The budgets the search met, each a figure fixed where it is declared, wherever they are
-         *  all that held the point open. */
+        /** The budgets the search met, each a figure fixed where it is declared, whatever else of
+         *  this compiler's it met beside them. */
         @Override
         public List<Figure> figures() {
-            return runSensitivity() == RunSensitivity.MAY_CHANGE
-                    ? Figure.inOrder(budgets.written().stream().map(CompositionBudget::figure)
-                            .toList())
-                    : List.of();
+            return Figure.inOrder(budgets.written().stream().map(CompositionBudget::figure)
+                    .toList());
         }
 
         /** The gap the budgets a search met are, where it met nothing else of this compiler's. */

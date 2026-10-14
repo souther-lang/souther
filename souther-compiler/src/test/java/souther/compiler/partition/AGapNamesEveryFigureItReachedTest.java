@@ -20,19 +20,22 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * A gap a wider run may close says which figure to widen, and a gap no wider run closes says none.
+ * A gap names every figure it reached, and a gap a wider run may close always names one.
  *
- * <p>The report tells a reader that a figure of this compiler's stopped something wherever a gap
- * answers {@link RunSensitivity#MAY_CHANGE}. Without the figure that sentence names nothing, and a
- * figure beside a gap a wider run meets again sends the reader to widen something that changes
- * nothing. So the two answers are held to each other over every arm, and the figures to the ones
- * that were met.
+ * <p>Two questions, held apart. Which figures were reached is what happened; whether a run allowed
+ * more of them closes the gap is asked of everything that stopped it. The report tells a reader a
+ * figure of this compiler's stopped something wherever a gap answers
+ * {@link RunSensitivity#MAY_CHANGE}, and without the figure that sentence names nothing — so that
+ * direction is held over every arm. The other is not: a gap stopped at a figure and at something a
+ * wider run meets again reached the figure, and a reader told it reached none would raise none and
+ * meet the figure once the other thing is lifted.
  */
-class AGapNamesAFigureExactlyWhereAWiderRunMayCloseItTest {
+class AGapNamesEveryFigureItReachedTest {
 
     private static final Figure DEPTH = WorkFigure.OBSERVED_DEPTH.at(3);
 
@@ -40,12 +43,12 @@ class AGapNamesAFigureExactlyWhereAWiderRunMayCloseItTest {
 
     /** Every reading gap there is: one of each arm, and of each code a value arrives unread with. */
     @Test
-    void aReadingGapNamesAFigureExactlyWhereAWiderRunMayChangeIt() {
+    void aReadingGapAWiderRunMayChangeNamesAFigure() {
         for (ReadingGap each : everyReadingGap()) {
-            assertEquals(each.runSensitivity() == RunSensitivity.MAY_CHANGE,
-                    !each.figures().isEmpty(),
-                    () -> each + " answers " + each.runSensitivity() + " and names "
-                            + each.figures());
+            if (each.runSensitivity() == RunSensitivity.MAY_CHANGE) {
+                assertFalse(each.figures().isEmpty(),
+                        () -> each + " answers MAY_CHANGE and names no figure");
+            }
         }
     }
 
@@ -96,41 +99,51 @@ class AGapNamesAFigureExactlyWhereAWiderRunMayCloseItTest {
                 met.eachKindOnce().written());
     }
 
-    /** Every establishment gap, over each way its parts meet. */
+    /**
+     * Every establishment gap, over each way its parts meet: the figures it reached whatever else
+     * stopped it, and how a wider run meets it asked of all of them.
+     */
     @Test
-    void anEstablishmentGapNamesAFigureExactlyWhereAWiderRunMayCloseIt() {
+    void anEstablishmentGapNamesEveryFigureItReachedHoweverAWiderRunMeetsIt() {
         Incompleteness.Cause aLimit =
                 Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED, DEPTH);
         Incompleteness.Cause nothingReadIt =
                 Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE);
         Set<CompositionBudget> budgets = Set.of(CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT,
                 CompositionBudget.STEPS_A_SEARCH_MAY_TAKE);
+        List<Figure> budgetFigures =
+                Figure.inOrder(budgets.stream().map(CompositionBudget::figure).toList());
         Set<CompositionRepertoire> writesSomeOf =
                 Set.of(CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE);
         Set<CompositionCapacity> noRoom = Set.of(new CompositionCapacity(
                 CompositionCapacity.Where.PLACES_A_PAIR_IS_WALKED_TO,
                 UnheldNumber.of(ExactFailures.room())));
 
-        Map<EstablishmentGap, List<Figure>> named = Map.of(
-                EstablishmentGap.Observation.of(List.of(aLimit)), List.of(DEPTH),
-                EstablishmentGap.Observation.of(List.of(nothingReadIt)), List.of(),
-                EstablishmentGap.Observation.of(List.of(aLimit, nothingReadIt)), List.of(),
+        Map<EstablishmentGap, Reached> named = Map.of(
+                EstablishmentGap.Observation.of(List.of(aLimit)),
+                new Reached(List.of(DEPTH), RunSensitivity.MAY_CHANGE),
+                EstablishmentGap.Observation.of(List.of(nothingReadIt)),
+                new Reached(List.of(), RunSensitivity.UNAFFECTED),
+                EstablishmentGap.Observation.of(List.of(aLimit, nothingReadIt)),
+                new Reached(List.of(DEPTH), RunSensitivity.UNAFFECTED),
                 EstablishmentGap.Composition.of(budgets),
-                        Figure.inOrder(budgets.stream().map(CompositionBudget::figure).toList()),
-                EstablishmentGap.Composition.of(budgets, writesSomeOf, Set.of()), List.of(),
-                EstablishmentGap.Composition.of(budgets, Set.of(), noRoom), List.of(),
-                EstablishmentGap.Composition.of(Set.of(), writesSomeOf, Set.of()), List.of());
+                new Reached(budgetFigures, RunSensitivity.MAY_CHANGE),
+                EstablishmentGap.Composition.of(budgets, writesSomeOf, Set.of()),
+                new Reached(budgetFigures, RunSensitivity.UNAFFECTED),
+                EstablishmentGap.Composition.of(budgets, Set.of(), noRoom),
+                new Reached(budgetFigures, RunSensitivity.UNAFFECTED),
+                EstablishmentGap.Composition.of(Set.of(), writesSomeOf, Set.of()),
+                new Reached(List.of(), RunSensitivity.UNAFFECTED));
 
-        for (Map.Entry<EstablishmentGap, List<Figure>> each : named.entrySet()) {
-            EstablishmentGap gap = each.getKey();
-            assertEquals(gap.runSensitivity() == RunSensitivity.MAY_CHANGE,
-                    !gap.figures().isEmpty(),
-                    () -> gap + " answers " + gap.runSensitivity() + " and names "
-                            + gap.figures());
-            assertEquals(Set.copyOf(each.getValue()), Set.copyOf(gap.figures()),
-                    () -> "the figures " + gap + " names");
-        }
+        named.forEach((gap, reached) -> {
+            assertEquals(reached.figures(), gap.figures(), () -> "the figures " + gap + " names");
+            assertEquals(reached.sensitivity(), gap.runSensitivity(),
+                    () -> "how a wider run meets " + gap);
+        });
     }
+
+    /** What a gap reached, and how a wider run meets it. */
+    private record Reached(List<Figure> figures, RunSensitivity sensitivity) {}
 
     /** An observation holding a code a figure decides is not made without one. */
     @Test

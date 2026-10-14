@@ -1700,7 +1700,7 @@ final class Coverages {
                     out.add(each instanceof ItemAssessment.Attempt.Unresolved it
                             ? shortOf(it, budgets, repertoires, capacities) : each);
                 }
-                return new SearchOutcomes(out);
+                return SearchOutcomes.each(out);
             }
 
             /**
@@ -2242,7 +2242,7 @@ final class Coverages {
             // came to nothing. Both can be true of one point, so this is asked beside them rather
             // than after them.
             if (it.tried() instanceof StandingAtAPoint.ReadingsTried.StoppedAtTheLimit stopped) {
-                by.add(new Weakening.BorderReadingsNotExhausted(border, stopped.limit()));
+                by.add(new Weakening.BorderReadingsNotExhausted(border, stopped.limits()));
             }
         }
         for (Incompleteness.Met gap : observed.gaps()) {

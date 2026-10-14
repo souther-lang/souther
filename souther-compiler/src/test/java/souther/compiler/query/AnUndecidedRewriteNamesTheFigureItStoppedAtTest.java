@@ -15,7 +15,6 @@ import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -53,7 +52,7 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
                 undecided(compiled(List.of(AN_ARM_ITS_ROW_DOES_NOT_TELL), 1)),
                 ReplacementEvidence.Undecided.Why.RUNS_SPENT);
 
-        assertEquals(new ReplacementEvidence.Undecided.Way.AtFigures(
+        assertEquals(ReplacementEvidence.Undecided.Way.atFigures(
                         ReplacementEvidence.Undecided.Why.RUNS_SPENT,
                         List.of(WorkFigure.RUNS_REPLACING_AN_ARM.at(1))), spent,
                 "the runs it was allowed, as they stood on this run");
@@ -88,7 +87,7 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
                         """), Budgets.measures().rewriteRuns())),
                 ReplacementEvidence.Undecided.Why.A_COMPOSING_FIGURE_REACHED);
 
-        assertEquals(new ReplacementEvidence.Undecided.Way.AtFigures(
+        assertEquals(ReplacementEvidence.Undecided.Way.atFigures(
                         ReplacementEvidence.Undecided.Why.A_COMPOSING_FIGURE_REACHED,
                         List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(64))), reached);
     }
@@ -115,12 +114,10 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
                 """), Budgets.measures().rewriteRuns())),
                 ReplacementEvidence.Undecided.Why.A_COMPOSING_FIGURE_REACHED);
 
-        ReplacementEvidence.Undecided.Way.AtFigures named = assertInstanceOf(
-                ReplacementEvidence.Undecided.Way.AtFigures.class, reached,
-                "a figure of the composing's own stopped it, and it is carried");
-        assertTrue(named.figures().contains(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.figure()),
-                () -> "what a proposed collection holds is what stopped it: " + named.figures());
-        assertEquals(RunSensitivity.MAY_CHANGE, named.runSensitivity());
+        assertTrue(reached.figures().contains(
+                        CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.figure()),
+                () -> "what a proposed collection holds is what stopped it: " + reached.figures());
+        assertEquals(RunSensitivity.MAY_CHANGE, reached.runSensitivity());
     }
 
     /**
@@ -158,7 +155,7 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
                 .filter(each -> each.why()
                         == ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK)
                 .toList();
-        assertEquals(List.of(new ReplacementEvidence.Undecided.Way.AtFigures(
+        assertEquals(List.of(ReplacementEvidence.Undecided.Way.atFigures(
                         ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK,
                         List.of(WorkFigure.EVALUATION_STEPS.at(100_000)))), notBack,
                 () -> "the rewrite that loops names the steps it spent: " + its);

@@ -230,6 +230,12 @@ public sealed interface StandingQuestion {
          * halves is no disagreement about anything the model says — there is no order there — so a
          * comparison of the joined lists would refuse a pair of accounts over a precedence neither
          * of them claimed.
+         *
+         * <p><b>Nor is a difference in the figures a reason was met at.</b> Which limit of an
+         * allowance refused is what happened on the way: two readings of one rule may be refused at
+         * different ones, and that is one reason met at both — so both agree where the reasons do
+         * with the figures left out ({@link BlockReason#factOf}), and the account they come to
+         * names every figure either met.
          */
         @Override
         public StandingQuestion mergedWith(StandingQuestion other) {
@@ -241,21 +247,23 @@ public sealed interface StandingQuestion {
                 throw new IllegalArgumentException("two accounts put together are of one question: "
                         + fact + " and " + it.fact);
             }
-            if (!stopped.itsRuleLeft().equals(it.stopped.itsRuleLeft())) {
+            if (!stopped.itsRuleLeft().sameFactAs(it.stopped.itsRuleLeft())) {
                 throw new TwoAccountsOfOneQuestion(fact, stopped, it.stopped);
             }
             Optional<BlockReason.AnswerRealizationStopped> mine = stopped.itsPositionWasShortOf();
             Optional<BlockReason.AnswerRealizationStopped> theirs =
                     it.stopped.itsPositionWasShortOf();
-            if (mine.isPresent() && theirs.isPresent() && !mine.equals(theirs)) {
+            if (mine.isPresent() && theirs.isPresent()
+                    && !BlockReason.factOf(mine.get()).equals(BlockReason.factOf(theirs.get()))) {
                 throw new TwoAccountsOfOneQuestion(fact, stopped, it.stopped);
             }
-            Optional<BlockReason.AnswerRealizationStopped> answer =
-                    mine.isPresent() ? mine : theirs;
+            Optional<BlockReason.AnswerRealizationStopped> answer = mine.isEmpty() ? theirs
+                    : theirs.isEmpty() ? mine
+                    : Optional.of(BlockReason.together(mine.get(), theirs.get()));
             Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
             both.addAll(it.reachedBy);
-            return new Exact(fact, both,
-                    new WhatAQuestionStandsOn(stopped.itsRuleLeft(), answer));
+            return new Exact(fact, both, new WhatAQuestionStandsOn(
+                    stopped.itsRuleLeft().together(it.stopped.itsRuleLeft()), answer));
         }
 
         @Override
@@ -380,7 +388,7 @@ public sealed interface StandingQuestion {
 
         @Override
         public Object fact() {
-            return filed;
+            return filed.fact();
         }
 
         @Override
@@ -389,13 +397,15 @@ public sealed interface StandingQuestion {
                 throw new IllegalArgumentException("a rule nothing classified and " + other
                         + " are not two accounts of one thing");
             }
-            if (!filed.equals(it.filed)) {
+            if (!filed.fact().equals(it.filed.fact())) {
                 throw new IllegalArgumentException("two accounts put together are of one rule: "
                         + filed + " and " + it.filed);
             }
             Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
             both.addAll(it.reachedBy);
-            return new NothingClassifiesIt(filed, both, together(readAt, it.readAt));
+            return new NothingClassifiesIt(new Filed(filed.rule(), filed.at(),
+                    BlockReason.together(filed.why(), it.filed.why())),
+                    both, together(readAt, it.readAt));
         }
 
         @Override
@@ -409,7 +419,8 @@ public sealed interface StandingQuestion {
          *
          * <p>The citation is no part of it, for the reason {@link Exact.Fact} gives. The reason is:
          * two limits met at one place are two things for a reader to lift, and one rule filed under
-         * the first of them would leave the second unsaid.
+         * the first of them would leave the second unsaid. The figures the reason was met at are
+         * not ({@link #fact}): one limit met at two of them is one thing to lift.
          */
         public record Filed(RuleRef rule, FilingCoordinate at,
                             BlockReason.RuleReadingStopped why) {
@@ -419,6 +430,12 @@ public sealed interface StandingQuestion {
                     throw new IllegalArgumentException(
                             "a rule nothing classified is one rule, filed somewhere, for a reason");
                 }
+            }
+
+            /** What makes two of these one: all of it, with the figures its reason was met at
+             *  left out. */
+            Object fact() {
+                return List.of(rule, at, BlockReason.factOf(why));
             }
         }
     }
@@ -491,7 +508,7 @@ public sealed interface StandingQuestion {
 
         @Override
         public Object fact() {
-            return filed;
+            return filed.fact();
         }
 
         @Override
@@ -500,13 +517,15 @@ public sealed interface StandingQuestion {
                 throw new IllegalArgumentException("a question nothing worked out and " + other
                         + " are not two accounts of one thing");
             }
-            if (!filed.equals(it.filed)) {
+            if (!filed.fact().equals(it.filed.fact())) {
                 throw new IllegalArgumentException("two accounts put together are of one question: "
                         + filed + " and " + it.filed);
             }
             Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
             both.addAll(it.reachedBy);
-            return new BoundaryUndetermined(filed, both, together(readAt, it.readAt));
+            return new BoundaryUndetermined(new Filed(filed.rule(), filed.at(),
+                    BlockReason.together(filed.why(), it.filed.why())),
+                    both, together(readAt, it.readAt));
         }
 
         @Override
@@ -515,7 +534,8 @@ public sealed interface StandingQuestion {
         }
 
         /** Which rule, where and what stopped it — the whole of what makes two of these one, for
-         *  the reason {@link Exact.Fact} gives about the citation. */
+         *  the reason {@link Exact.Fact} gives about the citation, with the figures the reason was
+         *  met at left out for the one {@link NothingClassifiesIt.Filed} gives. */
         public record Filed(RuleRef rule, FilingCoordinate at,
                             BlockReason.RuleReadingStopped why) {
 
@@ -524,6 +544,11 @@ public sealed interface StandingQuestion {
                     throw new IllegalArgumentException("a question nothing worked out is one of"
                             + " one rule, filed somewhere, for a reason");
                 }
+            }
+
+            /** What makes two of these one, as {@link NothingClassifiesIt.Filed#fact} says. */
+            Object fact() {
+                return List.of(rule, at, BlockReason.factOf(why));
             }
         }
     }

@@ -139,6 +139,55 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
                 Set.copyOf(both.causes().iterator().next().figures()), both::toString);
     }
 
+    /**
+     * One rewrite left open for one reason is one fact at every figure it was met at, and one
+     * weakening that names them all.
+     *
+     * <p>What tells two of these apart is which rewrite and the reasons it was left open for. A
+     * search held to one number of runs by one measure and to another by the next left one rewrite
+     * open for one reason, and a reader counting the verdict's openings counts it once.
+     */
+    @Test
+    void oneRewriteLeftOpenAtTwoFiguresIsOneFactAtBoth() {
+        Figure four = WorkFigure.RUNS_REPLACING_AN_ARM.at(4);
+        Figure eight = WorkFigure.RUNS_REPLACING_AN_ARM.at(8);
+        Replacement rewrite = new Replacement.ByOneAnswer(new ObservedValue.Integer(0),
+                new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1)));
+
+        WeakeningSet both = WeakeningSet.of(
+                new Weakening.RewriteUndecided("b", rewrite, runsSpentAt(four)),
+                new Weakening.RewriteUndecided("b", rewrite, runsSpentAt(eight)));
+
+        assertEquals(Set.of(new Weakening.RewriteUndecided("b", rewrite,
+                        new ReplacementEvidence.Undecided(ReplacementEvidence.Undecided.Way
+                                .atFigures(ReplacementEvidence.Undecided.Why.RUNS_SPENT,
+                                        List.of(four, eight))).why())),
+                both.causes());
+    }
+
+    /** And so is every other arm that carries the figures it stopped at beside what it is. */
+    @Test
+    void anArmStoppedAtTwoFiguresIsOneFactAtBoth() {
+        Figure one = WorkFigure.READINGS_OF_A_ROW_AT_A_POINT.at(64);
+        Figure other = WorkFigure.READINGS_OF_A_ROW_AT_A_POINT.at(128);
+
+        assertEquals(Set.of(new Weakening.BorderReadingsNotExhausted(border(),
+                        List.of(one, other))),
+                WeakeningSet.of(new Weakening.BorderReadingsNotExhausted(border(), one),
+                        new Weakening.BorderReadingsNotExhausted(border(), other)).causes());
+        assertEquals(Set.of(new Weakening.PairSpaceTruncated("b", 9, List.of(one, other))),
+                WeakeningSet.of(new Weakening.PairSpaceTruncated("b", 9, one),
+                        new Weakening.PairSpaceTruncated("b", 9, other)).causes());
+        assertEquals(Set.of(new Weakening.MeetingsNotWalked("b", 2, List.of(one, other))),
+                WeakeningSet.of(new Weakening.MeetingsNotWalked("b", 2, List.of(other)),
+                        new Weakening.MeetingsNotWalked("b", 2, List.of(one))).causes());
+    }
+
+    private static ReplacementEvidence.Undecided.LeftOpen runsSpentAt(Figure runs) {
+        return new ReplacementEvidence.Undecided(ReplacementEvidence.Undecided.Way.atFigures(
+                ReplacementEvidence.Undecided.Why.RUNS_SPENT, List.of(runs))).why();
+    }
+
     /** Every member of the seal is among them, read from the seal rather than from the list. */
     @Test
     void everyArmIsAmongThem() {
@@ -232,8 +281,8 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
             if (ended == ReplacementDisposition.Ended.ROWS_A_BLOCK_MAY_HOLD) {
                 continue;   // only ever of a search for a block, which the measure never asks
             }
-            for (List<Figure> carried : carriedFor(ended)) {
-                Map<ReplacementDisposition.Ended, List<Figure>> one =
+            for (ReplacementDisposition.Met carried : carriedFor(ended)) {
+                Map<ReplacementDisposition.Ended, ReplacementDisposition.Met> one =
                         new EnumMap<>(ReplacementDisposition.Ended.class);
                 one.put(ended, carried);
                 out.addAll(Replacements.Measured.whyNoneFound(one));
@@ -242,7 +291,7 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
         out.add(ReplacementReading.wayOf(new ArmReplacements.Sibling.Why.PastWhatAForkCarries(
                 WorkFigure.NODES_A_FORK_CARRIES.at(4000))));
         out.add(ReplacementReading.wayOf(new ArmReplacements.Sibling.Why.PastWhatAMethodHolds()));
-        out.add(new ReplacementEvidence.Undecided.Way.AtNoAllowance(
+        out.add(ReplacementEvidence.Undecided.Way.atNoAllowance(
                 ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ));
         return out;
     }
@@ -250,20 +299,29 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
     /**
      * What the search carries out of each way it ends: the runs it was allowed where it ran out of
      * them; the composing's figure, or a bound of the search's own, where composing stopped; the
-     * limit a run went past where one did, and none where every run that did not come back stopped
-     * at something no run allows; and nothing elsewhere.
+     * limit a run went past where one did, something no run allows where every run that did not
+     * come back stopped at that, and both where some did each; and nothing elsewhere.
      */
-    private static List<List<Figure>> carriedFor(ReplacementDisposition.Ended ended) {
+    private static List<ReplacementDisposition.Met> carriedFor(
+            ReplacementDisposition.Ended ended) {
         return switch (ended) {
-            case RUNS_A_REWRITE_MAY_TAKE -> List.of(
-                    List.of(WorkFigure.RUNS_REPLACING_AN_ARM.at(4)));
+            case RUNS_A_REWRITE_MAY_TAKE -> List.of(ReplacementDisposition.Met.at(
+                    List.of(WorkFigure.RUNS_REPLACING_AN_ARM.at(4))));
             case A_FIGURE_OF_THE_COMPOSING -> List.of(
-                    List.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.figure()),
-                    List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(64)));
+                    ReplacementDisposition.Met.at(
+                            List.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.figure())),
+                    ReplacementDisposition.Met.at(
+                            List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(64))));
             case A_RUN_DID_NOT_COME_BACK -> List.of(
-                    List.of(WorkFigure.EVALUATION_STEPS.at(100)), List.of());
+                    ReplacementDisposition.Met.at(List.of(WorkFigure.EVALUATION_STEPS.at(100))),
+                    ReplacementDisposition.Met.AT_NO_FIGURE,
+                    // One run stopped at a figure and at the host's stack, and one run at each.
+                    ReplacementDisposition.Met.once(
+                            List.of(WorkFigure.EVALUATION_STEPS.at(100)), true),
+                    ReplacementDisposition.Met.at(List.of(WorkFigure.EVALUATION_STEPS.at(100)))
+                            .and(ReplacementDisposition.Met.AT_NO_FIGURE));
             case EVERY_ROW_ANSWERED_ALIKE, NOTHING_WAS_COMPOSED, ROWS_A_BLOCK_MAY_HOLD,
-                 NOTHING_RAN -> List.of(List.of());
+                 NOTHING_RAN -> List.of(ReplacementDisposition.Met.AT_NO_FIGURE);
         };
     }
 

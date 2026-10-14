@@ -13,6 +13,11 @@ import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.publish.PublicationOrders;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -156,9 +161,9 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                         unverified());
 
         WritabilityKnowledge forward = WritabilityKnowledge.of(nothingShown(),
-                new SearchOutcomes(made));
+                SearchOutcomes.each(made));
         WritabilityKnowledge backward = WritabilityKnowledge.of(nothingShown(),
-                new SearchOutcomes(made.reversed()));
+                SearchOutcomes.each(made.reversed()));
 
         assertEquals(forward, backward, "the searches of one point are a set of facts about it");
         WritabilityKnowledge.Prevented held = assertInstanceOf(
@@ -190,6 +195,35 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                 "two observations naming one cause each are one observation naming both");
     }
 
+    /**
+     * A showing stopped is said where the readings it stopped were read, and not where the other
+     * readings of the point were.
+     *
+     * <p>One point, read at two calls of a helper: the search made for the reading at one call was
+     * stopped at a figure, and the one at the other call composed nothing. The gap is the first
+     * call's; told every call the point was read at, a reader would look for the stop at a call
+     * where there was none.
+     */
+    @Test
+    void aStoppedShowingIsSaidWhereTheReadingsItStoppedWereRead() {
+        ModelOccurrence oneCall = new ModelOccurrence(SourceConstructOrigin.written(
+                new WrittenOwner.Body("m", "f"), 1, SourceConstruct.CALL),
+                ExpansionLineage.ORIGINAL);
+        ModelOccurrence otherCall = new ModelOccurrence(SourceConstructOrigin.written(
+                new WrittenOwner.Body("m", "f"), 2, SourceConstruct.CALL),
+                ExpansionLineage.ORIGINAL);
+
+        WritabilityKnowledge.Prevented held = assertInstanceOf(
+                WritabilityKnowledge.Prevented.class,
+                WritabilityKnowledge.of(nothingShown(),
+                        SearchOutcomes.of(stopped()).readAt(List.of(oneCall))
+                                .plus(SearchOutcomes.of(unresolved())
+                                        .readAt(List.of(otherCall)))));
+
+        EstablishmentGap gap = held.by().written().getFirst();
+        assertEquals(List.of(oneCall), held.readAt(gap));
+    }
+
     /** A row read back is grounds, and grounds outrank nothing — they answer a different question. */
     @Test
     void aRowReadBackIsGroundsWhateverElseWasStopped() {
@@ -198,7 +232,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                         souther.compiler.partition.Level.OfTheQuantity.of(1)),
                 new Measurement.Complete<>(new ItemAssessment.Coverage.NoHit()),
                 ItemAssessment.WritabilityProjection.UNPROVEN,
-                new SearchOutcomes(List.of(stopped(), certified())));
+                SearchOutcomes.each(List.of(stopped(), certified())));
 
         assertTrue(owed.writabilityEvidence().has(
                         ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT),

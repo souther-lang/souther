@@ -72,4 +72,22 @@ public sealed interface Figure permits Figure.Budget, WorkFigure.At {
         out.sort(Comparator.comparing(Figure::name).thenComparing(Figure::most));
         return List.copyOf(out);
     }
+
+    /**
+     * Two lists of figures, each in {@link #inOrder}, figure by figure and then the shorter first:
+     * the order a holder compares by where what tells two of it apart includes the figures.
+     */
+    static int compare(List<Figure> these, List<Figure> those) {
+        for (int i = 0; i < Math.min(these.size(), those.size()); i++) {
+            int byName = these.get(i).name().compareTo(those.get(i).name());
+            if (byName != 0) {
+                return byName;
+            }
+            int byMost = these.get(i).most().compareTo(those.get(i).most());
+            if (byMost != 0) {
+                return byMost;
+            }
+        }
+        return Integer.compare(these.size(), those.size());
+    }
 }

@@ -6,7 +6,10 @@ import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.NotMeasuredReason;
 import souther.compiler.query.Weakening;
+import souther.compiler.query.WritabilityKnowledge;
+import souther.compiler.types.ModelOccurrence;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -142,7 +145,8 @@ public sealed interface AdequacyUncertainty {
      * read for it that did not come back, and a composing for another that never started — and what
      * a reader wants is everything that would have to give.
      */
-    record ShowingStopped(Subject subject, EstablishmentGap by) implements AdequacyUncertainty {
+    record ShowingStopped(Subject subject, EstablishmentGap by, List<ModelOccurrence> readAt)
+            implements AdequacyUncertainty {
 
         public ShowingStopped {
             if (subject == null) {
@@ -151,6 +155,29 @@ public sealed interface AdequacyUncertainty {
             if (by == null) {
                 throw new IllegalArgumentException("a showing that was stopped says what stopped it");
             }
+            readAt = List.copyOf(readAt);
+        }
+
+        /**
+         * What tells two of these apart: what it is about, and what stopped it with the figures
+         * and the calls left out. Two obligations of one behavior stopped alike at two figures are
+         * one thing open, met at both.
+         */
+        public Object fact() {
+            return List.of(subject, by.fact());
+        }
+
+        /** Both, as one: what stopped either, at every figure and in every copy either was. */
+        public ShowingStopped together(ShowingStopped other) {
+            if (!fact().equals(other.fact())) {
+                throw new IllegalArgumentException(
+                        "two showings put together are one: " + this + " and " + other);
+            }
+            List<ModelOccurrence> copies = new ArrayList<>(readAt);
+            other.readAt.stream().filter(copy -> !copies.contains(copy)).forEach(copies::add);
+            return new ShowingStopped(subject,
+                    WritabilityKnowledge.Prevented.of(List.of(by, other.by)).by().written()
+                            .getFirst(), copies);
         }
 
         /**

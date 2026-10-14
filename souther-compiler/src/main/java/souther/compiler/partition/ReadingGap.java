@@ -58,8 +58,9 @@ public sealed interface ReadingGap {
     RunSensitivity runSensitivity();
 
     /**
-     * The figures of this compiler's that stopped the reading, as each stood where it was compared:
-     * empty exactly where {@link #runSensitivity} is {@link RunSensitivity#UNAFFECTED}.
+     * Every figure of this compiler's that stopped the reading, as each stood where it was
+     * compared: some wherever {@link #runSensitivity} is {@link RunSensitivity#MAY_CHANGE}, and
+     * whatever else stopped it beside them.
      *
      * <p>Each arm answers, and none from a word: a reader told a wider run may change this is told
      * which figure to widen, and what a reason cannot carry is not said.

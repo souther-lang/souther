@@ -8408,9 +8408,9 @@ public final class Generator {
         private boolean alike;
         /** How many times this stopped a search. */
         private int stops;
-        /** The ways the search stopped with something left untried, each with the figures it was
-         *  stopped at there where one is carried. */
-        private final Map<ReplacementDisposition.Ended, Set<Figure>> stopped =
+        /** The ways the search stopped with something left untried, each as it was met there: at
+         *  the figures it was stopped at where one is carried, at something else where it was. */
+        private final Map<ReplacementDisposition.Ended, ReplacementDisposition.Met> stopped =
                 new EnumMap<>(ReplacementDisposition.Ended.class);
 
         private ReplacementWitness(RunOnce trial, ReplacementOwed asked, int mostRuns) {
@@ -8456,8 +8456,10 @@ public final class Generator {
                 // not one the two were seen to answer alike on: it is one nothing was seen on. With
                 // the figure that kept it untold, where one did.
                 case COULD_NOT_TELL -> {
-                    ended(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK,
-                            AnswerChange.untoldAt(body.answer(), rewritten));
+                    AnswerChange.Untold untold = AnswerChange.untold(body.answer(), rewritten);
+                    stopped.merge(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK,
+                            ReplacementDisposition.Met.once(untold.figures(), untold.atNoFigure()),
+                            ReplacementDisposition.Met::and);
                     yield Acceptance.PASSED;
                 }
             };
@@ -8490,9 +8492,14 @@ public final class Generator {
             return List.of(WorkFigure.RUNS_REPLACING_AN_ARM.at(mostRuns));
         }
 
-        /** One way the search ended, and the figures it was stopped at there. */
+        /**
+         * One way the search ended, and the figures it was stopped at there: none where nothing it
+         * was compared against stopped it, which is met beside whatever figures another stop of the
+         * same way was met at, and not lost among them.
+         */
         private void ended(ReplacementDisposition.Ended why, Collection<? extends Figure> at) {
-            stopped.computeIfAbsent(why, _ -> new LinkedHashSet<>()).addAll(at);
+            stopped.merge(why, at.isEmpty() ? ReplacementDisposition.Met.AT_NO_FIGURE
+                    : ReplacementDisposition.Met.at(at), ReplacementDisposition.Met::and);
         }
 
         /**
@@ -8599,17 +8606,19 @@ public final class Generator {
             return budgets.stream().map(CompositionBudget::figure).toList();
         }
 
-        /** How the search ended, where nothing was found: each way it stopped with the figures it
-         *  was stopped at, and whether rows were seen answered alike. */
-        Map<ReplacementDisposition.Ended, List<Figure>> ended() {
-            Map<ReplacementDisposition.Ended, List<Figure>> out =
+        /** How the search ended, where nothing was found: each way it stopped as it was met, and
+         *  whether rows were seen answered alike. */
+        Map<ReplacementDisposition.Ended, ReplacementDisposition.Met> ended() {
+            Map<ReplacementDisposition.Ended, ReplacementDisposition.Met> out =
                     new EnumMap<>(ReplacementDisposition.Ended.class);
-            stopped.forEach((way, at) -> out.put(way, Figure.inOrder(at)));
+            out.putAll(stopped);
             if (alike) {
-                out.put(ReplacementDisposition.Ended.EVERY_ROW_ANSWERED_ALIKE, List.of());
+                out.put(ReplacementDisposition.Ended.EVERY_ROW_ANSWERED_ALIKE,
+                        ReplacementDisposition.Met.AT_NO_FIGURE);
             }
             if (out.isEmpty()) {
-                out.put(ReplacementDisposition.Ended.NOTHING_WAS_COMPOSED, List.of());
+                out.put(ReplacementDisposition.Ended.NOTHING_WAS_COMPOSED,
+                        ReplacementDisposition.Met.AT_NO_FIGURE);
             }
             return out;
         }

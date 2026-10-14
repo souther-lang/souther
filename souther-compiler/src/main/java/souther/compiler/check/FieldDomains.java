@@ -4,6 +4,7 @@ import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ChoiceToLift;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Endpoint;
@@ -725,11 +726,22 @@ public final class FieldDomains {
      *             own terms
      */
     public record NoLine(NumberAt<RuleKey> at, PartId<RuleRef.Invariant> part, Core read,
-                         souther.compiler.inputs.BlockReason.RuleWithoutLineReason why) {
+                         BlockReason.RuleWithoutLineReason why) {
 
         /** What the value's rules call where the end was to have been placed. */
         public RuleKey path() {
             return at.position();
+        }
+
+        /** What tells two of these apart: all of it, with the figures its reason was met at left
+         *  out ({@link BlockReason#factOf}). */
+        Object key() {
+            return List.of(at, part, read, BlockReason.factOf(why));
+        }
+
+        /** Two readers' account of one of these, as one, met at every figure either met it at. */
+        NoLine together(NoLine other) {
+            return new NoLine(at, part, read, BlockReason.together(why, other.why));
         }
     }
 
@@ -768,7 +780,7 @@ public final class FieldDomains {
      *                  written
      */
     public record BoundaryStanding(
-            souther.compiler.inputs.BlockReason.RuleReadingStopped why,
+            BlockReason.RuleReadingStopped why,
             List<PartId<RuleRef.Invariant>> conjuncts) {
 
         public BoundaryStanding {

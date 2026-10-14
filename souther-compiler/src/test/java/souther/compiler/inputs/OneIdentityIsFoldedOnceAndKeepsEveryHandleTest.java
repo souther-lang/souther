@@ -202,10 +202,90 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
         StandingQuestion one = asked(ONE_CALL, standingOn());
         StandingQuestion other = asked(ANOTHER_CALL, new WhatAQuestionStandsOn(
                 RuleReasons.one(new BlockReason.UnreadComparisonForm()),
-                Optional.of(new BlockReason.RulesNotHandedOnAsSets(List.of(AT_A_FIGURE)))));
+                Optional.of(new BlockReason.RulesNotHandedOnAsSets(List.of(AT_A_FIGURE), false))));
 
         assertThrows(TwoAccountsOfOneQuestion.class, () -> one.mergedWith(other));
     }
+
+    /**
+     * And two that met one limit at two of its figures agree, and the question stands on that
+     * limit at both.
+     *
+     * <p>An allowance is refused at one machine or at everything built, and which of the two a
+     * reading meets turns on what was built before it — so two readings of one rule can meet one
+     * limit at different figures, and neither is wrong about the position. Compared with the
+     * figures in, the two were two accounts of one question that disagreed, and the model refused
+     * to compile.
+     */
+    @Test
+    void twoThatMetOneLimitAtTwoFiguresAreOneAccountMetAtBoth() {
+        StandingQuestion both = asked(ONE_CALL, new WhatAQuestionStandsOn(
+                RuleReasons.one(new BlockReason.PatternTooCostly(ONE_MACHINE)),
+                Optional.of(new BlockReason.ExactValuesTooCostly(ONE_MACHINE))))
+                .mergedWith(asked(ANOTHER_CALL, new WhatAQuestionStandsOn(
+                        RuleReasons.one(new BlockReason.PatternTooCostly(AT_A_FIGURE)),
+                        Optional.of(new BlockReason.ExactValuesTooCostly(AT_A_FIGURE)))));
+
+        assertEquals(new WhatAQuestionStandsOn(
+                        RuleReasons.one(new BlockReason.PatternTooCostly(
+                                List.of(ONE_MACHINE, AT_A_FIGURE))),
+                        Optional.of(new BlockReason.ExactValuesTooCostly(
+                                List.of(ONE_MACHINE, AT_A_FIGURE)))),
+                both.stopped());
+    }
+
+    /** And what one reading recorded at a position twice, at two figures, is one limit at both. */
+    @Test
+    void oneLimitRecordedAtTwoFiguresIsOneLimitAtBoth() {
+        assertEquals(Optional.of(new BlockReason.ExactValuesTooCostly(
+                        List.of(ONE_MACHINE, AT_A_FIGURE))),
+                WhatAQuestionStandsOn.oneOf(List.of(
+                        new BlockReason.ExactValuesTooCostly(AT_A_FIGURE),
+                        new BlockReason.ExactValuesTooCostly(ONE_MACHINE))));
+        assertThrows(IllegalArgumentException.class, () -> WhatAQuestionStandsOn.oneOf(List.of(
+                        new BlockReason.ExactValuesTooCostly(AT_A_FIGURE),
+                        new BlockReason.BehaviorDistinctionsTooCostly(AT_A_FIGURE))),
+                "two limits are still two, with no order between them");
+    }
+
+    /**
+     * What a rule's parts left is each reason once however many figures it was met at, and a rule
+     * filed twice for one reason at two figures is one finding and one question.
+     */
+    @Test
+    void oneReasonAtTwoFiguresIsOneEntryWhereverReasonsAreHeld() {
+        RuleSite whole = RuleSite.theRuleItself();
+        assertEquals(new RuleReasons(List.of(new RuleReasons.Said(whole, whole,
+                        new BlockReason.PatternTooCostly(List.of(ONE_MACHINE, AT_A_FIGURE))))),
+                RuleReasons.from(List.of(
+                        new RuleReasons.Said(whole, whole,
+                                new BlockReason.PatternTooCostly(AT_A_FIGURE)),
+                        new RuleReasons.Said(whole, whole,
+                                new BlockReason.PatternTooCostly(ONE_MACHINE)))));
+
+        RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
+        gathered.add(ONE_CALL, at("x"), new BlockReason.PatternTooCostly(ONE_MACHINE));
+        gathered.add(ANOTHER_CALL, at("x"), new BlockReason.PatternTooCostly(AT_A_FIGURE));
+        gathered.unclassified(ONE_CALL, List.of(), at("x"),
+                new BlockReason.PatternTooCostly(ONE_MACHINE));
+        gathered.unclassified(ANOTHER_CALL, List.of(), at("x"),
+                new BlockReason.PatternTooCostly(AT_A_FIGURE));
+        RulesWithNoLine found = gathered.found();
+
+        BlockReason.PatternTooCostly atBoth =
+                new BlockReason.PatternTooCostly(List.of(ONE_MACHINE, AT_A_FIGURE));
+        assertEquals(List.of(atBoth), found.reported().stream()
+                        .map(RuleWithoutALine::why).toList(),
+                "one finding, met at both");
+        assertEquals(List.of(atBoth), found.unclassified().stream()
+                        .map(StandingQuestion.Unclassified::why).toList(),
+                "one question, met at both");
+        assertEquals(Set.of(ONE_CALL, ANOTHER_CALL), found.unclassified().get(0).cited());
+    }
+
+    /** What the reading of one machine was refused at. */
+    private static final Figure ONE_MACHINE = WorkFigure.ADMITTED_VALUES_ONE_MACHINE.at(
+            "10000 states or 50000000 looked at");
 
     /** The same question, met where its position's answer was worked out. */
     private static WhatAQuestionStandsOn itsRuleAlone() {

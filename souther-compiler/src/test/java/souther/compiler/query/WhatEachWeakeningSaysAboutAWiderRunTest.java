@@ -297,7 +297,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         out.add(new Weakening.RewriteUndecided("b",
                 new Replacement.ByOneAnswer(new ObservedValue.Integer(0),
                         new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1))),
-                new ReplacementEvidence.Undecided(new ReplacementEvidence.Undecided.Way.AtFigures(
+                new ReplacementEvidence.Undecided(ReplacementEvidence.Undecided.Way.atFigures(
                         ReplacementEvidence.Undecided.Why.RUNS_SPENT,
                         List.of(WorkFigure.RUNS_REPLACING_AN_ARM.at(4)))).why()));
         return out;

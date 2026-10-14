@@ -18,6 +18,7 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
 import souther.compiler.partition.Replacement;
 import souther.compiler.observe.RowRef;
+import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 
 import java.util.ArrayList;
@@ -143,16 +144,16 @@ public final class ReplacementReading {
      * not the plan's: a fork a method could not hold its siblings in was written without them, and
      * a rewrite there is one no run could be asked for.
      *
-     * <p>{@code stoppedAt} is what stopped a row as written that came to no verdict, where a figure
-     * did, as the run that met it said: a rewrite such a row leaves open is left open at that
-     * figure.
+     * <p>{@code stoppedAt} is how a row as written that came to no verdict was stopped, as the
+     * run that met it said: at the figures it went past, and at whatever else stopped it. A
+     * rewrite such a row leaves open is left open as the row was.
      */
     public static List<Account> of(String behavior, CoverageSites.Plan plan,
                                    ArmReplacements carried,
                                    Function<RowOutcome, Set<ArmProbe>> wentThrough,
                                    Predicate<ControlPlace.Arm> unreached,
                                    List<RowOutcome> rows,
-                                   Function<RowOutcome, List<Figure>> stoppedAt,
+                                   Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
                                    Comparing comparing) {
         // The rows that state their answer, which are the only evidence about a rewrite there is.
         // A row whose answer is owed ran, and what it ran to is an observation and not what the
@@ -229,7 +230,7 @@ public final class ReplacementReading {
     private static Standing armStanding(Replacement.OfAnArm replaced, ArmReplacements.Asked asked,
                                         List<ArmProbe> where, List<RowOutcome> rows,
                                         Function<RowOutcome, Set<ArmProbe>> wentThrough,
-                                        Function<RowOutcome, List<Figure>> stoppedAt) {
+                                        Function<RowOutcome, ReplacementDisposition.Met> stoppedAt) {
         SequencedMap<Integer, Integer> replacing;
         switch (asked) {
             // Left unasked at the figure a fork was held to, or at what the JVM holds in one
@@ -241,10 +242,11 @@ public final class ReplacementReading {
             case ArmReplacements.Asked.Runs(var rewrite) -> replacing = rewrite.replacing();
         }
         RowOutcome shownBy = null;
-        boolean unknown = false;
-        // What stopped the runs that left a row untold, where it was a figure. One is enough to
+        // How the rows left untold were stopped, each row one meeting: the figures, whatever no
+        // figure decides — a run that stopped of its own accord, nothing that could run it, the
+        // host's stack — and whether one row was held by figures alone. One such is enough to
         // leave the rewrite to a wider run: a row that comes back there may be the row that tells.
-        Set<Figure> untoldAt = new HashSet<>();
+        ReplacementDisposition.Met untold = null;
         List<List<ObservedValue>> seenThrough = new ArrayList<>();
         for (RowOutcome row : rows) {
             if (where.stream().noneMatch(wentThrough.apply(row)::contains)) {
@@ -253,8 +255,7 @@ public final class ReplacementReading {
             // A row that neither held nor failed of the body as written ran out or was given up
             // on, and is not run again: there is no way it came out to compare another with.
             if (row.disposition() != Disposition.HELD && row.disposition() != Disposition.FAILED) {
-                unknown = true;
-                untoldAt.addAll(stoppedAt.apply(row));
+                untold = alsoUntold(untold, stoppedAt.apply(row));
                 continue;
             }
             seenThrough.add(row.inputs());
@@ -268,8 +269,8 @@ public final class ReplacementReading {
                             + row.identity().shown() + "` went through " + replaced
                             + " and carries no run of it: " + row.replaced()));
             if (run.noticed() == ReplacedRun.Noticed.COULD_NOT_TELL) {
-                unknown = true;
-                untoldAt.addAll(run.untoldAt());
+                untold = alsoUntold(untold, ReplacementDisposition.Met.once(run.untoldAt(),
+                        run.untoldAt().isEmpty()));
                 continue;
             }
             if (run.noticed() == ReplacedRun.Noticed.YES) {
@@ -279,21 +280,23 @@ public final class ReplacementReading {
                 shownBy = row;
             }
         }
-        // Where no figure stopped any of them — a run that stopped of its own accord, nothing that
-        // could run it, the host's stack — every run of this compiler leaves the rewrite as open.
-        if (unknown) {
-            return new Standing.CannotBeAsked(untoldAt.isEmpty()
-                    ? new ReplacementEvidence.Undecided.Way.AtNoAllowance(
-                            ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK)
-                    : new ReplacementEvidence.Undecided.Way.AtFigures(
-                            ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK,
-                            Figure.inOrder(untoldAt)));
+        // Where no row was held by figures alone every run of this compiler leaves the rewrite as
+        // open, and the figures reached on the way are said all the same.
+        if (untold != null) {
+            return new Standing.CannotBeAsked(new ReplacementEvidence.Undecided.Way(
+                    ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK, untold));
         }
         ReplacementOwed lookFor = new ReplacementOwed.OfAnArm(replaced.fork(), replaced.part(),
                 replaced.with(), where, replacing, seenThrough);
         return shownBy != null
                 ? new Standing.Unnoticed(RowRef.of(shownBy), lookFor)
                 : new Standing.Open(lookFor);
+    }
+
+    /** One more row left untold, beside the ones before it. */
+    private static ReplacementDisposition.Met alsoUntold(ReplacementDisposition.Met before,
+                                                         ReplacementDisposition.Met row) {
+        return before == null ? row : before.and(row);
     }
 
     /**
@@ -304,10 +307,10 @@ public final class ReplacementReading {
     static ReplacementEvidence.Undecided.Way wayOf(ArmReplacements.Sibling.Why why) {
         return switch (why) {
             case ArmReplacements.Sibling.Why.PastWhatAForkCarries(Figure limit) ->
-                    new ReplacementEvidence.Undecided.Way.AtFigures(
+                    ReplacementEvidence.Undecided.Way.atFigures(
                             ReplacementEvidence.Undecided.Why.TOO_LARGE, List.of(limit));
             case ArmReplacements.Sibling.Why.PastWhatAMethodHolds _ ->
-                    new ReplacementEvidence.Undecided.Way.AtNoAllowance(
+                    ReplacementEvidence.Undecided.Way.atNoAllowance(
                             ReplacementEvidence.Undecided.Why.TOO_LARGE);
         };
     }
@@ -375,7 +378,7 @@ public final class ReplacementReading {
             }
         }
         if (unread) {
-            return new Standing.CannotBeAsked(new ReplacementEvidence.Undecided.Way.AtNoAllowance(
+            return new Standing.CannotBeAsked(ReplacementEvidence.Undecided.Way.atNoAllowance(
                     ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ));
         }
         // A row whose own answer was another value is a run the rewrite answers differently.

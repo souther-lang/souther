@@ -485,7 +485,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
 
     /** {@code why} as a reading stopped by it says it, at a figure where it carries one. */
     private static StoppedReading stopped(UnreadReason why) {
-        return new StoppedReading(why, StoppedReading.carriesAFigure(why) ? AT_A_FIGURE : null);
+        return StoppedReading.carriesAFigure(why) ? new StoppedReading(why, AT_A_FIGURE)
+                : StoppedReading.of(why);
     }
 
     private static List<BlockReason> everyReason() {
@@ -510,7 +511,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.OrderedExtentTooCostly(Meter.Stopped.ONE_MACHINE),
                 new BlockReason.ExactValuesTooCostly(AT_A_FIGURE),
                 new BlockReason.BehaviorDistinctionsTooCostly(AT_A_FIGURE),
-                new BlockReason.RulesNotHandedOnAsSets(List.of(AT_A_FIGURE)),
+                new BlockReason.RulesNotHandedOnAsSets(List.of(AT_A_FIGURE), false),
                 new BlockReason.ValueRuleRelatingTwoPositions(),
                 new BlockReason.ValueRuleRelatingElements(),
                 new BlockReason.CasePairingNotDetermined(),

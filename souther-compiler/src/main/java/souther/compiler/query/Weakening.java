@@ -70,8 +70,9 @@ public sealed interface Weakening {
     RunSensitivity runSensitivity();
 
     /**
-     * The figures of this compiler's that stopped it, each as it stood where the comparison was
-     * made; none where {@link #runSensitivity} is {@link RunSensitivity#UNAFFECTED}.
+     * Every figure of this compiler's that stopped it, each as it stood where the comparison was
+     * made, whatever else stopped it beside them: a weakening a wider run leaves standing may have
+     * reached a figure on the way, and a reader is told it did.
      *
      * <p>Carried and never worked out here. Each arm hands over what the place that stopped put in
      * it, and an arm that holds what stopped it asks that, as {@link #runSensitivity} does: a
@@ -94,9 +95,9 @@ public sealed interface Weakening {
                  DecisionRunNotWatched _, DecisionRuleReadShort _,
                  KeyedOverwriteCasesUnmeasured _ -> List.of();
             case BorderValueUnreadable it -> it.why().figures();
-            case BorderReadingsNotExhausted it -> List.of(it.limit());
+            case BorderReadingsNotExhausted it -> it.limits();
             case ModelReadingIncomplete it -> it.cause().figures();
-            case PairSpaceTruncated it -> List.of(it.limit());
+            case PairSpaceTruncated it -> it.limits();
             case MeetingsNotWalked it -> it.limits();
             case DecisionReadingIncomplete it -> switch (it.why()) {
                 case DecisionReading.Enumeration.Complete _ -> List.of();
@@ -233,16 +234,27 @@ public sealed interface Weakening {
      * <p><b>The border and not the row.</b> Two rows can stop this walk at one border and a third
      * can run out, and what is owed a reader is that the border was not searched to the end. How
      * large the search was is what one row happened to hold rather than what is true of the point,
-     * so a figure of it here would make two facts of one.
+     * so a figure of it here would make two facts of one. Which figure stopped it is evidence of
+     * the fact for the same reason, and two walks of one border stopped at two are one fact met at
+     * both ({@code WeakeningSet}).
      *
-     * @param limit how many readings of one row a point is tried against, as it stood where the
-     *              walk over them stopped
+     * @param limits how many readings of one row a point is tried against, as each stood where a
+     *               walk over them stopped, each once and in {@link Figure#inOrder}
      */
-    record BorderReadingsNotExhausted(souther.compiler.partition.Border border, Figure limit)
-            implements Weakening {
+    record BorderReadingsNotExhausted(souther.compiler.partition.Border border,
+                                      List<Figure> limits) implements Weakening {
 
         public BorderReadingsNotExhausted {
-            Objects.requireNonNull(limit, "a walk stopped at a limit says which");
+            Objects.requireNonNull(border, "a walk stopped at some border");
+            limits = Figure.inOrder(limits);
+            if (limits.isEmpty()) {
+                throw new IllegalArgumentException("a walk stopped at a limit says which");
+            }
+        }
+
+        /** Stopped at one limit, which is how a walk meets it. */
+        public BorderReadingsNotExhausted(souther.compiler.partition.Border border, Figure limit) {
+            this(border, List.of(limit));
         }
 
         /** The figure is this compiler's, so a run allowed more readings comes to another answer. */
@@ -404,10 +416,19 @@ public sealed interface Weakening {
      * the one warrant a measure did carry — a {@code truncated} flag beside the status, which #951
      * had to add a constructor check to keep the two in step.
      */
-    record PairSpaceTruncated(String behavior, long total, Figure limit) implements Weakening {
+    record PairSpaceTruncated(String behavior, long total, List<Figure> limits)
+            implements Weakening {
 
         public PairSpaceTruncated {
-            Objects.requireNonNull(limit, "a walk stopped at a limit says which");
+            limits = Figure.inOrder(limits);
+            if (limits.isEmpty()) {
+                throw new IllegalArgumentException("a walk stopped at a limit says which");
+            }
+        }
+
+        /** Stopped at one limit, which is how a walk meets it. */
+        public PairSpaceTruncated(String behavior, long total, Figure limit) {
+            this(behavior, total, List.of(limit));
         }
 
         /** The one arm that is a figure of its own. {@code limit} is what the walk was compared
@@ -538,7 +559,7 @@ public sealed interface Weakening {
                 throw new IllegalArgumentException(
                         "a measure that walked every group went without nothing here: " + groups);
             }
-            limits = List.copyOf(limits);
+            limits = Figure.inOrder(limits);
             if (limits.isEmpty()) {
                 throw new IllegalArgumentException("a group held back was held back by a limit");
             }

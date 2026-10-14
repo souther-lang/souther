@@ -8,17 +8,16 @@ import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.partition.Replacement;
+import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * What a behavior's rows establish about the rewrites of its body: for each, whether a row tells it
@@ -246,11 +245,24 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
                 return ways.isEmpty();
             }
 
-            /** Every figure any way was stopped at, each once, in the order of the ways. */
+            /** Every figure any way was stopped at, each once, in {@link Figure#inOrder}. */
             public List<Figure> figures() {
-                Set<Figure> out = new LinkedHashSet<>();
+                List<Figure> out = new ArrayList<>();
                 ways.forEach(each -> out.addAll(each.figures()));
-                return List.copyOf(out);
+                return Figure.inOrder(out);
+            }
+
+            /**
+             * Both, as one: one way per reason either was left open by, each at every figure it
+             * was stopped at in either.
+             *
+             * <p>What tells two of these apart is the reasons ({@link #reasons}); the figures are
+             * what each way was met at, gathered from both.
+             */
+            public LeftOpen together(LeftOpen other) {
+                List<Way> both = new ArrayList<>(ways);
+                both.addAll(other.ways);
+                return of(both);
             }
 
             /** Whether a wider run could come to another answer: where any way of it could. */
@@ -262,54 +274,39 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
         }
 
         /**
-         * One way a rewrite was left open, as the place that left it open found it.
+         * One way a rewrite was left open, as the places that left it open found it.
          *
-         * <p>Whether a wider run gets past it is the place's to say and not the reason's: a fork too
+         * <p>Whether a wider run gets past it is the places' to say and not the reason's: a fork too
          * large to carry its siblings is held to a figure of this compiler's, and a method too large
          * for the JVM is held to the host's, and both are published as one reason.
+         *
+         * <p><b>As every meeting of it went, and not as one of them.</b> Two runs of one search can
+         * stop at a figure of this compiler's and at the host's limit and be published alike, and
+         * what was reached is both. A wider run may decide the rewrite where one of those meetings
+         * was held by figures alone: a row that comes back under it may be the row that tells,
+         * whatever the host stopped beside it. Told only that no allowance stopped it, a reader
+         * would allow nothing more and the row that tells would stay untold; told only the figure,
+         * they would not know what else stood in the way.
+         *
+         * @param why the reason it is published as
+         * @param met how it was met: every figure of this compiler's it was stopped at, as each
+         *            stood where it was reached; whether something no run allows stopped it as
+         *            well — what the rows came to, or a limit of the host's; and whether one of its
+         *            meetings was held by figures alone
          */
-        public sealed interface Way {
+        public record Way(Why why, ReplacementDisposition.Met met) {
 
-            /** The reason it is published as. */
-            Why why();
-
-            /** The figures it was stopped at, as each stood where it was reached; none exactly
-             *  where nothing it was stopped at is a figure of this compiler's. */
-            List<Figure> figures();
-
-            /** Whether a run that allows more could get past it. */
-            RunSensitivity runSensitivity();
-
-            /** Several meetings of one reason as one way: at no allowance where any of them is, and
-             *  otherwise at every figure any of them was stopped at. */
-            private static Way together(Why why, List<Way> met) {
-                if (met.stream().anyMatch(AtNoAllowance.class::isInstance)) {
-                    return new AtNoAllowance(why);
-                }
-                Set<Figure> figures = new LinkedHashSet<>();
-                met.forEach(each -> figures.addAll(each.figures()));
-                return new AtFigures(why, List.copyOf(figures));
+            public Way {
+                Objects.requireNonNull(why, "a way left open is published as some reason");
+                Objects.requireNonNull(met, "a way left open was met somehow: " + why);
             }
 
             /**
              * Stopped at figures this compiler holds its work to, each carried from where it was
              * reached: a run allowing more of them gets further.
              */
-            record AtFigures(Why why, List<Figure> figures) implements Way {
-
-                public AtFigures {
-                    Objects.requireNonNull(why, "a way left open is published as some reason");
-                    figures = Figure.inOrder(figures);
-                    if (figures.isEmpty()) {
-                        throw new IllegalArgumentException(
-                                "a way stopped at figures names one: " + why);
-                    }
-                }
-
-                @Override
-                public RunSensitivity runSensitivity() {
-                    return RunSensitivity.MAY_CHANGE;
-                }
+            public static Way atFigures(Why why, Collection<? extends Figure> figures) {
+                return new Way(why, ReplacementDisposition.Met.at(figures));
             }
 
             /**
@@ -317,21 +314,29 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
              * Every run of this compiler over this model leaves it open the same way, so there is
              * no figure to name.
              */
-            record AtNoAllowance(Why why) implements Way {
+            public static Way atNoAllowance(Why why) {
+                return new Way(why, ReplacementDisposition.Met.AT_NO_FIGURE);
+            }
 
-                public AtNoAllowance {
-                    Objects.requireNonNull(why, "a way left open is published as some reason");
-                }
+            /** Every figure of this compiler's it was stopped at. */
+            public List<Figure> figures() {
+                return met.figures();
+            }
 
-                @Override
-                public List<Figure> figures() {
-                    return List.of();
-                }
+            /** Whether a run that allows more could get past it: where one of its meetings was
+             *  held by figures alone, since one row coming back may tell. */
+            public RunSensitivity runSensitivity() {
+                return met.aWiderRunMayGetPast()
+                        ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
+            }
 
-                @Override
-                public RunSensitivity runSensitivity() {
-                    return RunSensitivity.UNAFFECTED;
+            /** Several meetings of one reason as one way, met as all of them were. */
+            private static Way together(Why why, List<Way> met) {
+                ReplacementDisposition.Met all = met.getFirst().met();
+                for (Way each : met.subList(1, met.size())) {
+                    all = all.and(each.met());
                 }
+                return new Way(why, all);
             }
         }
 

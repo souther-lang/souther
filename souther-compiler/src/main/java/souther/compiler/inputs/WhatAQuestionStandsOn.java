@@ -51,17 +51,21 @@ public record WhatAQuestionStandsOn(
      * would be a pair with no order between them either, and what a document should then write is a
      * decision to take when there is something to decide about — taken here by silence, it would be
      * taken by whichever arrived first.
+     *
+     * <p>One reason met at two figures is one reason, and comes out met at both: which limit of the
+     * allowance refused is what happened on the way, and two readings of one position may meet
+     * different ones.
      */
     public static Optional<BlockReason.AnswerRealizationStopped> oneOf(
             List<BlockReason.AnswerRealizationStopped> recorded) {
         BlockReason.AnswerRealizationStopped out = null;
         for (BlockReason.AnswerRealizationStopped each : recorded) {
-            if (out != null && !out.equals(each)) {
+            if (out != null && !BlockReason.factOf(out).equals(BlockReason.factOf(each))) {
                 throw new IllegalArgumentException(
                         "two limits the answer ran into stand at one question with no order"
                                 + " between them: " + out + " and " + each);
             }
-            out = each;
+            out = out == null ? each : BlockReason.together(out, each);
         }
         return Optional.ofNullable(out);
     }

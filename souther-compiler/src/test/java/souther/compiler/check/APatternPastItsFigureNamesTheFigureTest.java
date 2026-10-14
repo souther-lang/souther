@@ -31,30 +31,44 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * A stop that a wider run could get past names the figure it stopped at, and the figure is the one
  * the run was held to.
  *
- * <p>Two claims. The first is over the reasons: a reason says a figure exactly where it says a run
- * allowed more may get past it, so a report told one is never without the other. The second is
- * over a reading: the figure a pattern was refused at is carried from where the machine was
- * refused, so a run handed another budget names that budget's number and not one written down
- * somewhere else.
+ * <p>Two claims. The first is over the reasons: a reason a run allowed more may get past names a
+ * figure, so a report told the one is never without the other — and the converse is not claimed,
+ * because a reason can reach a figure and be held by something else as well. The second is over a
+ * reading: the figure a pattern was refused at is carried from where the machine was refused, so a
+ * run handed another budget names that budget's number and not one written down somewhere else.
  */
 class APatternPastItsFigureNamesTheFigureTest {
 
     private static final Figure AT_A_FIGURE = WorkFigure.ADMITTED_VALUES_ONE_MACHINE.at(300);
 
-    /** A reason names a figure exactly where a wider run may get past it. */
+    /** A reason a wider run may get past names the figure it stopped at. */
     @Test
-    void aReasonNamesAFigureExactlyWhereAWiderRunMayGetPastIt() {
-        List<String> disagreeing = new ArrayList<>();
+    void aReasonAWiderRunMayGetPastNamesAFigure() {
+        List<String> unnamed = new ArrayList<>();
         for (BlockReason.ReadingStopReason each : everyStop()) {
-            boolean mayChange = each.runSensitivity() == RunSensitivity.MAY_CHANGE;
-            if (mayChange == each.figures().isEmpty()) {
-                disagreeing.add(each + " " + each.runSensitivity() + " " + each.figures());
+            if (each.runSensitivity() == RunSensitivity.MAY_CHANGE && each.figures().isEmpty()) {
+                unnamed.add(each.toString());
             }
         }
 
-        assertEquals(List.of(), disagreeing,
-                "a reason a wider run may get past names what it stopped at, and one it cannot"
-                        + " names nothing");
+        assertEquals(List.of(), unnamed,
+                "a reason a wider run may get past names what it stopped at");
+    }
+
+    /**
+     * And a reason that reached a figure names it however else it was stopped.
+     *
+     * <p>Sets a position could not hand on because its own answer stopped at a figure and at a form
+     * nothing reads: a run allowed more meets the form again, and the figure was reached all the
+     * same. Named only where a wider run gets past, a reader would be told nothing was reached.
+     */
+    @Test
+    void aReasonStoppedAtAFigureAndAtSomethingElseNamesTheFigureAndGetsNoWiderRunPastIt() {
+        BlockReason.RulesNotHandedOnAsSets both =
+                new BlockReason.RulesNotHandedOnAsSets(List.of(AT_A_FIGURE), true);
+
+        assertEquals(RunSensitivity.UNAFFECTED, both.runSensitivity());
+        assertEquals(List.of(AT_A_FIGURE), both.figures());
     }
 
     /** Each figure that is fixed where it is declared is the one said. */
@@ -120,10 +134,14 @@ class APatternPastItsFigureNamesTheFigureTest {
                 new BlockReason.BehaviorDistinctionsTooCostly(
                         WorkFigure.BEHAVIOR_DISTINCTIONS_ONE_MACHINE.at(300)),
                 new BlockReason.RulesNotHandedOnAsSets(List.of(
-                        WorkFigure.RULE_SETS_ONE_MACHINE.at(300))),
+                        WorkFigure.RULE_SETS_ONE_MACHINE.at(300)), false),
                 // A position whose own answer stopped at a form nothing reads handed nothing on,
                 // and no figure is why.
-                new BlockReason.RulesNotHandedOnAsSets(List.of()),
+                new BlockReason.RulesNotHandedOnAsSets(List.of(), true),
+                // And one whose answer stopped at both: the figure is reached, and a run allowed
+                // more meets the form again.
+                new BlockReason.RulesNotHandedOnAsSets(List.of(
+                        WorkFigure.ADMITTED_VALUES_ONE_MACHINE.at(300)), true),
                 new BlockReason.OrderedExtentTooCostly(Meter.Stopped.ONE_MACHINE),
                 new BlockReason.OrderedExtentTooCostly(Meter.Stopped.THE_ANSWER),
                 new BlockReason.ValueRulesNotReachedPastDepthLimit(),
@@ -154,8 +172,8 @@ class APatternPastItsFigureNamesTheFigureTest {
         }
         // And what a value reading's own account comes to, every reason of it.
         for (UnreadReason why : UnreadReason.values()) {
-            out.add(BlockReason.of(new StoppedReading(why,
-                    StoppedReading.carriesAFigure(why) ? AT_A_FIGURE : null)));
+            out.add(BlockReason.of(StoppedReading.carriesAFigure(why)
+                    ? new StoppedReading(why, AT_A_FIGURE) : StoppedReading.of(why)));
         }
         return out;
     }

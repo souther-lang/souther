@@ -1,6 +1,5 @@
 package souther.compiler.values;
 
-import souther.compiler.observe.Figure;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -98,33 +97,22 @@ public record AdmissibleSet(ValueSet approximation, Completeness completeness) {
          * A rule about the position went unread, so a value the set holds may yet be refused.
          *
          * <p>Which kind of unread it was travels with it: the three are lifted by different work
-         * and a report writes its own word for each. So does the figure it stopped at, where an
+         * and a report writes its own word for each. So do the figures it stopped at, where an
          * allowance is what stopped it ({@link StoppedReading}).
          *
-         * @param why    what stopped the reading
-         * @param figure the figure it stopped at, or null where {@code why} carries none
+         * @param stopped what stopped the reading, with the figures beside it
          */
-        record RuleUnread(UnreadReason why, Figure figure) implements Widening {
+        record RuleUnread(StoppedReading stopped) implements Widening {
 
             public RuleUnread {
-                if (why == null) {
+                if (stopped == null) {
                     throw new IllegalArgumentException("a rule went unread for something");
                 }
-                if ((figure != null) != StoppedReading.carriesAFigure(why)) {
-                    throw new IllegalArgumentException(
-                            "a figure is carried exactly where an allowance stopped the reading: "
-                                    + why + " at " + figure);
-                }
             }
 
-            /** What stopped the reading, as a stopped reading says it. */
-            public RuleUnread(StoppedReading stopped) {
-                this(stopped.why(), stopped.figure());
-            }
-
-            /** What stopped the reading, with the figure beside it. */
-            public StoppedReading stopped() {
-                return new StoppedReading(why, figure);
+            /** What stopped the reading, the figures left aside. */
+            public UnreadReason why() {
+                return stopped.why();
             }
         }
 
@@ -252,14 +240,25 @@ public record AdmissibleSet(ValueSet approximation, Completeness completeness) {
      * with every rule read, and a caller asking this to find out whether the set is exact would
      * read that as a complete reading — {@link #completeness} is the question, and this is only
      * what to say about the rules.
+     *
+     * <p>The first reason recorded, at every figure any rule unread for it stopped at: two rules
+     * refused at two limits of one allowance are that reason met at both, and a reader told one of
+     * them would raise it and find the other standing.
      */
     public StoppedReading whyPartial() {
         if (!(completeness instanceof Completeness.Wider wider)) {
             return null;
         }
-        return wider.why().stream()
-                .filter(Widening.RuleUnread.class::isInstance)
-                .map(each -> ((Widening.RuleUnread) each).stopped())
-                .findFirst().orElse(null);
+        StoppedReading out = null;
+        for (Widening each : wider.why()) {
+            if (each instanceof Widening.RuleUnread(StoppedReading stopped)) {
+                if (out == null) {
+                    out = stopped;
+                } else if (out.why() == stopped.why()) {
+                    out = out.together(stopped);
+                }
+            }
+        }
+        return out;
     }
 }

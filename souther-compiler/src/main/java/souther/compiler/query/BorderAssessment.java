@@ -158,9 +158,9 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
                             WeakeningSet.of(new Weakening.BorderValueUnreadable(border, gap)));
                 }
                 yield met.tried() instanceof souther.compiler.partition.StandingAtAPoint
-                        .ReadingsTried.StoppedAtTheLimit(Figure limit)
+                        .ReadingsTried.StoppedAtTheLimit(List<Figure> limits)
                         ? out.union(WeakeningSet.of(
-                                new Weakening.BorderReadingsNotExhausted(border, limit)))
+                                new Weakening.BorderReadingsNotExhausted(border, limits)))
                         : out;
             }
             // The reading's own, which is what a measure over these lines is worth.

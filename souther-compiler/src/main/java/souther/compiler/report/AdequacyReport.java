@@ -2157,13 +2157,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // and nothing else holds them, so what is open about one is read off it — not off the
         // measures, which went without nothing — and said once per premise, however many
         // obligations rest on it.
-        Set<AdequacyUncertainty> premised = new LinkedHashSet<>();
+        //
+        // Once per premise by what it is, and not by everything it holds: two findings of one
+        // behavior a showing stopped alike at two figures, or at two calls, are one thing open,
+        // said once with both.
+        Map<Object, AdequacyUncertainty> premised = new LinkedHashMap<>();
         for (Adequacy.Finding finding : findings()) {
             if (!finding.open().isEmpty()) {
                 List<AdequacyUncertainty> open = new ArrayList<>();
                 unresolvedBy(open, new Subject.OfABehavior(finding.named()),
                         new ObligationDisposition.Undecided(finding.open()));
-                premised.addAll(open);
+                open.forEach(each -> premise(premised, each));
             }
         }
         // And of an arm, which is not a finding: an arm nobody can decide is named under its
@@ -2179,17 +2183,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             List<AdequacyUncertainty> open = new ArrayList<>();
                             unresolvedBy(open, new Subject.OfABehavior(behavior.name()),
                                     new ObligationDisposition.Undecided(arm.open()));
-                            premised.addAll(open);
+                            open.forEach(each -> premise(premised, each));
                         }
                     }
                 }
             }
         }
-        rest.addAll(premised);
+        rest.addAll(premised.values());
         List<AdequacyUncertainty> out = new ArrayList<>();
         facts.causes().forEach(each -> out.add(new AdequacyUncertainty.ByWeakening(each)));
         out.addAll(rest);
         return out;
+    }
+
+    /**
+     * One more premise, kept once by what it is: a showing that stopped is put together with one
+     * that stopped alike, at every figure and call either was stopped at, and the rest hold nothing
+     * beside what they are.
+     */
+    private static void premise(Map<Object, AdequacyUncertainty> premised,
+                                AdequacyUncertainty one) {
+        if (one instanceof AdequacyUncertainty.ShowingStopped stopped) {
+            premised.merge(stopped.fact(), stopped, (had, more) ->
+                    ((AdequacyUncertainty.ShowingStopped) had)
+                            .together((AdequacyUncertainty.ShowingStopped) more));
+        } else {
+            premised.putIfAbsent(one, one);
+        }
     }
 
     /**
@@ -2243,7 +2263,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         out.add(new AdequacyUncertainty.NotMeasured(subject, it.why().asOne()));
                 case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped it ->
                         it.by().by().written().forEach(gap ->
-                                out.add(new AdequacyUncertainty.ShowingStopped(subject, gap)));
+                                out.add(new AdequacyUncertainty.ShowingStopped(subject, gap,
+                                        it.by().readAt(gap))));
                 case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.NothingShowedIt _ ->
                         out.add(new AdequacyUncertainty.NothingShowedARowCanBeWritten(subject));
                 // One opening per premise, which is what a reader has to prove or answer; the
@@ -2307,6 +2328,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * {@link #whatKeepsTheVerdictOpen()} in the order the document writes them in, which is the
+     * order the page says them in, one line each.
+     *
+     * <p>The facts are a set, so the order they come in is no order at all; this is the one the
+     * document's openings sort in, so the page and the document list them alike.
+     */
+    List<AdequacyUncertainty> whatKeepsTheVerdictOpenInOrder(
+            SourceRendering rendering, PublishedRuleHandle.WhereARuleIs places) {
+        DocumentSources sources = new DocumentSources(rendering);
+        return PublicationOrders.WHAT_HOLDS_A_VERDICT_OPEN.arrangeBy(
+                whatKeepsTheVerdictOpen(), it -> openingOf(it, sources, places));
+    }
+
+    /** The same, for a reader holding no places of its own. */
+    List<AdequacyUncertainty> whatKeepsTheVerdictOpenInOrder(SourceRendering rendering) {
+        return whatKeepsTheVerdictOpenInOrder(rendering, rulePlaces());
+    }
+
+    /**
      * Every copy of a helper this report's pages name, with the calls it was made at.
      *
      * <p>Gathered from every page rather than the one an entry is about: an entry that holds a
@@ -2327,9 +2367,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /**
      * Where each point a behavior is owed was read: every copy any reading of its line was made in.
      *
-     * <p>Every reading and not the one that stopped. A point is owed once whatever readings of its
-     * line reach it, and which of them a stopped showing was stopped at is not carried; naming one
-     * would say a call was the cause where nothing said so.
+     * <p>Every reading, which is what an entry open on all of them is about. A showing that
+     * stopped says which of them stopped ({@link AdequacyUncertainty.ShowingStopped#readAt}).
      */
     private Map<BorderObligationPoint, List<ModelOccurrence>> whereEachPointIsRead() {
         Map<BorderObligationPoint, List<ModelOccurrence>> out = new LinkedHashMap<>();
@@ -2354,10 +2393,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return out;
     }
 
-    /** The copies what {@code subject} is about was read in, where it is a rule or a point. */
+    /**
+     * The copies what {@code unanswered} is about was read in, where it is a rule or a point.
+     *
+     * <p>A showing that stopped carries the readings whose searches stopped, and those are the
+     * copies: a point read at three calls and stopped at one was not stopped at the other two.
+     * Anything else open at a point is open on every reading of it — nothing showed a row at any
+     * of them — so those are every copy the point was read in.
+     */
     private static List<ModelOccurrence> readAt(
-            Subject subject, Map<BorderObligationPoint, List<ModelOccurrence>> pointsReadAt) {
-        return switch (subject) {
+            AdequacyUncertainty unanswered,
+            Map<BorderObligationPoint, List<ModelOccurrence>> pointsReadAt) {
+        if (unanswered instanceof AdequacyUncertainty.ShowingStopped stopped) {
+            return stopped.readAt();
+        }
+        return switch (unanswered.subject()) {
             case Subject.AtARule it -> it.question().readAt();
             case Subject.AtAPoint it -> pointsReadAt.getOrDefault(it.point(), List.of());
             case Subject.OfAModule _, Subject.OfABehavior _, Subject.OfASource _,
@@ -2673,9 +2723,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             //
             // In the order the document writes them in. The facts are a set, so the order they
             // come in is no order at all, and the page and the document list them alike.
-            DocumentSources sources = new DocumentSources(rendering);
-            for (AdequacyUncertainty each : PublicationOrders.WHAT_HOLDS_A_VERDICT_OPEN.arrangeBy(
-                    whatKeepsTheVerdictOpen(), it -> openingOf(it, sources, places))) {
+            for (AdequacyUncertainty each : whatKeepsTheVerdictOpenInOrder(rendering, places)) {
                 // What it is about and what to do with it, and not the word the document writes
                 // for the kind: those are for a consumer keyed on this report, and a person reading
                 // a line is owed a sentence. What kind of thing it is comes out in what is said to
@@ -2686,8 +2734,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // position read alike but for the calls.
                 out.append(String.format("      %s%s — %s%n",
                         said(each.subject(), rendering, places),
-                        inCopies(readAt(each.subject(), pointsReadAt), copies, rendering, null),
-                        next(ReaderDisposition.of(each))));
+                        inCopies(readAt(each, pointsReadAt), copies, rendering, null),
+                        next(each)));
             }
         }
         // What the mark above means, said by the report that wrote it. The count was said only by
@@ -8227,7 +8275,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 + (said.has("side") ? ", " + said.get("side").asString() : "") + ")";
     }
 
-    /** What a reader does next with one thing holding the verdict open. */
+    /**
+     * What a reader does next with one thing holding the verdict open, and every figure it reached
+     * where something beside them is what holds it.
+     *
+     * <p>Named either way. A reader sent to a rule nothing reads is owed the figure that stopped
+     * the reading as well: raising it lifts nothing today, and it is what they meet once the rule
+     * is read.
+     */
+    private static String next(AdequacyUncertainty unanswered) {
+        ReaderDisposition disposition = ReaderDisposition.of(unanswered);
+        String next = next(disposition);
+        return disposition instanceof ReaderDisposition.StoppedAtAFigure
+                || unanswered.figures().isEmpty() ? next
+                : next + "; it stopped at " + figuresSaid(unanswered.figures()) + " as well";
+    }
+
+    /** What a reader does next, as the disposition says. */
     private static String next(ReaderDisposition disposition) {
         return switch (disposition) {
             // The figures named here, as what stopped carried them, and nothing a run is given sets

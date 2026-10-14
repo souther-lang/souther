@@ -2,7 +2,8 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.numeric.OrderedIntervals;
-import souther.compiler.observe.Figure;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
@@ -27,7 +28,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.UnaryOperator;
 
@@ -1899,22 +1899,30 @@ sealed interface StatedByClauses {
                         }
                     })));
             Map<FactSubject, Realizations> answers = new LinkedHashMap<>();
-            Map<FactSubject, List<Figure>> notHandedOn = new LinkedHashMap<>();
+            Map<FactSubject, BlockReason.RulesNotHandedOnAsSets> notHandedOn =
+                    new LinkedHashMap<>();
             // Built for the block the position is on, which is what the machine is being made for:
             // positions the rules hold as one value have one answer between them, and one purse.
             asked.forEach((position, plans) -> {
                 if (!answered.speaksFor(position)) {
                     // Nothing was asked for, so no limit of the sets' allowance is why: what
-                    // stopped them is what stopped the position's own answer, figure and all.
-                    notHandedOn.put(position, answered.stoppedAt(position).stream()
-                            .map(StoppedReading::figure).filter(Objects::nonNull).distinct()
-                            .toList());
+                    // stopped them is what stopped the position's own answer, figure and all —
+                    // every figure it reached, and whether anything else stopped it too.
+                    // Asked of each stop in the words it is reported in, which is where a figure
+                    // fixed where it is declared is said as well as one carried here.
+                    List<BlockReason.ReadingStopReason> stopped = answered.stoppedAt(position)
+                            .stream().map(BlockReason::of).toList();
+                    notHandedOn.put(position, new BlockReason.RulesNotHandedOnAsSets(
+                            stopped.stream().flatMap(each -> each.figures().stream()).toList(),
+                            stopped.isEmpty() || stopped.stream().anyMatch(each ->
+                                    each.runSensitivity() == RunSensitivity.UNAFFECTED)));
                     return;
                 }
                 Realizations made = handingOn.realizeAll(answered.blockOf(position), plans);
                 if (made instanceof Realizations.NotBuilt it) {
-                    notHandedOn.put(position, List.of(it.refused().as(
-                            WorkFigure.RULE_SETS_ONE_MACHINE, WorkFigure.RULE_SETS_IN_ALL)));
+                    notHandedOn.put(position, new BlockReason.RulesNotHandedOnAsSets(
+                            List.of(it.refused().as(WorkFigure.RULE_SETS_ONE_MACHINE,
+                                    WorkFigure.RULE_SETS_IN_ALL)), false));
                 } else {
                     answers.put(position, made);
                 }
@@ -1944,7 +1952,7 @@ sealed interface StatedByClauses {
         private static Map<FactSubject, AdmittedStrings> admitted(
                 Map<FactSubject, StringRestriction> stated,
                 Map<FactSubject, Realizations> answers,
-                Map<FactSubject, List<Figure>> notHandedOn) {
+                Map<FactSubject, BlockReason.RulesNotHandedOnAsSets> notHandedOn) {
             if (stated.isEmpty()) {
                 return Map.of();
             }
