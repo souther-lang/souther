@@ -22,11 +22,11 @@ import java.util.Map;
  * The obligations of one behavior some row covers and only rows that do not hold do, measure by
  * measure.
  *
- * <p>Every one of them is met, and counted as met: a row that does not hold still ran, and what it
- * went through it went through. What these are is the part of the count an author loses by correcting
- * or deleting those rows, which nothing in the count says. Read off the witnesses the measures kept
- * and off nothing else, so the section that names one and the closing line that counts them are
- * reading the same answer.
+ * <p>Every one of them is met, and counted as met: whatever a row that does not hold reached before
+ * it stopped, it reached. What these are is the part of the count that rests on those rows alone —
+ * taken away, the obligation is not covered — which nothing in the count says. Read off the
+ * witnesses the measures kept and off nothing else. How many a page marked is counted where the
+ * page writes the marks and not here: a section can have reasons of its own not to be written.
  *
  * <p>Only what a report shows a count of. The combinations of two classes are counted under the
  * fallback and the combinations of decisions under the interactions, never both, so only the one the
@@ -56,12 +56,6 @@ public record CoveredOnlyByRowsThatDoNotHold(
      * @param by         the rows, every one of which does not hold
      */
     public record Covered<T>(T obligation, RowWitnesses.OnlyRowsThatDoNotHold by) {}
-
-    /** How many obligations of every measure. */
-    public int count() {
-        return classes.size() + combinationsOfClasses.size() + points.size() + arms.size()
-                + rules.size() + combinationsOfDecisions.size();
-    }
 
     /** What {@code behavior}'s measures kept. */
     static CoveredOnlyByRowsThatDoNotHold of(AdequacyReport.BehaviorReport behavior) {

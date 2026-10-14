@@ -5,18 +5,21 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowRef;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * Which rows a covered obligation is covered by, said as far as what an author does next turns on
  * it.
  *
- * <p>A row that does not hold still ran, so it is evidence of what it went through and an obligation
- * it reached is met. What that leaves an author to know is whether the obligation would still be met
- * without it: correcting or deleting such a row takes coverage away only where no other row covers
- * the same thing. So the rows are kept while every one of them is a row that does not hold, and the
- * first row of any other kind ends the account — which rows those were stops mattering there.
+ * <p>A row that does not hold reached what it reached before it stopped — all the way to an answer,
+ * or no further than the values it was given — so an obligation it reached is met. What that leaves
+ * an author to know is whether the obligation is met without it: the count has it only through such
+ * rows where no other row covers the same thing. So the rows are kept while every one of them is a
+ * row that does not hold, and the first row of any other kind ends the account — which rows those
+ * were stops mattering there.
  *
  * <p><b>Another row is not a row that held.</b> It is any row the measure counted that did not fail:
  * one that held, one still waiting for its answer, one recorded before there was a body to run. What
@@ -64,16 +67,49 @@ public sealed interface RowWitnesses {
                 : ANOTHER_ROW;
     }
 
-    /** What two sets of witnesses of one obligation come to together. Another row on either side
-     *  is another row of both. */
-    default RowWitnesses and(RowWitnesses other) {
-        if (this instanceof OnlyRowsThatDoNotHold(Set<RowRef> mine)
-                && other instanceof OnlyRowsThatDoNotHold(Set<RowRef> theirs)) {
-            Set<RowRef> both = new LinkedHashSet<>(mine);
-            both.addAll(theirs);
-            return new OnlyRowsThatDoNotHold(both);
+    /**
+     * The witnesses of one obligation as a walk finds them, made a value once the walk is done.
+     *
+     * <p>The one way witnesses are brought together, whether a walk adds a row at a time or a few
+     * answers about one obligation are joined. Into one set and made a value at the end, because a
+     * value made at every step is a copy of every row found so far once per row; and once another
+     * row is found nothing more is kept, since nothing more can change the answer.
+     */
+    final class Gathering {
+
+        private final Set<RowRef> notHolding = new LinkedHashSet<>();
+        private boolean another;
+
+        /** {@code by} added to what has been found. */
+        public void add(RowWitnesses by) {
+            if (another) {
+                return;
+            }
+            switch (by) {
+                case AnotherRow _ -> {
+                    another = true;
+                    notHolding.clear();
+                }
+                case OnlyRowsThatDoNotHold(Set<RowRef> witnesses) -> notHolding.addAll(witnesses);
+            }
         }
-        return ANOTHER_ROW;
+
+        /** Whether another row has been found, after which adding changes nothing. */
+        public boolean anotherRow() {
+            return another;
+        }
+
+        /** What was found, as a value. Something must have been added. */
+        public RowWitnesses done() {
+            return another ? ANOTHER_ROW : new OnlyRowsThatDoNotHold(notHolding);
+        }
+
+        /** Every entry of {@code gathered} made a value, in its order. */
+        public static <K> Map<K, RowWitnesses> done(Map<K, Gathering> gathered) {
+            Map<K, RowWitnesses> out = new LinkedHashMap<>();
+            gathered.forEach((key, found) -> out.put(key, found.done()));
+            return out;
+        }
     }
 
     /** Whether some row other than one that does not hold covers the obligation, which is where

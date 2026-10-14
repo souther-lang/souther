@@ -205,16 +205,20 @@ public sealed interface ArmObligation {
         }
         Awaited awaited = occurrences.stream().anyMatch(site -> awaiting.contains(site.index()))
                 ? Awaited.A_ROW_IS : Awaited.NOTHING_IS;
-        RowWitnesses by = null;
+        RowWitnesses.Gathering by = null;
         for (CoverageSites.ArmSite site : occurrences) {
             RowWitnesses here = covered.get(site.index());
             if (here != null) {
-                by = by == null ? here : by.and(here);
+                if (by == null) {
+                    by = new RowWitnesses.Gathering();
+                }
+                by.add(here);
             }
         }
         if (by != null) {
-            return new Counted(occurrences, new Measurement.Complete<>(new ArmCoverage.Hit(by)),
-                    awaited, ObligationDisposition.openOn(List.of()));
+            return new Counted(occurrences,
+                    new Measurement.Complete<>(new ArmCoverage.Hit(by.done())), awaited,
+                    ObligationDisposition.openOn(List.of()));
         }
         return new Counted(occurrences, rowsUnread.isEmpty()
                 ? new Measurement.Complete<>(new ArmCoverage.NoHit())

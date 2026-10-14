@@ -398,7 +398,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
     public static Measure<RowsPlaced> of(String behavior, RunPlacement against,
                                          List<WitnessedRow> rows,
                                          WeakeningSet whatTheRowsWentWithout) {
-        Map<DecisionRule, RowWitnesses> took = new LinkedHashMap<>();
+        Map<DecisionRule, RowWitnesses.Gathering> took = new LinkedHashMap<>();
         List<Weakening> whyNotPlaced = new ArrayList<>();
         int placed = 0;
         int notPlaced = 0;
@@ -413,7 +413,8 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                 case Generator.Watched.Ran _ -> {
                     switch (against.takenBy(row)) {
                         case RulesTaken.WhichRule.TookThis it -> {
-                            took.merge(it.rule(), witnessed.by(), RowWitnesses::and);
+                            took.computeIfAbsent(it.rule(), _ -> new RowWitnesses.Gathering())
+                                    .add(witnessed.by());
                             placed++;
                         }
                         case RulesTaken.WhichRule.CouldNotTell it -> {
@@ -440,7 +441,8 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                     WeakeningSet.of(new Weakening.DecisionRunNotWatched(behavior)));
         }
         RowsPlaced made =
-                new RowsPlaced(rows.size(), took, placed, notPlaced, notWatched);
+                new RowsPlaced(rows.size(), RowWitnesses.Gathering.done(took), placed, notPlaced,
+                        notWatched);
         // A row this reading could not place says what stopped it, and a row nothing watched says
         // what the run went without. Either leaves the placement partial; neither may arrive as a
         // complete reading of the rows.

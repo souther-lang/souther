@@ -66,17 +66,22 @@ What is monotone is the structure and not the numbers: the axes a behavior is me
 grow. That is the property a migration can be run against — no column disappears, so no progress is
 lost — and it is stated plainly rather than implied by a rising figure.
 
-A row that failed is still evidence. It did apply the behavior and did see an answer, so it feeds
-*observed*; it still says which case it expects, so it feeds *specified*; and it feeds no
-*verified*. A measure that dropped failing rows would report the case they produced as one nothing
-produces.
+A row that failed is still evidence of what it reached before it stopped. Not every failed row
+applied the behavior: one whose input or expectation could not be built stopped before it, and one
+the declared `ensures` refused never needed an answer. A row that failed at the comparison did apply
+the behavior and see an answer, so it feeds *observed*; every failed row that says which case it
+expects feeds *specified*; and none feeds *verified*. A measure that dropped failing rows would
+report the case they produced as one nothing produces.
 
 The same holds of the measures over the body and the inputs: an arm, a class, a point of a border
 or a rule a failing row reached is met, and the count says so. What the count does not say is which
-of those only failing rows reach, and that is what an author loses by correcting them. So each
-measure keeps, for what it counts as met, whether every row behind it is one that failed, and the
-report marks those and only those — not everything a failing row went through, which nothing is
-lost from where another row covers it too. Another row is any row the measure counts that did not
+of those it has only through failing rows — taken away, those are not covered. Correcting only the
+answer a row states leaves where it goes as it was, so that is what the rows contribute and not
+always what correcting them costs. So each measure keeps, for what it counts as met, whether every
+row behind it is one that failed, and the report marks those and only those — not everything a
+failing row reached, which the count keeps where another row covers it too. Where a failed row
+stopped is reported with it, so a row whose input could not be built is not read as a wrong
+answer. Another row is any row the measure counts that did not
 fail, so an unmarked obligation is not thereby one a row was seen to hold at. Whether the rows hold
 is not part of the verdict, which answers whether they cover what is owed; the report says both.
 

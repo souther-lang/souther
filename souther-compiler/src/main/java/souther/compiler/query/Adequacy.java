@@ -3733,6 +3733,8 @@ public final class Adequacy {
             // while having no axis at all. Which lines there are of either kind is the reading of the
             // model's, and this is handed both rather than assembling one of them.
             List<BorderAssessment> out = new ArrayList<>();
+            // The rows read once for every line, and not once per line.
+            Coverages.RowsPutToTheLines put = Coverages.RowsPutToTheLines.of(observed, numbering);
             for (Axis axis : partitioning.axes()) {
                 // A reading that ran, so its answer is one of the two a reading comes to. The third
                 // state belongs to the lines between two positions, where the question is not put at
@@ -3740,10 +3742,10 @@ public final class Adequacy {
                 // is answered at cannot arrive somewhere as the wrong one of the three.
                 out.addAll(Coverages.assess(partitioning.along(axis), subject, observed,
                         ItemAssessment.WritabilityProjection.ofReading(
-                                partitioning.edgeIsKnownWritable(axis.term())), numbering,
+                                partitioning.edgeIsKnownWritable(axis.term())), put,
                         partitioning.reaching()));
             }
-            out.addAll(Coverages.assessBetween(subject, observed, numbering,
+            out.addAll(Coverages.assessBetween(subject, observed, put,
                     partitioning.reaching()));
             return new LineReadings(out);
         }
@@ -4117,7 +4119,7 @@ public final class Adequacy {
             // which is where a row's own text was read, rather than by going back to the source.
             // A lit arm keeps which rows lit it, as far as whether they are all rows that do not
             // hold, whichever behavior those rows are written for.
-            Map<ArmProbe, RowWitnesses> lit = new LinkedHashMap<>();
+            Map<ArmProbe, RowWitnesses.Gathering> lighting = new LinkedHashMap<>();
             Set<ArmProbe> awaiting = new LinkedHashSet<>();
             for (RowReading observed : byTarget.values()) {
                 for (RowOutcome row : observed.rowsSeen()) {
@@ -4127,10 +4129,11 @@ public final class Adequacy {
                     }
                     RowWitnesses by = RowWitnesses.of(row);
                     for (ArmProbe arm : armsSeenIn(row, numbering)) {
-                        lit.merge(arm, by, RowWitnesses::and);
+                        lighting.computeIfAbsent(arm, _ -> new RowWitnesses.Gathering()).add(by);
                     }
                 }
             }
+            Map<ArmProbe, RowWitnesses> lit = RowWitnesses.Gathering.done(lighting);
 
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> reachable = db.ask(new Arrived(name)).value();
             Map<String, CoverageRead.Read> met = db.ask(new Meets(name)).value();
@@ -8525,9 +8528,9 @@ public final class Adequacy {
         List<RowOutcome> rows = seen.rowsSeen();
         // The cases the output type has, less the ones only an arm nothing reaches produces. A case
         // no reachable producer answers with is not a gap in the rows.
+        Set<TypeSymbol> outputCases = outputCoverableCases(sig.outputType(), kinds, sums);
         Set<TypeSymbol> declaredOut = souther.compiler.partition.ProducedCases.of(
-                body, plan, reachable.answers(),
-                outputCoverableCases(sig.outputType(), kinds, sums));
+                body, plan, reachable.answers(), outputCases);
         Set<TypeSymbol> specified = new LinkedHashSet<>();
         Set<TypeSymbol> observed = new LinkedHashSet<>();
         Set<TypeSymbol> verified = new LinkedHashSet<>();
@@ -8569,10 +8572,10 @@ public final class Adequacy {
         for (RowOutcome row : rows) {
             boolean held = row.disposition() == Disposition.HELD;
             if (row.expectedArm() != null) {
-                // Only a case this count is out of. A row naming a type the output does not have
-                // expects nothing of it, and counted here it would make the number of cases a row
-                // expects larger than the number there are to expect.
-                if (declaredOut.contains(row.expectedArm())) {
+                // Only a case of the output. A row naming a type the output does not have expects
+                // none of its cases. A case of it nothing reachable produces is kept: the row does
+                // expect it, and what the count is out of is the evidence's to apply.
+                if (outputCases.contains(row.expectedArm())) {
                     specified.add(row.expectedArm());
                 }
             } else if (!declaredOut.isEmpty()) {

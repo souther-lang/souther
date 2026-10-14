@@ -1997,7 +1997,7 @@
         },
         "rowsThatDoNotHold": {
           "type": "array",
-          "description": "The rows written for this behavior that ran and did not do what they say, in the order they were read. Empty where none, and never absent. Not part of `adequacy`: whether the rows cover what the model owes and whether they hold are two questions, and a row that does not hold is evidence of what it went through all the same. Each is keyed as its entry of `rowObligations` is.",
+          "description": "The rows written for this behavior that ran, or were to run, and did not do what they say, in the order they were read — each with where it stopped. Empty where none, and never absent. Not part of `adequacy`: whether the rows cover what the model owes and whether they hold are two questions, and a row that does not hold is evidence of what it reached before it stopped all the same. Each is keyed as its entry of `rowObligations` is.",
           "items": {
             "$ref": "#/$defs/aRowThatDoesNotHold"
           }
@@ -4126,10 +4126,11 @@
     },
     "aRowThatDoesNotHold": {
       "type": "object",
-      "description": "A row that ran and did not do what it says: which row, and where it is written. The place travels with the row because a row covering an obligation of one behavior may be written for another, and a document narrowed to the first has no entry of that row to look it up in.",
+      "description": "A row that ran, or was to run, and did not do what it says: which row, where it is written, and where it stopped. The place and the stop travel with the row because a row covering an obligation of one behavior may be written for another, and a document narrowed to the first has no entry of that row to look them up in.",
       "required": [
         "row",
-        "at"
+        "at",
+        "failedAt"
       ],
       "additionalProperties": false,
       "properties": {
@@ -4138,13 +4139,24 @@
         },
         "at": {
           "$ref": "#/$defs/at"
+        },
+        "failedAt": {
+          "description": "Where the row stopped, which is not always the behavior answering otherwise. `input_fixture` is an input that could not be built and `expected_fixture` an expectation that could not be built, and neither applied the behavior; `fake_resolution` is a dependency with no fake for it; `ensures` is what the row states breaking what the behavior declares of its answer; `invocation` is the behavior applied and giving no answer; `comparison` is the behavior answering with something other than the row expects. What a row covers is what it reached before it stopped. A row that went over a budget or could not be handed over ends undecided and is not one of these.",
+          "enum": [
+            "input_fixture",
+            "expected_fixture",
+            "fake_resolution",
+            "ensures",
+            "invocation",
+            "comparison"
+          ]
         }
       }
     },
     "onlyWitnessedBy": {
       "type": "array",
       "minItems": 1,
-      "description": "The rows covering an obligation, written exactly where every one of them does not hold and absent wherever some other row covers it too. The obligation is met either way and counted as met: a row that does not hold still ran, and what it went through it went through. What this says is what an author loses from the count by correcting or deleting these rows. Another row is any row the measure counts that does not fail — one that held, one waiting for its answer, one recorded before there was a body — so an obligation without this field is not thereby one a row was seen to hold at.",
+      "description": "The rows covering an obligation, written exactly where every one of them does not hold and absent wherever some other row covers it too. The obligation is met either way and counted as met: whatever a row that does not hold reached before it stopped, it reached. What this says is that the count has the obligation only through these rows — without them it is not covered. Correcting only the answer a row states leaves where it goes as it was, so that is not always what correcting it takes away. Another row is any row the measure counts that does not fail — one that held, one waiting for its answer, one recorded before there was a body — so an obligation without this field is not thereby one a row was seen to hold at.",
       "items": {
         "$ref": "#/$defs/aRowThatDoesNotHold"
       }

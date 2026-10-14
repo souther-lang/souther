@@ -93,7 +93,7 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
                         arm(UNSETTLED, 2, DecidedBy.NOT_SAID),
                         arm(UNSETTLED, 3, DecidedBy.NOT_SAID)),
                 Map.of(PLACES.get(0), RowWitnesses.ANOTHER_ROW), Set.of(),
-                souther.compiler.query.Adequacy.NOTHING_PROVEN,
+                Adequacy.NOTHING_PROVEN,
                 WeakeningSet.none(), _ -> List.of());
     }
 
@@ -119,7 +119,9 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
     void andNothingSaysARowWasNotRead() {
         StringBuilder out = new StringBuilder();
         new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "x", WeakeningSet.none(),
-                List.of()).branch(out, reported(), null, SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                List.of()).branch(out, reported(), null,
+                SourceRendering.namedByIdentity(SourceLayouts.NONE),
+                reported().coveredOnlyByRowsThatDoNotHold(), new AdequacyReport.MarksWritten());
 
         // Two arms and not four. What the count holds is what a row can be owed for, and a fork
         // standing for however many rules nobody could work out is not that — it is said under the

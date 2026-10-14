@@ -155,16 +155,19 @@ public sealed interface ObligationCoverage {
         WeakeningSet unread = WeakeningSet.none();
         List<ItemAssessment.Coverage.NotAsked> unasked = new ArrayList<>();
         boolean missed = false;
-        RowWitnesses found = null;
+        RowWitnesses.Gathering found = null;
         for (Measurement<ItemAssessment.Coverage> reading : readings) {
             // Found is found, and no accounting of what went unread can weaken a row somebody wrote.
             // The readings after it are still asked who they found, until one found a row that is
             // not one that does not hold: whether the point would be met without those rows is a
             // question about every reading that met it.
             if (reading.made().orElse(null) instanceof ItemAssessment.Coverage.Hit(RowWitnesses by)) {
-                found = found == null ? by : found.and(by);
+                if (found == null) {
+                    found = new RowWitnesses.Gathering();
+                }
+                found.add(by);
                 if (found.anotherRow()) {
-                    return new Witnessed(found);
+                    return new Witnessed(found.done());
                 }
                 continue;
             }
@@ -193,7 +196,7 @@ public sealed interface ObligationCoverage {
             }
         }
         if (found != null) {
-            return new Witnessed(found);
+            return new Witnessed(found.done());
         }
         if (!unread.isEmpty()) {
             return new Undecided(unread);

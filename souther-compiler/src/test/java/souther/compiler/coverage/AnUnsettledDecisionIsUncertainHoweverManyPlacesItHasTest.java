@@ -115,7 +115,7 @@ class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
                 List.of(arm(0, DecidedBy.NOT_SAID), arm(1, DecidedBy.NOT_SAID),
                         arm(2, beside, 0, DecidedBy.THE_DECLARATION)),
-                Map.of(), Set.of(), souther.compiler.query.Adequacy.NOTHING_PROVEN,
+                Map.of(), Set.of(), Adequacy.NOTHING_PROVEN,
                 WeakeningSet.none(), _ -> List.of());
 
         assertEquals(1, measured.arms().unmet().size(),

@@ -183,7 +183,7 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
                                          List<WitnessedRow> watched,
                                          WeakeningSet weakening,
                                          WhereNothingIsAnswered unanswered) {
-        Map<ObligationIdentity.OfACombinationOfDecisions, RowWitnesses> met =
+        Map<ObligationIdentity.OfACombinationOfDecisions, RowWitnesses.Gathering> making =
                 new LinkedHashMap<>();
         List<Generator.Watched.Ran> ran = new ArrayList<>();
         List<RowWitnesses> whose = new ArrayList<>();
@@ -198,14 +198,17 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
             for (int i = 0; i < ran.size(); i++) {
                 Generator.Watched.Ran run = ran.get(i);
                 if (asked.met(item, claim -> claim.satisfiedBy(run.seen()))) {
-                    if (met.merge(item, whose.get(i), RowWitnesses::and).anotherRow()) {
+                    RowWitnesses.Gathering found =
+                            making.computeIfAbsent(item, _ -> new RowWitnesses.Gathering());
+                    found.add(whose.get(i));
+                    if (found.anotherRow()) {
                         break;
                     }
                 }
             }
         }
-        RowsMeeting rows =
-                new RowsMeeting(watched.size(), met, seen, watched.size() - seen);
+        RowsMeeting rows = new RowsMeeting(watched.size(), RowWitnesses.Gathering.done(making),
+                seen, watched.size() - seen);
         // A row nothing watched leaves a meeting it may have made unread, and that is a shortfall
         // only where there is a meeting to make. A behavior whose decisions meet nowhere is asked
         // nothing here, and a measure a behavior has nothing to answer is not a degradation of it.
