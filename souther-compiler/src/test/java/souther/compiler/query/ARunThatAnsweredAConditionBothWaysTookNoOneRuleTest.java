@@ -15,6 +15,7 @@ import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.RulesTaken;
 import souther.compiler.partition.RunPlacement;
+import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.partition.ShownBy;
 import souther.compiler.partition.RuleStep;
 import souther.compiler.types.ModelOccurrence;
@@ -109,7 +110,7 @@ class ARunThatAnsweredAConditionBothWaysTookNoOneRuleTest {
             for (int i = 0; i < taken.length; i++) {
                 found.add(new DecisionReading.Ruled(taken[i],
                         List.of(new RuleStep(new ShownBy.AtAnArm(fork, partOf(taken[i])),
-                                List.of(), AnswersDemanded.NOTHING)), true));
+                                List.of(), AnswersDemanded.NOTHING, SaidOnTheWay.NONE)), true));
             }
             return new RunPlacement(RulesTaken.of(new DecisionReading("f", found,
                     new DecisionReading.Enumeration.Complete(), Map.of()),

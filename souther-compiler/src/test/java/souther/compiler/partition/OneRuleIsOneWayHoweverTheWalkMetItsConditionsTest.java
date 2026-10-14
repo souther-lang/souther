@@ -50,7 +50,7 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
     private static DecisionPath way(DecisionPath.Consulted... consulted) {
         DecisionPath out = DecisionPath.NOWHERE;
         for (DecisionPath.Consulted each : consulted) {
-            out = out.and(each.answer(), each.shown(), each.states());
+            out = out.and(each.answer(), each.shown(), each.states(), each.said());
         }
         return out;
     }
@@ -69,6 +69,7 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
                         new ConditionReportAnchor.WhereTheReadingMetIt("b", new ConditionOccurrence(
                                 "b", ConditionOccurrence.Reading.DECIDING, against)),
                         new WhyNotTaken.OutsideDomain(
-                                WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER))));
+                                WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER))),
+                SaidOnTheWay.NONE);
     }
 }

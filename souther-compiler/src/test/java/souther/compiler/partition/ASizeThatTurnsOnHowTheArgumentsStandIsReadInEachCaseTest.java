@@ -125,7 +125,7 @@ class ASizeThatTurnsOnHowTheArgumentsStandIsReadInEachCaseTest {
         return ReachingCuts.stating(Condition.of(analysis.core(), reads, rules().symbols(),
                         rules().newtypes(), new ConditionNumbering(module(), behavior,
                                 ConditionOccurrence.Reading.DIVIDING)),
-                reading, holding, WhatConditionsState.of(reading));
+                reading, holding, WhatConditionsState.of(reading)).entries();
     }
 
     private static final Compilation COMPILATION = compiled();

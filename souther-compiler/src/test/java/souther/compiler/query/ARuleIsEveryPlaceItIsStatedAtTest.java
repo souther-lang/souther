@@ -12,6 +12,7 @@ import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.MeasuredInput;
+import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.ReachabilityGap;
 import souther.compiler.partition.RuleStep;
@@ -268,10 +269,10 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
         OnTheWay.Declined declinedSecond = declined(1);
         DecisionReading.Ruled one = new DecisionReading.Ruled(first.rule(),
                 List.of(new RuleStep(first.steps().getFirst().shown(), List.of(declinedFirst),
-                        AnswersDemanded.NOTHING)), true);
+                        AnswersDemanded.NOTHING, SaidOnTheWay.NONE)), true);
         DecisionReading.Ruled other = new DecisionReading.Ruled(first.rule(),
                 List.of(new RuleStep(first.steps().getFirst().shown(), List.of(declinedSecond),
-                        AnswersDemanded.NOTHING)), true);
+                        AnswersDemanded.NOTHING, SaidOnTheWay.NONE)), true);
         SettledAt nothingTried = new SettledAt(one, RuleSettlement.nothingToTryWith(
                 new Generator.UnresolvedCombination(List.of("a rule of the decision"),
                         Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),

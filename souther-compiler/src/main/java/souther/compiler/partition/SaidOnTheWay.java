@@ -55,6 +55,33 @@ public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
         return by == null ? List.of() : by;
     }
 
+    /** Every copy anything on the way was read off, each once, in the order met. */
+    public List<ModelOccurrence> copies() {
+        List<ModelOccurrence> out = new ArrayList<>();
+        for (Map<?, List<ModelOccurrence>> each : List.of(entries, stated, unstated)) {
+            each.values().forEach(copies -> copies.stream().filter(copy -> !out.contains(copy))
+                    .forEach(out::add));
+        }
+        return out;
+    }
+
+    /**
+     * The same, with {@code demands} asked by every copy anything on the way was read off.
+     *
+     * <p>For the demands of one condition, which it asks of the answers out of what it states: they
+     * were read off what the condition's statement was, and not off any one entry of it.
+     */
+    public SaidOnTheWay asking(AnswersDemanded demands) {
+        List<ModelOccurrence> every = copies();
+        Map<AnswerDemand, List<ModelOccurrence>> asked = new LinkedHashMap<>(stated);
+        Map<DemandGap.Unstated, List<ModelOccurrence>> declined = new LinkedHashMap<>(unstated);
+        if (!every.isEmpty()) {
+            demands.stated().forEach(demand -> asked.put(demand, every));
+            demands.declined().forEach(demand -> declined.put(demand, every));
+        }
+        return new SaidOnTheWay(entries, asked, declined);
+    }
+
     /** Both, as what put things on a way two ways of reaching one line or rule share. */
     public SaidOnTheWay and(SaidOnTheWay other) {
         return new SaidOnTheWay(together(entries, other.entries), together(stated, other.stated),
@@ -63,17 +90,25 @@ public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
 
     /** What {@code entries} were put on a way by: {@code by}, for each of them and every entry
      *  inside an alternative of one. */
-    static void filed(List<OnTheWay> entries, ModelOccurrence by,
+    static void filed(List<OnTheWay> entries, List<ModelOccurrence> by,
                       Map<OnTheWay, List<ModelOccurrence>> into) {
         for (OnTheWay each : entries) {
-            List<ModelOccurrence> copies = into.computeIfAbsent(each, _ -> new ArrayList<>());
-            if (!copies.contains(by)) {
-                copies.add(by);
-            }
+            filedAlone(each, by, into);
             if (each instanceof OnTheWay.OneOf several) {
                 several.alternatives().forEach(one -> filed(one, by, into));
             }
         }
+    }
+
+    /** What {@code entry} itself was put on a way by, leaving what its alternatives were put
+     *  there by to whoever made them. */
+    static void filedAlone(OnTheWay entry, List<ModelOccurrence> by,
+                           Map<OnTheWay, List<ModelOccurrence>> into) {
+        if (by.isEmpty()) {
+            return;
+        }
+        List<ModelOccurrence> copies = into.computeIfAbsent(entry, _ -> new ArrayList<>());
+        by.stream().filter(copy -> !copies.contains(copy)).forEach(copies::add);
     }
 
     private static <K> Map<K, List<ModelOccurrence>> together(Map<K, List<ModelOccurrence>> one,

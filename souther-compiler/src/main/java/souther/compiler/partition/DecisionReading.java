@@ -9,7 +9,6 @@ import souther.compiler.flow.ValueArrivals;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.Proposition;
-import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -122,28 +121,19 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
         }
 
         /**
-         * Which copies of the model's code put each thing on this way: the copy each step stands
-         * in, for everything that step states and asks.
+         * Which copies of the model's code each thing on this way was read off: what each step
+         * says of its own statements, all of them together.
          *
-         * <p>Read off the steps, which are where the two were made together, and never by looking
-         * a value up among them afterwards.
+         * <p>Carried by the steps from where each condition was read, and never worked out from
+         * where a step is seen: the construct a run through a condition is seen at is one, and
+         * the constructs what it states was read off may be several, in other calls.
          */
         public SaidOnTheWay saidOnTheWay() {
-            Map<OnTheWay, List<ModelOccurrence>> entries = new LinkedHashMap<>();
-            Map<AnswerDemand, List<ModelOccurrence>> stated = new LinkedHashMap<>();
-            Map<DemandGap.Unstated, List<ModelOccurrence>> unstated = new LinkedHashMap<>();
+            SaidOnTheWay out = SaidOnTheWay.NONE;
             for (RuleStep each : steps) {
-                ModelOccurrence copy = each.shown().copy().orElse(null);
-                if (copy == null) {
-                    continue;
-                }
-                SaidOnTheWay.filed(each.states(), copy, entries);
-                each.demands().stated().forEach(demand ->
-                        stated.computeIfAbsent(demand, _ -> new ArrayList<>()).add(copy));
-                each.demands().declined().forEach(demand ->
-                        unstated.computeIfAbsent(demand, _ -> new ArrayList<>()).add(copy));
+                out = out.and(each.said());
             }
-            return new SaidOnTheWay(entries, stated, unstated);
+            return out;
         }
     }
 

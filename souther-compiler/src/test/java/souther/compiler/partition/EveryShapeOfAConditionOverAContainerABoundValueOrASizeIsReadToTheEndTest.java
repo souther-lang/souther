@@ -143,7 +143,8 @@ class EveryShapeOfAConditionOverAContainerABoundValueOrASizeIsReadToTheEndTest {
                 unread.add(name + " leaves " + Proposition.stopsIn(stated) + " unread");
             }
             for (boolean holding : List.of(true, false)) {
-                for (OnTheWay asked : ReachingCuts.stating(condition, read, holding, conditions)) {
+                for (OnTheWay asked
+                        : ReachingCuts.stating(condition, read, holding, conditions).entries()) {
                     declined(asked, name + " asked of a row coming out " + holding, unread);
                 }
                 if (DecisionMeanings.columnOf(stated, holding, new ConditionOccurrence(

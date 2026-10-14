@@ -303,7 +303,7 @@ class AMembershipIsComposedIntoTheRowTest {
                         rules().symbols(), rules().newtypes(),
                         new ConditionNumbering(module(), behavior,
                                 ConditionOccurrence.Reading.DIVIDING)),
-                reading, holding, WhatConditionsState.of(reading));
+                reading, holding, WhatConditionsState.of(reading)).entries();
         assertFalse(stated.isEmpty(), () -> "the body asks something of a row: " + behavior);
         return stated;
     }

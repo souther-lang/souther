@@ -54,8 +54,9 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
         return rules().newtypes();
     }
 
-    /** What {@code condition} coming out {@code held} states, and where it states nothing, that. */
-    List<OnTheWay> stating(Condition condition, boolean held) {
+    /** What {@code condition} coming out {@code held} states, and where it states nothing, that —
+     *  with which copies of the model's code each thing it states was read off. */
+    ReachingCuts.Stating stating(Condition condition, boolean held) {
         return ReachingCuts.stating(condition, read, held, WhatConditionsState.of(read));
     }
 

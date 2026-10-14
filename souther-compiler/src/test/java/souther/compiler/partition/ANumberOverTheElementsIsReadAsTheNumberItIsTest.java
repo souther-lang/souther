@@ -166,7 +166,7 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
         return ReachingCuts.stating(Condition.of(analysis.core(), reads, rules().symbols(),
                         rules().newtypes(), new ConditionNumbering(module(), behavior,
                                 ConditionOccurrence.Reading.DIVIDING)),
-                reading, true, WhatConditionsState.of(reading));
+                reading, true, WhatConditionsState.of(reading)).entries();
     }
 
     private static final Compilation COMPILATION = compiled();

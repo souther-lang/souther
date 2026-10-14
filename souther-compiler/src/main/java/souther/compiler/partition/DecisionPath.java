@@ -77,13 +77,17 @@ final class DecisionPath {
      *               be read off two accounts of one comparison. As many as the condition asks of a
      *               row — every element of a list meeting two things is two relations and one
      *               column — and all of them about the one condition
+     * @param said   which copies of the model's code each of {@code states} was read off, told
+     *               where the condition was read
      */
-    record Consulted(DecidedCondition answer, ShownBy shown, List<OnTheWay> states) {
+    record Consulted(DecidedCondition answer, ShownBy shown, List<OnTheWay> states,
+                     SaidOnTheWay said) {
 
         Consulted {
-            if (answer == null || shown == null || states == null || states.isEmpty()) {
+            if (answer == null || shown == null || states == null || states.isEmpty()
+                    || said == null) {
                 throw new IllegalArgumentException("a condition a path consulted is an answer,"
-                        + " where it is seen, and what it states");
+                        + " where it is seen, what it states and what that was read off");
             }
             states = List.copyOf(states);
         }
@@ -97,8 +101,9 @@ final class DecisionPath {
 
     /** This path with {@code answer} on it, or null where the path already answers that column the
      *  other way. */
-    DecisionPath and(DecidedCondition answer, ShownBy shown, List<OnTheWay> states) {
-        return and(new DecisionPath(List.of(new Consulted(answer, shown, states))));
+    DecisionPath and(DecidedCondition answer, ShownBy shown, List<OnTheWay> states,
+                     SaidOnTheWay said) {
+        return and(new DecisionPath(List.of(new Consulted(answer, shown, states, said))));
     }
 
     /**
@@ -133,9 +138,13 @@ final class DecisionPath {
      * a search goes without can be traced to the condition that said it.
      */
     List<RuleStep> steps() {
-        return consulted.stream()
-                .map(each -> new RuleStep(each.shown(), each.states(), demands(each)))
-                .toList();
+        List<RuleStep> out = new ArrayList<>();
+        for (Consulted each : consulted) {
+            AnswersDemanded demands = demands(each);
+            out.add(new RuleStep(each.shown(), each.states(), demands,
+                    each.said().asking(demands)));
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -353,7 +362,8 @@ final class DecisionPath {
     DecisionPath seenAgain(UnaryOperator<ShownBy> seen) {
         List<Consulted> out = new ArrayList<>();
         for (Consulted each : consulted) {
-            out.add(new Consulted(each.answer(), seen.apply(each.shown()), each.states()));
+            out.add(new Consulted(each.answer(), seen.apply(each.shown()), each.states(),
+                    each.said()));
         }
         return new DecisionPath(out);
     }

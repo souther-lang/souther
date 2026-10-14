@@ -137,7 +137,7 @@ class ATruthIsOneDemandHoweverItIsSpelledTest {
                         rules().symbols(), rules().newtypes(),
                         new ConditionNumbering(module(), behavior,
                                 ConditionOccurrence.Reading.DIVIDING)),
-                reading, holding, WhatConditionsState.of(reading));
+                reading, holding, WhatConditionsState.of(reading)).entries();
         assertEquals(1, stated.size(), () -> "one condition: " + stated);
         return stated.getFirst();
     }

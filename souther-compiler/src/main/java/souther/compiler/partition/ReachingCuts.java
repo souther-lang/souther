@@ -244,18 +244,51 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * is declined whole, at the condition rather than at an operand — neither operand is what could
      * not be carried.
      */
-    static List<OnTheWay> stating(Condition node, InputReading read, boolean holding,
-                                  WhatConditionsState conditions) {
+    static Stating stating(Condition node, InputReading read, boolean holding,
+                           WhatConditionsState conditions) {
         // What the condition asks is {@link DemandReading}'s, connectives and all, and each thing
         // it asks is put on the way at the condition of the shape that asked it. A truth stays
         // the truth it is: what a report names and where a run through it is seen are the
         // condition the author wrote, and only the demand is read as the comparison it means. A
         // disjunction of things is put at the whole node, since neither operand is what could not
         // be carried.
-        return DemandReading.stated(node, read, holding, conditions).stream()
-                .map(each -> onTheWay(each.where().occurrence(), each.where().anchor(),
-                        each.read(), read))
-                .toList();
+        List<OnTheWay> entries = new ArrayList<>();
+        Map<OnTheWay, List<ModelOccurrence>> by = new LinkedHashMap<>();
+        for (DemandReading.Stated each : DemandReading.stated(node, read, holding, conditions)) {
+            entries.add(onTheWay(each.where().occurrence(), each.where().anchor(), each.read(),
+                    read, each.readOff(), by));
+        }
+        return new Stating(entries, new SaidOnTheWay(by, Map.of(), Map.of()));
+    }
+
+    /**
+     * What a condition put on the way, and which copies of the model's code each entry was read
+     * off.
+     *
+     * <p>Told where the entries are made, which is the one place the part each was read off is
+     * still known. An entry is filed under a condition of the shape, and the condition is no
+     * account of where each thing it asks was read: a comparison over what another call of a
+     * helper worked out asks what that call's fork decided, and the halves of a joined condition
+     * may stand in two calls.
+     *
+     * @param entries what was put on the way, in order
+     * @param by      which copies each entry and each entry inside an alternative of one was read
+     *                off
+     */
+    record Stating(List<OnTheWay> entries, SaidOnTheWay by) {
+
+        Stating {
+            entries = List.copyOf(entries);
+            Objects.requireNonNull(by, "which copies each entry was read off, or none");
+        }
+
+        /** {@code entries}, every one of them and of their alternatives read off
+         *  {@code readIn}. */
+        static Stating of(List<OnTheWay> entries, List<ModelOccurrence> readIn) {
+            Map<OnTheWay, List<ModelOccurrence>> by = new LinkedHashMap<>();
+            SaidOnTheWay.filed(entries, readIn, by);
+            return new Stating(entries, new SaidOnTheWay(by, Map.of(), Map.of()));
+        }
     }
 
     /**
@@ -286,7 +319,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                                    InputReads reads, ConditionNumbering numbering) {
         InputDomain inputs = read.domain();
         RuleReadingSource ruleSource = read.rules();
-        ConditionOccurrence met = numbering.metEntering(match, match.occurrence(), part);
+        ConditionOccurrence met = numbering.metEntering(match, part);
         ConditionReportAnchor at =
                 numbering.anchorOfArm(match.origin(), part, arm.pos(), met);
         // The selection whole, and not one narrowing made out of it: a case over several leaves
@@ -477,7 +510,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
     static List<OnTheWay> attempting(Core.IfConstructed attempt, int part, SourcePos at,
                                      InputReading read, InputReads reads,
                                      ConditionNumbering numbering) {
-        ConditionOccurrence met = numbering.metEntering(attempt, attempt.occurrence(), part);
+        ConditionOccurrence met = numbering.metEntering(attempt, part);
         return armStated(WhatConditionsState.of(read).arm(attempt, part, reads).proposition(),
                 met, numbering.anchorOfArm(attempt.origin(), part, at, met), read);
     }
@@ -491,6 +524,14 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                 .toList();
     }
 
+    /** What a demand comes to on the way, for an arm: what entering it puts there is filed under
+     *  the fork, where the walk enters it ({@link ConditionNumbering#saidEntering}). */
+    private static OnTheWay onTheWay(ConditionOccurrence condition, ConditionReportAnchor at,
+                                     DemandReading.Read read, InputReading input) {
+        return onTheWay(condition, at, read, input, DemandReading.ReadOff.NONE,
+                new LinkedHashMap<>());
+    }
+
     /**
      * What a line of the comparison {@code at} asks of a row for the statement to turn on it,
      * {@code decides}, put on the way at that comparison.
@@ -501,19 +542,31 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * for over rows where it may decide nothing says so, and is never taken to be one nothing
      * reaches for it.
      */
-    static List<OnTheWay> whereItDecides(Condition at, Proposition decides, InputReading read) {
-        return DemandReading.asked(decides, read).stream()
-                .map(each -> onTheWay(at.occurrence(), at.anchor(), each, read))
-                .toList();
+    static Stating whereItDecides(Condition at, Proposition decides, InputReading read) {
+        // Read off the parts of the comparison's own statement: where a line decides is a fact of
+        // the comparison, over the values it reads.
+        List<OnTheWay> entries = new ArrayList<>();
+        Map<OnTheWay, List<ModelOccurrence>> by = new LinkedHashMap<>();
+        for (DemandReading.Stated each
+                : DemandReading.askedAt(at, decides, read, WhatConditionsState.of(read))) {
+            entries.add(onTheWay(at.occurrence(), at.anchor(), each.read(), read, each.readOff(),
+                    by));
+        }
+        return new Stating(entries, new SaidOnTheWay(by, Map.of(), Map.of()));
     }
 
     /**
      * What a condition's demand comes to on the way: taken in where there is one, and declined at
      * the condition with the reason where there is none.
+     *
+     * <p>And which copies of the model's code it was read off, filed into {@code by} as it is
+     * made: what {@code readOff} says of the read, and of each read inside an alternative of it.
      */
     private static OnTheWay onTheWay(ConditionOccurrence condition, ConditionReportAnchor at,
-                                     DemandReading.Read read, InputReading input) {
-        return switch (read) {
+                                     DemandReading.Read read, InputReading input,
+                                     DemandReading.ReadOff readOff,
+                                     Map<OnTheWay, List<ModelOccurrence>> by) {
+        OnTheWay made = switch (read) {
             case DemandReading.Read.Demands(var demand) -> new OnTheWay.TakenIn(at, demand);
             case DemandReading.Read.Settled(var thisWay) ->
                     new OnTheWay.Settled(condition, at, thisWay);
@@ -521,10 +574,13 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                     narrowing(condition, at, position, cases, input);
             case DemandReading.Read.OneOf oneOf -> new OnTheWay.OneOf(
                     condition, at, oneOf.alternatives().stream().map(each -> each.stream()
-                            .map(one -> onTheWay(condition, at, one, input)).toList()).toList(),
+                            .map(one -> onTheWay(condition, at, one, input, readOff, by))
+                            .toList()).toList(),
                     oneOf.stated());
             case DemandReading.Read.Unread(var why) -> new OnTheWay.Declined(condition, at, why);
         };
+        SaidOnTheWay.filedAlone(made, readOff.of(read), by);
+        return made;
     }
 
     /**

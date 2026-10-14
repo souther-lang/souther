@@ -555,9 +555,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         Condition.of(iff.cond(), reads, symbols, in.newtypes(), numbering);
                 // What the condition coming out each way says, once: what each arm is entered
                 // under, and what a run seen down it is known to have done.
-                List<OnTheWay> holding = numbering.said(condition.occurrence(),
+                List<OnTheWay> holding = numbering.said(
                         ReachingCuts.stating(condition, in.read(), true, in.conditions()));
-                List<OnTheWay> failing = numbering.said(condition.occurrence(),
+                List<OnTheWay> failing = numbering.said(
                         ReachingCuts.stating(condition, in.read(), false, in.conditions()));
                 if (live) {
                     truthsIn(condition, assumed, in.read(), in.truths(), in.conditions(),
@@ -967,7 +967,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         Map<WhereAPartDecides, List<OnTheWay>> out = new LinkedHashMap<>();
         for (ComparisonAssessment.Several.Part part : several.parts()) {
             for (WhereAPartDecides reading : part.readings()) {
-                out.put(reading, numbering.said(at.occurrence(),
+                out.put(reading, numbering.said(
                         ReachingCuts.whereItDecides(at, reading.decides(), in.read())));
             }
         }
@@ -987,7 +987,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                          souther.compiler.inputs.InputReading read,
                                          List<OnTheWay> assumed, WhatConditionsState conditions,
                                          ConditionNumbering numbering) {
-        return past(assumed, numbering.said(condition.occurrence(),
+        return past(assumed, numbering.said(
                 ReachingCuts.stating(condition, read, holding, conditions)));
     }
 

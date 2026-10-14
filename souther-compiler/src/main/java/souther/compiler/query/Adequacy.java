@@ -19,6 +19,7 @@ import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.RulesTaken;
 import souther.compiler.partition.RunPlacement;
+import souther.compiler.partition.RuleStep;
 import souther.compiler.partition.ShownBy;
 import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.inputs.TermPath;
@@ -8275,12 +8276,25 @@ public final class Adequacy {
                     // marked there alike are three a reader cannot tell apart; what tells them
                     // apart is the call, and a call is one place whatever number of the rule's
                     // conditions its copy holds.
+                    //
+                    // The copy a condition is seen at says which way the rule takes it there. Every
+                    // other copy what the condition states was read off — the call whose fork
+                    // worked out a value it compares, the calls the halves of a joined condition
+                    // stand in — the rule goes through, and nothing more is said of it there.
                     Map<Citation, CallMarks> calls = new LinkedHashMap<>();
-                    for (ShownBy each : ruled.shownBy()) {
-                        DecisionRuleReading read = DecisionRuleReading.of(each, plan, behavior);
+                    for (RuleStep each : ruled.steps()) {
+                        DecisionRuleReading read =
+                                DecisionRuleReading.of(each.shown(), plan, behavior);
                         said(db, built, read);
-                        each.copy().ifPresent(copy ->
-                                calledAt(db, module, read, copy.lineage(), calls));
+                        Optional<ModelOccurrence> seen = each.shown().copy();
+                        seen.ifPresent(copy -> calledAt(db, module,
+                                called -> takenAt(read, called), copy.lineage(), calls));
+                        for (ModelOccurrence copy : each.said().copies()) {
+                            if (!seen.equals(Optional.of(copy))) {
+                                calledAt(db, module, ExampleMessage.TheRuleGoesThroughThisCall::new,
+                                        copy.lineage(), calls);
+                            }
+                        }
                     }
                     calls.forEach((call, marks) -> marks.markedAt(built, call));
                 }
@@ -8455,13 +8469,12 @@ public final class Adequacy {
         }
 
         /**
-         * What the calls the copy a condition of the rule stands in was made through say of it,
-         * each filed under the call.
+         * What the calls {@code copy} was made through say of the rule, each filed under the call.
          *
-         * <p>The call of the helper the condition is written in says which way the rule takes it
-         * in that call, and every call further out says the rule goes through it. Marked at the
-         * calls, because the condition's own marker is at the helper — one place for every call of
-         * it — and what tells the copies apart is the call each was made at.
+         * <p>The call that made the copy says {@code innermost} of what was called, and every call
+         * further out says the rule goes through it. Marked at the calls, because a condition's own
+         * marker is at the helper — one place for every call of it — and what tells the copies
+         * apart is the call each was made at.
          *
          * <p>A call nothing places is not marked: it was not written where this compilation can
          * show it, and the condition's own marker still is.
@@ -8469,9 +8482,9 @@ public final class Adequacy {
          * @param calls what each call has been told so far, which every condition of the rule adds
          *              to and which is marked once all of them have
          */
-        private static void calledAt(Db db, String module, DecisionRuleReading read,
+        private static void calledAt(Db db, String module, Function<String, Supporting> innermost,
                                      ExpansionLineage copy, Map<Citation, CallMarks> calls) {
-            boolean innermost = true;
+            boolean first = true;
             ExpansionLineage at = copy;
             while (at instanceof ExpansionLineage.Expansion made) {
                 String called = made.expanded().saidIn(module);
@@ -8479,10 +8492,10 @@ public final class Adequacy {
                         ? Sites.placeIfKnown(db, wrote) : null;
                 if (call != null) {
                     calls.computeIfAbsent(call, _ -> new CallMarks(called, new ArrayList<>()))
-                            .said().add(innermost ? takenAt(read, called)
+                            .said().add(first ? innermost.apply(called)
                                     : new ExampleMessage.TheRuleGoesThroughThisCall(called));
                 }
-                innermost = false;
+                first = false;
                 at = made.within();
             }
         }
@@ -8510,20 +8523,25 @@ public final class Adequacy {
         /**
          * What one call is told by the conditions of a rule, and the one mark it is given.
          *
-         * <p>One mark per call, because a call is one place. Where everything it is told says one
-         * thing, that is the mark; where the conditions of its copy go different ways, a mark at
-         * the call cannot say which condition went which way — the conditions are marked at the
-         * helper, alike for every call — so it says only that the rule goes through the call.
+         * <p>One mark per call, because a call is one place. Where what it is told of the way the
+         * rule takes its conditions says one thing, that is the mark — that the rule goes through
+         * the call says less, and is true of every call it takes a condition in. Where the
+         * conditions of its copy go different ways, a mark at the call cannot say which condition
+         * went which way — the conditions are marked at the helper, alike for every call — so it
+         * says only that the rule goes through the call, and that is what it says where nothing
+         * more was told.
          *
          * @param called what was called
-         * @param said   what each condition of the rule that stands in a copy made at it says
+         * @param said   what each condition of the rule read off a copy made at it says
          */
         private record CallMarks(String called, List<Supporting> said) {
 
             void markedAt(Diagnostic.Builder built, Citation call) {
-                List<Supporting> distinct = said.stream().distinct().toList();
-                label(built, call, (ExampleMessage & Supporting) (distinct.size() == 1
-                        ? distinct.getFirst()
+                List<Supporting> taken = said.stream()
+                        .filter(each -> !(each instanceof ExampleMessage.TheRuleGoesThroughThisCall))
+                        .distinct().toList();
+                label(built, call, (ExampleMessage & Supporting) (taken.size() == 1
+                        ? taken.getFirst()
                         : new ExampleMessage.TheRuleGoesThroughThisCall(called)));
             }
         }

@@ -9,7 +9,6 @@ import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -89,13 +88,10 @@ final class ConditionNumbering {
      *  be at. A {@code match} and an attempt both, since an arm of either is met the same way. */
     private final Map<Core, Map<Integer, ConditionOccurrence>> arms = new IdentityHashMap<>();
     private final Map<ConditionOccurrence, Citation> metAt;
-    /** Which construct of the model, in which copy of it, each condition named here is. Shared with
-     *  every place this reading reads, as the names are. */
-    private final Map<ConditionOccurrence, ModelOccurrence> stands;
-    /** The copy that made each entry this reading put on a way, by the entry itself, shared with
-     *  every place this reading reads. Two equal entries are two entries here, each made by its
-     *  own copy. */
-    private final Map<OnTheWay, ModelOccurrence> madeBy;
+    /** The copies each entry this reading put on a way was read off, by the entry itself, shared
+     *  with every place this reading reads. Two equal entries are two entries here, each read off
+     *  its own copies. */
+    private final Map<OnTheWay, List<ModelOccurrence>> madeBy;
     /** How many names this reading has handed out, shared with every place it reads. */
     private final int[] next;
     /** What this reading names inside the body of each call of a recursive helper it reads, by the
@@ -103,20 +99,18 @@ final class ConditionNumbering {
     private final Map<CallContext, ConditionNumbering> within;
 
     ConditionNumbering(String module, String behavior, ConditionOccurrence.Reading reading) {
-        this(module, behavior, reading, new LinkedHashMap<>(), new LinkedHashMap<>(),
-                new IdentityHashMap<>(), new int[1], new HashMap<>());
+        this(module, behavior, reading, new LinkedHashMap<>(), new IdentityHashMap<>(),
+                new int[1], new HashMap<>());
     }
 
     private ConditionNumbering(String module, String behavior, ConditionOccurrence.Reading reading,
                                Map<ConditionOccurrence, Citation> metAt,
-                               Map<ConditionOccurrence, ModelOccurrence> stands,
-                               Map<OnTheWay, ModelOccurrence> madeBy, int[] next,
+                               Map<OnTheWay, List<ModelOccurrence>> madeBy, int[] next,
                                Map<CallContext, ConditionNumbering> within) {
         this.module = module;
         this.behavior = behavior;
         this.reading = reading;
         this.metAt = metAt;
-        this.stands = stands;
         this.madeBy = madeBy;
         this.next = next;
         this.within = within;
@@ -133,8 +127,8 @@ final class ConditionNumbering {
     ConditionNumbering within(CallContext context) {
         return context.equals(CallContext.OF_THE_BODY) ? this
                 : within.computeIfAbsent(context,
-                        _ -> new ConditionNumbering(module, behavior, reading, metAt, stands,
-                                madeBy, next, within));
+                        _ -> new ConditionNumbering(module, behavior, reading, metAt, madeBy,
+                                next, within));
     }
 
     /** What this reading already made of the condition at {@code at} under {@code reads}, or null
@@ -154,26 +148,6 @@ final class ConditionNumbering {
     }
 
     /**
-     * The name of the condition being recognised now, it being {@code written}.
-     *
-     * <p>Which copy of the model's construct it is, is filed in the same act. A helper's condition
-     * is one construct written once and met once per call, and the names already tell those apart;
-     * what a reader is shown to tell them apart by is the call each copy was made at, and that is
-     * the occurrence's to say. Paired with a name anywhere else, it would be this correspondence
-     * made a second time by something that had not done the recognising.
-     *
-     * <p>Nothing is filed where the model states nothing at the construct — one the source never
-     * wrote, or one inside the language's own operations ({@link ModelOccurrence#statedAt}).
-     */
-    ConditionOccurrence met(ConstructOccurrence written) {
-        ConditionOccurrence met = met();
-        if (written.isWritten()) {
-            ModelOccurrence.statedAt(written).ifPresent(stated -> stands.put(met, stated));
-        }
-        return met;
-    }
-
-    /**
      * The name reaching {@code part} of {@code fork} goes by.
      *
      * <p>Refused where this reading has already named that arm, rather than answered with the name
@@ -183,10 +157,10 @@ final class ConditionNumbering {
      * two ways, and nothing downstream could tell the two apart. So it is raised here rather than
      * resolved by keeping one of them.
      */
-    ConditionOccurrence metEntering(Core fork, ConstructOccurrence written, int part) {
+    ConditionOccurrence metEntering(Core fork, int part) {
         Map<Integer, ConditionOccurrence> named =
                 arms.computeIfAbsent(fork, _ -> new LinkedHashMap<>());
-        ConditionOccurrence already = named.putIfAbsent(part, met(written));
+        ConditionOccurrence already = named.putIfAbsent(part, met());
         if (already != null) {
             throw new IllegalStateException(
                     "this reading has already named arm " + part + " of a fork: " + already);
@@ -236,36 +210,39 @@ final class ConditionNumbering {
     }
 
     /**
-     * {@code entries}, filed as what {@code condition} put on the way.
+     * What a condition put on the way, each entry filed under the copies it was read off.
      *
      * <p>Filed by the entry itself and not by what it says. An entry is a value, and two copies of
      * a helper on two ways that never meet can put equal values on them; filed by the value, a way
      * through one would be told it met the other. What each way met is read off its own entries
      * when the way is recorded ({@link #saidOnTheWay}), and this is how it can be.
      *
-     * @return {@code entries}, so a walk files what it puts on the way where it puts it
+     * <p>Under the copies {@code stated} says each was read off, and not under the condition it
+     * ended up beside: which copy each was read off is known only where it was made.
+     *
+     * @return the entries, so a walk files what it puts on the way where it puts it
      */
-    List<OnTheWay> said(ConditionOccurrence condition, List<OnTheWay> entries) {
-        ModelOccurrence copy = stands.get(condition);
-        if (copy != null) {
-            file(entries, copy);
-        }
-        return entries;
+    List<OnTheWay> said(ReachingCuts.Stating stated) {
+        file(stated.entries(), stated.by());
+        return stated.entries();
     }
 
-    /** The same, for entering an arm of a fork written as {@code fork}. */
+    /** {@code entries}, put on the way entering an arm of a fork written as {@code fork}, which is
+     *  what the arm states and the copy it is read off. */
     List<OnTheWay> saidEntering(ConstructOccurrence fork, List<OnTheWay> entries) {
-        if (fork.isWritten()) {
-            ModelOccurrence.statedAt(fork).ifPresent(copy -> file(entries, copy));
-        }
-        return entries;
+        List<ModelOccurrence> copy = fork.isWritten()
+                ? ModelOccurrence.statedAt(fork).map(List::of).orElse(List.of()) : List.of();
+        return said(ReachingCuts.Stating.of(entries, copy));
     }
 
-    private void file(List<OnTheWay> entries, ModelOccurrence copy) {
+    private void file(List<OnTheWay> entries, SaidOnTheWay by) {
         for (OnTheWay each : entries) {
-            madeBy.putIfAbsent(each, copy);
+            List<ModelOccurrence> copies = by.entries().get(each);
+            if (copies != null && !copies.isEmpty()) {
+                madeBy.putIfAbsent(each, copies);
+            }
             if (each instanceof OnTheWay.OneOf several) {
-                several.alternatives().forEach(one -> file(one, copy));
+                several.alternatives().forEach(one -> file(one, by));
             }
         }
     }
@@ -286,12 +263,9 @@ final class ConditionNumbering {
 
     private void told(List<OnTheWay> way, Map<OnTheWay, List<ModelOccurrence>> into) {
         for (OnTheWay each : way) {
-            ModelOccurrence copy = madeBy.get(each);
-            if (copy != null) {
-                List<ModelOccurrence> copies = into.computeIfAbsent(each, _ -> new ArrayList<>());
-                if (!copies.contains(copy)) {
-                    copies.add(copy);
-                }
+            List<ModelOccurrence> made = madeBy.get(each);
+            if (made != null) {
+                SaidOnTheWay.filedAlone(each, made, into);
             }
             if (each instanceof OnTheWay.OneOf several) {
                 several.alternatives().forEach(one -> told(one, into));

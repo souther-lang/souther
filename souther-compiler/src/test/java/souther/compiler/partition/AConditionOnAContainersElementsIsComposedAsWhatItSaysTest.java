@@ -201,7 +201,7 @@ class AConditionOnAContainersElementsIsComposedAsWhatItSaysTest {
                         rules().symbols(), rules().newtypes(),
                         new ConditionNumbering(module(), behavior,
                                 ConditionOccurrence.Reading.DIVIDING)),
-                reading, true, WhatConditionsState.of(reading));
+                reading, true, WhatConditionsState.of(reading)).entries();
         assertEquals(1, stated.size(), () -> "one condition: " + stated);
         return stated;
     }

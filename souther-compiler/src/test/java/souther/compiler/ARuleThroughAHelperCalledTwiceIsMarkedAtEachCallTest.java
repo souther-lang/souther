@@ -157,6 +157,43 @@ class ARuleThroughAHelperCalledTwiceIsMarkedAtEachCallTest {
                 + " different ways, which is what one mark per call has to settle");
     }
 
+    /**
+     * A joined condition whose halves stand in two calls of a helper, over what an operation of
+     * the language answers. No run through either comparison is recorded where it stands, so the
+     * rule is seen at the body's own fork, which is no call — and what it states is read off both
+     * calls.
+     */
+    private static final String JOINED = """
+            module example.joined
+
+            data Line = { a: Int, b: Int }
+
+            behavior f : (xs: List<Line>, ys: List<Line>) -> Int
+
+            let ok (zs: List<Line>): Bool = List.sum(List.map(x -> x.a, zs)) > 0
+
+            let f (xs, ys) = if ok(xs) && ok(ys) then 1 else 2
+            """;
+
+    @Test
+    void aRuleSeenAtNoCallIsMarkedAtTheCallsWhatItStatesWasReadOff() {
+        Compilation compilation = Compilation.ofSource(JOINED, "Main");
+        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
+        compilation.answerEverything();
+        boolean both = false;
+        for (Located each : compilation.warnings()) {
+            Set<DiagnosticPlace> places = new HashSet<>();
+            for (LabeledRegion label : each.diagnostic().secondary()) {
+                if (label.said() instanceof ExampleMessage.TheRuleGoesThroughThisCall(var called)
+                        && called.equals("ok")) {
+                    places.add(label.place());
+                }
+            }
+            both |= places.size() == 2;
+        }
+        assertTrue(both, "a rule through both halves marks the call each half stands in");
+    }
+
     private static String called(LabeledRegion label) {
         return switch (label.said()) {
             case ExampleMessage.TheRuleTakesItHoldingInThisCall(var called) -> called;
