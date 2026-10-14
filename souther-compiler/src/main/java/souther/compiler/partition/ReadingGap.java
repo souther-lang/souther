@@ -157,6 +157,9 @@ public sealed interface ReadingGap {
             /** A part of it would be read once for more applications than a reading makes. */
             MORE_READINGS_THAN_ARE_MADE,
 
+            /** A part of it is about a container holding more than a walk writes out. */
+            MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT,
+
             /** It is no value the row writes: what a dependency answered, a case nothing here
              *  puts to a row, or an element of a container made of the input's in another order
              *  or of other elements. */
@@ -169,19 +172,27 @@ public sealed interface ReadingGap {
             }
         }
 
-        /** A part declined at how many readings are made is one a run allowing more may read. */
+        /** A part declined at how many readings are made, or at how far a container is written
+         *  out, is one a run allowing more may read. */
         @Override
         public RunSensitivity runSensitivity() {
-            return why == Why.MORE_READINGS_THAN_ARE_MADE ? RunSensitivity.MAY_CHANGE
-                    : RunSensitivity.UNAFFECTED;
+            return switch (why) {
+                case MORE_READINGS_THAN_ARE_MADE, MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT ->
+                        RunSensitivity.MAY_CHANGE;
+                case A_PART_NOT_READ, NO_VALUE_OF_THE_ROW -> RunSensitivity.UNAFFECTED;
+            };
         }
 
         /** Why a statement whose reading stopped at {@code unread} could not be read off a row, or
          *  that it is no value of one where nothing in it stopped. */
         public static ReachNotRead of(WhyUnread unread) {
-            return new ReachNotRead(unread == null ? Why.NO_VALUE_OF_THE_ROW
-                    : unread instanceof WhyUnread.MoreReadingsThanAreMade
-                            ? Why.MORE_READINGS_THAN_ARE_MADE : Why.A_PART_NOT_READ);
+            return new ReachNotRead(switch (unread) {
+                case null -> Why.NO_VALUE_OF_THE_ROW;
+                case WhyUnread.MoreReadingsThanAreMade _ -> Why.MORE_READINGS_THAN_ARE_MADE;
+                case WhyUnread.MoreElementsThanAreWrittenOut _ ->
+                        Why.MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT;
+                default -> Why.A_PART_NOT_READ;
+            });
         }
     }
 

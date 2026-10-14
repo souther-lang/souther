@@ -173,10 +173,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         table.put("RelationNotShownToReachEveryValue",
                 "RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE/UNAFFECTED");
         // What the rule states was taken apart, and the reason no line came of it is read off that
-        // meaning. A part declined at how many readings are made is one a run allowed more may
-        // read; every other part not read, a number no position holds and a statement of which
-        // case, truth or value stands here are met again.
+        // meaning. A part declined at how many readings are made, or at how far a container is
+        // written out, is one a run allowed more may read; every other part not read, a number no
+        // position holds and a statement of which case, truth or value stands here are met again.
         table.put("WhatItStatesIsNoLine:MORE_READINGS_THAN_ARE_MADE",
+                "RULE_MEANING_NOT_READ/MAY_CHANGE");
+        table.put("WhatItStatesIsNoLine:MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT",
                 "RULE_MEANING_NOT_READ/MAY_CHANGE");
         table.put("WhatItStatesIsNoLine:A_PART_NOT_READ", "RULE_MEANING_NOT_READ/UNAFFECTED");
         table.put("WhatItStatesIsNoLine:A_NUMBER_NO_POSITION_HOLDS",

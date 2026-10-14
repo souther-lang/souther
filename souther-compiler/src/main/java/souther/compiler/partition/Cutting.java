@@ -825,7 +825,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *
      * <p>A part the place words is asked first: where one is in the statement, an author is sent to
      * it before a step this compiler has not taken beside it. Then a part declined at how many
-     * readings are made, since a run allowed more may read it, and then any other part.
+     * readings are made, and one declined at how far a container is written out, since a run
+     * allowed more may read either, and then any other part.
      */
     static BlockReason.WhatItStatesIsNoLine whatItStates(Proposition stated,
                                                          List<WhyUnread> stops) {
@@ -835,6 +836,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (stops.stream().anyMatch(WhyUnread.MoreReadingsThanAreMade.class::isInstance)) {
             return new BlockReason.WhatItStatesIsNoLine(
                     BlockReason.WhatItStatesIsNoLine.Why.MORE_READINGS_THAN_ARE_MADE);
+        }
+        if (stops.stream().anyMatch(WhyUnread.MoreElementsThanAreWrittenOut.class::isInstance)) {
+            return new BlockReason.WhatItStatesIsNoLine(
+                    BlockReason.WhatItStatesIsNoLine.Why.MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT);
         }
         if (!stops.isEmpty()) {
             return new BlockReason.WhatItStatesIsNoLine(
@@ -868,7 +873,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  WhyUnread.ANumberOfWhatAnOperationAnswers _,
                  WhyUnread.WhatARecursiveHelperAnswers _, WhyUnread.AtNoPosition _,
                  WhyUnread.NoMeasureOfItsSize _ -> true;
-            case WhyUnread.MoreReadingsThanAreMade _, WhyUnread.ANumberNotHeld _,
+            case WhyUnread.MoreReadingsThanAreMade _, WhyUnread.MoreElementsThanAreWrittenOut _,
+                 WhyUnread.SeveralValuesNotGoneInto _, WhyUnread.ANumberNotHeld _,
                  WhyUnread.AClauseOfAnInvariant _, WhyUnread.AnInvariantNotReached _,
                  WhyUnread.InACalledBody _, WhyUnread.CopiesStateDifferentThings _,
                  WhyUnread.NotMetByTheReading _ -> false;

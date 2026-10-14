@@ -249,11 +249,12 @@ public sealed interface BlockReason {
                 case SeveralLinesInOneRule _ -> 15;
                 case WhatItStatesIsNoLine(WhatItStatesIsNoLine.Why why) -> switch (why) {
                     case MORE_READINGS_THAN_ARE_MADE -> 16;
-                    case A_PART_NOT_READ -> 17;
-                    case A_NUMBER_NO_POSITION_HOLDS -> 18;
-                    case NO_RELATION_OF_NUMBERS -> 19;
+                    case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> 17;
+                    case A_PART_NOT_READ -> 18;
+                    case A_NUMBER_NO_POSITION_HOLDS -> 19;
+                    case NO_RELATION_OF_NUMBERS -> 20;
                 };
-                case RelationNotShownToReachEveryValue _ -> 20;
+                case RelationNotShownToReachEveryValue _ -> 21;
             };
         }
 
@@ -313,10 +314,14 @@ public sealed interface BlockReason {
                 // more of either need not stop at the same rule.
                 case PatternTooCostly _, OrderedExtentTooCostly _ -> RunSensitivity.MAY_CHANGE;
                 // And the readings of what a statement means, which stop at a figure only where
-                // they were declined at how many of them are made.
-                case WhatItStatesIsNoLine(var why) ->
-                        why == WhatItStatesIsNoLine.Why.MORE_READINGS_THAN_ARE_MADE
-                                ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
+                // they were declined at how many of them are made or how far a container they
+                // read is written out.
+                case WhatItStatesIsNoLine(var why) -> switch (why) {
+                    case MORE_READINGS_THAN_ARE_MADE, MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT ->
+                            RunSensitivity.MAY_CHANGE;
+                    case A_PART_NOT_READ, A_NUMBER_NO_POSITION_HOLDS, NO_RELATION_OF_NUMBERS ->
+                            RunSensitivity.UNAFFECTED;
+                };
                 // And every other, where nothing was compared against anything. A form nothing
                 // takes apart, values no line can be drawn on, a rule about a value made from this
                 // one, a rule about an element of one of several containers, a relation between two
@@ -986,6 +991,10 @@ public sealed interface BlockReason {
             /** A part read once for each application or case more times than the reading makes:
              *  a figure of this compiler's work was reached. */
             MORE_READINGS_THAN_ARE_MADE,
+
+            /** A part about a container holding more than a walk writes out: a figure of this
+             *  compiler's work was reached, and not the one above. */
+            MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT,
 
             /** Some other part of what it states was not read. */
             A_PART_NOT_READ,

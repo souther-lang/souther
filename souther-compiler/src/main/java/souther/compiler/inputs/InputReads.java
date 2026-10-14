@@ -25,6 +25,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -179,10 +180,38 @@ public final class InputReads {
             return null;
         }
 
-        /** {@code more}, newest first, over this. */
+        /**
+         * {@code more}, newest first, over this.
+         *
+         * <p>Without what of this {@code more} takes as well. {@link #of} reads the newest first, so
+         * a node {@code more} takes is answered from {@code more} wherever it stands below; kept, it
+         * would be one taking more for every value carried from a reading that was on it already,
+         * and a chain carried down a run of choices would double at each of them.
+         */
         Taken under(Taken more) {
-            return more == null ? this
-                    : new Taken(more.node, more.as, more.older == null ? this : under(more.older));
+            if (more == null) {
+                return this;
+            }
+            Set<Core> newer = Collections.newSetFromMap(new IdentityHashMap<>());
+            for (Taken at = more; at != null; at = at.older) {
+                newer.add(at.node);
+            }
+            return more.over(without(newer));
+        }
+
+        /** This, with what takes one of {@code nodes} left out; null where nothing is left. */
+        private Taken without(Set<Core> nodes) {
+            Taken older = this.older == null ? null : this.older.without(nodes);
+            if (nodes.contains(node)) {
+                return older;
+            }
+            return older == this.older ? this : new Taken(node, as, older);
+        }
+
+        /** This, newest first, over {@code base}. */
+        private Taken over(Taken base) {
+            return base == null ? this
+                    : new Taken(node, as, older == null ? base : older.over(base));
         }
 
         @Override
@@ -527,7 +556,7 @@ public final class InputReads {
                     return new Applications.NoneMade();
                 }
                 case ReadMeaning.MoreThanAreWrittenOut _ -> {
-                    return new Applications.MoreThanAreRead();
+                    return new Applications.PastWhatIsWrittenOut();
                 }
                 case ReadMeaning.Position _, ReadMeaning.Through _, ReadMeaning.Element _,
                      ReadMeaning.Unknown _ -> { }
@@ -648,7 +677,7 @@ public final class InputReads {
         }
         return applied.taken() == null
                 || !(applied.taken().of(Core.withoutStanding(e)) instanceof TakenAs.AValue(var as))
-                ? null : as;
+                ? null : carryingWhatIsTaken(as);
     }
 
     /**
@@ -873,6 +902,15 @@ public final class InputReads {
         /** More applications than a condition is read on, counting the ones this reading is
          *  already one of. */
         record MoreThanAreRead() implements Applications {}
+
+        /**
+         * A parameter is handed the elements of a container holding more than a walk writes out
+         * ({@link ReadMeaning.MoreThanAreWrittenOut}), so the applications are not counted at all.
+         *
+         * <p>Beside {@link MoreThanAreRead} and not folded into it: the two stop at two figures,
+         * and a reader told which is told the one that was reached.
+         */
+        record PastWhatIsWrittenOut() implements Applications {}
     }
 
     /** Whether {@code e} reads a binding it does not make itself. */

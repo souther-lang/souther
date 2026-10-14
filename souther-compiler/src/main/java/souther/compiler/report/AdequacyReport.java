@@ -4253,6 +4253,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         case A_PART_NOT_READ -> "a part of the way that was not read";
                         case MORE_READINGS_THAN_ARE_MADE -> "a part of the way reading which took"
                                 + " more readings than are made";
+                        case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> "a part of the way about a"
+                                + " container holding more than is written out";
                         case NO_VALUE_OF_THE_ROW -> "something the row does not write";
                     };
             // The values were there, so nothing is said about the row: what stopped is the number
@@ -4900,6 +4902,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // Its own words: nothing the author wrote is wanting, and raising a figure lifts it.
             case WhyUnread.MoreReadingsThanAreMade _ -> "a condition that would be read once for each"
                     + " of more values or cases than this compiler reads one by one";
+            case WhyUnread.MoreElementsThanAreWrittenOut _ -> "a condition about a container"
+                    + " holding more than this compiler writes out one element at a time";
+            // Not a figure: nothing was counted, and the reading did not go in.
+            case WhyUnread.SeveralValuesNotGoneInto _ -> "a condition over a value that is one of"
+                    + " several, which this reading did not read on each of them";
             case WhyUnread.CopiesStateDifferentThings _ -> "a condition of a helper that states"
                     + " different things where the helper is written";
             case WhyUnread.NotMetByTheReading _ -> "a condition the reading of what conditions"
@@ -5530,6 +5537,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         case AN_ANSWER_NOT_READ -> "called_body_not_read";
                     };
                     case WhyUnread.MoreReadingsThanAreMade _ -> "more_readings_than_are_made";
+                    case WhyUnread.MoreElementsThanAreWrittenOut _ ->
+                            "more_elements_than_are_written_out";
+                    case WhyUnread.SeveralValuesNotGoneInto _ -> "several_values_not_gone_into";
                     case WhyUnread.CopiesStateDifferentThings _ ->
                             "copies_state_different_things";
                     case WhyUnread.NotMetByTheReading _ -> "not_met_by_the_reading";

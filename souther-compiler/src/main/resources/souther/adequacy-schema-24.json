@@ -2739,6 +2739,8 @@
                   "called_body_reaches_itself",
                   "called_body_not_read",
                   "more_readings_than_are_made",
+                  "more_elements_than_are_written_out",
+                  "several_values_not_gone_into",
                   "copies_state_different_things",
                   "not_met_by_the_reading"
                 ]
