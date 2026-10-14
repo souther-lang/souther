@@ -257,7 +257,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "Witnesses$Placed;",
                     THE_POSITION),
             row(PARTITION + "Witnesses", "varied",
-                    "(" + TYPE + "I" + CONTEXT + ")" + PROPOSALS,
+                    "(" + TYPE + CONTEXT + ")Ljava/util/function/IntFunction;",
                     THE_POSITION));
 
     private static String row(String owner, String name, String descriptor, String way) {

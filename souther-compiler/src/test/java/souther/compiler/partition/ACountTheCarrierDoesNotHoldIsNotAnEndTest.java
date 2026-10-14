@@ -163,13 +163,13 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         // What the type wraps still stands for it — a candidate is a proposal the decoder answers,
         // and this one is refused there. What is gone is the value from inside the range, which is
         // where a count past the calendar was being written from.
-        assertEquals(List.of("PastMoment(DateTime(\"2000-01-01T00:00:00\"))"), representatives("""
+        assertEquals(List.of("PastMoment(DateTime(\"1970-01-01T00:00:00\"))"), representatives("""
                 module example.pastmoment
 
                 data PastMoment = DateTime
                     invariant value > DateTime("+999999999-12-31T23:59:59.999999999")
                 """, "PastMoment"));
-        assertEquals(List.of("BeforeMoment(DateTime(\"2000-01-01T00:00:00\"))"), representatives("""
+        assertEquals(List.of("BeforeMoment(DateTime(\"1970-01-01T00:00:00\"))"), representatives("""
                 module example.beforemoment
 
                 data BeforeMoment = DateTime
@@ -182,7 +182,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
     @Test
     void aRuleInsideTheCalendarStillOffersAValueFromInsideIt() {
         assertEquals(List.of("Ordinary(DateTime(\"2026-01-01T00:00:00\"))",
-                        "Ordinary(DateTime(\"2000-01-01T00:00:00\"))"),
+                        "Ordinary(DateTime(\"1970-01-01T00:00:00\"))"),
                 representatives("""
                         module example.ordinary
 

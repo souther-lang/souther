@@ -343,7 +343,7 @@ class CompileExampleGenerateTest {
                     | (Request { on = Date("2026-08-03"), flag = Yes }) -> Ok { n = 0 }
                 """;
 
-        assertEquals(List.of("Request { on = Date(\"2000-01-01\"), flag = No }"),
+        assertEquals(List.of("Request { on = Date(\"1970-01-01\"), flag = No }"),
                 inputs(generated(dated).get("take").composed()));
     }
 

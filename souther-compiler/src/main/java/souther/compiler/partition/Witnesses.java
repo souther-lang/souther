@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingContext;
-import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.ElementsApart;
 import souther.compiler.check.FieldDomains;
@@ -32,6 +31,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.IntFunction;
 import java.util.function.Supplier;
 
 /**
@@ -1054,7 +1054,7 @@ final class Witnesses {
      * string stepped by a character is a value of the carrier and not of the type: what the carrier
      * answers is how many characters, and a type whose rule says which of them gets a string it
      * refuses at every element after the first. The rules are what tell the values apart there, the
-     * same as a range does for a number ({@link Partitions#numberInside}).
+     * same as a range does for a number ({@link Partitions#valuesInside}).
      *
      * <p>Then, for a type with no carrier to step, values that differ in what they hold: a record at
      * one of its fields and a collection in how many it holds ({@link #differing}). A list kept
@@ -1097,8 +1097,9 @@ final class Witnesses {
             }
             out.add(each);
         }
+        IntFunction<Proposals> stepped = varied(type, reading);
         for (int i = 0; out.size() < many; i++) {
-            Proposals each = varied(type, i, reading);
+            Proposals each = stepped.apply(i);
             out.addAll(each, many);
             if (each.isEmpty()) {
                 break;
@@ -1737,40 +1738,40 @@ final class Witnesses {
     }
 
     /**
-     * The {@code index}th value of {@code type} made by stepping its carrier, or nothing where the
-     * carrier has no order to step — or where the step is a string longer than a proposal holds,
+     * The values of {@code type} made by stepping its carrier, by index: nothing at an index where
+     * the carrier has no order to step — or where the step is a string longer than a proposal holds,
      * which meets that figure.
      *
-     * <p>A string grows by a character from the length its rules ask for, and a whole number steps
-     * through the range they leave. Which characters is a question the carrier has no answer to, so
-     * a type whose rules say which of them is answered before this is reached
+     * <p>A string grows by a character from the length its rules ask for, and every other value steps
+     * through the range they leave on the order it is compared on ({@link Partitions#valuesInside}) —
+     * a whole number by one, a date by a day. Which characters is a question the carrier has no
+     * answer to, so a type whose rules say which of them is answered before this is reached
      * ({@link Partitions#admittedStrings}) and what is left here is the length.
      *
-     * <p>A date or a record has no such step that keeps every rule the
-     * position carries, and inventing one would put a value in a row the type's own chooser had reason
-     * not to offer — which is what the values a type divides into are for, above.
+     * <p>Which order a value is on is the reading's, and nothing here decides it again. A record has
+     * none, which is what the values a type divides into are for, above.
+     *
+     * <p>The position is read once and each index is a step from what was read, since a caller asks
+     * for every index up to how many it is filling and nothing read depends on which.
      */
-    private static Proposals varied(Type type, int index, RuleReadingContext reading) {
+    private static IntFunction<Proposals> varied(Type type, RuleReadingContext reading) {
         RuleReadingSource ruleSource = reading.source();
         TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
         if (view.shape() instanceof Shape.Scalar scalar && scalar.prim() == Type.Prim.STRING) {
             // The floor asked first, so that a floor past the figure is not added to.
             int least = Math.max(1, Partitions.leastHeld(view, reading));
-            CompositionBudget past = pastTheCharacters(least) != null
-                    ? pastTheCharacters(least) : pastTheCharacters(least + index);
-            return past != null ? Proposals.stoppedBy(past) : Proposals.ofNullable(WornNames.under(
-                    view.wrappers(), FixtureTemplate.string("x".repeat(least + index)),
-                    ruleSource));
+            CompositionBudget atTheFloor = pastTheCharacters(least);
+            return index -> {
+                CompositionBudget past = atTheFloor != null
+                        ? atTheFloor : pastTheCharacters(least + index);
+                return past != null ? Proposals.stoppedBy(past)
+                        : Proposals.ofNullable(WornNames.under(view.wrappers(),
+                                FixtureTemplate.string("x".repeat(least + index)), ruleSource));
+            };
         }
-        Place at = Partitions.numberInside(view, reading, index);
-        if (at == null) {
-            return Proposals.NONE;
-        }
-        Carrier carrier = view.shape() instanceof Shape.Scalar scalar
-                && scalar.prim() == Type.Prim.DECIMAL ? Carrier.DENSE : Carrier.WHOLE;
-        return Proposals.ofNullable(WornNames.under(view.wrappers(), FixtureTemplate.on(
-                carrier, at, ruleSource.symbols().scope()::reach), ruleSource));
+        IntFunction<FixtureTemplate> inside = Partitions.valuesInside(view, reading);
+        return index -> Proposals.ofNullable(inside.apply(index));
     }
 
     private Witnesses() {}

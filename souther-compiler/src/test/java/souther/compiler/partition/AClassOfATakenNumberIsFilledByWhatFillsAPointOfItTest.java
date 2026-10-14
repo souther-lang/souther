@@ -96,18 +96,19 @@ class AClassOfATakenNumberIsFilledByWhatFillsAPointOfItTest {
             }
             """;
 
-    /** A class of counts of dates, which this compiler tries a few of and gives up on: it offers
-     *  one date for an element and steps nothing from it, so no set of three is built. */
+    /** A class of counts of whole numbers, which this compiler tries a few of and gives up on: it
+     *  builds no collection larger than how many elements a proposed one holds, and every count
+     *  the class admits is past that. */
     private static final String MORE_THAN_IT_HOLDS = """
             module example.taken
 
-            behavior h : (s: Set<Date>) -> Bool
+            behavior h : (s: Set<Int>) -> Bool
             let h (s) = {
-                guard Set.size(s) >= 3 else false
+                guard Set.size(s) >= %d else false
 
                 true
             }
-            """;
+            """.formatted(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum() + 1);
 
     /**
      * A class of the hour is offered a time standing in it.
