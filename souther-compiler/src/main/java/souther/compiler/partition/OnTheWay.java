@@ -236,6 +236,11 @@ public sealed interface OnTheWay {
         }
 
         @Override
+        public List<List<OnTheWay>> alternatives() {
+            return alternatives;
+        }
+
+        @Override
         public boolean ofSeveralWays() {
             return true;
         }
