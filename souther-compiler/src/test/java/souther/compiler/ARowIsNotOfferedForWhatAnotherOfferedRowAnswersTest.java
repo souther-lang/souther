@@ -107,15 +107,16 @@ class ARowIsNotOfferedForWhatAnotherOfferedRowAnswersTest {
                 OfferingRequest.overTheModule("example.shippingfee"));
         assertNotNull(offered, "the model under test compiles");
 
-        // Eight, of the eleven the searches composed. Three go, and the same three as before the
-        // combinations of two classes were asked for: two stand at the ends of the comparison's
-        // regions, where the rows composed at the declaration's line already stand, and the third
-        // is the only thing offering for a point nobody is asked about — a row is written at it
-        // already — while what it stands at besides, another offered row stands at too.
+        // Five, of the eight the searches composed. Three go: two stand at the ends of the
+        // comparison's regions, where the rows composed at the declaration's line already stand,
+        // and the third is the only thing offering for a point nobody is asked about — a row is
+        // written at it already — while what it stands at besides, another offered row stands at
+        // too.
         //
-        // The three that arrived with the combinations stay. Each is the only row in its
-        // combination: a row that sits in two classes at once is not one two rows apart make.
-        assertEquals(8, offered.count(),
+        // A premium order is answered without its total or its region being asked, so no
+        // combination of either with it is owed; each one an ordinary order is owed is sat in by a
+        // row that is offered, which the test below asks of every gap.
+        assertEquals(5, offered.count(),
                 "a row answering what another answers is not offered: " + composed.count()
                         + " composed, " + offered.count() + " offered");
     }
@@ -145,6 +146,8 @@ class ARowIsNotOfferedForWhatAnotherOfferedRowAnswersTest {
                         new ObligationIdentity.OfAClass(
                                 new souther.compiler.partition.ClassOfAPosition(
                                         missing.axis().at(), missing.name()));
+                case souther.compiler.query.About.ACombinationOfTwoClassesNoRowIsIn(var cell) ->
+                        cell;
                 default -> null;
             };
             if (item == null) {
@@ -213,7 +216,7 @@ class ARowIsNotOfferedForWhatAnotherOfferedRowAnswersTest {
                 OfferingRequest.overTheModule("example.shippingfee"), generated,
                 Adequacy.accountFor(compilation.db(), "example.shippingfee",
                         new GenerationScope.Module()));
-        assertEquals(11, composed.count(),
+        assertEquals(8, composed.count(),
                 "the searches compose one row per thing they are asked for");
         return composed;
     }

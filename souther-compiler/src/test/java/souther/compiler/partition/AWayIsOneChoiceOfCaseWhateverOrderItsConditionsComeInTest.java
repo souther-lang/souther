@@ -10,8 +10,10 @@ import souther.compiler.reading.Decision;
 import souther.compiler.reading.WayIn;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -67,21 +69,37 @@ class AWayIsOneChoiceOfCaseWhateverOrderItsConditionsComeInTest {
 
         PathReachability.Answers arrives =
                 c.db().ask(new Adequacy.PathReached("probe.order")).value().get("smallOnes");
-        Map<AxisId, BodyDistinction> asWritten = BodyDistinction.of(read, subject, arrives);
-        List<WayIn> turned = new ArrayList<>();
-        for (WayIn way : read.taken()) {
-            turned.add(new WayIn(lastFirst(way)));
-        }
-        Map<AxisId, BodyDistinction> turnedRound = BodyDistinction.of(new CoverageRead.Read(
-                read.interactions(), read.arms(), turned, read.restOfTheBlock(),
-                read.answersNothing()), subject, arrives);
+        BodyInputReading asWritten = BodyInputReading.of(read, subject, arrives);
+        Set<WayIn> turnedInPart = new LinkedHashSet<>();
+        List<WayIn> turned = turnedRound(read.taken(), read.saidInPart(), turnedInPart);
+        List<WayIn> answeredTurned =
+                turnedRound(read.answeredBy(), read.saidInPart(), turnedInPart);
+        BodyInputReading turnedRoundReading = BodyInputReading.of(new CoverageRead.Read(
+                read.interactions(), read.arms(), turned, answeredTurned, turnedInPart,
+                read.restOfTheBlock(), read.answersNothing()), subject, arrives);
+        Map<AxisId, BodyDistinction> turnedRound = turnedRoundReading.distinctions();
 
-        assertEquals(asWritten, turnedRound);
+        assertEquals(asWritten, turnedRoundReading);
         AxisId large = subject.axes().axes().stream()
                 .filter(each -> each.path().toString().equals("o.kind@Large.flag"))
                 .map(Axis::id).findFirst().orElseThrow();
         assertInstanceOf(BodyDistinction.Untouched.class, turnedRound.get(large),
                 () -> "no Large takes a way to the fork, in either order: " + turnedRound);
+    }
+
+    /** Each of {@code ways} with its decisions last first, and those of them {@code inPart} holds
+     *  added to {@code turnedInPart} as turned. */
+    private static List<WayIn> turnedRound(List<WayIn> ways, Set<WayIn> inPart,
+                                           Set<WayIn> turnedInPart) {
+        List<WayIn> out = new ArrayList<>();
+        for (WayIn way : ways) {
+            WayIn turned = new WayIn(lastFirst(way));
+            out.add(turned);
+            if (inPart.contains(way)) {
+                turnedInPart.add(turned);
+            }
+        }
+        return out;
     }
 
     /** The decisions of a way, last first. */

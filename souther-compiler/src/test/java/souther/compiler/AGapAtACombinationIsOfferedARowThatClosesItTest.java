@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
@@ -13,7 +14,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -31,7 +31,8 @@ class AGapAtACombinationIsOfferedARowThatClosesItTest {
 
     /**
      * Two positions the body tells apart, and no meeting between them: the answer is a
-     * construction, so the pair space is the criterion.
+     * construction, so the pair space is the criterion. The cost is asked under either kind, so
+     * each kind beside each side of the line is owed.
      */
     private static final String MODEL = """
             module example.round
@@ -53,7 +54,10 @@ class AGapAtACombinationIsOfferedARowThatClosesItTest {
                     guard request.cost.value <= 100 else Waiting { n = 1 }
                     Ok { n = 0 }
                 }
-                | Overseas -> Ok { n = 2 }
+                | Overseas -> {
+                    guard request.cost.value <= 100 else Waiting { n = 3 }
+                    Ok { n = 2 }
+                }
 
             example submit
                 | (Request { kind = Domestic, cost = Amount(50) })  -> Ok { n = 0 }
@@ -63,7 +67,7 @@ class AGapAtACombinationIsOfferedARowThatClosesItTest {
 
     /** The row the block offers for the one combination nothing is in, answered. */
     private static final String ANSWERED = """
-                | (Request { kind = Overseas, cost = Amount(101) }) -> Ok { n = 2 }
+                | (Request { kind = Overseas, cost = Amount(101) }) -> Waiting { n = 3 }
             """;
 
     /**
@@ -71,7 +75,7 @@ class AGapAtACombinationIsOfferedARowThatClosesItTest {
      *
      * <p>The three rows cover three of the four combinations; what is left is an overseas request
      * over the line. The block offers a row that sits in both classes, and the same model with that
-     * row answered raises nothing and is offered nothing.
+     * row answered raises nothing and is offered nothing for it.
      */
     @Test
     void aCombinationNoRowIsInIsRaisedOfferedAndThenGone() {
@@ -88,7 +92,11 @@ class AGapAtACombinationIsOfferedARowThatClosesItTest {
         Compilation after = measured(MODEL + ANSWERED);
         assertEquals(List.of(), gapsOf(after),
                 () -> "the row that was offered answers it: " + report(after));
-        assertFalse(block(after).contains("kind = Overseas"),
+        // Asked of what the offered rows answer and not of their text: the guard under each kind
+        // draws a line, and a row for a point of it may be an overseas one.
+        assertTrue(Adequacy.offeredFor(after.db(), OfferingRequest.overTheModule("example.round"))
+                        .answered().stream()
+                        .noneMatch(ObligationIdentity.OfAFallbackPairCell.class::isInstance),
                 () -> "and nothing is offered for it a second time: " + block(after));
     }
 

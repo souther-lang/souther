@@ -2588,7 +2588,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // arm is what makes the condition something to spell rather than something to inherit.
         // Under the criterion this behavior is held to, which is the model's answer and not this
         // page's: a behavior whose body brings decisions together is measured against those, and
-        // the product of its positions is a neighbouring technique it is not held to. Asked of the
+        // the pair space is a neighbouring technique it is not held to. Asked of the
         // evidence rather than worked out here, so that what is printed and what a build refuses
         // over are the same choice.
         //

@@ -1,13 +1,15 @@
 package souther.compiler.query;
 
+import souther.compiler.partition.ReadTogether;
+
 /**
  * Which criterion a behavior's combinations are measured against.
  *
  * <p>One, never both. A behavior whose body brings decisions together is held to those; one whose
  * decisions meet nowhere, and one with no body to read at all, is held to the pair space. The two
- * state different requirements — the first is what the model reads together, the second the product
- * of every two positions — so a report showing both would put two universes on one page, and a
- * reader would act on the one that is not the criterion.
+ * state different requirements — the first is the decisions that settle one value together, the
+ * second the classes of every two positions a run reads together — so a report showing both would
+ * put two universes on one page, and a reader would act on the one that is not the criterion.
  *
  * <p><b>Chosen by the model and never by how the measuring went.</b> The question is whether the
  * walk found a meeting, asked of {@link souther.compiler.partition.InteractionRequirements#any()}.
@@ -32,11 +34,12 @@ public sealed interface CombinationCriterion {
     }
 
     /**
-     * The two-class combinations of the behavior's positions, where its decisions meet nowhere.
+     * The two-class combinations of the behavior's positions some run reads together, where its
+     * decisions meet nowhere ({@link ReadTogether}).
      *
-     * <p>What the pair space has always counted, now as the criterion of the behaviors that have
-     * nothing better. An injected behavior is the clearest of them: it has no body, so there is
-     * nothing to read a meeting out of.
+     * <p>The criterion of the behaviors that have nothing better. An injected behavior is the
+     * clearest of them: it has no body, so there is nothing to read a meeting out of, nor which
+     * classes a run reads together, and every combination is owed.
      */
     record PairFallback(PartitionEvidence.PairSpace space) implements CombinationCriterion {
 

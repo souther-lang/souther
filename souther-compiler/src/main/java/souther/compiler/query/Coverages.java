@@ -31,6 +31,7 @@ import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BodyDistinction;
+import souther.compiler.partition.BodyInputReading;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.ClassCoexistence;
 import souther.compiler.partition.Criterion;
@@ -51,18 +52,21 @@ import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.PartitionClass;
 import souther.compiler.partition.Partitions;
 import souther.compiler.partition.QuantityKey;
+import souther.compiler.partition.ReadTogether;
 import souther.compiler.partition.InputClassifications;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.Reachability;
 import souther.compiler.partition.WayToTheBorder;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -273,7 +277,7 @@ final class Coverages {
     static PartitionEvidence of(souther.compiler.partition.MeasuredInput subject,
                                 souther.compiler.query.Adequacy.RowReading observed,
                                 souther.compiler.partition.AdequacyPolicy.OfTheMeasures budget,
-                                Map<AxisId, BodyDistinction> toldApart) {
+                                BodyInputReading body) {
         List<RowOutcome> rows = observed.rowsSeen();
         Partitions.Partitioning partitioning = subject.partitioning();
 
@@ -292,7 +296,7 @@ final class Coverages {
         for (Readings.AtPosition at : readings.positions()) {
             for (Readings.AxisReading reading : at.axes()) {
                 axes.add(coverageOf(at, reading, readings, partitioning, observed.rowsWereRead(),
-                        toldApartAt(toldApart, reading.axis())));
+                        toldApartAt(body.distinctions(), reading.axis())));
             }
         }
         // Each measure asked its own closure, and neither told from the length of what came back.
@@ -302,7 +306,7 @@ final class Coverages {
         return new PartitionEvidence(
                 PartitionDerivation.of(axes, partitioning.partitionClosure(),
                         partitioning.inputIsEmpty()),
-                pairsOf(subject.behavior(), readings, observed.rowsWereRead(), budget, toldApart),
+                pairsOf(subject.behavior(), readings, observed.rowsWereRead(), budget, body),
                 partitioning.undivided(), partitioning.rulesWithoutALine(), partitioning.blocked(),
                 // What the model asked and nothing answered, taken whole and not gathered as the
                 // axes are walked. The questions are the model's; whether a position could be
@@ -484,7 +488,7 @@ final class Coverages {
                                                       Readings readings, boolean asked,
                                                       souther.compiler.partition.AdequacyPolicy
                                                               .OfTheMeasures budget,
-                                                      Map<AxisId, BodyDistinction> toldApart) {
+                                                      BodyInputReading body) {
         // Every measure a row is placed at, which is the locations above flattened rather than a
         // list somebody gathered beside them. A pair is between two positions, so this question is
         // the one that reads across them.
@@ -507,12 +511,19 @@ final class Coverages {
         // BodyDistinction#makesCombinations}). A position nothing in the body is about answers the
         // same however the other one moves, so the product of it with anything asks for a row that
         // shows nothing the two rows apart do not.
+        //
+        // And of those, only the classes some run reads together ({@link ReadTogether}). Two
+        // positions read on ways no run takes both of are told apart by the body each, and a row
+        // combining them shows nothing the rows apart do not either.
         boolean[] combining = new boolean[axes.size()];
         for (int i = 0; i < axes.size(); i++) {
-            combining[i] = toldApartAt(toldApart, axes.get(i)).makesCombinations();
+            combining[i] = toldApartAt(body.distinctions(), axes.get(i)).makesCombinations();
         }
-        List<PartitionEvidence.PairSpace.AxisPair> space = new ArrayList<>();
+        // Listed while there are no more of them than this compilation counts off the rows, and
+        // counted past that: the number is exact either way, and a list nobody walks is not kept.
+        List<OwedBetween> owed = new ArrayList<>();
         ClassCoexistence among = ClassCoexistence.among(axes);
+        long total = 0;
         for (int i = 0; i < axes.size(); i++) {
             if (!combining[i]) {
                 continue;
@@ -521,16 +532,23 @@ final class Coverages {
                 if (!combining[j]) {
                     continue;
                 }
-                long between = combinationsOf(among, axes, i, j);
-                if (between > 0) {
-                    space.add(new PartitionEvidence.PairSpace.AxisPair(
-                            new PartitionEvidence.PairSpace.Between(
-                                    axes.get(i).id(), axes.get(j).id()), between));
+                OwedBetween between = owedBetween(among, body.together(), axes, i, j,
+                        budget.pairSpace() - total);
+                total += between.count();
+                if (between.count() > 0) {
+                    owed.add(between);
                 }
             }
         }
-        if (space.isEmpty()) {
+        if (owed.isEmpty()) {
             return PartitionEvidence.PairSpace.NONE;
+        }
+        boolean listed = total <= budget.pairSpace();
+        List<PartitionEvidence.PairSpace.AxisPair> space = new ArrayList<>();
+        for (OwedBetween each : owed) {
+            space.add(new PartitionEvidence.PairSpace.AxisPair(each.between(), listed
+                    ? new PartitionEvidence.PairSpace.Owed.Listed(List.copyOf(each.cells()))
+                    : new PartitionEvidence.PairSpace.Owed.Counted(each.count())));
         }
         // Before anything about the rows, because there are none to be about: a build that asked for
         // no measurement read no row, and what the model holds stays what the model says it is.
@@ -543,8 +561,7 @@ final class Coverages {
         if (readings.noRows() && !readings.someRowsUnseen()) {
             return PartitionEvidence.PairSpace.noRows(space);
         }
-        long total = space.stream().mapToLong(PartitionEvidence.PairSpace.AxisPair::total).sum();
-        if (total > budget.pairSpace()) {
+        if (!listed) {
             return PartitionEvidence.PairSpace.truncated(behavior, space, total,
                     budget.pairSpace());
         }
@@ -557,16 +574,9 @@ final class Coverages {
         // does not turn on the row, and made inside the walk over the rows it is a name built and
         // thrown away for every row the behavior has.
         Map<Long, ReachedBetween> byPositions = new LinkedHashMap<>();
-        for (int i = 0; i < axes.size(); i++) {
-            for (int j = i + 1; j < axes.size(); j++) {
-                PartitionEvidence.PairSpace.Between relation =
-                        new PartitionEvidence.PairSpace.Between(axes.get(i).id(), axes.get(j).id());
-                Map<PartitionEvidence.PairSpace.Cell, RowWitnesses> here = reached.get(relation);
-                if (here != null) {
-                    byPositions.put((long) i * axes.size() + j,
-                            new ReachedBetween(relation, here));
-                }
-            }
+        for (OwedBetween each : owed) {
+            byPositions.put((long) each.one() * axes.size() + each.other(), new ReachedBetween(
+                    each.between(), each.cells(), reached.get(each.between())));
         }
         for (Readings.WhereARowSat where : readings.byRow()) {
             for (int i = 0; i < axes.size(); i++) {
@@ -585,10 +595,14 @@ final class Coverages {
                         // Which classes, within the relation that holds them. The relation is the
                         // key above and a class id is unique within its axis, so what is written
                         // here needs to tell two combinations of these two positions apart and no
-                        // more.
-                        at.cells().merge(new PartitionEvidence.PairSpace.Cell(
-                                at.between(), pair.getKey(), pair.getValue()), where.by(),
-                                RowWitnesses::and);
+                        // more. Counted only where it is owed: a row in a combination no run
+                        // reads together reached nothing anybody asked for.
+                        PartitionEvidence.PairSpace.Cell cell =
+                                new PartitionEvidence.PairSpace.Cell(
+                                        at.between(), pair.getKey(), pair.getValue());
+                        if (at.owed().contains(cell)) {
+                            at.cells().merge(cell, where.by(), RowWitnesses::and);
+                        }
                     }
                 }
             }
@@ -617,91 +631,73 @@ final class Coverages {
     }
 
     /**
-     * How many combinations two positions' classes make between them.
+     * The combinations two positions' classes owe a row for: those some run reads together, of
+     * classes that can be in one value.
      *
-     * <p>The product where the two are in one value, and less where they are not. Which two classes
-     * can be in one value is {@link ClassCoexistence}'s answer, and the same answer is what decides
-     * which combinations are left ({@link #uncovered}) — so what is counted here and what a row is
-     * asked for come from one reading rather than from two that agree until a case is added.
+     * <p>Which two classes can be in one value is {@link ClassCoexistence}'s answer and which a run
+     * reads together is {@link ReadTogether}'s, both asked here once. The list made here is what
+     * the space holds, and the count, what the rows reached and what is left are all read off it —
+     * so what is counted and what a row is asked for come from one reading rather than from two
+     * that agree until a case is added.
+     *
+     * @param room how many may be listed; past that they are counted and not listed
      */
-    private static long combinationsOf(ClassCoexistence among, List<Axis> axes, int one,
-                                       int other) {
+    private static OwedBetween owedBetween(ClassCoexistence among, ReadTogether together,
+                                           List<Axis> axes, int one, int other, long room) {
+        Axis ones = axes.get(one);
+        Axis others = axes.get(other);
+        PartitionEvidence.PairSpace.Between between =
+                new PartitionEvidence.PairSpace.Between(ones.id(), others.id());
+        SequencedSet<PartitionEvidence.PairSpace.Cell> cells = new LinkedHashSet<>();
+        List<String> oneClasses = ones.classes().stream().map(PartitionClass::id).toList();
+        List<String> otherClasses = others.classes().stream().map(PartitionClass::id).toList();
+        // A class of the first at a time, so that what is made to answer is one row of the
+        // combinations and not all of them.
+        ReadTogether.Between read = together.between(ones.id(), oneClasses, others.id(),
+                otherClasses);
         long count = 0;
-        for (int here = 0; here < axes.get(one).classes().size(); here++) {
-            for (int there = 0; there < axes.get(other).classes().size(); there++) {
-                if (among.canHoldTogether(one, here, other, there)) {
-                    count++;
-                }
-            }
-        }
-        return count;
-    }
-
-    /**
-     * One relation of two positions, beside the combinations of it the rows have reached.
-     *
-     * <p>The two together because the walk over the rows wants both at once, and which relation a
-     * position and the one beside it make does not turn on the row. Looked up separately, the
-     * relation is fetched again for every combination every row is in.
-     */
-    private record ReachedBetween(PartitionEvidence.PairSpace.Between between,
-                                  Map<PartitionEvidence.PairSpace.Cell, RowWitnesses> cells) {
-    }
-
-    /**
-     * The combinations of a behavior's pair space no row is in, made where somebody asks for them.
-     *
-     * <p>Here rather than on the measure, and made rather than held. The space is as large as the
-     * positions make it and what is worth carrying about it is two numbers and the combinations the
-     * rows reached; which ones are left is wanted where something acts on them, and is worked out
-     * from the positions — which are the model's and are not part of an answer about the rows.
-     *
-     * <p>Combinations a value can be in only, asked the way the count is asked. A class of a
-     * position under one case of a sum and a class of a position under another are in no one value,
-     * and neither are a class of an element's field and a count of its list that admits no element,
-     * so they make no combination and nothing is owed at them.
-     *
-     * <p>Empty where no count was made. A combination nothing was read about is not one no row is
-     * in, and a list of the whole space would be read as a list of gaps.
-     */
-    static List<souther.compiler.partition.ObligationIdentity.OfAFallbackPairCell> uncovered(
-            String behavior, souther.compiler.partition.MeasuredInput.MeasuredAxes axes,
-            PartitionEvidence.PairSpace pairs) {
-        if (pairs.counted().made().isEmpty()) {
-            return List.of();
-        }
-        PartitionEvidence.PairSpace.CoveredBetween made = pairs.counted().made().orElseThrow();
-        List<souther.compiler.partition.ObligationIdentity.OfAFallbackPairCell> out =
-                new ArrayList<>();
-        List<Axis> ordered = axes.axes();
-        ClassCoexistence among = ClassCoexistence.among(ordered);
-        for (int i = 0; i < ordered.size(); i++) {
-            for (int j = i + 1; j < ordered.size(); j++) {
-                PartitionEvidence.PairSpace.Between between =
-                        new PartitionEvidence.PairSpace.Between(
-                                ordered.get(i).id(), ordered.get(j).id());
-                if (!made.byPair().containsKey(between)) {
+        for (int here = 0; here < oneClasses.size(); here++) {
+            BitSet readWith = read.readWith(here);
+            for (int there = readWith.nextSetBit(0); there >= 0;
+                    there = readWith.nextSetBit(there + 1)) {
+                if (!among.canHoldTogether(one, here, other, there)) {
                     continue;
                 }
-                Set<PartitionEvidence.PairSpace.Cell> reached = made.reached(between);
-                List<PartitionClass> ones = ordered.get(i).classes();
-                List<PartitionClass> others = ordered.get(j).classes();
-                for (int here = 0; here < ones.size(); here++) {
-                    for (int there = 0; there < others.size(); there++) {
-                        if (!among.canHoldTogether(i, here, j, there)) {
-                            continue;
-                        }
-                        PartitionEvidence.PairSpace.Cell cell =
-                                new PartitionEvidence.PairSpace.Cell(between,
-                                        ones.get(here).id(), others.get(there).id());
-                        if (!reached.contains(cell)) {
-                            out.add(cell.owedBy(behavior));
-                        }
-                    }
+                String oneClass = oneClasses.get(here);
+                String otherClass = otherClasses.get(there);
+                count++;
+                if (count <= room) {
+                    cells.add(new PartitionEvidence.PairSpace.Cell(between, oneClass,
+                            otherClass));
                 }
             }
         }
-        return List.copyOf(out);
+        return new OwedBetween(one, other, between, count,
+                count <= room ? cells : new LinkedHashSet<>());
+    }
+
+    /**
+     * The combinations of one relation a row is owed for, and how many there are.
+     *
+     * @param one   which of the positions walked the relation's first is
+     * @param other which its second is
+     * @param cells each of them, where there are no more than could be listed; empty past that
+     */
+    private record OwedBetween(int one, int other, PartitionEvidence.PairSpace.Between between,
+                               long count, SequencedSet<PartitionEvidence.PairSpace.Cell> cells) {
+    }
+
+    /**
+     * One relation of two positions, beside the combinations of it owed and those the rows have
+     * reached.
+     *
+     * <p>Together because the walk over the rows wants them at once, and which relation a position
+     * and the one beside it make does not turn on the row. Looked up separately, the relation is
+     * fetched again for every combination every row is in.
+     */
+    private record ReachedBetween(PartitionEvidence.PairSpace.Between between,
+                                  Set<PartitionEvidence.PairSpace.Cell> owed,
+                                  Map<PartitionEvidence.PairSpace.Cell, RowWitnesses> cells) {
     }
 
     /**

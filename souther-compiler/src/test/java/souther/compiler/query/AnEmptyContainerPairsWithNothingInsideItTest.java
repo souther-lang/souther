@@ -100,7 +100,12 @@ class AnEmptyContainerPairsWithNothingInsideItTest {
         }
     }
 
-    /** A class holding a count of one holds a list with an element, so it is kept whole. */
+    /**
+     * A class holding a count of one holds a list with an element, so it is kept whole.
+     *
+     * <p>The elements are asked about first, so every run that asks the length has read them, and
+     * what is left to decide is only whether the classes can be in one value.
+     */
     @Test
     void aClassThatHoldsACountOfOneIsKept() {
         Measured few = measured("""
@@ -116,8 +121,8 @@ class AnEmptyContainerPairsWithNothingInsideItTest {
                     constructs Out
 
                 let few (c) = {
-                    guard length(c.items) <= 1 else Out(0)
                     guard all(i -> i.quantity >= 1, c.items) else Out(1)
+                    guard length(c.items) <= 1 else Out(0)
                     Out(2)
                 }
 
@@ -129,7 +134,12 @@ class AnEmptyContainerPairsWithNothingInsideItTest {
                 () -> "each class of the length holds a list with an element: " + few.dump());
     }
 
-    /** A position the list does not hold is there whether or not the list holds anything. */
+    /**
+     * A position the list does not hold is there whether or not the list holds anything.
+     *
+     * <p>Asked of a body that reads the note on either side of the count, so that every one of the
+     * four is a combination some run reads and what is asked is only whether a value holds it.
+     */
     @Test
     void aPositionOutsideTheListIsKept() {
         Measured noted = measured("""
@@ -144,11 +154,11 @@ class AnEmptyContainerPairsWithNothingInsideItTest {
                 behavior noted : (c: Cart) -> Out
                     constructs Out
 
-                let noted (c) = {
-                    guard length(c.items) >= 1 else Out(0)
-                    guard c.note >= 1 else Out(1)
-                    Out(2)
-                }
+                let noted (c) =
+                    if length(c.items) >= 1 then
+                        if c.note >= 1 then Out(2) else Out(1)
+                    else
+                        if c.note >= 1 then Out(3) else Out(0)
 
                 example noted
                     | (Cart { items = [Item { quantity = 1 }], note = 1 }) -> Out(2)
@@ -244,7 +254,7 @@ class AnEmptyContainerPairsWithNothingInsideItTest {
         }
 
         List<ObligationIdentity.OfAFallbackPairCell> owed() {
-            return Coverages.uncovered(behavior, subject.axes(), evidence.pairs());
+            return evidence.pairs().left(behavior);
         }
 
         List<String> pairGaps() {

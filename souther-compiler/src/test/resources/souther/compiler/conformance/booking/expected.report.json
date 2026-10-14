@@ -2632,11 +2632,11 @@
           } ]
         } ],
         "pairs" : {
-          "total" : 4,
+          "total" : 2,
           "between" : [ {
             "one" : "redeem/voucher",
             "other" : "redeem/party",
-            "total" : 4
+            "total" : 2
           } ],
           "status" : "unavailable",
           "reason" : "no_rows"
