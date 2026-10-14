@@ -72,19 +72,6 @@ class AStrictBuildRefusesRowsNoArmCanBeToldApartByTest {
                 report);
     }
 
-    /**
-     * A row generated for one of them is offered under the words the report says the arms in. Not
-     * the fork's place: a row's name stays in the source, where a coordinate would go stale, so
-     * rows for the same pair of arms at the two {@code if}s are offered under one name.
-     */
-    @Test
-    void aRowGeneratedForAGapIsNamedByTheArms() throws Exception {
-        String generated = run("--generate").out();
-
-        assertTrue(generated.contains("\"then answering as else\""),
-                "a row named for the arm and the arm it answers as: " + generated);
-    }
-
     private record Ran(int code, String out) {}
 
     /** {@code souther examples} over the model with {@code flag}, and what it printed. */

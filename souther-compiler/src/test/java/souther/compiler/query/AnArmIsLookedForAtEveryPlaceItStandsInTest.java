@@ -94,7 +94,7 @@ class AnArmIsLookedForAtEveryPlaceItStandsInTest {
      */
     private static boolean offersARowForTheHelpersArm(String model) {
         return blockOf(model).lines().anyMatch(line ->
-                line.equals("// fills case Off") || line.contains("\"case Off\""));
+                line.startsWith("// fills case Off (") || line.contains("\"case Off\""));
     }
 
     /** What the block says about the helper's arm where it offers no row for it. */
