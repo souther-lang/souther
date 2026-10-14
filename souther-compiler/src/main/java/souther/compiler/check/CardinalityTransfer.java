@@ -216,7 +216,14 @@ final class CardinalityTransfer {
                                OccurrenceValues values, RuleReadingSource source,
                                Answers answers, Supposing granted,
                                Set<TypeSymbol> worn) {
-        return new Walk(source, answers, granted, worn).at(type, path, counts, values);
+        // What the shape leaves, and no more than the rules name where they name a few. Both
+        // bound the same values whatever the shape is — a string held to two of them and an
+        // enumeration held to two of its cases each have two — so the narrower holds.
+        return switch (new Walk(source, answers, granted, worn).at(type, path, counts, values)) {
+            case Cardinality.None it -> it;
+            case Cardinality.Standing it ->
+                    Cardinality.Standing.narrower(it, values.namedValuesAt(path));
+        };
     }
 
     /**

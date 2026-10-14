@@ -10,7 +10,11 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.Value;
+import souther.compiler.values.ValueSet;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -66,7 +70,7 @@ final class ValuesOfAnElement {
      */
     static Listed of(Type type, TermPath at, RuleReadingContext reading, int most,
                      Function<TermPath, List<ObservedValue>> numbersAt) {
-        List<ObservedValue> out = valuesOf(type, at, reading.source(), most + 1, numbersAt,
+        List<ObservedValue> out = valuesOf(type, at, NO_RULE_HERE, reading, most + 1, numbersAt,
                 new HashSet<>());
         if (out == null) {
             return null;
@@ -75,32 +79,69 @@ final class ValuesOfAnElement {
                 : new Listed(out, true);
     }
 
+    /** What a place no rule is written about admits: every value, read in full. */
+    private static final AdmissibleSet NO_RULE_HERE = AdmissibleSet.complete(ValueSet.ANY);
+
     /**
      * Up to {@code most} values of {@code type} standing at {@code at}, or null where some part of
      * it is one nothing here chooses values of, or a type written in terms of itself.
      *
      * <p>None where there is no room for one: what holds this part has used its room up, and the
      * listing above it is the one that says it stopped.
+     *
+     * <p>Of what the place divides into under its rules ({@link PartitionClasses#casesAt}) — the
+     * truths, cases and named values the rules of the names it wears and of the record it is a
+     * field of leave — and not of every one its type has: a value the place's rules refuse is
+     * listed only to be refused where the container holding it is built.
+     *
+     * @param atThePlace which values the rules of the record this is a field of admit here
      */
-    private static List<ObservedValue> valuesOf(Type type, TermPath at, RuleReadingSource source,
-                                                int most,
+    private static List<ObservedValue> valuesOf(Type type, TermPath at, AdmissibleSet atThePlace,
+                                                RuleReadingContext reading, int most,
                                                 Function<TermPath, List<ObservedValue>> numbersAt,
                                                 Set<TypeSymbol> expanding) {
         if (most <= 0) {
             return List.of();
         }
+        RuleReadingSource source = reading.source();
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
+        List<Case> left = PartitionClasses.casesAt(view, atThePlace, reading);
         List<ObservedValue> bare = switch (view.shape()) {
-            case Shape.Scalar scalar -> scalar.prim() == Type.Prim.BOOL
-                    ? List.of(new ObservedValue.Bool(false), new ObservedValue.Bool(true))
-                    : numbersAt.apply(at);
+            // The truths or the named values the place is left, where every one of them can be
+            // written as a row reads it; otherwise what the statements part the values at.
+            case Shape.Scalar scalar when scalar.prim() == Type.Prim.BOOL -> {
+                List<ObservedValue> truths = new ArrayList<>();
+                for (boolean each : new boolean[] {false, true}) {
+                    if (left.contains(new Case.Truth(each))) {
+                        truths.add(new ObservedValue.Bool(each));
+                    }
+                }
+                yield truths;
+            }
+            case Shape.Scalar scalar -> {
+                List<ObservedValue> named = new ArrayList<>();
+                boolean whole = true;
+                for (Case each : left) {
+                    ObservedValue one = switch (each) {
+                        case Case.Truth truth -> new ObservedValue.Bool(truth.value());
+                        case Case.Named value -> observed(value.value(), scalar.prim());
+                        case Case.Presence _, Case.SumCase _ -> null;
+                    };
+                    if (one == null) {
+                        whole = false;
+                    } else {
+                        named.add(one);
+                    }
+                }
+                yield whole && !named.isEmpty() ? named : numbersAt.apply(at);
+            }
             case Shape.Unit unit -> List.of(new ObservedValue.Unit(unit.name()));
             case Shape.Product product -> {
                 if (!expanding.add(product.name())) {
                     yield null;
                 }
-                List<ObservedValue> made = recordsOf(product, at, source, most, numbersAt,
+                List<ObservedValue> made = recordsOf(product, at, reading, most, numbersAt,
                         expanding);
                 expanding.remove(product.name());
                 yield made;
@@ -109,13 +150,22 @@ final class ValuesOfAnElement {
             // of a field of the case is read.
             case Shape.Sum sum -> {
                 List<ObservedValue> made = new ArrayList<>();
+                Set<TypeSymbol> kept = new HashSet<>();
+                left.forEach(each -> {
+                    if (each instanceof Case.SumCase one) {
+                        kept.add(one.leaf());
+                    }
+                });
                 for (TypeSymbol each : sum.reaches().cases()) {
+                    if (!kept.contains(each)) {
+                        continue;
+                    }
                     boolean oneValue = TypeView.of(Type.ref(each), source.inners(),
                             source.symbols(), source.kinds(), source.sums()).shape()
                             instanceof Shape.Unit;
                     List<ObservedValue> ofTheCase = valuesOf(Type.ref(each),
-                            at.refine(Refinement.of(new Case.SumCase(each, oneValue))), source,
-                            most - made.size(), numbersAt, expanding);
+                            at.refine(Refinement.of(new Case.SumCase(each, oneValue))),
+                            NO_RULE_HERE, reading, most - made.size(), numbersAt, expanding);
                     if (ofTheCase == null) {
                         yield null;
                     }
@@ -128,9 +178,8 @@ final class ValuesOfAnElement {
             }
             case Shape.Optional optional -> {
                 List<ObservedValue> held = valuesOf(optional.element(),
-                        at.refine(Refinement.of(new Case.Presence(true))), source, most - 1,
-                        numbersAt,
-                        expanding);
+                        at.refine(Refinement.of(new Case.Presence(true))), NO_RULE_HERE, reading,
+                        most - 1, numbersAt, expanding);
                 if (held == null) {
                     yield null;
                 }
@@ -160,16 +209,19 @@ final class ValuesOfAnElement {
     }
 
     /** Up to {@code most} records of {@code product}: every field at each of its values, the
-     *  first field changing slowest. */
+     *  first field changing slowest, and each field at the values the record's rules leave it. */
     private static List<ObservedValue> recordsOf(Shape.Product product, TermPath at,
-                                                 RuleReadingSource source, int most,
+                                                 RuleReadingContext reading, int most,
                                                  Function<TermPath, List<ObservedValue>> numbersAt,
                                                  Set<TypeSymbol> expanding) {
         List<Map<String, ObservedValue>> made = new ArrayList<>();
         made.add(new LinkedHashMap<>());
         for (Map.Entry<String, Type> field : product.fields().entrySet()) {
+            // A record no module declared writes no rule, and leaves the field what its type does.
+            AdmissibleSet atTheField = product.name() instanceof TypeSymbol.AtModule record
+                    ? Partitions.admittedAt(record, field.getKey(), reading) : NO_RULE_HERE;
             List<ObservedValue> values = valuesOf(field.getValue(), at.then(field.getKey()),
-                    source, most, numbersAt, expanding);
+                    atTheField, reading, most, numbersAt, expanding);
             if (values == null) {
                 return null;
             }
@@ -192,4 +244,28 @@ final class ValuesOfAnElement {
         }
         return out;
     }
+
+    /**
+     * {@code value}, a value a rule named at a place of {@code prim}, as a row holding it reads —
+     * or null where this has no such reading of it: a carrier read as something other than its
+     * text, or a whole number past what a row holds one in.
+     */
+    private static ObservedValue observed(Value value, Type.Prim prim) {
+        return switch (value) {
+            case Value.Text text -> prim == Type.Prim.STRING
+                    ? new ObservedValue.Text(text.value()) : null;
+            case Value.Truth truth -> new ObservedValue.Bool(truth.value());
+            case Value.Number number -> switch (prim) {
+                case INT -> number.value().compareTo(LEAST) >= 0
+                        && number.value().compareTo(MOST) <= 0
+                        ? new ObservedValue.Integer(number.value().longValue()) : null;
+                case DECIMAL -> new ObservedValue.Decimal(number.value());
+                case BOOL, STRING, RATIONAL, DATE, TIME, DATETIME, INSTANT -> null;
+            };
+            case Value.Case one -> new ObservedValue.Unit(one.data());
+        };
+    }
+
+    private static final BigDecimal LEAST = BigDecimal.valueOf(Long.MIN_VALUE);
+    private static final BigDecimal MOST = BigDecimal.valueOf(Long.MAX_VALUE);
 }

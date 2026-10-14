@@ -943,6 +943,8 @@ public final class GeneratedRows {
                     switch (why) {
                         case NOTHING_HOLDS_A_ROW_TO_IT -> "nothing here can hold a row to it, so it"
                                 + " was not looked for — which does not make it a way no row goes";
+                        case THE_RULES_LEAVE_NO_VALUE_THAT_WAY -> "the rules leave no value that"
+                                + " way, so no row goes this way";
                         case IT_WOULD_REWRITE_A_STATED_VALUE -> "a row going this way would write"
                                 + " afresh a value the module states, which the row keeps as"
                                 + " written, so it was not looked for";

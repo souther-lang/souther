@@ -58,10 +58,35 @@ import java.util.function.Supplier;
  * @param cut     where the line is: what is cut, and where on it
  * @param origin  the rule that drew it, as this reading met it
  * @param answers one entry per point the line has, and no other
+ * @param leftNothing the sides of the line the rules leave no value on, where the rule orders the
+ *                    values and a side is where it comes out one way. Neither where none is shown
+ *                    to be, which is not a side shown to hold something — see
+ *                    {@link #theRulesLeaveNothingWhereItComesOut}
  */
-public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, PointAnswer> answers) {
+public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, PointAnswer> answers,
+                     Sides leftNothing) {
+
+    /**
+     * Which of the two sides of a line something holds of.
+     *
+     * <p>Two answers and not a set of sides: there are two, and each is asked by name.
+     */
+    public record Sides(boolean below, boolean above) {
+
+        /** Neither side. */
+        public static final Sides NEITHER = new Sides(false, false);
+
+        /** Whether it holds of {@code side}. */
+        public boolean of(Towards side) {
+            return side == Towards.ABOVE ? above : below;
+        }
+    }
 
     public Border {
+        if (leftNothing == null) {
+            throw new IllegalArgumentException("a border says which sides it knows hold nothing,"
+                    + " neither among them");
+        }
         if (answers == null || !answersEveryPoint(answers, pointsOf(origin))) {
             throw new IllegalArgumentException("a border that does not answer at every point its"
                     + " line has: "
@@ -165,6 +190,28 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      *  there. */
     public PointRole roleOf(DomainPoint point) {
         return PointRole.of(point, holdsAt(point, origin));
+    }
+
+    /**
+     * Whether the rules leave no value on the side of this line where its rule comes out
+     * {@code holding}, so that the comparison never comes out that way.
+     *
+     * <p>A proof read off where the rules leave off, and not off the points. Every point on a side
+     * can be refused while values lie further out: the run beside the line can be one the order
+     * holds nothing in, and the point against it can be outside the class of numbers the values
+     * are held to. The range the rules leave has no hole in its middle, so a side starting past
+     * its end holds nothing at all.
+     *
+     * <p>False wherever that was not shown, which is not a side shown to hold something.
+     */
+    public boolean theRulesLeaveNothingWhereItComesOut(boolean holding) {
+        for (Towards side : Towards.values()) {
+            DomainPoint region = new DomainPoint.InTheRegion(side);
+            if (answers.containsKey(region) && roleOf(region).inside() == holding) {
+                return leftNothing.of(side);
+            }
+        }
+        return false;
     }
 
     /**
@@ -598,18 +645,18 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // others already hold is a question about where the values part, and the arrangement is
         // what answers it — asked here as well, this reading kept whichever of two lines at one
         // place it met first and the other went unsaid.
+        DomainEnds ends = DomainEnds.leaving(space, cut, reach, narrowed);
         ExactAnswer<Arranged> arranged = parted.flatMap(others ->
                 partedBy(target, origin).map(mine -> {
                     List<Parting> all = new ArrayList<>(others);
                     all.addAll(mine);
-                    return new Arranged(QuantityArrangement.of(space, all,
-                            DomainEnds.leaving(space, cut, reach, narrowed)), mine);
+                    return new Arranged(QuantityArrangement.of(space, all, ends), mine);
                 }));
         Map<DomainPoint, PointAnswer> demands = new LinkedHashMap<>();
         if (drawnByAnInvariant(origin)) {
             aBound(demands, origin, target.of(), cut, space, admissible,
                     arranged.map(Arranged::arrangement));
-            return new Border(target, origin, demands);
+            return new Border(target, origin, demands, Sides.NEITHER);
         }
         againstTheLine(demands, origin, cut, space, admissible);
         // Each side runs from the point against the line on that side, where there is one, and from
@@ -633,7 +680,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                                 levelAgainstTheLineOn(demands, origin, side), side);
             });
         }
-        return new Border(target, origin, demands);
+        return new Border(target, origin, demands, leftNothing(space, cut, origin, ends));
     }
 
     /** The arrangement of every place the rules part a quantity, and the places this line's own
@@ -1417,6 +1464,24 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             case LineOrigin.NarrowedOrigin n -> drawnByAnInvariant(n.bound());
             case LineOrigin.ComparisonOrigin _, LineOrigin.EnsuresOrigin _ -> false;
         };
+    }
+
+    /**
+     * The sides of an ordering line the rules leave no value on, out of where they leave off.
+     *
+     * <p>Only a line that orders the values. A rule naming one leaves the value between two places
+     * and the rest on either side of them, so which values make it come out a way is not one side
+     * of anything, and nothing is claimed of it. A place that was not worked out claims nothing
+     * either: no side is known to be the one it looks like.
+     */
+    private static Sides leftNothing(LevelSpace space, Level cut, LineOrigin origin,
+                                     DomainEnds ends) {
+        if (!(origin.lineFacts().claim() instanceof ComparisonClaim.Cut)
+                || !(seamOf(space, cut, origin) instanceof ExactAnswer.Held<Seam>(Seam seam))) {
+            return Sides.NEITHER;
+        }
+        return new Sides(QuantityArrangement.nothingLeftBeyond(seam, Towards.BELOW, ends),
+                QuantityArrangement.nothingLeftBeyond(seam, Towards.ABOVE, ends));
     }
 
     /**

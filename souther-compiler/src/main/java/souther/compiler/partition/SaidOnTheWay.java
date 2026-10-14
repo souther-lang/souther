@@ -133,8 +133,28 @@ public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
 
     /** Both, as what put things on a way two ways of reaching one line or rule share. */
     public SaidOnTheWay and(SaidOnTheWay other) {
-        return new SaidOnTheWay(together(entries, other.entries), together(stated, other.stated),
-                together(unstated, other.unstated));
+        return allOf(List.of(this, other));
+    }
+
+    /**
+     * Every one of {@code ways}, as what put things on a way they all reach one line or rule by:
+     * {@link #and} taken over them in order.
+     *
+     * <p>Put together at once rather than two at a time. A thing on a way is filed under its value,
+     * which is a tree, and taking the ways two at a time files everything gathered so far again at
+     * each step — so a line read once per call of a helper paid for its ways once per call for
+     * every call before it.
+     */
+    public static SaidOnTheWay allOf(List<SaidOnTheWay> ways) {
+        Map<OnTheWay, List<ModelOccurrence>> entries = new LinkedHashMap<>();
+        Map<AnswerDemand, List<ModelOccurrence>> stated = new LinkedHashMap<>();
+        Map<DemandGap.Unstated, List<ModelOccurrence>> unstated = new LinkedHashMap<>();
+        for (SaidOnTheWay way : ways) {
+            into(entries, way.entries);
+            into(stated, way.stated);
+            into(unstated, way.unstated);
+        }
+        return new SaidOnTheWay(entries, stated, unstated);
     }
 
     /** What {@code entries} were put on a way by: {@code by}, for each of them and every entry
@@ -160,15 +180,13 @@ public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
         by.stream().filter(copy -> !copies.contains(copy)).forEach(copies::add);
     }
 
-    private static <K> Map<K, List<ModelOccurrence>> together(Map<K, List<ModelOccurrence>> one,
-                                                               Map<K, List<ModelOccurrence>> other) {
-        Map<K, List<ModelOccurrence>> out = new LinkedHashMap<>();
-        one.forEach((key, copies) -> out.put(key, new ArrayList<>(copies)));
-        other.forEach((key, copies) -> {
+    /** {@code from} taken into {@code out}: each key where it was first met, and each copy once. */
+    private static <K> void into(Map<K, List<ModelOccurrence>> out,
+                                 Map<K, List<ModelOccurrence>> from) {
+        from.forEach((key, copies) -> {
             List<ModelOccurrence> held = out.computeIfAbsent(key, _ -> new ArrayList<>());
             copies.stream().filter(copy -> !held.contains(copy)).forEach(held::add);
         });
-        return out;
     }
 
     /** In the order the copies were met, which is the order a reader is told them in. */

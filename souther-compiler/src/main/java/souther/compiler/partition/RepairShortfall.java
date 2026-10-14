@@ -131,6 +131,12 @@ public record RepairShortfall(List<Generator.Purpose> soughtFor, CoverageSites.A
         NOTHING_HOLDS_A_ROW_TO_IT,
 
         /**
+         * A part of it is a comparison coming out on a side the rules leave no value on. No row
+         * goes this way, which is the model's to say and not a search that stopped.
+         */
+        THE_RULES_LEAVE_NO_VALUE_THAT_WAY,
+
+        /**
          * Holding the row to it would compose afresh a parameter the row writes as the value the
          * model states. That value is the author's, and what it does to the body is what the row
          * says about it.

@@ -52,10 +52,35 @@ public record HeldOutcome(List<RowDemand> demands, Reachability.Reaching reachin
     @FunctionalInterface
     public interface Of {
 
-        /** What brings a run to {@code place}, or empty where nothing was found that does. */
-        Optional<HeldOutcome> at(ControlPlace place);
+        /** What brings a run to {@code place}, or why nothing does. */
+        Bringing at(ControlPlace place);
 
         /** Nothing holds any condition — what a caller with no borders to read uses. */
-        Of NOTHING = _ -> Optional.empty();
+        Of NOTHING = _ -> new Bringing.NothingFound();
+    }
+
+    /**
+     * What brings a run to one place, or why nothing does.
+     *
+     * <p>Two ways of nothing and they are not one. The rules leaving no value on the side a
+     * comparison comes out on is the model's: no row goes that way, and none was looked for
+     * because there is none. Nothing found is this compiler's: a row may well go that way, and
+     * what to hold it to was not worked out.
+     */
+    public sealed interface Bringing {
+
+        /** What the row has to be. */
+        record Found(HeldOutcome held) implements Bringing {}
+
+        /** The rules leave no value on the side the comparison comes out on, so nothing does. */
+        record TheRulesLeaveNoValueThere() implements Bringing {}
+
+        /** Nothing was found that does, which does not make it a place no run comes to. */
+        record NothingFound() implements Bringing {}
+
+        /** What was found, or nothing found where {@code found} is empty. */
+        static Bringing of(Optional<HeldOutcome> found) {
+            return found.<Bringing>map(Found::new).orElseGet(NothingFound::new);
+        }
     }
 }
