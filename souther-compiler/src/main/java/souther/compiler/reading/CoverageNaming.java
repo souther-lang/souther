@@ -111,6 +111,14 @@ final class CoverageNaming implements Naming<Outcome> {
             // it, so there is nothing here to say. The fork on it is named where the way in is.
             return null;
         }
+        // The one reading of this comparison, which is the reading whatever admitted the way used.
+        // Read again here, the decision would be said of a number the admission never saw. A case
+        // of a sum held equal to the value is read as which case it is, as the admission reads it.
+        CaseCompared compared = numbers.caseOf(comparison, reads);
+        ComparedNumber drawn = compared == null ? numbers.of(comparison, reads) : null;
+        if (compared == null && drawn == null) {
+            return null;
+        }
         // Which construct of the model the decision is of. An application answering here comes
         // first: the comparison is then the code of the operation it applies, which the model
         // states nothing of, and the rule the author wrote — and drew a line by — is the
@@ -122,7 +130,8 @@ final class CoverageNaming implements Naming<Outcome> {
         if (outcome == null) {
             return null;
         }
-        Condition condition = conditionOf(comparison, outcome, held);
+        Condition condition = compared != null ? casesLeft(compared, held)
+                : new Condition.Side(drawn.term(), outcome.occurrence(), held, lineOf(drawn));
         if (condition == null) {
             return null;
         }
@@ -137,28 +146,18 @@ final class CoverageNaming implements Naming<Outcome> {
     }
 
     /**
-     * What {@code comparison} coming out {@code held} leaves the position it is about, or null
-     * where it names no number of the input or leaves the value no case at all.
+     * What a value of a sum compared with one of its cases coming out {@code held} leaves it: the
+     * cases, as an arm of a {@code match} on it leaves them ({@link CaseCompared}). A run is
+     * steered there by which case it hands in, and the order the cases are declared in has nothing
+     * to do with it.
      *
-     * <p>A value of a sum compared with one of its cases is left cases, as an arm of a
-     * {@code match} on it leaves them ({@link CaseCompared}); a run is steered there by which case
-     * it hands in, and the order the cases are declared in has nothing to do with it. That holds of
-     * a sum whose other cases carry something, which no order counts. Every other comparison comes
-     * out a side of its number.
+     * <p>Null where it leaves no case, which the admission of the way has already said: a way no
+     * value comes out is not one this is asked to name.
      */
-    private Condition conditionOf(Core.Binary comparison, ControlPlace.Outcome outcome,
-                                  boolean held) {
-        CaseCompared compared = CaseCompared.of(comparison, numbers.reading(), reads);
-        if (compared != null) {
-            List<TypeSymbol> left = compared.leavesWhere(held);
-            return left.isEmpty() ? null : new Condition.Case(compared.at(),
-                    left.stream().map(TypeSymbol::name).toList());
-        }
-        // The one reading of this comparison, which is the reading whatever admitted the way used.
-        // Read again here, the decision would be said of a number the admission never saw.
-        ComparedNumber drawn = numbers.of(comparison, reads);
-        return drawn == null ? null
-                : new Condition.Side(drawn.term(), outcome.occurrence(), held, lineOf(drawn));
+    private static Condition casesLeft(CaseCompared compared, boolean held) {
+        List<TypeSymbol> left = compared.leavesWhere(held);
+        return left.isEmpty() ? null : new Condition.Case(compared.at(),
+                left.stream().map(TypeSymbol::name).toList());
     }
 
     /**

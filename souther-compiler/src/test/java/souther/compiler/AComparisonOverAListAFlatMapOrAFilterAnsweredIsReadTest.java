@@ -2,21 +2,12 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.AnalysisBody;
-import souther.compiler.check.ElementBindings;
-import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceRendering;
-import souther.compiler.inputs.InputDomain;
-import souther.compiler.inputs.InputReads;
-import souther.compiler.meaning.MeaningsOfABody;
-import souther.compiler.partition.MeaningsOfABodyReading;
+import souther.compiler.partition.WhatTheComparisonsState;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -72,21 +63,7 @@ class AComparisonOverAListAFlatMapOrAFilterAnsweredIsReadTest {
     private static String states(String places, String rows) {
         Compilation compilation = Compilation.ofSource(PLACED.formatted(places, rows), "Main");
         compilation.answerEverything();
-        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("p")).value();
-        AnalysisBody analysis = checked.analysisBodies().get("f");
-        RuleReadingSource rules = RuleReadings.of(compilation, "p");
-        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("p")).value().get("f");
-        InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
-                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
-                inputs.dependencies());
-        MeaningsOfABody meanings = MeaningsOfABodyReading.of(analysis,
-                () -> inputs.reading(rules), reads, rules.symbols(), rules.newtypes());
-        List<String> out = new ArrayList<>();
-        meanings.stated().forEach((site, meaning) -> {
-            if (site.part() == MeaningsOfABody.Part.Asked.ITSELF) {
-                out.add(meaning.states().key());
-            }
-        });
+        List<String> out = WhatTheComparisonsState.of(compilation, "f");
         assertEquals(1, out.size(), () -> "one comparison is written: " + out);
         return out.getFirst();
     }

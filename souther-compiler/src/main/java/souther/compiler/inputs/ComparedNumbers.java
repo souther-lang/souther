@@ -40,14 +40,21 @@ public final class ComparedNumbers {
 
     private record Read(InputReads under, ComparedNumber said) { }
 
-    private ComparedNumbers(InputReading read, Map<Core.Binary, Read> said) {
+    /** Which case each comparison asks a value to be, and what it was read under. */
+    private final Map<Core.Binary, CaseRead> cases;
+
+    private record CaseRead(InputReads under, CaseCompared said) { }
+
+    private ComparedNumbers(InputReading read, Map<Core.Binary, Read> said,
+                            Map<Core.Binary, CaseRead> cases) {
         this.read = read;
         this.said = said;
+        this.cases = cases;
     }
 
     /** The comparisons of one body, read against {@code read}. */
     public static ComparedNumbers of(InputReading read) {
-        return new ComparedNumbers(read, new IdentityHashMap<>());
+        return new ComparedNumbers(read, new IdentityHashMap<>(), new IdentityHashMap<>());
     }
 
     /** The reading they were read against, for a reader that wants it beside them. */
@@ -77,6 +84,30 @@ public final class ComparedNumbers {
         }
         ComparedNumber made = ComparedNumber.of(comparison, read, at);
         said.put(comparison, new Read(at, made));
+        return made;
+    }
+
+    /**
+     * Which case of a sum {@code comparison} asks the value at a position to be where its names
+     * read {@code at}, or null where it is no such comparison ({@link CaseCompared}).
+     *
+     * <p>Read once and shared as {@link #of} is: the naming and the ways of a body meet the
+     * comparison at every run of the walk through it, and the reading looks the position's cases up
+     * in its declarations.
+     */
+    public CaseCompared caseOf(Core.Binary comparison, InputReads at) {
+        CaseRead had = cases.get(comparison);
+        if (had != null) {
+            if (!had.under().equals(at)) {
+                throw new IllegalStateException(
+                        "one comparison read under two environments, at " + comparison.pos()
+                                + ": what a name reads there is settled by the walk, and two"
+                                + " readers of it have arrived with different answers");
+            }
+            return had.said();
+        }
+        CaseCompared made = CaseCompared.of(comparison, read, at);
+        cases.put(comparison, new CaseRead(at, made));
         return made;
     }
 }

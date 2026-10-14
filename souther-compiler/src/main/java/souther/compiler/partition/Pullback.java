@@ -707,6 +707,8 @@ final class Pullback {
                                                 boolean fixed, InputReads reads,
                                                 Once<AffineReading.OfAComparison> arithmetic) {
         AnEmptinessCheck.Checked checked = AnEmptinessCheck.checked(stated);
+        // Asked by the rule reading it and by the order it keeps from reading it, so read once.
+        Once<CaseCompared> asACase = new Once<>(() -> CaseCompared.of(stated, read, reads));
         return List.of(
                 () -> checked == null ? null : new Derivation.AnEmptinessCheck(at == null
                         ? observe(checked.container(), AnswerAspect.EMPTINESS, reads)
@@ -715,9 +717,11 @@ final class Pullback {
                 () -> partOf(at, truthCompared(stated, reads)),
                 () -> heldAgainstAWrittenTruth(stated, reads),
                 () -> partOf(at, ofTwoValuesWrittenOut(stated, reads)),
-                () -> partOf(at, ofACaseCompared(stated, reads)),
+                () -> partOf(at, ofACaseCompared(asACase.get())),
                 () -> partOf(at, asACut(stated, arithmetic.get(), fixed)),
-                () -> partOf(at, onAnOrder(stated, arithmetic.get(), reads)),
+                // A case held equal to the value asks nothing of the order the cases stand on.
+                () -> asACase.get() != null ? null
+                        : partOf(at, onAnOrder(stated, arithmetic.get(), reads)),
                 () -> ofTheYearOfADate(stated, at, fixed, reads),
                 () -> ofACountOfWholeUnits(stated, at, fixed, reads),
                 () -> ofAShiftedRemainder(stated, at, fixed, reads),
@@ -4200,8 +4204,7 @@ final class Pullback {
      * <p>What an arm of a {@code match} selecting the case states, so that the two writings state
      * one thing and no line is drawn on the order the cases are declared in.
      */
-    private Derivation ofACaseCompared(StatedComparison stated, InputReads reads) {
-        CaseCompared compared = CaseCompared.of(stated, read, reads);
+    private static Derivation ofACaseCompared(CaseCompared compared) {
         if (compared == null) {
             return null;
         }
@@ -4280,14 +4283,10 @@ final class Pullback {
      * <p>Only where it stopped: a date against a written date and a case of an enumeration are
      * values it does not count, and the comparison still states a line on their order. A comparison
      * the arithmetic read is that arithmetic's, which is the reading a border is drawn by.
-     *
-     * <p>Not a case of an enumeration held equal to the value or not: that asks which case the
-     * value is and nothing of the order ({@link #ofACaseCompared}).
      */
     private Derivation onAnOrder(StatedComparison comparison,
                                  AffineReading.OfAComparison arithmetic, InputReads reads) {
-        if (!(arithmetic instanceof AffineReading.OfAComparison.Stopped)
-                || CaseCompared.of(comparison, read, reads) != null) {
+        if (!(arithmetic instanceof AffineReading.OfAComparison.Stopped)) {
             return null;
         }
         ComparedLine drawn = ComparedLine.asWritten(comparison, read, reads);

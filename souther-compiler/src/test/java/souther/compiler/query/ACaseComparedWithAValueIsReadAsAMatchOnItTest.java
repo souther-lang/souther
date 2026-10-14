@@ -124,7 +124,7 @@ class ACaseComparedWithAValueIsReadAsAMatchOnItTest {
 
     /**
      * Beside a truth of the input, which the way does not name, the case the comparison came out
-     * is still read where the arm is: as the {@code match} that asks the truth only under the case.
+     * is read where the arm is: as the {@code match} that asks the truth only under the case.
      */
     @Test
     void aCaseTestedBesideATruthOwesWhatTheMatchUnderItOwes() {
@@ -169,7 +169,7 @@ class ACaseComparedWithAValueIsReadAsAMatchOnItTest {
         return out;
     }
 
-    /** An order on the cases is still a line, and the way past it reads the account nowhere. */
+    /** An order on the cases is a line, and the way past it reads the account nowhere. */
     @Test
     void anOrderOnTheCasesStillDrawsItsLine() {
         Measured below = measured(AS_DECLARED, "let apply (account, reason) =\n"
@@ -198,9 +198,9 @@ class ACaseComparedWithAValueIsReadAsAMatchOnItTest {
     }
 
     /**
-     * How many elements of an input list are a case is a number of the input, and a line on it
-     * stays: the case compared with each element is which case that element is, and how many of
-     * them are is counted on the list.
+     * How many elements of an input list are a case is a number of the input, and a comparison of
+     * it draws a line on it: the case compared with each element is which case that element is,
+     * and how many of them are is counted on the list.
      */
     @Test
     void aCountOfTheElementsThatAreACaseKeepsItsLine() {

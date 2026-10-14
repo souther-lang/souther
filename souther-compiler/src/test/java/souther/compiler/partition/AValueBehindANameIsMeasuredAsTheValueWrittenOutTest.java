@@ -3,15 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.Compiler;
-import souther.compiler.check.AnalysisBody;
-import souther.compiler.check.ElementBindings;
-import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.inputs.InputDomain;
-import souther.compiler.inputs.InputReads;
-import souther.compiler.meaning.MeaningsOfABody;
-import souther.compiler.query.Bodies;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.query.Adequacy;
@@ -436,9 +428,6 @@ class AValueBehindANameIsMeasuredAsTheValueWrittenOutTest {
                 Adequacy.boundariesOf(compilation.db(), module);
         assertNotNull(evidence, "the model under test compiles");
         assertNotNull(borders, "the model under test compiles");
-        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
-        Map<String, InputDomain> inputs = compilation.db().ask(new Adequacy.Inputs(module)).value();
-        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, Measured> out = new LinkedHashMap<>();
         evidence.forEach((behavior, each) -> {
             String own = behavior + "/";
@@ -455,26 +444,8 @@ class AValueBehindANameIsMeasuredAsTheValueWrittenOutTest {
                         points.add(point.toString().replace(own, "")));
             });
             out.put(behavior, new Measured(axes, unread, points,
-                    statesOf(checked.analysisBodies().get(behavior), inputs.get(behavior), rules)));
+                    WhatTheComparisonsState.of(compilation, behavior)));
         });
-        return out;
-    }
-
-    /** What each comparison of {@code analysis} states, as the body's meanings file it. */
-    private static List<String> statesOf(AnalysisBody analysis, InputDomain inputs,
-                                         RuleReadingSource rules) {
-        InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
-                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
-                inputs.dependencies());
-        MeaningsOfABody meanings = MeaningsOfABodyReading.of(analysis,
-                () -> inputs.reading(rules), reads, rules.symbols(), rules.newtypes());
-        List<String> out = new ArrayList<>();
-        meanings.stated().forEach((site, meaning) -> {
-            if (site.part() == MeaningsOfABody.Part.Asked.ITSELF) {
-                out.add(meaning.states().key());
-            }
-        });
-        out.sort(null);
         return out;
     }
 }

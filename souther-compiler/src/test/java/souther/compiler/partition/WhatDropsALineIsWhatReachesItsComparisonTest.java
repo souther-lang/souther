@@ -283,8 +283,8 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
 
     /**
      * A case held equal to the value asks which case it is and draws no line on the order, so there
-     * is no line for nothing to arrive at. The way the arm has already ruled out is still ruled out,
-     * as the case the arm leaves out: narrowed to one case or to a sum of several.
+     * is no line for nothing to arrive at. The way the arm rules out is owed no row, as the case the
+     * arm leaves out: narrowed to one case or to a sum of several.
      */
     @Test
     void aCaseHeldEqualToTheValueIsNoLineToDrop() {
