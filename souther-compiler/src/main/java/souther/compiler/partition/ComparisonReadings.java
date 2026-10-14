@@ -738,7 +738,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     walk(arm.answers(), in, reads.choosing(arm.decidedBy(), symbols, in.newtypes()),
                             applying.choosing(arm.decidedBy(), symbols, in.newtypes(), on ->
                                     in.conditions().arm(attempt, which, on).proposition()), flow,
-                            past(assumed, numbering.saidEntering(attempt.occurrence(),
+                            past(assumed, numbering.said(
                                     ReachingCuts.attempting(attempt, part, arm.answers().pos(),
                                             in.read(), reads, numbering))),
                             live, out, forks, numbering);
@@ -1003,7 +1003,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private static List<OnTheWay> entering(Core.Match match, Core.Case arm, int part,
                                            InputReading read, InputReads reads,
                                            List<OnTheWay> assumed, ConditionNumbering numbering) {
-        return past(assumed, numbering.saidEntering(match.occurrence(),
+        return past(assumed, numbering.said(
                 ReachingCuts.entering(match, arm, part, read, reads, numbering)));
     }
 

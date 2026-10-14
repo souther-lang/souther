@@ -5,7 +5,6 @@ import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.sites.WrittenCondition;
-import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
 
@@ -225,14 +224,6 @@ final class ConditionNumbering {
     List<OnTheWay> said(ReachingCuts.Stating stated) {
         file(stated.entries(), stated.by());
         return stated.entries();
-    }
-
-    /** {@code entries}, put on the way entering an arm of a fork written as {@code fork}, which is
-     *  what the arm states and the copy it is read off. */
-    List<OnTheWay> saidEntering(ConstructOccurrence fork, List<OnTheWay> entries) {
-        List<ModelOccurrence> copy = fork.isWritten()
-                ? ModelOccurrence.statedAt(fork).map(List::of).orElse(List.of()) : List.of();
-        return said(ReachingCuts.Stating.of(entries, copy));
     }
 
     private void file(List<OnTheWay> entries, SaidOnTheWay by) {

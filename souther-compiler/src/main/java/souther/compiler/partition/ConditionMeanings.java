@@ -11,7 +11,6 @@ import souther.compiler.inputs.InputReads;
 
 import souther.compiler.meaning.Proposition;
 
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -76,8 +75,8 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
      * <p>The environment is handed in rather than held, because it is a function of the program
      * point and this is not.
      */
-    List<OnTheWay> entering(Core.Match match, int part, InputReads reads,
-                            ConditionNumbering numbering) {
+    ReachingCuts.Stating entering(Core.Match match, int part, InputReads reads,
+                                  ConditionNumbering numbering) {
         return ReachingCuts.entering(match, match.cases().get(part), part, read, reads, numbering);
     }
 
@@ -88,8 +87,8 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
     }
 
     /** What taking arm {@code part} of {@code attempt}, written at {@code at}, says of the input. */
-    List<OnTheWay> attempting(Core.IfConstructed attempt, int part, SourcePos at,
-                              InputReads reads, ConditionNumbering numbering) {
+    ReachingCuts.Stating attempting(Core.IfConstructed attempt, int part, SourcePos at,
+                                    InputReads reads, ConditionNumbering numbering) {
         return ReachingCuts.attempting(attempt, part, at, read, reads, numbering);
     }
 }

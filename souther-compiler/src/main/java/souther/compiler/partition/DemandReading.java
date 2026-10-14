@@ -223,9 +223,6 @@ final class DemandReading {
      */
     static final class ReadOff {
 
-        /** Nothing read off any copy. */
-        static final ReadOff NONE = new ReadOff(new IdentityHashMap<>(), List.of());
-
         private final Map<Read, List<ModelOccurrence>> each;
         private final List<ModelOccurrence> own;
 
@@ -422,11 +419,8 @@ final class DemandReading {
      */
     static List<Stated> askedAt(Condition at, Proposition stated, InputReading read,
                                 WhatConditionsState conditions) {
-        Pullback.Pulled pulled = pulledOf(at, read, conditions);
-        Projection projection = pulled == null ? Projection.unplaced() : Projection.over(pulled);
-        List<Read> reads = projected(stated, read, projection);
-        ReadOff off = projection.told(own(at));
-        return reads.stream().map(each -> new Stated(at, each, off)).toList();
+        Projected made = projectedOff(pulledOf(at, read, conditions), stated, read, own(at));
+        return made.reads().stream().map(each -> new Stated(at, each, made.readOff())).toList();
     }
 
     private static void once(ModelOccurrence copy, List<ModelOccurrence> out) {
@@ -484,10 +478,36 @@ final class DemandReading {
     private static List<Stated> statedOff(Condition where, Pullback.Pulled pulled,
                                           boolean holding, InputReading read,
                                           WhatConditionsState conditions) {
-        Projection projection = Projection.over(pulled);
-        List<Read> reads = projected(holdingAs(pulled.proposition(), holding), read, projection);
-        ReadOff off = projection.told(own(where));
-        return reads.stream().map(each -> new Stated(where, each, off)).toList();
+        Projected made = projectedOff(pulled, holdingAs(pulled.proposition(), holding), read,
+                own(where));
+        return made.reads().stream().map(each -> new Stated(where, each, made.readOff()))
+                .toList();
+    }
+
+    /**
+     * What {@code stated} asks of a row, and which copies of the model's code each read of it was
+     * read off.
+     *
+     * @param reads   one entry for each thing it asks
+     * @param readOff which copies each of them, and every read inside an alternative of one, was
+     *                read off
+     */
+    record Projected(List<Read> reads, ReadOff readOff) {}
+
+    /**
+     * What {@code stated} — a statement {@code pulled} read, or one about what it read — asks of a
+     * row, each read told the copies of the parts of {@code pulled} it is made of, and a read of a
+     * part read off nothing else told {@code own}: the copy of the code that states it.
+     *
+     * <p>A part of a statement is read off another construct only on the way to what is compared
+     * — the fork a value came out of in the call that worked it out — and is kept with that
+     * construct ({@link Pullback.Leaf}). What the code itself states is no such part.
+     */
+    static Projected projectedOff(Pullback.Pulled pulled, Proposition stated, InputReading read,
+                                  List<ModelOccurrence> own) {
+        Projection projection = pulled == null ? Projection.unplaced() : Projection.over(pulled);
+        List<Read> reads = projected(stated, read, projection);
+        return new Projected(reads, projection.told(own));
     }
 
     /**

@@ -17,6 +17,7 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -315,8 +316,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * nothing and an arm nothing could be read of are the two answers a walk has to tell apart, and
      * a silence is both of them.
      */
-    static List<OnTheWay> entering(Core.Match match, Core.Case arm, int part, InputReading read,
-                                   InputReads reads, ConditionNumbering numbering) {
+    static Stating entering(Core.Match match, Core.Case arm, int part, InputReading read,
+                            InputReads reads, ConditionNumbering numbering) {
         InputDomain inputs = read.domain();
         RuleReadingSource ruleSource = read.rules();
         ConditionOccurrence met = numbering.metEntering(match, part);
@@ -348,7 +349,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             Optional<Boolean> taken = reads.whetherEveryRowTakes(arm, match.scrutinee(),
                     ruleSource.symbols(), ruleSource.newtypes());
             if (taken.isPresent()) {
-                return List.of(new OnTheWay.Settled(met, at, taken.get()));
+                return Stating.of(List.of(new OnTheWay.Settled(met, at, taken.get())),
+                        copyOf(match.occurrence()));
             }
         }
         // The position that is narrowed, and not the narrowed one. A case declaring no field has
@@ -364,12 +366,13 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         if (taking == null) {
             return enteredWhole(match, part, read, reads, met, at);
         }
-        return List.of(switch (taking) {
+        // What the fork states of its own scrutinee, read off the copy it stands in.
+        return Stating.of(List.of(switch (taking) {
             case DeclaredInput.Taking.Narrows(TermPath to) -> new OnTheWay.Narrowed(at, to,
                     inputs.reach().crossings(), onItsOrder(to, read));
             case DeclaredInput.Taking.Implied _ -> new OnTheWay.Settled(met, at, true);
             case DeclaredInput.Taking.Excluded _ -> new OnTheWay.Settled(met, at, false);
-        });
+        }), copyOf(match.occurrence()));
     }
 
     /**
@@ -378,11 +381,11 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * another behavior answers is, under what; an optional's two carriers at once — asked as any
      * condition is.
      */
-    private static List<OnTheWay> enteredWhole(Core.Match match, int part, InputReading read,
-                                               InputReads reads, ConditionOccurrence met,
-                                               ConditionReportAnchor at) {
-        return armStated(WhatConditionsState.of(read).arm(match, part, reads).proposition(), met,
-                at, read);
+    private static Stating enteredWhole(Core.Match match, int part, InputReading read,
+                                        InputReads reads, ConditionOccurrence met,
+                                        ConditionReportAnchor at) {
+        return armStated(WhatConditionsState.of(read).arm(match, part, reads), met, at, read,
+                copyOf(match.occurrence()));
     }
 
     /**
@@ -507,29 +510,39 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      *
      * @param at where the arm is written, which is its body since an attempt writes no arm of its own
      */
-    static List<OnTheWay> attempting(Core.IfConstructed attempt, int part, SourcePos at,
-                                     InputReading read, InputReads reads,
-                                     ConditionNumbering numbering) {
+    static Stating attempting(Core.IfConstructed attempt, int part, SourcePos at,
+                              InputReading read, InputReads reads,
+                              ConditionNumbering numbering) {
         ConditionOccurrence met = numbering.metEntering(attempt, part);
-        return armStated(WhatConditionsState.of(read).arm(attempt, part, reads).proposition(),
-                met, numbering.anchorOfArm(attempt.origin(), part, at, met), read);
+        return armStated(WhatConditionsState.of(read).arm(attempt, part, reads), met,
+                numbering.anchorOfArm(attempt.origin(), part, at, met), read,
+                copyOf(attempt.occurrence()));
     }
 
-    /** What a run entering an arm that states {@code stated} asks of a row, each thing it asks put
-     *  on the way at the arm. */
-    private static List<OnTheWay> armStated(Proposition stated, ConditionOccurrence met,
-                                            ConditionReportAnchor at, InputReading read) {
-        return DemandReading.asked(stated, read).stream()
-                .map(each -> onTheWay(met, at, each, read))
-                .toList();
+    /**
+     * What a run entering an arm that states what {@code arm} read asks of a row, each thing it
+     * asks put on the way at the arm, and read off the parts of what the arm states — what the
+     * fork itself states read off {@code fork}, the copy it stands in.
+     */
+    private static Stating armStated(Pullback.Pulled arm, ConditionOccurrence met,
+                                     ConditionReportAnchor at, InputReading read,
+                                     List<ModelOccurrence> fork) {
+        DemandReading.Projected made =
+                DemandReading.projectedOff(arm, arm.proposition(), read, fork);
+        List<OnTheWay> entries = new ArrayList<>();
+        Map<OnTheWay, List<ModelOccurrence>> by = new LinkedHashMap<>();
+        for (DemandReading.Read each : made.reads()) {
+            entries.add(onTheWay(met, at, each, read, made.readOff(), by));
+        }
+        return new Stating(entries, new SaidOnTheWay(by, Map.of(), Map.of()));
     }
 
-    /** What a demand comes to on the way, for an arm: what entering it puts there is filed under
-     *  the fork, where the walk enters it ({@link ConditionNumbering#saidEntering}). */
-    private static OnTheWay onTheWay(ConditionOccurrence condition, ConditionReportAnchor at,
-                                     DemandReading.Read read, InputReading input) {
-        return onTheWay(condition, at, read, input, DemandReading.ReadOff.NONE,
-                new LinkedHashMap<>());
+    /** The copy of the model's code {@code fork} stands in, or none where the model states
+     *  nothing there. */
+    private static List<ModelOccurrence> copyOf(ConstructOccurrence fork) {
+        return fork.isWritten()
+                ? ModelOccurrence.statedAt(fork).map(List::of).orElse(List.of())
+                : List.of();
     }
 
     /**
@@ -628,7 +641,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
     static final class Collected {
 
         private final Map<ALine, List<OnTheWay>> byLine = new LinkedHashMap<>();
-        private final Map<ALine, SaidOnTheWay> saidByLine = new LinkedHashMap<>();        private final Map<ModelOccurrence, ConditionOnTheWay> byTruth = new LinkedHashMap<>();
+        private final Map<ALine, SaidOnTheWay> saidByLine = new LinkedHashMap<>();
+        private final Map<ModelOccurrence, ConditionOnTheWay> byTruth = new LinkedHashMap<>();
         private final Map<ModelOccurrence, ConditionOnTheWay> byFork = new LinkedHashMap<>();
 
         /**

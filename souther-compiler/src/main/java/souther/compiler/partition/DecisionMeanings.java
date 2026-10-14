@@ -15,8 +15,6 @@ import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
-import souther.compiler.types.ConstructOccurrence;
-import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -53,14 +51,9 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
      */
     record Read(DecidedCondition answer, List<OnTheWay> onTheWay, SaidOnTheWay said) {
 
-        /** What an arm of a fork written as {@code fork} asks, read off the copy the fork
-         *  stands in. */
-        static Read atTheFork(DecidedCondition answer, List<OnTheWay> onTheWay,
-                              ConstructOccurrence fork) {
-            List<ModelOccurrence> copy = fork != null && fork.isWritten()
-                    ? ModelOccurrence.statedAt(fork).map(List::of).orElse(List.of())
-                    : List.of();
-            return new Read(answer, onTheWay, ReachingCuts.Stating.of(onTheWay, copy).by());
+        /** {@code answer}, asking what {@code stated} put on the way. */
+        Read(DecidedCondition answer, ReachingCuts.Stating stated) {
+            this(answer, stated.entries(), stated.by());
         }
     }
 
@@ -292,24 +285,26 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
      */
     Optional<Read> entering(Core.Match match, int part, InputReads reads,
                             ConditionNumbering numbering) {
-        List<OnTheWay> onTheWay = states.entering(match, part, reads, numbering);
+        ReachingCuts.Stating entered = states.entering(match, part, reads, numbering);
+        List<OnTheWay> onTheWay = entered.entries();
         if (onTheWay.size() == 1 && onTheWay.getFirst() instanceof OnTheWay.Settled settled
                 && settled.thisWay()) {
             return Optional.empty();
         }
-        return Optional.of(asTheArm(match, part, reads, onTheWay));
+        return Optional.of(asTheArm(match, part, reads, entered));
     }
 
     /** The column taking arm {@code part} is, where it is one. */
-    private Read asTheArm(Core.Match match, int part, InputReads reads, List<OnTheWay> onTheWay) {
+    private Read asTheArm(Core.Match match, int part, InputReads reads,
+                          ReachingCuts.Stating entered) {
+        List<OnTheWay> onTheWay = entered.entries();
         if (onTheWay.size() == 1 && onTheWay.getFirst() instanceof OnTheWay.Narrowed narrowed) {
             TermPath at = narrowed.position();
             // Where the value the fork is on stands: a name read on a value left several cases is
             // the name read at the sum, and not a name under the set of them.
-            return Read.atTheFork(new DecidedCondition.Narrowed(new DecisionCondition.ACase(
+            return new Read(new DecidedCondition.Narrowed(new DecisionCondition.ACase(
                     new DecisionSubject.AnInput(at.narrowedFrom().position()),
-                    states.answersOf(match, reads)), at.narrowing()), onTheWay,
-                    match.occurrence());
+                    states.answersOf(match, reads)), at.narrowing()), entered);
         }
         // Where the arithmetic had no position to narrow, the fork may still be on something a row
         // controls; and where the declarations leave the position none of the arm's case, there is
@@ -320,14 +315,14 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
         DecisionSubject subject = subjects.of(match.scrutinee(), reads);
         CasesLeft narrowing = CasesLeft.selectedBy(match.cases().get(part).pattern());
         if (subject != null && narrowing != null) {
-            return Read.atTheFork(new DecidedCondition.Narrowed(
+            return new Read(new DecidedCondition.Narrowed(
                     new DecisionCondition.ACase(subject, states.answersOf(match, reads)),
-                    narrowing), onTheWay, match.occurrence());
+                    narrowing), entered);
         }
         // Otherwise the column is what entering the arm states: which case a value the body
         // computed is of, under what.
-        return Read.atTheFork(columnOf(states.entered(match, part, reads), true,
-                metAt(onTheWay)), onTheWay, match.occurrence());
+        return new Read(columnOf(states.entered(match, part, reads), true, metAt(onTheWay)),
+                entered);
     }
 
     /**
@@ -339,9 +334,9 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
      */
     Read attempting(Core.IfConstructed attempt, int part, SourcePos at, InputReads reads,
                     ConditionNumbering numbering) {
-        List<OnTheWay> onTheWay = states.attempting(attempt, part, at, reads, numbering);
-        return Read.atTheFork(columnOf(states.entered(attempt, part, reads), true,
-                metAt(onTheWay)), onTheWay, attempt.occurrence());
+        ReachingCuts.Stating entered = states.attempting(attempt, part, at, reads, numbering);
+        return new Read(columnOf(states.entered(attempt, part, reads), true,
+                metAt(entered.entries())), entered);
     }
 
     /**
