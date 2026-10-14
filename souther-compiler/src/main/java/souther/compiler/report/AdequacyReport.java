@@ -1,11 +1,13 @@
 package souther.compiler.report;
 
+import souther.compiler.query.Answer;
 import souther.compiler.query.ClaimAnnotations;
 import souther.compiler.diag.QuotedFrom;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorImplementation;
+import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.CoverageObligation;
@@ -17,7 +19,7 @@ import souther.compiler.publish.ThroughStepWord;
 import souther.compiler.types.CanonicalNameOrder;
 import souther.compiler.types.ExpansionSite;
 import souther.compiler.types.MaterialisationSite;
-import souther.compiler.types.OccurrenceLineage;
+import souther.compiler.types.StepOfACopy;
 import souther.compiler.types.RegionSlot;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
@@ -1205,18 +1207,34 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
-     * {@code ways} with each that reads like one before it left out, the first of them kept in the
-     * order it came in.
+     * The ways of {@code ways} a reader is told of as alternatives: each once, and none that has
+     * another inside it. Kept in the order they came in, each in its own.
      *
      * <p>Like as sets. A combination is the decisions it settles and not the order a way met them
      * in, so two ways naming the same conditions in two orders are one thing to tell a reader.
+     *
+     * <p>And a way holding every condition of another is no alternative to it. A run makes the
+     * combination by doing all of some one way ({@link InteractionRequirements#met}), so a run that
+     * did the larger did the smaller, and the larger adds a choice nobody can take without having
+     * taken the smaller. A body that meets the same decisions at a value of a helper and again
+     * where two calls of that helper meet states both.
      */
     static List<List<ShownCondition>> distinctWays(List<List<ShownCondition>> ways) {
         Map<Set<ShownCondition>, List<ShownCondition>> distinct = new LinkedHashMap<>();
         for (List<ShownCondition> way : ways) {
             distinct.putIfAbsent(Set.copyOf(way), List.copyOf(way));
         }
-        return List.copyOf(distinct.values());
+        List<List<ShownCondition>> out = new ArrayList<>();
+        for (Map.Entry<Set<ShownCondition>, List<ShownCondition>> way : distinct.entrySet()) {
+            boolean holdsAnother = false;
+            for (Set<ShownCondition> other : distinct.keySet()) {
+                holdsAnother |= other != way.getKey() && way.getKey().containsAll(other);
+            }
+            if (!holdsAnother) {
+                out.add(way.getValue());
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -1258,18 +1276,35 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     comparison.at();
             case DecisionRuleReading.AnApplicationAnswered(var application, var _, var _) ->
                     application.writtenAt();
-            case DecisionRuleReading.AForkTookAnArm(var arm, var _) ->
-                    Sites.placeOf(compilation.db(), arm.anchor());
+            case DecisionRuleReading.AForkTookAnArm(var _, var shownAt, var _) ->
+                    Sites.placeOf(compilation.db(), shownAt);
             case DecisionRuleReading.AConditionIsNotShown _,
                     DecisionRuleReading.AnOutcomeIsNotPlaced _,
                     DecisionRuleReading.AForkIsNotPlaced _ -> null;
         };
     }
 
-    /** One condition, with where a reader is sent for it and the calls it was reached through. */
+    /** One condition, with where a reader is sent for it and for each step of its copy. */
     private static ShownCondition shown(Compilation compilation, DecisionRuleReading read) {
-        return new ShownCondition(read, whereItIsWritten(compilation, read),
-                Sites.callsThrough(compilation.db(), read.within()));
+        List<ShownStep> through = new ArrayList<>();
+        for (StepOfACopy step : read.through()) {
+            Answer<Citation> made = Sites.whereMade(compilation.db(), step);
+            through.add(new ShownStep(step, made.present() ? made.value() : null));
+        }
+        return new ShownCondition(read, whereItIsWritten(compilation, read), through);
+    }
+
+    /**
+     * One step of the copy a condition is of, with where a reader is sent for it.
+     *
+     * @param step the step, which is what tells it from every other step
+     * @param at   where the copy was made, or null where there is nowhere to send a reader
+     */
+    public record ShownStep(StepOfACopy step, Citation at) {
+
+        public ShownStep {
+            Objects.requireNonNull(step, "a step shown is some step");
+        }
     }
 
     /**
@@ -1280,16 +1315,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * asks, and it is answered where the plan that numbered the places is in reach.
      *
      * @param at      where the construct that drew it is written, or null where there is none
-     * @param through the calls of the model's own values it was reached through, outermost first,
-     *                and none where it stands in the body itself. Where it is written is one place
-     *                for every copy, and a value called twice is two copies a path can take two
-     *                ways
+     * @param through the steps of the copy it is of, outermost first, and none where it stands where
+     *                it is written. Where it is written is one place for every copy, and a value
+     *                called twice is two copies a path can take two ways
      */
-    public record ShownCondition(DecisionRuleReading read, Citation at,
-                                 List<Sites.ACall> through) {
+    public record ShownCondition(DecisionRuleReading read, Citation at, List<ShownStep> through) {
 
         public ShownCondition {
-            java.util.Objects.requireNonNull(read, "a condition shown is some condition");
+            Objects.requireNonNull(read, "a condition shown is some condition");
             through = List.copyOf(through);
         }
     }
@@ -3743,7 +3776,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case DecisionRuleReading.AnApplicationAnswered(var _, var held, var _) ->
                     "the operation applied at " + shown.at().said(rendering, declaredIn)
                             + (held ? " answers true" : " answers false");
-            case DecisionRuleReading.AForkTookAnArm(var arm, var _) ->
+            case DecisionRuleReading.AForkTookAnArm(var arm, var _, var _) ->
                     "it goes through `" + ArmVocabulary.label(arm) + "` ("
                             + shown.at().said(rendering, declaredIn) + ")";
             // Every shape with nothing to send a reader to. What differs between them is which
@@ -3755,14 +3788,56 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     DecisionRuleReading.AForkIsNotPlaced _ ->
                     "one condition of it is one this compiler has nothing to send you to";
         };
-        List<String> calls = new ArrayList<>();
-        // The nearest call first, which is the one the construct is written in.
-        for (Sites.ACall call : shown.through().reversed()) {
-            calls.add("`" + call.called() + "`"
-                    + (call.at() == null ? "" : " at " + call.at().said(rendering, declaredIn)));
+        StringBuilder out = new StringBuilder(condition);
+        // The nearest step first, which is the copy the construct is written in.
+        for (ShownStep step : shown.through().reversed()) {
+            out.append(", ").append(said(step, declaredIn, rendering));
         }
-        return calls.isEmpty() ? condition
-                : condition + ", in the call of " + String.join(" in the call of ", calls);
+        return out.toString();
+    }
+
+    /**
+     * One step of a copy, as a page writes it: where the copy was made, or — where there is
+     * nowhere to send a reader — what tells the step from every other, and that there is no place.
+     *
+     * <p>Never fewer words than tell two steps apart. Two copies of one value made at two names this
+     * compiler could not place would otherwise read alike, and a reader would be shown one
+     * combination twice where there are two.
+     */
+    private static String said(ShownStep shown, SourceId declaredIn, SourceRendering rendering) {
+        return switch (shown.step()) {
+            case StepOfACopy.ACall(var called, var site) -> {
+                String what = "`" + HelperInliner.asWritten(called.name()) + "`";
+                if (shown.at() == null) {
+                    yield "in a copy of " + what + " made at " + unplaced(site)
+                            + ", which this compiler has no place for";
+                }
+                String at = shown.at().said(rendering, declaredIn);
+                yield switch (site) {
+                    case ExpansionSite.Written _ -> "in the call of " + what + " at " + at;
+                    case ExpansionSite.Named _ -> "in the use of " + what + " at " + at;
+                    case ExpansionSite.Supplied _ ->
+                            "in what was passed as " + what + ", applied at " + at;
+                };
+            }
+            // A build is made for a region and not at a place, so it is said by the region.
+            case StepOfACopy.ABuild(var built, var region) ->
+                    "in a build of `" + built.name() + "` for " + region
+                            + ", which this compiler has no place for";
+        };
+    }
+
+    /** A site a copy was made at, said by what it is within the definition that wrote it. */
+    private static String unplaced(ExpansionSite site) {
+        return switch (site) {
+            case ExpansionSite.Written(var call) -> "call " + call.ordinal() + " of `"
+                    + WrittenOwner.theBodyThatWrote(call.owner()).definition() + "`";
+            case ExpansionSite.Named(var reference) -> "name " + reference.ordinal() + " of `"
+                    + WrittenOwner.theBodyThatWrote(reference.owner()).definition() + "`";
+            case ExpansionSite.Supplied supplied -> unplaced(supplied.application())
+                    + " inside `" + HelperInliner.asWritten(supplied.copy().expanded().name())
+                    + "`";
+        };
     }
 
     /**
@@ -5252,40 +5327,30 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // runs, and two builds of one value hold the same construct under the same calls. It
         // identifies within one compilation and matches nothing across two: which builds there are
         // follows how the compiler shares them.
-        List<OccurrenceLineage> steps = new ArrayList<>();
-        OccurrenceLineage at = occurrence.lineage();
-        while (!(at instanceof OccurrenceLineage.Original)) {
-            steps.add(at);
-            at = switch (at) {
-                case OccurrenceLineage.Expansion copy -> copy.within();
-                case OccurrenceLineage.Materialisation build -> build.within();
-                case OccurrenceLineage.Original original -> original;
-            };
-        }
+        //
+        // The steps a page names a copy by, read off the same list.
+        List<StepOfACopy> steps = StepOfACopy.of(occurrence.lineage());
         if (steps.isEmpty()) {
             return;
         }
         ArrayNode through = into.putArray("through");
-        for (OccurrenceLineage step : steps.reversed()) {
+        for (StepOfACopy step : steps) {
             ObjectNode one = through.addObject();
             switch (step) {
-                case OccurrenceLineage.Expansion copy -> expansionStep(one, copy);
-                case OccurrenceLineage.Materialisation build -> {
+                case StepOfACopy.ACall copy -> expansionStep(one, copy);
+                case StepOfACopy.ABuild(var built, var region) -> {
                     one.put("kind", word(ThroughStepWord.MATERIALISATION));
-                    one.put("materialised", build.materialised().toString());
-                    regionOf(one.putObject("at"), build.at());
+                    one.put("materialised", built.toString());
+                    regionOf(one.putObject("at"), region);
                 }
-                case OccurrenceLineage.Original original -> throw new IllegalStateException(
-                        "the chain ends where it was written and is not a step of itself: "
-                                + original);
             }
         }
     }
 
     /** One call the copy was made through: what it reached, and where the call is written. */
-    private static void expansionStep(ObjectNode one, OccurrenceLineage.Expansion copy) {
+    private static void expansionStep(ObjectNode one, StepOfACopy.ACall copy) {
         one.put("kind", word(ThroughStepWord.EXPANSION));
-        one.put("expanded", copy.expanded().toString());
+        one.put("expanded", copy.called().toString());
         switch (copy.at()) {
             case ExpansionSite.Written(var origin) -> {
                 one.put("module", origin.owner().module());

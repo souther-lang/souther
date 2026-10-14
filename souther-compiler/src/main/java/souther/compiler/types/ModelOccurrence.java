@@ -118,30 +118,6 @@ public record ModelOccurrence(SourceConstructOrigin origin, ExpansionLineage lin
     }
 
     /**
-     * Which copy of the model {@code occurrence} stands in when it is inside one of the language's
-     * own operations: the copy the outermost call of the operation stands in, with that call as its
-     * last step. Empty where it stands in no operation, or the call is no call the source wrote.
-     *
-     * <p>The call is a step of it and not only where it is. Two calls of one operation in one body
-     * are two copies of its code, and a construct inside them told apart by the copy around the
-     * calls would be one construct in both.
-     */
-    public static Optional<ExpansionLineage> operationCopyAround(ConstructOccurrence occurrence) {
-        ExpansionLineage model = ExpansionLineage.ORIGINAL;
-        for (Iterator<ExpansionLineage.Expansion> outermost = openAt(occurrence).descendingIterator();
-                outermost.hasNext();) {
-            ExpansionLineage.Expansion each = outermost.next();
-            if (each.expanded() instanceof ValueName.Stdlib.Operation) {
-                return each.at() instanceof ExpansionSite.Written
-                        ? Optional.of(model.copiedInto(each.expanded(), each.at()))
-                        : Optional.empty();
-            }
-            model = model.copiedInto(each.expanded(), each.at());
-        }
-        return Optional.empty();
-    }
-
-    /**
      * The copies {@code occurrence} still stands in, the innermost on top: every copy made on the
      * way to it, less those a block handed over has crossed out of.
      */

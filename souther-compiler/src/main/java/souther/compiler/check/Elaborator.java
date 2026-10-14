@@ -1317,8 +1317,7 @@ public final class Elaborator {
         if (ex.callee() == null) {
             return "a helper";
         }
-        String name = ex.callee().name();
-        return name.startsWith("$") ? name.substring(1) : name;
+        return HelperInliner.asWritten(ex.callee().name());
     }
 
     /** {@code let f: T = <function>} where {@code T} is not a function type. No ordinary type describes

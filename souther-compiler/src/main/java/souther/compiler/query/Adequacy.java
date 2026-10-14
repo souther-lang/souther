@@ -36,7 +36,7 @@ import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.msg.DeadBranchMessage;
 import souther.compiler.diag.msg.ExampleMessage;
-import souther.compiler.diag.msg.Supporting;
+import souther.compiler.check.HelperInliner;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.Localizable;
@@ -71,7 +71,7 @@ import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.TypeOps;
-import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.StepOfACopy;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 import souther.compiler.observe.Disposition;
@@ -8331,8 +8331,13 @@ public final class Adequacy {
                                 checked == null ? CoverageSites.Plan.NONE : checked.plan(),
                                 behavior);
                     });
+                    boolean deeper = false;
                     for (DecisionRuleReading read : DecisionRuleReading.of(ruled, sites)) {
                         said(db, built, read);
+                        deeper |= inItsCalls(db, built, read);
+                    }
+                    if (deeper) {
+                        built.hint(new ExampleMessage.TheReportNamesEveryCallAConditionIsIn());
                     }
                 }
                 // Which of the two this arm is, is already settled: a row is there. What is left is
@@ -8483,30 +8488,17 @@ public final class Adequacy {
         private static void said(Db db, souther.compiler.diag.Diagnostic.Builder built,
                                  DecisionRuleReading read) {
             switch (read) {
-                case DecisionRuleReading.AComparisonCameOut(var comparison, var held, var within) -> {
-                    label(built, comparison.at(), held
-                            ? new ExampleMessage.TheRuleTakesThisConditionHolding()
-                            : new ExampleMessage.TheRuleTakesThisConditionFailing());
-                    inEachCall(db, built, within, called -> held
-                            ? new ExampleMessage.TheRuleTakesAConditionHoldingInThisCall(called)
-                            : new ExampleMessage.TheRuleTakesAConditionFailingInThisCall(called));
-                }
-                case DecisionRuleReading.AnApplicationAnswered(var application, var held,
-                                                               var within) -> {
-                    label(built, application.writtenAt(), held
-                            ? new ExampleMessage.TheRuleTakesThisConditionHolding()
-                            : new ExampleMessage.TheRuleTakesThisConditionFailing());
-                    inEachCall(db, built, within, called -> held
-                            ? new ExampleMessage.TheRuleTakesAConditionHoldingInThisCall(called)
-                            : new ExampleMessage.TheRuleTakesAConditionFailingInThisCall(called));
-                }
-                case DecisionRuleReading.AForkTookAnArm(var arm, var within) -> {
-                    label(built, Sites.placeOf(db, arm.anchor()),
-                            new ExampleMessage.TheRuleGoesThroughThisArm(phraseFor(arm)));
-                    inEachCall(db, built, within, called ->
-                            new ExampleMessage.TheRuleGoesThroughAnArmInThisCall(
-                                    phraseFor(arm), called));
-                }
+                case DecisionRuleReading.AComparisonCameOut(var comparison, var held, var _) ->
+                        label(built, comparison.at(), held
+                                ? new ExampleMessage.TheRuleTakesThisConditionHolding()
+                                : new ExampleMessage.TheRuleTakesThisConditionFailing());
+                case DecisionRuleReading.AnApplicationAnswered(var application, var held, var _) ->
+                        label(built, application.writtenAt(), held
+                                ? new ExampleMessage.TheRuleTakesThisConditionHolding()
+                                : new ExampleMessage.TheRuleTakesThisConditionFailing());
+                case DecisionRuleReading.AForkTookAnArm(var arm, var shownAt, var _) ->
+                        label(built, Sites.placeOf(db, shownAt),
+                                new ExampleMessage.TheRuleGoesThroughThisArm(phraseFor(arm)));
                 // Every shape with nothing to send a reader to, said as one note. What differs
                 // between them is which part of this compiler fell short, which is not something
                 // an author acts on — and a note is written for each so that the rule is never
@@ -8519,23 +8511,68 @@ public final class Adequacy {
         }
 
         /**
-         * The calls of the model's own values a condition was reached through, each marked with
-         * what the rule takes in it.
+         * The call a condition was reached through, marked with what the rule takes in it; or,
+         * where it was reached through more than one, the outermost marked as one the condition is
+         * in, and true to say the report is where the rest is.
          *
          * <p>The mark on the construct is the same for every copy of it, so a rule through a value
          * called twice — one way in one call, the other way in the next — would have both marks on
-         * one construct and nothing saying which call each was in. A call that is no call the
-         * author wrote has nowhere to be marked and is left unmarked: the condition is already
-         * marked where it is written.
+         * one construct and nothing saying which call each was in. One call deep, the mark on the
+         * call says it. Deeper, a call written inside the value is one place for every call of
+         * that value, so a mark there would pair a condition with a copy it is not in; only the
+         * outermost call is one place per copy, and what it can say is that a condition of the rule
+         * is in it. Which calls inside it, and which way, is what the report writes out in full.
+         *
+         * <p>A call with nowhere to be marked is left unmarked: the condition is already marked
+         * where it is written.
          */
-        private static <M extends ExampleMessage & Supporting> void inEachCall(
-                Db db, Diagnostic.Builder built, ExpansionLineage within,
-                Function<String, M> said) {
-            for (Sites.ACall call : Sites.callsThrough(db, within)) {
-                if (call.at() != null) {
-                    label(built, call.at(), said.apply(call.called()));
+        private static boolean inItsCalls(Db db, Diagnostic.Builder built,
+                                          DecisionRuleReading read) {
+            List<StepOfACopy> calls = read.through();
+            if (calls.isEmpty()) {
+                return false;
+            }
+            Answer<Citation> at = Sites.whereMade(db, calls.getFirst());
+            if (calls.size() > 1) {
+                if (at.present()) {
+                    label(built, at.value(), new ExampleMessage.AConditionOfTheRuleIsInThisCall(
+                            calledIn(calls.getFirst())));
+                }
+                return true;
+            }
+            if (at.present()) {
+                String called = calledIn(calls.getFirst());
+                switch (read) {
+                    case DecisionRuleReading.AComparisonCameOut(var _, var held, var _) ->
+                            label(built, at.value(), held
+                                    ? new ExampleMessage.TheRuleTakesAConditionHoldingInThisCall(
+                                            called)
+                                    : new ExampleMessage.TheRuleTakesAConditionFailingInThisCall(
+                                            called));
+                    case DecisionRuleReading.AnApplicationAnswered(var _, var held, var _) ->
+                            label(built, at.value(), held
+                                    ? new ExampleMessage.TheRuleTakesAConditionHoldingInThisCall(
+                                            called)
+                                    : new ExampleMessage.TheRuleTakesAConditionFailingInThisCall(
+                                            called));
+                    case DecisionRuleReading.AForkTookAnArm(var arm, var _, var _) ->
+                            label(built, at.value(),
+                                    new ExampleMessage.TheRuleGoesThroughAnArmInThisCall(
+                                            phraseFor(arm), called));
+                    case DecisionRuleReading.AConditionIsNotShown _,
+                            DecisionRuleReading.AnOutcomeIsNotPlaced _,
+                            DecisionRuleReading.AForkIsNotPlaced _ -> { }
                 }
             }
+            return false;
+        }
+
+        /** What a step copied, as the model names it. */
+        private static String calledIn(StepOfACopy step) {
+            return HelperInliner.asWritten(switch (step) {
+                case StepOfACopy.ACall(var called, var _) -> called.name();
+                case StepOfACopy.ABuild(var built, var _) -> built.name();
+            });
         }
 
         /**

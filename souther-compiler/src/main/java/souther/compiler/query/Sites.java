@@ -16,16 +16,14 @@ import souther.compiler.sites.WrittenApplications;
 import souther.compiler.sites.WrittenCondition;
 import souther.compiler.sites.WrittenConditions;
 import souther.compiler.sites.WrittenForks;
-import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ExpansionSite;
-import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.SourceReferenceOrigin;
+import souther.compiler.types.StepOfACopy;
 import souther.compiler.types.TypeSymbol;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Where a module's source was written, occurrence by occurrence.
@@ -498,46 +496,48 @@ public final class Sites {
     }
 
     /**
-     * One call of the model's own values a construct was reached through.
+     * Where the copy {@code step} names was made, or absent where it was made at nothing a reader
+     * can be sent to — a build, which is made for a region and not at a place — or this compilation
+     * holds no place for it.
      *
-     * @param called what was called, as the model names it
-     * @param at     where the call is written, or null where it is no call the author wrote — a
-     *               name standing where a value goes — or one this compilation holds no place for
+     * <p>The one answer for every surface that says which copy a construct stands in. A page writes
+     * it out and a warning marks it, and two answers would be free to send the two readers to
+     * different places for one copy.
+     *
+     * <p>A block a call handed over is placed at the application that ran it, which is in the code
+     * of the value it was handed to; where it was handed over is a step further out.
      */
-    public record ACall(String called, Citation at) {
+    public static Answer<Citation> whereMade(Db db, StepOfACopy step) {
+        return switch (step) {
+            case StepOfACopy.ACall(var _, var at) -> switch (at) {
+                case ExpansionSite.Direct direct -> whereMade(db, direct);
+                case ExpansionSite.Supplied supplied -> whereMade(db, supplied.application());
+            };
+            case StepOfACopy.ABuild _ -> Answer.absent();
+        };
+    }
 
-        public ACall {
-            Objects.requireNonNull(called, "a call is a call of something");
-        }
+    private static Answer<Citation> whereMade(Db db, ExpansionSite.Direct at) {
+        return switch (at) {
+            case ExpansionSite.Written(var call) -> appliedAt(db, call);
+            case ExpansionSite.Named(var reference) -> referencedAt(db, reference);
+        };
     }
 
     /**
-     * The calls {@code within} was made through, outermost first, and none for a construct where it
-     * is written.
+     * Where the module that wrote {@code origin} says the name stands.
      *
-     * <p>One walk for every surface that says which copy of a construct a condition is of. The
-     * page writes the calls out and a warning marks them, and two walks would be free to disagree
-     * about which call a condition was reached through.
-     *
-     * <p>A block a call handed over is named by the application that ran it, which is in the code
-     * of the value it was handed to. A block handed to one of the language's own operations is not
-     * among these: a construct of the model is read out of such a copy before it gets here
-     * ({@link ModelOccurrence#statedAt}).
+     * <p>Read off the module's walk and not asked as a question of its own. Only a page naming a
+     * copy made at a name asks it, and a question answered for so few readers would be one most
+     * runs declare and never reach.
      */
-    public static List<ACall> callsThrough(Db db, ExpansionLineage within) {
-        List<ACall> out = new ArrayList<>();
-        for (ExpansionLineage at = within; at instanceof ExpansionLineage.Expansion copy;
-                at = copy.within()) {
-            ExpansionSite.Direct called = switch (copy.at()) {
-                case ExpansionSite.Direct direct -> direct;
-                case ExpansionSite.Supplied supplied -> supplied.application();
-            };
-            Answer<Citation> written = called instanceof ExpansionSite.Written(var origin)
-                    ? appliedAt(db, origin) : Answer.absent();
-            out.add(new ACall(copy.expanded().name(),
-                    written.present() ? written.value() : null));
+    private static Answer<Citation> referencedAt(Db db, SourceReferenceOrigin origin) {
+        Answer<AuthoredSites.Walked> walked = db.ask(new Walk(origin.owner().module()));
+        if (!walked.present()) {
+            return Answer.absent();
         }
-        return out.reversed();
+        SourcePos at = walked.value().references().at(origin);
+        return at == null ? Answer.absent() : Answer.of(Citation.of(at));
     }
 
     /** Where the module that wrote {@code origin} says the call stands. */

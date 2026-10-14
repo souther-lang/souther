@@ -419,6 +419,20 @@ public sealed interface ExampleMessage extends Message {
     record TheRuleGoesThroughAnArmInThisCall(Localizable arm, String called)
             implements ExampleMessage, Supporting {}
 
+    /**
+     * A condition of that rule reached through more than one call, marked at the outermost: a
+     * condition of the rule is somewhere in this call of {@code called}.
+     *
+     * <p>No more than that. A call written inside {@code called} is one place for every call of it,
+     * so which of those calls the condition is in, and which way it went there, is nothing a mark
+     * can pair with one copy — the report writes it out ({@link TheReportNamesEveryCallAConditionIsIn}).
+     */
+    record AConditionOfTheRuleIsInThisCall(String called) implements ExampleMessage, Supporting {}
+
+    /** That the report names every call each condition of the rule was reached through, said
+     *  wherever a mark at a call cannot. */
+    record TheReportNamesEveryCallAConditionIsIn() implements ExampleMessage, Supporting {}
+
     /** A condition of the rule with nothing to send a reader to, so that a rule is never described
      *  by fewer conditions than it turns on. */
     record OneConditionOfTheRuleIsNotShown() implements ExampleMessage, Supporting {}

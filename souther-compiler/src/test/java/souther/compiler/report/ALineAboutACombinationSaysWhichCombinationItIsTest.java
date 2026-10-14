@@ -1,37 +1,50 @@
 package souther.compiler.report;
 
-import souther.compiler.coverage.SourceOutcome;
+import souther.compiler.coverage.ControlClaim;
+import souther.compiler.coverage.ControlPlace;
 import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Located;
+import souther.compiler.diag.Note;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.partition.InteractionRequirements;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.CombinationCriterion;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DecisionRuleReading;
-import souther.compiler.reading.Condition;
-import souther.compiler.types.ModelOccurrence;
-import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.OccurrenceLineage;
+import souther.compiler.types.StepOfACopy;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * A line about a combination of a body's decisions says which combination it is, and the one it
  * says is the one the line is about.
  *
- * <p>Held against the combination's identity, which is what the document's {@code obligationId}
- * is written from, and not against the ways the conditions were read off: those are the readings'
- * own source, and a check built from them would agree with whatever they said.
+ * <p>Two questions, checked apart. Whether each condition said is the place a run of the
+ * combination is recorded at — every step of the copy it stands in included — is checked against
+ * the claims the measure holds the combination to, read here without the reading's own walk. And
+ * whether two combinations a page names read as two is checked on the page itself. The first does
+ * not give the second: a condition of a combination can be a case of a position, which no claim
+ * names, and the page is what has to tell such combinations apart.
  */
 class ALineAboutACombinationSaysWhichCombinationItIsTest {
 
@@ -72,97 +85,180 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
                 | (Total(5000), Standard, Express) -> Fee(1)
             """;
 
-    /** One value called on both inputs: the decisions are one construct in two calls. */
-    private static final String TWICE = """
-            module example.twice
-
+    private static final String KINDS = """
+            module p
             data Gold
             data Plain
             data Kind = Gold | Plain
-            data Fee = Int
-
-            behavior pairFee : (first: Kind, second: Kind) -> Fee
-                constructs Fee
-
-            let pairFee (first, second) =
-                Fee(price(first) + price(second))
-
+            behavior f : (first: Kind, second: Kind) -> Int
             let price (kind: Kind): Int =
                 match kind with
                     | Gold -> 10
                     | Plain -> 1
-
-            example pairFee
-                | (Gold, Gold)   -> Fee(20)
             """;
 
+    /** One value called on both inputs: the decisions are one construct in two calls. */
+    private static final String TWICE = KINDS + """
+            let f (first, second) = price(first) + price(second)
+            example f
+                | (Gold, Gold) -> 20
+            """;
+
+    /** One value called inside another called twice: two steps to each decision. */
+    private static final String NESTED = KINDS + """
+            let outer (k: Kind): Int = price(k)
+            let f (first, second) = outer(first) + outer(second)
+            example f
+                | (Gold, Gold) -> 20
+            """;
+
+    /** A value passed by name to one that applies it, twice. */
+    private static final String NAMED = KINDS + """
+            let apply (g: (Kind) -> Int, k: Kind): Int = g(k)
+            let f (first, second) = apply(price, first) + apply(price, second)
+            example f
+                | (Gold, Gold) -> 20
+            """;
+
+    /** Two positions matched on the same cases, where the body itself writes both. */
+    private static final String SAME_CASES = """
+            module p
+            data Gold
+            data Plain
+            data Kind = Gold | Plain
+            behavior f : (first: Kind, second: Kind) -> Int
+            let f (first, second) =
+                (match first with
+                    | Gold -> 10
+                    | Plain -> 1)
+                + (match second with
+                    | Gold -> 10
+                    | Plain -> 1)
+            example f
+                | (Gold, Gold) -> 20
+            """;
+
+    /** One of the language's own operations called on both inputs: the decisions are inside its
+     *  code, one construct in two calls. */
+    private static final String OPERATION = """
+            module p
+            data H = { a: Option<Int>, b: Option<Int> }
+            behavior f : (h: H) -> Int
+            let f (h) = Option.withDefault(0, h.a) + Option.withDefault(0, h.b)
+            example f
+                | (H { a = 1, b = 2 }) -> 3
+            """;
+
+    /** The same two decisions meet at a value of a helper and again where two calls of it meet,
+     *  so each combination has more than one way. */
+    private static final String MEETS_TWICE = KINDS + """
+            let both (a: Kind, b: Kind): Int = price(a) * price(b)
+            let f (first, second) = both(first, second) + both(first, second)
+            example f
+                | (Gold, Gold) -> 200
+            """;
+
+    private static final Map<String, String> FIXTURES = Map.of(
+            "MEETING", MEETING, "TWICE", TWICE, "NESTED", NESTED, "NAMED", NAMED,
+            "SAME_CASES", SAME_CASES, "OPERATION", OPERATION, "MEETS_TWICE", MEETS_TWICE);
+
     /**
-     * Each combination a line is about is said by exactly the conditions it settles: a case by the
-     * arm written for it, a comparison by the comparison and the way it came out, each in the copy
-     * the condition is of.
+     * Each condition under a line is a place a run of that combination is recorded at, with every
+     * step of the copy it stands in, and the alternatives under it are the ways the measure holds
+     * it to that no other way is inside.
      */
-    @Test
-    void whatALineSaysIsTheCombinationItIsAbout() {
-        AdequacyReport.BehaviorReport behavior = behaviorOf(MEETING);
+    @ParameterizedTest
+    @ValueSource(strings = {"MEETING", "TWICE", "NESTED", "NAMED", "SAME_CASES", "OPERATION",
+            "MEETS_TWICE"})
+    void eachConditionSaidIsAPlaceTheCombinationIsRecordedAt(String fixture) {
+        AdequacyReport.BehaviorReport behavior = behaviorOf(FIXTURES.get(fixture));
         Set<ObligationIdentity.OfACombinationOfDecisions> about = aboutOf(behavior);
-        assertEquals(3, about.size(), () -> "two no row makes and one only a failing row makes: "
-                + about);
+        assertTrue(about.size() >= 3, () -> "lines about combinations: " + about);
 
         for (ObligationIdentity.OfACombinationOfDecisions combination : about) {
-            List<List<AdequacyReport.ShownCondition>> ways = behavior.waysOf(combination);
-            assertEquals(1, ways.size(), () -> "one way to " + combination + ": " + ways);
-            assertEquals(said(combination.settled()), said(ways.getFirst()),
-                    () -> "the lines under " + combination + " say what it settles");
-        }
-    }
-
-    /**
-     * Three combinations through one value called twice read as three, and the page prints three
-     * different blocks.
-     *
-     * <p>The case and the place it is written are the same in both calls, so what tells
-     * {@code (Gold, Plain)} from {@code (Plain, Gold)} is which call each case was taken in.
-     */
-    @Test
-    void combinationsThroughOneValueCalledTwiceReadApart() {
-        Compilation compilation = measured(TWICE);
-        AdequacyReport.BehaviorReport behavior = AdequacyReport.of(compilation).modules()
-                .getFirst().behaviors().getFirst();
-        Set<ObligationIdentity.OfACombinationOfDecisions> about = aboutOf(behavior);
-        assertEquals(3, about.size(), () -> "the three combinations with a `Plain`: " + about);
-
-        // As sets, because the order a way met its conditions in is no part of which combination
-        // it is: (Gold, Plain) said in one order and (Plain, Gold) in the other read alike.
-        Set<Set<AdequacyReport.ShownCondition>> read = new HashSet<>();
-        for (ObligationIdentity.OfACombinationOfDecisions combination : about) {
-            read.add(Set.copyOf(behavior.waysOf(combination).getFirst()));
-        }
-        assertEquals(about.size(), read.size(), () -> "each reads as its own: " + read);
-
-        List<Set<String>> blocks = blocksOf(AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())));
-        assertEquals(3, blocks.size(), () -> "a block per combination: " + blocks);
-        assertEquals(3, new HashSet<>(blocks).size(), () -> "and no two alike: " + blocks);
-    }
-
-    /**
-     * The warning about a rule through one value called twice marks each call with the arm the
-     * rule goes through in it, so the rules that go one way in one call and the other way in the
-     * next are told apart where the page tells the combinations apart.
-     *
-     * <p>A warning cannot write a place into its words, so the construct alone is marked with both
-     * arms for both rules; what pairs each arm with its call is the mark on the call.
-     */
-    @Test
-    void theWarningAboutARuleThroughAValueCalledTwiceMarksEachCall() {
-        Compilation compilation = Compilation.ofSource(TWICE, "Main");
-        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
-        List<Set<String>> calls = new ArrayList<>();
-        for (Located each : compilation.warnings()) {
-            if (!(each.diagnostic().said() instanceof ExampleMessage.NoRowTakesADecisionRule)) {
-                continue;
+            Set<Set<List<Object>>> asked = new HashSet<>();
+            for (InteractionRequirements.Way way : waysOf(behavior, combination)) {
+                Set<List<Object>> claimed = new HashSet<>();
+                for (ControlClaim claim : way.claims()) {
+                    claimed.add(claimed(claim));
+                }
+                asked.add(claimed);
             }
+            Set<Set<List<Object>>> alternatives = new HashSet<>();
+            for (Set<List<Object>> way : asked) {
+                if (asked.stream().noneMatch(other -> other != way && way.containsAll(other))) {
+                    alternatives.add(way);
+                }
+            }
+            Set<Set<List<Object>>> said = new HashSet<>();
+            for (List<AdequacyReport.ShownCondition> way : behavior.waysOf(combination)) {
+                List<List<Object>> read = way.stream().map(each -> read(each.read())).toList();
+                assertEquals(read.size(), new HashSet<>(read).size(),
+                        () -> "no condition said twice in one way: " + read);
+                said.add(new HashSet<>(read));
+            }
+            assertEquals(alternatives, said, () -> "what is said under " + combination);
+        }
+    }
+
+    /** Every combination a page names reads as its own, and only the ways the page needs are said
+     *  as alternatives. */
+    @ParameterizedTest
+    @ValueSource(strings = {"MEETING", "TWICE", "NESTED", "NAMED", "SAME_CASES", "OPERATION",
+            "MEETS_TWICE"})
+    void combinationsAPageNamesReadApart(String fixture) {
+        Compilation compilation = measured(FIXTURES.get(fixture));
+        AdequacyReport report = AdequacyReport.of(compilation);
+        Set<ObligationIdentity.OfACombinationOfDecisions> about =
+                aboutOf(report.modules().getFirst().behaviors().getFirst());
+        List<Set<String>> blocks =
+                blocksOf(report.human(SourceRendering.namedByIdentity(compilation.texts())));
+        assertEquals(about.size(), blocks.size(), () -> "a line per combination: " + blocks);
+        assertEquals(blocks.size(), new HashSet<>(blocks).size(),
+                () -> "and no two alike: " + blocks);
+    }
+
+    /**
+     * Where a combination has more than one way, the page writes one line for it and says the
+     * ways under it as alternatives, leaving out a way that has another inside it. The document
+     * names the combination once whatever its ways.
+     */
+    @Test
+    void waysAreSaidAsAlternativesUnderOneLine() {
+        Compilation compilation = measured(MEETS_TWICE);
+        AdequacyReport report = AdequacyReport.of(compilation);
+        AdequacyReport.BehaviorReport behavior = report.modules().getFirst().behaviors().getFirst();
+        Set<ObligationIdentity.OfACombinationOfDecisions> about = aboutOf(behavior);
+        for (ObligationIdentity.OfACombinationOfDecisions combination : about) {
+            assertEquals(3, waysOf(behavior, combination).size(),
+                    () -> "the meeting in each call and the one between them: " + combination);
+            assertEquals(2, behavior.waysOf(combination).size(),
+                    () -> "the one between them holds both of the others: " + combination);
+        }
+        String page = report.human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertEquals(about.size(), blocksOf(page).size(), page);
+        assertEquals(about.size(), linesSaying(page, "either"), page);
+        assertEquals(about.size(), linesSaying(page, "or"), page);
+
+        JsonNode interaction = JsonMapper.builder().build().readTree(
+                report.json(SourceRendering.namedByIdentity(compilation.texts())))
+                .findValue("interaction");
+        int unmade = 0;
+        for (JsonNode each : interaction.get("obligations")) {
+            unmade += each.get("made").asBoolean() ? 0 : 1;
+        }
+        assertEquals(about.size(), unmade, () -> "one obligation per line: " + interaction);
+    }
+
+    /**
+     * A warning about a rule through a value called once marks the call with what the rule takes
+     * in it, so the rules that go one way in one call and the other way in the next read apart.
+     */
+    @Test
+    void aWarningMarksTheOneCallAConditionIsIn() {
+        List<Located> warnings = ruleWarnings(TWICE);
+        List<Set<String>> calls = new ArrayList<>();
+        for (Located each : warnings) {
             Set<String> marked = new HashSet<>();
             for (LabeledRegion label : each.diagnostic().secondary()) {
                 if (label.said() instanceof ExampleMessage.TheRuleGoesThroughAnArmInThisCall) {
@@ -170,12 +266,37 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
                 }
             }
             calls.add(marked);
+            assertTrue(hints(each).isEmpty(), () -> "nothing left to the report: " + each);
         }
         assertEquals(3, calls.size(), () -> "the three rules with a `Plain`: " + calls);
         for (Set<String> marked : calls) {
             assertEquals(2, marked.size(), () -> "each call marked with its arm: " + marked);
         }
         assertEquals(3, new HashSet<>(calls).size(), () -> "and no two alike: " + calls);
+    }
+
+    /**
+     * A warning about a rule through calls inside calls marks only the outermost, says no more
+     * there than that a condition is in it, and leaves which calls and which way to the report.
+     */
+    @Test
+    void aWarningMarksOnlyTheOutermostCallWhereThereAreMore() {
+        List<Located> warnings = ruleWarnings(NESTED);
+        assertEquals(3, warnings.size(), () -> "the three rules with a `Plain`: " + warnings);
+        for (Located each : warnings) {
+            Set<String> marked = new HashSet<>();
+            for (LabeledRegion label : each.diagnostic().secondary()) {
+                assertTrue(!(label.said() instanceof ExampleMessage.TheRuleGoesThroughAnArmInThisCall),
+                        () -> "no arm paired with a call: " + label);
+                if (label.said() instanceof ExampleMessage.AConditionOfTheRuleIsInThisCall(var c)) {
+                    assertEquals("outer", c, () -> "the outermost call: " + label);
+                    marked.add(String.valueOf(label.place()));
+                }
+            }
+            assertEquals(2, marked.size(), () -> "each call of `outer`: " + each);
+            assertEquals(List.of(new ExampleMessage.TheReportNamesEveryCallAConditionIsIn()),
+                    hints(each), () -> "and the report is where the rest is: " + each);
+        }
     }
 
     /** Two ways naming the same conditions in two orders are said once, in the first one's order. */
@@ -191,41 +312,64 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
                 AdequacyReport.distinctWays(List.of(way.reversed(), way)));
     }
 
-    /**
-     * What each condition of a combination is, in the words a reading of it is checked by: which
-     * construct, which way, and which copy.
-     */
-    private static Set<String> said(Set<Condition> settled) {
-        Set<String> out = new LinkedHashSet<>();
-        for (Condition each : settled) {
-            out.add(switch (each) {
-                case Condition.Case(var _, var names) -> "case " + names;
-                case Condition.Side side -> "comparison "
-                        + side.statedAt().origin() + " " + side.held() + " "
-                        + ModelOccurrence.statedAt(side.statedAt()).orElseThrow().lineage();
-                case Condition.Arm arm -> "arm " + arm.arm().origin() + " " + arm.arm().part();
-            });
+    /** What a claim is recorded at: which construct, which way, where it is shown, and every step
+     *  of its copy — read off the claim's occurrence by a walk of this test's own. */
+    private static List<Object> claimed(ControlClaim claim) {
+        return switch (claim.at()) {
+            case ControlPlace.Arm(var arm, var _, var anchor) ->
+                    List.of("arm", arm.origin(), arm.part(), anchor, steps(arm.fork().lineage()));
+            case ControlPlace.Outcome(var occurrence, var _, var held) ->
+                    List.of("outcome", occurrence.origin(), held, steps(occurrence.lineage()));
+        };
+    }
+
+    /** The same, read off what a page was handed. */
+    private static List<Object> read(DecisionRuleReading read) {
+        return switch (read) {
+            case DecisionRuleReading.AForkTookAnArm(var arm, var shownAt, var through) ->
+                    List.of("arm", arm.obligation().origin(), arm.obligation().part(), shownAt,
+                            steps(through));
+            case DecisionRuleReading.AComparisonCameOut(var comparison, var held, var through) ->
+                    List.of("outcome", comparison.obligation().origin(), held, steps(through));
+            case DecisionRuleReading.AnApplicationAnswered(var application, var held,
+                                                           var through) ->
+                    List.of("outcome", application.application().origin(), held, steps(through));
+            case DecisionRuleReading.AConditionIsNotShown _, DecisionRuleReading.AnOutcomeIsNotPlaced _,
+                 DecisionRuleReading.AForkIsNotPlaced _ ->
+                    fail("every condition of these fixtures has a site: " + read);
+        };
+    }
+
+    private static List<List<Object>> steps(OccurrenceLineage lineage) {
+        List<List<Object>> out = new ArrayList<>();
+        OccurrenceLineage at = lineage;
+        while (!(at instanceof OccurrenceLineage.Original)) {
+            if (at instanceof OccurrenceLineage.Expansion copy) {
+                out.addFirst(List.of("call", copy.expanded(), copy.at()));
+                at = copy.within();
+            } else if (at instanceof OccurrenceLineage.Materialisation build) {
+                out.addFirst(List.of("build", build.materialised(), build.at()));
+                at = build.within();
+            }
         }
         return out;
     }
 
-    /** The same words, read off what a page was handed. */
-    private static Set<String> said(List<AdequacyReport.ShownCondition> way) {
-        Set<String> out = new LinkedHashSet<>();
-        for (AdequacyReport.ShownCondition each : way) {
-            out.add(switch (each.read()) {
-                case DecisionRuleReading.AForkTookAnArm(var arm, var _)
-                        when arm.outcome() instanceof SourceOutcome.Matched(var cases) ->
-                        "case " + cases.stream().map(TypeSymbol::name).sorted().toList();
-                case DecisionRuleReading.AForkTookAnArm(var arm, var _) ->
-                        "arm " + arm.obligation().origin() + " " + arm.obligation().part();
-                case DecisionRuleReading.AComparisonCameOut(var comparison, var held, var within) ->
-                        "comparison " + comparison.obligation().origin() + " " + held + " "
-                                + within;
-                default -> "nothing to send a reader to: " + each.read();
-            });
+    private static List<List<Object>> steps(List<StepOfACopy> through) {
+        return through.stream().map(step -> switch (step) {
+            case StepOfACopy.ACall(var called, var at) -> List.<Object>of("call", called, at);
+            case StepOfACopy.ABuild(var built, var at) -> List.<Object>of("build", built, at);
+        }).toList();
+    }
+
+    private static List<InteractionRequirements.Way> waysOf(
+            AdequacyReport.BehaviorReport behavior,
+            ObligationIdentity.OfACombinationOfDecisions combination) {
+        if (!(behavior.evidence().combinations() instanceof CombinationCriterion.Interactions(
+                var meetings))) {
+            return fail("held to the combinations of its decisions: " + behavior.name());
         }
-        return out;
+        return meetings.asked().ways().get(combination);
     }
 
     /** The combinations a line under {@code behavior} is about. */
@@ -260,6 +404,28 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
             }
         }
         return out;
+    }
+
+    /** How many lines of {@code page} say {@code word} and nothing else. */
+    private static long linesSaying(String page, String word) {
+        return page.lines().filter(line -> line.strip().equals(word)).count();
+    }
+
+    /** The warnings a build reads about rules of {@code source} no row takes. */
+    private static List<Located> ruleWarnings(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
+        compilation.answerEverything();
+        return compilation.warnings().stream()
+                .filter(each -> each.diagnostic().said()
+                        instanceof ExampleMessage.NoRowTakesADecisionRule)
+                .toList();
+    }
+
+    private static List<Object> hints(Located warning) {
+        return warning.diagnostic().notes().stream().map(Note::said)
+                .filter(said -> said instanceof ExampleMessage.TheReportNamesEveryCallAConditionIsIn)
+                .map(said -> (Object) said).toList();
     }
 
     private static AdequacyReport.BehaviorReport behaviorOf(String source) {
