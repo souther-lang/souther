@@ -8,6 +8,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
@@ -223,9 +224,11 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
                 List.of(divided("days/low", low).ofTheNumber(atDays),
                         divided("days/high", 9).ofTheNumber(atDays)),
                 List.of());
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES);
         MeasuredInput subject = MeasuredInput.of("fee",
                 InputDomain.of(List.of(new InputDomain.Parameter("days", null, Type.INT)),
-                        RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES),
+                        reading, TypeCardinality.Counts.workedOutIn(reading),
                         Membership.none())
                         .reading(SYMBOLS),
                 AxesATestWrote.asAMeasurement("fee", List.of(days)));

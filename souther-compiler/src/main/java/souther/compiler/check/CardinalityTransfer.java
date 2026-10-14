@@ -219,6 +219,14 @@ final class CardinalityTransfer {
         return new Walk(source, answers, granted, worn).at(type, path, counts, values);
     }
 
+    /**
+     * How many values a value of {@code type} has where no rule is written about it, which is how a
+     * collection's element is read.
+     */
+    static Cardinality held(Type type, RuleReadingSource source, Answers answers) {
+        return new Walk(source, answers, Supposing.NOTHING, new HashSet<>()).held(type);
+    }
+
     /** How many times a reading has opened a name worn over a value. */
     static long namesOpened() {
         return OPENED.get();

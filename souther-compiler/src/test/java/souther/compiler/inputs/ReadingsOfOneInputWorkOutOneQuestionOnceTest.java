@@ -6,6 +6,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -93,8 +94,10 @@ class ReadingsOfOneInputWorkOutOneQuestionOnceTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        InputDomain read = InputDomain.of(sigs.get("read"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+        InputDomain read = InputDomain.of(sigs.get("read"), reading,
+                TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none());
         return (ReadQuantities) read.quantities(rules);
     }

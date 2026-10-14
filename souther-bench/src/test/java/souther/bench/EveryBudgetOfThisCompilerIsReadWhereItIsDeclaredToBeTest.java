@@ -71,12 +71,14 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
 
             // The stops. Each reaches a figure and hands it over as itself.
             Map.entry("souther.compiler.partition.Witnesses#<clinit>()V",
-                    "how many elements and characters a proposal holds, and how many pairings"),
-            Map.entry("souther.compiler.partition.Witnesses#sized("
-                            + "Lsouther/compiler/check/TypeView;ILjava/util/List;"
-                            + "Lsouther/compiler/check/RuleReadingContext;Ljava/util/Set;)"
-                            + "Lsouther/compiler/partition/Witnesses$Built;",
-                    "stops at the elements and the characters, and says which"),
+                    "how many pairings a map is built from at once"),
+            // Every value built at a count asks these, and they say which figure it is past.
+            Map.entry("souther.compiler.partition.Witnesses#pastTheElements(I)"
+                            + "Lsouther/compiler/partition/CompositionBudget;",
+                    "stops at the elements a value is built with, and says which"),
+            Map.entry("souther.compiler.partition.Witnesses#pastTheCharacters(I)"
+                            + "Lsouther/compiler/partition/CompositionBudget;",
+                    "stops at the characters a string is built with, and says which"),
             Map.entry("souther.compiler.partition.Witnesses#ofMapping("
                             + "Lsouther/compiler/check/Shape$Mapping;I"
                             + "Lsouther/compiler/check/RuleReadingContext;Ljava/util/Set;)"

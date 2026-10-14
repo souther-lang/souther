@@ -8,6 +8,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -171,9 +172,11 @@ class EachOfAPositionsNumbersIsMeasuredOnItsOwnTest {
     private static List<String> measuredIn(String model, String parameter) {
         RuleReadingSource rules = RuleReadings.ofSource(model);
         Type type = Type.ref(TypeSymbols.declared(new TypeKey(rules.symbols().module(), parameter)));
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
         InputDomain read = InputDomain.of(
                 List.of(new InputDomain.Parameter("v", null, type)),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), Membership.none());
+                reading, TypeCardinality.Counts.workedOutIn(reading), Membership.none());
         List<String> out = new ArrayList<>();
         for (souther.compiler.inputs.Position at : read.positions()) {
             switch (LocalInspection.of(at,

@@ -28,16 +28,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AClassThisCompilerStoppedAtSaysWhichFigureStoppedItTest {
 
     /**
-     * A class of counts higher than the position holds any of.
+     * A class of counts of dates.
      *
-     * <p>A set of truths holds two at most, so the counts this class admits run past what this
-     * compiler tries and none of the ones it tried built. Which is this compiler giving up at a
-     * figure, and the figure is one somebody can raise.
+     * <p>There are sets of dates of every size, and this compiler offers one date for an element
+     * and steps nothing from it, so the counts this class admits run past what it tries and none of
+     * the ones it tried built. Which is this compiler giving up at a figure.
      */
     private static final String MORE_THAN_IT_HOLDS = """
             module example.stopped
 
-            behavior h : (s: Set<Bool>) -> Bool
+            behavior h : (s: Set<Date>) -> Bool
             let h (s) = {
                 guard Set.size(s) >= 3 else false
 

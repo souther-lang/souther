@@ -23,9 +23,12 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.RuleRef;
+import souther.compiler.check.TypeCardinality;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -430,10 +433,11 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
         Map<String, souther.compiler.check.DeclaredSig> sigs = compilation.db()
                 .ask(new souther.compiler.query.Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs.get(behavior), "the model under test compiles");
+        RuleReadingContext context = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
         souther.compiler.inputs.InputDomain domain =
-                souther.compiler.inputs.InputDomain.of(sigs.get(behavior),
-                        RuleReadingContext.unshared(rules,
-                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                InputDomain.of(sigs.get(behavior), context,
+                        TypeCardinality.Counts.workedOutIn(context),
                         Membership.none());
         Partitions.Partitioning partitioning = Partitions.of(behavior, domain.reading(rules),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);

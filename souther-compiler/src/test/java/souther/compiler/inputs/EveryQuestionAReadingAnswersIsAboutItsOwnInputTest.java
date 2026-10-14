@@ -7,6 +7,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.ReadAs;
@@ -50,8 +51,10 @@ class EveryQuestionAReadingAnswersIsAboutItsOwnInputTest {
 
     /** A reading of an input that takes one whole number, and nothing called {@code s}. */
     private static Quantities reading() {
-        return InputDomain.of(List.of(new InputDomain.Parameter("n", null, Type.INT)),
-                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES),
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES);
+        return InputDomain.of(List.of(new InputDomain.Parameter("n", null, Type.INT)), reading,
+                TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none()).quantities(RULES);
     }
 

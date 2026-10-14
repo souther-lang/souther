@@ -8,6 +8,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -39,18 +40,22 @@ class AReadingAnswersAboutItsOwnTermsAndNoOthersTest {
 
     /** A reading of one behavior's input, which takes a string called {@code s}. */
     private static Quantities readingOfAString() {
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES);
         return InputDomain.of(
-                List.of(new InputDomain.Parameter("s", null, Type.STRING)),
-                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES),
+                List.of(new InputDomain.Parameter("s",null, Type.STRING)),
+                reading, TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none()).quantities(RULES);
     }
 
     /** A reading of another behavior's input, which takes a whole number called {@code n} and has
      *  no parameter the term below is under. */
     private static Quantities readingOfANumber() {
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES);
         return InputDomain.of(
-                List.of(new InputDomain.Parameter("n", null, Type.INT)),
-                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES),
+                List.of(new InputDomain.Parameter("n",null, Type.INT)),
+                reading, TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none()).quantities(RULES);
     }
 
@@ -102,13 +107,17 @@ class AReadingAnswersAboutItsOwnTermsAndNoOthersTest {
      */
     @Test
     void twoReadingsWithAParameterSpelledAlikeAreNotOneReading() {
+        RuleReadingContext textReading =
+                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES);
         InputReading text = InputDomain.of(
                 List.of(new InputDomain.Parameter("x", null, Type.STRING)),
-                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES),
+                textReading, TypeCardinality.Counts.workedOutIn(textReading),
                 souther.compiler.carrier.Membership.none()).reading(RULES);
+        RuleReadingContext numberReading =
+                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES);
         InputReading number = InputDomain.of(
                 List.of(new InputDomain.Parameter("x", null, Type.INT)),
-                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES),
+                numberReading, TypeCardinality.Counts.workedOutIn(numberReading),
                 souther.compiler.carrier.Membership.none()).reading(RULES);
         NumericTerm at = new NumericTerm.ValueOf(TermPath.of("x"));
 

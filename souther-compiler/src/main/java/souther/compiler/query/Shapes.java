@@ -1576,8 +1576,9 @@ public final class Shapes {
     }
 
     /** What a count of one component is handed about a declaration outside it: the answer for the
-     *  component that one is a member of, which is a reading of its own. */
-    private static final class CountedElsewhere implements TypeCardinality.Counts {
+     *  component that one is a member of, which is a reading of its own. And what a reading of a
+     *  behavior's input asks how many values a declaration has, for the same reason. */
+    static final class CountedElsewhere implements TypeCardinality.Counts {
 
         private final Db db;
 

@@ -11,6 +11,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
 
@@ -280,11 +281,13 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
                 List.of(divided("days/low", 1).ofTheNumber(atDays),
                         divided("days/high", 9).ofTheNumber(atDays)),
                 List.of());
+        RuleReadingContext context =
+                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES);
         MeasuredInput subject = MeasuredInput.of("fee",
                 souther.compiler.inputs.InputDomain.of(
                         List.of(new souther.compiler.inputs.InputDomain.Parameter("days", null,
                                 Type.INT)),
-                        RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES),
+                        context, TypeCardinality.Counts.workedOutIn(context),
                         Membership.none())
                         .reading(SYMBOLS),
                 AxesATestWrote.asAMeasurement("fee", List.of(days)));

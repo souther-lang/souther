@@ -7,6 +7,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ReadingPolicy;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -67,7 +68,9 @@ class EveryAnswerAPositionGivesAboutADistinctionIsOneSomeModelHereGetsTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        Position k = InputDomain.of(sigs.get("take"), RuleReadingContext.unshared(rules, policy),
+        RuleReadingContext reading = RuleReadingContext.unshared(rules, policy);
+        Position k = InputDomain.of(sigs.get("take"), reading,
+                        TypeCardinality.Counts.workedOutIn(reading),
                         souther.compiler.carrier.Membership.none())
                 .positions().stream()
                 .filter(p -> p.path().toString().equals("r.k"))

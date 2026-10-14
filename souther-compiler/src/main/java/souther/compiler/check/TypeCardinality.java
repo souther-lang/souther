@@ -101,6 +101,59 @@ public final class TypeCardinality {
 
         /** Nowhere to ask, for a count that holds every declaration it reads. */
         Counts NONE = _ -> null;
+
+        /**
+         * The counts worked out here, each declaration answered with everything it reaches the
+         * first time a reading asks for it, for a caller with nowhere to ask.
+         *
+         * <p>The same answers a compilation hands out one component at a time, which is what
+         * {@link #overTheWholeGraph} is kept to say. Every declaration a walk from one name
+         * reached is kept, so a name reached again from another is not counted again.
+         */
+        static Counts workedOutIn(RuleReadingContext reading) {
+            Premises premises = Premises.read(reading);
+            Map<TypeSymbol, Cardinality> counted = new HashMap<>();
+            return name -> {
+                if (!counted.containsKey(name)) {
+                    counted.putAll(overTheWholeGraph(List.of(name), reading, premises).all());
+                    counted.putIfAbsent(name, Cardinality.UNKNOWN);
+                }
+                return counted.get(name);
+            };
+        }
+    }
+
+    /**
+     * How many a value of {@code type} holds at most where it is a set or a map, or -1 where it is
+     * neither or nothing bounds what it holds apart.
+     *
+     * <p>A set holds each of its element's values once and a map each of its keys once, which is
+     * the fact a set too large for its element is refused by, read here as an end of how many it
+     * holds.
+     * Nought where there is no value to hold, since the empty one is a set or a map of anything. An
+     * upper bound and no more: that one of every size below it can be built is a question about the
+     * rules it and what it holds are under, and asked of those.
+     *
+     * <p>Asked of the element or the key as a value no rule of the container's was written about,
+     * which is how a count reads what a collection holds; a name it reaches is asked of
+     * {@code counted}.
+     */
+    public static long mostItHoldsApart(Type type, RuleReadingSource source, Counts counted) {
+        Type apart = switch (TypeOps.base(type, source.inners())) {
+            case Type.SetOf set -> set.element();
+            case Type.MapOf map -> map.key();
+            // What these hold may repeat, or they hold nothing at all.
+            case Type.ListOf _, Type.OptionOf _, Type.TupleOf _, Type.FnOf _, Type.Prim _,
+                 Type.Ref _, Type.Open _, Type.Nothing _, Type.Never _, Type.Erroneous _,
+                 Type.Union _ -> null;
+        };
+        if (apart == null) {
+            return -1;
+        }
+        return switch (CardinalityTransfer.held(apart, source, Answers.over(counted))) {
+            case Cardinality.None _ -> 0;
+            case Cardinality.Standing each -> each.boundOr(-1);
+        };
     }
 
     /**

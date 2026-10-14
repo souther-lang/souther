@@ -7,13 +7,16 @@ import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.inputs.Case;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 
 import java.util.List;
 import java.util.Map;
@@ -158,11 +161,11 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
 
     private static Partitions.Partitioning partitioningOf() {
         Read read = read(FLAGGED);
+        RuleReadingContext reading = RuleReadingContext.unshared(read.rules(),
+                ReadAs.THE_COMPILATION_DOES);
         return Partitions.of("look",
-                souther.compiler.inputs.InputDomain.of(read.sig(),
-                        RuleReadingContext.unshared(read.rules(),
-                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                        Membership.none())
+                InputDomain.of(read.sig(), reading,
+                        TypeCardinality.Counts.workedOutIn(reading), Membership.none())
                 .reading(read.rules()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 

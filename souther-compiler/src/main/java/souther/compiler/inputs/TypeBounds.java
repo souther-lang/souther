@@ -32,14 +32,20 @@ public final class TypeBounds {
      * §invariant-discharge-terms). Kept here with the rules rather than at the boundary that reads
      * them, so that a guard at zero is refused its neighbour below by the same intersection that
      * refuses one outside an invariant.
+     *
+     * <p>And what the type of the value the term is taken of leaves it, which no rule writes
+     * either: a set of an element with three values holds at most three. {@code held} is that, or null
+     * where the type leaves the term nothing beyond what the term guarantees itself.
      */
     public static NumericDomain.Bounds admissible(DeclaredBounds.Range own, NumericDomain.Bounds projected,
-                                           NumericTerm term) {
+                                           NumericTerm term, NumericDomain.Bounds held) {
         // A term with nothing to guarantee and no term at all are one answer here. What this returns
         // is read by callers that take a null for a position they know nothing about, which is not
         // the same as a range holding every value — kept apart there, and flattened once here rather
         // than at each of them.
-        NumericDomain.Bounds guaranteed = term == null ? null : term.intrinsicBounds();
+        NumericDomain.Bounds ofTheTerm = term == null ? null : term.intrinsicBounds();
+        NumericDomain.Bounds guaranteed = held == null ? ofTheTerm
+                : ofTheTerm == null ? held : ofTheTerm.meet(held);
         NumericDomain.Bounds intrinsic =
                 guaranteed == null || guaranteed.saysNothing() ? null : guaranteed;
         if (own == null) {
@@ -57,7 +63,7 @@ public final class TypeBounds {
 
     /** The same, of a position no term of its own is measured at. */
     public static NumericDomain.Bounds admissible(DeclaredBounds.Range own, NumericDomain.Bounds projected) {
-        return admissible(own, projected, null);
+        return admissible(own, projected, null, null);
     }
 
     private TypeBounds() {}

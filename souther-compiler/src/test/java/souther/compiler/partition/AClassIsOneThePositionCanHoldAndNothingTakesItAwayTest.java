@@ -7,10 +7,12 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 
 import java.util.List;
 import java.util.Map;
@@ -62,7 +64,10 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
     /** The classes of the one position, off the declarations alone. */
     private static List<String> declared(String source, String behavior) {
         Read read = of(source, behavior);
-        return classesOf(Partitions.of(read.behavior(), InputDomain.of(read.sig(), RuleReadingContext.unshared(read.rules(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+        RuleReadingContext reading = RuleReadingContext.unshared(read.rules(),
+                ReadAs.THE_COMPILATION_DOES);
+        return classesOf(Partitions.of(read.behavior(), InputDomain.of(read.sig(), reading,
+                TypeCardinality.Counts.workedOutIn(reading),
                 Membership.none()).reading(read.rules()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 
@@ -115,7 +120,10 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
     /** The classes at {@code path}, off the declarations alone. */
     private static List<String> declaredAt(String source, String behavior, String path) {
         Read read = of(source, behavior);
-        return classesAt(Partitions.of(read.behavior(), InputDomain.of(read.sig(), RuleReadingContext.unshared(read.rules(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+        RuleReadingContext reading = RuleReadingContext.unshared(read.rules(),
+                ReadAs.THE_COMPILATION_DOES);
+        return classesAt(Partitions.of(read.behavior(), InputDomain.of(read.sig(), reading,
+                TypeCardinality.Counts.workedOutIn(reading),
                 Membership.none()).reading(read.rules()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 path);
     }
@@ -329,7 +337,10 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
     private static List<String> declaredAt(List<String> sources, String behavior, int nth,
                                            String path) {
         Read read = of(sources, behavior, nth);
-        return classesAt(Partitions.of(read.behavior(), InputDomain.of(read.sig(), RuleReadingContext.unshared(read.rules(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+        RuleReadingContext reading = RuleReadingContext.unshared(read.rules(),
+                ReadAs.THE_COMPILATION_DOES);
+        return classesAt(Partitions.of(read.behavior(), InputDomain.of(read.sig(), reading,
+                TypeCardinality.Counts.workedOutIn(reading),
                 Membership.none()).reading(read.rules()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 path);
     }
@@ -382,8 +393,11 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                     else Refused { at = "y" }
                 """.replace("UNREAD", souther.compiler.ARuleNoReadingTakesIn.about("value"));
         Read read = of(model, "classify");
+        RuleReadingContext reading = RuleReadingContext.unshared(read.rules(),
+                ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning base =
-                Partitions.of(read.behavior(), InputDomain.of(read.sig(), RuleReadingContext.unshared(read.rules(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Partitions.of(read.behavior(), InputDomain.of(read.sig(), reading,
+                TypeCardinality.Counts.workedOutIn(reading),
                 Membership.none()).reading(read.rules()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         assertFalse(base.unanswered().isEmpty(),
@@ -411,8 +425,10 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                         .ask(new souther.compiler.query.Adequacy.Inputs(read.module())).value()
                         .get(read.behavior()),
                 read.rules());
+        RuleReadingContext reading = RuleReadingContext.unshared(read.rules(),
+                ReadAs.THE_COMPILATION_DOES);
         return ThresholdFixtures.withThresholds(base,
-                InputDomain.of(read.sig(), RuleReadingContext.unshared(read.rules(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                InputDomain.of(read.sig(), reading, TypeCardinality.Counts.workedOutIn(reading),
                         Membership.none())
                         .quantities(read.rules()),
                 guards.thresholds(),
