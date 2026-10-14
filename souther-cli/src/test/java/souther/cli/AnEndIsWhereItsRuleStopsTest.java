@@ -55,11 +55,12 @@ class AnEndIsWhereItsRuleStopsTest {
     void eachRuleDrawsItsLineWhereItStops() throws Exception {
         String report = reportOn(MODEL);
 
-        assertTrue(report.contains("h.p = 0"),
+        // Under the declarations, whose lines they are, in the words each declaration wrote.
+        assertTrue(report.contains("value = 0 (invariant Positive (positive))"),
                 () -> "`value > 0m` stops the position at zero:\n" + report);
-        assertTrue(report.contains("h.a = 5"),
+        assertTrue(report.contains("value = 5 (invariant AboveFive (above))"),
                 () -> "`value > 5.0m` stops it at five:\n" + report);
-        assertTrue(report.contains("border      borders 2"),
+        assertTrue(report.contains("declarations   borders 2"),
                 () -> "two rules, two lines:\n" + report);
         // And not at the whole number a positive integer starts at, which is the reading these
         // lines were once taken from and a value no decimal rule here mentions.
@@ -80,7 +81,7 @@ class AnEndIsWhereItsRuleStopsTest {
         String report = reportOn(MODEL);
 
         assertTrue(report.contains(
-                        "no ON point is owed at h.p = 0 (invariant Positive (positive)):"
+                        "no ON point is owed at value = 0 (invariant Positive (positive)):"
                                 + " this order names no value there, so the point cannot be written"),
                 () -> report);
         // Two of the eight items these lines owe are asked for and nobody measured them, which
@@ -89,7 +90,7 @@ class AnEndIsWhereItsRuleStopsTest {
         //
         // Under the declarations, because that is whose the lines are: a `data` clause's line is
         // owed once for the module, and the body carrying the type is short of nothing on it.
-        assertTrue(report.contains("declarations   obligations 0/2"),
+        assertTrue(report.contains("declarations   borders 2   obligations 0/2"),
                 () -> "and the row inside each line is one somebody is owed:\n" + report);
         assertTrue(report.contains("undecided whether a row is at the IN point value in 0 < value"
                         + " (invariant Positive (positive)) — no row names this behavior"),

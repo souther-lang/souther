@@ -316,9 +316,13 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                     partition   not applicable (the rules of this behavior divide no position)
                       · no line: invariant Span #1 — it relates the value here to another value rather than dividing the values here, about `v.startsAt`
                       · no line: invariant Span #1 — it relates the value here to another value rather than dividing the values here, about `v.endsAt`
-                    border      borders 1   obligations 0/0
-                      · no OFF point is owed at v.startsAt = v.endsAt (invariant Span #1): excluded — no value can stand there
-                      · no OUT point is owed at v.startsAt = v.endsAt (invariant Span #1): excluded — no value can stand there
+                    border      borders 0   obligations 0/0
+                    branch\
+                """), report);
+        // The line is the declaration's, and what it leaves out is said under the declarations.
+        assertTrue(report.contains("""
+                      · no OFF point of invariant Span #1 is owed: excluded — no value can stand there
+                      · no OUT point of invariant Span #1 is owed: excluded — no value can stand there
                 """), report);
     }
 
@@ -341,9 +345,12 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                     partition   not applicable (the rules of this behavior divide no position)
                       · no line: invariant Floor #1 — it relates the value here to another value rather than dividing the values here, about `v.n`
                       · no line: invariant Floor #1 — it relates the value here to another value rather than dividing the values here, about `v.min`
-                    border      borders 1   obligations 0/0
-                      · no OFF point is owed at v.n = v.min (invariant Floor #1): excluded — no value can stand there
-                      · no OUT point is owed at v.n = v.min (invariant Floor #1): excluded — no value can stand there
+                    border      borders 0   obligations 0/0
+                    branch\
+                """), report);
+        assertTrue(report.contains("""
+                      · no OFF point of invariant Floor #1 is owed: excluded — no value can stand there
+                      · no OUT point of invariant Floor #1 is owed: excluded — no value can stand there
                 """), report);
     }
 

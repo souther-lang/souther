@@ -351,6 +351,272 @@
           }
         },
         "code" : "E1916"
+      } ],
+      "lines" : [ {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.booking",
+                "declaredOn" : "Seat",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.booking",
+          "declaredOn" : "Seat",
+          "clause" : 0
+        },
+        "label" : "value = 1",
+        "noPoint" : [ ]
+      }, {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.booking",
+                "declaredOn" : "Seat",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "300"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.booking",
+          "declaredOn" : "Seat",
+          "clause" : 0
+        },
+        "label" : "value = 300",
+        "noPoint" : [ ]
+      } ],
+      "excluded" : [ {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.booking",
+                "declaredOn" : "Seat",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.booking",
+          "declaredOn" : "Seat",
+          "clause" : 0
+        },
+        "label" : "value = 1",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.booking",
+                "declaredOn" : "Seat",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.booking",
+          "declaredOn" : "Seat",
+          "clause" : 0
+        },
+        "label" : "value = 1",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.booking",
+                "declaredOn" : "Seat",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "300"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "above"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.booking",
+          "declaredOn" : "Seat",
+          "clause" : 0
+        },
+        "label" : "value = 300",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.booking",
+                "declaredOn" : "Seat",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "300"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "above"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.booking",
+          "declaredOn" : "Seat",
+          "clause" : 0
+        },
+        "label" : "value = 300",
+        "notOwed" : "no_value_can_stand_there"
       } ]
     }, {
       "owners" : [ {
@@ -694,6 +960,272 @@
           }
         },
         "code" : "E1916"
+      } ],
+      "lines" : [ {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.booking",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.booking",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 1",
+        "noPoint" : [ ]
+      }, {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.booking",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "8"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.booking",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 8",
+        "noPoint" : [ ]
+      } ],
+      "excluded" : [ {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.booking",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.booking",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 1",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.booking",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.booking",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 1",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.booking",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "8"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "above"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.booking",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 8",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.booking",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "8"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "above"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.booking",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 8",
+        "notOwed" : "no_value_can_stand_there"
       } ]
     } ],
     "behaviors" : [ {
@@ -827,7 +1359,8 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -846,7 +1379,8 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
           "besides" : [ ],
@@ -923,7 +1457,8 @@
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -942,7 +1477,8 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
           "besides" : [ ],
@@ -1019,7 +1555,8 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -1038,7 +1575,8 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
           "besides" : [ ],
@@ -1115,7 +1653,8 @@
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -1134,7 +1673,8 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         } ],
         "obligations" : [ ],
@@ -1330,7 +1870,141 @@
           "reason" : "no_rows"
         } ]
       } ],
-      "findings" : [ ]
+      "findings" : [ ],
+      "lines" : [ {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.vouchers",
+                "declaredOn" : "Voucher",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.vouchers",
+          "declaredOn" : "Voucher",
+          "clause" : 0
+        },
+        "label" : "String.length(value) = 1",
+        "noPoint" : [ ]
+      } ],
+      "excluded" : [ {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.vouchers",
+                "declaredOn" : "Voucher",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.vouchers",
+          "declaredOn" : "Voucher",
+          "clause" : 0
+        },
+        "label" : "String.length(value) = 1",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.vouchers",
+                "declaredOn" : "Voucher",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.vouchers",
+          "declaredOn" : "Voucher",
+          "clause" : 0
+        },
+        "label" : "String.length(value) = 1",
+        "notOwed" : "no_value_can_stand_there"
+      } ]
     }, {
       "owners" : [ {
         "kind" : "declared",
@@ -1599,7 +2273,273 @@
           "reason" : "no_rows"
         } ]
       } ],
-      "findings" : [ ]
+      "findings" : [ ],
+      "lines" : [ {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.vouchers",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.vouchers",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 1",
+        "noPoint" : [ ]
+      }, {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.vouchers",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "8"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.vouchers",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 8",
+        "noPoint" : [ ]
+      } ],
+      "excluded" : [ {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.vouchers",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.vouchers",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 1",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.vouchers",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.vouchers",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 1",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.vouchers",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "8"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "above"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.vouchers",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 8",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.vouchers",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "8"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "above"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.vouchers",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 8",
+        "notOwed" : "no_value_can_stand_there"
+      } ]
     } ],
     "behaviors" : [ {
       "name" : "redeem",
@@ -1751,14 +2691,16 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "the_carrier_names_no_neighbour"
+            "notOwed" : "the_carrier_names_no_neighbour",
+            "stops" : [ ]
           }, {
             "point" : "off",
             "location" : {
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "the_carrier_names_no_neighbour"
+            "notOwed" : "the_carrier_names_no_neighbour",
+            "stops" : [ ]
           }, {
             "point" : "out",
             "location" : {
@@ -1864,7 +2806,8 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -1883,7 +2826,8 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
           "besides" : [ ],
@@ -1960,7 +2904,8 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -1979,7 +2924,8 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
           "besides" : [ ],
@@ -2056,7 +3002,8 @@
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -2075,7 +3022,8 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
           "besides" : [ ],
@@ -2863,7 +3811,141 @@
           "reason" : "no_rows"
         } ]
       } ],
-      "findings" : [ ]
+      "findings" : [ ],
+      "lines" : [ {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.waitlist",
+                "declaredOn" : "Ticket",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.waitlist",
+          "declaredOn" : "Ticket",
+          "clause" : 0
+        },
+        "label" : "String.length(value) = 1",
+        "noPoint" : [ ]
+      } ],
+      "excluded" : [ {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.waitlist",
+                "declaredOn" : "Ticket",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.waitlist",
+          "declaredOn" : "Ticket",
+          "clause" : 0
+        },
+        "label" : "String.length(value) = 1",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.waitlist",
+                "declaredOn" : "Ticket",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.waitlist",
+          "declaredOn" : "Ticket",
+          "clause" : 0
+        },
+        "label" : "String.length(value) = 1",
+        "notOwed" : "no_value_can_stand_there"
+      } ]
     }, {
       "owners" : [ {
         "kind" : "declared",
@@ -3132,7 +4214,273 @@
           "reason" : "no_rows"
         } ]
       } ],
-      "findings" : [ ]
+      "findings" : [ ],
+      "lines" : [ {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.waitlist",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.waitlist",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 1",
+        "noPoint" : [ ]
+      }, {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.waitlist",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "8"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.waitlist",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 8",
+        "noPoint" : [ ]
+      } ],
+      "excluded" : [ {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.waitlist",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.waitlist",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 1",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.waitlist",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "1"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.waitlist",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 1",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.waitlist",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "8"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "above"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.waitlist",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 8",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.waitlist",
+                "declaredOn" : "Party",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "8"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "above"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.waitlist",
+          "declaredOn" : "Party",
+          "clause" : 0
+        },
+        "label" : "value = 8",
+        "notOwed" : "no_value_can_stand_there"
+      } ]
     } ],
     "behaviors" : [ {
       "name" : "seat",
@@ -3293,7 +4641,8 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -3312,7 +4661,8 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
           "besides" : [ ],
@@ -3389,7 +4739,8 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -3408,7 +4759,8 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
           "besides" : [ ],
@@ -3485,7 +4837,8 @@
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -3504,7 +4857,8 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
           "besides" : [ ],

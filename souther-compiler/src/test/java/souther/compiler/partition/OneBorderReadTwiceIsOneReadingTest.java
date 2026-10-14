@@ -32,8 +32,11 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -158,6 +161,81 @@ class OneBorderReadTwiceIsOneReadingTest {
                 "the two list what stops the run in opposite orders");
         assertTrue(one.sameReadingAs(other),
                 "and are owed to the same things, so they are one reading of one line");
+    }
+
+    /**
+     * A point no row is owed at, settled in another place, is another reading.
+     *
+     * <p>The position holds a hundred and nothing else, so the run above the bound is empty and no
+     * row is owed in it — settled by where the values stop. The same answer settled by the end of
+     * the order instead owes no row for the same reason and is another point no row is owed at, as
+     * a run owed to two different things is two points a row is owed at. Compared by the demands
+     * alone, the two were one reading, and the second of them was dropped where one reading's lines
+     * are kept from holding one line twice.
+     */
+    @Test
+    void aPointNoRowIsOwedAtSettledElsewhereIsAnotherReading() {
+        Border settled = onlyAHundred(NarrowedBounds.NOTHING);
+        Border elsewhere = settledBy(settled, new DomainPoint.InTheRegion(Towards.ABOVE),
+                List.of(new RegionClaim(new FarEnd.AtTheOrderEnd(Towards.ABOVE),
+                        PointContributions.none())));
+
+        assertTrue(settled.answer(new DomainPoint.InTheRegion(Towards.ABOVE))
+                        instanceof PointAnswer.NotOwed,
+                () -> "nothing stands above a hundred: " + settled.answers());
+        assertFalse(settled.sameReadingAs(elsewhere),
+                "the two owe no row there for one reason, and were settled in two places");
+        assertTheReadingIsItsPoints(settled, elsewhere);
+    }
+
+    /**
+     * And who settled it there is no part of which reading this is, for a point no row is owed at
+     * as for one a row is.
+     */
+    @Test
+    void whoSettledAPointNoRowIsOwedAtIsNoPartOfTheReading() {
+        Border bare = onlyAHundred(NarrowedBounds.NOTHING);
+        Border narrowed = onlyAHundred(AReadingOfAPosition.withAnUpperEndAt(
+                Endpoint.inclusive(Count.of(100)), aDeclaration()));
+
+        assertNotEquals(bare, narrowed,
+                "a declaration took the end in at one of them, and this is what they differ in");
+        assertTrue(bare.sameReadingAs(narrowed),
+                "and the run above stops in the one place at both, so it is one reading");
+        assertTheReadingIsItsPoints(bare, narrowed);
+    }
+
+    /**
+     * That two readings are one exactly where the points they issue are the same: the points a row
+     * is owed at and the points no row is owed at, as the accounts read them.
+     */
+    private static void assertTheReadingIsItsPoints(Border one, Border other) {
+        boolean samePoints = Set.copyOf(one.owes().stream().map(OwedPoint::point).toList())
+                .equals(Set.copyOf(other.owes().stream().map(OwedPoint::point).toList()))
+                && Set.copyOf(one.leavesOut().stream().map(LeftOutPoint::point).toList())
+                .equals(Set.copyOf(other.leavesOut().stream().map(LeftOutPoint::point).toList()));
+        assertEquals(samePoints, one.sameReadingAs(other),
+                () -> "one reading is one set of points: " + one.leavesOut() + " / "
+                        + other.leavesOut());
+    }
+
+    /** A bound at a hundred on a position that holds a hundred and nothing else. */
+    private static Border onlyAHundred(NarrowedBounds narrowed) {
+        return Border.at(aLineAt("w.a", 100), aBound(),
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(100)),
+                        Endpoint.inclusive(Count.of(100))),
+                List.of(), narrowed);
+    }
+
+    /** The same border with the point at {@code point} settled by {@code claims} instead. */
+    private static Border settledBy(Border border, DomainPoint point, List<RegionClaim> claims) {
+        Map<DomainPoint, PointAnswer> answers = new LinkedHashMap<>(border.answers());
+        if (!(answers.get(point) instanceof PointAnswer.NotOwed was)) {
+            throw new IllegalArgumentException("no row is owed at " + point + " to settle again: "
+                    + answers);
+        }
+        answers.put(point, new PointAnswer.NotOwed(was.reason(), claims));
+        return new Border(border.cut(), border.origin(), answers, border.leftNothing());
     }
 
     /** The same border with what stops each of its runs listed the other way round. */
