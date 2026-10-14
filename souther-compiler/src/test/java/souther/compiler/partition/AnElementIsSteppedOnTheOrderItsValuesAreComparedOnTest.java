@@ -17,9 +17,9 @@ import souther.compiler.types.TypeSymbols;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.IntFunction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,6 +41,7 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
               invariant value <= 0
             data Late = Time
               invariant value >= Time("23:59:58")
+            data Level = Low | Mid | High
             """;
 
     private static final String MODEL = """
@@ -116,14 +117,15 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
     private static final String NOT_THE_DAY = """
             module p
             data NotTheDay = Date
-              invariant value /= Date("2000-01-01")
+              invariant value /= Date("1970-01-01")
             behavior h : (d: NotTheDay) -> Int
             let h (d) = 1
             """;
 
     /**
-     * A position whose rule refuses the one value it is ordinarily offered is offered one beside it
-     * on the same order, a date as much as a whole number.
+     * A position whose rule refuses the one value it is ordinarily offered is offered the one beside
+     * it on the same order, a date as much as a whole number: the day after the day where an
+     * unbounded range of dates is entered.
      */
     @Test
     void aDateItsRuleRefusesIsDisplacedAlongItsOrder() {
@@ -136,8 +138,17 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
                 .map(row -> row.inputs().get(0).text())
                 .toList();
 
-        assertFalse(written.isEmpty(), "a row is composed for the decision rule");
-        assertFalse(written.contains("NotTheDay(Date(\"2000-01-01\"))"), written::toString);
+        assertEquals(List.of("NotTheDay(Date(\"1970-01-02\"))"), written);
+    }
+
+    /**
+     * Only a value of its own that counts is stepped. An enumeration's cases are what the position
+     * divides into, and a string is ordered with no count under it.
+     */
+    @Test
+    void neitherACaseNorAStringIsStepped() {
+        assertEquals(List.of(), stepped(declared("Level"), 3));
+        assertEquals(List.of(), stepped(Type.STRING, 3));
     }
 
     /** Between two decimals there is no next one, and none is made up. */
@@ -146,15 +157,16 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
         assertEquals(1, stepped(Type.DECIMAL, 3).size());
     }
 
-    /** What stepping alone offers: the values {@link Partitions#valueInside} names, in order, up
+    /** What stepping alone offers: the values {@link Partitions#valuesInside} names, in order, up
      *  to the first it has none for. */
     private static List<String> stepped(Type type, int many) {
         RuleReadingContext reading = reading();
         TypeView view = TypeView.of(type, reading.source().inners(), reading.source().symbols(),
                 reading.source().kinds(), reading.source().sums());
+        IntFunction<FixtureTemplate> inside = Partitions.valuesInside(view, reading);
         List<String> out = new ArrayList<>();
         for (int i = 0; i < many; i++) {
-            FixtureTemplate each = Partitions.valueInside(view, reading, i);
+            FixtureTemplate each = inside.apply(i);
             if (each == null) {
                 break;
             }
