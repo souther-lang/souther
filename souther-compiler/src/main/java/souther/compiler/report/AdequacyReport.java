@@ -1270,6 +1270,32 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * The line for a position that is read and holds more classes than this behavior's body tells
+     * apart, where its classes take part in a relation no row reaches.
+     *
+     * <p>Asked of the one thing that answers it, which is what the decision this leaves a reader is
+     * read from: worked out again here, the line and the decision would be two answers to one
+     * question. Said in groups, because a body that asks whether a value is one of two cases out of
+     * four tells the four apart as two groups.
+     *
+     * @param untouched what is said where the body sends every class one way
+     */
+    private static void widerThanToldApart(StringBuilder out, PartitionEvidence.AxisCoverage axis,
+                                           List<ReaderDisposition.Wider> wider, String untouched) {
+        for (ReaderDisposition.Wider each : wider) {
+            if (!each.axis().at().equals(axis.at())) {
+                continue;
+            }
+            out.append(each.groups() <= 1
+                    ? String.format("      · %s holds %d classes and %s%n",
+                            axis.name(), axis.classes().size(), untouched)
+                    : String.format("      · %s holds %d classes and this behavior tells them"
+                                    + " apart as %d groups%n",
+                            axis.name(), axis.classes().size(), each.groups()));
+        }
+    }
+
+    /**
      * The handles each rule that composed a position's classes offers, one entry per rule.
      *
      * <p>Grouped by the rule and not by the reading. What tells two readings apart is which of them
@@ -2330,46 +2356,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             List<ReaderDisposition.Wider> wider =
                     ReaderDisposition.widerThanTheyAreSeparated(partition.pairs(), partition.axes());
             for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
-                // A position nothing the behavior states reads, which is owed no row at any of its
-                // classes. Said whether or not the rows reach them: the count above still has them,
-                // and a reader is told why none of them is asked for.
-                boolean owes = axis.owesARowPerClass();
-                if (!owes) {
-                    out.append(String.format("      · %s holds %d classes and nothing this behavior"
-                                    + " states reads it, so no row is owed at any of them%n",
+                // What is said of how the behavior reads the position, one sentence for each of the
+                // three answers. A position nothing reads is owed no row at any of its classes, and
+                // that is said whether or not the rows reach them: the count above still has them,
+                // and a reader is told why none of them is asked for — which says more than that
+                // the body tells them apart nowhere. Where every class of a position that is read
+                // goes one way, it is said as read without being told apart: a value carried into
+                // the answer is told apart by nothing and owed a row at every class, and a line
+                // saying only the first would read as the second's contradiction.
+                switch (axis.use()) {
+                    case InputUse.NotRead _ -> out.append(String.format("      · %s holds %d"
+                                    + " classes and nothing this behavior states reads it, so no"
+                                    + " row is owed at any of them%n",
                             axis.name(), axis.classes().size()));
-                }
-                // A position holding more classes than this behavior's body tells apart, whose
-                // classes take part in a relation no row reaches. Asked of the one thing that
-                // answers it, which is what the decision this leaves a reader is read from: worked
-                // out again here, the line and the decision would be two answers to one question.
-                //
-                // Said in groups, because a body that asks whether a value is one of two cases out
-                // of four tells the four apart as two groups.
-                //
-                // Not said of a position nothing reads, which the line above has said more of. And
-                // where every class goes one way, said as read without being told apart where it
-                // is read: a value carried into the answer is told apart by nothing and owed a row
-                // at every class, and a line saying only the first would read as the second's
-                // contradiction.
-                for (ReaderDisposition.Wider each : wider) {
-                    if (!each.axis().at().equals(axis.at()) || !owes) {
-                        continue;
-                    }
-                    out.append(each.groups() <= 1
-                            ? String.format(switch (axis.use()) {
-                                        case InputUse.Read _ -> "      · %s holds %d classes and"
-                                                + " this behavior reads it without telling them"
-                                                + " apart%n";
-                                        case InputUse.NotKnown _ -> "      · %s holds %d classes and"
-                                                + " this behavior does not tell them apart%n";
-                                        case InputUse.NotRead _ -> throw new IllegalStateException(
-                                                "a position nothing reads is owed a row: "
-                                                        + axis.name());
-                                    }, axis.name(), axis.classes().size())
-                            : String.format("      · %s holds %d classes and this behavior tells"
-                                            + " them apart as %d groups%n",
-                                    axis.name(), axis.classes().size(), each.groups()));
+                    case InputUse.Read _ -> widerThanToldApart(out, axis, wider,
+                            "this behavior reads it without telling them apart");
+                    case InputUse.NotKnown _ -> widerThanToldApart(out, axis, wider,
+                            "this behavior does not tell them apart");
                 }
                 // Which rule composed the classes, for a reader told that no row is in one of them.
                 // The lines above name the class; this names what made it, so that a reader sent

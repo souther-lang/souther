@@ -266,9 +266,6 @@ public record InputUses(List<TermPath> decided, List<TermPath> whole, boolean kn
          * wider type takes none itself, and what it stands for is its child.
          */
         private static Core fieldOf(Core e) {
-            if (e instanceof Core.Widen) {
-                return null;
-            }
             return switch (e) {
                 case Core.FieldAccess it -> it.target();
                 case Core.FieldProjection it -> it.base();
