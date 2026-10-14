@@ -58,7 +58,8 @@ class WhatTheWaysUnderTheCasesComeToTest {
 
     private static ContentsAsked holding(String container, String value) {
         return new ContentsAsked(List.of(new ContentsAsked.Asked(
-                LEAD.then(container), LEAD.then(value), true, false, Optional.empty())));
+                LEAD.then(container), LEAD.then(value), true, false, Optional.empty())),
+                List.of());
     }
 
     @Test
@@ -135,7 +136,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
         List<Requirements> taken = new ArrayList<>();
 
         assertEquals(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED,
-                new ContentsAsked(List.of()).underTheCases(reach, asked, Set.of())
+                ContentsAsked.NONE.underTheCases(reach, asked, Set.of())
                         .tryEach(way -> {
                             taken.add(way.taken());
                             return false;
@@ -158,7 +159,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
         NameReach reach = spreadUnderBoth("urgent");
         TermPath urgent = LEAD.then("urgent");
         List<Map<TermPath, TermPath>> standing = new ArrayList<>();
-        new ContentsAsked(List.of()).underTheCases(reach, Requirements.NONE, Set.of(urgent))
+        ContentsAsked.NONE.underTheCases(reach, Requirements.NONE, Set.of(urgent))
                 .tryEach(way -> {
                     standing.add(way.standing());
                     return false;
@@ -193,7 +194,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
     private static ContentsAsked holdingUnder(Refinement branch) {
         return new ContentsAsked(List.of(new ContentsAsked.Asked(
                 LEAD.refine(branch).then("campaigns"), LEAD.refine(branch).then("campaign"),
-                true, false, Optional.empty())));
+                true, false, Optional.empty())), List.of());
     }
 
     @Test
@@ -248,7 +249,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
             asked.add(new ContentsAsked.Asked(at.then("held"), TermPath.of("value"), true,
                     false, Optional.empty()));
         }
-        return new ContentsAsked(asked).underTheCases(
+        return new ContentsAsked(asked, List.of()).underTheCases(
                 new NameReach(crossings, List.of(), List.of()), Requirements.NONE, Set.of());
     }
 }

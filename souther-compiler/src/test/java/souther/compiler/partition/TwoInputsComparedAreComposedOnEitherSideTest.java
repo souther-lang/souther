@@ -143,6 +143,184 @@ class TwoInputsComparedAreComposedOnEitherSideTest {
                 () -> "a way into it is read: " + arms);
     }
 
+    /**
+     * The arm a comparison of two records, two cases of a sum or two truths leads into is offered
+     * a row the same way, by the walk that composes a row for a coverage item rather than for a
+     * rule of the decision.
+     */
+    @Test
+    void theArmTwoValuesOnNoOrderLeadIntoIsOfferedARow() {
+        assertTheArmIsOfferedARow("""
+                module example.armpoints
+
+                data Point = { x: Int, y: Int }
+
+                behavior f : (a: Point, b: Point) -> Same | Apart
+
+                let f (a, b) =
+                    if a /= b then Apart else Same
+
+                example f
+                    | (Point { x = 0, y = 0 }, Point { x = 0, y = 0 }) -> Same
+                """);
+        assertTheArmIsOfferedARow("""
+                module example.armshapes
+
+                data Circle = { r: Int }
+                data Square = { s: Int }
+                data Shape = Circle | Square
+
+                behavior f : (a: Shape, b: Shape) -> Same | Apart
+
+                let f (a, b) =
+                    if a /= b then Apart else Same
+
+                example f
+                    | (Circle { r = 0 }, Circle { r = 0 }) -> Same
+                """);
+        assertTheArmIsOfferedARow("""
+                module example.armtruths
+
+                behavior f : (a: Bool, b: Bool) -> Same | Apart
+
+                let f (a, b) =
+                    if a /= b then Apart else Same
+
+                example f
+                    | (true, true) -> Same
+                """);
+    }
+
+    /**
+     * A value held with another at a field of it is handed on where the field is already held at
+     * a value: the other is given the value the field holds, and not one a type offers first.
+     */
+    @Test
+    void aValueHeldWithAFieldHeldAtAValueIsGivenTheValueTheFieldHolds() {
+        assertEveryRuleTaken("""
+                module example.samefield
+
+                data P = { n: Int }
+                data Q = { p: P }
+
+                behavior f : (a: Q, b: P) -> Int
+
+                let f (a, b) =
+                    if a.p.n == 7 && a.p == b then 1 else 2
+                """);
+    }
+
+    /**
+     * What the way asks under the second of two values held to one is asked of the first as well:
+     * one value at both is one value, and the first composed alone is one the second cannot be.
+     */
+    @Test
+    void whatIsAskedUnderEitherOfTwoValuesHeldToOneIsAskedOfBoth() {
+        assertEveryRuleTaken("""
+                module example.later
+
+                data P = { n: Int }
+
+                behavior f : (a: P, b: P) -> Int
+
+                let f (a, b) =
+                    if a == b && b.n == 7 then 1 else 2
+                """);
+    }
+
+    /**
+     * Two strings a rule allows only a few values of are held apart among those values: the place
+     * the way leaves one is tried at each value the rule names, and not only at the first.
+     */
+    @Test
+    void stringsARuleNamesTheValuesOfAreHeldApartAmongThem() {
+        assertEveryRuleTaken("""
+                module example.named
+
+                data Code = String
+                    invariant value == "a" || value == "b"
+
+                behavior f : (a: Code, b: Code) -> Int
+
+                let f (a, b) =
+                    if a /= b && b == "a" then 1 else 2
+                """);
+        assertEveryRuleTaken("""
+                module example.namedthree
+
+                data Code = String
+                    invariant value == "a" || value == "b"
+
+                behavior f : (a: Code, b: Code, c: Code) -> Int
+
+                let f (a, b, c) =
+                    if a /= b && c == b && c == "a" then 1 else 2
+                """);
+    }
+
+    /** Two positions of one parameter held to one value, or two, are composed as two would be. */
+    @Test
+    void twoPositionsOfOneParameterAreComposedOnEitherSide() {
+        assertEveryRuleTaken("""
+                module example.sameinone
+
+                data P = { n: Int }
+                data Pair = { left: P, right: P }
+
+                behavior f : (p: Pair) -> Int
+
+                let f (p) =
+                    if p.left.n == 7 && p.left == p.right then 1 else 2
+                """);
+        assertEveryRuleTaken("""
+                module example.apartinone
+
+                data Pair = { left: String, right: String }
+
+                behavior f : (p: Pair) -> Int
+
+                let f (p) =
+                    if p.left /= p.right then 1 else 2
+                """);
+    }
+
+    /**
+     * Three values each other than the other two are composed for every type that has three: a
+     * value held apart from two is offered among one more value than it is to avoid, and not
+     * among a fixed number of them.
+     */
+    @Test
+    void threeValuesApartAreOfferedOneMoreValueThanEachAvoids() {
+        assertEveryRuleTaken(model3("String"));
+        assertEveryRuleTaken("""
+                module example.three
+
+                data P = { n: Int }
+
+                behavior f : (a: P, b: P, c: P) -> Int
+
+                let f (a, b, c) =
+                    if a /= b && a /= c && b /= c then 1 else 2
+                """);
+    }
+
+    /**
+     * Two truths cannot be three values apart, and what the search says is that it composed
+     * nothing — not that the rule is out of reach, which nothing here shows.
+     */
+    @Test
+    void threeTruthsApartAreNotSaidToBeOutOfReach() {
+        Map<?, SettledAt> settled = search(model3("Bool"), "f");
+        assertEquals(1, settled.values().stream()
+                .filter(each -> each.settlement().requirement()
+                        instanceof RuleRequirement.Required).count(),
+                () -> "only the way past the else is taken: " + settled);
+        for (SettledAt each : settled.values()) {
+            assertFalse(each.settlement().requirement() instanceof RuleRequirement.Excluded,
+                    () -> "running out of values is no proof: " + each);
+        }
+    }
+
     /** Two statements about three inputs, met by one row together. */
     @Test
     void twoComparisonsAreMetTogether() {
@@ -227,6 +405,39 @@ class TwoInputsComparedAreComposedOnEitherSideTest {
                 let f (a, b) =
                     if (CONDITION) then 1 else 2
                 """.replace("TYPE", type).replace("CONDITION", condition);
+    }
+
+    private static String model3(String type) {
+        return """
+                module example.three
+
+                behavior f : (a: TYPE, b: TYPE, c: TYPE) -> Int
+
+                let f (a, b, c) =
+                    if a /= b && a /= c && b /= c then 1 else 2
+                """.replace("TYPE", type);
+    }
+
+    /**
+     * The one arm the example leaves untaken is read as the comparison coming out the other way,
+     * and the rule saying so is taken by the row composed for it.
+     */
+    private static void assertTheArmIsOfferedARow(String model) {
+        Compilation compilation = compiled(model);
+        String module = compilation.modules().getFirst();
+        List<Adequacy.GenerationDisposition> arms =
+                Adequacy.generatedOf(compilation.db(), module).get("f").generation().stream()
+                        .filter(each -> each.finding().kind() == Adequacy.Kind.ARM_UNREACHED)
+                        .toList();
+        assertEquals(1, arms.size(), () -> "the arm the values apart take: " + arms);
+        assertFalse(arms.getFirst().outcome() instanceof GenerationOutcome.NotSupported,
+                () -> "a way into it is read:\n" + model + "\n" + arms);
+        Map<?, SettledAt> settled =
+                compilation.db().ask(new Adequacy.DecisionSearch(module, "f")).value();
+        assertEquals(1, settled.size(), () -> "the rule the example leaves: " + settled);
+        assertInstanceOf(RuleRequirement.Required.class,
+                settled.values().iterator().next().settlement().requirement(),
+                () -> "a row whose run takes the arm:\n" + model + "\n" + settled);
     }
 
     private static void assertEveryRuleTaken(String model) {

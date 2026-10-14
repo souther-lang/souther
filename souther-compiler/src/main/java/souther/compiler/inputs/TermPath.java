@@ -411,6 +411,20 @@ public record TermPath(String head, List<Step> steps) {
         return new RuleKey(named);
     }
 
+    /**
+     * The position as far under {@code to} as this is under {@code from}, or null where this is
+     * not under {@code from}: the same place inside another value of the same shape.
+     */
+    public TermPath movedFrom(TermPath from, TermPath to) {
+        List<Step> below = below(from);
+        if (below == null) {
+            return null;
+        }
+        List<Step> moved = new ArrayList<>(to.steps);
+        moved.addAll(below);
+        return new TermPath(to.head, moved);
+    }
+
     /** The steps of this below {@code root}, or null where this is not under it. */
     private List<Step> below(TermPath root) {
         return isAtOrUnder(root) ? steps.subList(root.steps.size(), steps.size()) : null;

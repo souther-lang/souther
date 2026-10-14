@@ -18,7 +18,7 @@ import java.util.Set;
  * on that parameter's value — and on every value that one's turned on in turn: a box holding the
  * number, and an outer list holding the box, is an outer list another number may let be built. And
  * a parameter asked to hold the value another holds, or one other than it, turns on the one composed
- * before it ({@link #relating}).
+ * before it.
  * Worked out once here, the order, whether a parameter has to wait for one after it, and whether
  * one coming to nothing is a reason to try another value of an earlier one are one reading; a walk
  * that answered any of them itself would answer it its own way.
@@ -67,6 +67,12 @@ record CompositionOrder(List<String> parameters, List<Integer> order,
      * The order {@code parameters} are composed in under what {@code contents} asks: each after
      * every parameter whose value one of its containers is handed, and otherwise in the order they
      * are declared.
+     *
+     * <p>And two parameters a position of each of which is held to one value with the other, or
+     * two, in the order that comes to: what is asked of the two says nothing of which comes first,
+     * so the one composed second turns on the first, and a value of the first the second can be
+     * given nothing beside is passed over for the next ({@link #mayTurnOn}). Said in the order
+     * already worked out, so it adds no order of its own and no circle.
      */
     static Result of(List<String> parameters, ContentsAsked contents) {
         Map<String, Set<String>> after = new LinkedHashMap<>();
@@ -95,45 +101,20 @@ record CompositionOrder(List<String> parameters, List<Integer> order,
             out.add(next);
             placed.add(parameters.get(next));
         }
+        for (List<String> pair : contents.heldAcross()) {
+            int one = out.indexOf(parameters.indexOf(pair.get(0)));
+            int other = out.indexOf(parameters.indexOf(pair.get(1)));
+            if (one < 0 || other < 0) {
+                continue;
+            }
+            after.computeIfAbsent(parameters.get(out.get(Math.max(one, other))),
+                    _ -> new LinkedHashSet<>()).add(parameters.get(out.get(Math.min(one, other))));
+        }
         Map<String, Set<String>> reached = new LinkedHashMap<>();
         for (String parameter : parameters) {
             reached.put(parameter, reachedFrom(parameter, after));
         }
         return new Result.Ordered(new CompositionOrder(parameters, out, reached));
-    }
-
-    /**
-     * The same order, with each parameter of a pair {@code related} asks to hold one value — or
-     * two — turning on the one of the pair composed before it.
-     *
-     * <p>Symmetric in what it asks and not in how it is met: which value a parameter can be given
-     * is known once the other is composed, so the one composed second turns on the first, and a
-     * value of the first the second can be given nothing beside is passed over for the next
-     * ({@link #mayTurnOn}). Said in the order already worked out, so it adds no order of its own
-     * and no circle.
-     */
-    CompositionOrder relating(List<RowDemand.OneValueAtBoth> related) {
-        Map<String, Set<String>> direct = new LinkedHashMap<>();
-        turnsOn.forEach((parameter, on) -> direct.put(parameter, new LinkedHashSet<>(on)));
-        boolean added = false;
-        for (RowDemand.OneValueAtBoth each : related) {
-            int one = order.indexOf(parameters.indexOf(each.one().head()));
-            int other = order.indexOf(parameters.indexOf(each.other().head()));
-            if (one < 0 || other < 0 || one == other) {
-                continue;
-            }
-            String first = parameters.get(order.get(Math.min(one, other)));
-            String second = parameters.get(order.get(Math.max(one, other)));
-            added |= direct.computeIfAbsent(second, _ -> new LinkedHashSet<>()).add(first);
-        }
-        if (!added) {
-            return this;
-        }
-        Map<String, Set<String>> reached = new LinkedHashMap<>();
-        for (String parameter : parameters) {
-            reached.put(parameter, reachedFrom(parameter, direct));
-        }
-        return new CompositionOrder(parameters, order, reached);
     }
 
     /** Every parameter whose value reaches {@code parameter}'s containers, directly or not. */

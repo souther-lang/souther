@@ -175,7 +175,15 @@ final class Outwards {
         // Unless the run is that one place, and then there is nothing further for a way of naming
         // one to reach. Said the other way, a run bounded to a single value would have this
         // compiler reporting a population it writes some of — of a walk that wrote all of it.
+        //
+        // And unless the narrowings name the places outright: a set of finitely many values is
+        // every place there is to try, with no step needed to reach the next, so they are walked
+        // as an order that counts is.
         if (!carrier.counts()) {
+            List<Place> named = carrier.everyPlaceOf(admits);
+            if (named != null) {
+                return namedFrom(first, named, carrier, within, howManyTaken, admits, apart);
+            }
             return new Walked(List.of(first), onePlace(within, first)
                     ? Ended.HAVING_TRIED_THEM_ALL : Ended.WITH_NO_STEP_TO_TAKE);
         }
@@ -278,6 +286,30 @@ final class Outwards {
      *  where the host had no room to write the count out. */
     private static ExactAnswer<Optional<Place>> onTheCarrier(ExactRatio at, Carrier carrier) {
         return Count.written(at).map(count -> count.map(carrier::onTheGrid));
+    }
+
+    /**
+     * {@code first}, then each of {@code named} the run holds and the narrowings take in, as many
+     * as {@code howManyTaken}.
+     *
+     * <p>Every one of them where that many are left, since the set is every place there is; the
+     * figure where a place it names was left untaken.
+     */
+    private static Walked namedFrom(Place first, List<Place> named, Carrier carrier,
+                                    NumericDomain.Bounds within, int howManyTaken,
+                                    ValueSet admits, PlacesApart apart) {
+        List<Place> out = new ArrayList<>();
+        out.add(first);
+        for (Place each : named) {
+            if (each.sameAs(first) || !takenIn(each, carrier, within, admits, apart)) {
+                continue;
+            }
+            if (out.size() == howManyTaken) {
+                return new Walked(out, Ended.AT_THE_FIGURE_OF_CANDIDATES);
+            }
+            out.add(each);
+        }
+        return new Walked(out, Ended.HAVING_TRIED_THEM_ALL);
     }
 
     /**

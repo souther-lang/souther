@@ -558,7 +558,7 @@ final class Witnesses {
      * What {@code value} holds at the end of {@code run}, under no name it wears, or null where it
      * is not written out field by field down to there.
      */
-    static Hir.Expr valueAt(Hir.Expr value, List<String> run) {
+    private static Hir.Expr valueAt(Hir.Expr value, List<String> run) {
         Hir.Expr at = bare(value);
         for (String field : run) {
             if (!(at instanceof Hir.NewData record) || !record.spreads().isEmpty()) {

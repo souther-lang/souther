@@ -32,16 +32,27 @@ import java.util.function.Predicate;
  * two pairings are not composed here — some element unequal to a value, or every element equal to
  * one — and are said as not composed rather than left out.
  *
- * @param asked each container and the value it is to hold or hold nothing equal to, in the order
- *              the way asked them
+ * <p><b>And which positions are to hold one value, or two.</b> That is a value handed from one
+ * parameter to another as surely as a value a container holds is, and read off what was built the
+ * same way ({@link HandedOn}) — so it is asked here, beside the containers' demands and not as one
+ * of them: a container's demand is about what a container holds, and this is about two values.
+ * Held with no direction: which of the two is composed first is the order's to say
+ * ({@link CompositionOrder#of}), and a position whose counterpart is of the same parameter is
+ * held to it where that parameter is composed.
+ *
+ * @param asked   each container and the value it is to hold or hold nothing equal to, in the order
+ *                the way asked them
+ * @param related each two positions the way asks to hold one value, or two, in the order the way
+ *                asked them
  */
-record ContentsAsked(List<Asked> asked) {
+record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related) {
 
     /** Nothing asked. */
-    static final ContentsAsked NONE = new ContentsAsked(List.of());
+    static final ContentsAsked NONE = new ContentsAsked(List.of(), List.of());
 
     ContentsAsked {
         asked = List.copyOf(asked);
+        related = List.copyOf(related);
     }
 
     /**
@@ -156,6 +167,7 @@ record ContentsAsked(List<Asked> asked) {
     /** What {@code way} asks of containers' contents. */
     static ContentsAsked of(List<OnTheWay.TakenIn> way) {
         List<Asked> out = new ArrayList<>();
+        List<RowDemand.OneValueAtBoth> related = new ArrayList<>();
         for (OnTheWay.TakenIn each : way) {
             // One an element meets several ways is written once one of them is chosen, and
             // until then asks nothing of a container written alike.
@@ -166,14 +178,15 @@ record ContentsAsked(List<Asked> asked) {
                 // A count is composed with the container's other numbers, where its value is
                 // written ({@link CardinalityComposer}), and asks no value written into it here.
                 case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                     RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ -> { }
+                     RowDemand.ForTheRun _ -> { }
+                case RowDemand.OneValueAtBoth both -> related.add(both);
                 case RowDemand.Exists exists -> asked(exists.container(), true,
                         exists.ofAnElement().theWay(), Optional.empty(), out);
                 case RowDemand.ForAll every -> asked(every.container(), false,
                         every.ofEachElement().theWay(), Optional.empty(), out);
             }
         }
-        return new ContentsAsked(out);
+        return new ContentsAsked(out, related);
     }
 
     /**
@@ -181,9 +194,10 @@ record ContentsAsked(List<Asked> asked) {
      * hands on for each element it counts ({@link ACountHandedOn}).
      */
     static ContentsAsked of(List<OnTheWay.TakenIn> way, Map<RealizationTarget, AskedAt> counts) {
-        List<Asked> out = new ArrayList<>(of(way).asked());
+        ContentsAsked asked = of(way);
+        List<Asked> out = new ArrayList<>(asked.asked());
         out.addAll(ACountHandedOn.askedOf(counts));
-        return new ContentsAsked(out);
+        return new ContentsAsked(out, asked.related());
     }
 
     /**
@@ -257,6 +271,10 @@ record ContentsAsked(List<Asked> asked) {
         }
         named.addAll(trying.atANameTheCasesShare());
         named.addAll(writing);
+        for (RowDemand.OneValueAtBoth each : related) {
+            named.add(each.one());
+            named.add(each.other());
+        }
         List<TermPath> paths = List.copyOf(named);
         List<WhereANameIsWritten> written = new ArrayList<>();
         boolean notWorkedOut = false;
@@ -349,7 +367,17 @@ record ContentsAsked(List<Asked> asked) {
                                     new Around(at.get(around.container()), around.some(),
                                             around.from(), around.below()))));
                 }
-                return composes.test(new Way(new ContentsAsked(under), taken, at))
+                // Two positions are one value or two wherever this way writes them; a pair a case
+                // puts under no field a value is read at is no pair a row is held to here.
+                List<RowDemand.OneValueAtBoth> related = new ArrayList<>();
+                for (RowDemand.OneValueAtBoth each : asked.related()) {
+                    RowDemand.OneValueAtBoth written = RowDemand.OneValueAtBoth.of(
+                            at.get(each.one()), at.get(each.other()), each.same());
+                    if (written != null) {
+                        related.add(written);
+                    }
+                }
+                return composes.test(new Way(new ContentsAsked(under, related), taken, at))
                         ? Walked.COMPOSED : Walked.EVERY_WAY_TRIED;
             }
             for (WhereANameIsWritten.Place place : written.get(next).places()) {
@@ -478,7 +506,47 @@ record ContentsAsked(List<Asked> asked) {
                 given.add(new Given(each, in.getFirst()));
             }
         }
-        return new Resolution.Resolved(new Here(within, given, leftOpen));
+        // And each position of this parameter held to one of another composed before it, with the
+        // value built there; a counterpart composed after this one is held to this one there.
+        // Two positions of this parameter are held to each other where it is composed.
+        List<HeldTo> heldTo = new ArrayList<>();
+        List<RowDemand.OneValueAtBoth> alongside = new ArrayList<>();
+        for (RowDemand.OneValueAtBoth each : related) {
+            boolean one = each.one().head().equals(head);
+            boolean other = each.other().head().equals(head);
+            if (one && other) {
+                alongside.add(each);
+            } else if (one || other) {
+                TermPath mine = one ? each.one() : each.other();
+                ValuesHandedOn.Standing theirs = handed.chosen().get(each.besides(mine));
+                if (theirs != null) {
+                    heldTo.add(new HeldTo(mine, theirs.value(), each.same()));
+                }
+            }
+        }
+        return new Resolution.Resolved(new Here(within, given, leftOpen, heldTo, alongside));
+    }
+
+    /**
+     * A position of the parameter being composed held to the value built at a position of one
+     * composed before it.
+     *
+     * @param at    the position of this parameter
+     * @param value what was built at the other, as a row writes it
+     * @param same  whether {@code at} is to hold that value, rather than any other
+     */
+    record HeldTo(TermPath at, FixtureTemplate value, boolean same) {
+
+        HeldTo {
+            Objects.requireNonNull(at, "a position is held to a value");
+            Objects.requireNonNull(value, "a position is held to some value");
+        }
+
+        /** Whether {@code built}, written at {@link #at}, holds what this asks. Two values are
+         *  one where a row writes them alike, which is how what was built is read back. */
+        boolean heldBy(FixtureTemplate built) {
+            return built.text().equals(value.text()) == same;
+        }
     }
 
     /** The element {@code taken} took from each of {@code through}, in that order. */
@@ -536,13 +604,44 @@ record ContentsAsked(List<Asked> asked) {
      *                 they are asked, and that are handed to nothing: a row composed without them
      *                 meets them or not as it comes, so what composing came to is not every row
      *                 there is
+     * @param heldTo    each position of it held to a value built at a parameter composed before it
+     * @param alongside each two positions of it held to one value, or two
      */
-    record Here(List<Asked> within, List<Given> given, List<Asked> leftOpen) {
+    record Here(List<Asked> within, List<Given> given, List<Asked> leftOpen,
+                List<HeldTo> heldTo, List<RowDemand.OneValueAtBoth> alongside) {
 
         Here {
             within = List.copyOf(within);
             given = List.copyOf(given);
             leftOpen = List.copyOf(leftOpen);
+            heldTo = List.copyOf(heldTo);
+            alongside = List.copyOf(alongside);
+        }
+
+        /**
+         * What {@code built} does not hold of what the positions of this parameter are held to, or
+         * null where it holds all of it.
+         *
+         * @param built what was built at each position of this parameter a value is read at
+         */
+        String notHeldBy(Map<TermPath, FixtureTemplate> built) {
+            for (HeldTo each : heldTo) {
+                FixtureTemplate here = built.get(each.at());
+                if (here != null && !each.heldBy(here)) {
+                    return "`" + each.at() + "` is to hold " + (each.same() ? "" : "a value other"
+                            + " than ") + each.value().text();
+                }
+            }
+            for (RowDemand.OneValueAtBoth each : alongside) {
+                FixtureTemplate one = built.get(each.one());
+                FixtureTemplate other = built.get(each.other());
+                if (one != null && other != null
+                        && one.text().equals(other.text()) != each.same()) {
+                    return "`" + each.one() + "` and `" + each.other() + "` are to hold "
+                            + (each.same() ? "one value" : "two values");
+                }
+            }
+            return null;
         }
 
         /** Why what composing came to is not every row there is, or nothing where it is. */
@@ -689,7 +788,74 @@ record ContentsAsked(List<Asked> asked) {
                 }
             }
         }
+        // And every position of it held to one value with another, or two: what was built there
+        // is what it is held to its counterpart by, whichever of the two is composed first.
+        for (RowDemand.OneValueAtBoth each : related) {
+            for (TermPath at : List.of(each.one(), each.other())) {
+                if (at.head().equals(head)) {
+                    one.add(at);
+                }
+            }
+        }
         return new ToHandOn(one, inEach, containers);
+    }
+
+    /**
+     * {@code decided}, with what is decided at or under one of two positions held to one value
+     * decided at the same place under the other as well, where nothing is decided there yet.
+     *
+     * <p>One value at both is one value, so what the way asks of it under either is asked of it
+     * under both. Composed apart, the position composed first is built knowing only its own half,
+     * and the one after it is held to a value its own half refuses. Two things decided at one place
+     * are left as they are: the value built there is held to the other ({@link Here#notHeldBy}),
+     * and a row with both is one nothing composes.
+     */
+    <V> Map<TermPath, V> sharedAcross(Map<TermPath, V> decided) {
+        if (related.isEmpty()) {
+            return decided;
+        }
+        Map<TermPath, V> out = new LinkedHashMap<>(decided);
+        boolean grew = true;
+        while (grew) {
+            grew = false;
+            for (RowDemand.OneValueAtBoth each : related) {
+                // A position held to one under itself has nothing to give the other that is not
+                // already its own, and copying would go one level deeper every time round.
+                if (each.same() && !each.one().isAtOrUnder(each.other())
+                        && !each.other().isAtOrUnder(each.one())) {
+                    grew |= copiedUnder(out, each.one(), each.other());
+                    grew |= copiedUnder(out, each.other(), each.one());
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Whether anything decided at or under {@code from} was put at its place under {@code to}. */
+    private static <V> boolean copiedUnder(Map<TermPath, V> decided, TermPath from, TermPath to) {
+        boolean put = false;
+        for (Map.Entry<TermPath, V> each : List.copyOf(decided.entrySet())) {
+            TermPath moved = each.getKey().movedFrom(from, to);
+            if (moved != null && !decided.containsKey(moved)) {
+                decided.put(moved, each.getValue());
+                put = true;
+            }
+        }
+        return put;
+    }
+
+    /**
+     * Each two parameters a position of one of which is held to a position of the other, as their
+     * names: what the order composes one of after the other, whichever it is.
+     */
+    List<List<String>> heldAcross() {
+        List<List<String>> out = new ArrayList<>();
+        for (RowDemand.OneValueAtBoth each : related) {
+            if (!each.one().head().equals(each.other().head())) {
+                out.add(List.of(each.one().head(), each.other().head()));
+            }
+        }
+        return out;
     }
 
     /**
