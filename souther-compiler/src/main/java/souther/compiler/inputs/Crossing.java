@@ -7,6 +7,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
@@ -85,7 +86,7 @@ final class Crossing {
      * could not turn into a set of one position's values at all. What each of them would take to
      * lift is different work, which is why they stay apart rather than becoming one word.
      */
-    static BlockReason.ReadingStopReason stopped(souther.compiler.values.UnreadReason why) {
+    static BlockReason.ReadingStopReason stopped(StoppedReading why) {
         return BlockReason.of(why);
     }
 

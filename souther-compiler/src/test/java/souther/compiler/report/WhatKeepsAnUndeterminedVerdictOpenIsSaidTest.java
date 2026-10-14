@@ -15,6 +15,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -103,10 +104,10 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
      * told what keeps the verdict open is told only what is still out of reach.
      */
     @Test
-    void whatKeepsItOpenIsWhatAWiderRunDoesNotReach() {
+    void whatKeepsItOpenIsWhatNoFigureStopped() {
         AdequacyReport report = measured();
 
-        assertEquals(new AdequacyReport.UnderAWiderRun(0, 1), report.underAWiderRun(),
+        assertEquals(new AdequacyReport.HeldOpen(0, 1), report.heldOpen(),
                 () -> "what keeps it open: " + report.whatKeepsTheVerdictOpen());
     }
 
@@ -140,8 +141,8 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
         assertTrue(human.contains("""
                 adequacy: undetermined
                   what keeps it open
-                    may change in a wider run     0
-                    unaffected by a wider run     1
+                    stopped at a figure of this compiler     0
+                    stopped at no figure                     1
                 """), human);
     }
 
@@ -224,7 +225,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
 
         assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED, report.adequacy(),
                 () -> report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
-        assertEquals(new AdequacyReport.UnderAWiderRun(0, 0), report.underAWiderRun());
+        assertEquals(new AdequacyReport.HeldOpen(0, 0), report.heldOpen());
         assertFalse(report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)).contains("what keeps it open"),
                 report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertTrue(root.get("keptOpenBy").isEmpty(), root.get("keptOpenBy").toString());
@@ -331,7 +332,8 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
                 "two rules nothing could read are two things to tell a person");
         assertEquals(Map.of("rule_unread/may_change", 1L, "rule_unread/unaffected", 1L),
                 howManyOfEach(keptOpenBy(WeakeningSet.of(
-                        ruleUnread(new BlockReason.PatternTooCostly(), "a"),
+                        ruleUnread(new BlockReason.PatternTooCostly(
+                                WorkFigure.ADMITTED_VALUES_ONE_MACHINE.at(50_000)), "a"),
                         ruleUnread(new BlockReason.RuleAboutADerivedValue(), "b")))),
                 "and one word over two answers is two entries, not one of either");
     }

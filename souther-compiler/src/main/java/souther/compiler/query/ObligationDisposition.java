@@ -314,7 +314,7 @@ public sealed interface ObligationDisposition {
     private static StandingAtAPoint.ReadingsTried readingsTriedIn(WeakeningSet by) {
         for (Weakening each : by.causes()) {
             if (each instanceof Weakening.BorderReadingsNotExhausted it) {
-                return new StandingAtAPoint.ReadingsTried.StoppedAtTheLimit(it.limit());
+                return new StandingAtAPoint.ReadingsTried.StoppedAtTheLimit(it.limits());
             }
         }
         return StandingAtAPoint.ReadingsTried.EVERY_ONE;

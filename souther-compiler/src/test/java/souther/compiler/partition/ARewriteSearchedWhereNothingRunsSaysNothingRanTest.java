@@ -20,7 +20,6 @@ import souther.compiler.reading.CoverageRead;
 import souther.compiler.source.SourceId;
 
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -48,14 +47,14 @@ class ARewriteSearchedWhereNothingRunsSaysNothingRanTest {
     @Test
     void aWayToRunRowsThatRunsNothingSaysNothingRan() {
         assertEquals(new ReplacementDisposition.NoneFound(
-                        Set.of(ReplacementDisposition.Ended.NOTHING_RAN)),
+                        ReplacementDisposition.Ended.NOTHING_RAN),
                 searchedWith(Generator.Trial.NOTHING_RUNS));
     }
 
     @Test
     void andSoDoesOneThatRunsEachRowOnceOverNothing() {
         assertEquals(new ReplacementDisposition.NoneFound(
-                        Set.of(ReplacementDisposition.Ended.NOTHING_RAN)),
+                        ReplacementDisposition.Ended.NOTHING_RAN),
                 searchedWith(Generator.once(Generator.Trial.NOTHING_RUNS)));
     }
 

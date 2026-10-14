@@ -3,6 +3,8 @@ package souther.compiler.publish;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
+import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.query.EstablishmentGap;
 
@@ -55,7 +57,7 @@ class ACanonicalPublicationOrderIsCompleteAndOnePerKindTest {
     @Test
     void everyOrderHoldsEveryMemberOfItsKind() throws Exception {
         for (Map.Entry<String, CanonicalSelection.Order<?>> each : declaredOrders().entrySet()) {
-            List<Object> slots = each.getValue().slots();
+            List<Object> slots = membersAtThePlacesOf(each.getValue());
             assertEquals(universeOf(slots), new LinkedHashSet<>(slots),
                     () -> each.getKey() + " does not say every member of its kind, or says one"
                             + " nothing else does");
@@ -76,7 +78,7 @@ class ACanonicalPublicationOrderIsCompleteAndOnePerKindTest {
     void noKindIsPutInOrderTwice() throws Exception {
         Map<Class<?>, String> byKind = new LinkedHashMap<>();
         for (Map.Entry<String, CanonicalSelection.Order<?>> each : declaredOrders().entrySet()) {
-            Class<?> kind = kindOf(each.getValue().slots());
+            Class<?> kind = kindOf(membersAtThePlacesOf(each.getValue()));
             String already = byKind.put(kind, each.getKey());
             assertEquals(null, already,
                     () -> kind.getSimpleName() + " is put in order by " + already + " and by "
@@ -89,14 +91,15 @@ class ACanonicalPublicationOrderIsCompleteAndOnePerKindTest {
      *
      * <p>The reading gaps are the observation codes with the one reason that is no observation's
      * after them. Written again rather than composed, the two would be two orders over the codes
-     * that agree until somebody moves one of them.
+     * that agree until somebody moves one of them. An observation is placed at its code, since
+     * the figures it carries are what it was met at.
      */
     @Test
     void theReadingGapsAreTheObservationCodesAndNotASecondOrderOverThem() {
         List<Object> codesInReadingOrder = new ArrayList<>();
-        for (Object gap : PublicationOrders.READING_GAPS.slots()) {
-            if (gap instanceof ReadingGap.Observation it) {
-                codesInReadingOrder.add(it.code());
+        for (Object place : PublicationOrders.READING_GAPS.slots()) {
+            if (place instanceof Incompleteness.Code it) {
+                codesInReadingOrder.add(it);
             }
         }
 
@@ -115,7 +118,7 @@ class ACanonicalPublicationOrderIsCompleteAndOnePerKindTest {
     @Test
     void whatIsKeptIsTheOrderItselfWithWhatIsHeldLeftIn() throws Exception {
         for (Map.Entry<String, CanonicalSelection.Order<?>> each : declaredOrders().entrySet()) {
-            List<Object> slots = each.getValue().slots();
+            List<Object> slots = membersAtThePlacesOf(each.getValue());
             if (slots.getFirst() instanceof Class<?>) {
                 // An order over arms places values this cannot make: what a member of one holds is
                 // the arm's, and building one here would be this test deciding it.
@@ -134,6 +137,21 @@ class ACanonicalPublicationOrderIsCompleteAndOnePerKindTest {
             assertEquals(List.of(slots.getLast()), order.keep(List.of(slots.getLast())).written(),
                     () -> each.getKey() + " does not keep one of them on its own");
         }
+    }
+
+    /**
+     * An observation is placed at its code whatever figure it was met at, so one code met at two
+     * figures is two members for one place, which a holder makes one before it asks.
+     */
+    @Test
+    void oneCodeAtTwoFiguresIsTwoMembersForOnePlace() {
+        assertThrows(IllegalArgumentException.class,
+                () -> PublicationOrders.READING_GAPS.keep(List.of(
+                        ReadingGap.of(Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED,
+                                Limits.DEFAULT.nodesFigure())),
+                        ReadingGap.of(Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED,
+                                Limits.DEFAULT.textFigure())))),
+                "one code at two figures is one reason, and the order is not what makes it one");
     }
 
     /**
@@ -171,9 +189,10 @@ class ACanonicalPublicationOrderIsCompleteAndOnePerKindTest {
         assertThrows(IllegalArgumentException.class,
                 () -> PublicationOrders.ESTABLISHMENT_GAPS.keep(List.of(
                         EstablishmentGap.Observation.of(
-                                List.of(Incompleteness.Code.VALUE_TRUNCATED)),
+                                List.of(Incompleteness.Code.VALUE_TRUNCATED),
+                                List.of(Limits.DEFAULT.nodesFigure())),
                         EstablishmentGap.Observation.of(
-                                List.of(Incompleteness.Code.VALUE_UNREADABLE)))),
+                                List.of(Incompleteness.Code.VALUE_UNREADABLE), List.of()))),
                 "two observations are one observation naming both, and putting them in order is"
                         + " not what makes them one");
     }
@@ -190,6 +209,31 @@ class ACanonicalPublicationOrderIsCompleteAndOnePerKindTest {
         }
         assertTrue(out.size() > 1, "the orders are read off the declarations, and this found none");
         return out;
+    }
+
+    /**
+     * A member of {@code order} at each of its places, in order.
+     *
+     * <p>The places themselves wherever they are members. The reading gaps place an observation at
+     * its code, since what it carries beside the code is the figure it was met at and not a reason
+     * of its own; there the member is an observation of that code.
+     */
+    private static List<Object> membersAtThePlacesOf(CanonicalSelection.Order<?> order) {
+        if (order != PublicationOrders.READING_GAPS) {
+            return order.slots();
+        }
+        List<Object> out = new ArrayList<>();
+        for (Object place : order.slots()) {
+            out.add(place instanceof Incompleteness.Code code ? anObservationOf(code) : place);
+        }
+        return out;
+    }
+
+    /** An observation of {@code code}, at a figure where a figure is what decides it. */
+    private static ReadingGap anObservationOf(Incompleteness.Code code) {
+        return ReadingGap.of(code.runSensitivity() == RunSensitivity.MAY_CHANGE
+                ? Incompleteness.Cause.at(code, Limits.DEFAULT.nodesFigure())
+                : Incompleteness.Cause.of(code));
     }
 
     /** What kind an order is over, read off what it places. */
@@ -234,6 +278,14 @@ class ACanonicalPublicationOrderIsCompleteAndOnePerKindTest {
      * count rather than left with a test that quietly stopped covering it.
      */
     private static List<Object> valuesOf(Class<?> arm) throws Exception {
+        if (arm == ReadingGap.Observation.class) {
+            // One per code, whatever figure it was met at: the figure is where it was met.
+            List<Object> out = new ArrayList<>();
+            for (Incompleteness.Code code : Incompleteness.Code.values()) {
+                out.add(anObservationOf(code));
+            }
+            return out;
+        }
         RecordComponent[] held = arm.getRecordComponents();
         if (held == null) {
             return fail(arm.getSimpleName() + " is not a record, and this does not know what values"

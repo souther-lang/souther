@@ -1,5 +1,8 @@
 package souther.compiler.values;
 
+import net.unit8.notation199x.pattern.Meter;
+import souther.compiler.regex.PatternPlan;
+
 /**
  * What a position's plan came to, or which limit stopped this compiler building it.
  *
@@ -46,25 +49,41 @@ public sealed interface Realization {
      *
      * @param asked the pattern whose machine was refused, which is what somebody wrote and what any
      *              rule writing it asked for
+     * @param refused the limit that refused it, of the budget the position was building under
      */
-    record OverTheMachineLimit(souther.compiler.regex.PatternPlan asked) implements Realization {
+    record OverTheMachineLimit(PatternPlan asked, PatternPlan.Refused refused)
+            implements Realization {
 
         public OverTheMachineLimit {
             if (asked == null) {
                 throw new IllegalArgumentException(
                         "a machine is asked for by a pattern, and this says which");
             }
+            if (refused == null || refused.by() != Meter.Stopped.ONE_MACHINE) {
+                throw new IllegalArgumentException(
+                        "a machine over the machine limit was refused by that limit: " + refused);
+            }
         }
     }
 
     /**
-     * What this answer has built came to more than it may build in all.
+     * What this answer was building was refused, and no one pattern somebody wrote is why.
      *
      * <p>About the answer. Every rule that reached the position was understood and every one of
-     * them could have been built; what ran out is the allowance for all of them together, and which
-     * one was being built when it ran out is a fact about the order and not about the rules.
+     * them could have been built; what ran out is the allowance for all of them together, or the
+     * machine the rules come to between them was larger than one may be — and which one was being
+     * built when that happened is a fact about the order and not about the rules.
+     *
+     * @param refused which limit of the budget the position was building under refused it
      */
-    record OverTheAnswerLimit() implements Realization {}
+    record OverTheAnswerLimit(PatternPlan.Refused refused) implements Realization {
+
+        public OverTheAnswerLimit {
+            if (refused == null) {
+                throw new IllegalArgumentException("an answer that was refused was refused by a limit");
+            }
+        }
+    }
 
     /** What is known about the position either way, which is the set or every value. */
     default ValueSet upperBound() {
@@ -74,5 +93,14 @@ public sealed interface Realization {
     /** Whether the rules' own answer is what came back. */
     default boolean isExact() {
         return this instanceof Exact;
+    }
+
+    /** Which limit refused it, or null where the rules' own answer came back. */
+    static PatternPlan.Refused refusedIn(Realization made) {
+        return switch (made) {
+            case Exact _ -> null;
+            case OverTheMachineLimit it -> it.refused();
+            case OverTheAnswerLimit it -> it.refused();
+        };
     }
 }

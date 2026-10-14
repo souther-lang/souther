@@ -5,6 +5,7 @@ import souther.compiler.values.StringFacts;
 import souther.compiler.values.StringMachineAnswers;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.ConjoinedAdmissibleValues;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Combinators.Handed;
@@ -516,7 +517,7 @@ public final class InvariantChecker {
                   List<Written> readings,
                   Map<FactSubject, souther.compiler.numeric.Granularity> spacing,
                   Map<RuleKey, ValueSet> admitted,
-                  Map<RuleKey, List<UnreadReason>> unreadAt,
+                  Map<RuleKey, List<StoppedReading>> unreadAt,
                   Set<RuleKey> notSeparated,
                   StringFacts stringMachines,
                   Map<RuleRef.Invariant, Map<FactSubject, Set<ChoiceToLift>>> endsLeftOpen,
@@ -1184,12 +1185,12 @@ public final class InvariantChecker {
         // finish it, and a reading kept by a reader that only asks questions of it would be
         // keeping an allowance.
         Map<RuleKey, ValueSet> admitted = new LinkedHashMap<>();
-        Map<RuleKey, List<UnreadReason>> unreadAt = new LinkedHashMap<>();
+        Map<RuleKey, List<StoppedReading>> unreadAt = new LinkedHashMap<>();
         Set<RuleKey> notSeparated = new LinkedHashSet<>();
         ConjoinedAdmissibleValues<FactSubject> readAs = constraints.values();
         for (RuleKey field : written(atoms, keys)) {
             ValueSet here = ValueSet.ANY;
-            List<UnreadReason> why = new ArrayList<>();
+            List<StoppedReading> why = new ArrayList<>();
             // Not asked at all where the reading admits nothing. What it holds there is not the
             // relation's projections — those are empty wherever the relation is — but where the
             // arithmetic had got to when it learned that no value of this type exists, so whether
@@ -1204,7 +1205,11 @@ public final class InvariantChecker {
                         allowed.meet(readAs.blockOf(name), here, readAs.at(name));
                 here = made.set();
                 if (made.gaveUp()) {
-                    why.add(UnreadReason.EXACT_VALUES_TOO_COSTLY);
+                    StoppedReading wide = StoppedReading.ofTheValues(
+                            UnreadReason.EXACT_VALUES_TOO_COSTLY, made.refused());
+                    if (!why.contains(wide)) {
+                        why.add(wide);
+                    }
                 }
                 separated = separated && readAs.projectionExactAt(name);
                 // Every one of them. Two subjects of one name are two ways the same rules were
@@ -1212,7 +1217,7 @@ public final class InvariantChecker {
                 // an ordering the interval algebra knows the place by and a pattern the values
                 // reading knows it by stop this reading in two ways, and each is a rule of the
                 // author's to act on. Said once here — a limit met under both names is one limit.
-                for (UnreadReason each : readAs.whyUnread(name)) {
+                for (StoppedReading each : readAs.stoppedAt(name)) {
                     if (!why.contains(each)) {
                         why.add(each);
                     }
@@ -2114,7 +2119,7 @@ public final class InvariantChecker {
         List<Direct> out = new ArrayList<>();
         // Sets in the order they were filed: one finding is filed by every rule that comes to it, and
         // a list asked whether it holds one already is asked across everything filed before.
-        SequencedSet<FieldDomains.NoLine> noLines = new LinkedHashSet<>();
+        SequencedMap<Object, FieldDomains.NoLine> noLines = new LinkedHashMap<>();
         SequencedMap<HandOver, FieldDomains.WithoutAnEnd> withoutAnEnd = new LinkedHashMap<>();
         SequencedMap<Candidate, Set<InvariantStatementId>> aboutOneCoordinate = new LinkedHashMap<>();
         Map<RuleKey, SequencedSet<TypeSymbol.AtModule>> narrowers = new LinkedHashMap<>();
@@ -2144,7 +2149,7 @@ public final class InvariantChecker {
                                 raised, took, rules, raisedByPart, standing, partsNaming))));
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
-        return new Reading(List.copyOf(out), List.copyOf(noLines),
+        return new Reading(List.copyOf(out), List.copyOf(noLines.values()),
                 List.copyOf(withoutAnEnd.values()),
                 // Made once each, from the statements gathered under them: a candidate rebuilt as
                 // the walk met another statement copied what it had so far every time.
@@ -2279,7 +2284,7 @@ public final class InvariantChecker {
     private void direct(ClauseExpr.Part said, InvariantStatementId statement,
                         Written of, PartId<RuleRef.Invariant> part, Denotations at,
                         Coordinates byName, List<Direct> out,
-                        SequencedSet<FieldDomains.NoLine> noLines,
+                        SequencedMap<Object, FieldDomains.NoLine> noLines,
                         SequencedMap<HandOver, FieldDomains.WithoutAnEnd> withoutAnEnd,
                         SequencedMap<Candidate, Set<InvariantStatementId>> naming,
                         Map<RuleKey, SequencedSet<TypeSymbol.AtModule>> narrowers,
@@ -3102,7 +3107,7 @@ public final class InvariantChecker {
     private void noLineDrawn(CanonicalForm read, Core clause, PartId<RuleRef.Invariant> part,
                             Denotations at,
                             Coordinates byName, Arrivals answering, Set<RuleKey> notShown,
-                            SequencedSet<FieldDomains.NoLine> out) {
+                            SequencedMap<Object, FieldDomains.NoLine> out) {
         if (!(read.comparison().claim() instanceof ComparisonClaim.Cut)) {
             return;
         }
@@ -3210,7 +3215,7 @@ public final class InvariantChecker {
     private void restricting(Core clause, ClauseOccurrence at, RuleRef.Invariant from,
                              Written of, PartId<RuleRef.Invariant> part,
                              Coordinates byName, RulesRead rules,
-                             SequencedSet<FieldDomains.NoLine> noLines, RunsRead runs) {
+                             SequencedMap<Object, FieldDomains.NoLine> noLines, RunsRead runs) {
         ReadByClauses.OfAPart account = of.adoptedAt(at);
         ReadByClauses.OfARule rule = rules.ruleIn(from);
         if (account == null || rule == null) {
@@ -3247,9 +3252,10 @@ public final class InvariantChecker {
             // outstanding and no rule of it is why. Written down all the same: what a reader takes
             // from an absence here is that the model draws no line, and the truth is that nobody
             // worked out whether it does.
-            if (runs.notPublishedAt(position)) {
+            BlockReason.RulesNotHandedOnAsSets notHandedOn = runs.notPublishedAt(position);
+            if (notHandedOn != null) {
                 add(noLines, new FieldDomains.NoLine(each.getValue().at(), part, clause,
-                        new BlockReason.RulesNotHandedOnAsSets()));
+                        notHandedOn));
                 continue;
             }
             // And what the rule itself came to once its own choices are decided and its own
@@ -3265,18 +3271,26 @@ public final class InvariantChecker {
         }
     }
 
-    /** Both lists, the second's after the first's, each reason once. */
+    /**
+     * Both lists, the second's after the first's, each reason once — and a reason in both, met at
+     * every figure either met it at ({@link BlockReason#factOf}).
+     */
     private static List<BlockReason.RuleReadingStopped> alsoSaying(
             List<BlockReason.RuleReadingStopped> these,
             List<BlockReason.RuleReadingStopped> those) {
-        List<BlockReason.RuleReadingStopped> out = new ArrayList<>(these);
-        those.stream().filter(each -> !out.contains(each)).forEach(out::add);
-        return List.copyOf(out);
+        Map<Object, BlockReason.RuleReadingStopped> out = new LinkedHashMap<>();
+        these.forEach(each -> out.merge(BlockReason.factOf(each), each, BlockReason::together));
+        those.forEach(each -> out.merge(BlockReason.factOf(each), each, BlockReason::together));
+        return List.copyOf(out.values());
     }
 
-    /** One finding per rule and reason, however many readers arrive at it. */
-    private static void add(SequencedSet<FieldDomains.NoLine> noLines, FieldDomains.NoLine said) {
-        noLines.add(said);
+    /**
+     * One finding per rule and reason, however many readers arrive at it, and filed where the first
+     * of them was: a second met at another figure is the same finding, met at both.
+     */
+    private static void add(SequencedMap<Object, FieldDomains.NoLine> noLines,
+                            FieldDomains.NoLine said) {
+        noLines.merge(said.key(), said, FieldDomains.NoLine::together);
     }
 
     /**
@@ -3334,8 +3348,8 @@ public final class InvariantChecker {
                 // And a rule of a position that could not hand its sets on leaves the question
                 // standing with nothing about the rule to say. What was not made is the position's
                 // group of them, which this rule is no more answerable for than the one beside it.
-                case AdmittedStrings.NotPublished _ ->
-                        byPosition.put(position, new Run.NotPublished());
+                case AdmittedStrings.NotPublished it ->
+                        byPosition.put(position, new Run.NotPublished(it.why()));
             }
         });
         return new RunsRead(byPosition);
@@ -3441,8 +3455,11 @@ public final class InvariantChecker {
          * whole group of sets and no rule of it is answerable for that, so this carries no reason
          * to name one with — what it says is that the question about this conjunct stands, and the
          * one word for why is the position's ({@link BlockReason.RulesNotHandedOnAsSets}).
+         *
+         * @param why the position's word for it, which is the position's and carried here only to
+         *            be said
          */
-        record NotPublished() implements Run {}
+        record NotPublished(BlockReason.RulesNotHandedOnAsSets why) implements Run {}
     }
 
     /** What one conjunct's rules about strings came to, per position. */
@@ -3492,15 +3509,15 @@ public final class InvariantChecker {
         }
 
         /**
-         * Whether this conjunct states a rule about the strings at {@code position} that the
-         * position could not hand on as a set.
+         * Why this conjunct's rule about the strings at {@code position} was not handed on as a
+         * set, or null where the position handed it on or the conjunct states none there.
          *
          * <p>Asked apart from {@link #stoppedAt} because the answer is not one of that one's. Those
          * are reasons about a rule and this one is about the position, and the two would be one
          * list only by giving the position's shortfall a rule to be filed against.
          */
-        boolean notPublishedAt(FactSubject position) {
-            return byPosition.get(position) instanceof Run.NotPublished;
+        BlockReason.RulesNotHandedOnAsSets notPublishedAt(FactSubject position) {
+            return byPosition.get(position) instanceof Run.NotPublished it ? it.why() : null;
         }
 
     }
@@ -3558,8 +3575,8 @@ public final class InvariantChecker {
     /** One finding, kept once. A coordinate reached twice is one place with one thing to say. */
     private static void file(Coordinate where, PartId<RuleRef.Invariant> part, Core clause,
                              BlockReason.RuleWithoutLineReason why,
-                             SequencedSet<FieldDomains.NoLine> out) {
-        out.add(new FieldDomains.NoLine(where.at(), part, clause, why));
+                             SequencedMap<Object, FieldDomains.NoLine> out) {
+        add(out, new FieldDomains.NoLine(where.at(), part, clause, why));
     }
 
     /**

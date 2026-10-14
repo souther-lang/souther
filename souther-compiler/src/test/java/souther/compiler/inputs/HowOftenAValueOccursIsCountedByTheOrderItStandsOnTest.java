@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.numeric.Count;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -79,7 +80,7 @@ class HowOftenAValueOccursIsCountedByTheOrderItStandsOnTest {
     /** What stands inside a newtype that was read may be what was not. */
     @Test
     void aNewtypeHoldingAValueThatWasNotReadIsNotReadEither() {
-        ObservedValue cut = label(new ObservedValue.Truncated());
+        ObservedValue cut = label(new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()));
         ObservedValue whole = label(new ObservedValue.Text("a"));
         assertInstanceOf(NumericTerm.Reading.Missing.class,
                 read(Carrier.TEXT, cut, List.of(cut, whole)));
@@ -95,7 +96,7 @@ class HowOftenAValueOccursIsCountedByTheOrderItStandsOnTest {
     @Test
     void aValueThatWasNotReadIsNotCountedAsAnotherOrTheSame() {
         List<ObservedValue> every = List.of(new ObservedValue.Text("a"),
-                new ObservedValue.Truncated());
+                new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()));
         assertInstanceOf(NumericTerm.Reading.Missing.class,
                 read(Carrier.TEXT, new ObservedValue.Text("a"), every));
     }

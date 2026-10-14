@@ -38,6 +38,26 @@ public record Limits(int maxDepth, int maxNodes, int maxElements, int maxText) {
         }
     }
 
+    /** {@link #maxDepth} as a figure, for a walk under these limits that stopped at it. */
+    public Figure depthFigure() {
+        return WorkFigure.OBSERVED_DEPTH.at(maxDepth);
+    }
+
+    /** {@link #maxNodes} as a figure, for a walk under these limits that stopped at it. */
+    public Figure nodesFigure() {
+        return WorkFigure.OBSERVED_NODES.at(maxNodes);
+    }
+
+    /** {@link #maxElements} as a figure, for a walk under these limits that stopped at it. */
+    public Figure elementsFigure() {
+        return WorkFigure.OBSERVED_ELEMENTS.at(maxElements);
+    }
+
+    /** {@link #maxText} as a figure, for a walk under these limits that stopped at it. */
+    public Figure textFigure() {
+        return WorkFigure.OBSERVED_TEXT.at(maxText);
+    }
+
     /**
      * Whether a value stated by a source text is one these limits would keep whole.
      *
@@ -58,8 +78,12 @@ public record Limits(int maxDepth, int maxNodes, int maxElements, int maxText) {
      * says so; a value holding something that could not be read says that instead, whatever its
      * size — the two are what a reader has to tell apart, since one is about how much was written
      * and the other about what could be made of it.
+     *
+     * <p>A value these numbers stop says which of them it was, as it stood here. Where what stopped
+     * it was met by an earlier walk, it says that walk's figure, which is the one the value
+     * carries.
      */
-    public Incompleteness.Code stoppedBy(Asserted stated) {
+    public Incompleteness.Cause stoppedBy(Asserted stated) {
         return new Room().holds(stated, 0);
     }
 
@@ -76,7 +100,7 @@ public record Limits(int maxDepth, int maxNodes, int maxElements, int maxText) {
     }
 
     /** Why an observed value is not one these limits keep whole, or null where it is. */
-    public Incompleteness.Code stoppedBy(ObservedValue observed) {
+    public Incompleteness.Cause stoppedBy(ObservedValue observed) {
         return new Room().holds(observed, 0);
     }
 
@@ -93,32 +117,42 @@ public record Limits(int maxDepth, int maxNodes, int maxElements, int maxText) {
         private int budget = maxNodes;
 
         /** {@link Incompleteness.Code#VALUE_TRUNCATED} where there is no room for a node here: a
-         *  walk under these limits would have stopped at exactly this one. */
-        private Incompleteness.Code room(int depth) {
-            return budget-- > 0 && depth <= maxDepth ? null : Incompleteness.Code.VALUE_TRUNCATED;
+         *  walk under these limits would have stopped at exactly this one, and at the figure it
+         *  checks first — the nodes, then the depth, as the walk that produces an observation
+         *  does. */
+        private Incompleteness.Cause room(int depth) {
+            if (budget-- <= 0) {
+                return stopped(nodesFigure());
+            }
+            return depth <= maxDepth ? null : stopped(depthFigure());
         }
 
-        Incompleteness.Code holds(Asserted stated, int depth) {
+        /** Where these numbers stopped a value, at {@code figure}. */
+        private Incompleteness.Cause stopped(Figure figure) {
+            return Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED, figure);
+        }
+
+        Incompleteness.Cause holds(Asserted stated, int depth) {
             return switch (stated) {
                 case Asserted.Value(ObservedValue value) -> holds(value, depth);
                 case Asserted.Built built -> {
-                    Incompleteness.Code stopped = room(depth);
+                    Incompleteness.Cause stopped = room(depth);
                     for (Asserted field : built.fields().values()) {
                         stopped = stopped != null ? stopped : holds(field, depth + 1);
                     }
                     yield stopped;
                 }
                 case Asserted.Elements elements -> {
-                    Incompleteness.Code stopped = elements.elements().size() > maxElements
-                            ? Incompleteness.Code.VALUE_TRUNCATED : room(depth);
+                    Incompleteness.Cause stopped = elements.elements().size() > maxElements
+                            ? stopped(elementsFigure()) : room(depth);
                     for (Asserted element : elements.elements()) {
                         stopped = stopped != null ? stopped : holds(element, depth + 1);
                     }
                     yield stopped;
                 }
                 case Asserted.Entries entries -> {
-                    Incompleteness.Code stopped = entries.entries().size() > maxElements
-                            ? Incompleteness.Code.VALUE_TRUNCATED : room(depth);
+                    Incompleteness.Cause stopped = entries.entries().size() > maxElements
+                            ? stopped(elementsFigure()) : room(depth);
                     for (Asserted.Entry entry : entries.entries()) {
                         stopped = stopped != null ? stopped : holds(entry.key(), depth + 1);
                         stopped = stopped != null ? stopped : holds(entry.value(), depth + 1);
@@ -128,31 +162,32 @@ public record Limits(int maxDepth, int maxNodes, int maxElements, int maxText) {
             };
         }
 
-        Incompleteness.Code holds(ObservedValue observed, int depth) {
-            Incompleteness.Code stopped = room(depth);
+        Incompleteness.Cause holds(ObservedValue observed, int depth) {
+            Incompleteness.Cause stopped = room(depth);
             if (stopped != null) {
                 return stopped;
             }
             // What a walk under these limits already met, said as it says it: a value it stopped and
             // a value it could not read are two things, and which one this is is not a second
-            // reading — it is the one the value carries.
-            if (observed.unread() != null) {
-                return observed.unread();
+            // reading — it is the one the value carries, with the figure that walk stopped at.
+            Incompleteness.Cause carried = observed.cause();
+            if (carried != null) {
+                return carried;
             }
             return switch (observed) {
                 case ObservedValue.Text(String text) ->
-                        text.length() <= maxText ? null : Incompleteness.Code.VALUE_TRUNCATED;
+                        text.length() <= maxText ? null : stopped(textFigure());
                 case ObservedValue.Sequence(List<ObservedValue> elements) -> {
-                    Incompleteness.Code met = elements.size() > maxElements
-                            ? Incompleteness.Code.VALUE_TRUNCATED : null;
+                    Incompleteness.Cause met = elements.size() > maxElements
+                            ? stopped(elementsFigure()) : null;
                     for (ObservedValue element : elements) {
                         met = met != null ? met : holds(element, depth + 1);
                     }
                     yield met;
                 }
                 case ObservedValue.Mapping(List<ObservedValue.Entry> entries) -> {
-                    Incompleteness.Code met = entries.size() > maxElements
-                            ? Incompleteness.Code.VALUE_TRUNCATED : null;
+                    Incompleteness.Cause met = entries.size() > maxElements
+                            ? stopped(elementsFigure()) : null;
                     for (ObservedValue.Entry entry : entries) {
                         met = met != null ? met : holds(entry.key(), depth + 1);
                         met = met != null ? met : holds(entry.value(), depth + 1);
@@ -160,7 +195,7 @@ public record Limits(int maxDepth, int maxNodes, int maxElements, int maxText) {
                     yield met;
                 }
                 case ObservedValue.Constructed constructed -> {
-                    Incompleteness.Code met = null;
+                    Incompleteness.Cause met = null;
                     for (ObservedValue field : constructed.fields().values()) {
                         met = met != null ? met : holds(field, depth + 1);
                     }
@@ -169,10 +204,10 @@ public record Limits(int maxDepth, int maxNodes, int maxElements, int maxText) {
                 // A value with no parts, which the room above already accounted for.
                 case ObservedValue.Bool _, ObservedValue.Integer _, ObservedValue.Decimal _,
                      ObservedValue.Temporal _, ObservedValue.Unit _, ObservedValue.Absent _ -> null;
-                // Neither is a value: `unread` above answers for both, and this arm is what says
+                // Neither is a value: `cause` above answers for both, and this arm is what says
                 // that a case added beside them has to be considered here rather than admitted.
                 case ObservedValue.Truncated _, ObservedValue.Unknown _ ->
-                        Incompleteness.Code.VALUE_UNREADABLE;
+                        Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE);
             };
         }
     }

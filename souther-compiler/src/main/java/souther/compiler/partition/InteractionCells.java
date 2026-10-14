@@ -6,6 +6,8 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Towards;
+import souther.compiler.observe.Figure;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.reading.Factor;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.Outcome;
@@ -13,6 +15,7 @@ import souther.compiler.reading.Outcome;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * The combinations a group of decisions has, as the classes a row filling one may sit in.
@@ -257,13 +260,19 @@ public final class InteractionCells {
      * can ask whether this group could have stated it — and a requirement none of whose conditions
      * this group has is one it certainly could not, whatever went unwalked. Without that, a group
      * held back leaves every requirement of every other group as one it might have stated.
+     *
+     * <p>And the limit it was held back by, as it stood where the group was compared against it:
+     * how many combinations of one group are measured is handed to a run, so a reader is owed the
+     * number this run used.
      */
     public record NotOffered(List<souther.compiler.coverage.ControlClaim> claims,
-                             java.util.Set<souther.compiler.reading.Condition> settles) {
+                             java.util.Set<souther.compiler.reading.Condition> settles,
+                             Figure limit) {
 
         public NotOffered {
             claims = List.copyOf(claims);
             settles = java.util.Set.copyOf(settles);
+            Objects.requireNonNull(limit, "a group held back was held back by a limit");
         }
 
         /**
@@ -447,7 +456,8 @@ public final class InteractionCells {
             // of one group going untried; what saying nothing cost is an arm among them reading as
             // one the body never reaches.
             if (productOf(placed, mostCellsPerGroup) > mostCellsPerGroup) {
-                held.add(new NotOffered(claimsOf(reach, placed), settlesOf(reach, placed)));
+                held.add(new NotOffered(claimsOf(reach, placed), settlesOf(reach, placed),
+                        WorkFigure.COMBINATIONS_OF_A_GROUP_MEASURED.at(mostCellsPerGroup)));
                 continue;
             }
             Group built = new Group(reach, placed);

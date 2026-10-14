@@ -1,17 +1,22 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
+import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -94,7 +99,9 @@ public sealed interface WritabilityKnowledge {
      * that. So two runs that were stopped by the same things hold one value, whatever
      * order the readings arrived in and whatever order the kinds are declared in.
      */
-    record Prevented(CanonicalSelection<EstablishmentGap> by) implements WritabilityKnowledge {
+    record Prevented(CanonicalSelection<EstablishmentGap> by,
+                     Map<EstablishmentGap, List<ModelOccurrence>> readAt)
+            implements WritabilityKnowledge {
 
         public Prevented {
             Objects.requireNonNull(by, "a showing that was stopped says what stopped it");
@@ -102,6 +109,19 @@ public sealed interface WritabilityKnowledge {
                 throw new IllegalArgumentException(
                         "a showing that was stopped says what stopped it");
             }
+            Map<EstablishmentGap, List<ModelOccurrence>> copied = new LinkedHashMap<>();
+            for (EstablishmentGap each : by.written()) {
+                copied.put(each, List.copyOf(readAt.getOrDefault(each, List.of())));
+            }
+            readAt = Collections.unmodifiableMap(copied);
+        }
+
+        /**
+         * Where the readings whose searches {@code gap} stopped were read: the copies of the
+         * model's code a reader is sent to about it, and none where the readings said none.
+         */
+        public List<ModelOccurrence> readAt(EstablishmentGap gap) {
+            return readAt.getOrDefault(gap, List.of());
         }
 
         /**
@@ -115,7 +135,19 @@ public sealed interface WritabilityKnowledge {
          * equality. Only what is left after that has an order, and it is the one order there is.
          */
         public static Prevented of(Collection<EstablishmentGap> gaps) {
+            Map<EstablishmentGap, List<ModelOccurrence>> nowhere = new LinkedHashMap<>();
+            gaps.forEach(each -> nowhere.put(each, List.of()));
+            return of(nowhere);
+        }
+
+        /**
+         * The same, with where the readings each gap stopped were read: a gap of one kind put
+         * together out of several is where every one of them was.
+         */
+        public static Prevented of(Map<EstablishmentGap, List<ModelOccurrence>> gaps) {
             Set<Incompleteness.Code> observed = EnumSet.noneOf(Incompleteness.Code.class);
+            List<Figure> observedAt = new ArrayList<>();
+            List<ModelOccurrence> observedIn = new ArrayList<>();
             Set<CompositionBudget> budgets = EnumSet.noneOf(CompositionBudget.class);
             // Beside the figures and not among them. Two composings that came to nothing for two
             // kinds of reason are one composing gap, which is what a reader of a gap is told; what
@@ -123,24 +155,40 @@ public sealed interface WritabilityKnowledge {
             // would have to lose one of the two.
             Set<CompositionRepertoire> repertoires = EnumSet.noneOf(CompositionRepertoire.class);
             Set<CompositionCapacity> capacities = new HashSet<>();
-            for (EstablishmentGap each : gaps) {
+            List<ModelOccurrence> composedIn = new ArrayList<>();
+            gaps.forEach((each, readAt) -> {
                 switch (each) {
-                    case EstablishmentGap.Observation it -> observed.addAll(it.causes().written());
+                    case EstablishmentGap.Observation it -> {
+                        observed.addAll(it.causes().written());
+                        observedAt.addAll(it.stoppedAt());
+                        alsoIn(observedIn, readAt);
+                    }
                     case EstablishmentGap.Composition it -> {
                         budgets.addAll(it.budgets().written());
                         repertoires.addAll(it.repertoires().written());
                         capacities.addAll(it.capacities().written());
+                        alsoIn(composedIn, readAt);
                     }
                 }
-            }
+            });
             List<EstablishmentGap> kinds = new ArrayList<>();
+            Map<EstablishmentGap, List<ModelOccurrence>> readAt = new LinkedHashMap<>();
             if (!observed.isEmpty()) {
-                kinds.add(EstablishmentGap.Observation.of(observed));
+                EstablishmentGap observation = EstablishmentGap.Observation.of(observed, observedAt);
+                kinds.add(observation);
+                readAt.put(observation, observedIn);
             }
             if (!budgets.isEmpty() || !repertoires.isEmpty() || !capacities.isEmpty()) {
-                kinds.add(EstablishmentGap.Composition.of(budgets, repertoires, capacities));
+                EstablishmentGap composition =
+                        EstablishmentGap.Composition.of(budgets, repertoires, capacities);
+                kinds.add(composition);
+                readAt.put(composition, composedIn);
             }
-            return new Prevented(PublicationOrders.ESTABLISHMENT_GAPS.keep(kinds));
+            return new Prevented(PublicationOrders.ESTABLISHMENT_GAPS.keep(kinds), readAt);
+        }
+
+        private static void alsoIn(List<ModelOccurrence> copies, List<ModelOccurrence> more) {
+            more.stream().filter(copy -> !copies.contains(copy)).forEach(copies::add);
         }
 
         /** One gap that was made, for a caller that has exactly one. */
@@ -190,7 +238,7 @@ public sealed interface WritabilityKnowledge {
         // of its line, two readings can have been stopped by two different figures, and what a
         // reader is owed is everything that would have to give — so the gaps are collected and
         // never ranked.
-        Set<EstablishmentGap> stopped = searches.prevented();
+        Map<EstablishmentGap, List<ModelOccurrence>> stopped = searches.prevented();
         return stopped.isEmpty() ? new NoEvidence() : Prevented.of(stopped);
     }
 }

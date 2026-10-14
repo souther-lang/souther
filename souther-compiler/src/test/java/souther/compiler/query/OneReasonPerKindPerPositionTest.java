@@ -6,6 +6,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.FixtureTemplate;
@@ -49,8 +50,11 @@ class OneReasonPerKindPerPositionTest {
     }
 
     private static Classification could(Incompleteness.Code code, AxisId axis) {
-        return new Classification.Unclassified(
-                Incompleteness.atPosition(code, axis.behavior(), axis.term()));
+        return new Classification.Unclassified(Incompleteness.atPosition(
+                code == Incompleteness.Code.VALUE_TRUNCATED
+                        ? Incompleteness.Cause.at(code, Limits.DEFAULT.nodesFigure())
+                        : Incompleteness.Cause.of(code),
+                axis.behavior(), axis.term()));
     }
 
     /** One row, with what it said at the two measures the walk reaches in this order. */

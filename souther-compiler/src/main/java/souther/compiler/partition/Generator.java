@@ -45,8 +45,10 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Classification;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
@@ -60,6 +62,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -2202,7 +2205,8 @@ public final class Generator {
      *  many as a search may compose for one requirement, the one past them said as the figure. */
     private static RowTaking witnessedBy(ReplacementWitness looking, List<Purpose> purposes,
                                          List<StoodInAnswer> answers) {
-        return atMost(MOST_REPAIRS, looking::composingStopped,
+        return atMost(MOST_REPAIRS, () -> looking.composingStopped(
+                        List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(MOST_REPAIRS))),
                 inputs -> looking.of(new GeneratedRow(purposes, inputs, answers), null));
     }
 
@@ -3068,9 +3072,16 @@ public final class Generator {
      *                a figure of this compiler's on the way — which the word in {@code came} does
      *                not tell from a walk that ran to the end of what this compiler writes. Never
      *                where a row was taken
+     * @param boundsReached the bounds of this class's own a walk was compared against and stopped
+     *                at, each as it stood there; none where none stopped one
      */
     private record Searched(GeneratedRow row, Candidate from, Set<String> against,
-                            CameToNothing came, boolean stoppedShort) {}
+                            CameToNothing came, boolean stoppedShort, List<Figure> boundsReached) {
+
+        Searched {
+            boundsReached = Figure.inOrder(boundsReached);
+        }
+    }
 
     /** What a search makes of a row that holds every pin. */
     enum Acceptance {
@@ -3139,7 +3150,7 @@ public final class Generator {
         Traversal stated = nearestFirst(requires, reading, origins, admits, building);
         if (stated == Traversal.SATISFIED) {
             return new Searched(building.found, building.foundAt, building.foundAgainst, null,
-                    false);
+                    false, List.of());
         }
         // The composition, whatever the stated values spent, and with a budget of its own.
         Building composing = new Building(axes, pins, purposes, label, check, MOST_REPAIRS,
@@ -3147,7 +3158,7 @@ public final class Generator {
         Traversal composed = composing(requires, reading, origins, admits, composing);
         if (composed == Traversal.SATISFIED) {
             return new Searched(composing.found, composing.foundAt, composing.foundAgainst, null,
-                    false);
+                    false, List.of());
         }
         // What the walks came to, added up the way a combination's readings are. What is pinned
         // is one reading — a class apiece at the positions the requirement names — so what is left
@@ -3192,9 +3203,11 @@ public final class Generator {
                             Optional.empty())
                     : found.published(pins.labels(), last.reason(), last.detail(), last.said());
         };
+        Set<Figure> boundsReached = new HashSet<>(building.boundsReached);
+        boundsReached.addAll(composing.boundsReached);
         return new Searched(null, null, Set.of(), came,
                 looked.found() == Completeness.Nothing.SEARCH_STOPPED
-                        || !found.met().figures().isEmpty());
+                        || !found.met().figures().isEmpty(), Figure.inOrder(boundsReached));
     }
 
     /**
@@ -3245,6 +3258,9 @@ public final class Generator {
 
         /** How many were built, which is what this is allowed so many of. */
         private int builds;
+
+        /** The figure this walk stopped at where it ran out of builds, as it stood there. */
+        private final Set<Figure> boundsReached = new HashSet<>();
 
         /** What this has seen come of one parameter's value, which the walk leaves out. */
         private final ParameterProjections known;
@@ -3316,6 +3332,7 @@ public final class Generator {
                 return Taken.AND_MORE;   // nothing here can be written against the model's value
             }
             if (builds >= most) {
+                boundsReached.add(buildsReached());
                 return Taken.NOT_TAKEN;   // this candidate is the work nobody did
             }
             builds++;
@@ -3361,6 +3378,11 @@ public final class Generator {
             };
         }
 
+        /** How many candidates this walk may build, as it stood where the walk ran out of them. */
+        private Figure buildsReached() {
+            return WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(most);
+        }
+
         /**
          * One candidate, its values chosen again until a row holding every pin is one
          * {@link #accepts} takes. A row outside a pin is passed over the way one the caller passes
@@ -3376,6 +3398,7 @@ public final class Generator {
             RowComposed came = composed(axes, candidate.where(), held, check, given, inputs -> {
                 if (!first[0]) {
                     if (builds >= most) {
+                        boundsReached.add(buildsReached());
                         return Acceptance.STOPPED;   // the rows past here are the work nobody did
                     }
                     builds++;
@@ -8271,8 +8294,19 @@ public final class Generator {
          * raise — dropped because the walk then stopped for another reason, it is a stop nothing
          * downstream can see. And an offer a candidate was short of the same: a rule somebody can
          * rewrite, whichever candidate it was offered to.
+         *
+         * <p>{@code boundsReached} is the bounds of this class's own the walk was compared against
+         * and stopped at, as each stood there: none where what cut it short was not one of them.
+         * {@code metARunNothingWatched} is whether a candidate ran and nothing could say what it
+         * did, which cuts a walk short at no figure at all.
          */
-        record Limited(List<String> classes, SearchShortfall found) implements Witness {
+        record Limited(List<String> classes, SearchShortfall found, List<Figure> boundsReached,
+                       boolean metARunNothingWatched)
+                implements Witness {
+
+            public Limited {
+                boundsReached = Figure.inOrder(boundsReached);
+            }
 
             /**
              * The search stopped, which is this run's news and not the model's: said as that,
@@ -8374,9 +8408,10 @@ public final class Generator {
         private boolean alike;
         /** How many times this stopped a search. */
         private int stops;
-        /** The ways the search stopped with something left untried. */
-        private final Set<ReplacementDisposition.Ended> stopped =
-                EnumSet.noneOf(ReplacementDisposition.Ended.class);
+        /** The ways the search stopped with something left untried, each as it was met there: at
+         *  the figures it was stopped at where one is carried, at something else where it was. */
+        private final Map<ReplacementDisposition.Ended, ReplacementDisposition.Met> stopped =
+                new EnumMap<>(ReplacementDisposition.Ended.class);
 
         private ReplacementWitness(RunOnce trial, ReplacementOwed asked, int mostRuns) {
             this.trial = trial;
@@ -8391,7 +8426,7 @@ public final class Generator {
         Acceptance of(GeneratedRow row, ObservedRun written) {
             ObservedRun body = written != null ? written : run(row);
             if (body == null) {
-                return stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE);
+                return stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE, runsReached());
             }
             AnswerObservation rewritten;
             switch (asked) {
@@ -8399,10 +8434,12 @@ public final class Generator {
                     Optional<AnswerObservation> answered =
                             trial.runReplacing(row.toRun(), arm.replacing(), this::spend);
                     if (answered == null) {
-                        return stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE);
+                        return stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE,
+                                runsReached());
                     }
                     if (answered.isEmpty()) {
-                        return stop(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK);
+                        return stop(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK,
+                                List.of());
                     }
                     rewritten = answered.get();
                 }
@@ -8416,9 +8453,13 @@ public final class Generator {
                     yield Acceptance.PASSED;
                 }
                 // A run that came back with no answer, or one that could not be read in full, is
-                // not one the two were seen to answer alike on: it is one nothing was seen on.
+                // not one the two were seen to answer alike on: it is one nothing was seen on. With
+                // the figure that kept it untold, where one did.
                 case COULD_NOT_TELL -> {
-                    stopped.add(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK);
+                    AnswerChange.Untold untold = AnswerChange.untold(body.answer(), rewritten);
+                    stopped.merge(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK,
+                            ReplacementDisposition.Met.once(untold.figures(), untold.atNoFigure()),
+                            ReplacementDisposition.Met::and);
                     yield Acceptance.PASSED;
                 }
             };
@@ -8438,16 +8479,39 @@ public final class Generator {
             return true;
         }
 
-        /** This stopping the search, and why. */
-        private Acceptance stop(ReplacementDisposition.Ended why) {
-            stopped.add(why);
+        /** This stopping the search, why, and the figures it was stopped at. */
+        private Acceptance stop(ReplacementDisposition.Ended why,
+                                Collection<? extends Figure> at) {
+            ended(why, at);
             stops++;
             return Acceptance.STOPPED;
         }
 
-        /** Composing the rows the search looked through stopped at a figure of its own. */
-        void composingStopped() {
-            stopped.add(ReplacementDisposition.Ended.A_FIGURE_OF_THE_COMPOSING);
+        /** The figure this was compared against when it had no run left, as it stood here. */
+        private List<Figure> runsReached() {
+            return List.of(WorkFigure.RUNS_REPLACING_AN_ARM.at(mostRuns));
+        }
+
+        /**
+         * One way the search ended, and the figures it was stopped at there: none where nothing it
+         * was compared against stopped it, which is met beside whatever figures another stop of the
+         * same way was met at, and not lost among them.
+         */
+        private void ended(ReplacementDisposition.Ended why, Collection<? extends Figure> at) {
+            stopped.merge(why, at.isEmpty() ? ReplacementDisposition.Met.AT_NO_FIGURE
+                    : ReplacementDisposition.Met.at(at), ReplacementDisposition.Met::and);
+        }
+
+        /**
+         * Composing the rows the search looked through stopped at {@code at}: the composing's own
+         * budgets, and the bounds this class holds a search to, each as it stood where the search
+         * was compared against it.
+         */
+        void composingStopped(Collection<? extends Figure> at) {
+            if (at.isEmpty()) {
+                throw new IllegalArgumentException("composing stopped at some figure, and says which");
+            }
+            ended(ReplacementDisposition.Ended.A_FIGURE_OF_THE_COMPOSING, at);
         }
 
         /**
@@ -8467,12 +8531,23 @@ public final class Generator {
             if (came instanceof Witness.Certified(GeneratedRow row, var _)) {
                 return row;
             }
-            shortOfAFigureUnlessThisStoppedIt(before, switch (came) {
-                // The walk over the readings stopped with readings it had not tried.
-                case Witness.Limited _ -> true;
-                case Witness.Exhausted none -> !none.found().met().figures().isEmpty();
-                case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ -> false;
-            });
+            switch (came) {
+                // The walk over the readings stopped with readings it had not tried, at a bound of
+                // its own or at the figures what it composed on the way met.
+                case Witness.Limited limited -> {
+                    List<Figure> at = new ArrayList<>(limited.boundsReached());
+                    at.addAll(asFigures(limited.found().met().figures()));
+                    // Cut short by a run nothing watched and by no figure: rows were composed and
+                    // run, and nothing could say what they answered.
+                    if (at.isEmpty() && limited.metARunNothingWatched() && stops == before) {
+                        ended(ReplacementDisposition.Ended.NOTHING_RAN, List.of());
+                    }
+                    composingStoppedUnlessThisStoppedIt(before, at);
+                }
+                case Witness.Exhausted none -> composingStoppedUnlessThisStoppedIt(before,
+                        asFigures(none.found().met().figures()));
+                case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ -> { }
+            }
             return null;
         }
 
@@ -8483,14 +8558,17 @@ public final class Generator {
             if (came instanceof RowComposed.Taken(List<FixtureTemplate> inputs)) {
                 return inputs;
             }
-            shortOfAFigureUnlessThisStoppedIt(before, switch (came) {
+            switch (came) {
                 case RowComposed.PassedOver(SearchShortfall found) ->
-                        !found.met().figures().isEmpty();
-                case RowComposed.Failed(Attempt why, var _) -> !why.found().met().figures().isEmpty();
+                        composingStoppedUnlessThisStoppedIt(before,
+                                asFigures(found.met().figures()));
+                case RowComposed.Failed(Attempt why, OptionalInt _) ->
+                        composingStoppedUnlessThisStoppedIt(before,
+                                asFigures(why.found().met().figures()));
                 // Stopped by what it handed its rows to: this, or the bound on how many it may be
                 // handed ({@link #atMost}), which says so where it is reached.
-                case RowComposed.Halted _, RowComposed.Taken _ -> false;
-            });
+                case RowComposed.Halted _, RowComposed.Taken _ -> { }
+            }
             return null;
         }
 
@@ -8501,25 +8579,46 @@ public final class Generator {
             if (came.row() != null) {
                 return came.row();
             }
-            shortOfAFigureUnlessThisStoppedIt(before, came.stoppedShort());
+            if (came.stoppedShort()) {
+                List<Figure> at = new ArrayList<>(came.boundsReached());
+                at.addAll(asFigures(came.came().met().figures()));
+                composingStoppedUnlessThisStoppedIt(before, at);
+            }
             return null;
         }
 
-        private void shortOfAFigureUnlessThisStoppedIt(int before, boolean shortOfAFigure) {
-            if (shortOfAFigure && stops == before) {
-                composingStopped();
+        /**
+         * Composing stopped at {@code figures}, unless this stopped it.
+         *
+         * <p>None is no figure reached: a search cut short by nothing it was compared against —
+         * a run nothing watched, which no run of this compiler watches more of — leaves nothing to
+         * say here, and what it came to is what was seen.
+         */
+        private void composingStoppedUnlessThisStoppedIt(int before,
+                                                         Collection<? extends Figure> figures) {
+            if (stops == before && !figures.isEmpty()) {
+                composingStopped(figures);
             }
         }
 
-        /** How the search ended, where nothing was found: each way it stopped, and whether rows
-         *  were seen answered alike. */
-        Set<ReplacementDisposition.Ended> ended() {
-            Set<ReplacementDisposition.Ended> out = new LinkedHashSet<>(stopped);
+        /** The composing stage's budgets a search met, as the figures they are. */
+        private static List<Figure> asFigures(Collection<CompositionBudget> budgets) {
+            return budgets.stream().map(CompositionBudget::figure).toList();
+        }
+
+        /** How the search ended, where nothing was found: each way it stopped as it was met, and
+         *  whether rows were seen answered alike. */
+        Map<ReplacementDisposition.Ended, ReplacementDisposition.Met> ended() {
+            Map<ReplacementDisposition.Ended, ReplacementDisposition.Met> out =
+                    new EnumMap<>(ReplacementDisposition.Ended.class);
+            out.putAll(stopped);
             if (alike) {
-                out.add(ReplacementDisposition.Ended.EVERY_ROW_ANSWERED_ALIKE);
+                out.put(ReplacementDisposition.Ended.EVERY_ROW_ANSWERED_ALIKE,
+                        ReplacementDisposition.Met.AT_NO_FIGURE);
             }
             if (out.isEmpty()) {
-                out.add(ReplacementDisposition.Ended.NOTHING_WAS_COMPOSED);
+                out.put(ReplacementDisposition.Ended.NOTHING_WAS_COMPOSED,
+                        ReplacementDisposition.Met.AT_NO_FIGURE);
             }
             return out;
         }
@@ -8754,6 +8853,14 @@ public final class Generator {
         /** How many readings were searched, which is what this is allowed so many of. */
         private int searched;
 
+        /** The bounds of this search's own it was compared against and stopped at, each as it
+         *  stood there: the readings it may search, and the runs one reading is given. */
+        private final Set<Figure> boundsReached = new HashSet<>();
+
+        /** Whether a candidate ran and nothing could say what it did, which stops the search at no
+         *  figure. */
+        private boolean metARunNothingWatched;
+
         /** What the last candidate that composed nothing came to, for a search that tried them
          *  all. */
         private Attempt last;
@@ -8823,6 +8930,8 @@ public final class Generator {
                 return Taken.AND_MORE;
             }
             if (searched >= MOST_INTERPRETATIONS) {
+                boundsReached.add(
+                        WorkFigure.READINGS_OF_A_COMBINATION_TRIED.at(MOST_INTERPRETATIONS));
                 return Taken.NOT_TAKEN;   // a reading of this combination that nobody looked at
             }
             searched++;
@@ -8863,7 +8972,9 @@ public final class Generator {
                 // Said as that whatever the ones that were tried came to — the miss of the third of
                 // them is a fact about that candidate, and offered as the combination's answer it
                 // stands for a space this never entered.
-                case Completeness.Nothing.SEARCH_STOPPED -> new Witness.Limited(named, foundOut);
+                case Completeness.Nothing.SEARCH_STOPPED ->
+                        new Witness.Limited(named, foundOut, Figure.inOrder(boundsReached),
+                                metARunNothingWatched);
                 // Every one of these carries what every candidate found out and not what the
                 // candidate whose word is said found out. Rows that went somewhere else are not
                 // every row the readings had where an offer was short of a rule, and the rule is
@@ -9000,6 +9111,7 @@ public final class Generator {
             private ObservedRun ranAs(GeneratedRow named) {
                 return trial.run(named.toRun(), () -> {
                     if (runs >= most) {
+                        boundsReached.add(WorkFigure.RUNS_FOR_ONE_READING.at(most));
                         return false;
                     }
                     runs++;
@@ -9026,6 +9138,7 @@ public final class Generator {
                                 return Acceptance.STOPPED;
                             }
                             if (!(observed.watched() instanceof Watched.Ran ran)) {
+                                metARunNothingWatched = true;
                                 return Acceptance.STOPPED;
                             }
                             // No witness, for the reason one built at once is none.

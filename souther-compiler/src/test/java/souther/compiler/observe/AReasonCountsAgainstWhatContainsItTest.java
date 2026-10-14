@@ -83,7 +83,8 @@ class AReasonCountsAgainstWhatContainsItTest {
     /** A position is inside one behavior, and it says which one it is. */
     @Test
     void aPositionScopedReasonCountsAgainstTheBehaviorItIsIn() {
-        Incompleteness gap = Incompleteness.atPosition(Incompleteness.Code.VALUE_TRUNCATED,
+        Incompleteness gap = Incompleteness.atPosition(Incompleteness.Cause.at(
+                        Incompleteness.Code.VALUE_TRUNCATED, Limits.DEFAULT.nodesFigure()),
                 "submit", "request.kind");
 
         assertEquals(Incompleteness.Scope.POSITION, gap.scope());

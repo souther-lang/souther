@@ -85,7 +85,7 @@ class ARewriteThroughAnArmStandsAtEverySiteOfItTest {
         ArmReplacements partly = spliced().carryingNothingAt(Set.of(7));
 
         assertEquals(List.of(new ArmReplacements.Asked.NotRun(1,
-                        ArmReplacements.Sibling.Why.TOO_LARGE)),
+                        new ArmReplacements.Sibling.Why.PastWhatAMethodHolds())),
                 partly.askedOf(FORK, 0, _ -> false));
     }
 

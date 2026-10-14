@@ -2,12 +2,14 @@ package souther.compiler.query;
 
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ConditionGap;
+import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * What looking for a row at one point came to, over every search that was made for it.
@@ -21,13 +23,36 @@ import java.util.Set;
  * <p><b>Nothing here ranks them.</b> A row that was composed, a search a budget of this compiler's
  * ended, a search that ran to the end of what this compiler writes, and a search that ran through
  * what it had are facts about one point; there is no order in which one of them stands for another,
- * and every question a reader puts is answered by looking at all of them. What is chosen is a row to offer somebody ({@link #rowToOffer}), which is
- * a choice about what to show and not about what happened.
+ * and every question a reader puts is answered by looking at all of them. What is chosen is a row
+ * to offer somebody ({@link #rowToOffer}), which is a choice about what to show and not about what
+ * happened.
+ *
+ * <p><b>Each with where its reading was read.</b> A point is owed once however many readings of
+ * its line reach it, and a reading of a line written in a helper is read at the calls of it. Which
+ * reading a search was made for is what says which calls a stopped search was stopped at: folded
+ * away, a reader of a point read at three calls and stopped at one is told all three.
+ *
+ * @param made every search, with the copies of the model's code the reading it was made for was
+ *             read at, in the order they were made
  */
-public record SearchOutcomes(List<ItemAssessment.Attempt> each) {
+public record SearchOutcomes(List<Made> made) {
 
     public SearchOutcomes {
-        each = List.copyOf(each);
+        made = List.copyOf(made);
+    }
+
+    /**
+     * One search, and the copies of the model's code the reading it was made for was read at.
+     *
+     * @param attempt what the search came to
+     * @param readAt  where the reading it was made for was read; none until a reading says
+     */
+    public record Made(ItemAssessment.Attempt attempt, List<ModelOccurrence> readAt) {
+
+        public Made {
+            Objects.requireNonNull(attempt, "a search came to something");
+            readAt = List.copyOf(readAt);
+        }
     }
 
     /** Nobody asked for a value to be built here. */
@@ -37,25 +62,46 @@ public record SearchOutcomes(List<ItemAssessment.Attempt> each) {
 
     /** One search, or none where {@code attempt} is null. */
     public static SearchOutcomes of(ItemAssessment.Attempt attempt) {
-        return attempt == null ? none() : new SearchOutcomes(List.of(attempt));
+        return attempt == null ? none() : each(List.of(attempt));
+    }
+
+    /** These searches, in the order they were made, by a reading nothing has said yet. */
+    public static SearchOutcomes each(List<ItemAssessment.Attempt> attempts) {
+        return new SearchOutcomes(attempts.stream().map(each -> new Made(each, List.of())).toList());
     }
 
     /** These and those, in the order they were made. */
     public SearchOutcomes plus(SearchOutcomes other) {
-        if (other.each.isEmpty()) {
+        if (other.made.isEmpty()) {
             return this;
         }
-        if (each.isEmpty()) {
+        if (made.isEmpty()) {
             return other;
         }
-        List<ItemAssessment.Attempt> out = new ArrayList<>(each);
-        out.addAll(other.each);
+        List<Made> out = new ArrayList<>(made);
+        out.addAll(other.made);
         return new SearchOutcomes(out);
+    }
+
+    /**
+     * The same searches, as made by a reading read at {@code copies}: the reading a search was
+     * made for is what says where it was read, so this is said where the search is handed to that
+     * reading and before readings of one line are put together — after that, the copies are every
+     * reading's and no longer the one that searched.
+     */
+    public SearchOutcomes readAt(List<ModelOccurrence> copies) {
+        return new SearchOutcomes(made.stream()
+                .map(each -> new Made(each.attempt(), copies)).toList());
+    }
+
+    /** What every search came to, in the order they were made. */
+    public List<ItemAssessment.Attempt> each() {
+        return made.stream().map(Made::attempt).toList();
     }
 
     /** Whether anybody searched here at all. */
     public boolean ran() {
-        return !each.isEmpty();
+        return !made.isEmpty();
     }
 
     /**
@@ -67,11 +113,11 @@ public record SearchOutcomes(List<ItemAssessment.Attempt> each) {
      * is the thing this type exists to stop, and it gets told rather than given the first.
      */
     public ItemAssessment.Attempt only() {
-        if (each.size() != 1) {
+        if (made.size() != 1) {
             throw new IllegalStateException(
-                    "one search was asked for at a point that had " + each.size() + ": " + each);
+                    "one search was asked for at a point that had " + made.size() + ": " + each());
         }
-        return each.get(0);
+        return made.get(0).attempt();
     }
 
     /**
@@ -81,12 +127,12 @@ public record SearchOutcomes(List<ItemAssessment.Attempt> each) {
      * them showed about it, they all showed.
      */
     public boolean certified() {
-        return each.stream().anyMatch(it -> it instanceof ItemAssessment.Attempt.Certified);
+        return each().stream().anyMatch(it -> it instanceof ItemAssessment.Attempt.Certified);
     }
 
     /**
      * Which figures of this compiler's leave a showing here unable to establish the point, and
-     * empty where none do.
+     * empty where none do — each with every copy a reading whose search it stopped was read at.
      *
      * <p>Said that way and not as "stopped", because the outcomes that name a figure did not all
      * stop: one search ran to the end of a plan short of the point, and one point was never
@@ -94,18 +140,19 @@ public record SearchOutcomes(List<ItemAssessment.Attempt> each) {
      * open on something somebody could raise.
      *
      * <p>All of them. Two searches held back by two figures are two pieces of work, and a reader
-     * asking what would have to give is owed both.
+     * asking what would have to give is owed both, and where each was met.
      *
      * <p>Kept inside this package, where the one caller is what puts them together
      * ({@link WritabilityKnowledge#of}). They are as many as the searches were, in the order the
      * searches are held, so a reader outside would be taking a plurality nobody has put together
      * and saying it in an order nobody chose.
      */
-    Set<EstablishmentGap> prevented() {
-        Set<EstablishmentGap> out = new LinkedHashSet<>();
-        for (ItemAssessment.Attempt attempt : each) {
-            if (attempt instanceof ItemAssessment.Attempt.Prevented it) {
-                out.add(it.by());
+    Map<EstablishmentGap, List<ModelOccurrence>> prevented() {
+        Map<EstablishmentGap, List<ModelOccurrence>> out = new LinkedHashMap<>();
+        for (Made each : made) {
+            if (each.attempt() instanceof ItemAssessment.Attempt.Prevented it) {
+                List<ModelOccurrence> copies = out.computeIfAbsent(it.by(), _ -> new ArrayList<>());
+                each.readAt().stream().filter(copy -> !copies.contains(copy)).forEach(copies::add);
             }
         }
         return out;
@@ -139,7 +186,7 @@ public record SearchOutcomes(List<ItemAssessment.Attempt> each) {
         // Nothing was searched, so nothing proved anything. Said before the quantifier rather than
         // left to it: a universal over no outcomes is true, and true here would be a point nobody
         // looked at coming back as one the rules refuse.
-        return ran() && each.stream().allMatch(it ->
+        return ran() && each().stream().allMatch(it ->
                 it instanceof ItemAssessment.Attempt.Unresolved unresolved
                         && unresolved.why().reason().provesInfeasible());
     }
@@ -153,11 +200,11 @@ public record SearchOutcomes(List<ItemAssessment.Attempt> each) {
      * and takes nothing away: what each search came to is still here for whoever asks.
      */
     public Optional<ItemAssessment.Attempt.Built> rowToOffer() {
-        Optional<ItemAssessment.Attempt.Built> placed = each.stream()
+        Optional<ItemAssessment.Attempt.Built> placed = each().stream()
                 .filter(it -> it instanceof ItemAssessment.Attempt.Certified)
                 .map(ItemAssessment.Attempt.Built.class::cast)
                 .findFirst();
-        return placed.isPresent() ? placed : each.stream()
+        return placed.isPresent() ? placed : each().stream()
                 .filter(it -> it instanceof ItemAssessment.Attempt.Built)
                 .map(ItemAssessment.Attempt.Built.class::cast)
                 .findFirst();
@@ -178,7 +225,7 @@ public record SearchOutcomes(List<ItemAssessment.Attempt> each) {
      */
     public List<ItemAssessment.Attempt> worthSaying() {
         List<ItemAssessment.Attempt> out = new ArrayList<>();
-        for (ItemAssessment.Attempt attempt : each) {
+        for (ItemAssessment.Attempt attempt : each()) {
             if (attempt instanceof ItemAssessment.Attempt.Built
                     || attempt instanceof ItemAssessment.Attempt.Unavailable) {
                 continue;
@@ -193,7 +240,7 @@ public record SearchOutcomes(List<ItemAssessment.Attempt> each) {
     /** Every condition on the way that none of these composed against. */
     public List<ConditionGap> unaccountedFor() {
         List<ConditionGap> out = new ArrayList<>();
-        for (ItemAssessment.Attempt attempt : each) {
+        for (ItemAssessment.Attempt attempt : each()) {
             for (ConditionGap gap : attempt.unaccountedFor()) {
                 if (!out.contains(gap)) {
                     out.add(gap);

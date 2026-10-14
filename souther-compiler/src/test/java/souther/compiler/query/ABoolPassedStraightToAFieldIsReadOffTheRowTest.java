@@ -7,6 +7,7 @@ import souther.compiler.coverage.Observation;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.RulesTaken;
@@ -17,6 +18,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -137,7 +139,8 @@ class ABoolPassedStraightToAFieldIsReadOffTheRowTest {
         assertEquals(new RulesTaken.WhichRule.CouldNotTell(
                         RulesTaken.WhichRule.Why.NO_RECOGNISABLE_RULE_MATCHES),
                 placing.takenBy(new ObservedInputs(flag, account,
-                        new AnswerObservation.RanOut())),
+                        new AnswerObservation.RanOut(
+                                Optional.of(WorkFigure.EVALUATION_STEPS.at(100))))),
                 "and a run that spent its budget went down no whole path");
         assertInstanceOf(RulesTaken.WhichRule.TookThis.class,
                 placing.takenBy(new ObservedInputs(flag, account,

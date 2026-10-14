@@ -6,7 +6,7 @@ import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.Emptiness.SidesShownEmpty;
 import souther.compiler.values.PlannedValues;
 import souther.compiler.values.Realized;
-import souther.compiler.values.UnreadReason;
+import souther.compiler.values.StoppedReading;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -344,7 +344,7 @@ record Settlement(Confinement.Worked<FactSubject> confinement, ChoicesDecided ou
      * builds an account of a rule out of it, which is the direction the loss runs in.
      */
     record Sided(Confinement.Admission<FactSubject> shown,
-                 Map<FactSubject, List<UnreadReason>> answerStanding,
+                 Map<FactSubject, List<StoppedReading>> answerStanding,
                  Set<souther.compiler.values.Unbuilt.RuleShortfall<FactSubject>> ruleShortfalls,
                  Set<FactSubject> unbuilt) {
 
@@ -377,15 +377,15 @@ record Settlement(Confinement.Worked<FactSubject> confinement, ChoicesDecided ou
             // together here and each arrived in its own — the machines in the order the copies were
             // met — so a place holding one of each would otherwise come out in the order this
             // method appended them, which is the order of the copies reaching the answer.
-            Map<FactSubject, SortedSet<UnreadReason>> both = new LinkedHashMap<>();
-            answerStanding.forEach((position, why) ->
-                    both.computeIfAbsent(position, _ -> new TreeSet<>()).addAll(why));
-            ruleShortfalls.forEach(each ->
-                    both.computeIfAbsent(each.at(), _ -> new TreeSet<>()).add(each.why()));
+            Map<FactSubject, SortedSet<StoppedReading>> both = new LinkedHashMap<>();
+            answerStanding.forEach((position, why) -> both.computeIfAbsent(position,
+                    _ -> new TreeSet<>(StoppedReading.IN_A_STEADY_ORDER)).addAll(why));
+            ruleShortfalls.forEach(each -> both.computeIfAbsent(each.at(),
+                    _ -> new TreeSet<>(StoppedReading.IN_A_STEADY_ORDER)).add(each.why()));
             souther.compiler.values.Standing<FactSubject> out =
                     souther.compiler.values.Standing.nothing();
-            for (Map.Entry<FactSubject, SortedSet<UnreadReason>> each : both.entrySet()) {
-                for (UnreadReason why : each.getValue()) {
+            for (Map.Entry<FactSubject, SortedSet<StoppedReading>> each : both.entrySet()) {
+                for (StoppedReading why : each.getValue()) {
                     out = out.alsoAt(Set.of(each.getKey()), why);
                 }
             }
@@ -404,10 +404,10 @@ record Settlement(Confinement.Worked<FactSubject> confinement, ChoicesDecided ou
         Sided alsoSeen(Sided other) {
             Set<FactSubject> gaveUp = new java.util.LinkedHashSet<>(unbuilt);
             gaveUp.addAll(other.unbuilt());
-            Map<FactSubject, List<UnreadReason>> why = new java.util.LinkedHashMap<>();
+            Map<FactSubject, List<StoppedReading>> why = new java.util.LinkedHashMap<>();
             ReadByClauses.alsoSaying(answerStanding, other.answerStanding())
-                    .forEach((position, reasons) ->
-                            why.put(position, reasons.stream().sorted().toList()));
+                    .forEach((position, reasons) -> why.put(position,
+                            reasons.stream().sorted(StoppedReading.IN_A_STEADY_ORDER).toList()));
             // And the other half as a union, which is what this half is: a shortfall is one fact
             // about one pattern at one position, so two copies of one are one and two are two.
             // Held in the order the copies were met, a branch's aggregate would say which copy was

@@ -22,6 +22,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TwoAccountsOfOneQuestion;
 import souther.compiler.inputs.WhatAQuestionStandsOn;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
@@ -131,7 +132,8 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
     @Test
     void aQuestionCitedTwoWaysKeepsTheAuthorsOneAccountOfWhatStoppedIt() {
         BlockReason.RuleReadingStopped form = new BlockReason.UnreadComparisonForm();
-        BlockReason.AnswerRealizationStopped answer = new BlockReason.ExactValuesTooCostly();
+        BlockReason.AnswerRealizationStopped answer = new BlockReason.ExactValuesTooCostly(
+                WorkFigure.ADMITTED_VALUES_IN_ALL.at("200000 states built and 50000000 looked at"));
         RuleCitation here = reachedAt(9);
         RuleCitation fromACall = reachedAt(3);
         WeakeningSet met = standingQuestion(here, form, answer);

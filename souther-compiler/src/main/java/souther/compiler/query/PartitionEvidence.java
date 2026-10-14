@@ -10,6 +10,7 @@ import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputQuestion;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.WhatAQuestionStandsOn;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.AxisId;
@@ -859,7 +860,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * what kind of nothing came back.
          */
         public static PairSpace truncated(String behavior, List<AxisPair> space, long size,
-                                          int limit) {
+                                          Figure limit) {
             return new PairSpace(space, new Measurement.FailedToMeasure<>(
                     TooLarge.TOO_MANY_COMBINATIONS,
                     WeakeningSet.of(new Weakening.PairSpaceTruncated(behavior, size, limit))));

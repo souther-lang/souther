@@ -280,7 +280,7 @@ class ValueMatchTest {
         assertEquals(Mismatch.Reason.UNREADABLE,
                 differs(new ObservedValue.Unknown("why"), n(1), INT).reason());
         assertEquals(Mismatch.Reason.UNREADABLE,
-                differs(n(1), new ObservedValue.Truncated(), INT).reason());
+                differs(n(1), new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()), INT).reason());
     }
 
     @Test
@@ -289,7 +289,7 @@ class ValueMatchTest {
         // about what stood past it. Reading it as equality is how a depth bound answers "the same"
         // for two values that differ only below it.
         assertEquals(Mismatch.Reason.UNREADABLE,
-                differs(new ObservedValue.Truncated(), new ObservedValue.Truncated(), INT).reason());
+                differs(new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()), new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()), INT).reason());
         assertEquals(Mismatch.Reason.UNREADABLE,
                 differs(new ObservedValue.Unknown("a"), new ObservedValue.Unknown("a"), INT).reason());
     }

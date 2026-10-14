@@ -1,18 +1,23 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.observe.RowRef;
+import souther.compiler.observe.RunSensitivity;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.partition.Replacement;
+import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * What a behavior's rows establish about the rewrites of its body: for each, whether a row tells it
@@ -178,7 +183,7 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
     }
 
     /** Nothing here could say whether a row tells the rewrite from the body, and why. */
-    public record Undecided(CanonicalSelection<Why> why) implements Outcome {
+    public record Undecided(LeftOpen why) implements Outcome {
 
         /**
          * Every way it was left open, and not the one that ranks first: a search that ran out of
@@ -186,17 +191,153 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
          * of them is owed the other. In the order they are published in.
          */
         public Undecided {
-            if (why.isEmpty()) {
-                throw new IllegalArgumentException("a rewrite left open was left open for a reason");
+            Objects.requireNonNull(why, "a rewrite left open was left open for a reason");
+        }
+
+        public Undecided(Collection<Way> ways) {
+            this(LeftOpen.of(ways));
+        }
+
+        public Undecided(Way way) {
+            this(List.of(way));
+        }
+
+        /**
+         * Every way one rewrite was left open, one per reason, in the order the reasons are
+         * published in.
+         *
+         * <p>A reason met more than once is one way, holding every figure any of its meetings was
+         * stopped at. Where one of them was met at something no run allows — the host's limit —
+         * that is what the way is: a wider run meets it again whatever else it gets past.
+         */
+        public record LeftOpen(List<Way> ways) {
+
+            public LeftOpen {
+                ways = List.copyOf(ways);
+                if (ways.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a rewrite left open was left open for a reason");
+                }
+            }
+
+            /** {@code met}, one way per reason, in the order the reasons are published in. */
+            public static LeftOpen of(Collection<Way> met) {
+                Map<Why, List<Way>> byReason = new EnumMap<>(Why.class);
+                for (Way each : met) {
+                    byReason.computeIfAbsent(each.why(), _ -> new ArrayList<>()).add(each);
+                }
+                List<Way> out = new ArrayList<>();
+                for (Why reason : PublicationOrders.REWRITE_UNDECIDED_REASONS
+                        .keep(byReason.keySet()).written()) {
+                    out.add(Way.together(reason, byReason.get(reason)));
+                }
+                return new LeftOpen(out);
+            }
+
+            /** The reasons, in the order they are published in. */
+            public CanonicalSelection<Why> reasons() {
+                return PublicationOrders.REWRITE_UNDECIDED_REASONS.keep(
+                        ways.stream().map(Way::why).toList());
+            }
+
+            /** Never: a rewrite left open was left open for a reason. */
+            public boolean isEmpty() {
+                return ways.isEmpty();
+            }
+
+            /** Every figure any way was stopped at, each once, in {@link Figure#inOrder}. */
+            public List<Figure> figures() {
+                List<Figure> out = new ArrayList<>();
+                ways.forEach(each -> out.addAll(each.figures()));
+                return Figure.inOrder(out);
+            }
+
+            /**
+             * Both, as one: one way per reason either was left open by, each at every figure it
+             * was stopped at in either.
+             *
+             * <p>What tells two of these apart is the reasons ({@link #reasons}); the figures are
+             * what each way was met at, gathered from both.
+             */
+            public LeftOpen together(LeftOpen other) {
+                List<Way> both = new ArrayList<>(ways);
+                both.addAll(other.ways);
+                return of(both);
+            }
+
+            /** Whether a wider run could come to another answer: where any way of it could. */
+            public RunSensitivity runSensitivity() {
+                return ways.stream().anyMatch(
+                        each -> each.runSensitivity() == RunSensitivity.MAY_CHANGE)
+                        ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
             }
         }
 
-        public Undecided(Set<Why> why) {
-            this(PublicationOrders.REWRITE_UNDECIDED_REASONS.keep(why));
-        }
+        /**
+         * One way a rewrite was left open, as the places that left it open found it.
+         *
+         * <p>Whether a wider run gets past it is the places' to say and not the reason's: a fork too
+         * large to carry its siblings is held to a figure of this compiler's, and a method too large
+         * for the JVM is held to the host's, and both are published as one reason.
+         *
+         * <p><b>As every meeting of it went, and not as one of them.</b> Two runs of one search can
+         * stop at a figure of this compiler's and at the host's limit and be published alike, and
+         * what was reached is both. A wider run may decide the rewrite where one of those meetings
+         * was held by figures alone: a row that comes back under it may be the row that tells,
+         * whatever the host stopped beside it. Told only that no allowance stopped it, a reader
+         * would allow nothing more and the row that tells would stay untold; told only the figure,
+         * they would not know what else stood in the way.
+         *
+         * @param why the reason it is published as
+         * @param met how it was met: every figure of this compiler's it was stopped at, as each
+         *            stood where it was reached; whether something no run allows stopped it as
+         *            well — what the rows came to, or a limit of the host's; and whether one of its
+         *            meetings was held by figures alone
+         */
+        public record Way(Why why, ReplacementDisposition.Met met) {
 
-        public Undecided(Why why) {
-            this(Set.of(why));
+            public Way {
+                Objects.requireNonNull(why, "a way left open is published as some reason");
+                Objects.requireNonNull(met, "a way left open was met somehow: " + why);
+            }
+
+            /**
+             * Stopped at figures this compiler holds its work to, each carried from where it was
+             * reached: a run allowing more of them gets further.
+             */
+            public static Way atFigures(Why why, Collection<? extends Figure> figures) {
+                return new Way(why, ReplacementDisposition.Met.at(figures));
+            }
+
+            /**
+             * Left open by nothing a run allows: what the rows came to, or a limit of the host's.
+             * Every run of this compiler over this model leaves it open the same way, so there is
+             * no figure to name.
+             */
+            public static Way atNoAllowance(Why why) {
+                return new Way(why, ReplacementDisposition.Met.AT_NO_FIGURE);
+            }
+
+            /** Every figure of this compiler's it was stopped at. */
+            public List<Figure> figures() {
+                return met.figures();
+            }
+
+            /** Whether a run that allows more could get past it: where one of its meetings was
+             *  held by figures alone, since one row coming back may tell. */
+            public RunSensitivity runSensitivity() {
+                return met.aWiderRunMayGetPast()
+                        ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
+            }
+
+            /** Several meetings of one reason as one way, met as all of them were. */
+            private static Way together(Why why, List<Way> met) {
+                ReplacementDisposition.Met all = met.getFirst().met();
+                for (Way each : met.subList(1, met.size())) {
+                    all = all.and(each.met());
+                }
+                return new Way(why, all);
+            }
         }
 
         /** Why a rewrite was left open. */
@@ -218,18 +359,7 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
             /** No row the search could look at was composed. */
             NOTHING_WAS_COMPOSED,
             /** Nothing could run a row. */
-            NOTHING_RAN;
-
-            /** Whether a wider run could come to another answer: a figure this compiler stopped
-             *  at could be raised, and a run that did not come back could come back. */
-            public boolean anAllowance() {
-                return switch (this) {
-                    case TOO_LARGE, RUNS_SPENT, A_COMPOSING_FIGURE_REACHED,
-                         A_RUN_DID_NOT_COME_BACK -> true;
-                    case A_STATEMENT_WAS_NOT_READ, NO_ROW_ANSWERED_DIFFERENTLY,
-                         NOTHING_WAS_COMPOSED, NOTHING_RAN -> false;
-                };
-            }
+            NOTHING_RAN
         }
     }
 
@@ -266,7 +396,7 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
         Summary summary = new Summary(rewrites);
         List<Weakening> open = new ArrayList<>(rowsBehind.causes());
         for (Rewrite each : rewrites) {
-            if (each.outcome() instanceof Undecided(CanonicalSelection<Undecided.Why> why)) {
+            if (each.outcome() instanceof Undecided(Undecided.LeftOpen why)) {
                 open.add(new Weakening.RewriteUndecided(behavior, each.replacement(), why));
             }
         }

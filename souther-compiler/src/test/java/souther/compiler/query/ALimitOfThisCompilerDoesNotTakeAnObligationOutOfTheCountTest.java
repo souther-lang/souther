@@ -3,12 +3,12 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.publish.CanonicalSelection;
 
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 
@@ -106,13 +106,13 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
         ObligationDisposition disposition = ObligationDisposition.of(
                 new ObligationCoverage.Undecided(WeakeningSet.of(
                         new Weakening.BorderValueUnreadable(null,
-                                ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
+                                ReadingGap.of(A_LIMIT)))),
                 prevented(), NOTHING_OPEN);
 
         assertEquals(ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
                                 ReadingReasons.of(List.of(
-                                        ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)),
+                                        ReadingGap.of(A_LIMIT)),
                                         StandingAtAPoint.ReadingsTried.EVERY_ONE)),
                         new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
                                 prevented()))),
@@ -234,7 +234,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                 new ObligationCoverage.Missed(),
                 new ObligationCoverage.Undecided(WeakeningSet.of(
                         new Weakening.BorderValueUnreadable(null,
-                                ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
+                                ReadingGap.of(A_LIMIT)))),
                 new ObligationCoverage.NotMeasured(
                         UnaskedReasons.of(ItemAssessment.Coverage.NotAsked.NO_ROWS)));
     }
@@ -251,6 +251,10 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
 
     private static WritabilityKnowledge.Prevented prevented() {
         return WritabilityKnowledge.Prevented.by(EstablishmentGap.Observation.of(
-                EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)));
+                List.of(A_LIMIT)));
     }
+
+    /** A value a limit kept short of whole, at the figure it stopped at. */
+    private static final Incompleteness.Cause A_LIMIT = Incompleteness.Cause.at(
+            Incompleteness.Code.VALUE_TRUNCATED, Limits.DEFAULT.nodesFigure());
 }

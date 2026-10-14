@@ -4,6 +4,7 @@ import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructOccurrence;
@@ -1835,7 +1836,9 @@ public final class CoverageSites {
                     }
                     if (tooLarge) {
                         siblings.put(sibling, new DraftSibling(
-                                Optional.of(ArmReplacements.Sibling.Why.TOO_LARGE), differs));
+                                Optional.of(new ArmReplacements.Sibling.Why.PastWhatAForkCarries(
+                                        WorkFigure.NODES_A_FORK_CARRIES.at(
+                                                MOST_NODES_A_FORK_CARRIES))), differs));
                     } else {
                         siblings.put(sibling, new DraftSibling(Optional.empty(), differs));
                         carriedParts.add(sibling);

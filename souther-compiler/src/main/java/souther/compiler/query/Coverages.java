@@ -27,8 +27,10 @@ import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.observe.Classification;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RowOutcome;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
@@ -573,7 +575,7 @@ final class Coverages {
         }
         if (!listed) {
             return PartitionEvidence.PairSpace.truncated(behavior, space, total,
-                    budget.pairSpace());
+                    WorkFigure.PAIRS_OF_CLASSES_COUNTED.at(budget.pairSpace()));
         }
         // One set of combinations per relation, in the order the relations were worked out. What is
         // counted is the same as it was; where the count goes is what changed.
@@ -975,9 +977,13 @@ final class Coverages {
             java.util.Map<DomainPoint, ItemAssessment> items = new java.util.LinkedHashMap<>();
             for (DomainPoint point : border.items().keySet()) {
                 ItemAssessment item = border.at(point);
+                // Each search with the copies the reading it was made for was read at, said here
+                // because this is the last place one reading's searches are that reading's alone:
+                // the readings of one line are put together next, searches and copies both, and a
+                // search stopped at one call would come out stopped at every call of the line.
                 items.put(point, item instanceof ItemAssessment.Owed owed && owed.worthSearching()
                         ? owed.settledBy(search.search(owed.criterion(),
-                                border.border().label(point)))
+                                border.border().label(point)).readAt(border.readAt()))
                         : item);
             }
             // And who put on the way what the search went along, which is what says at which calls
@@ -1698,7 +1704,7 @@ final class Coverages {
                     out.add(each instanceof ItemAssessment.Attempt.Unresolved it
                             ? shortOf(it, budgets, repertoires, capacities) : each);
                 }
-                return new SearchOutcomes(out);
+                return SearchOutcomes.each(out);
             }
 
             /**
@@ -1997,12 +2003,14 @@ final class Coverages {
      */
     private static EstablishmentGap.Observation stopped(StandingAtAPoint.Met.CouldNotTell why) {
         Set<Incompleteness.Code> codes = new LinkedHashSet<>();
+        List<Figure> figures = new ArrayList<>();
         for (souther.compiler.partition.ReadingGap each : why.why()) {
             if (each instanceof souther.compiler.partition.ReadingGap.Observation it) {
                 codes.add(it.code());
+                figures.addAll(it.figures());
             }
         }
-        return EstablishmentGap.Observation.of(codes);
+        return EstablishmentGap.Observation.of(codes, figures);
     }
 
     /** No population written some of, for an answer that met none. One value, since nothing
@@ -2238,7 +2246,7 @@ final class Coverages {
             // came to nothing. Both can be true of one point, so this is asked beside them rather
             // than after them.
             if (it.tried() instanceof StandingAtAPoint.ReadingsTried.StoppedAtTheLimit stopped) {
-                by.add(new Weakening.BorderReadingsNotExhausted(border, stopped.limit()));
+                by.add(new Weakening.BorderReadingsNotExhausted(border, stopped.limits()));
             }
         }
         for (Incompleteness.Met gap : observed.gaps()) {
