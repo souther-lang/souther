@@ -1949,15 +1949,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     ? " is owed at " + each.said() + " (" + rule + ")" : " of " + rule + " is owed";
             String exists = each.namesItsLevel()
                     ? " exists at " + each.said() + " (" + rule + ")" : " of " + rule + " exists";
-            for (BorderAssessment.Point p : each.notOwed()) {
-                if (p.item() instanceof ItemAssessment.NotOwed not) {
-                    out.append(String.format("      · no %s point%s%s: %s%n",
-                            p.role(), each.read().border().whichSide(p.at()), owed,
-                            whyNotOwed(not.reason())));
-                }
+            // Where it is left out at some readings and not others, which ones: the rest of the
+            // region beside the line ends where each reading's other rules say.
+            for (Adequacy.DeclaredLine.PointLeftOut p : each.notOwed()) {
+                out.append(String.format("      · no %s point%s%s: %s%n",
+                        p.role(), p.whichSide(), owed, whyNotOwed(p.reason())));
+                p.onlyAt().forEach(at -> out.append(String.format("          · at %s%n", at)));
             }
-            each.noPoint().forEach((role, none) -> out.append(String.format(
-                    "      · no %s point%s: %s%n", role, exists, whyNoPoint(none.why()))));
+            for (Adequacy.DeclaredLine.RoleLeftOut r : each.noPoint()) {
+                out.append(String.format("      · no %s point%s: %s%n",
+                        r.role(), exists, whyNoPoint(r.why())));
+                r.onlyAt().forEach(at -> out.append(String.format("          · at %s%n", at)));
+            }
         }
         Map<String, List<Adequacy.Finding>> byDeclaration = new LinkedHashMap<>();
         for (ReportedFinding each : module.declarations()) {
@@ -7718,17 +7721,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static void excluded(ArrayNode out, List<Adequacy.DeclaredLine> lines) {
         for (Adequacy.DeclaredLine line : lines) {
-            for (BorderAssessment.Point point : line.notOwed()) {
-                if (point.item() instanceof ItemAssessment.NotOwed not) {
-                    ObjectNode one = out.addObject();
-                    ObjectNode id = one.putObject("pointId");
-                    authoredLineId(id.putObject("line"), line.line().line());
-                    level(id.putObject("level"), line.line().at());
-                    location(id.putObject("location"), point.at());
-                    one.put("point", word(point.role()));
-                    ruleId(one.putObject("ruleId"), line.line().provenance());
-                    one.put("label", line.said());
-                    one.put("notOwed", word(not.reason()));
+            for (Adequacy.DeclaredLine.PointLeftOut point : line.notOwed()) {
+                ObjectNode one = out.addObject();
+                ObjectNode id = one.putObject("pointId");
+                authoredLineId(id.putObject("line"), line.line().line());
+                level(id.putObject("level"), line.line().at());
+                location(id.putObject("location"), point.at());
+                one.put("point", word(point.role()));
+                ruleId(one.putObject("ruleId"), line.line().provenance());
+                one.put("label", line.said());
+                one.put("notOwed", word(point.reason()));
+                // Which readings it is left out at, where that is not every one of them.
+                if (!point.onlyAt().isEmpty()) {
+                    ArrayNode at = one.putArray("onlyAt");
+                    for (Adequacy.DeclaredLine.ReadAt each : point.onlyAt()) {
+                        ObjectNode read = at.addObject();
+                        read.put("behavior", each.behavior());
+                        read.put("axis", each.position());
+                    }
                 }
             }
         }

@@ -113,10 +113,11 @@ class TwoSurfacesAgreeWhichBehaviorsHaveASectionTest {
      */
     @Test
     void theBehaviorThisIssueWasAboutHasOneAndSaysWhatItFound() {
-        String take = block(report().human(SourceRendering.namedByIdentity(SourceLayouts.NONE)), "take");
+        AdequacyReport report = report();
+        String take = block(report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)), "take");
         // The lines are `Rate`'s, so they are counted and said under the declarations, which a
         // view of `take` alone shows because `take` reads them.
-        String shown = report().only(null, "take")
+        String shown = report.only(null, "take")
                 .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
         String declarations = shown.substring(shown.indexOf("  declarations "));
 

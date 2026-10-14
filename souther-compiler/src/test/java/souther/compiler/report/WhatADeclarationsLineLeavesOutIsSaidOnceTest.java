@@ -13,6 +13,8 @@ import tools.jackson.databind.json.JsonMapper;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -153,6 +155,59 @@ class WhatADeclarationsLineLeavesOutIsSaidOnceTest {
                 "`peek` carries a Failures and no Capped");
     }
 
+    /**
+     * A point a line leaves out at some readings and not at others is said once, with where.
+     *
+     * <p>The region above {@code Failures}' line at 0 holds every value above it where a bare
+     * {@code Failures} is read, and nothing where {@code Parcel}'s own clause holds the field at 0.
+     * So the IN point is owed at {@code b} and left out at {@code a}: one line, read two ways, and
+     * both readings are right. Refused as two readings disagreeing, the model got no report at all.
+     */
+    @Test
+    void aPointLeftOutAtSomeReadingsIsSaidWithThem() {
+        Compilation compilation = compiled(NARROWED);
+        List<String> declarations = block(human(compilation), "declarations");
+
+        int in = declarations.indexOf("· no IN point is owed at value = 0 (invariant Failures #1):"
+                + " excluded — no value can stand there");
+        assertTrue(in >= 0, () -> "" + declarations);
+        assertEquals("· at a/p.failures", declarations.get(in + 1),
+                "left out where the record holds the field at 0, and only there");
+        int off = declarations.indexOf("· no OFF point is owed at value = 0 (invariant Failures"
+                + " #1): excluded — no value can stand there");
+        assertTrue(off >= 0 && !declarations.get(off + 1).startsWith("· at "),
+                () -> "below the line nothing is a Failures wherever it is read: " + declarations);
+
+        JsonNode document = JSON.readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        List<String> onlyAt = new ArrayList<>();
+        document.get("modules").get(0).get("declarations").forEach(entry ->
+                entry.get("excluded").forEach(each -> {
+                    if (each.has("onlyAt")) {
+                        each.get("onlyAt").forEach(at -> onlyAt.add(each.get("point").asString()
+                                + " " + at.get("behavior").asString() + "/"
+                                + at.get("axis").asString()));
+                    }
+                }));
+        assertEquals(List.of("in a/p.failures"), onlyAt);
+        DocumentShape.assertShapedLikeTheSchema(document);
+    }
+
+    private static final String NARROWED = """
+            module example.narrowed
+
+            data Failures = Int
+                invariant value >= 0
+            data Parcel = { failures: Failures }
+                invariant failures.value <= 0
+
+            behavior a : (p: Parcel) -> Int
+            let a (p) = 1
+
+            behavior b : (f: Failures) -> Int
+            let b (f) = 1
+            """;
+
     private static final String TWO_TYPES = """
             module example.two
 
@@ -237,12 +292,20 @@ class WhatADeclarationsLineLeavesOutIsSaidOnceTest {
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    /**
+     * Each model measured once for the class. The checks only read what a compilation answers, and
+     * the database keeps the answers, so several checks asking it is one measurement asked again.
+     */
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+
     private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(), () -> "the model compiles: "
-                + compilation.errors());
-        return compilation;
+        return MEASURED.computeIfAbsent(source, each -> {
+            Compilation compilation = Compilation.ofSource(each, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            assertTrue(compilation.errors().isEmpty(), () -> "the model compiles: "
+                    + compilation.errors());
+            return compilation;
+        });
     }
 }

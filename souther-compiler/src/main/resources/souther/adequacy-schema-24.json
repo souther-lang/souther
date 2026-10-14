@@ -1962,6 +1962,28 @@
                         "the_carrier_names_no_neighbour"
                       ],
                       "description": "Why no row is owed at the point, in the words a behavior's `boundaries` item uses for the same answer."
+                    },
+                    "onlyAt": {
+                      "type": "array",
+                      "minItems": 1,
+                      "description": "The readings of the line the point is left out at, present only where it is not left out at every one. A point in the region beside a line is left out where that region holds no value, and where the region ends is each reading's: a record's own clause on the field can end it at one position and not at another. Absent, the point is left out wherever the line is read.",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "behavior",
+                          "axis"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "behavior": {
+                            "type": "string"
+                          },
+                          "axis": {
+                            "type": "string",
+                            "description": "The position, as the reading names the left of the line."
+                          }
+                        }
+                      }
                     }
                   }
                 }

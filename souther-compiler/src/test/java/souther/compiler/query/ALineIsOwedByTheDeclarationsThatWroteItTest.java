@@ -134,7 +134,8 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
         assertEquals(List.of("label"), producers.get(0).carriedBy(),
                 "read by the producer's own behavior, and the consumer's reading is not one of its");
         assertEquals(List.of(PointRole.OFF, PointRole.OUT),
-                producers.get(0).notOwed().stream().map(BorderAssessment.Point::role).toList(),
+                producers.get(0).notOwed().stream()
+                        .map(Adequacy.DeclaredLine.PointLeftOut::role).toList(),
                 "no string is shorter than the line and still a Sku");
     }
 

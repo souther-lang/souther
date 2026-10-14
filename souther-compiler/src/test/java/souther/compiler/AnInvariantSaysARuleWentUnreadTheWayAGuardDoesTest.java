@@ -67,11 +67,37 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
             let byGuardAboutOne (b) = if b.x < b.x + 1 then Ok else No
             """;
 
+    /**
+     * {@link #MODEL} measured, once for the class.
+     *
+     * <p>Every check here reads what the compilation answers, and its database keeps the answers,
+     * so each of them measuring the model again is the same measurement paid for again. Rendered
+     * once for the same reason.
+     */
+    private static Compilation measured;
+
+    private static String rendered;
+
+    private static synchronized Compilation measured() {
+        if (measured == null) {
+            Compilation compilation = Compilation.ofSource(MODEL, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            measured = compilation;
+        }
+        return measured;
+    }
+
+    private static synchronized String human() {
+        if (rendered == null) {
+            rendered = AdequacyReport.of(measured())
+                    .human(SourceRendering.namedByIdentity(measured().texts()));
+        }
+        return rendered;
+    }
+
     private static String blockOf(String behavior) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        String human = AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        String human = human();
         StringBuilder block = new StringBuilder();
         boolean inside = false;
         for (String line : human.split("\n", -1)) {
@@ -171,11 +197,8 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
     /** The declarations' block of a report showing {@code behavior} alone, which holds the lines
      *  the declarations drew that it reads. */
     private static String declarationsShownWith(String behavior) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        String human = AdequacyReport.of(compilation).only(null, behavior)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        String human = AdequacyReport.of(measured()).only(null, behavior)
+                .human(SourceRendering.namedByIdentity(measured().texts()));
         return human.substring(human.indexOf("  declarations "));
     }
 
