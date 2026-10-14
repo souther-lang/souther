@@ -832,6 +832,7 @@ public final class Adequacy {
                     implemented == null ? List.of() : implemented.declaredInputs(),
                     RuleReadingContext.of(reading.value(), db.ask(new Front.Reading()).value(),
                             db.readings()),
+                    new Shapes.CountedElsewhere(db),
                     named.value().demand(),
                     dependenciesOf(spec.value())));
         }
@@ -3166,6 +3167,7 @@ public final class Adequacy {
         souther.compiler.inputs.InputReading read = souther.compiler.inputs.InputDomain.of(
                 List.of(new souther.compiler.inputs.InputDomain.Parameter(ANSWER, null, answers)),
                 RuleReadingContext.of(reading, policy, beside.machines()),
+                new Shapes.CountedElsewhere(db), InputDemand.NONE,
                 // An answer, which no row stands anything in for.
                 Membership.none()).reading(reading);
         return new AnswerSubjects.Standing(souther.compiler.partition.MeasuredInput.of(ANSWER,
