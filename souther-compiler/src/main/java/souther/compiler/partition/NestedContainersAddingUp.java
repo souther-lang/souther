@@ -471,20 +471,24 @@ final class NestedContainersAddingUp {
                     .orElse(0);
             return () -> IntStream.range(0, ways)
                     .mapToObj(way -> built(0, layout, new ArrayDeque<>(values), way))
-                    .filter(Objects::nonNull)
+                    .<FixtureTemplate>mapMulti((built, out) -> {
+                        left.met(built.met());
+                        built.values().forEach(out);
+                    })
                     .iterator();
         }
 
         /**
          * The container of level {@code at} holding what {@code layout} says, taking the leaves it
-         * holds off the front of {@code values}, or null where one of its elements cannot be built.
+         * holds off the front of {@code values}, or nothing where one of its elements cannot be
+         * built — with what of this compiler's building them met.
          *
-         * <p>Null as well where the elements of a container above the innermost are not apart as
+         * <p>Nothing as well where the elements of a container above the innermost are not apart as
          * its rules keep them. Leaves apart across the row put apart every container holding some,
          * and two holding none are alike all the same: a grouping this writes that does so is one
          * of the many it is not, which the walk says of every count.
          */
-        private FixtureTemplate built(int at, Layout layout, Deque<BigDecimal> values, int way) {
+        private Proposals built(int at, Layout layout, Deque<BigDecimal> values, int way) {
             Level level = levels.get(at);
             List<ContainersAddingUp.Filling> fillings = level.ways().filled();
             ContainersAddingUp.Filling filling = fillings.get(Math.min(way, fillings.size() - 1));
@@ -498,28 +502,35 @@ final class NestedContainersAddingUp {
             }
             List<FixtureTemplate> each = new ArrayList<>();
             List<Layout> within = layout.within();
+            CompositionShortfall met = CompositionShortfall.NONE;
             for (int i = 0; i < within.size(); i++) {
-                FixtureTemplate inner = built(at + 1, within.get(i), values, way);
+                Proposals inner = built(at + 1, within.get(i), values, way);
+                met = met.and(inner.met());
                 Map<TermPath, FixtureTemplate> own = level.apart().besideFor(i, within.size());
-                if (inner == null || own == null) {
-                    return null;
+                if (own == null) {
+                    return Proposals.NONE.meeting(met.and(level.apart().met()));
+                }
+                if (inner.isEmpty()) {
+                    return Proposals.NONE.meeting(met);
                 }
                 Map<TermPath, FixtureTemplate> beside = new LinkedHashMap<>(own);
                 beside.putAll(filling.beside());
-                FixtureTemplate one = PlanComposer.compose(filling.plan().root(),
-                        new ValuesCarryingANumber(filling.fixed(), inner, beside,
-                                filling.narrowed(), reading),
+                Proposals one = PlanComposer.compose(filling.plan().root(),
+                        new ValuesCarryingANumber(filling.fixed(), inner.values().getFirst(),
+                                beside, filling.narrowed(), reading),
                         reading);
-                if (one == null) {
-                    return null;
+                met = met.and(one.met());
+                if (one.isEmpty()) {
+                    return Proposals.NONE.meeting(met);
                 }
-                each.add(one);
+                each.add(one.values().getFirst());
             }
             if (!Witnesses.holdApart(each, level.apart().runs())) {
-                return null;
+                return Proposals.NONE.meeting(met);
             }
-            return WornNames.under(level.view().wrappers(), FixtureTemplate.collection(each),
-                    reading.source());
+            FixtureTemplate written = WornNames.under(level.view().wrappers(),
+                    FixtureTemplate.collection(each), reading.source());
+            return Proposals.ofNullable(written).meeting(met);
         }
 
         @Override

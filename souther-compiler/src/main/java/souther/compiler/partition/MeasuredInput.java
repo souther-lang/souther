@@ -105,8 +105,12 @@ public final class MeasuredInput {
      * <p>No part of what makes two of these one, for the reason {@link #machines} is not: it is
      * derived from what is compared and from the reading, and two of these that compare equal would
      * fill it alike.
+     *
+     * <p>The whole answer, with what building it met: a search reading the values from here and
+     * why they are short from a second build would hold two answers that agree only while the
+     * builds do.
      */
-    private final Map<Offered, List<FixtureTemplate>> offered = new ConcurrentHashMap<>();
+    private final Map<Offered, Proposals> offered = new ConcurrentHashMap<>();
     /**
      * Which values' rules name each position, as {@link #ruleRoots} answers it.
      *
@@ -115,6 +119,15 @@ public final class MeasuredInput {
      * for the reason {@link #offered} is not.
      */
     private final Map<TermPath, List<RuleRoots.Naming>> named = new ConcurrentHashMap<>();
+    /**
+     * What the rules of every value written at each position keep apart there, with nothing
+     * settled.
+     *
+     * <p>Kept because every edge composed at a container asks it of the same position, and with
+     * nothing settled the answer is the reading's and nothing an edge brings. No part of what
+     * makes two of these one, for the reason {@link #offered} is not.
+     */
+    private final Map<TermPath, List<List<String>>> keptApart = new ConcurrentHashMap<>();
 
     /** A position as what it is offered turns on. */
     private record Offered(Type type, NumericDomain.Bounds within, FieldDomains.Held held) {}
@@ -257,6 +270,15 @@ public final class MeasuredInput {
     }
 
     /**
+     * What the rules of every value written at {@code path} keep apart there, with nothing a row
+     * fixes read in ({@link ConstructionRules#heldAt}, {@link ElementsKeptApart#heldBy}).
+     */
+    List<List<String>> keptApartAt(TermPath path) {
+        return keptApart.computeIfAbsent(path, at ->
+                ElementsKeptApart.heldBy(ConstructionRules.of(this, Map.of()).heldAt(at)));
+    }
+
+    /**
      * Where the model divides its positions, whole.
      *
      * <p>For a reader whose question is about the measurement rather than about a row: which
@@ -313,16 +335,15 @@ public final class MeasuredInput {
      * type reads the types inside it, and a map filled while it is being filled is not one a
      * reading may count on.
      */
-    List<FixtureTemplate> representativesHolding(Type type, NumericDomain.Bounds within,
-                                                 FieldDomains.Held held) {
+    Proposals representativesHolding(Type type, NumericDomain.Bounds within,
+                                     FieldDomains.Held held) {
         Offered at = new Offered(type, within, held);
-        List<FixtureTemplate> already = offered.get(at);
+        Proposals already = offered.get(at);
         if (already != null) {
             return already;
         }
-        List<FixtureTemplate> made =
-                Partitions.representativesHolding(type, ruleReading(), within, held);
-        List<FixtureTemplate> raced = offered.putIfAbsent(at, made);
+        Proposals made = Partitions.representativesHolding(type, ruleReading(), within, held);
+        Proposals raced = offered.putIfAbsent(at, made);
         return raced != null ? raced : made;
     }
 

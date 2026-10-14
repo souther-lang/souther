@@ -7431,9 +7431,10 @@ public final class Generator {
                 }
                 // And some value of it that its own type's decoder does not refuse. A value refused
                 // on its own is refused in every row it is put in, so a location every value of
-                // which is refused composes no row — and nothing of this compiler's stopped it.
+                // which is refused composes no row — with what building the values met, which is
+                // why those were the values there were to refuse.
                 if (everyValueRefused(edge)) {
-                    return new NumericWitness.Composed.NotBuilt(CompositionShortfall.NONE);
+                    return new NumericWitness.Composed.NotBuilt(edge.met());
                 }
                 into.add(new ComposedAt(group.getKey(), group.getValue(), within, edge));
             }
@@ -7929,10 +7930,11 @@ public final class Generator {
      *
      * <p>Read where the plan's composing reads them, so a list built as a field of an element of
      * another list is kept apart as its own record says, whichever of the two builds it. Nothing
-     * settled: what is kept apart is the same whatever a row fixes.
+     * settled: what is kept apart is the same whatever a row fixes, so it is the input's answer,
+     * read once for every edge at the position ({@link MeasuredInput#keptApartAt}).
      */
     private static List<List<String>> keptApartUnder(MeasuredInput subject, TermPath at) {
-        return ElementsKeptApart.heldBy(ConstructionRules.of(subject, Map.of()).heldAt(at));
+        return subject.keptApartAt(at);
     }
 
     /**
@@ -10570,7 +10572,10 @@ public final class Generator {
             // offered at a position the plan stopped short of is whole values of a type it declined
             // to look inside, and none being available is that decision and not a fact about the
             // model.
-            return whatTheSearchCameTo(CompositionShortfall.NONE, new LinkedHashMap<>(),
+            //
+            // And where building what was offered met a figure, the position may have nothing
+            // because of it, which is the offer being short and not the declarations' answer.
+            return whatTheSearchCameTo(choices.met(), new LinkedHashMap<>(),
                     choices.missingUnderAFigure(),
                     new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                             choices.missingAt()));
@@ -10593,7 +10598,11 @@ public final class Generator {
         // are asserted, which is the only way `a < b` is met in general.
         // Handed to the caller as every value the walk composes is: the caller is what composes the
         // parameters after this one, so a value it was never handed is a row with nothing after it.
-        Outcome conditioned = conditioned(subject, plan, fixed, settled, composing, rules);
+        // The rules of the value being composed, read once for the whole search. Every position's
+        // turn is answered by taking what the positions before it took onto this, which is the
+        // reading a settling states and not a second one of the declaration.
+        ConditionedCandidates candidates = new ConditionedCandidates(subject.ruleReading(), rules);
+        Outcome conditioned = conditioned(plan, fixed, settled, composing, candidates);
         if (conditioned instanceof Outcome.Built(ComposedValue value)) {
             return switch (taking.take(value)) {
                 case TAKEN -> conditioned;
@@ -10619,28 +10628,26 @@ public final class Generator {
                 met = met.and(its);
             }
         }
-        // And what the rules about the positions left out of the offer, which a figure being
-        // reached does not answer for. A search stopped at one position and given less than it
-        // could have been at another is short both ways, and an author is owed the figure and the
-        // rule — sent only the figure, they raise it and meet the same block.
-        if (!met.figures().isEmpty()) {
-            return new Outcome.Stopped(met, offeredShortOf(subject, plan), null);
-        }
-        if (!met.nothing()) {
-            return new Outcome.Unexhausted(met, offeredShortOf(subject, plan), null);
-        }
         // Every value that was offered was refused, which is only the whole story where every value
         // the rules allow was offered. A position that read a count past what a row is built to carry,
         // or that has more pairings than are built at once, held something back, and saying so is the
         // difference between a fact about the model and a fact about this.
+        HeldBack held = heldBack(subject, plan, choices, candidates, composing);
+        // And what the rules about the positions left out of the offer, which a figure being
+        // reached does not answer for. A search stopped at one position and given less than it
+        // could have been at another is short both ways, and an author is owed the figure and the
+        // rule — sent only the figure, they raise it and meet the same block. Beside a pass that
+        // stopped, what the offer was short of as well: a reader raising the pass's figure would
+        // meet the offer's next.
+        if (!met.nothing()) {
+            CompositionShortfall both = met.and(held.offer());
+            return both.figures().isEmpty()
+                    ? new Outcome.Unexhausted(both, held.offered(), null)
+                    : new Outcome.Stopped(both, held.offered(), null);
+        }
         // What each of them was short of, handed over unmerged and unranked. Which of the two a
         // reader is owed is one decision and it is made in one place.
-        // Nothing of a population is short here. What a proposal holds back is a figure of this
-        // compiler's over what it builds, and every value of the kind it does build is one it would
-        // offer.
-        HeldBack held = heldBack(subject, plan, rules);
-        return whatTheSearchCameTo(CompositionShortfall.of(held.offer()), held.offered(),
-                held.plan(), product);
+        return whatTheSearchCameTo(held.offer(), held.offered(), held.plan(), product);
     }
 
     /**
@@ -10762,32 +10769,34 @@ public final class Generator {
     }
 
     /**
-     * Why a position of this parameter offered less than its rules allow, or null where none did.
+     * Why a position of this parameter offered less than its rules allow, or nothing where none
+     * did.
      *
-     * <p>Off the reading the values were chosen against, handed in rather than made again. A rule
-     * counting one field against another asks for nothing in particular until the row fixes the
-     * other, so a reading without them answers about a rule this row is no longer under — and would
-     * say "every value tried was refused" of a position whose values were never built. Read a
-     * second time here, the two readings are of one row and are free to come apart the first time
-     * either is given something the other is not.
+     * <p>Off the builds the values were chosen from, handed in rather than made again: what
+     * building each position's offer met ({@code Choices.met}), what building the values the
+     * conditioned pass chose among met ({@link ConditionedCandidates#met}), and what composing the
+     * assignments met ({@code Composing.met}). A second build here would be a second answer about
+     * the same values, and one that read the rules without what the row fixed would say "every
+     * value tried was refused" of a position whose values were never built. A position the caller
+     * fixed was given its value and was offered nothing, so it held nothing back.
+     *
+     * <p>Here and not in what each pass comes back with. A pass says what stopped the pass; what
+     * the values it was given were short of is one fact about the offer, and said by a pass it
+     * would be said again by every pass that was given them.
+     *
+     * <p>Every figure each of them met, and not the first or the strongest. Two positions stopped
+     * by two budgets are two things this compiler declined to do, and a reader asking what would
+     * let the search go further is owed both.
      */
     private static HeldBack heldBack(MeasuredInput subject, ConstructionPlan plan,
-                                     ConstructionRules rules) {
-        // Every budget that held a position back, and not the first or the strongest. Two positions
-        // stopped by two budgets are two things this compiler declined to do, and a reader asking
-        // what would let the search go further is owed both — read as one, whichever the walk met
-        // last was the whole answer.
-        java.util.Set<CompositionBudget> budgets =
-                java.util.EnumSet.noneOf(CompositionBudget.class);
+                                     Choices choices, ConditionedCandidates candidates,
+                                     Composing composing) {
         // And what the rules about the strings at each position left out of what was offered there.
-        // Every position's, for the reason every position's budget is here: two positions short of
+        // Every position's, for the reason every position's figure is here: two positions short of
         // two different things are two things this compiler did not offer, and a reader asking why
         // nothing was taken is owed both.
-        for (ConstructionPlan.Slot each : plan.slots()) {
-            budgets.addAll(Partitions.notBuilt(each.type(), subject.ruleReading(),
-                    rules.heldAt(each.at())));
-        }
-        return new HeldBack(budgets, offeredShortOf(subject, plan), plan.cutBy());
+        return new HeldBack(choices.met().and(candidates.met()).and(composing.met()),
+                offeredShortOf(subject, plan), plan.cutBy());
     }
 
     /**
@@ -10845,12 +10854,11 @@ public final class Generator {
      * @param plan    what the plan was short of. Any of them may be empty, and all being empty is a
      *                search that had the whole of what the point had
      */
-    private record HeldBack(Set<CompositionBudget> offer,
+    private record HeldBack(CompositionShortfall offer,
                             SequencedMap<TermPath, StringOfferShortfall> offered,
                             Set<CompositionBudget> plan) {
 
         private HeldBack {
-            offer = Set.copyOf(offer);
             plan = Set.copyOf(plan);
         }
     }
@@ -10867,10 +10875,10 @@ public final class Generator {
      * branch, and the search in front of it answers most rows without any of that; running this one
      * first would spend it on every row to change none of them.
      */
-    private static Outcome conditioned(MeasuredInput subject, ConstructionPlan plan,
+    private static Outcome conditioned(ConstructionPlan plan,
                                        Map<TermPath, List<FixtureTemplate>> decided,
                                        Map<TermPath, Place> settled,
-                                       Composing composing, ConstructionRules rules) {
+                                       Composing composing, ConditionedCandidates candidates) {
         List<ConstructionPlan.Slot> found = plan.slots();
         // What the caller fixed goes first, so that everything chosen after it is chosen beside it.
         // A class stands for one value and a boundary is one value, and neither is worth deciding
@@ -10880,15 +10888,12 @@ public final class Generator {
         positions.addAll(
                 found.stream().filter(each -> !decided.containsKey(each.at())).toList());
         Budget budget = new Budget();
-        // The rules of the value being composed, read once for the whole search. Every position's
-        // turn is answered by taking what the positions before it took onto this, which is the
-        // reading a settling states and not a second one of the declaration.
-        ConditionedCandidates candidates = new ConditionedCandidates(subject.ruleReading(), rules);
         ComposedValue built = descend(positions, 0, new LinkedHashMap<>(),
                 new LinkedHashMap<>(settled), decided, composing, budget, candidates);
         if (built != null) {
             return new Outcome.Built(built);
         }
+        // What the values chosen from met is the offer's, and is said with the offer's.
         return budget.cutShort
                 ? new Outcome.Stopped(CompositionShortfall.of(
                         java.util.Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES)),
@@ -10959,6 +10964,13 @@ public final class Generator {
         private final Set<Map<TermPath, String>> refused = new HashSet<>();
 
         /**
+         * What of this compiler's composing an assignment met. An assignment a figure kept from
+         * being composed was never put to the decoder, so the search that comes back without a row
+         * has not had everything it chose refused, and says so with this.
+         */
+        private CompositionShortfall met = CompositionShortfall.NONE;
+
+        /**
          * Told of every value built and not handed on. Not read here: what the search comes to is
          * said where the parameter's search is answered, beside whatever its alternatives came to,
          * and a value not handed on is said there however the rest of the search went.
@@ -10991,6 +11003,11 @@ public final class Generator {
                     == CandidateCheck.Admissibility.REFUSED;
         }
 
+        /** What of this compiler's composing the assignments so far met. */
+        CompositionShortfall met() {
+            return met;
+        }
+
         /** What putting one assignment to the decoder came to, or that it did not need putting. */
         Tried attempt(Map<TermPath, FixtureTemplate> chosen, Budget budget) {
             Map<TermPath, String> written = new HashMap<>();
@@ -11007,11 +11024,13 @@ public final class Generator {
                 return new Tried.OutOfBudget();
             }
             FromTheAssignment values = new FromTheAssignment(chosen, plan, here);
-            FixtureTemplate composed = compose(plan.root(), values, reading);
-            if (composed == null) {
+            Proposals built = compose(plan.root(), values, reading);
+            met = met.and(built.met());
+            if (built.isEmpty()) {
                 refused.add(written);
                 return new Tried.Refused();
             }
+            FixtureTemplate composed = built.values().getFirst();
             return switch (HandedOn.of(check.build(parameter, composed),
                     () -> values.read(handedOn.positions(), reading), handedOn, inputs, reading)) {
                 case HandedOn.Came.Values(var read) ->
@@ -11124,12 +11143,15 @@ public final class Generator {
      * @param plan      what these positions are positions of, carried so that an assignment is
      *                  composed back into the shape the positions were taken from rather than into
      *                  one worked out a second time
+     * @param met       what of this compiler's building the positions' offers met. Taken from the
+     *                  build that made {@code values}, so that what a reader is told the offer was
+     *                  short of is that build's own answer and not a second build's
      */
     private record Choices(ConstructionPlan plan, List<TermPath> at,
                            List<List<FixtureTemplate>> values,
                            List<List<FixtureTemplate>> reserves, String missingAt,
                            Set<CompositionBudget> missingUnderAFigure,
-                           List<Displacing> displacing) {
+                           List<Displacing> displacing, CompositionShortfall met) {
 
         Choices {
             missingUnderAFigure = Set.copyOf(missingUnderAFigure);
@@ -11137,8 +11159,8 @@ public final class Generator {
         }
 
         static Choices missing(ConstructionPlan plan, String at,
-                               java.util.Set<CompositionBudget> under) {
-            return new Choices(plan, List.of(), List.of(), List.of(), at, under, List.of());
+                               Set<CompositionBudget> under, CompositionShortfall met) {
+            return new Choices(plan, List.of(), List.of(), List.of(), at, under, List.of(), met);
         }
 
         /**
@@ -11159,8 +11181,10 @@ public final class Generator {
                     continue;
                 }
                 List<FixtureTemplate> here = new ArrayList<>(values.get(i));
+                // What building these met is what building the position's offer met, which
+                // {@link #met} already holds.
                 for (FixtureTemplate each : Partitions.displacedRepresentativesOf(slot.type(),
-                        reading, slot.within(), slot.held())) {
+                        reading, slot.within(), slot.held()).values()) {
                     if (here.stream().noneMatch(had -> had.text().equals(each.text()))) {
                         here.add(each);
                     }
@@ -11213,13 +11237,16 @@ public final class Generator {
         // And is not displaced either, for the same reason.
         List<Displacing> displacing =
                 new ArrayList<>(Collections.nCopies(paths.size(), (Displacing) null));
+        CompositionShortfall met = CompositionShortfall.NONE;
         for (ConstructionPlan.Slot slot : plan.slots()) {
             if (paths.contains(slot.at())) {
                 continue;   // an axis decides here
             }
-            NumericDomain.Bounds here = left.valuesAt(slot.at());
-            FieldDomains.Held held = left.heldAt(slot.at());
-            List<FixtureTemplate> stands = subject.representativesHolding(slot.type(), here, held);
+            FieldDomains.ConstructionLimits limits = left.limitsAt(slot.at());
+            NumericDomain.Bounds here = limits.values();
+            FieldDomains.Held held = limits.held();
+            Proposals stands = subject.representativesHolding(slot.type(), here, held);
+            met = met.and(stands.met());
             if (stands.isEmpty()) {
                 // Nothing could be written at all: a position of a type nothing stands for. Which is
                 // not the same as a value that was written and refused, and reporting it as one sends
@@ -11229,17 +11256,18 @@ public final class Generator {
                 // that decision rather than a fact about the model: what such a position is offered
                 // is whole values of a type this declined to look inside. Read off the plan's own
                 // leaf and not off whether the plan was cut anywhere, so a figure reached at one
-                // position is never the reason given for another having nothing.
+                // position is never the reason given for another having nothing — and for the same
+                // reason, what building the offer met is this position's own.
                 return Choices.missing(plan, slot.at() + ": " + Type.show(slot.type()),
                         slot.leaf() instanceof ConstructionPlan.Leaf.Beneath(var cutBy)
-                                ? cutBy : java.util.Set.of());
+                                ? cutBy : Set.of(), stands.met());
             }
             paths.add(slot.at());
-            values.add(stands);
-            reserves.add(Partitions.inReserve(slot.type(), reading, here));
+            values.add(stands.values());
+            reserves.add(Partitions.inReserve(slot.type(), reading, here, stands.values()));
             displacing.add(new Displacing(slot.type(), here, held));
         }
-        return new Choices(plan, paths, values, reserves, null, Set.of(), displacing);
+        return new Choices(plan, paths, values, reserves, null, Set.of(), displacing, met);
     }
 
     /** What a position's value is displaced within: its type, and what its rules leave of it. */
@@ -11767,11 +11795,11 @@ public final class Generator {
      * The value at one position of the plan: what the assignment chose there, or a record built out
      * of the positions under it.
      *
-     * <p>Null where the assignment put nothing at a position the plan asks for one at, and where a
-     * name this module cannot write leaves no value to write. It used to be null for a third reason
-     * — the walk that collected the choices and this one disagreeing about where the positions
-     * were — and that reason has nowhere left to come from: both are this plan's positions, so a
-     * disagreement between them is not something the two can be in.
+     * <p>Nothing where the assignment put nothing at a position the plan asks for one at, where a
+     * name this module cannot write leaves no value to write, and where a container the plan fills
+     * is past a figure of this compiler's — which last is said by what comes back with it. The walk
+     * that collected the choices and this one read this plan's positions, so the two cannot
+     * disagree about where they are.
      *
      * <p>What was built is handed back to the recipe that said how to build it, which puts on the
      * names the position writes its values under. The composing and the writing are one recipe
@@ -11779,8 +11807,8 @@ public final class Generator {
      * composes an {@code Approved} and the row carries {@code DecisionN(Approved { id = 1 })}.
      * Composed without that, the row carries a value of a type the parameter does not declare.
      */
-    private static FixtureTemplate compose(ConstructionPlan.Node node, FromTheAssignment values,
-                                           RuleReadingContext reading) {
+    private static Proposals compose(ConstructionPlan.Node node, FromTheAssignment values,
+                                     RuleReadingContext reading) {
         return PlanComposer.compose(node, values, reading);
     }
 
@@ -11810,15 +11838,19 @@ public final class Generator {
             implements PlanComposer.Values {
 
         @Override
-        public FixtureTemplate at(ConstructionPlan.Slot slot) {
-            return chosen.get(slot.at());
+        public Proposals at(ConstructionPlan.Slot slot) {
+            return Proposals.ofNullable(chosen.get(slot.at()));
         }
 
         @Override
         public ContainerContents contentsOf(TermPath container, PlanComposer.Under under) {
             return here.contentsOf(container, value -> {
                 ConstructionPlan.Node node = plan.at(value);
-                return node == null ? null : under.of(node);
+                if (node == null) {
+                    return null;
+                }
+                Proposals composed = under.of(node);
+                return composed.isEmpty() ? null : composed.values().getFirst();
             });
         }
 
@@ -11833,26 +11865,28 @@ public final class Generator {
             Map<TermPath, FixtureTemplate> out = new LinkedHashMap<>();
             for (TermPath each : positions) {
                 ConstructionPlan.Node node = plan.at(each);
-                FixtureTemplate value = node == null ? null : compose(node, this, reading);
-                if (value != null) {
-                    out.put(each, value);
+                Proposals value = node == null ? Proposals.NONE : compose(node, this, reading);
+                if (!value.isEmpty()) {
+                    out.put(each, value.values().getFirst());
                 }
             }
             return out;
         }
 
         @Override
-        public SequencedMap<String, FixtureTemplate> under(ConstructionPlan.Built built,
-                                                  PlanComposer.Under under) {
+        public Partitions.FieldsChosen under(ConstructionPlan.Built built,
+                                             PlanComposer.Under under) {
             SequencedMap<String, FixtureTemplate> fields = new LinkedHashMap<>();
+            CompositionShortfall met = CompositionShortfall.NONE;
             for (Map.Entry<String, ConstructionPlan.Node> each : built.under().entrySet()) {
-                FixtureTemplate value = under.of(each.getValue());
-                if (value == null) {
-                    return null;
+                Proposals value = under.of(each.getValue());
+                met = met.and(value.met());
+                if (value.isEmpty()) {
+                    return new Partitions.FieldsChosen(null, met);
                 }
-                fields.put(each.getKey(), value);
+                fields.put(each.getKey(), value.values().getFirst());
             }
-            return fields;
+            return new Partitions.FieldsChosen(fields, met);
         }
     }
 

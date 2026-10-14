@@ -9,7 +9,6 @@ import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.SequencedMap;
 
 /**
  * The value a construction plan builds.
@@ -35,12 +34,13 @@ final class PlanComposer {
      */
     interface Values {
 
-        /** What stands at a position the plan chooses a whole value at, or null where nothing does. */
-        FixtureTemplate at(ConstructionPlan.Slot slot);
+        /** What stands at a position the plan chooses a whole value at, or nothing where nothing
+         *  does — with what building it met. */
+        Proposals at(ConstructionPlan.Slot slot);
 
         /**
-         * What stands at each field of a record the plan composes, or null where one of them has
-         * nothing to stand for it.
+         * What stands at each field of a record the plan composes, or none where one of them has
+         * nothing to stand for it — with what choosing them met.
          *
          * @param under composes a position of the plan, which is how a caller reaches the fields it
          *              does have a value under. Handed over rather than left to the caller so that
@@ -51,7 +51,7 @@ final class PlanComposer {
          *              order and a caller handed only which fields there are would write them in
          *              whatever a walk of them came to.
          */
-        SequencedMap<String, FixtureTemplate> under(ConstructionPlan.Built built, Under under);
+        Partitions.FieldsChosen under(ConstructionPlan.Built built, Under under);
 
         /**
          * What the container at {@code container} is to hold and to hold nothing equal to, or null
@@ -70,33 +70,51 @@ final class PlanComposer {
     /** Composing one position of the plan, which is what a caller is given to reach below a field. */
     interface Under {
 
-        /** The value at {@code node}, or null where nothing here builds one. */
-        FixtureTemplate of(ConstructionPlan.Node node);
+        /** The value at {@code node}, or nothing where nothing here builds one, with what
+         *  building it met. */
+        Proposals of(ConstructionPlan.Node node);
     }
 
     /**
-     * The value at one position of the plan, or null where nothing builds one.
+     * The value at one position of the plan, or nothing where nothing builds one — with what of
+     * this compiler's building it met.
      *
-     * <p>Null travels up: a field with nothing at it is a record with nothing at it, because what
-     * would be written instead is a value of a type the position does not declare.
+     * <p>Nothing travels up: a field with nothing at it is a record with nothing at it, because what
+     * would be written instead is a value of a type the position does not declare. And what was
+     * met travels up with it, so a record with nothing because a container in it is past a figure
+     * is not read as a record the decoder refused.
      */
-    static FixtureTemplate compose(ConstructionPlan.Node node, Values values,
-                                   RuleReadingContext reading) {
+    static Proposals compose(ConstructionPlan.Node node, Values values,
+                             RuleReadingContext reading) {
         RuleReadingSource ruleSource = reading.source();
         return switch (node) {
             // Under the names the position wore before a narrowing reached it, and under none where
             // none did: what stands at a slot is a value of the narrowed type, already written
             // under whatever names that type wears, and a `data DecisionN = Decision` narrowed to
             // one of its cases is written `DecisionN(...)` all the same.
-            case ConstructionPlan.Slot slot ->
-                    WornNames.under(slot.worn(), values.at(slot), ruleSource);
+            case ConstructionPlan.Slot slot -> {
+                Proposals at = values.at(slot);
+                yield at.isEmpty() ? at : Proposals.ofNullable(WornNames.under(slot.worn(),
+                        at.values().getFirst(), ruleSource)).meeting(at.met());
+            }
             case ConstructionPlan.Built built -> composed(built, values, reading);
             case ConstructionPlan.Held held -> held(held, values, reading);
             // The requirement settled this one, so nothing was chosen for it and there is nothing to
             // look up. Under every name the position wears, since the value arrives bare.
             case ConstructionPlan.Exact exact ->
-                    WornNames.under(exact.worn(), exact.exact(), ruleSource);
+                    Proposals.ofNullable(WornNames.under(exact.worn(), exact.exact(), ruleSource));
         };
+    }
+
+    /** What composing the positions a container is handed values from met. */
+    private static final class Met {
+
+        private CompositionShortfall met = CompositionShortfall.NONE;
+
+        Proposals noting(Proposals composed) {
+            met = met.and(composed.met());
+            return composed;
+        }
     }
 
     /**
@@ -111,26 +129,31 @@ final class PlanComposer {
      * {@code data Basket = List<Item>} carries {@code Basket([...])}, and a list composed without
      * them is of a type the parameter does not declare.
      */
-    private static FixtureTemplate held(ConstructionPlan.Held plan, Values values,
-                                        RuleReadingContext reading) {
+    private static Proposals held(ConstructionPlan.Held plan, Values values,
+                                  RuleReadingContext reading) {
         List<FixtureTemplate> holding = new ArrayList<>();
         List<FixtureTemplate> keptOut = List.of();
         List<FixtureTemplate> keysHeld = List.of();
         List<FixtureTemplate> keysEachFiled = List.of();
         List<FixtureTemplate> keysKeptOut = List.of();
+        CompositionShortfall met = CompositionShortfall.NONE;
         FixtureTemplate element = null;
         if (plan.composesItsElement()) {
-            element = compose(plan.under().get(), values, reading);
-            if (element == null) {
-                return null;
+            Proposals composed = compose(plan.under().get(), values, reading);
+            met = composed.met();
+            if (composed.isEmpty()) {
+                return Proposals.NONE.meeting(met);
             }
+            element = composed.values().getFirst();
             holding.add(element);
         }
         if (plan.handed()) {
-            ContainerContents contents =
-                    values.contentsOf(plan.at(), node -> compose(node, values, reading));
+            Met handed = new Met();
+            ContainerContents contents = values.contentsOf(plan.at(),
+                    node -> handed.noting(compose(node, values, reading)));
+            met = met.and(handed.met);
             if (contents == null) {
-                return null;
+                return Proposals.NONE.meeting(met);
             }
             holding.addAll(contents.holding());
             keptOut = contents.keptOut();
@@ -145,26 +168,28 @@ final class PlanComposer {
         if (!(TypeView.shapeOf(plan.type(), ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums())
                 instanceof Shape.Container container)) {
-            return null;
+            return Proposals.NONE.meeting(met);
         }
         // The key the plan put the element under, or over whatever value the rules admit where
         // nothing was asked of the value.
         FixtureTemplate key = null;
         if (plan.key().isPresent()) {
-            key = compose(plan.key().get(), values, reading);
-            if (key == null) {
-                return null;
+            Proposals composed = compose(plan.key().get(), values, reading);
+            met = met.and(composed.met());
+            if (composed.isEmpty()) {
+                return Proposals.NONE.meeting(met);
             }
+            key = composed.values().getFirst();
         }
         // A key the rules ask the entry to be filed under is a value of another position, and one
         // entry is filed under one key.
         for (FixtureTemplate asked : keysHeld) {
             if (key != null && !key.text().equals(asked.text())) {
-                return null;
+                return Proposals.NONE.meeting(met);
             }
             key = asked;
         }
-        FixtureTemplate collection = switch (container) {
+        Proposals collection = switch (container) {
             case Shape.Sequence carrier -> {
                 // Every element is the one composed, and elements kept apart — a set's, or a
                 // list's its rules or those of what holds it keep apart — hold it once: one the
@@ -172,7 +197,7 @@ final class PlanComposer {
                 List<List<String>> apart =
                         ElementsKeptApart.at(plan.worn(), carrier, plan.keptApart(), reading);
                 if (plan.eachOf() && !apart.isEmpty() && plan.holds().least() > 1) {
-                    yield null;
+                    yield Proposals.NONE;
                 }
                 if (key != null || !keysEachFiled.isEmpty()) {
                     throw new IllegalStateException("a plan put a key on what a list or a set"
@@ -184,20 +209,20 @@ final class PlanComposer {
                     key == null ? null : new Witnesses.Filed(key, element), keysEachFiled,
                     keysKeptOut, plan.holds(), reading);
         };
-        if (collection == null) {
-            return null;
-        }
+        met = met.and(collection.met());
         // A name this module cannot write leaves no value to write.
-        return WornNames.under(plan.worn(), collection, ruleSource);
+        return collection.isEmpty() ? Proposals.NONE.meeting(met)
+                : Proposals.ofNullable(WornNames.under(plan.worn(),
+                        collection.values().getFirst(), ruleSource)).meeting(met);
     }
 
     /** One record of the plan, out of whatever the caller has at the positions under it. */
-    private static FixtureTemplate composed(ConstructionPlan.Built built, Values values,
-                                            RuleReadingContext reading) {
-        SequencedMap<String, FixtureTemplate> fields =
+    private static Proposals composed(ConstructionPlan.Built built, Values values,
+                                      RuleReadingContext reading) {
+        Partitions.FieldsChosen chosen =
                 values.under(built, node -> compose(node, values, reading));
-        if (fields == null) {
-            return null;
+        if (chosen.fields() == null) {
+            return Proposals.NONE.meeting(chosen.met());
         }
         RuleReadingSource ruleSource = reading.source();
         // Under the names the position is written with, which the descent that found the fields took
@@ -206,13 +231,15 @@ final class PlanComposer {
         // A name this module cannot write leaves no value to write.
         if (!(ruleSource.symbols().scope().reach(built.of())
                 instanceof TypeReachName.Written written)) {
-            return null;
+            return Proposals.NONE.meeting(chosen.met());
         }
         // Under every name the position wears, which where a refinement narrowed it are the names
         // it wore before the narrowing and the ones the narrowed value wears after it. One list and
         // one putting-back-on: read as two, the outer names had to be recovered from the class that
         // asked for the narrowing rather than from the position they belong to.
-        return WornNames.under(built.worn(), FixtureTemplate.record(written, fields), ruleSource);
+        return Proposals.ofNullable(WornNames.under(built.worn(),
+                FixtureTemplate.record(written, chosen.fields()), ruleSource))
+                .meeting(chosen.met());
     }
 
     private PlanComposer() {}

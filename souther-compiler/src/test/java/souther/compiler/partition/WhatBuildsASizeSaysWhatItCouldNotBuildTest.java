@@ -72,7 +72,8 @@ class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
      */
     @Test
     void aFloorOfNoneAsksForNothingWhereASizeOfZeroAsksForTheEmptyValue() {
-        assertEquals(List.of(), Witnesses.holding(position(Type.STRING), 0, List.of(), READING, Set.of()));
+        assertEquals(List.of(),
+                Witnesses.holding(position(Type.STRING), 0, List.of(), READING, Set.of()).values());
         assertTrue(!Witnesses.ofSize(position(Type.STRING), 0, List.of(), READING, Set.of()).values().isEmpty());
     }
 
@@ -116,7 +117,8 @@ class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
     @Test
     void aFloorIsStillOfferedTheValueTheTypeCanReach() {
         assertEquals(List.of("[true, false]"),
-                Witnesses.holding(position(new Type.SetOf(Type.BOOL)), 3, List.of(), READING, Set.of()).stream()
+                Witnesses.holding(position(new Type.SetOf(Type.BOOL)), 3, List.of(), READING, Set.of())
+                        .values().stream()
                         .map(FixtureTemplate::text).toList());
     }
 

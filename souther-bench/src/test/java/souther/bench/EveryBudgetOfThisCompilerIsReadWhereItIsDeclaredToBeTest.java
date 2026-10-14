@@ -391,11 +391,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.Generator#<clinit>()V",
                     "how many assignments a search composes"),
             Map.entry("souther.compiler.partition.Generator#conditioned("
-                            + "Lsouther/compiler/partition/MeasuredInput;"
                             + "Lsouther/compiler/partition/ConstructionPlan;Ljava/util/Map;"
                             + "Ljava/util/Map;"
                             + "Lsouther/compiler/partition/Generator$Composing;"
-                            + "Lsouther/compiler/partition/ConstructionRules;)"
+                            + "Lsouther/compiler/partition/ConditionedCandidates;)"
                             + "Lsouther/compiler/partition/Generator$Outcome;",
                     "the assignments a descent composes, marked where the bound is reached"),
             Map.entry("souther.compiler.partition.Generator#over("

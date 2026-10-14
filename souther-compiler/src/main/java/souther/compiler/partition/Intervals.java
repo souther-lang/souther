@@ -272,8 +272,11 @@ final class Intervals {
         TermRealizations.Realization made = TermRealizations.satisfying(type, orders, admits,
                 named, reading.region(), ruleReading);
         return switch (made) {
+            // With what building them met, which a realization says of its values as a whole, so
+            // it stands in front of them.
             case TermRealizations.Realization.Built built ->
-                    RepresentativeSource.of(built.values());
+                    RepresentativeSource.of(Proposals.of(built.values())
+                            .meeting(made.shortfall()));
             // Nothing writes one either way. That the rules leave no number of the class is more
             // than this says, and it is not this reader's to carry: what a representative is for
             // is standing in a class, and a class the rules leave nothing in has nothing to stand

@@ -201,7 +201,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
                 classes.add(each.label());
                 List<FixtureTemplate> made =
                         Partitions.standingFor(each.representatives(), ruleReading,
-                                java.util.Set.of());
+                                java.util.Set.of()).values();
                 stands.add(made.isEmpty() ? "none"
                         : made.stream().map(FixtureTemplate::text)
                                 .map(WhatARuleOnAStringIsMeasuredAtTest::bare).toList().toString());
