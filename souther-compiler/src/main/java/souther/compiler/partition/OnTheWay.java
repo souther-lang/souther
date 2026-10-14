@@ -8,6 +8,7 @@ import souther.compiler.meaning.WhyNotTaken;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -163,22 +164,75 @@ public sealed interface OnTheWay {
      * the ways are more than are looked along, a composer holding the statement whole composes a
      * row against all of them at once instead of along none ({@link Generator}).
      *
-     * @param alternatives what each alternative asks, in the order they are kept; two or more
-     * @param stated       the statement read, where one proposition says it
+     * <p><b>A class and not a record, for its hash.</b> An alternative holds conditions that are
+     * one of several things themselves, so the value is a tree as deep as the conditions inside
+     * one another, and it is a key wherever a way files what put it there
+     * ({@link SaidOnTheWay}). Worked out from the parts each time it is asked, the hash walks the
+     * whole tree at every filing; worked out once, it is the one a record would give.
      */
-    record OneOf(ConditionOccurrence condition, ConditionReportAnchor anchor,
-                 List<List<OnTheWay>> alternatives, Optional<Proposition> stated)
-            implements OnTheWay {
+    final class OneOf implements OnTheWay {
 
-        public OneOf {
+        private final ConditionOccurrence condition;
+        private final ConditionReportAnchor anchor;
+        private final List<List<OnTheWay>> alternatives;
+        private final Optional<Proposition> stated;
+        private final int hash;
+
+        /**
+         * The condition {@code condition}, come out one of {@code alternatives}.
+         *
+         * @param alternatives what each alternative asks, in the order they are kept; two or more
+         * @param stated       the statement read, where one proposition says it
+         */
+        public OneOf(ConditionOccurrence condition, ConditionReportAnchor anchor,
+                     List<List<OnTheWay>> alternatives, Optional<Proposition> stated) {
             if (condition == null || stated == null) {
                 throw new IllegalArgumentException(
                         "a condition of several ways is some condition the reading met");
             }
-            alternatives = alternatives.stream().map(List::copyOf).toList();
             if (alternatives.size() < 2) {
                 throw new IllegalArgumentException("one of several ways is two or more");
             }
+            this.condition = condition;
+            this.anchor = anchor;
+            this.alternatives = alternatives.stream().map(List::copyOf).toList();
+            this.stated = stated;
+            this.hash = Objects.hash(condition, anchor, this.alternatives, stated);
+        }
+
+        public ConditionOccurrence condition() {
+            return condition;
+        }
+
+        @Override
+        public ConditionReportAnchor anchor() {
+            return anchor;
+        }
+
+        public List<List<OnTheWay>> alternatives() {
+            return alternatives;
+        }
+
+        public Optional<Proposition> stated() {
+            return stated;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof OneOf that && hash == that.hash
+                    && condition.equals(that.condition) && Objects.equals(anchor, that.anchor)
+                    && alternatives.equals(that.alternatives) && stated.equals(that.stated));
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public String toString() {
+            return "OneOf[condition=" + condition + ", anchor=" + anchor + ", alternatives="
+                    + alternatives + ", stated=" + stated + "]";
         }
     }
 

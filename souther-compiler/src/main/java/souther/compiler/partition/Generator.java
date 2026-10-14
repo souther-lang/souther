@@ -780,7 +780,11 @@ public final class Generator {
                              PATHS_OF_A_DECISION_READ,
                              // It stops a reading of what a condition means, and what it stopped
                              // is carried as a part nothing read, naming it.
-                             READINGS_OF_ONE_CONDITION,
+                             READINGS_OF_ONE_CONDITION, TOTAL_READINGS_OF_ONE_CONDITION,
+                             PARTS_A_DERIVATION_CONCLUDES,
+                             // It stops what a path takes in of a condition, and what it stopped
+                             // is carried as a condition the path did not take in, naming it.
+                             ALTERNATIVES_A_PATH_TRIES,
                              // Past either the way is looked along whole, the row is composed
                              // either way, and what was not looked along is carried with the row's
                              // account.

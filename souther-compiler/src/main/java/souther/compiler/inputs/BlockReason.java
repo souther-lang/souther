@@ -2,11 +2,11 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.GuaranteeWalk;
 import souther.compiler.check.NonAffineOperation;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
-import souther.compiler.partition.CompositionBudget;
 import souther.compiler.values.TextExtents;
 import net.unit8.notation199x.pattern.Meter;
 
@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
@@ -284,12 +285,14 @@ public sealed interface BlockReason {
                 case SeveralLinesInOneRule _ -> 15;
                 case WhatItStatesIsNoLine(WhatItStatesIsNoLine.Why why) -> switch (why) {
                     case MORE_READINGS_THAN_ARE_MADE -> 16;
-                    case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> 17;
-                    case A_PART_NOT_READ -> 18;
-                    case A_NUMBER_NO_POSITION_HOLDS -> 19;
-                    case NO_RELATION_OF_NUMBERS -> 20;
+                    case MORE_TOTAL_READINGS_THAN_ARE_MADE -> 17;
+                    case MORE_PARTS_THAN_ARE_CONCLUDED -> 18;
+                    case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> 19;
+                    case A_PART_NOT_READ -> 20;
+                    case A_NUMBER_NO_POSITION_HOLDS -> 21;
+                    case NO_RELATION_OF_NUMBERS -> 22;
                 };
-                case RelationNotShownToReachEveryValue _ -> 21;
+                case RelationNotShownToReachEveryValue _ -> 23;
             };
         }
 
@@ -376,14 +379,9 @@ public sealed interface BlockReason {
                 // more of either need not stop at the same rule.
                 case PatternTooCostly _, OrderedExtentTooCostly _ -> RunSensitivity.MAY_CHANGE;
                 // And the readings of what a statement means, which stop at a figure only where
-                // they were declined at how many of them are made or how far a container they
-                // read is written out.
-                case WhatItStatesIsNoLine(var why) -> switch (why) {
-                    case MORE_READINGS_THAN_ARE_MADE, MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT ->
-                            RunSensitivity.MAY_CHANGE;
-                    case A_PART_NOT_READ, A_NUMBER_NO_POSITION_HOLDS, NO_RELATION_OF_NUMBERS ->
-                            RunSensitivity.UNAFFECTED;
-                };
+                // the part they declined stopped at one.
+                case WhatItStatesIsNoLine(var why) -> why.figure().isPresent()
+                        ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
                 // And every other, where nothing was compared against anything. A form nothing
                 // takes apart, values no line can be drawn on, a rule about a value made from this
                 // one, a rule about an element of one of several containers, a relation between two
@@ -419,15 +417,8 @@ public sealed interface BlockReason {
                 // and nothing hands it another ({@code TextExtents}), so which limit refused is
                 // the whole of what varies.
                 case OrderedExtentTooCostly it -> List.of(TextExtents.refusedAt(it.stopped()));
-                // Each of the two is one figure, declared where it is counted.
-                case WhatItStatesIsNoLine(var why) -> switch (why) {
-                    case MORE_READINGS_THAN_ARE_MADE ->
-                            List.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure());
-                    case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> List.of(
-                            WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(WrittenOutElements.MOST_WALKED));
-                    case A_PART_NOT_READ, A_NUMBER_NO_POSITION_HOLDS, NO_RELATION_OF_NUMBERS ->
-                            List.of();
-                };
+                // The figure the part it declined stopped at, which that part's reason says.
+                case WhatItStatesIsNoLine(var why) -> why.figure().map(List::of).orElseGet(List::of);
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                      RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
                      NonAffineArithmetic _,
@@ -1245,24 +1236,57 @@ public sealed interface BlockReason {
 
             /** A part read once for each application or case more times than the reading makes:
              *  a figure of this compiler's work was reached. */
-            MORE_READINGS_THAN_ARE_MADE,
+            MORE_READINGS_THAN_ARE_MADE(WhyUnread.PAST_THE_READINGS),
+
+            /** A part read once more where the reading had made as many readings in all, along
+             *  every way, as it makes: a figure of this compiler's work was reached, and not the
+             *  one above. */
+            MORE_TOTAL_READINGS_THAN_ARE_MADE(WhyUnread.PAST_THE_TOTAL_READINGS),
+
+            /** A part whose statement, written out, comes to more parts than a step of the reading
+             *  is concluded with: a figure of this compiler's work was reached, and not either of
+             *  the ones above. */
+            MORE_PARTS_THAN_ARE_CONCLUDED(WhyUnread.PAST_THE_PARTS),
 
             /** A part about a container holding more than a walk writes out: a figure of this
-             *  compiler's work was reached, and not the one above. */
-            MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT,
+             *  compiler's work was reached, and none of the ones above. */
+            MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT(WhyUnread.PAST_THE_ELEMENTS),
 
             /** Some other part of what it states was not read. */
-            A_PART_NOT_READ,
+            A_PART_NOT_READ(null),
 
             /** It relates a number no position of the input holds: a value the body works out,
              *  or what a run of values comes to. */
-            A_NUMBER_NO_POSITION_HOLDS,
+            A_NUMBER_NO_POSITION_HOLDS(null),
 
             /** It states which case, which truth or whether a value something other than the
              *  input's own positions holds, or what some element of a container meets — no
              *  relation of numbers at all. Said only of the input's positions, it is no reading
              *  that stopped ({@code Cutting.Read.StatesNoRelation}). */
-            NO_RELATION_OF_NUMBERS
+            NO_RELATION_OF_NUMBERS(null);
+
+            private final WhyUnread says;
+
+            /**
+             * A word, saying the reason {@code says} where it says one.
+             *
+             * @param says the reason that stopped at a figure this word says, or null where it says
+             *             none. The figure is the reason's ({@link WhyUnread#figure}) and not this
+             *             word's, so the two cannot name two figures.
+             */
+            Why(WhyUnread says) {
+                this.says = says;
+            }
+
+            /** The reason that stopped at a figure this word says, or null where it says none. */
+            public WhyUnread says() {
+                return says;
+            }
+
+            /** The figure the part was declined at, or none. */
+            public Optional<Figure> figure() {
+                return says == null ? Optional.empty() : says.figure();
+            }
         }
     }
 

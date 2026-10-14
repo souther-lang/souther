@@ -5,11 +5,13 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -67,6 +69,26 @@ class AChoiceOfWaysAnAnswerMeetsKeepsWhatWasLookedAtTest {
         assertEquals(new AnAnswerComposed.Ways.Unwritable(),
                 AnAnswerComposed.written(List.of(new DemandReading.Read.OneOf(
                         List.of(List.of(NO_WORDS), List.of(NO_OTHER_WORDS)), Optional.empty()))));
+    }
+
+    /**
+     * A part the reading gave up at a figure is stopped at that figure, whichever it is: each says
+     * the one somebody would raise, and none is a part no value is written toward.
+     */
+    @Test
+    void aPartGivenUpAtAFigureIsStoppedAtThatFigure() {
+        Map<WhyUnread, CompositionBudget> figures = Map.of(
+                new WhyUnread.MoreReadingsThanAreMade(),
+                CompositionBudget.READINGS_OF_ONE_CONDITION,
+                new WhyUnread.MoreTotalReadingsThanAreMade(),
+                CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION,
+                new WhyUnread.MorePartsThanAreConcluded(),
+                CompositionBudget.PARTS_A_DERIVATION_CONCLUDES);
+        figures.forEach((why, figure) -> assertEquals(
+                new AnAnswerComposed.Ways.Stopped(Set.of(figure)),
+                AnAnswerComposed.written(List.of(
+                        new DemandReading.Read.Unread(new WhyNotTaken.MeaningUnread(why)))),
+                why::toString));
     }
 
     /** That the number at {@code $answer.n} is at least {@code level}. */

@@ -96,6 +96,11 @@ class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
                         case WhyNotTaken.MoreWaysThanAreRead _ -> fail(() -> name
                                 + " coming out " + positive + " met a figure a path has no use"
                                 + " for: " + why);
+                        // A path's own figure, and no sample here holds as many parts as it
+                        // counts, so meeting it is a part taken alone that was not there.
+                        case WhyNotTaken.MoreAlternativesThanAreTried _ -> fail(() -> name
+                                + " coming out " + positive + " met a figure its parts do not"
+                                + " reach: " + why);
                     }
                 }
             }
