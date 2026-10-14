@@ -247,21 +247,23 @@ public sealed interface BlockReason {
          * <p><b>The whole of what one is, and not which kind it is.</b> A member that carries
          * something is two facts where what it carries differs, so an order over the kinds alone
          * leaves those wherever the walk put them — which is what the order is here to stop. So the
-         * kind is compared, and then whatever the kind holds.
+         * kind is compared, then the figures it stopped at, and then whatever else the kind holds.
          *
          * <p><b>Steady and nothing else.</b> What the result means is nothing beyond which comes
          * first, and it says nothing about what an author wrote: that is a fact about where the
          * rules stand and is asked where the places are ({@code AdequacyReport}). This is what
          * keeps one compiler over one source publishing one document where nobody wrote an order.
          *
-         * <p>A switch and no {@code default}, so a reason added to the vocabulary is placed by
-         * whoever adds it rather than arriving wherever the runtime happened to put it.
+         * <p>Two switches and no {@code default}, so a reason added to the vocabulary is placed and
+         * its components read by whoever adds it, rather than arriving wherever the runtime
+         * happened to put it. A component added to a member that is already here changes neither
+         * switch, and {@code ASteadyOrderTellsApartWhateverEqualityTellsApartTest} is what asks for
+         * it: it varies every component of every member.
          */
         Comparator<RuleReadingStopped> IN_A_STEADY_ORDER =
                 Comparator.<RuleReadingStopped>comparingInt(RuleReadingStopped::rank)
-                        // What a member carries that a second of its kind can differ in is the
-                        // figures it stopped at — the limit, and the number a run held it to.
-                        .thenComparing(RuleReadingStopped::figures, Figure::compare);
+                        .thenComparing(RuleReadingStopped::figures, Figure::compare)
+                        .thenComparing(RuleReadingStopped::byWhatItHolds);
 
         private static int rank(RuleReadingStopped reason) {
             return switch (reason) {
@@ -289,6 +291,30 @@ public sealed interface BlockReason {
                     case NO_RELATION_OF_NUMBERS -> 20;
                 };
                 case RelationNotShownToReachEveryValue _ -> 21;
+            };
+        }
+
+        /**
+         * Two of one kind, by what that kind holds that neither the rank nor the figures say.
+         *
+         * <p>Asked only where the ranks agree, so {@code other} is of the kind {@code one} is.
+         */
+        private static int byWhatItHolds(RuleReadingStopped one, RuleReadingStopped other) {
+            return switch (one) {
+                case NonAffineArithmetic(NonAffineOperation operation) ->
+                        operation.compareTo(((NonAffineArithmetic) other).operation());
+                case LineSideNotWorkedOut(UnheldNumber why) ->
+                        why.compareTo(((LineSideNotWorkedOut) other).why());
+                // Told apart before this is asked: a pattern and a machine by the figures they
+                // stopped at, and a statement that is no line by its rank.
+                case PatternTooCostly _, OrderedExtentTooCostly _, WhatItStatesIsNoLine _ -> 0;
+                case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
+                     RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
+                     ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
+                     EndLeftOpenByAChoice _,
+                     ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
+                     CasePairingNotDetermined _, SeveralLinesInOneRule _,
+                     RelationNotShownToReachEveryValue _ -> 0;
             };
         }
 
