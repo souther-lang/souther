@@ -40,8 +40,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AValueBehindANameIsMeasuredAsTheValueWrittenOutTest {
 
-    /** What one behavior's comparison was measured as, with the behavior's own name taken off. */
-    private record Measured(List<String> axes, List<String> unread, List<String> points) {}
+    /**
+     * What one behavior's comparison was measured as, with the behavior's own name taken off.
+     *
+     * @param states what each comparison of the body states, which is where a case compared with
+     *               the value is read: it draws no line, so the points say nothing of it
+     */
+    private record Measured(List<String> axes, List<String> unread, List<String> points,
+                            List<String> states) {}
 
     private static final String CASES = """
             module probe.named
@@ -213,24 +219,22 @@ class AValueBehindANameIsMeasuredAsTheValueWrittenOutTest {
                 "what a newtype the module declares wraps is the rows written in it");
     }
 
+    /**
+     * A case compared with the value states which case the value is, and a name standing for
+     * another position or for a value the input chooses is no case: what the comparison states is
+     * something else.
+     */
     @Test
     void aNameForAnotherPositionOrAChosenValueIsNoValueWrittenOut() {
         Map<String, Measured> read = measured(CASES);
-        assertNotEquals(read.get("written").points(), read.get("another").points(),
+        List<String> written = read.get("written").states();
+        assertEquals(List.of("s is Alice"), written,
+                "the case written out is which case the value is");
+        assertNotEquals(written, read.get("another").states(),
                 "a second position is not a case of the first: " + read.get("another"));
-        assertNotEquals(read.get("written").points(), read.get("chosen").points(),
+        assertNotEquals(written, read.get("chosen").states(),
                 "a value the input chooses between two cases is neither of them: "
                         + read.get("chosen"));
-    }
-
-    /** The other side of the line is told apart, so the cases above are told apart by where it
-     *  falls and not only by whether one was drawn. */
-    @Test
-    void aValueTheModuleSettlesAsAnotherCaseDrawsItsLineThere() {
-        Map<String, Measured> read = measured(CASES);
-        assertFalse(read.get("settled").points().isEmpty(), "read: " + read.get("settled"));
-        assertNotEquals(read.get("written").points(), read.get("settled").points(),
-                "a line at Bob is not the line at Alice: " + read.get("settled"));
     }
 
     /**
@@ -439,7 +443,8 @@ class AValueBehindANameIsMeasuredAsTheValueWrittenOutTest {
                 border.items().keySet().forEach(point ->
                         points.add(point.toString().replace(own, "")));
             });
-            out.put(behavior, new Measured(axes, unread, points));
+            out.put(behavior, new Measured(axes, unread, points,
+                    WhatTheComparisonsState.of(compilation, behavior)));
         });
         return out;
     }

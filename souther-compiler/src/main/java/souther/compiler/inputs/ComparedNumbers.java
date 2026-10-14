@@ -4,6 +4,7 @@ import souther.compiler.core.Core;
 
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * The comparisons of one body, each read once.
@@ -36,18 +37,23 @@ public final class ComparedNumbers {
 
     /** What each comparison came to and what it was read under, shared by every reader of one
      *  body. */
-    private final Map<Core.Binary, Read> said;
+    private final Map<Core.Binary, Read<ComparedNumber>> said;
 
-    private record Read(InputReads under, ComparedNumber said) { }
+    /** Which case each comparison asks a value to be, and what it was read under. */
+    private final Map<Core.Binary, Read<CaseCompared>> cases;
 
-    private ComparedNumbers(InputReading read, Map<Core.Binary, Read> said) {
+    private record Read<T>(InputReads under, T said) { }
+
+    private ComparedNumbers(InputReading read, Map<Core.Binary, Read<ComparedNumber>> said,
+                            Map<Core.Binary, Read<CaseCompared>> cases) {
         this.read = read;
         this.said = said;
+        this.cases = cases;
     }
 
     /** The comparisons of one body, read against {@code read}. */
     public static ComparedNumbers of(InputReading read) {
-        return new ComparedNumbers(read, new IdentityHashMap<>());
+        return new ComparedNumbers(read, new IdentityHashMap<>(), new IdentityHashMap<>());
     }
 
     /** The reading they were read against, for a reader that wants it beside them. */
@@ -65,7 +71,26 @@ public final class ComparedNumbers {
      * what the check below is comparing.
      */
     public ComparedNumber of(Core.Binary comparison, InputReads at) {
-        Read had = said.get(comparison);
+        return once(said, comparison, at, () -> ComparedNumber.of(comparison, read, at));
+    }
+
+    /**
+     * Which case of a sum {@code comparison} asks the value at a position to be where its names
+     * read {@code at}, or null where it is no such comparison ({@link CaseCompared}).
+     *
+     * <p>Read once and shared as {@link #of} is: the naming and the ways of a body meet the
+     * comparison at every run of the walk through it, and the reading looks the position's cases up
+     * in its declarations.
+     */
+    public CaseCompared caseOf(Core.Binary comparison, InputReads at) {
+        return once(cases, comparison, at, () -> CaseCompared.of(comparison, read, at));
+    }
+
+    /** What {@code kept} holds of {@code comparison}, read by {@code reading} the first time it is
+     *  asked — and refused where a second reader arrives under another environment. */
+    private static <T> T once(Map<Core.Binary, Read<T>> kept, Core.Binary comparison,
+                              InputReads at, Supplier<T> reading) {
+        Read<T> had = kept.get(comparison);
         if (had != null) {
             if (!had.under().equals(at)) {
                 throw new IllegalStateException(
@@ -75,8 +100,8 @@ public final class ComparedNumbers {
             }
             return had.said();
         }
-        ComparedNumber made = ComparedNumber.of(comparison, read, at);
-        said.put(comparison, new Read(at, made));
+        T made = reading.get();
+        kept.put(comparison, new Read<>(at, made));
         return made;
     }
 }
