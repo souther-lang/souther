@@ -59,6 +59,12 @@ class ASteadyOrderTellsApartWhateverEqualityTellsApartTest {
     }
 
     @Test
+    void aReasonSaidAboutASite() {
+        assertEquals(List.of(), whereItIsNoOrder(RuleReasons.Said.IN_A_STEADY_ORDER,
+                values.of(RuleReasons.Said.class)));
+    }
+
+    @Test
     void aSiteInARule() {
         assertEquals(List.of(), whereItIsNoOrder(RuleSite.IN_A_STEADY_ORDER,
                 values.of(RuleSite.class)));

@@ -247,7 +247,7 @@ public sealed interface BlockReason {
          * <p><b>The whole of what one is, and not which kind it is.</b> A member that carries
          * something is two facts where what it carries differs, so an order over the kinds alone
          * leaves those wherever the walk put them — which is what the order is here to stop. So the
-         * kind is compared, then the figures it stopped at, and then whatever else the kind holds.
+         * kind is compared, and then whatever the kind holds.
          *
          * <p><b>Steady and nothing else.</b> What the result means is nothing beyond which comes
          * first, and it says nothing about what an author wrote: that is a fact about where the
@@ -262,7 +262,6 @@ public sealed interface BlockReason {
          */
         Comparator<RuleReadingStopped> IN_A_STEADY_ORDER =
                 Comparator.<RuleReadingStopped>comparingInt(RuleReadingStopped::rank)
-                        .thenComparing(RuleReadingStopped::figures, Figure::compare)
                         .thenComparing(RuleReadingStopped::byWhatItHolds);
 
         private static int rank(RuleReadingStopped reason) {
@@ -295,7 +294,7 @@ public sealed interface BlockReason {
         }
 
         /**
-         * Two of one kind, by what that kind holds that neither the rank nor the figures say.
+         * Two of one kind, by what that kind holds.
          *
          * <p>Asked only where the ranks agree, so {@code other} is of the kind {@code one} is.
          */
@@ -305,9 +304,12 @@ public sealed interface BlockReason {
                         operation.compareTo(((NonAffineArithmetic) other).operation());
                 case LineSideNotWorkedOut(UnheldNumber why) ->
                         why.compareTo(((LineSideNotWorkedOut) other).why());
-                // Told apart before this is asked: a pattern and a machine by the figures they
-                // stopped at, and a statement that is no line by its rank.
-                case PatternTooCostly _, OrderedExtentTooCostly _, WhatItStatesIsNoLine _ -> 0;
+                case PatternTooCostly(List<Figure> stoppedAt) ->
+                        Figure.compare(stoppedAt, ((PatternTooCostly) other).stoppedAt());
+                // By the figure the limit that refused it stands at, as a pattern is.
+                case OrderedExtentTooCostly _ -> Figure.compare(one.figures(), other.figures());
+                // The rank says which statement it is.
+                case WhatItStatesIsNoLine _ -> 0;
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                      RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
                      ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
