@@ -40,7 +40,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class APositionSaysHowFarTheBodyTellsItsClassesApartTest {
 
-    /** Five cases the body never asks about: the line says the body tells none of them apart. */
+    /**
+     * Five cases the body carries into its answer and never asks about: the line says the body
+     * reads the position and tells none of them apart.
+     */
     @Test
     void aPositionTheBodyTellsNothingApartIsSaidToBe() {
         String human = report("""
@@ -53,22 +56,23 @@ class APositionSaysHowFarTheBodyTellsItsClassesApartTest {
                 data Banned
                 data Refusal = TooShort | TooLong | WrongCase | Repeated | Banned
 
-                data Ok = { n: Int }
+                data Ok = { n: Int, why: Refusal }
 
                 behavior judge : (why: Refusal, n: Int) -> Ok
                     constructs Ok
 
                 let judge (why, n) = {
-                    guard n > 10 else Ok { n = 0 }
-                    Ok { n = 1 }
+                    guard n > 10 else Ok { n = 0, why = why }
+                    Ok { n = 1, why = why }
                 }
 
                 example judge
-                    | (TooShort, 5)  -> Ok { n = 0 }
-                    | (TooLong, 50)  -> Ok { n = 1 }
+                    | (TooShort, 5)  -> Ok { n = 0, why = TooShort }
+                    | (TooLong, 50)  -> Ok { n = 1, why = TooLong }
                 """);
 
-        assertTrue(human.contains("why holds 5 classes and this behavior does not tell them apart"),
+        assertTrue(human.contains("why holds 5 classes and this behavior reads it without telling"
+                        + " them apart"),
                 () -> "the cases are classes and the body looks at none of them: " + human);
     }
 

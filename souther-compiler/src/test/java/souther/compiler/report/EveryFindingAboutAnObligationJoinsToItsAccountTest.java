@@ -102,7 +102,8 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
             behavior both : (left: Flag, right: Flag) -> Res
                 constructs Res
 
-            let both (left, right) = Res { n = 1 }
+            let both (left, right) =
+                match left with | Yes | No -> match right with | Yes | No -> Res { n = 1 }
 
             example both
                 | "both say yes" : (Yes, Yes) -> Res { n = 1 }
@@ -159,7 +160,7 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
             behavior only : (flag: Flag) -> Res
                 constructs Res
 
-            let only (flag) = Res { n = 1 }
+            let only (flag) = match flag with | Yes | No -> Res { n = 1 }
 
             example only
                 | "yes" : (Yes) -> Res { n = 1 }

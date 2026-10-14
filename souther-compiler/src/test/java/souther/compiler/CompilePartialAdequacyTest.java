@@ -142,7 +142,8 @@ class CompilePartialAdequacyTest {
                 behavior take : (request: Draft) -> Ok
                     constructs Ok
 
-                let take (request) = Ok { n = request.cost.value }
+                let take (request) =
+                    match request.flag with | Yes | No -> Ok { n = request.cost.value }
 
 
                 let someItems (n: Int): List<Item> =

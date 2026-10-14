@@ -496,6 +496,11 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + " and the walk goes on into it and meets the one under it");
         row(out, c + "check/RecursionOverAList", "callsOf", "(" + core + "L" + c
                         + "types/ValueName$Helper;Ljava/util/List;)V", 1, GOES_ON_INTO_IT);
+        row(out, c + "inputs/InputUses$Walk", "fieldOf", "(" + core + ")" + core, 1,
+                "what a node takes a field off, asked of the node a walk stands at: a Widen takes"
+                        + " none and is walked on into, where the access it holds is met");
+        row(out, c + "inputs/InputUses$Walk", "heldWithoutReading",
+                "(" + core + "L" + c + "inputs/InputReads;)" + core, 2, GOES_ON_INTO_IT);
         row(out, c + "inputs/InputReads", "walkNames",
                 "(" + core + "Ljava/util/Set;Ljava/util/Set;)V", 1, COUNTS_THROUGH_IT);
         row(out, c + "inputs/InputReads", "readsAnApplied", "(" + core + "L" + c

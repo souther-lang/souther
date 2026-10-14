@@ -84,12 +84,12 @@ class AMeasureWithNoNumberSaysWhyTest {
             data Flag = Yes | No
             data Ask = { flag: Flag }
 
-            behavior classify : (q: Ask) -> Res
-                constructs Res
-            let classify (q) = Res { n = 1 }
+            behavior classify : (q: Ask) -> Ask
+                constructs Ask
+            let classify (q) = Ask { flag = q.flag }
 
             example classify
-                | (Ask { flag = Yes }) -> Res { n = 1 }
+                | (Ask { flag = Yes }) -> Ask { flag = Yes }
 
             data Pair = { left: Flag, right: Flag }
 
@@ -259,7 +259,8 @@ class AMeasureWithNoNumberSaysWhyTest {
                     border      not applicable (the rules of this behavior draw no line)
                     branch      not applicable (this body owes no arm)
                     decision    rules 1   taken 1
-                    replacement 0/0
+                    replacement 0/1
+                      ! no row would come out differently if the body answered one value
                   sift                     implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   axes 2   equivalence partitions 0/0   (2 not measured: no row names this behavior)
@@ -291,7 +292,7 @@ class AMeasureWithNoNumberSaysWhyTest {
 
                 7 behaviors: 6 implemented, 0 unimplemented, 1 injected; 0 rows waiting for a `let`.
                 adequacy: not satisfied
-                7 gaps marked `!`: what a strict build refuses over.
+                8 gaps marked `!`: what a strict build refuses over.
                 """, human());
     }
 

@@ -44,7 +44,7 @@ class APositionOffersASecondValueWhereItsRangeIsNotCertifiedTest {
 
                 behavior f : (r: R, flag: Bool) -> Ok
 
-                let f (r, flag) = Ok
+                let f (r, flag) = if flag then Ok else Ok
                 """.replace("CLAUSE", clause);
         Path file = Files.createTempDirectory("souther-uncertified").resolve("model.sou");
         Files.writeString(file, model);
@@ -120,7 +120,7 @@ class APositionOffersASecondValueWhereItsRangeIsNotCertifiedTest {
 
                 behavior f : (r: R, flag: Bool) -> Ok
 
-                let f (r, flag) = Ok
+                let f (r, flag) = if flag then Ok else Ok
                 """;
         Path file = Files.createTempDirectory("souther-bare").resolve("model.sou");
         Files.writeString(file, model);
@@ -164,7 +164,7 @@ class APositionOffersASecondValueWhereItsRangeIsNotCertifiedTest {
 
                 behavior f : (pair: Pair, flag: Bool) -> Ok
 
-                let f (pair, flag) = Ok
+                let f (pair, flag) = if flag then Ok else Ok
                 """;
         Path file = Files.createTempDirectory("souther-halfopen").resolve("model.sou");
         Files.writeString(file, model);
