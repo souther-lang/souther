@@ -11,7 +11,6 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.ValueDefinitions;
-import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.query.Adequacy;
@@ -64,22 +63,27 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
                     "m", new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0));
 
     /**
-     * A comparison of two positions standing on no order is declined, and says which shortfall it
-     * is.
+     * A comparison of two positions standing on no order is two values a row writes, and narrows
+     * no region.
      *
-     * <p>Not the word for a reading that fell short and not the word for a rule that constrains
-     * nothing: this rule was read from end to end and constrains both of the positions it names.
-     * What is missing is an order to measure them on, which is where an author looks.
+     * <p>A difference between two records is a distance on nothing, so it is no relation a region
+     * carries — and the rule was read from end to end all the same: the two hold one value or two,
+     * which is what a row is composed to write at them, as a truth a row writes at a {@code Bool}
+     * is. Taken in as that, and never as a relation, so no account reads it as something the
+     * search was narrowed by.
      */
     @Test
-    void aComparisonOverPositionsWithNoOrderIsDeclined() {
+    void aComparisonOverPositionsWithNoOrderIsTwoValuesToWriteAndNarrowsNoRegion() {
         for (boolean holding : List.of(true, false)) {
-            OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
+            OnTheWay.TakenIn taken = assertInstanceOf(OnTheWay.TakenIn.class,
                     only("recordsAreEqual", holding),
-                    "a difference between two records is a distance on nothing, so no search was"
-                            + " narrowed by it");
-            assertEquals(List.of(new WhyNotTaken.OutsideDomain(
-                    WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER)), declined.whys());
+                    "the two hold one value or two, which a row writes");
+            RowDemand.OneValueAtBoth both = assertInstanceOf(RowDemand.OneValueAtBoth.class,
+                    taken.demand(), "and not a relation a region carries");
+            assertEquals(holding, both.same());
+            SearchRegion before = regionOf("recordsAreEqual");
+            assertSame(before, new WayToTheBorder(List.of(taken)).narrowing(before),
+                    "and the region is left where it was");
         }
     }
 

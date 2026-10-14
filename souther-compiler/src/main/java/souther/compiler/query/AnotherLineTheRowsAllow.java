@@ -1112,6 +1112,13 @@ public sealed interface AnotherLineTheRowsAllow {
                             return false;
                         }
                     }
+                    // Whether two positions hold one value, which a step moving a number of
+                    // either may change.
+                    case OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth both) -> {
+                        if (movesAnyOf(both.positions())) {
+                            return false;
+                        }
+                    }
                     // A statement no composer writes toward, which a step moving any number may
                     // turn: which numbers it turns on is the run's to say.
                     case OnTheWay.TakenIn(var _, RowDemand.ForTheRun _) -> {

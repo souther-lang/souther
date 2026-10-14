@@ -67,6 +67,11 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.Generator.NOT_HERE",
                     "no position, which is what an index that found none is"),
 
+            // How many values make one of them not another's, which is a count the question
+            // settles and not how far anything looks.
+            Map.entry("souther.compiler.partition.Generator.OneValueAtBothHeld.VALUES_OFFERED_APART",
+                    "two values apart, one of which is not the value another position holds"),
+
             // How much of a number is written down, which bounds a value's shape and not a search:
             // any length is sound while the rounding goes outward, so nothing is left unlooked at.
             Map.entry("souther.compiler.partition.LevelRealizer.DIGITS_A_DERIVED_END_KEEPS",

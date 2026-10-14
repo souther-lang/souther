@@ -5242,7 +5242,8 @@ public final class Generator {
         ContentsAsked asked = ContentsAsked.of(reaching.boundedOnTheWay(), numbers);
         CompositionOrder order;
         switch (CompositionOrder.of(parametersOf(subject), asked)) {
-            case CompositionOrder.Result.Ordered(CompositionOrder ordered) -> order = ordered;
+            case CompositionOrder.Result.Ordered(CompositionOrder ordered) ->
+                    order = ordered.relating(oneValueAtBoth(reaching.boundedOnTheWay()));
             case CompositionOrder.Result.Circular circular -> {
                 return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
                         UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
@@ -5704,6 +5705,8 @@ public final class Generator {
             // for.
             FoundOut found = new FoundOut();
             CandidateCheck certified = certifying(check, subject, p, standing, found);
+            OneValueAtBothHeld held = new OneValueAtBothHeld(subject, p,
+                    oneValueAtBoth(reaching.boundedOnTheWay()), composedBefore(next));
             Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
             // Every location the row has been asked to write, and not only the ones a number
             // stands at: a truth the way asks for is written and stands at no place.
@@ -5728,6 +5731,15 @@ public final class Generator {
             List<ParameterCameToNothing> cameToNothing = new ArrayList<>();
             boolean[] passed = {false};
             ValueTaking taking = value -> {
+                // A value two positions are asked to hold one value at, or two, and this one does
+                // not: passed over for the next, which is what a value to look further for is.
+                String apart = held.notHeldBy(value.value());
+                if (apart != null) {
+                    cameToNothing.add(new ParameterCameToNothing(p, new Outcome.Unresolved(
+                            UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, apart),
+                            SearchShortfall.NONE, Map.of()));
+                    return Acceptance.PASSED;
+                }
                 composed[p] = value.value();
                 after[0] = from(next + 1, elsewhere.and(value.read()));
                 return switch (after[0]) {
@@ -5752,6 +5764,19 @@ public final class Generator {
             Outcome tried = valueAt(subject, p, here, sizesUnder(decided,
                             TermPath.of(head)), settled, reaching.requirements(),
                     new Handed(contents, elsewhere), certified, found, taking);
+            // Where every value offered was passed over for not holding what two positions are
+            // asked to hold, once more with the position offered values of its own type apart
+            // from one another — or, to be one with a whole value composed before, that value. A
+            // position whose type has no order to step along is offered one value ordinarily,
+            // and one value is never two.
+            if (tried instanceof Outcome.PassedOver && !passed[0]) {
+                Map<TermPath, List<FixtureTemplate>> offered = held.offering(here);
+                if (offered != null) {
+                    tried = valueAt(subject, p, offered, sizesUnder(decided, TermPath.of(head)),
+                            settled, reaching.requirements(), new Handed(contents, elsewhere),
+                            certified, found, taking);
+                }
+            }
             return switch (tried) {
                 // Taken where the rest was composed with it.
                 case Outcome.Built _ -> after[0];
@@ -5781,6 +5806,17 @@ public final class Generator {
                                                 here),
                                         cameToNothing), found.shortfall()));
             };
+        }
+
+        /** The value of each parameter composed before the {@code next}-th in the order, by its
+         *  declared position, and null at every other. */
+        private List<FixtureTemplate> composedBefore(int next) {
+            FixtureTemplate[] out = new FixtureTemplate[composed.length];
+            for (int at = 0; at < next; at++) {
+                int p = order.order().get(at);
+                out[p] = composed[p];
+            }
+            return Arrays.asList(out);
         }
 
         /**
@@ -6306,7 +6342,7 @@ public final class Generator {
                         CountedElements.of(subject.behavior(), many.count(), subject.quantities(),
                                 many.anElementMeeting())).writeRoot());
                 case RowDemand.Exists _, RowDemand.ForAll _, RowDemand.ATruth _,
-                     RowDemand.ForTheRun _ -> { }
+                     RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ -> { }
             }
         }
         Map<OnTheWay.TakenIn, ElementBound> out = new LinkedHashMap<>();
@@ -6554,6 +6590,9 @@ public final class Generator {
             // Passed over before it is asked: it places no number ({@link #placesNoNumber}).
             case RowDemand.ATruth truth -> throw new IllegalArgumentException(
                     "a truth is written where the row is composed and placed nowhere: " + truth);
+            case RowDemand.OneValueAtBoth both -> throw new IllegalArgumentException(
+                    "two values being one are written where the row is composed and placed"
+                            + " nowhere: " + both);
             // Taken in beside the rest, as a demand on the container ({@link #alsoOnTheWay}).
             case RowDemand.SoMany many -> throw new IllegalArgumentException(
                     "a count is composed where its container is and placed nowhere: " + many);
@@ -6588,7 +6627,7 @@ public final class Generator {
             case RowDemand.Exists exists -> exists.counted();
             case RowDemand.ForAll every -> every.counted();
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                 RowDemand.ForTheRun _ -> Optional.empty();
+                 RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ -> Optional.empty();
         };
     }
 
@@ -6598,7 +6637,7 @@ public final class Generator {
             case RowDemand.Exists exists -> exists.container();
             case RowDemand.ForAll every -> every.container();
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                 RowDemand.ForTheRun _ -> null;
+                 RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ -> null;
         };
     }
 
@@ -6623,6 +6662,8 @@ public final class Generator {
             case RowDemand.Exists exists -> exists.relations().isEmpty();
             case RowDemand.ForAll every -> every.relations().isEmpty();
             case RowDemand.ATruth _ -> true;
+            // Two values on no order, which are written where the row is composed.
+            case RowDemand.OneValueAtBoth _ -> true;
             // A count, which places a count of the container and the numbers beside an element.
             case RowDemand.SoMany _ -> false;
             // A statement no composer writes toward, which places nothing.
@@ -7483,6 +7524,119 @@ public final class Generator {
         SearchShortfall shortfall() {
             return found;
         }
+    }
+
+    /** What {@code way} asks two positions to hold one value at, or two. */
+    private static List<RowDemand.OneValueAtBoth> oneValueAtBoth(List<OnTheWay.TakenIn> way) {
+        List<RowDemand.OneValueAtBoth> out = new ArrayList<>();
+        for (OnTheWay.TakenIn each : way) {
+            if (each.demand() instanceof RowDemand.OneValueAtBoth both) {
+                out.add(both);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What the way asks of two positions holding one value, or two, as a value of one parameter is
+     * held to it: the value at a position of it one with the value at the other position, or not,
+     * where that one is of this value or of one composed before it.
+     *
+     * <p>Held to and not written, because which value a position of a record or a case of a sum
+     * holds is what the parameter's own walk chooses: a value that does not hold what is asked is
+     * passed over, and the walk offers the next — displaced to another value where every one it
+     * offered ordinarily was passed over, which is what looking for a different value is. Two
+     * values are one where they are written alike under the names a row wraps them in, which is
+     * what tells two elements apart as well ({@link Witnesses#holdApart}). Where either is not
+     * written out down to the position, nothing is passed over and the run says whether they were.
+     *
+     * @param parameter the parameter being composed, by its declared position
+     * @param asked     what the way asks two positions to hold
+     * @param before    each parameter's value composed before this one, by its declared position,
+     *                  and null at every other
+     */
+    private record OneValueAtBothHeld(MeasuredInput subject, int parameter,
+                                      List<RowDemand.OneValueAtBoth> asked,
+                                      List<FixtureTemplate> before) {
+
+        /** How many values apart a position is offered: two, since of two different values one
+         *  is not the value another position holds, whatever that is. */
+        private static final int VALUES_OFFERED_APART = 2;
+
+        /** What {@code candidate}, as this parameter's value, does not hold of what is asked, or
+         *  null where it holds all of it. */
+        String notHeldBy(FixtureTemplate candidate) {
+            for (RowDemand.OneValueAtBoth both : asked) {
+                Hir.Expr one = valueOf(both.one(), candidate);
+                Hir.Expr other = valueOf(both.other(), candidate);
+                boolean aboutThis = isThis(both.one()) || isThis(both.other());
+                if (aboutThis && one != null && other != null
+                        && one.equals(other) != both.same()) {
+                    return "`" + both.one() + "` and `" + both.other() + "` are to hold "
+                            + (both.same() ? "one value" : "two values")
+                            + ", and the value tried here does not";
+                }
+            }
+            return null;
+        }
+
+        /**
+         * {@code here}, with a position of this parameter that one of what is asked is about
+         * offered values to choose from: the whole value composed before where it is to be one
+         * with that, and otherwise values of its type apart from one another, one of which is not
+         * the other's. Null where no position here is one to offer anything at.
+         */
+        Map<TermPath, List<FixtureTemplate>> offering(Map<TermPath, List<FixtureTemplate>> here) {
+            Map<TermPath, List<FixtureTemplate>> out = new LinkedHashMap<>(here);
+            boolean added = false;
+            for (RowDemand.OneValueAtBoth both : asked) {
+                TermPath mine = isThis(both.other()) ? both.other()
+                        : isThis(both.one()) ? both.one() : null;
+                TermPath theirs = mine == null ? null : both.besides(mine);
+                List<String> run = mine == null ? null : fieldsOf(mine);
+                if (run == null || out.containsKey(mine)
+                        || (!isThis(theirs) && valueOf(theirs, null) == null)) {
+                    continue;
+                }
+                int of = subject.parameters().indexOf(theirs.head());
+                List<FixtureTemplate> values = both.same() && !isThis(theirs)
+                        && theirs.steps().isEmpty() && run.isEmpty()
+                        ? List.of(before.get(of))
+                        : Witnesses.valuesApartAt(subject.types().get(parameter), run,
+                                VALUES_OFFERED_APART, subject.ruleReading()).values();
+                if (!values.isEmpty()) {
+                    out.put(mine, values);
+                    added = true;
+                }
+            }
+            return added ? out : null;
+        }
+
+        private boolean isThis(TermPath at) {
+            return at.head().equals(subject.parameters().get(parameter));
+        }
+
+        /** The value at {@code at}, of {@code candidate} where it is a position of this parameter
+         *  and of the value composed before where it is one of that. */
+        private Hir.Expr valueOf(TermPath at, FixtureTemplate candidate) {
+            int of = subject.parameters().indexOf(at.head());
+            FixtureTemplate value = isThis(at) ? candidate : of < 0 ? null : before.get(of);
+            List<String> run = fieldsOf(at);
+            return value == null || run == null ? null : Witnesses.valueAt(value.value(), run);
+        }
+    }
+
+    /** The fields {@code at} steps through from its parameter, or null where it takes any other
+     *  step. */
+    private static List<String> fieldsOf(TermPath at) {
+        List<String> out = new ArrayList<>();
+        for (TermPath.Step step : at.steps()) {
+            if (!(step instanceof TermPath.Step.Field(var name))) {
+                return null;
+            }
+            out.add(name);
+        }
+        return out;
     }
 
     /**

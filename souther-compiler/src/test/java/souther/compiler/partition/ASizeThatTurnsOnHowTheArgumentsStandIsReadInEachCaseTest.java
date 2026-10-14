@@ -89,7 +89,8 @@ class ASizeThatTurnsOnHowTheArgumentsStandIsReadInEachCaseTest {
                     yield rel.holds(sum.signum());
                 }
                 case RowDemand.Relational _, RowDemand.Exists _, RowDemand.ForAll _,
-                     RowDemand.ATruth _, RowDemand.SoMany _, RowDemand.ForTheRun _ ->
+                     RowDemand.ATruth _, RowDemand.SoMany _, RowDemand.OneValueAtBoth _,
+                     RowDemand.ForTheRun _ ->
                         throw new AssertionError("a size is asked as numbers are: " + asked);
             };
             case OnTheWay.OneOf one -> one.alternatives().stream()

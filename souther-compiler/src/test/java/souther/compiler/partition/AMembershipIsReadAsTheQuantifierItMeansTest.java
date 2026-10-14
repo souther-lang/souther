@@ -133,7 +133,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                     case RowDemand.Exists some -> some.container();
                     case RowDemand.ForAll every -> every.container();
                     case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                         RowDemand.ForTheRun _ ->
+                         RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ ->
                             throw new AssertionError("a membership is some element or every one: "
                                     + asked);
                 };
@@ -143,7 +143,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                     case RowDemand.Exists some -> some.holdingOne();
                     case RowDemand.ForAll every -> every.holdingNone();
                     case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                         RowDemand.ForTheRun _ ->
+                         RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ ->
                             throw new AssertionError("a membership is some element or every one: "
                                     + asked);
                 };
@@ -209,7 +209,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                     case RowDemand.Exists some -> some.ofAnElement().theWay();
                     case RowDemand.ForAll every -> every.ofEachElement().theWay();
                     case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                         RowDemand.ForTheRun _ -> List.of();
+                         RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ -> List.of();
                 };
                 assertTrue(ofAnElement.stream().noneMatch(one ->
                                 one.equals(new RowDemand.SameAs(wanted))
