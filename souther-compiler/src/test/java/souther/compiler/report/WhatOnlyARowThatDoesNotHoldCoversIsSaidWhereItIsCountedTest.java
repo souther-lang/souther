@@ -168,7 +168,9 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
     void aRowWaitingForItsAnswerIsAnotherRow() {
         String human = human(FAILING.replace("    | \"10 is cold\" : (Celsius(10)) -> Cold\n",
                 "    | \"24 again\" : (Celsius(24)) -> <?>\n"));
-        assertFalse(human.contains("OFF point (comparison@5:28): label"), human);
+        assertEquals(List.of(), marked(human), human);
+        assertTrue(human.contains("1 row does not hold:"),
+                () -> "and the row at 24 still does not hold: " + human);
     }
 
     /**
@@ -238,7 +240,7 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
 
         String withAnother = PAIRS + "    | \"metered, at 200\" : (Metered, Usage(200))"
                 + " -> Fee(800)\n";
-        assertFalse(human(withAnother).contains("~ only a row that does not hold is in `Metered`"),
+        assertTrue(marked(human(withAnother)).stream().noneMatch(line -> line.contains(" with ")),
                 withAnother);
         assertFalse(behavior(json(withAnother), "charge").get("partition").get("pairs")
                 .get("between").get(0).has("coveredOnlyBy"));
@@ -293,8 +295,8 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
                 .get("interaction")), MEETINGS);
 
         String withAnother = MEETINGS + "    | (Total(6000), Standard, Express) -> Fee(500)\n";
-        assertFalse(human(withAnother).contains("makes this combination of the decisions:"),
-                withAnother);
+        assertTrue(marked(human(withAnother)).stream()
+                .noneMatch(line -> line.contains("combination of the decisions")), withAnother);
         assertEquals(0, onlyWitnessedByIn(behavior(json(withAnother), "shippingFee")
                 .get("interaction")), withAnother);
     }
@@ -351,8 +353,8 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
                 "    | \"cheap\" : (Amount(50)) -> Submitted { cost = Amount(50) }\n",
                 "    | \"cheap\" : (Amount(50)) -> Submitted { cost = Amount(50) }\n"
                         + "    | \"dear\" : (Amount(200)) -> Waiting { cost = Amount(200) }\n");
-        assertFalse(human(withAnother, "classify").contains(
-                "~ only a row that does not hold goes through `else`"), withAnother);
+        assertTrue(marked(human(withAnother, "classify")).stream()
+                .noneMatch(line -> line.contains("goes through `else`")), withAnother);
     }
 
     /** A helper read under both arms of a body, so each of its arms is one arm at two places. */
@@ -403,8 +405,8 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
         assertTrue(human.contains("~ only a row that does not hold goes through `case Off`"),
                 human);
         String withAnother = TWICE + "    | \"safe off\"  : (Safe, Off)  -> X\n";
-        assertFalse(human(withAnother).contains(
-                "~ only a row that does not hold goes through `case Off`"), withAnother);
+        assertTrue(marked(human(withAnother)).stream()
+                .noneMatch(line -> line.contains("goes through `case Off`")), withAnother);
     }
 
     /** A type whose line is owed by its declaration, and one behavior's row is all that stands at
@@ -464,7 +466,9 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
     @Test
     void aRowAtTheSamePointThroughAnotherReadingIsAnotherRow() {
         String human = human(CARRIED.replace("UserId(\"abcd\")", "UserId(\"y\")"));
-        assertFalse(human.contains("~ only a row that does not hold is at the ON point"), human);
+        // The one rule of `schedule` its only row takes, and not the point.
+        assertEquals(List.of("      ~ only a row that does not hold takes a decision rule:"
+                + " schedule at the boundary (19:7)"), marked(human), human);
         assertTrue(human.contains("1 row does not hold:"), human);
     }
 

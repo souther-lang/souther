@@ -46,8 +46,8 @@ public enum RowFailure {
     }
 
     /**
-     * Where a failed row stopped. Every place but these ends a row undecided, so a row that failed
-     * anywhere else is two of this compiler's answers disagreeing about what failing is.
+     * Where a failed row stopped. A row's outcome holds a failed row to a place a row can fail at
+     * ({@link FailurePhase#failsARow()}), so the others are not a failed row's and are refused.
      */
     public static RowFailure of(FailurePhase phase) {
         return switch (phase) {
@@ -58,8 +58,9 @@ public enum RowFailure {
             case INVOCATION -> INVOCATION;
             case COMPARISON -> COMPARISON;
             case NONE, ANSWERER_ESTABLISHMENT, IMPLEMENTATION_NOT_MADE, VALUE_CROSSING, STEP_LIMIT,
-                 DEPTH_LIMIT, TIMEOUT, STACK_EXHAUSTED -> throw new IllegalStateException(
-                    "a row that failed stopped where a row ends undecided: " + phase);
+                 DEPTH_LIMIT, TIMEOUT, STACK_EXHAUSTED -> throw new IllegalArgumentException(
+                    "a row can fail at none of these, and a failed row's outcome says so: "
+                            + phase);
         };
     }
 }
