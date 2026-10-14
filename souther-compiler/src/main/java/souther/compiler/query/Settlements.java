@@ -130,8 +130,10 @@ public record Settlements(List<ObligationIdentity> requested,
                 }
                 // Nothing kept is shown to settle it, and the row composed for it is what a person
                 // was offered there — the one piece of work anybody was handed, whether or not its
-                // reading could tell.
-                if (at == null && composedKept) {
+                // reading could tell. Asked of the row and not of its input: a kept row that settles
+                // the line and stands at no input the line's reading names is still the row for it,
+                // and the row composed for it, kept for something else, does not take its place.
+                if (row == null && composedKept) {
                     row = composed;
                     at = composedAt.get(item);
                 }

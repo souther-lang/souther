@@ -13,6 +13,7 @@ import souther.compiler.partition.QuantityKey;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 
@@ -129,6 +130,38 @@ class TheInputShownForALineIsTheOneTheOfferedRowStandsAtTest {
         assertEquals("x = 2, y = 5", table.shownFor(kept).get(LINE).at().orElseThrow().said(),
                 "the line is shown where the row that rules it out stands, and not where the row"
                         + " composed for it and kept for something else does");
+    }
+
+    /**
+     * The same, where the row that rules the line out stands at no input the line's reading names
+     * — as a row at a point in a region does not. It is still the row for the line: which row is
+     * handed for a line and whether its input there can be said are two questions, and a row
+     * standing nowhere nameable does not hand the line to the row composed for it, which does not
+     * rule it out.
+     */
+    @Test
+    void aKeptRowThatSettlesTheLineAtNoNameableInputIsStillTheRowForIt() {
+        ObligationIdentity other = new ObligationIdentity.OfABorder(
+                TheLinesBesideABorder.aLineOverTwoPositions().obligation(),
+                aDirection(-1));
+        SequencedMap<ObligationIdentity, RowKey> composedFor = new LinkedHashMap<>();
+        composedFor.put(LINE, COMPOSED_FOR_IT);
+        SequencedMap<RowKey, Map<ObligationIdentity, Settlement>> byRow = new LinkedHashMap<>();
+        byRow.put(COMPOSED_FOR_IT,
+                Map.of(LINE, new Settlement.DoesNotSettle(), other, new Settlement.Settles()));
+        byRow.put(COMPOSED_FOR_SOMETHING_ELSE,
+                Map.of(LINE, new Settlement.Settles(), other, new Settlement.DoesNotSettle()));
+        Settlements table = new Settlements(List.of(LINE, other), composedFor, byRow,
+                new LinkedHashMap<>(), Map.of(LINE, standing(1, 3)));
+
+        Set<RowKey> kept = table.keeping();
+        assertEquals(Set.of(COMPOSED_FOR_IT, COMPOSED_FOR_SOMETHING_ELSE), kept,
+                "each row is the only one settling one of the two items, so both are kept");
+        Settlements.Shown shown = table.shownFor(kept).get(LINE);
+        assertEquals(COMPOSED_FOR_SOMETHING_ELSE, shown.rowKey(),
+                "the line is the row's that rules it out, though no input of it can be said");
+        assertEquals(Optional.empty(), shown.at(),
+                "and no input is named for it, rather than the input of the row that does not");
     }
 
     /** And a line no kept row is offered for is a line nothing here names a place for. */

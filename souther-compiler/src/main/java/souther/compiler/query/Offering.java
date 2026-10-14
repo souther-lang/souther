@@ -100,7 +100,8 @@ public final class Offering {
 
     /**
      * The input of the row a person is handed for {@code item}'s line, or null where no row here is
-     * offered for it.
+     * offered for it — or where one is and stands at no input the line's reading names, as a row
+     * at a point in a region does not. Which row it is, either way, is {@link #linesShownAt}'s.
      *
      * <p>The one place a report may name for such a line. What a search composed is a candidate and
      * what is left after the reduction is the work, and only the second of those is in front of a
