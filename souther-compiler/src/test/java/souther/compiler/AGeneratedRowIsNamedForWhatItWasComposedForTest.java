@@ -134,13 +134,16 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         assertEquals(4, rows(block),
                 "two rows for the classes and two at the points of the border:\n" + block);
 
-        // Two of the four classes are named, and the two that are not are where the named rows
-        // stand: the row at the top of the range holds the first tier, and the row for the other
-        // tier holds the bottom of the range. A row is named for what it was composed for, so
-        // neither name moves onto the row that answers it — what a class is offered under is the
-        // row a person writes, and which class that row also settles is in the report.
-        assertEquals(List.of("request.cost=100 < x", "request.tier=Silver"),
-                offered.stream().sorted().toList(), block);
+        // Two of the four classes are offered a row, each said over it rather than named: the row
+        // over the ceiling was composed for the decision rule the class is reached by as well, the
+        // row for the other tier is the one handed for a point of the amount's line, and a row for
+        // several things is named for none. The two classes neither is offered for are where the
+        // offered rows stand: the row at the top of the range holds the first tier, and the row for
+        // the other tier holds the bottom of the range. No class moves onto the row that answers
+        // it — which class that row also settles is in the report.
+        assertEquals(List.of(), offered, block);
+        assertTrue(offeredFor(block).containsAll(
+                List.of("request.cost=100 < x", "request.tier=Silver")), block);
 
         Set<String> distinct = new LinkedHashSet<>(offered);
         assertEquals(offered.size(), distinct.size(),
@@ -184,8 +187,8 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
      */
     @Test
     void whatIsOfferedBesideItIsAllowedToChange() {
-        List<String> before = names(block(LIMIT));
-        List<String> after = names(block(AND_A_ROW));
+        List<String> before = offeredFor(block(LIMIT));
+        List<String> after = offeredFor(block(AND_A_ROW));
 
         assertTrue(before.contains("request.tier=Silver"),
                 "the class the row was written for was owed: " + before);

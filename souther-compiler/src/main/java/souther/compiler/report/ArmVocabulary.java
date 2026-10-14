@@ -1,7 +1,9 @@
 package souther.compiler.report;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.OutcomeName;
 import souther.compiler.coverage.SourceOutcome;
+import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
@@ -31,7 +33,18 @@ public final class ArmVocabulary {
      * nothing the day one of them was reworded.
      */
     public static String label(CoverageSites.Site arm) {
-        return switch (arm.outcome()) {
+        return label(arm.construct(), arm.outcome());
+    }
+
+    /**
+     * The same word for an outcome of a construct, where no site of it is in hand.
+     *
+     * <p>An arm is a construct and an outcome whether or not a run through it is recorded, and a
+     * sibling an arm is rewritten as is often one nothing records. Both readers come here, so an
+     * arm a rewrite names and the same arm a branch line names are one word.
+     */
+    public static String label(SourceConstruct construct, SourceOutcome outcome) {
+        return switch (outcome) {
             case SourceOutcome.Matched(List<TypeSymbol> cases) -> "case " + namesOf(cases);
             // The word the author put the departure under, and the clause where they named one. The
             // name of this outcome is `departure`, which says what happened rather than what is
@@ -40,7 +53,7 @@ public final class ArmVocabulary {
                     clause.map(c -> "else " + c).orElse("else");
             case SourceOutcome.Compared(var op) -> op.toString();
             case SourceOutcome.Held _, SourceOutcome.Failed _ ->
-                    arm.name().name().toLowerCase(Locale.ROOT);
+                    OutcomeName.of(construct, outcome).name().toLowerCase(Locale.ROOT);
         };
     }
 

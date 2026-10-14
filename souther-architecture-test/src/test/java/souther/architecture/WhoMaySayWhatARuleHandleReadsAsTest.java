@@ -2,6 +2,7 @@ package souther.architecture;
 
 import souther.architecture.ARosterWrittenByName.Told;
 import souther.compiler.publish.DocumentArray;
+import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.report.Subject;
 
 import tools.jackson.databind.node.ObjectNode;
@@ -78,9 +79,18 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
     private static final Told THE_FINDINGS_OF_THE_DOCUMENT =
             Told.takingA(REPORT, "findings", 0, DocumentArray.class);
 
+    /**
+     * The block's words for a point of a body's line, which a finding about the point and a row
+     * handed for it both ask. The other {@code about} of the block says a finding and hands a
+     * point to this one.
+     */
+    private static final Told SAID_OF_A_POINT =
+            Told.takingA(ROWS, "about", 0, BorderObligationPointAssessment.class);
+
     private static final List<Told> TOLD_APART = List.of(PARTITION_IN_PROSE,
             PARTITION_IN_THE_DOCUMENT, INSIDE_THE_PARTITION_IN_PROSE,
-            INSIDE_THE_PARTITION_IN_THE_DOCUMENT, SAID_OF_A_SUBJECT, THE_FINDINGS_OF_THE_DOCUMENT);
+            INSIDE_THE_PARTITION_IN_THE_DOCUMENT, SAID_OF_A_SUBJECT, THE_FINDINGS_OF_THE_DOCUMENT,
+            SAID_OF_A_POINT);
 
     /**
      * Every class that asks what a handle reads as outside a document, and why it may.
@@ -99,7 +109,7 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
             INSIDE_THE_PARTITION_IN_PROSE.spelt(),
             PARTITION_IN_PROSE.spelt(),
             SAID_OF_A_SUBJECT.spelt(),
-            ROWS + "#about",
+            SAID_OF_A_POINT.spelt(),
             // And the same block saying which rule gave the offer no value, which is the same
             // reader meeting the same rule: told that a search was short of what the rules leave
             // and not told which rule, they have every rule of the position to look at.

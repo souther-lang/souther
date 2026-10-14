@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.MeasureReason;
+import souther.compiler.observe.RowRef;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
@@ -114,16 +115,21 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
     }
 
     /** One rewrite, where a report about it is shown, and what the rows came to about it. */
-    public record Rewrite(Replacement replacement, ReplacementReportAnchor reportAt,
+    public record Rewrite(ReplacementAsWritten written, ReplacementReportAnchor reportAt,
                           Outcome outcome) {
 
         public Rewrite {
-            Objects.requireNonNull(replacement, "a rewrite is some rewrite");
+            Objects.requireNonNull(written, "a rewrite is some rewrite");
             Objects.requireNonNull(reportAt, "and is shown somewhere");
             Objects.requireNonNull(outcome, "a rewrite says what the rows came to about it");
-            if (!reportAt.shows(replacement)) {
-                throw new IllegalArgumentException(replacement + " is not shown at " + reportAt);
+            if (!reportAt.shows(written.replacement())) {
+                throw new IllegalArgumentException(written + " is not shown at " + reportAt);
             }
+        }
+
+        /** Which rewrite this is. */
+        public Replacement replacement() {
+            return written.replacement();
         }
     }
 
@@ -154,11 +160,17 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
     /** Which row shows a rewrite answering differently from the body. */
     public sealed interface ShownBy {
 
-        /** A row the module writes: its run under the rewrite answered differently. */
-        record AWrittenRow(RowIdentity identity) implements ShownBy {
+        /**
+         * A row the module writes: its run under the rewrite answered differently.
+         *
+         * @param rowRef which row, with the source it is written in: a row written without a name
+         *               is numbered within its source, and two sources each have a first row.
+         *               Where it is written is asked by whoever sends a reader there
+         */
+        record AWrittenRow(RowRef rowRef) implements ShownBy {
 
             public AWrittenRow {
-                Objects.requireNonNull(identity, "a written row is some row");
+                Objects.requireNonNull(rowRef, "a written row is some row");
             }
         }
 

@@ -547,6 +547,11 @@ public final class Compilation {
 
     /** The id of the source that declares {@code module}, or null when nothing here does. */
     public SourceId sourceIdOf(String module) {
+        return sourceIdOf(db, module);
+    }
+
+    /** The same, asked of {@code db} by a reader that holds the store and not the compilation. */
+    public static SourceId sourceIdOf(Db db, String module) {
         Front.Layout.Of layout = db.ask(new Front.Layout()).value();
         return layout == null ? null : layout.idOfModule().get(module);
     }
