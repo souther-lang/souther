@@ -163,7 +163,7 @@ class ASteadyOrderTellsApartWhateverEqualityTellsApartTest {
 
     private record Kept(StoppedReading reason, boolean twice) {
 
-        private Kept {
+        Kept {
             Objects.requireNonNull(reason, "kept for some reason");
         }
     }
