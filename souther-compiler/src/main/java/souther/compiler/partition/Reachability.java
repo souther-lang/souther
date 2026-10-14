@@ -5,6 +5,7 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -73,9 +74,7 @@ public sealed interface Reachability {
                         // it is not taken to have met it.
                         case OneOfEach.Way.LeftUnchosen<OnTheWay>(var chosen, var unchosen) ->
                                 reaching(new WayToTheBorder(chosen), declarations).splitAs(
-                                        new Ways.Whole(unchosen.stream()
-                                                .map(OnTheWay.OneOf.class::cast).toList(),
-                                                stoppedBy, List.of()));
+                                        new Ways.Whole(unchosen, stoppedBy, List.of()));
                     });
                 }
                 // Every way a row takes is among them, so a search looking along each looks
@@ -134,7 +133,7 @@ public sealed interface Reachability {
 
     /**
      * Whether a way is looked along as each of the ways a condition of several ways on it splits
-     * it into ({@link OnTheWay.OneOf}).
+     * it into ({@link OnTheWay#alternatives}).
      *
      * <p>Three answers and not a list that is sometimes empty. A way not split because nothing on
      * it came out one of several ways, and one not split because they were more than are looked
@@ -192,13 +191,14 @@ public sealed interface Reachability {
          * @param along   the ways the figure let through that some row may take, looked along
          *                before the way whole; none where every one of them was closed
          */
-        record Whole(List<OnTheWay.OneOf> unsplit, CompositionBudget figure, List<Reaching> along)
+        record Whole(List<OnTheWay> unsplit, CompositionBudget figure, List<Reaching> along)
                 implements Ways {
 
             public Whole {
                 unsplit = List.copyOf(unsplit);
                 along = List.copyOf(along);
-                if (unsplit.isEmpty() || figure == null) {
+                if (unsplit.isEmpty() || figure == null
+                        || !unsplit.stream().allMatch(OnTheWay::ofSeveralWays)) {
                     throw new IllegalArgumentException("a way looked along whole past a figure has"
                             + " a condition of several ways on it, and a figure it met");
                 }
@@ -264,6 +264,40 @@ public sealed interface Reachability {
         Reaching splitAs(Ways split) {
             return new Reaching(region, requirements, truths, boundedOnTheWay, split, declined);
         }
+
+        /**
+         * The cases this takes a row through, with the ones each of {@code items} is written
+         * under — or the first item written under a case this does not take.
+         *
+         * <p>A row is one value, so what the way says and where an item's numbers are written are
+         * one set of cases. A line read at a name the cases of a sum share is read under each case,
+         * and the way to it may take a row through only some of them — or, split at the cases a
+         * narrowing leaves, through one of them along each way. Asked before anything is composed
+         * for the item, so that a reading off the way is the model's answer about it and not a
+         * search that tried values and came to nothing.
+         */
+        public Written writing(Collection<? extends RealizationTarget> items) {
+            Requirements required = requirements;
+            for (RealizationTarget each : items) {
+                if (!(required.merge(each.writeRoot().requirements())
+                        instanceof Requirements.Merge.Merged(Requirements both))) {
+                    return new Written.OffTheWay(each);
+                }
+                required = both;
+            }
+            return new Written.Under(required);
+        }
+    }
+
+    /** Where an item is written, against the cases a way takes a row through
+     *  ({@link Reaching#writing}). */
+    sealed interface Written {
+
+        /** Every item is written under a case the way takes, and these are the cases together. */
+        record Under(Requirements required) implements Written {}
+
+        /** {@code item} is written under a case the way does not take. */
+        record OffTheWay(RealizationTarget item) implements Written {}
     }
 
     /**
