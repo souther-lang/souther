@@ -257,7 +257,7 @@ public final class LinesWhereTheyFall {
             // nobody meant. What an author is owed is the pairing, and it is said here.
             // The line is what has nowhere to go: the rule was read, an end came out of it, and
             // which of the positions it runs between is what nothing worked out.
-            noLine.boundaryUndetermined(line.by().cited(),
+            noLine.boundaryUndetermined(line.by().cited(), line.by().readAt(),
                     new FilingCoordinate.OfTerm(filed.getFirst().name()),
                     new BlockReason.CasePairingNotDetermined());
             return;

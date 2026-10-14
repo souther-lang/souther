@@ -242,7 +242,7 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
 
     private static WeakeningSet ruleWithoutALine(RuleCitation cited) {
         return of(new Weakening.ModelReadingIncomplete(ClosureGap.QuestionUnanswered.of(
-                StandingQuestion.NothingClassifiesIt.of(cited,
+                StandingQuestion.NothingClassifiesIt.of(cited, List.of(),
                         new FilingCoordinate.AtPosition(TermPath.of("x")),
                         new BlockReason.UnreadComparisonForm()))));
     }

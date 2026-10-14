@@ -341,7 +341,7 @@ public sealed interface AnotherLineTheRowsAllow {
              */
             ExactAnswer<Ends> with(OrderedAffineBoundary drawn, Map<NumericTerm, Place> values) {
                 return drawn.satisfies(values).flatMap(modelKeeps ->
-                        OrderedAffineBoundary.along(direction.direction(), values)
+                        OrderedAffineBoundary.along(direction, values)
                                 .map(at -> withAt(modelKeeps, at)));
             }
 
@@ -964,7 +964,7 @@ public sealed interface AnotherLineTheRowsAllow {
         // of the exact arithmetic's reach, this stepping composes no partings for this row — the
         // same as a row the reduction below already skips for want of one. Fewer candidate inputs is
         // what every caller here already reads a gap this way, never a claim the model has none.
-        ExactRatio at = OrderedAffineBoundary.along(ends.direction().direction(), values).orNull();
+        ExactRatio at = OrderedAffineBoundary.along(ends.direction(), values).orNull();
         ExactRatio apart = at == null ? null : toward.minus(at).orNull();
         BigInteger truncated = apart == null ? null
                 : apart.dividedBy(moves).flatMap(ExactRatio::truncated).orNull();

@@ -15,8 +15,9 @@ import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.RulesTaken;
 import souther.compiler.partition.RunPlacement;
+import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.partition.ShownBy;
-import souther.compiler.partition.WayToTheBorder;
+import souther.compiler.partition.RuleStep;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
@@ -48,7 +49,8 @@ class ARunThatAnsweredAConditionBothWaysTookNoOneRuleTest {
             let f (xs) = List.map(x -> if x > 0 then 1 else 0, xs)
             """;
 
-    private static final ConditionOccurrence AT = new ConditionOccurrence("f", 0);
+    private static final ConditionOccurrence AT =
+            new ConditionOccurrence("f", ConditionOccurrence.Reading.DECIDING, 0);
 
     private static final DecisionCondition.AConditionNotRead CONDITION =
             new DecisionCondition.AConditionNotRead(AT,
@@ -107,11 +109,11 @@ class ARunThatAnsweredAConditionBothWaysTookNoOneRuleTest {
             List<DecisionReading.Ruled> found = new ArrayList<>();
             for (int i = 0; i < taken.length; i++) {
                 found.add(new DecisionReading.Ruled(taken[i],
-                        List.of(new ShownBy.AtAnArm(fork, partOf(taken[i]))),
-                        WayToTheBorder.UNTOUCHED, AnswersDemanded.NOTHING, true));
+                        List.of(new RuleStep(new ShownBy.AtAnArm(fork, partOf(taken[i])),
+                                List.of(), AnswersDemanded.NOTHING, SaidOnTheWay.NONE)), true));
             }
             return new RunPlacement(RulesTaken.of(new DecisionReading("f", found,
-                    new DecisionReading.Enumeration.Complete()),
+                    new DecisionReading.Enumeration.Complete(), Map.of()),
                     checked.behaviorBodies().get("f"), plan), inputs);
         }
 

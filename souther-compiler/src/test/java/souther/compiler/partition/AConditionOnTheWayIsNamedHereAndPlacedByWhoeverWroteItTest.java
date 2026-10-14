@@ -262,8 +262,10 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
      */
     @Test
     void aValueThatNamesOneConditionAndReportsAnotherIsRefused() {
-        ConditionOccurrence declined = new ConditionOccurrence("b", 0);
-        ConditionOccurrence reported = new ConditionOccurrence("b", 1);
+        ConditionOccurrence declined =
+                new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0);
+        ConditionOccurrence reported =
+                new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 1);
         assertThrows(IllegalArgumentException.class, () -> new OnTheWay.Declined(declined,
                 new ConditionReportAnchor.WhereTheReadingMetIt("m", reported),
                 new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER)));

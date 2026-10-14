@@ -12,6 +12,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
 import souther.compiler.query.RuleSettlement;
+import souther.compiler.query.SettledAt;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
@@ -360,7 +361,8 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
 
         Set<CompositionBudget> said = new HashSet<>();
         for (RuleSettlement each : compilation.db()
-                .ask(new Adequacy.DecisionSearch(module, "f")).value().values()) {
+                .ask(new Adequacy.DecisionSearch(module, "f")).value().values().stream()
+                .map(SettledAt::settlement).toList()) {
             for (DemandGap gap : each.account().onAnAnswer()) {
                 if (gap instanceof DemandGap.Uncomposed(var _,
                         DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded(var figures))) {
@@ -450,7 +452,8 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
 
         List<DemandGap.WhyNotComposed> said = new ArrayList<>();
         Collection<RuleSettlement> rules = compilation.db()
-                .ask(new Adequacy.DecisionSearch(module, "f")).value().values();
+                .ask(new Adequacy.DecisionSearch(module, "f")).value().values().stream()
+                .map(SettledAt::settlement).toList();
         for (RuleSettlement each : rules) {
             for (DemandGap gap : each.account().onAnAnswer()) {
                 if (gap instanceof DemandGap.Uncomposed(AnswerDemand.AStatement _, var why)) {
@@ -505,7 +508,8 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
 
         List<DemandGap.WhyNotComposed> said = new ArrayList<>();
         for (RuleSettlement each : compilation.db()
-                .ask(new Adequacy.DecisionSearch(module, "f")).value().values()) {
+                .ask(new Adequacy.DecisionSearch(module, "f")).value().values().stream()
+                .map(SettledAt::settlement).toList()) {
             for (DemandGap gap : each.account().onAnAnswer()) {
                 if (gap instanceof DemandGap.Uncomposed(AnswerDemand.AStatement _, var why)) {
                     said.add(why);
@@ -573,7 +577,8 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
         String module = compilation.modules().getFirst();
 
         for (RuleSettlement each : compilation.db()
-                .ask(new Adequacy.DecisionSearch(module, "f")).value().values()) {
+                .ask(new Adequacy.DecisionSearch(module, "f")).value().values().stream()
+                .map(SettledAt::settlement).toList()) {
             assertInstanceOf(RuleRequirement.Required.class, each.requirement(),
                     () -> "a row for each rule: " + each);
             assertEquals(List.of(), each.account().onTheWay(),
@@ -676,7 +681,8 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
         String module = compilation.modules().getFirst();
         List<RowToRun> rows = new ArrayList<>();
         for (RuleSettlement each : compilation.db()
-                .ask(new Adequacy.DecisionSearch(module, "f")).value().values()) {
+                .ask(new Adequacy.DecisionSearch(module, "f")).value().values().stream()
+                .map(SettledAt::settlement).toList()) {
             if (each.requirement() instanceof RuleRequirement.Required(RowToRun row)) {
                 rows.add(row);
             }

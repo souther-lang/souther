@@ -32,7 +32,8 @@ class AWayThatLeftAChoiceUnchosenSaysItWasNotSplitAtItTest {
     private static final int ASKED_OF_Q = 12;
 
     private static final ConditionReportAnchor WHERE =
-            new ConditionReportAnchor.WhereTheReadingMetIt("m", new ConditionOccurrence("f", 0));
+            new ConditionReportAnchor.WhereTheReadingMetIt("m",
+                    new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 0));
 
     @Test
     void eachWayLookedAlongIsNotSplitAtTheChoiceLeft() {
@@ -61,8 +62,9 @@ class AWayThatLeftAChoiceUnchosenSaysItWasNotSplitAtItTest {
 
     private static OnTheWay.OneOf oneOf(int occurrence, List<OnTheWay> one,
                                         List<OnTheWay> other) {
-        return new OnTheWay.OneOf(new ConditionOccurrence("f", occurrence), WHERE,
-                List.of(one, other), Optional.empty());
+        return new OnTheWay.OneOf(
+                new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, occurrence),
+                WHERE, List.of(one, other), Optional.empty());
     }
 
     private static OnTheWay truth(String field, boolean held) {

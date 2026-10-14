@@ -197,7 +197,7 @@ final class Pullback {
         }
 
         /** The spelling of each part {@code stated} turns on, either way round, into {@code into}. */
-        private static void partsOf(Proposition stated, Set<String> into) {
+        static void partsOf(Proposition stated, Set<String> into) {
             switch (stated) {
                 case Proposition.Always _ -> { }
                 case Proposition.Unread unread when unread.fixed() -> { }

@@ -309,8 +309,8 @@ final class AReportOfOneBorder {
                         null, null, null, null),
                 new souther.compiler.query.RowSummary(List.of()),
                 souther.compiler.query.ClaimAnnotations.NONE, List.of(), java.util.Map.of(),
-                java.util.Map.of(), rulePlaces(lines), java.util.Map.of(), java.util.Map.of(),
-                Map.of(), Map.of());
+                AdequacyReport.ConditionsShown.NONE, rulePlaces(lines), java.util.Map.of(),
+                java.util.Map.of(), Map.of(), Map.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", WeakeningSet.none(),
                 List.of(new AdequacyReport.ModuleReport("example.wide",
                         new SourceId("wide.sou"), List.of(behavior), List.of(),
@@ -318,7 +318,7 @@ final class AReportOfOneBorder {
                         // them went without: the fixture is about one behavior's own lines.
                         new AdequacyReport.DeclarationsShown(
                                 new Adequacy.DeclaredBoundaries(List.of(), java.util.Map.of()),
-                                Map.of(), Map.of(), Map.of()))))
+                                AdequacyReport.ConditionsShown.NONE, Map.of(), Map.of()))))
                 .adequacy();
     }
 

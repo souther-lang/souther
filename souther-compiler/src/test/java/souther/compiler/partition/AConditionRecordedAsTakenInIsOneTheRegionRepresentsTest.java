@@ -61,7 +61,7 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
     /** The anchor a report would name a hand-written condition by, which nothing here asks about. */
     private static final ConditionReportAnchor WHERE =
             new ConditionReportAnchor.WhereTheReadingMetIt(
-                    "m", new ConditionOccurrence("b", 0));
+                    "m", new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0));
 
     /**
      * A comparison of two positions standing on no order is declined, and says which shortfall it
@@ -216,8 +216,9 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
 
         List<OnTheWay> stating(boolean holding) {
             return ReachingCuts.stating(Condition.of(body, reads, rules.symbols(),
-                    rules.newtypes(), new ConditionNumbering(module, behavior)), read, holding,
-                    WhatConditionsState.of(read));
+                    rules.newtypes(), new ConditionNumbering(module, behavior,
+                            ConditionOccurrence.Reading.DIVIDING)), read, holding,
+                    WhatConditionsState.of(read)).entries();
         }
     }
 

@@ -451,6 +451,18 @@ public final class Sites {
     }
 
     /**
+     * The same, as an answer that may be missing.
+     *
+     * <p>For a reader naming a construct it did not choose: the calls a copy was made through are
+     * whatever the model's code wrote, and a call in a file this compilation does not hold is still
+     * a call the copy was made at.
+     */
+    public static Citation placeIfKnown(Db db, SourceConstructOrigin origin) {
+        Answer<Citation> at = wroteIt(db, origin);
+        return at.present() ? at.value() : null;
+    }
+
+    /**
      * Where a report about one part of a rule points.
      *
      * <p>Asked here and not carried in what the reading decided. Which part of which clause it is
@@ -582,10 +594,17 @@ public final class Sites {
         return at.present() ? at.value() : null;
     }
 
-    /** Where the reading of {@code condition}'s body met it, as an answer that may be missing. */
+    /**
+     * Where the reading of {@code condition}'s body met it, as an answer that may be missing.
+     *
+     * <p>Asked of the reading that named it. Each reading counts the conditions of a body in its own
+     * order, so a number looked up in the other's places is some other condition's place.
+     */
     private static Answer<Citation> metIn(Db db, String module, ConditionOccurrence condition) {
-        Answer<Map<ConditionOccurrence, Citation>> met =
-                db.ask(new Adequacy.ConditionsMet(module, condition.behavior()));
+        Answer<Map<ConditionOccurrence, Citation>> met = db.ask(switch (condition.reading()) {
+            case DIVIDING -> new Adequacy.ConditionsMet(module, condition.behavior());
+            case DECIDING -> new Adequacy.ConditionsDecidedMet(module, condition.behavior());
+        });
         if (!met.present()) {
             return Answer.absent();
         }

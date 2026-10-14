@@ -5,7 +5,6 @@ import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.Observation;
 import souther.compiler.meaning.WhyNotTaken;
-import souther.compiler.partition.AnswersDemanded;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionCondition;
@@ -13,7 +12,6 @@ import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.RulesTaken;
 import souther.compiler.partition.RunPlacement;
-import souther.compiler.partition.WayToTheBorder;
 
 import java.util.List;
 import java.util.Map;
@@ -58,10 +56,11 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
     /** A rule that turns on one condition this reading has no words for, so it is not
      *  {@link #NO_DISTINCTION} and a finding about one is not a finding about the other. */
     private static final DecisionRule ONE_DISTINCTION = new DecisionRule(Map.of(
-            new DecisionCondition.AConditionNotRead(new ConditionOccurrence("decides", 0),
-                    ON_NO_ORDER),
+            new DecisionCondition.AConditionNotRead(new ConditionOccurrence(
+                    "decides", ConditionOccurrence.Reading.DECIDING, 0), ON_NO_ORDER),
             new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
-                    new ConditionOccurrence("decides", 0), ON_NO_ORDER),
+                    new ConditionOccurrence("decides", ConditionOccurrence.Reading.DECIDING, 0),
+                    ON_NO_ORDER),
                     true)));
 
     @Test
@@ -144,13 +143,12 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
     }
 
     private static DecisionReading.Ruled ruled(DecisionRule rule, boolean whole) {
-        return new DecisionReading.Ruled(rule, List.of(), WayToTheBorder.UNTOUCHED,
-                AnswersDemanded.NOTHING, whole);
+        return new DecisionReading.Ruled(rule, List.of(), whole);
     }
 
     private static DecisionReading reading(DecisionReading.Ruled... found) {
         return new DecisionReading("decides", List.of(found),
-                new DecisionReading.Enumeration.Complete());
+                new DecisionReading.Enumeration.Complete(), Map.of());
     }
 
     /** What the rows of {@code read} took where nobody wrote a row, as the account makes it. */

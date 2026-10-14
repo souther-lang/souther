@@ -74,9 +74,10 @@ class ARuleNothingCouldComposeARowForIsSaidAndNotDroppedTest {
     void thePageSaysWhatTheSearchCameToAtTheRuleItSettledNothingAbout() {
         List<String> decision = decisionSection(human(TWO_CALLS));
 
-        assertTrue(decision.stream().anyMatch(line -> line.contains(
-                        "nothing could show a row can be written at 1 decision rule")),
-                () -> "the way needing two answers is counted as one nothing settled: "
+        assertEquals(1, decision.stream().filter(line -> line.startsWith(
+                        "      ? nothing could show a row can be written at a decision rule"))
+                        .count(),
+                () -> "the way needing two answers is the one rule nothing settled: "
                         + decision);
         assertTrue(decision.stream().anyMatch(line ->
                         line.contains("answer by what it was applied to")),
@@ -85,9 +86,10 @@ class ARuleNothingCouldComposeARowForIsSaidAndNotDroppedTest {
 
     @Test
     void theCountCloses() {
-        // Over the shapes a rule can be in and not over one model. The page enumerates what an
-        // author can act on and counts the rest under the reason each came to, so what is held is
-        // that the numbers add up to the ways the body has — not that there is a line apiece.
+        // Over the shapes a rule can be in and not over one model. The page writes an entry for
+        // each rule owed a row and each rule nothing settled, and counts the rules the model owes
+        // no row under the reason each came to, so what is held is that the entries and the counts
+        // add up to the ways the body has.
         for (String model : List.of(TWO_CALLS, REFUSED, bothWays("On"), bothWays("Off"))) {
             List<String> decision = decisionSection(human(model));
             String headline = decision.get(0);
@@ -95,11 +97,13 @@ class ARuleNothingCouldComposeARowForIsSaidAndNotDroppedTest {
             int taken = Integer.parseInt(headline.replaceAll(".*taken +(\\d+).*", "$1"));
             int findings = (int) decision.stream()
                     .filter(line -> line.contains("no row takes a decision rule")).count();
+            int unsettled = (int) decision.stream()
+                    .filter(line -> line.startsWith("      ? nothing could show a row")).count();
             int gathered = gatheredIn(decision);
 
-            assertEquals(rules - taken, findings + gathered,
-                    () -> "the ways no row took are the findings and what is counted beside"
-                            + " them: " + decision);
+            assertEquals(rules - taken, findings + unsettled + gathered,
+                    () -> "the ways no row took are the findings, the rules nothing settled and"
+                            + " what is counted beside them: " + decision);
         }
     }
 

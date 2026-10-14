@@ -1,11 +1,14 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 
 /**
@@ -27,13 +30,23 @@ import java.util.TreeMap;
  * is outside the other, so turning a form round is not free; what settles the direction is done
  * before this, where a comparison is read ({@link AffineReading}).
  *
+ * <p>Held with its terms in their order ({@link NumericTerms}), which is the order a row is read
+ * along it. What a row comes to along a direction is asked once per row, and a direction put in
+ * order where it is made is not put in order again by each of them. Two keys are equal whatever
+ * order their maps were filled in, so the order is no part of which quantity this is.
+ *
  * @param direction the coefficients with their common divisor taken out, which is the smallest form
  *                  that runs this way
  */
 public record QuantityKey(Map<NumericTerm, ExactRatio> direction) {
 
     public QuantityKey {
-        direction = Map.copyOf(direction);
+        Map<NumericTerm, ExactRatio> ordered = new LinkedHashMap<>();
+        for (NumericTerm term : NumericTerms.inOrder(direction.keySet())) {
+            ordered.put(term, Objects.requireNonNull(direction.get(term),
+                    () -> "a direction weighs each of its terms by something: " + term));
+        }
+        direction = Collections.unmodifiableMap(ordered);
     }
 
     /**

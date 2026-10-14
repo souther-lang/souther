@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.check.CoverageObligation;
+import souther.compiler.types.ModelOccurrence;
 import souther.compiler.diag.Citation;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ReadingPolicy;
@@ -251,7 +252,8 @@ final class Coverages {
         // question says, and where it says it is what the reading got to rather than what the fork
         // is about.
         sets.forks().forEach(each ->
-                each.filed().forEach((at, why) -> found.unclassified(each.cited(), at, why)));
+                each.filed().forEach((at, why) ->
+                        found.unclassified(each.cited(), List.of(), at, why)));
         return clauses.noLine().and(guards.noLine()).and(filed.noLine()).and(found.found());
     }
 
@@ -977,8 +979,11 @@ final class Coverages {
                                 border.border().label(point)))
                         : item);
             }
+            // And who put on the way what the search went along, which is what says at which calls
+            // of a helper a reader meets what the search went without.
             out.add(new BorderAssessment(border.border(), items, border.beside(),
-                    tellingApart(border, search)));
+                    tellingApart(border, search), border.readAt(),
+                    reaching.saidOnTheWayTo(border.border().origin())));
         }
         return new LineReadings(out);
     }
@@ -1789,12 +1794,17 @@ final class Coverages {
         for (DomainPoint point : a.items().keySet()) {
             kept.put(point, together(a.at(point), b.at(point)));
         }
+        List<ModelOccurrence> readAt = new ArrayList<>(a.readAt());
+        b.readAt().stream().filter(copy -> !readAt.contains(copy)).forEach(readAt::add);
         return new BorderAssessment(a.border(), kept, besides(a.beside(), b.beside()),
                 // Both readings' searches and neither standing for the other. A row is composed in
                 // one reading's region and at the positions that reading names, so the reading
                 // travels with it — folded to one here, a row would arrive beside the other
                 // reading's line and its input would be read at positions that line has none of.
-                a.toldApart().and(b.toldApart()));
+                a.toldApart().and(b.toldApart()),
+                // And both readings' copies, which is what tells the calls of a helper that read
+                // one line apart, and what put things on each one's way.
+                readAt, a.saidOnTheWay().and(b.saidOnTheWay()));
     }
 
     /**

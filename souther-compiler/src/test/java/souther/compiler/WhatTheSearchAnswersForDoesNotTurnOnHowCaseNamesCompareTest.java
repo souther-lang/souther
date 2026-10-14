@@ -5,7 +5,7 @@ import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.GenerationAnswer;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.RuleSettlement;
+import souther.compiler.query.SettledAt;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -126,12 +126,12 @@ class WhatTheSearchAnswersForDoesNotTurnOnHowCaseNamesCompareTest {
             // And what searching each rule of the decision established, which is the other half of
             // what a search answers for. A rule names the cases its way turns on, so the key is
             // said in the names the model under test is written in.
-            Map<DecisionRule, RuleSettlement> rules =
+            Map<DecisionRule, SettledAt> rules =
                     compilation.db().ask(new Adequacy.DecisionSearch(module, behavior)).value();
             if (rules != null) {
                 rules.forEach((rule, settled) -> out.put(
                         behavior + " rule " + spelledBefore(String.valueOf(rule), back),
-                        kindOf(settled.requirement())));
+                        kindOf(settled.settlement().requirement())));
             }
         });
         return out;

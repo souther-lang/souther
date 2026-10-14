@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.partition.DecisionCondition;
+import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.ShownBy;
 import souther.compiler.types.ModelOccurrence;
 
@@ -138,24 +139,29 @@ public sealed interface DecisionRuleReading {
      * already related; a fork the plan has no site for is said as a condition nothing shows rather
      * than left out, so the count of what a reader is told matches the rule.
      */
-    static List<DecisionRuleReading> of(souther.compiler.partition.DecisionReading.Ruled ruled,
-                                        CoverageSites.Plan plan, String behavior) {
+    static List<DecisionRuleReading> of(DecisionReading.Ruled ruled, CoverageSites.Plan plan,
+                                        String behavior) {
         List<DecisionRuleReading> out = new ArrayList<>();
         for (ShownBy each : ruled.shownBy()) {
-            out.add(switch (each) {
-                case ShownBy.AtAnOutcome(var construct, var held) ->
-                        outcomeOf(plan, behavior, construct, held);
-                case ShownBy.AtAnArm(var fork, var part) -> armOf(plan, behavior, fork, part);
-                // The arm is the place a reader is sent to: the operand not run is what the run
-                // there did not do, and there is no place to send anyone for that.
-                case ShownBy.AtAnArmShortOf(var fork, var part, var _) ->
-                        armOf(plan, behavior, fork, part);
-                case ShownBy.ShortOf(var condition, var _) -> new AConditionIsNotShown(condition);
-                case ShownBy.NothingIsRecorded(var condition) ->
-                        new AConditionIsNotShown(condition);
-            });
+            out.add(of(each, plan, behavior));
         }
         return List.copyOf(out);
+    }
+
+    /** One condition of a rule, as {@link #of(DecisionReading.Ruled, CoverageSites.Plan, String)}
+     *  reads each. */
+    static DecisionRuleReading of(ShownBy shown, CoverageSites.Plan plan, String behavior) {
+        return switch (shown) {
+            case ShownBy.AtAnOutcome(var construct, var held) ->
+                    outcomeOf(plan, behavior, construct, held);
+            case ShownBy.AtAnArm(var fork, var part) -> armOf(plan, behavior, fork, part);
+            // The arm is the place a reader is sent to: the operand not run is what the run there
+            // did not do, and there is no place to send anyone for that.
+            case ShownBy.AtAnArmShortOf(var fork, var part, var _) ->
+                    armOf(plan, behavior, fork, part);
+            case ShownBy.ShortOf(var condition, var _) -> new AConditionIsNotShown(condition);
+            case ShownBy.NothingIsRecorded(var condition) -> new AConditionIsNotShown(condition);
+        };
     }
 
     /**

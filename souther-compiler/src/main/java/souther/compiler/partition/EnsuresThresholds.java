@@ -276,7 +276,7 @@ public final class EnsuresThresholds {
         // nothing that was determined.
         left.forEach(each -> {
             if (each.why() instanceof BlockReason.RuleReadingStopped stopped) {
-                withoutALine.unclassified(cited, each.at(), stopped);
+                withoutALine.unclassified(cited, List.of(), each.at(), stopped);
             } else {
                 withoutALine.add(cited, each.at(), each.why());
             }

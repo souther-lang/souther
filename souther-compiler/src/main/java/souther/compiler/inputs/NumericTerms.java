@@ -48,19 +48,29 @@ public final class NumericTerms {
     }
 
     private static <T> List<T> walked(List<T> these, Function<T, String> naming) {
-        these.sort(Comparator.comparing(naming));
-        for (int at = 1; at < these.size(); at++) {
-            T before = these.get(at - 1);
-            T here = these.get(at);
-            if (naming.apply(before).equals(naming.apply(here)) && !before.equals(here)) {
+        // Each named once. A name is spelled out of the term's whole path, and the sort asks for
+        // the names of two terms at every comparison; spelled there, one walk of a form of a few
+        // terms spelled each of them several times over.
+        List<Named<T>> named = new ArrayList<>(these.size());
+        for (T each : these) {
+            named.add(new Named<>(naming.apply(each), each));
+        }
+        named.sort(Comparator.comparing(Named::name));
+        for (int at = 1; at < named.size(); at++) {
+            Named<T> before = named.get(at - 1);
+            Named<T> here = named.get(at);
+            if (before.name().equals(here.name()) && !before.value().equals(here.value())) {
                 throw new IllegalStateException("two terms of one form are written alike: "
-                        + before + " and " + here + "; a form holds one coefficient per term, and"
-                        + " a walk by the names would hand one of them over twice and the other"
-                        + " never");
+                        + before.value() + " and " + here.value() + "; a form holds one"
+                        + " coefficient per term, and a walk by the names would hand one of them"
+                        + " over twice and the other never");
             }
         }
-        return List.copyOf(these);
+        return named.stream().map(Named::value).toList();
     }
+
+    /** One of the things walked, with the name it is walked under. */
+    private record Named<T>(String name, T value) {}
 
     /**
      * The name a term is walked under: what it is written as, and then which kind of term it is.

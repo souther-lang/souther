@@ -351,14 +351,20 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
     @Test
     void aTotalAndACountNothingComposesOneListForAreSaidAsThat() {
         String report = report(measured(A_TOTAL_AND_HOW_MANY_MEET));
-        List<String> said = report.lines()
-                .filter(line -> line.contains("nothing could show a row can be written at")
-                        && line.contains("decision rule"))
-                .toList();
+        List<String> lines = report.lines().toList();
+        List<Integer> opened = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i++) {
+            if (lines.get(i).contains("nothing could show a row can be written at")
+                    && lines.get(i).contains("decision rule")) {
+                opened.add(i);
+            }
+        }
 
-        assertEquals(1, said.size(), () -> report);
-        assertTrue(said.getFirst().contains("a condition on another number taken where this row"
-                + " is already being written for one"), () -> said.getFirst());
+        assertEquals(1, opened.size(), () -> report);
+        List<String> under = lines.subList(opened.getFirst() + 1, lines.size()).stream()
+                .takeWhile(line -> line.startsWith("          · ")).toList();
+        assertTrue(under.stream().anyMatch(line -> line.contains("a condition on another number"
+                + " taken where this row is already being written for one")), () -> report);
     }
 
     /**

@@ -6,6 +6,8 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DecisionEvidence;
 import souther.compiler.query.RuleRequirement;
+import souther.compiler.query.RuleSettlement;
+import souther.compiler.query.SettledAt;
 
 import java.util.List;
 import java.util.Map;
@@ -61,13 +63,13 @@ class ASearchStandsInARuleWithoutCoveringItTest {
         List<DecisionRule> open = evidence.notTakenByRows();
         assertEquals(1, open.size(), () -> "and one is left: " + open);
 
-        Map<DecisionRule, souther.compiler.query.RuleSettlement> found =
+        Map<DecisionRule, SettledAt> found =
                 compilation.db().ask(new Adequacy.DecisionSearch(module, "decides")).value();
         assertNotNull(found, "the search ran");
         assertEquals(open, List.copyOf(found.keySet()),
                 "it looks at the rules no row took and at no others");
         assertInstanceOf(RuleRequirement.Required.class,
-                found.get(open.get(0)).requirement(),
+                found.get(open.get(0)).settlement().requirement(),
                 () -> "and it composes a value that takes the rule: " + found);
     }
 
@@ -82,8 +84,8 @@ class ASearchStandsInARuleWithoutCoveringItTest {
         DecisionEvidence before =
                 compilation.db().ask(new Adequacy.Decides(module)).value().get("decides");
         assertTrue(compilation.db().ask(new Adequacy.DecisionSearch(module, "decides")).value()
-                        .values().stream().map(
-                                souther.compiler.query.RuleSettlement::requirement)
+                        .values().stream().map(SettledAt::settlement)
+                        .map(RuleSettlement::requirement)
                         .anyMatch(RuleRequirement.Required.class::isInstance),
                 "the search stands somewhere");
         DecisionEvidence after =

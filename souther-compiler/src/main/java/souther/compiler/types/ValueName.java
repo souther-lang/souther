@@ -23,6 +23,17 @@ public sealed interface ValueName extends SettledAnswer {
     String name();
 
     /**
+     * This name as a reader of {@code module} is told it: the bare name where that module declares
+     * it, and the declaring module's name before it where another does. A helper of another module
+     * spliced into this one is that module's code, and the bare name would read as one of this
+     * module's own.
+     */
+    default String saidIn(String module) {
+        return this instanceof OfAModule declared && !declared.module().equals(module)
+                ? declared.module() + "." + name() : name();
+    }
+
+    /**
      * A name a module of some compilation declares.
      *
      * <p>The two of them, said as a type. What is reached under a module's own name is exactly what
