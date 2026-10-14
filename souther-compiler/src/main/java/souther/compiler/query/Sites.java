@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.HelperInliner;
 import souther.compiler.check.PartId;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleCitation;
@@ -16,7 +17,10 @@ import souther.compiler.sites.WrittenApplications;
 import souther.compiler.sites.WrittenCondition;
 import souther.compiler.sites.WrittenConditions;
 import souther.compiler.sites.WrittenForks;
+import souther.compiler.types.ExpansionSite;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.SourceReferenceOrigin;
+import souther.compiler.types.StepOfACopy;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
@@ -502,6 +506,65 @@ public final class Sites {
             case IF, GUARD, COMPREHENSION, MATCH, COLLECTION_LITERAL, NOT_WRITTEN ->
                     Answer.absent();
         };
+    }
+
+    /**
+     * Where the copy {@code step} names was made, or absent where it was made at nothing a reader
+     * can be sent to — a build, which is made for a region and not at a place — or this compilation
+     * holds no place for it.
+     *
+     * <p>The one answer for every surface that says which copy a construct stands in. A page writes
+     * it out and a warning marks it, and two answers would be free to send the two readers to
+     * different places for one copy.
+     *
+     * <p>A block a call handed over is placed at the application that ran it, which is in the code
+     * of the value it was handed to; where it was handed over is a step further out.
+     */
+    public static Answer<Citation> whereMade(Db db, StepOfACopy step) {
+        return switch (step) {
+            case StepOfACopy.ACall(var _, var at) -> switch (at) {
+                case ExpansionSite.Direct direct -> whereMade(db, direct);
+                case ExpansionSite.Supplied supplied -> whereMade(db, supplied.application());
+            };
+            case StepOfACopy.ABuild _ -> Answer.absent();
+        };
+    }
+
+    /**
+     * What {@code step} copied, as a reader of {@code module} is told it: the name the author
+     * wrote, and the module before it where another module declares it.
+     *
+     * <p>A block handed to a parameter is bound under the parameter with a mark of the pass that
+     * did it, which says nothing to the author and is not shown ({@link HelperInliner#asWritten}).
+     */
+    public static String calledIn(StepOfACopy step, String module) {
+        return HelperInliner.asWritten(switch (step) {
+            case StepOfACopy.ACall(var called, var _) -> called.saidIn(module);
+            case StepOfACopy.ABuild(var built, var _) -> built.saidIn(module);
+        });
+    }
+
+    private static Answer<Citation> whereMade(Db db, ExpansionSite.Direct at) {
+        return switch (at) {
+            case ExpansionSite.Written(var call) -> appliedAt(db, call);
+            case ExpansionSite.Named(var reference) -> referencedAt(db, reference);
+        };
+    }
+
+    /**
+     * Where the module that wrote {@code origin} says the name stands.
+     *
+     * <p>Read off the module's walk and not asked as a question of its own. Only a page naming a
+     * copy made at a name asks it, and a question answered for so few readers would be one most
+     * runs declare and never reach.
+     */
+    private static Answer<Citation> referencedAt(Db db, SourceReferenceOrigin origin) {
+        Answer<AuthoredSites.Walked> walked = db.ask(new Walk(origin.owner().module()));
+        if (!walked.present()) {
+            return Answer.absent();
+        }
+        SourcePos at = walked.value().references().at(origin);
+        return at == null ? Answer.absent() : Answer.of(Citation.of(at));
     }
 
     /** Where the module that wrote {@code origin} says the call stands. */

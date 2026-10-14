@@ -3118,7 +3118,7 @@
                     "type": "array",
                     "items": {
                       "type": "object",
-                      "description": "One step the copy was made by, and `kind` says which. An `expansion` is a call the copy was made at: what it reached, and where the call is written; a site named by what stands there rather than by a call carries `name` or `supplied` instead. A `materialisation` is one build of a value's body, for the region `at` names.",
+                      "description": "One step the copy was made by, and `kind` says which. An `expansion` is a copy of what `expanded` names, made at one site: a call, by where it is written (`module`, `definition`, `call`, `lowered`); a name written where a value goes, by `name`; or a block handed to a parameter and applied, by `supplied`. Exactly one of the three. A `materialisation` is one build of a value's body, for the region `at` names.",
                       "required": [
                         "kind"
                       ],
@@ -3138,6 +3138,11 @@
                           "then": {
                             "required": [
                               "expanded"
+                            ],
+                            "allOf": [
+                              {
+                                "$ref": "#/$defs/copySite"
+                              }
                             ],
                             "not": {
                               "anyOf": [
@@ -3245,10 +3250,10 @@
                           "minimum": 0
                         },
                         "name": {
-                          "type": "string"
+                          "$ref": "#/$defs/namedReference"
                         },
                         "supplied": {
-                          "type": "string"
+                          "$ref": "#/$defs/suppliedBlock"
                         }
                       }
                     },
@@ -3261,6 +3266,204 @@
                 "minimum": 0,
                 "description": "Which arm of the fork, for an arm."
               }
+            }
+          }
+        }
+      }
+    },
+    "copySite": {
+      "description": "Where a copy was made, said by exactly one of three: a call by where it is written (`module`, `definition`, `call`, `lowered`, all four); a name written where a value goes by `name`; a block handed over and applied by `supplied`. Applied to the object that carries the fields.",
+      "oneOf": [
+        {
+          "required": [
+            "module",
+            "definition",
+            "call",
+            "lowered"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "name"
+                ]
+              },
+              {
+                "required": [
+                  "supplied"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "name"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "module"
+                ]
+              },
+              {
+                "required": [
+                  "definition"
+                ]
+              },
+              {
+                "required": [
+                  "call"
+                ]
+              },
+              {
+                "required": [
+                  "lowered"
+                ]
+              },
+              {
+                "required": [
+                  "supplied"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "supplied"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "module"
+                ]
+              },
+              {
+                "required": [
+                  "definition"
+                ]
+              },
+              {
+                "required": [
+                  "call"
+                ]
+              },
+              {
+                "required": [
+                  "lowered"
+                ]
+              },
+              {
+                "required": [
+                  "name"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "namedReference": {
+      "type": "object",
+      "description": "A name written where a value goes, which a copy of what it names was made at: which reference of which definition of which module it is.",
+      "required": [
+        "module",
+        "definition",
+        "reference"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "module": {
+          "type": "string"
+        },
+        "definition": {
+          "type": "string"
+        },
+        "reference": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "suppliedBlock": {
+      "type": "object",
+      "description": "A block handed to a parameter and applied, which a copy of it was made at: the copy it was handed to (`handedTo`, what was copied and where that copy was made), the parameter of that copy it filled, and where it was applied (`appliedAt`, a call or a name). Two applications of one block and two blocks applied at one place are told apart here.",
+      "required": [
+        "handedTo",
+        "parameter",
+        "appliedAt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "handedTo": {
+          "type": "object",
+          "required": [
+            "expanded"
+          ],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "$ref": "#/$defs/copySite"
+            }
+          ],
+          "properties": {
+            "expanded": {
+              "type": "string"
+            },
+            "module": {
+              "type": "string"
+            },
+            "definition": {
+              "type": "string"
+            },
+            "call": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "lowered": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "name": {
+              "$ref": "#/$defs/namedReference"
+            },
+            "supplied": {
+              "$ref": "#/$defs/suppliedBlock"
+            }
+          }
+        },
+        "parameter": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "appliedAt": {
+          "type": "object",
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "$ref": "#/$defs/copySite"
+            }
+          ],
+          "properties": {
+            "module": {
+              "type": "string"
+            },
+            "definition": {
+              "type": "string"
+            },
+            "call": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "lowered": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "name": {
+              "$ref": "#/$defs/namedReference"
             }
           }
         }

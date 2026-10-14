@@ -13,6 +13,7 @@ import souther.compiler.types.ExpansionSite;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.StepOfACopy;
 import souther.compiler.types.ValueName;
 import souther.compiler.types.WrittenOwner;
 
@@ -54,7 +55,8 @@ class ACopyAPageNamesIsOneItWasAssembledWithTest {
     @Test
     void aCopyThePageWasAssembledWithNamesItsCalls() {
         AdequacyReport.CopyShown copy = new AdequacyReport.CopyShown(null,
-                List.of(new AdequacyReport.CallSite("positive", null)));
+                List.of(new AdequacyReport.CallSite(
+                        StepOfACopy.of(IN_THE_CALL.lineage()).getFirst(), "positive", null)));
         AdequacyReport.ConditionsShown shown = new AdequacyReport.ConditionsShown(Map.of(),
                 Map.of(IN_THE_CALL, copy), WAY);
         assertEquals(List.of(copy), shown.copiesOf(GAP),

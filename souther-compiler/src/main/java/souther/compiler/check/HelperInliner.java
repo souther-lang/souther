@@ -1224,6 +1224,18 @@ public final class HelperInliner {
         return SUPPLIED + parameter;
     }
 
+    /**
+     * {@code bound} as whoever wrote the call wrote it: the parameter a supplied function was given
+     * to, without the mark {@link #suppliedAs} puts on it, and any other name as it is.
+     *
+     * <p>The mark is this pass's own and says nothing to an author, so a message naming the binding
+     * shows the parameter. Read here, beside where the mark is written, so that a second spelling of
+     * it is never what a message strips.
+     */
+    public static String asWritten(String bound) {
+        return bound.startsWith(SUPPLIED) ? bound.substring(SUPPLIED.length()) : bound;
+    }
+
     /** The one spelling for a rule written at a call site. */
     private static final String SUPPLIED = "$";
 

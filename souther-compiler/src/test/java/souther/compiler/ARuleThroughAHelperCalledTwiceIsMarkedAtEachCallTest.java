@@ -158,6 +158,44 @@ class ARuleThroughAHelperCalledTwiceIsMarkedAtEachCallTest {
     }
 
     /**
+     * A warning whose mark at a call said less than the call was told sends the reader to the
+     * report, once; one whose marks said everything does not.
+     *
+     * <p>Here every call is the helper's own, so a call marked only as one the rule goes through is
+     * a call whose two conditions went different ways — which is what was left unsaid.
+     */
+    @Test
+    void aWarningSendsAReaderToTheReportOnlyWhereAMarkSaidLess() {
+        Compilation compilation = Compilation.ofSource(TWO_CONDITIONS_A_CALL, "Main");
+        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
+        compilation.answerEverything();
+        int sent = 0;
+        for (Located each : compilation.warnings()) {
+            if (!(each.diagnostic().said() instanceof ExampleMessage.NoRowTakesADecisionRule)) {
+                continue;
+            }
+            boolean saidLess = each.diagnostic().secondary().stream().anyMatch(label ->
+                    label.said() instanceof ExampleMessage.TheRuleGoesThroughThisCall);
+            long hints = hintsIn(each.diagnostic());
+            assertEquals(saidLess ? 1 : 0, hints,
+                    () -> "the report is named where, and only where, a mark said less: "
+                            + each.diagnostic().secondary());
+            sent += (int) hints;
+        }
+        assertTrue(sent > 0, "some warning here said less at a call");
+
+        for (Diagnostic each : warningsAboutRules()) {
+            assertEquals(0, hintsIn(each),
+                    () -> "one condition a call says all there is: " + each.secondary());
+        }
+    }
+
+    private static long hintsIn(Diagnostic warning) {
+        return warning.notes().stream().filter(note -> note.said()
+                instanceof ExampleMessage.TheReportSaysWhatTheRuleTakesInEachCall).count();
+    }
+
+    /**
      * A joined condition whose halves stand in two calls of a helper, over what an operation of
      * the language answers. No run through either comparison is recorded where it stands, so the
      * rule is seen at the body's own fork, which is no call — and what it states is read off both

@@ -73,6 +73,7 @@ import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.types.StepOfACopy;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 import souther.compiler.observe.Disposition;
@@ -142,6 +143,7 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -8068,9 +8070,12 @@ public final class Adequacy {
                 return Answer.absent();
             }
             List<Report> reports = new ArrayList<>();
+            // The sites a rule's conditions are resolved against, filed once per behavior: a
+            // behavior's rules are as many warnings, and each is read against the same sites.
+            Map<String, DecisionRuleReading.Places> places = new HashMap<>();
             for (Finding finding : found) {
                 if (finding.isAdequacyGap()) {
-                    reports.add(warning(db, name, finding));
+                    reports.add(warning(db, name, finding, places));
                 }
             }
             return Answer.of(true, reports);
@@ -8113,8 +8118,12 @@ public final class Adequacy {
          * that a scan for the keys this names finds them — a key built by concatenation is one nothing
          * can see is used. Which findings get here is {@link Finding#isAdequacyGap}'s answer and not
          * this method's.
+         *
+         * @param places the sites each behavior's rules are read against, filled as they are first
+         *               asked for and shared by every warning this build makes
          */
-        private static Report warning(Db db, String module, Finding finding) {
+        private static Report warning(Db db, String module, Finding finding,
+                                      Map<String, DecisionRuleReading.Places> places) {
             About said = finding.about();
             souther.compiler.diag.Diagnostic.Builder built = pointedAt(placeOf(db, module, finding))
                     .say(switch (said) {
@@ -8362,9 +8371,12 @@ public final class Adequacy {
                 // The sentence above says only which behavior, so a rule whose conditions were
                 // dropped here would be a finding two of which a reader cannot act on.
                 case About.ARuleNoRowTakes(var behavior, var ruled) -> {
-                    Bodies.Elaborated checked = db.ask(new Bodies.Observable(module)).value();
-                    CoverageSites.Plan plan =
-                            checked == null ? CoverageSites.Plan.NONE : checked.plan();
+                    DecisionRuleReading.Places sites = places.computeIfAbsent(behavior, _ -> {
+                        Bodies.Elaborated checked = db.ask(new Bodies.Observable(module)).value();
+                        return DecisionRuleReading.Places.of(
+                                checked == null ? CoverageSites.Plan.NONE : checked.plan(),
+                                behavior);
+                    });
                     // And the calls of the helpers the conditions are in, one mark per call. A
                     // helper called three times is one place in the source, and three conditions
                     // marked there alike are three a reader cannot tell apart; what tells them
@@ -8379,10 +8391,10 @@ public final class Adequacy {
                     for (RuleStep each : ruled.steps()) {
                         // The condition's own marker once, where it is written, and the way the
                         // rule takes it at every call the way consulted it at.
-                        said(db, built, DecisionRuleReading.of(each.shown(), plan, behavior));
+                        said(db, built, DecisionRuleReading.of(each.shown(), sites));
                         Set<ModelOccurrence> seen = new HashSet<>();
                         for (ShownBy place : each.seen()) {
-                            DecisionRuleReading read = DecisionRuleReading.of(place, plan, behavior);
+                            DecisionRuleReading read = DecisionRuleReading.of(place, sites);
                             place.copy().ifPresent(copy -> {
                                 seen.add(copy);
                                 calledAt(db, module, called -> takenAt(read, called),
@@ -8396,7 +8408,17 @@ public final class Adequacy {
                             }
                         }
                     }
-                    calls.forEach((call, marks) -> marks.markedAt(built, call));
+                    // And, once, where a call's mark said less than its conditions do, that the
+                    // report says the rest: which way each condition went in it, and every call it
+                    // was reached through. Not where every mark said what its call was told — a
+                    // reader told everything a mark can say is sent nowhere.
+                    boolean saidLess = false;
+                    for (Map.Entry<Citation, CallMarks> each : calls.entrySet()) {
+                        saidLess |= each.getValue().markedAt(built, each.getKey());
+                    }
+                    if (saidLess) {
+                        built.hint(new ExampleMessage.TheReportSaysWhatTheRuleTakesInEachCall());
+                    }
                 }
                 // Which of the two this arm is, is already settled: a row is there. What is left is
                 // the answer, so the hint says how it is written rather than what might be wrong.
@@ -8554,8 +8576,8 @@ public final class Adequacy {
                         label(built, application.writtenAt(), held
                                 ? new ExampleMessage.TheRuleTakesThisConditionHolding()
                                 : new ExampleMessage.TheRuleTakesThisConditionFailing());
-                case DecisionRuleReading.AForkTookAnArm(var arm) ->
-                        label(built, Sites.placeOf(db, arm.anchor()),
+                case DecisionRuleReading.AForkTookAnArm(var arm, var shownAt) ->
+                        label(built, Sites.placeOf(db, shownAt),
                                 new ExampleMessage.TheRuleGoesThroughThisArm(phraseFor(arm)));
                 // Every shape with nothing to send a reader to, said as one note. What differs
                 // between them is which part of this compiler fell short, which is not something
@@ -8577,7 +8599,8 @@ public final class Adequacy {
          * apart is the call each was made at.
          *
          * <p>A call nothing places is not marked: it was not written where this compilation can
-         * show it, and the condition's own marker still is.
+         * show it, and the condition's own marker still is. Where each step was made is the one
+         * answer a page sends a reader to as well ({@link Sites#whereMade}).
          *
          * @param calls what each call has been told so far, which every condition of the rule adds
          *              to and which is marked once all of them have
@@ -8585,18 +8608,16 @@ public final class Adequacy {
         private static void calledAt(Db db, String module, Function<String, Supporting> innermost,
                                      ExpansionLineage copy, Map<Citation, CallMarks> calls) {
             boolean first = true;
-            ExpansionLineage at = copy;
-            while (at instanceof ExpansionLineage.Expansion made) {
-                String called = made.expanded().saidIn(module);
-                Citation call = made.at() instanceof ExpansionSite.Written(var wrote)
-                        ? Sites.placeIfKnown(db, wrote) : null;
-                if (call != null) {
-                    calls.computeIfAbsent(call, _ -> new CallMarks(called, new ArrayList<>()))
+            for (StepOfACopy step : StepOfACopy.of(copy).reversed()) {
+                String called = Sites.calledIn(step, module);
+                Answer<Citation> call = Sites.whereMade(db, step);
+                if (call.present()) {
+                    calls.computeIfAbsent(call.value(),
+                                    _ -> new CallMarks(called, new ArrayList<>()))
                             .said().add(first ? innermost.apply(called)
                                     : new ExampleMessage.TheRuleGoesThroughThisCall(called));
                 }
                 first = false;
-                at = made.within();
             }
         }
 
@@ -8610,7 +8631,7 @@ public final class Adequacy {
                 case DecisionRuleReading.AnApplicationAnswered(var _, var held) -> held
                         ? new ExampleMessage.TheRuleTakesItHoldingInThisCall(called)
                         : new ExampleMessage.TheRuleTakesItFailingInThisCall(called);
-                case DecisionRuleReading.AForkTookAnArm(var arm) ->
+                case DecisionRuleReading.AForkTookAnArm(var arm, var _) ->
                         new ExampleMessage.TheRuleGoesThroughItsArmInThisCall(phraseFor(arm),
                                 called);
                 case DecisionRuleReading.AConditionIsNotShown _,
@@ -8636,13 +8657,19 @@ public final class Adequacy {
          */
         private record CallMarks(String called, List<Supporting> said) {
 
-            void markedAt(Diagnostic.Builder built, Citation call) {
+            /**
+             * Marks the call, and answers whether the mark said less than the call was told: true
+             * where its conditions went different ways and the mark says only that the rule goes
+             * through it. Nothing was told is nothing left unsaid.
+             */
+            boolean markedAt(Diagnostic.Builder built, Citation call) {
                 List<Supporting> taken = said.stream()
                         .filter(each -> !(each instanceof ExampleMessage.TheRuleGoesThroughThisCall))
                         .distinct().toList();
                 label(built, call, (ExampleMessage & Supporting) (taken.size() == 1
                         ? taken.getFirst()
                         : new ExampleMessage.TheRuleGoesThroughThisCall(called)));
+                return taken.size() > 1;
             }
         }
 

@@ -7,6 +7,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.source.SourceId;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.SourceReferenceOrigin;
 
 
 import java.util.LinkedHashMap;
@@ -78,7 +79,7 @@ public final class AuthoredSites {
      * the extents play no part in.
      */
     public record Walked(Census census, WrittenForks forks, WrittenConditions conditions,
-                         WrittenApplications applications) {}
+                         WrittenApplications applications, WrittenReferences references) {}
 
     /** {@code module} walked, once. */
     public static Walked walk(Hir.Module module) {
@@ -88,7 +89,8 @@ public final class AuthoredSites {
                 : new Census.Identified(new AuthoredSites(walk.byExtent)),
                 new WrittenForks(walk.byOrigin),
                 new WrittenConditions(walk.byCondition),
-                new WrittenApplications(walk.byApplication));
+                new WrittenApplications(walk.byApplication),
+                new WrittenReferences(walk.byReference));
     }
 
     /** The occurrences of {@code module}, or why they could not be told apart. */
@@ -201,6 +203,9 @@ public final class AuthoredSites {
          *  change. Beside the other two rather than inside them: a rule read off a call is neither
          *  a fork a body takes an arm of nor a condition a row had to satisfy. */
         private final Map<SourceConstructOrigin, SourcePos> byApplication = new LinkedHashMap<>();
+        /** Where each name this module wrote where a value goes stands, under the identity a copy
+         *  cannot change: a copy of what it names is made there. */
+        private final Map<SourceReferenceOrigin, SourcePos> byReference = new LinkedHashMap<>();
         private Census refusal;
 
         /**
@@ -236,6 +241,17 @@ public final class AuthoredSites {
             if (apply.application() instanceof ApplicationOrigin.Written written
                     && apply.pos() != null) {
                 byApplication.putIfAbsent(written.application(), apply.pos());
+            }
+        }
+
+        /**
+         * Files where a name the source wrote is, for the reason {@link #wroteApplication} files a
+         * call: a name written where a value goes is where a copy of what it names is made. A name
+         * this compiler composed is no reference an author wrote, and the first stands.
+         */
+        private void wroteReference(Hir.Var name) {
+            if (name.origin() instanceof SourceReferenceOrigin written && name.region() != null) {
+                byReference.putIfAbsent(written, name.region().start());
             }
         }
 
@@ -381,7 +397,11 @@ public final class AuthoredSites {
                 return;
             }
             switch (e) {
-                case Hir.IntLit _, Hir.DecimalLit _, Hir.StringLit _, Hir.BoolLit _, Hir.Var _,
+                case Hir.Var name -> {
+                    take(e);
+                    wroteReference(name);
+                }
+                case Hir.IntLit _, Hir.DecimalLit _, Hir.StringLit _, Hir.BoolLit _,
                      Hir.Unreachable _ -> take(e);
                 case Hir.Neg neg -> {
                     take(e);
