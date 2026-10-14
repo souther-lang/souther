@@ -44,8 +44,11 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Classification;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.WorkFigure;
+import souther.compiler.publish.PublicationOrders;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
@@ -59,6 +62,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -2038,7 +2042,7 @@ public final class Generator {
      *  many as a search may compose for one requirement, the one past them said as the figure. */
     private static RowTaking witnessedBy(ReplacementWitness looking, List<Purpose> purposes,
                                          List<StoodInAnswer> answers) {
-        return atMost(MOST_REPAIRS, looking::composingStopped,
+        return atMost(MOST_REPAIRS, () -> looking.composingStopped(List.of()),
                 inputs -> looking.of(new GeneratedRow(purposes, inputs, answers), null));
     }
 
@@ -8124,9 +8128,10 @@ public final class Generator {
         private boolean alike;
         /** How many times this stopped a search. */
         private int stops;
-        /** The ways the search stopped with something left untried. */
-        private final Set<ReplacementDisposition.Ended> stopped =
-                EnumSet.noneOf(ReplacementDisposition.Ended.class);
+        /** The ways the search stopped with something left untried, each with the figures it was
+         *  stopped at there where one is carried. */
+        private final Map<ReplacementDisposition.Ended, Set<Figure>> stopped =
+                new EnumMap<>(ReplacementDisposition.Ended.class);
 
         private ReplacementWitness(Trial trial, Map<List<String>, ObservedRun> ran,
                                    ReplacementOwed asked, int mostRuns) {
@@ -8143,19 +8148,21 @@ public final class Generator {
         Acceptance of(GeneratedRow row, ObservedRun written) {
             ObservedRun body = written != null ? written : run(row);
             if (body == null) {
-                return stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE);
+                return stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE, runsReached());
             }
             AnswerObservation rewritten;
             switch (asked) {
                 case ReplacementOwed.OfAnArm arm -> {
                     if (runs >= mostRuns) {
-                        return stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE);
+                        return stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE,
+                                runsReached());
                     }
                     runs++;
                     Optional<AnswerObservation> answered =
                             trial.runReplacing(row.toRun(), arm.replacing());
                     if (answered.isEmpty()) {
-                        return stop(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK);
+                        return stop(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK,
+                                List.of());
                     }
                     rewritten = answered.get();
                 }
@@ -8171,7 +8178,7 @@ public final class Generator {
                 // A run that came back with no answer, or one that could not be read in full, is
                 // not one the two were seen to answer alike on: it is one nothing was seen on.
                 case COULD_NOT_TELL -> {
-                    stopped.add(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK);
+                    ended(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK, List.of());
                     yield Acceptance.PASSED;
                 }
             };
@@ -8193,16 +8200,32 @@ public final class Generator {
             return now;
         }
 
-        /** This stopping the search, and why. */
-        private Acceptance stop(ReplacementDisposition.Ended why) {
-            stopped.add(why);
+        /** This stopping the search, why, and the figures it was stopped at. */
+        private Acceptance stop(ReplacementDisposition.Ended why,
+                                Collection<? extends Figure> at) {
+            ended(why, at);
             stops++;
             return Acceptance.STOPPED;
         }
 
-        /** Composing the rows the search looked through stopped at a figure of its own. */
-        void composingStopped() {
-            stopped.add(ReplacementDisposition.Ended.A_FIGURE_OF_THE_COMPOSING);
+        /** The figure this was compared against when it had no run left, as it stood here. */
+        private List<Figure> runsReached() {
+            return List.of(WorkFigure.RUNS_REPLACING_AN_ARM.at(mostRuns));
+        }
+
+        /** One way the search ended, and the figures it was stopped at there. */
+        private void ended(ReplacementDisposition.Ended why, Collection<? extends Figure> at) {
+            stopped.computeIfAbsent(why, _ -> new LinkedHashSet<>()).addAll(at);
+        }
+
+        /**
+         * Composing the rows the search looked through stopped at a figure of its own: one of
+         * {@code at}, or, where it is empty, a bound of this class's that is no
+         * {@link CompositionBudget} and so has no figure to carry.
+         */
+        void composingStopped(Collection<CompositionBudget> at) {
+            ended(ReplacementDisposition.Ended.A_FIGURE_OF_THE_COMPOSING,
+                    PublicationOrders.COMPOSITION_BUDGETS.keep(at).written());
         }
 
         /**
@@ -8222,12 +8245,15 @@ public final class Generator {
             if (came instanceof Witness.Certified(GeneratedRow row, var _)) {
                 return row;
             }
-            shortOfAFigureUnlessThisStoppedIt(before, switch (came) {
-                // The walk over the readings stopped with readings it had not tried.
-                case Witness.Limited _ -> true;
-                case Witness.Exhausted none -> !none.found().met().figures().isEmpty();
-                case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ -> false;
-            });
+            switch (came) {
+                // The walk over the readings stopped with readings it had not tried, at a bound of
+                // its own or at the figures what it composed on the way met.
+                case Witness.Limited limited ->
+                        composingStoppedUnlessThisStoppedIt(before, limited.found().met().figures());
+                case Witness.Exhausted none ->
+                        shortOfAFigureUnlessThisStoppedIt(before, none.found().met().figures());
+                case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ -> { }
+            }
             return null;
         }
 
@@ -8238,14 +8264,15 @@ public final class Generator {
             if (came instanceof RowComposed.Taken(List<FixtureTemplate> inputs)) {
                 return inputs;
             }
-            shortOfAFigureUnlessThisStoppedIt(before, switch (came) {
+            switch (came) {
                 case RowComposed.PassedOver(SearchShortfall found) ->
-                        !found.met().figures().isEmpty();
-                case RowComposed.Failed(Attempt why, var _) -> !why.found().met().figures().isEmpty();
+                        shortOfAFigureUnlessThisStoppedIt(before, found.met().figures());
+                case RowComposed.Failed(Attempt why, OptionalInt _) ->
+                        shortOfAFigureUnlessThisStoppedIt(before, why.found().met().figures());
                 // Stopped by what it handed its rows to: this, or the bound on how many it may be
                 // handed ({@link #atMost}), which says so where it is reached.
-                case RowComposed.Halted _, RowComposed.Taken _ -> false;
-            });
+                case RowComposed.Halted _, RowComposed.Taken _ -> { }
+            }
             return null;
         }
 
@@ -8256,25 +8283,39 @@ public final class Generator {
             if (came.row() != null) {
                 return came.row();
             }
-            shortOfAFigureUnlessThisStoppedIt(before, came.stoppedShort());
+            if (came.stoppedShort()) {
+                composingStoppedUnlessThisStoppedIt(before, came.came().met().figures());
+            }
             return null;
         }
 
-        private void shortOfAFigureUnlessThisStoppedIt(int before, boolean shortOfAFigure) {
-            if (shortOfAFigure && stops == before) {
-                composingStopped();
+        /** Composing stopped at {@code figures} where there are any, unless this stopped it. */
+        private void shortOfAFigureUnlessThisStoppedIt(int before,
+                                                       Set<CompositionBudget> figures) {
+            if (!figures.isEmpty()) {
+                composingStoppedUnlessThisStoppedIt(before, figures);
             }
         }
 
-        /** How the search ended, where nothing was found: each way it stopped, and whether rows
-         *  were seen answered alike. */
-        Set<ReplacementDisposition.Ended> ended() {
-            Set<ReplacementDisposition.Ended> out = new LinkedHashSet<>(stopped);
+        /** Composing stopped, at {@code figures} or at a bound with none, unless this stopped it. */
+        private void composingStoppedUnlessThisStoppedIt(int before,
+                                                         Set<CompositionBudget> figures) {
+            if (stops == before) {
+                composingStopped(figures);
+            }
+        }
+
+        /** How the search ended, where nothing was found: each way it stopped with the figures it
+         *  was stopped at, and whether rows were seen answered alike. */
+        Map<ReplacementDisposition.Ended, List<Figure>> ended() {
+            Map<ReplacementDisposition.Ended, List<Figure>> out =
+                    new EnumMap<>(ReplacementDisposition.Ended.class);
+            stopped.forEach((way, at) -> out.put(way, List.copyOf(at)));
             if (alike) {
-                out.add(ReplacementDisposition.Ended.EVERY_ROW_ANSWERED_ALIKE);
+                out.put(ReplacementDisposition.Ended.EVERY_ROW_ANSWERED_ALIKE, List.of());
             }
             if (out.isEmpty()) {
-                out.add(ReplacementDisposition.Ended.NOTHING_WAS_COMPOSED);
+                out.put(ReplacementDisposition.Ended.NOTHING_WAS_COMPOSED, List.of());
             }
             return out;
         }

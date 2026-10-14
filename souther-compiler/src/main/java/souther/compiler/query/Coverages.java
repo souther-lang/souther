@@ -30,6 +30,7 @@ import souther.compiler.observe.Classification;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RowOutcome;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
@@ -574,7 +575,7 @@ final class Coverages {
         }
         if (!listed) {
             return PartitionEvidence.PairSpace.truncated(behavior, space, total,
-                    budget.pairSpace());
+                    WorkFigure.PAIRS_OF_CLASSES_COUNTED.at(budget.pairSpace()));
         }
         // One set of combinations per relation, in the order the relations were worked out. What is
         // counted is the same as it was; where the count goes is what changed.

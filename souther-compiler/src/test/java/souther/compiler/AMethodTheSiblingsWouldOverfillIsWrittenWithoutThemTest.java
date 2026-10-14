@@ -2,15 +2,18 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.observe.RunSensitivity;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReplacementEvidence;
 import souther.compiler.query.Replacements;
+import souther.compiler.query.Weakening;
 
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -98,5 +101,28 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
                         instanceof ReplacementEvidence.Undecided(var why)
                         && why.written().contains(ReplacementEvidence.Undecided.Why.TOO_LARGE)),
                 () -> "a rewrite the method had no room for: " + rewrites);
+    }
+
+    /**
+     * And the room was the JVM's, which no run of this compiler widens: every rewrite left open
+     * for it is one a wider run leaves open too, and names no figure for a reader to raise.
+     */
+    @Test
+    void aRewriteTheJvmHadNoRoomForIsOneNoWiderRunAnswers() {
+        Compilation compilation = Compilation.ofSource(model(), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        ReplacementEvidence measured = compilation.db()
+                .ask(new Replacements.Measured(compilation.modules().getFirst())).value().get("f");
+
+        List<Weakening> tooLarge = measured.measured().weakening().causes().stream()
+                .filter(each -> each instanceof Weakening.RewriteUndecided it
+                        && it.why().written().contains(ReplacementEvidence.Undecided.Why.TOO_LARGE))
+                .toList();
+        assertFalse(tooLarge.isEmpty(), () -> "a rewrite the method had no room for: " + measured);
+        for (Weakening each : tooLarge) {
+            assertEquals(RunSensitivity.UNAFFECTED, each.runSensitivity(), each::toString);
+            assertEquals(List.of(), each.figures(), each::toString);
+        }
     }
 }

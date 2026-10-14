@@ -11,11 +11,13 @@ import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -85,6 +87,26 @@ class TheReadingTheStepsWereFoundByIsOneOfTheReadingsTriedTest {
                         + " none"));
         assertNotSame(readings.tried().get(0), readings.tried().get(1),
                 "so each of them is a walk of its own");
+    }
+
+    /**
+     * A row holding more readings than a point is tried against says the walk stopped, and names
+     * the figure it stopped at as it stood there; one holding fewer says it tried every one.
+     */
+    @Test
+    void aRowWithMoreReadingsThanAPointIsTriedAgainstNamesTheLimit() {
+        List<ObservedValue> many = new ArrayList<>();
+        for (int i = 0; i < 257; i++) {
+            many.add(line(i));
+        }
+
+        assertEquals(new StandingAtAPoint.ReadingsTried.StoppedAtTheLimit(
+                        WorkFigure.READINGS_OF_A_ROW_AT_A_POINT.at(256)),
+                readingsOf(AN_AMOUNT, List.of(new ObservedValue.Integer(7),
+                        new ObservedValue.Sequence(many))).whether());
+        assertEquals(StandingAtAPoint.ReadingsTried.EVERY_ONE,
+                readingsOf(AN_AMOUNT, List.of(new ObservedValue.Integer(7),
+                        new ObservedValue.Sequence(many.subList(0, 2)))).whether());
     }
 
     private static StandingAtAPoint.Readings readingsOf(TermPath at, List<ObservedValue> row) {

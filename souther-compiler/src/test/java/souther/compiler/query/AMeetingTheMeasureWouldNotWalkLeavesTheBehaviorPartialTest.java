@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.AdequacyPolicy;
 import souther.compiler.partition.Budgets;
 import souther.compiler.regex.PatternPlan;
@@ -93,6 +94,22 @@ class AMeetingTheMeasureWouldNotWalkLeavesTheBehaviorPartialTest {
         assertTrue(narrow.weakenedBy().causes().stream()
                         .anyMatch(Weakening.MeetingsNotWalked.class::isInstance),
                 () -> "and what it went without says which walk: " + narrow.weakenedBy());
+    }
+
+    /**
+     * And what it went without names the limit the group was held back by, at the number this run
+     * was handed: a reader raising it is told which figure and from what.
+     */
+    @Test
+    void theGroupHeldBackNamesTheLimitItWasHeldTo() {
+        AdequacyReport.BehaviorReport narrow = behaviorUnder(1);
+
+        assertEquals(List.of(List.of(WorkFigure.COMBINATIONS_OF_A_GROUP_MEASURED.at(1))),
+                narrow.weakenedBy().causes().stream()
+                        .filter(Weakening.MeetingsNotWalked.class::isInstance)
+                        .map(Weakening::figures)
+                        .toList(),
+                () -> "the walk held back says what it was held to: " + narrow.weakenedBy());
     }
 
     /** And nothing is owed at a combination of a group nobody walked. */

@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import souther.compiler.observe.Figure;
 import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.Collections;
@@ -125,21 +126,41 @@ public record ArmReplacements(SequencedMap<Integer, AtSite> bySite) {
             }
         }
 
-        /** Why a sibling is not carried. */
-        enum Why {
+        /**
+         * Why a sibling is not carried: carrying the siblings would make the code larger than it
+         * may be. A limit of the classes and not of the model, and one of two limits that a wider
+         * run does not treat alike.
+         */
+        sealed interface Why {
+
             /**
-             * Carrying the siblings would make the code larger than it may be: larger than this
-             * compiler lets a fork grow by, or past what the JVM holds in the method the fork is
-             * written in. A limit of the classes and not of the model.
+             * Larger than this compiler lets a fork grow by, which is a figure of its own: a run
+             * allowing a fork more carries the sibling.
+             *
+             * @param limit what a fork may carry, as it stood where the fork was compared against
+             *              it
              */
-            TOO_LARGE
+            record PastWhatAForkCarries(Figure limit) implements Why {
+
+                public PastWhatAForkCarries {
+                    Objects.requireNonNull(limit, "a fork held back was held to some figure");
+                }
+            }
+
+            /**
+             * Past what the JVM holds in the method the fork is written in. The host's limit and
+             * not this compiler's, so a run allowing more of everything writes the method without
+             * the sibling again.
+             */
+            record PastWhatAMethodHolds() implements Why {}
         }
     }
 
     /**
      * These replacements with nothing carried at {@code sites}: what the classes hold where the
-     * emitter wrote the arms there without their siblings. A sibling the classes do not carry is
-     * still a rewrite, left as one this could not put to a row and why.
+     * emitter wrote the arms there without their siblings, because the method they are in would
+     * otherwise be more than the JVM holds. A sibling the classes do not carry is still a rewrite,
+     * left as one this could not put to a row and why.
      */
     public ArmReplacements carryingNothingAt(Set<Integer> sites) {
         SequencedMap<Integer, AtSite> out = new TreeMap<>();
@@ -150,7 +171,8 @@ public record ArmReplacements(SequencedMap<Integer, AtSite> bySite) {
             }
             Map<Integer, Sibling> siblings = new LinkedHashMap<>();
             at.siblings().forEach((with, sibling) -> siblings.put(with,
-                    new Sibling.NotCarried(Sibling.Why.TOO_LARGE, sibling.differs())));
+                    new Sibling.NotCarried(new Sibling.Why.PastWhatAMethodHolds(),
+                            sibling.differs())));
             out.put(site, new AtSite(at.fork(), at.part(), siblings));
         });
         return new ArmReplacements(out);

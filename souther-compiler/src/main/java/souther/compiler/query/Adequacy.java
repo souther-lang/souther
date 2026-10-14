@@ -5536,9 +5536,9 @@ public final class Adequacy {
             return switch (answer) {
                 case ReplacementDisposition.Witnessed(var row) ->
                         new GenerationOutcome.Generated(List.of(composed.rowFor(row)));
-                case ReplacementDisposition.NoneFound(var ended) -> {
+                case ReplacementDisposition.NoneFound none -> {
                     List<CameToNothing> why = new ArrayList<>();
-                    for (ReplacementDisposition.Ended each : ended) {
+                    for (ReplacementDisposition.Ended each : none.ways()) {
                         why.add(CameToNothing.metNothing(new Generator.UnresolvedCombination(
                                 List.of(), switch (each) {
                                     case EVERY_ROW_ANSWERED_ALIKE ->

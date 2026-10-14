@@ -24,6 +24,7 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.RowRef;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.source.SourceId;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Replacement;
@@ -274,13 +275,16 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         out.add(new Weakening.ArmsUnsettled(
                 new SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 1, 0,
                         SourceConstruct.IF)));
-        out.add(new Weakening.PairSpaceTruncated("b", 9, 4));
-        out.add(new Weakening.BorderReadingsNotExhausted(border(), 4));
+        out.add(new Weakening.PairSpaceTruncated("b", 9,
+                WorkFigure.PAIRS_OF_CLASSES_COUNTED.at(4)));
+        out.add(new Weakening.BorderReadingsNotExhausted(border(),
+                WorkFigure.READINGS_OF_A_ROW_AT_A_POINT.at(4)));
         out.add(new Weakening.ItemsPlaceNotWorkedOut(border(),
                 souther.compiler.numeric.UnheldNumber.MORE_ROOM_COULD_ANSWER));
         out.add(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border(),
                 Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why.NOTHING_WATCHED_THE_RUNS));
-        out.add(new Weakening.MeetingsNotWalked("b", 1));
+        out.add(new Weakening.MeetingsNotWalked("b", 1,
+                List.of(WorkFigure.COMBINATIONS_OF_A_GROUP_MEASURED.at(4))));
         out.add(new Weakening.DecisionOfRowUnreadable("b",
                 souther.compiler.partition.RulesTaken.WhichRule.Why.NO_RECOGNISABLE_RULE_MATCHES));
         out.add(new Weakening.DecisionRunNotWatched("b"));
@@ -293,8 +297,9 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         out.add(new Weakening.RewriteUndecided("b",
                 new Replacement.ByOneAnswer(new ObservedValue.Integer(0),
                         new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1))),
-                new ReplacementEvidence.Undecided(ReplacementEvidence.Undecided.Why.RUNS_SPENT)
-                        .why()));
+                new ReplacementEvidence.Undecided(new ReplacementEvidence.Undecided.Way.AtFigures(
+                        ReplacementEvidence.Undecided.Why.RUNS_SPENT,
+                        List.of(WorkFigure.RUNS_REPLACING_AN_ARM.at(4)))).why()));
         return out;
     }
 

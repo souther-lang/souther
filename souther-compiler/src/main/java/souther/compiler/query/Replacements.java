@@ -11,6 +11,7 @@ import souther.compiler.observe.ArmObservation;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.observe.Comparisons;
 import souther.compiler.observe.Expectation;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.Position;
 import souther.compiler.observe.RowOutcome;
@@ -27,13 +28,11 @@ import souther.compiler.partition.RewriteSearch;
 import souther.compiler.reach.Reachability;
 
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -276,17 +275,13 @@ public final class Replacements {
                 case ReplacementReading.Standing.Unnoticed(var shownBy, var lookFor) ->
                         new ReplacementEvidence.Unnoticed(
                                 new ReplacementEvidence.ShownBy.AWrittenRow(shownBy), lookFor);
-                case ReplacementReading.Standing.CannotBeAsked(var why) ->
-                        new ReplacementEvidence.Undecided(switch (why) {
-                            case TOO_LARGE -> ReplacementEvidence.Undecided.Why.TOO_LARGE;
-                            case A_STATEMENT_WAS_NOT_READ ->
-                                    ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ;
-                            case A_RUN_DID_NOT_COME_BACK ->
-                                    ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK;
-                        });
+                case ReplacementReading.Standing.CannotBeAsked(
+                        ReplacementEvidence.Undecided.LeftOpen why) ->
+                        new ReplacementEvidence.Undecided(why);
                 case ReplacementReading.Standing.Open(var lookFor) -> searched == null
                         ? new ReplacementEvidence.Undecided(
-                                ReplacementEvidence.Undecided.Why.NOTHING_RAN)
+                                new ReplacementEvidence.Undecided.Way.AtNoAllowance(
+                                        ReplacementEvidence.Undecided.Why.NOTHING_RAN))
                         : switch (searched.disposition()) {
                             case ReplacementDisposition.Witnessed _ ->
                                     new ReplacementEvidence.Unnoticed(
@@ -299,32 +294,31 @@ public final class Replacements {
         }
 
         /**
-         * Every way a search that found nothing ended, each said as itself: which figure a wider
-         * run would have to raise is what a reader of an undecided rewrite acts on, and ranking
-         * one way over another would hand them one of two.
+         * Every way a search that found nothing ended, each said as itself and with the figures it
+         * was stopped at there: which figure a wider run would have to raise is what a reader of an
+         * undecided rewrite acts on, and ranking one way over another would hand them one of two.
          */
-        private static Set<ReplacementEvidence.Undecided.Why> whyNoneFound(
-                Set<ReplacementDisposition.Ended> ended) {
-            Set<ReplacementEvidence.Undecided.Why> out =
-                    EnumSet.noneOf(ReplacementEvidence.Undecided.Why.class);
-            for (ReplacementDisposition.Ended each : ended) {
-                out.add(switch (each) {
-                    case EVERY_ROW_ANSWERED_ALIKE ->
-                            ReplacementEvidence.Undecided.Why.NO_ROW_ANSWERED_DIFFERENTLY;
-                    case NOTHING_WAS_COMPOSED ->
-                            ReplacementEvidence.Undecided.Why.NOTHING_WAS_COMPOSED;
-                    case RUNS_A_REWRITE_MAY_TAKE -> ReplacementEvidence.Undecided.Why.RUNS_SPENT;
-                    case A_FIGURE_OF_THE_COMPOSING ->
-                            ReplacementEvidence.Undecided.Why.A_COMPOSING_FIGURE_REACHED;
-                    case A_RUN_DID_NOT_COME_BACK ->
-                            ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK;
-                    case NOTHING_RAN -> ReplacementEvidence.Undecided.Why.NOTHING_RAN;
-                    // The measure's search is asked for on the measure's behalf, which no block's
-                    // row limit stops ({@link RewriteSearch.For#THE_MEASURE}).
-                    case ROWS_A_BLOCK_MAY_HOLD -> throw new IllegalStateException(
-                            "a search for the measure stopped at the rows a block may hold");
-                });
-            }
+        static List<ReplacementEvidence.Undecided.Way> whyNoneFound(
+                Map<ReplacementDisposition.Ended, List<Figure>> ended) {
+            List<ReplacementEvidence.Undecided.Way> out = new ArrayList<>();
+            ended.forEach((each, figures) -> out.add(switch (each) {
+                case EVERY_ROW_ANSWERED_ALIKE -> new ReplacementEvidence.Undecided.Way.AtNoAllowance(
+                        ReplacementEvidence.Undecided.Why.NO_ROW_ANSWERED_DIFFERENTLY);
+                case NOTHING_WAS_COMPOSED -> new ReplacementEvidence.Undecided.Way.AtNoAllowance(
+                        ReplacementEvidence.Undecided.Why.NOTHING_WAS_COMPOSED);
+                case RUNS_A_REWRITE_MAY_TAKE -> ReplacementEvidence.Undecided.Way.atAnAllowance(
+                        ReplacementEvidence.Undecided.Why.RUNS_SPENT, figures);
+                case A_FIGURE_OF_THE_COMPOSING -> ReplacementEvidence.Undecided.Way.atAnAllowance(
+                        ReplacementEvidence.Undecided.Why.A_COMPOSING_FIGURE_REACHED, figures);
+                case A_RUN_DID_NOT_COME_BACK -> ReplacementEvidence.Undecided.Way.atAnAllowance(
+                        ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK, figures);
+                case NOTHING_RAN -> new ReplacementEvidence.Undecided.Way.AtNoAllowance(
+                        ReplacementEvidence.Undecided.Why.NOTHING_RAN);
+                // The measure's search is asked for on the measure's behalf, which no block's
+                // row limit stops ({@link RewriteSearch.For#THE_MEASURE}).
+                case ROWS_A_BLOCK_MAY_HOLD -> throw new IllegalStateException(
+                        "a search for the measure stopped at the rows a block may hold");
+            }));
             return out;
         }
     }

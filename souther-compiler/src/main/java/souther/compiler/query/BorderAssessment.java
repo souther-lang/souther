@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
+import souther.compiler.observe.Figure;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.BoundaryTarget;
@@ -157,7 +158,7 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
                             WeakeningSet.of(new Weakening.BorderValueUnreadable(border, gap)));
                 }
                 yield met.tried() instanceof souther.compiler.partition.StandingAtAPoint
-                        .ReadingsTried.StoppedAtTheLimit(int limit)
+                        .ReadingsTried.StoppedAtTheLimit(Figure limit)
                         ? out.union(WeakeningSet.of(
                                 new Weakening.BorderReadingsNotExhausted(border, limit)))
                         : out;

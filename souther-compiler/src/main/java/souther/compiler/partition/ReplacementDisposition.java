@@ -1,6 +1,13 @@
 package souther.compiler.partition;
 
-import java.util.EnumSet;
+import souther.compiler.observe.Figure;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -22,18 +29,36 @@ public sealed interface ReplacementDisposition {
         }
     }
 
-    /** No row was found, and how the search ended; more than one where several runs looked. */
-    record NoneFound(Set<Ended> ended) implements ReplacementDisposition {
+    /**
+     * No row was found, and how the search ended; more than one where several runs looked.
+     *
+     * <p>Each way with the figures it was stopped at, as they stood where the search was compared
+     * against them. None where the way is not a figure's, and none where the figure that stopped it
+     * is one this compiler does not carry out as one: a figure is said where it is carried from
+     * the place it was reached, and never worked out afterwards from which way it was.
+     *
+     * @param ended every way the search ended, in the order the ways are declared, each with the
+     *              figures that stopped it there
+     */
+    record NoneFound(Map<Ended, List<Figure>> ended) implements ReplacementDisposition {
 
         public NoneFound {
             if (ended.isEmpty()) {
                 throw new IllegalArgumentException("a search that found nothing ended some way");
             }
-            ended = Set.copyOf(EnumSet.copyOf(ended));
+            Map<Ended, List<Figure>> copied = new EnumMap<>(Ended.class);
+            ended.forEach((way, figures) -> copied.put(way, List.copyOf(figures)));
+            ended = Collections.unmodifiableMap(copied);
         }
 
+        /** A search that ended one way that no figure stopped. */
         public NoneFound(Ended one) {
-            this(Set.of(one));
+            this(Map.of(one, List.of()));
+        }
+
+        /** The ways it ended, without the figures. */
+        public Set<Ended> ways() {
+            return ended.keySet();
         }
     }
 
@@ -62,15 +87,19 @@ public sealed interface ReplacementDisposition {
 
     /**
      * What two searches for one rewrite came to together: a row either found, or every way the
-     * two ended.
+     * two ended, each with every figure either was stopped at there.
      */
     static ReplacementDisposition together(ReplacementDisposition one, ReplacementDisposition other) {
-        if (one instanceof NoneFound(Set<Ended> first)
-                && other instanceof NoneFound(Set<Ended> second)) {
-            Set<Ended> both = EnumSet.noneOf(Ended.class);
-            both.addAll(first);
-            both.addAll(second);
-            return new NoneFound(both);
+        if (one instanceof NoneFound(Map<Ended, List<Figure>> first)
+                && other instanceof NoneFound(Map<Ended, List<Figure>> second)) {
+            Map<Ended, Set<Figure>> both = new EnumMap<>(Ended.class);
+            first.forEach((way, figures) ->
+                    both.computeIfAbsent(way, _ -> new LinkedHashSet<>()).addAll(figures));
+            second.forEach((way, figures) ->
+                    both.computeIfAbsent(way, _ -> new LinkedHashSet<>()).addAll(figures));
+            Map<Ended, List<Figure>> out = new EnumMap<>(Ended.class);
+            both.forEach((way, figures) -> out.put(way, new ArrayList<>(figures)));
+            return new NoneFound(out);
         }
         return one instanceof Witnessed ? one : other;
     }

@@ -1,13 +1,16 @@
 package souther.compiler.query;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.ClosureGap;
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.Replacement;
-import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.types.SourceConstructOrigin;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -65,6 +68,45 @@ public sealed interface Weakening {
      * because for those there is nothing further in to ask.
      */
     RunSensitivity runSensitivity();
+
+    /**
+     * The figures of this compiler's that stopped it, each as it stood where the comparison was
+     * made; none where {@link #runSensitivity} is {@link RunSensitivity#UNAFFECTED}.
+     *
+     * <p>Carried and never worked out here. Each arm hands over what the place that stopped put in
+     * it, and an arm that holds what stopped it asks that, as {@link #runSensitivity} does: a
+     * figure named from the word an arm is published as would name one of the figures that share
+     * the word, and a reader raising it may be raising the one that stopped nothing.
+     *
+     * <p>Not every {@link RunSensitivity#MAY_CHANGE} has one. A border left out because nothing
+     * watched the runs ({@link ABorderNotHeldAgainstTheLinesBesideIt.Why#NOTHING_WATCHED_THE_RUNS})
+     * was stopped by what this build was asked to record, which is a way of running and not a
+     * figure. A rewrite left open at an allowance whose figure is not carried out of the place it
+     * was reached ({@link ReplacementEvidence.Undecided.Way.AtAnAllowanceNotCarried}) has none to
+     * name, and nor has an observation a code says was cut short ({@link ObservationIncomplete}):
+     * the code says a limit stopped it and not which. Both say so rather than borrowing one.
+     */
+    default List<Figure> figures() {
+        return switch (this) {
+            case ObservationIncomplete _, OutputCasesUnreadable _, InputCasesUnreadable _,
+                 ItemsPlaceNotWorkedOut _, ABorderNotHeldAgainstTheLinesBesideIt _,
+                 BodyNotInEvaluation _, BoundaryNotDerived _, InputNotRead _,
+                 ProofContradicted _, ArmsUnsettled _, DecisionOfRowUnreadable _,
+                 DecisionRunNotWatched _, DecisionRuleReadShort _,
+                 KeyedOverwriteCasesUnmeasured _ -> List.of();
+            case BorderValueUnreadable it -> it.why().figures();
+            case BorderReadingsNotExhausted it -> List.of(it.limit());
+            case ModelReadingIncomplete it -> it.cause().figures();
+            case PairSpaceTruncated it -> List.of(it.limit());
+            case MeetingsNotWalked it -> it.limits();
+            case DecisionReadingIncomplete it -> switch (it.why()) {
+                case DecisionReading.Enumeration.Complete _ -> List.of();
+                case DecisionReading.Enumeration.StoppedAtAFigure(CompositionBudget figure) ->
+                        List.of(figure);
+            };
+            case RewriteUndecided it -> it.why().figures();
+        };
+    }
 
     /**
      * Something the rows were to be measured from was not observed.
@@ -194,10 +236,15 @@ public sealed interface Weakening {
      * large the search was is what one row happened to hold rather than what is true of the point,
      * so a figure of it here would make two facts of one.
      *
-     * @param limit how many readings of one row a point is tried against
+     * @param limit how many readings of one row a point is tried against, as it stood where the
+     *              walk over them stopped
      */
-    record BorderReadingsNotExhausted(souther.compiler.partition.Border border, int limit)
+    record BorderReadingsNotExhausted(souther.compiler.partition.Border border, Figure limit)
             implements Weakening {
+
+        public BorderReadingsNotExhausted {
+            Objects.requireNonNull(limit, "a walk stopped at a limit says which");
+        }
 
         /** The figure is this compiler's, so a run allowed more readings comes to another answer. */
         @Override
@@ -358,7 +405,11 @@ public sealed interface Weakening {
      * the one warrant a measure did carry — a {@code truncated} flag beside the status, which #951
      * had to add a constructor check to keep the two in step.
      */
-    record PairSpaceTruncated(String behavior, long total, int limit) implements Weakening {
+    record PairSpaceTruncated(String behavior, long total, Figure limit) implements Weakening {
+
+        public PairSpaceTruncated {
+            Objects.requireNonNull(limit, "a walk stopped at a limit says which");
+        }
 
         /** The one arm that is a figure of its own. {@code limit} is what the walk was compared
          *  against, and it is a number the query graph hands the analysis, so a run under a wider
@@ -476,13 +527,21 @@ public sealed interface Weakening {
      *
      * <p>Beside {@link PairSpaceTruncated}, which is the same figure running out on the other
      * criterion. Two words because a reader raising a limit raises a different one for each.
+     *
+     * @param limits what the groups held back were compared against, as each stood there: one
+     *               figure handed to the run, said once however many groups it held back
      */
-    record MeetingsNotWalked(String behavior, int groups) implements Weakening {
+    record MeetingsNotWalked(String behavior, int groups, List<Figure> limits)
+            implements Weakening {
 
         public MeetingsNotWalked {
             if (groups < 1) {
                 throw new IllegalArgumentException(
                         "a measure that walked every group went without nothing here: " + groups);
+            }
+            limits = List.copyOf(limits);
+            if (limits.isEmpty()) {
+                throw new IllegalArgumentException("a group held back was held back by a limit");
             }
         }
 
@@ -593,24 +652,20 @@ public sealed interface Weakening {
      * nothing about the next.
      */
     record RewriteUndecided(String behavior, Replacement replacement,
-                            CanonicalSelection<ReplacementEvidence.Undecided.Why> why)
+                            ReplacementEvidence.Undecided.LeftOpen why)
             implements Weakening {
 
         public RewriteUndecided {
             Objects.requireNonNull(behavior, "a rewrite is of some behavior's body");
             Objects.requireNonNull(replacement, "a rewrite left open is some rewrite");
-            if (why.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "a rewrite left open was left open for a reason");
-            }
+            Objects.requireNonNull(why, "a rewrite left open was left open for a reason");
         }
 
-        /** A wider run could come to another answer where any of the ways it was left open is a
-         *  figure this compiler stopped at, or a run that did not come back. */
+        /** Asked of the ways it was left open, each of which the place that left it open
+         *  answered: a wider run could come to another answer where any of them could. */
         @Override
         public RunSensitivity runSensitivity() {
-            return why.written().stream().anyMatch(ReplacementEvidence.Undecided.Why::anAllowance)
-                    ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
+            return why.runSensitivity();
         }
     }
 }
