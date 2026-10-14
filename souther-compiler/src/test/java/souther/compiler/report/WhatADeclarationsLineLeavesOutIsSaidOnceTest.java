@@ -1,0 +1,248 @@
+package souther.compiler.report;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.DocumentShape;
+import souther.compiler.diag.SourceRendering;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A line a declaration drew is the declaration's, in what a report counts and in what it says.
+ *
+ * <p>{@code Failures} draws a line at 0 and one at 3, and every value of the type is between them.
+ * So no row is owed below 0 or above 3, at any position holding a {@code Failures} — which is a fact
+ * about the type, said once under the declarations. A behavior's {@code borders} are the lines its
+ * own rules drew: {@code greet} compares nothing and has none, and {@code fail} has its own
+ * comparison, whose IN point the invariant leaves no value at, and that is a fact about the body.
+ */
+class WhatADeclarationsLineLeavesOutIsSaidOnceTest {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    private static final String MODEL = """
+            module example.login
+
+            data Failures = Int
+                invariant value >= 0 && value <= 3
+            data Account = { failures: Failures, name: String }
+
+            behavior greet : (account: Account) -> String
+
+            let greet (account) = account.name
+
+            behavior fail : (account: Account) -> Account
+                constructs Account, Failures
+
+            let fail (account) =
+                if account.failures.value >= 3 then account
+                else Account { ...account, failures = Failures(account.failures.value + 1) }
+
+            example greet
+                | "a" : (Account { failures = Failures(0), name = "n" }) -> "n"
+
+            example fail
+                | "zero" : (Account { failures = Failures(0), name = "n" })
+                    -> Account { failures = Failures(1), name = "n" }
+                | "two" : (Account { failures = Failures(2), name = "n" })
+                    -> Account { failures = Failures(3), name = "n" }
+                | "three" : (Account { failures = Failures(3), name = "n" })
+                    -> Account { failures = Failures(3), name = "n" }
+            """;
+
+    /** What the invariant leaves out, in the words the declarations block says it in. */
+    private static final List<String> LEFT_OUT_BY_FAILURES = List.of(
+            "· no OFF point is owed at value = 0 (invariant Failures #1): excluded — no value can"
+                    + " stand there",
+            "· no OUT point is owed at value = 0 (invariant Failures #1): excluded — no value can"
+                    + " stand there",
+            "· no OFF point is owed at value = 3 (invariant Failures #1): excluded — no value can"
+                    + " stand there",
+            "· no OUT point is owed at value = 3 (invariant Failures #1): excluded — no value can"
+                    + " stand there");
+
+    /** A behavior whose rules compare nothing has no borders, whatever types it carries. */
+    @Test
+    void aBehaviorThatComparesNothingHasNoBorder() {
+        assertEquals(List.of("border      borders 0   obligations 0/0"),
+                block(human(compiled(MODEL)), "greet").stream()
+                        .filter(each -> each.startsWith("border")).toList());
+    }
+
+    /**
+     * A behavior's borders are its own rules' lines, and what its own line leaves out is said
+     * under it.
+     *
+     * <p>The IN point of {@code >= 3} is left out because the invariant leaves no value above 3, and
+     * it is still news about the body: the comparison is at the type's last value.
+     */
+    @Test
+    void aBehaviorSaysWhatItsOwnLinesLeaveOut() {
+        List<String> fail = block(human(compiled(MODEL)), "fail");
+
+        assertTrue(fail.contains("border      borders 1   obligations 3/3"), () -> "" + fail);
+        assertEquals(1, fail.stream().filter(each -> each.startsWith("· no ")).count(),
+                () -> "the body's one line and nothing of the type's: " + fail);
+        assertTrue(fail.stream().anyMatch(each -> each.startsWith(
+                        "· no IN point is owed at account.failures = 3 (comparison@")),
+                () -> "" + fail);
+    }
+
+    /** What the invariant leaves out is said once, under the declarations, and nowhere else. */
+    @Test
+    void whatTheInvariantLeavesOutIsSaidOnceUnderTheDeclarations() {
+        String report = human(compiled(MODEL));
+        List<String> declarations = block(report, "declarations");
+
+        assertTrue(declarations.getFirst().startsWith("declarations   borders 2   obligations"),
+                () -> "two lines, counted once for the module: " + declarations);
+        assertEquals(LEFT_OUT_BY_FAILURES,
+                declarations.stream().filter(each -> each.startsWith("· no ")).toList());
+        for (String each : LEFT_OUT_BY_FAILURES) {
+            assertEquals(1, report.lines().map(String::strip).filter(each::equals).count(),
+                    () -> "said once: " + each + "\n" + report);
+        }
+    }
+
+    /**
+     * Two rules at one value are two lines, and what each leaves out is its own.
+     *
+     * <p>{@code Capped} is written the way {@code Failures} is. Gathered by the value and the role,
+     * the two would be one line here and one rule's points would be said under the other's name.
+     */
+    @Test
+    void twoRulesAtOneValueAreTwoLines() {
+        List<String> declarations = block(human(compiled(TWO_TYPES)), "declarations");
+
+        assertTrue(declarations.getFirst().startsWith("declarations   borders 4"),
+                () -> "" + declarations);
+        for (String type : List.of("Failures", "Capped")) {
+            assertEquals(4, declarations.stream()
+                            .filter(each -> each.startsWith("· no ")
+                                    && each.contains("(invariant " + type + " #1)"))
+                            .count(),
+                    () -> type + " leaves out its own four points: " + declarations);
+        }
+    }
+
+    /**
+     * A view of one behavior says what the lines that behavior reads leave out, and nothing about
+     * the lines it does not.
+     */
+    @Test
+    void aViewOfOneBehaviorSaysWhatItsLinesLeaveOut() {
+        Compilation compilation = compiled(TWO_TYPES);
+        String peek = AdequacyReport.of(compilation).only(null, "peek")
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        List<String> declarations = block(peek, "declarations");
+
+        assertTrue(declarations.getFirst().startsWith("declarations   borders 2"),
+                () -> "" + declarations);
+        assertEquals(LEFT_OUT_BY_FAILURES,
+                declarations.stream().filter(each -> each.startsWith("· no ")).toList(),
+                "`peek` carries a Failures and no Capped");
+    }
+
+    private static final String TWO_TYPES = """
+            module example.two
+
+            data Failures = Int
+                invariant value >= 0 && value <= 3
+            data Capped = Int
+                invariant value >= 0 && value <= 3
+            data Account = { failures: Failures, capped: Capped, name: String }
+            data Other = { failures: Failures }
+
+            behavior greet : (account: Account) -> String
+
+            let greet (account) = account.name
+
+            behavior peek : (other: Other) -> Int
+
+            let peek (other) = other.failures.value
+
+            example greet
+                | "a" : (Account { failures = Failures(0), capped = Capped(0), name = "n" }) -> "n"
+
+            example peek
+                | "a" : (Other { failures = Failures(1) }) -> 1
+            """;
+
+    /**
+     * The document says each point once, under the declaration, and keeps the readings it has
+     * always published.
+     *
+     * <p>A behavior's {@code boundaries} are every line as its positions met it, which is what an
+     * entry about a line of a type read at one position joins to; the declaration's account of what
+     * its lines leave out is beside them and is not a second copy of them per behavior.
+     */
+    @Test
+    void theDocumentSaysEachPointOnceUnderTheDeclarations() {
+        Compilation compilation = compiled(MODEL);
+        JsonNode document = JSON.readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        JsonNode module = document.get("modules").get(0);
+
+        List<JsonNode> excluded = new ArrayList<>();
+        module.get("declarations").forEach(each -> each.get("excluded").forEach(excluded::add));
+        assertEquals(List.of("off value = 0", "out value = 0", "off value = 3", "out value = 3"),
+                excluded.stream().map(each -> each.get("point").asString() + " "
+                        + each.get("label").asString()).toList());
+        assertEquals(excluded.size(), new LinkedHashSet<>(excluded.stream()
+                        .map(each -> each.get("pointId")).toList()).size(),
+                () -> "each point is one entry: " + excluded);
+
+        List<JsonNode> read = new ArrayList<>();
+        for (JsonNode behavior : module.get("behaviors")) {
+            if ("fail".equals(behavior.get("name").asString())) {
+                behavior.get("partition").get("boundaries").forEach(
+                        each -> read.add(each.get("lineId")));
+            }
+        }
+        assertEquals(3, read.size(),
+                () -> "the two lines of the type and the body's own, as `fail` met them: " + read);
+        DocumentShape.assertShapedLikeTheSchema(document);
+    }
+
+    /** The lines of one block of the report, stripped: a behavior's, or the declarations'. */
+    private static List<String> block(String report, String heading) {
+        List<String> out = new ArrayList<>();
+        boolean in = false;
+        for (String line : report.lines().toList()) {
+            boolean headingLine = line.startsWith("  ") && !line.startsWith("    ");
+            if (headingLine) {
+                in = line.strip().startsWith(heading + " ")
+                        || line.strip().equals(heading);
+            }
+            if (in && !line.isBlank()) {
+                out.add(line.strip());
+            }
+        }
+        assertTrue(!out.isEmpty(), () -> "the report has a block for " + heading + ":\n" + report);
+        return out;
+    }
+
+    private static String human(Compilation compilation) {
+        return AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    private static Compilation compiled(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertTrue(compilation.errors().isEmpty(), () -> "the model compiles: "
+                + compilation.errors());
+        return compilation;
+    }
+}

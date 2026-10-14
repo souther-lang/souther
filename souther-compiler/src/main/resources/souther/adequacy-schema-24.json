@@ -1900,10 +1900,72 @@
               "owners",
               "name",
               "obligations",
-              "findings"
+              "findings",
+              "excluded"
             ],
             "additionalProperties": false,
             "properties": {
+              "excluded": {
+                "type": "array",
+                "description": "The points these declarations' lines leave no row owed at, once per line however many positions carry the type. A fact the declarations settled and not an obligation: none of these is in `obligations`, and none is a row anybody is short of. The same points are items of each behavior's `partition.boundaries` that reads the line, with `notOwed` there as here — that array is every line as each position met it, and this is the declaration's account of what its lines leave out.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "pointId",
+                    "point",
+                    "ruleId",
+                    "label",
+                    "notOwed"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "pointId": {
+                      "type": "object",
+                      "description": "Which point of which line, in the parts an `obligationId` names a point by. A point no row is owed at has no run to be stopped, so there is no `stops`.",
+                      "required": [
+                        "line",
+                        "level",
+                        "location"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "line": {
+                          "$ref": "#/$defs/authoredLineId"
+                        },
+                        "level": {
+                          "$ref": "#/$defs/level"
+                        },
+                        "location": {
+                          "$ref": "#/$defs/location"
+                        }
+                      }
+                    },
+                    "point": {
+                      "enum": [
+                        "on",
+                        "off",
+                        "in",
+                        "out"
+                      ],
+                      "description": "Which of the four coverage items this point is. Not what tells two of them apart: two points of one line can carry one of these words, and `pointId` is what they differ by."
+                    },
+                    "ruleId": {
+                      "$ref": "#/$defs/ruleId"
+                    },
+                    "label": {
+                      "type": "string",
+                      "description": "Where the line is, in the words the declaration wrote for what it is on, and the level where the line states one on that quantity. A rendering and never a key."
+                    },
+                    "notOwed": {
+                      "enum": [
+                        "no_value_can_stand_there",
+                        "the_carrier_names_no_neighbour"
+                      ],
+                      "description": "Why no row is owed at the point, in the words a behavior's `boundaries` item uses for the same answer."
+                    }
+                  }
+                }
+              },
               "name": {
                 "type": "string",
                 "description": "What a report calls the owners above. A rendering and never a key: two sets of declarations a report writes alike are two sets."

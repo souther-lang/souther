@@ -454,6 +454,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     ? List.of() : owedByDeclarations.owed().owed();
         }
 
+        /** The lines the declarations drew, each once, for a reader walking them. Empty where
+         *  nobody could be asked, for the reason {@link #debts()} is. */
+        public List<Adequacy.DeclaredLine> declaredLines() {
+            return owedByDeclarations.owed() == null
+                    ? List.of() : owedByDeclarations.owed().lines();
+        }
+
         /**
          * Why the measures of this module could not read everything, as the reasons themselves.
          *
@@ -786,6 +793,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     : boundaryReadings().made().orElseGet(List::of);
         }
 
+        /**
+         * The lines this behavior's own rules drew, which are the borders a report says it has.
+         *
+         * <p>A line a declaration drew is read at this behavior's positions and is still the
+         * declaration's: what it owes is the declarations' account, and what it leaves out is said
+         * once under the declarations ({@link Adequacy.DeclaredLine}). Counted or said here, a
+         * behavior that compares nothing has borders, and every behavior carrying the type repeats
+         * the same points. Whose a line is is the line's own answer
+         * ({@link AuthoredLine#obligationOwners}), the one the accounts are filed by.
+         */
+        public List<BorderAssessment> ownLines() {
+            return lines().stream()
+                    .filter(line -> line.origin().authoredLine().obligationOwners().isEmpty())
+                    .toList();
+        }
+
 
         /** What they establish about the arms of its body. */
         public Adequacy.BranchEvidence branch() {
@@ -1054,6 +1077,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         List<BorderAssessment> lines = new ArrayList<>();
         owed.owed().forEach(each -> lines.addAll(each.debt().met().values()));
+        owed.lines().forEach(each -> lines.add(each.read()));
         return lines;
     }
 
@@ -1866,13 +1890,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // What the declarations are owed, folded the way a behavior's own account is and by the same
         // fold. Here rather than in the blocks above, because that is where the work is: a line a
         // `data` clause drew is owed once for the module, and a behavior carrying the type is short
-        // of nothing on its account.
+        // of nothing on its account. And the lines themselves counted here, each once, for the same
+        // reason: a behavior's `borders` are the lines its own rules drew.
         List<Adequacy.DeclaredDebt> debts = module.debts();
+        List<Adequacy.DeclaredLine> lines = module.declaredLines();
         ObligationSummary<Adequacy.DeclaredDebt> account =
                 ObligationSummary.of(debts, each -> each.debt().owed());
-        if (!debts.isEmpty()) {
-            out.append(String.format("  declarations   obligations %d/%d%s%n",
-                    account.met().size(), account.counted(), refuted(account)));
+        if (!debts.isEmpty() || !lines.isEmpty()) {
+            out.append(String.format("  declarations   borders %d   obligations %d/%d%s%n",
+                    lines.size(), account.met().size(), account.counted(), refuted(account)));
         }
         // Every obligation the count holds and no row is at, so that the difference between the two
         // numbers is a difference a reader can walk. A point nobody can say is missed is not a gap
@@ -1913,6 +1939,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             covered.obligation().debt().describe(places), rendering, null)),
                     rowsThatDoNotHold(covered.by(), module.owedByDeclarations().rowPlace(),
                             rendering, null)));
+        }
+        // And the points the declarations' lines leave nobody owing, once per line, in the words a
+        // behavior's own are said in. They are not obligations and are in neither number above.
+        // A line with no level in the declaration's words is named by its rule, as a debt on it is.
+        for (Adequacy.DeclaredLine each : lines) {
+            String rule = RuleHandleProse.said(each.read().describe(places), rendering, null);
+            String owed = each.namesItsLevel()
+                    ? " is owed at " + each.said() + " (" + rule + ")" : " of " + rule + " is owed";
+            String exists = each.namesItsLevel()
+                    ? " exists at " + each.said() + " (" + rule + ")" : " of " + rule + " exists";
+            for (BorderAssessment.Point p : each.notOwed()) {
+                if (p.item() instanceof ItemAssessment.NotOwed not) {
+                    out.append(String.format("      · no %s point%s%s: %s%n",
+                            p.role(), each.read().border().whichSide(p.at()), owed,
+                            whyNotOwed(not.reason())));
+                }
+            }
+            each.noPoint().forEach((role, none) -> out.append(String.format(
+                    "      · no %s point%s: %s%n", role, exists, whyNoPoint(none.why()))));
         }
         Map<String, List<Adequacy.Finding>> byDeclaration = new LinkedHashMap<>();
         for (ReportedFinding each : module.declarations()) {
@@ -3226,15 +3271,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // so a count of borders would say a border with one point met and three missed was as
         // covered as one with nothing to owe but that point; and a line is owed once however many
         // positions read it, so a count of readings would say a guard on a name every case of a sum
-        // spreads was as many rows as the sum has cases. `borders` stays the lines at coordinates,
-        // which is what the block under it shows, and the two numbers are not one multiplied.
+        // spreads was as many rows as the sum has cases. `borders` stays the lines at coordinates
+        // this behavior's own rules drew, which is what the block under it shows, and the two
+        // numbers are not one multiplied. A line a declaration drew is the declarations' to count
+        // and to say, in the block about them.
         //
         // What this behavior is owed is its account, which is a projection of the module's one
         // relation, and where each obligation of it stands is one fold shared with the block that
         // says what the declarations owe.
         ReportMeasurement<List<BorderAssessment>> bounded =
                 ReportMeasurement.of(behavior.boundaryReadings());
-        List<BorderAssessment> lines = behavior.lines();
+        List<BorderAssessment> lines = behavior.ownLines();
         ObligationSummary<BorderObligationPointAssessment> owed = ObligationSummary.of(
                 behavior.account(), BorderObligationPointAssessment::owed);
         if (!bounded.counted()) {
@@ -3366,6 +3413,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // What the model itself answered, which is not a row anybody is behind on. Named by the
         // reason rather than left blank: a point the rules refuse and a point this language cannot
         // write down are counted out for opposite reasons, and a reader acts on them differently.
+        // Of this behavior's own lines only. What a declaration's line leaves out is the same at
+        // every behavior carrying the type, and is said once where the declarations are.
         for (BorderAssessment.Point p : BorderAssessment.pointsOf(lines)) {
             if (p.item() instanceof ItemAssessment.NotOwed not) {
                 out.append(String.format("      · no %s point%s is owed at %s (%s): %s%n",
@@ -6508,7 +6557,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // sent to is exactly what {@link FindingSubject} was introduced
             // to keep.
             declarations(m.putArray("declarations"), module.declarations(), module.debts(),
-                    sources, module.owedByDeclarations().rulePlace(),
+                    module.declaredLines(), sources, module.owedByDeclarations().rulePlace(),
                     module.owedByDeclarations().rowPlace());
             ArrayNode behaviors = m.putArray("behaviors");
             for (BehaviorReport behavior : module.behaviors()) {
@@ -7609,8 +7658,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * declaration it belongs to would be gone.
      */
     private void declarations(ArrayNode out, List<ReportedFinding> written,
-                              List<Adequacy.DeclaredDebt> owed, DocumentSources sources,
-                              PublishedRuleHandle.WhereARuleIs places, WhereARowIs rowsAt) {
+                              List<Adequacy.DeclaredDebt> owed, List<Adequacy.DeclaredLine> lines,
+                              DocumentSources sources, PublishedRuleHandle.WhereARuleIs places,
+                              WhereARowIs rowsAt) {
         // What the declarations are owed, under the declaration each is owed to, and not only what
         // they are short of. A line a row already stands at has no finding, so a section written
         // from the findings alone publishes the gaps and nothing else — a reader could not tell a
@@ -7634,6 +7684,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             ? it.declarations() : List.of();
             byOwners.computeIfAbsent(owners, _ -> new Entry()).found.add(each);
         }
+        // And the lines that leave some point unowed, under the same owners. A line every point of
+        // which is owed has nothing to publish here that its obligations do not.
+        for (Adequacy.DeclaredLine each : lines) {
+            if (!each.notOwed().isEmpty()) {
+                byOwners.computeIfAbsent(each.owners().stream()
+                                .map(Adequacy.DeclaredDebt.Owner::declaration).toList(),
+                        _ -> new Entry()).lines.add(each);
+            }
+        }
         byOwners.forEach((owners, entry) -> {
             ObjectNode one = out.addObject();
             ArrayNode declared = one.putArray("owners");
@@ -7645,13 +7704,41 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             each -> each.debt().point(), Adequacy.DeclaredDebt::axis, (a, _) -> a)),
                     sources, places, rowsAt);
             findings(DocumentPart.FINDINGS.putArray(one), entry.found, sources, places);
+            excluded(one.putArray("excluded"), entry.lines);
         });
+    }
+
+    /**
+     * The points the declarations' lines leave nobody owing, once per line however many positions
+     * read it.
+     *
+     * <p>Identified the way an obligation is, by the line, its level and where on the quantity the
+     * point is, so that a consumer holding a point of a behavior's {@code boundaries} finds it here
+     * by the same parts. Not among the obligations: none of these is a row anybody is short of.
+     */
+    private static void excluded(ArrayNode out, List<Adequacy.DeclaredLine> lines) {
+        for (Adequacy.DeclaredLine line : lines) {
+            for (BorderAssessment.Point point : line.notOwed()) {
+                if (point.item() instanceof ItemAssessment.NotOwed not) {
+                    ObjectNode one = out.addObject();
+                    ObjectNode id = one.putObject("pointId");
+                    authoredLineId(id.putObject("line"), line.line().line());
+                    level(id.putObject("level"), line.line().at());
+                    location(id.putObject("location"), point.at());
+                    one.put("point", word(point.role()));
+                    ruleId(one.putObject("ruleId"), line.line().provenance());
+                    one.put("label", line.said());
+                    one.put("notOwed", word(not.reason()));
+                }
+            }
+        }
     }
 
     /** What one set of owners owes and is short of, gathered before anything is written. */
     private static final class Entry {
         private final List<Adequacy.DeclaredDebt> owed = new ArrayList<>();
         private final List<ReportedFinding> found = new ArrayList<>();
+        private final List<Adequacy.DeclaredLine> lines = new ArrayList<>();
 
         /**
          * What a report calls this set, taken from whoever already says it.

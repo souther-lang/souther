@@ -81,7 +81,7 @@ class WhatADeclarationsAccountSaysWhenARowCouldNotBeReadTest {
     void everyObligationTheCountHoldsAndNoRowIsAtIsNamed() throws Exception {
         Run run = examples(TOO_LARGE_TO_OBSERVE, "--strict");
 
-        assertTrue(run.out().contains("declarations   obligations 0/4"),
+        assertTrue(run.out().contains("declarations   borders 2   obligations 0/4"),
                 () -> "the module's declarations owe four rows and no row is at one:\n" + run.out());
         assertEquals(4, run.out().lines()
                         .filter(line -> line.contains("? undecided whether a row is at")).count(),
@@ -106,17 +106,19 @@ class WhatADeclarationsAccountSaysWhenARowCouldNotBeReadTest {
     }
 
     /**
-     * The behavior's own block owes nothing, the lines under it being the declarations'.
+     * The behavior's own block has no border and owes nothing, the lines it reads being the
+     * declarations'.
      *
-     * <p>Two borders and no obligation: the body reads {@code Amount}'s clause at one position and
-     * the rows the clause asks for are owed once for the module, so the two numbers here count
-     * different things and neither is a part of the other.
+     * <p>The body reads {@code Amount}'s clause at one position, and the clause's two lines and the
+     * rows they ask for are the module's, counted once under the declarations. Counted here as
+     * well, every behavior carrying the type would have borders its body never drew.
      */
     @Test
-    void theBehaviorsBlockCountsBordersAndOwesNothing() throws Exception {
+    void theBehaviorsBlockHasNoBorderOfTheDeclarations() throws Exception {
         Run run = examples(TOO_LARGE_TO_OBSERVE);
 
-        assertTrue(run.out().contains("border      borders 2   obligations 0/0"), run.out());
+        assertTrue(run.out().contains("border      borders 0   obligations 0/0"), run.out());
+        assertTrue(run.out().contains("declarations   borders 2   obligations 0/4"), run.out());
     }
 
     private record Run(int code, String out, String err) {}

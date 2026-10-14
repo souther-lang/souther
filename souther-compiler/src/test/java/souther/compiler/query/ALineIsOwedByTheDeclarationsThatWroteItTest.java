@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.meta.ModulePath;
 import souther.compiler.partition.BorderObligationId;
+import souther.compiler.partition.PointRole;
 
 import java.util.List;
 
@@ -91,7 +92,7 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
         Compilation both = compiled(PRODUCER, CONSUMER);
         assertTrue(Adequacy.boundariesOf(both.db(), "example.consumer").get("tag").stream()
                         .anyMatch(each -> each.owedAt(
-                                souther.compiler.partition.PointRole.ON).hasRowWitness()),
+                                PointRole.ON).hasRowWitness()),
                 "the consumer's row does stand at the line, so there is something to be read");
 
         List<Adequacy.Finding> alone = declaredFindings(compiled(PRODUCER), "example.producer");
@@ -114,6 +115,35 @@ class ALineIsOwedByTheDeclarationsThatWroteItTest {
         assertEquals(account(compiled(PRODUCER), "example.producer"),
                 account(compiled(PRODUCER, CONSUMER), "example.producer"),
                 "a module's account of its own declarations is its own");
+    }
+
+    /**
+     * And what the line leaves out is the producer's to say, once, and nothing the importer says.
+     *
+     * <p>The points below length 1 are no value of a {@code Sku} at either module. Held as the
+     * importer's, they are the same points said again by a module that wrote none of the rule.
+     */
+    @Test
+    void whatAnImportedTypesLineLeavesOutIsTheProducersAlone() {
+        Compilation both = compiled(PRODUCER, CONSUMER);
+
+        assertEquals(List.of(), linesOf(both, "example.consumer"),
+                "the consumer carries the type and drew none of its lines");
+        List<Adequacy.DeclaredLine> producers = linesOf(both, "example.producer");
+        assertEquals(1, producers.size(), () -> "one clause, one line: " + producers);
+        assertEquals(List.of("label"), producers.get(0).carriedBy(),
+                "read by the producer's own behavior, and the consumer's reading is not one of its");
+        assertEquals(List.of(PointRole.OFF, PointRole.OUT),
+                producers.get(0).notOwed().stream().map(BorderAssessment.Point::role).toList(),
+                "no string is shorter than the line and still a Sku");
+    }
+
+    /** The lines the module's declarations drew, in the order the query answers them. */
+    private static List<Adequacy.DeclaredLine> linesOf(Compilation compilation, String module) {
+        Adequacy.DeclaredBoundaries account =
+                compilation.db().ask(new Adequacy.DeclaredBorders(module)).value();
+        assertNotNull(account, "the model under test compiles");
+        return account.lines();
     }
 
     /** What each of the module's debts asks a row for, as a report writes it. */

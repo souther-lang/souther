@@ -97,7 +97,8 @@ class ARunOfTheStringsIsABoundAndIsOwedItsEdgeTest {
         assertTrue(report.contains(
                 "undecided whether a row is at the ON point value = JP (invariant Pre #1)"), report);
         assertTrue(report.contains(
-                "no ON point is owed at v = JQ (invariant Pre #1): this order names no value there"),
+                "no ON point is owed at value = JQ (invariant Pre #1): this order names no value"
+                        + " there"),
                 report);
     }
 

@@ -222,7 +222,20 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
 
         assertFalse(block.contains("divided no way: c"), block);
         assertFalse(notReadAbout(block, "c"), block);
-        assertTrue(block.contains("border      borders 1   obligations 0/0\n"), block);
+        assertTrue(block.contains("border      borders 0   obligations 0/0\n"), block);
+        String declarations = declarationsShownWith("boundedByADate");
+        assertTrue(declarations.startsWith("  declarations   borders 1 "), declarations);
+    }
+
+    /** The declarations' block of a report showing {@code behavior} alone, which holds the lines
+     *  the declarations drew that it reads. */
+    private static String declarationsShownWith(String behavior) {
+        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String human = AdequacyReport.of(compilation).only(null, behavior)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        return human.substring(human.indexOf("  declarations "));
     }
 
     /**

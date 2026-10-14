@@ -79,7 +79,7 @@ class AnEdgeNothingPromisesSaysWhatWasTriedTest {
     void theEdgeIsCountedAndTheVerdictSaysNobodyCouldDecideIt() {
         String human = report();
 
-        assertTrue(human.contains("declarations   obligations 2/4"), human);
+        assertTrue(human.contains("declarations   borders 2   obligations 2/4"), human);
         assertTrue(human.contains("adequacy: undetermined"), human);
     }
 

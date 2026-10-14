@@ -38,8 +38,10 @@ class AChoiceOfBoundsOnOneNumberStopsItWhereBothLeaveItTest {
             data Answer = Yes | No
             """;
 
+    /** The line is the declaration's, so the behavior carrying the type has no border of it and
+     *  the declarations count it. */
     private static final List<String> A_LINE_AT_TWO =
-            List.of("border      borders 1   obligations 0/0");
+            List.of("border      borders 0   obligations 0/0", "declarations   borders 1");
     private static final List<String> NO_LINE =
             List.of("border      not applicable (the rules of this behavior draw no line)");
     private static final List<String> NOT_MEASURED =
@@ -177,7 +179,8 @@ class AChoiceOfBoundsOnOneNumberStopsItWhereBothLeaveItTest {
         assertEquals(List.of(
                         "partition   not measured (no partition axis was derived at any position)",
                         "· divided no way: c[*]",
-                        "border      borders 2   obligations 0/0",
+                        "border      borders 0   obligations 0/0",
+                        "declarations   borders 2",
                         "· read as check/Set.size(c): = 3",
                         "· read as check/Set.size(c): in 3 < Set.size(c) <= 5",
                         "· read as check/Set.size(c): = 5",
@@ -195,7 +198,8 @@ class AChoiceOfBoundsOnOneNumberStopsItWhereBothLeaveItTest {
                         behavior check : (c: Codes) -> Answer
                         let check (c) = Yes
                         """,
-                        each -> each.startsWith("border") || each.startsWith("· read as")
+                        each -> each.startsWith("border") || each.startsWith("declarations")
+                                || each.startsWith("· read as")
                                 || each.startsWith("partition")
                                 || each.startsWith("· divided")),
                 "the ends are at three and five, and nothing says the sizes between them are"
@@ -275,8 +279,10 @@ class AChoiceOfBoundsOnOneNumberStopsItWhereBothLeaveItTest {
                 "· read as check/" + number + ": in " + value + " < " + number);
     }
 
+    /** The behavior's border, and how many lines the declarations drew. */
     private static List<String> borderIn(String clause) {
-        return linesOf(clause, each -> each.startsWith("border"));
+        return linesOf(clause, each -> each.startsWith("border")
+                || each.startsWith("declarations"));
     }
 
     private static List<String> readingIn(String clause) {
@@ -304,6 +310,14 @@ class AChoiceOfBoundsOnOneNumberStopsItWhereBothLeaveItTest {
         return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip)
                 .filter(which)
+                .map(AChoiceOfBoundsOnOneNumberStopsItWhereBothLeaveItTest::linesCounted)
                 .toList();
+    }
+
+    /** The declarations' header as far as how many lines they drew. What they are owed beside it
+     *  is about rows, which these models write none of. */
+    private static String linesCounted(String line) {
+        int owed = line.indexOf("   obligations");
+        return line.startsWith("declarations") && owed >= 0 ? line.substring(0, owed) : line;
     }
 }

@@ -280,7 +280,9 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(TWO_NEWTYPES);
 
         assertTrue(report.contains("read as benefitOf/charge: = ceiling"), report);
-        assertTrue(report.contains("border      borders 3   obligations 2/4"), report);
+        // The comparison is the body's one line; the two types' own bounds are the declarations'.
+        assertTrue(report.contains("border      borders 1   obligations 2/4"), report);
+        assertTrue(report.contains("declarations   borders 2 "), report);
     }
 
     /**
@@ -297,7 +299,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aRowOnTheLineMeetsIt() {
         String report = report(ON_THE_LINE);
 
-        assertTrue(report.contains("border      borders 3   obligations 3/4"), report);
+        assertTrue(report.contains("border      borders 1   obligations 3/4"), report);
         assertFalse(report.contains("read as benefitOf/charge: = ceiling\n"),
                 report);
         assertTrue(report.contains("read as benefitOf/charge: = ceiling + 1"),
@@ -548,7 +550,10 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(ALLOWED_BY_THE_RECORD);
 
         assertTrue(report.contains("read as cmp/p.a: = p.b"), report);
-        assertTrue(report.contains("border      borders 2   obligations 1/2"), report);
+        // The guard's line is the body's and the clause's is the declaration's, so each is counted
+        // where it is owed.
+        assertTrue(report.contains("border      borders 1   obligations 1/2"), report);
+        assertTrue(report.contains("declarations   borders 1   obligations 1/2"), report);
     }
 
     private static String report(String model) {
