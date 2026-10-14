@@ -99,7 +99,7 @@ class ADemandNoRegionCarriesIsNotComposedAgainstTest {
     /** The reasons a search that came to nothing came back with. */
     private static List<Generator.UnresolvedCombination.Reason> reasons(RuleSettlement settled) {
         return settled.search() instanceof RuleSearch.CameToNothing(var ways)
-                ? ways.stream().map(Generator.UnresolvedCombination::reason).toList()
+                ? ways.stream().map(each -> each.why().reason()).toList()
                 : List.of();
     }
 

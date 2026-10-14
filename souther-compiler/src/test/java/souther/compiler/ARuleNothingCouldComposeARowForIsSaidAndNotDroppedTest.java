@@ -137,8 +137,9 @@ class ARuleNothingCouldComposeARowForIsSaidAndNotDroppedTest {
         // may be the easiest row in the file to write by hand, and a requirement carrying that
         // reason would be the generator's failure answering whether a row is owed.
         assertEquals("nothing_was_composed_to_try", unsettled.get("because").stringValue());
-        assertEquals("a_table_is_what_this_needs",
-                unsettled.get("synthesisShortfall").stringValue());
+        JsonNode words = unsettled.get("synthesisShortfalls");
+        assertEquals(1, words.size(), () -> "the ways came back with one word: " + words);
+        assertEquals("a_table_is_what_this_needs", words.get(0).get("reason").stringValue());
     }
 
     @Test
@@ -149,7 +150,7 @@ class ARuleNothingCouldComposeARowForIsSaidAndNotDroppedTest {
 
         rules.forEach(rule -> {
             if ("required".equals(rule.get("requirement").stringValue())) {
-                assertNull(rule.get("synthesisShortfall"),
+                assertNull(rule.get("synthesisShortfalls"),
                         () -> "a row was composed for it and run, so nothing fell short: " + rule);
                 assertNull(rule.get("because"),
                         () -> "and what settles it is the row that was seen standing in: " + rule);

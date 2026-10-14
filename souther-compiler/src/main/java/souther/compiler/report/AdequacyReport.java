@@ -4214,10 +4214,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     new Said(0, 1, "a row was composed and run, and what it was composed against"
                             + " was less than the way asks");
             case RuleRequirement.Unsettled.NothingWasComposedToTry _ ->
-                    new Said(1, PublicationOrders.positionOf(
-                                    came.synthesisShortfall().reason()),
-                            GeneratedRows.beside(saidOrWhy(came.synthesisShortfall()),
-                                    came.synthesisShortfall(), rendering, places));
+                    nothingToTry(came.synthesisShortfalls(), rendering, places);
             case RuleRequirement.Unsettled.CouldNotTellWhereTheRowWent(var reading) ->
                     new Said(2, PublicationOrders.positionOf(reading), switch (reading) {
                         case NO_RULE_IS_RECOGNISABLE ->
@@ -4282,6 +4279,30 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * What a rule nothing was composed to try is said as.
+     *
+     * <p>A clause per word, each opening on what its searches met of this compiler's, the way a
+     * point this compiler stopped at opens. Told the word first, a reader has already read a search
+     * that had everything and reached nothing; told the figure first, they read the word as the
+     * answer of a search that did not finish, and know what to raise.
+     *
+     * <p>Where the sentence sits among the others is the first word's place, as for a proof.
+     */
+    private static Said nothingToTry(List<RuleSearch.Came> came, SourceRendering rendering,
+                                     PublishedRuleHandle.WhereARuleIs places) {
+        List<String> clauses = new ArrayList<>();
+        for (RuleSearch.Came each : came) {
+            String clause = Reasons.met(each.figures(), each.populations(), each.unheld())
+                    + GeneratedRows.beside(saidOrWhy(each.why()), each.why(), rendering, places);
+            if (!clauses.contains(clause)) {
+                clauses.add(clause);
+            }
+        }
+        return new Said(1, PublicationOrders.positionOf(came.get(0).why().reason()),
+                String.join("; ", clauses));
+    }
+
+    /**
      * What a rule the composings proved no value takes is said as.
      *
      * <p>A clause per word and never one per way. How many ways came back with a word is how many
@@ -4294,13 +4315,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static Said proved(RuleSearch.CameToNothing proofs, SourceRendering rendering,
                                PublishedRuleHandle.WhereARuleIs places) {
         List<String> clauses = new ArrayList<>();
-        for (Generator.UnresolvedCombination why : proofs.ways()) {
+        for (RuleSearch.Came proof : proofs.ways()) {
+            Generator.UnresolvedCombination why = proof.why();
             String clause = GeneratedRows.beside(saidOrWhy(why), why, rendering, places);
             if (!clauses.contains(clause)) {
                 clauses.add(clause);
             }
         }
-        return new Said(7, PublicationOrders.positionOf(proofs.ways().get(0).reason()),
+        return new Said(7, PublicationOrders.positionOf(proofs.ways().get(0).why().reason()),
                 String.join("; ", clauses));
     }
 
@@ -7349,14 +7371,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // its own. A row this compiler could not compose is its shortfall and says nothing
                 // about whether the model owes one there, so a consumer reading `requirement` is
                 // never handed a generator's failure as the answer to that question.
-                if (came.synthesisShortfall() != null) {
-                    one.put("synthesisShortfall", word(came.synthesisShortfall().reason()));
-                    // And why the offer it was refusing was not everything the rules leave, where
-                    // anything made it short. Beside the word and not spelled into it: the word is
-                    // what the search came to and this is what it was given to try, and a consumer
-                    // told the first alone counts a rule this compiler never read as a rule the
-                    // values were refused by.
-                    causes(one, came.synthesisShortfall(), sources, behavior.rulePlace());
+                if (!came.synthesisShortfalls().isEmpty()) {
+                    synthesisShortfalls(one, came.synthesisShortfalls(), sources,
+                            behavior.rulePlace());
                 }
             }
         }
@@ -7433,6 +7450,52 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             }
         });
+    }
+
+    /**
+     * What the composings for a rule came back with where none had a candidate to try, one entry
+     * per word.
+     *
+     * <p>Each word with what its searches met of this compiler's, in the document's own words for
+     * the three things a search meets: a figure it stopped at or was cut short by, a population it
+     * writes some of, and a number it could not hold. A word alone sends a consumer to rewrite a
+     * rule where a figure was the whole of it.
+     *
+     * <p>And why the offer each was refusing was not everything the rules leave, where anything
+     * made it short. Beside the word and not spelled into it: the word is what the search came to
+     * and this is what it was given to try, and a consumer told the first alone counts a rule this
+     * compiler never read as a rule the values were refused by. On the entry and not beside the
+     * list, because it is that word's offer it is about.
+     *
+     * <p>Every array absent where it would be empty, so an entry with no {@code figures} is one
+     * that met no figure rather than one nobody asked.
+     */
+    private static void synthesisShortfalls(ObjectNode into, List<RuleSearch.Came> came,
+                                            DocumentSources sources,
+                                            PublishedRuleHandle.WhereARuleIs places) {
+        ArrayNode all = into.putArray("synthesisShortfalls");
+        for (RuleSearch.Came each : came) {
+            ObjectNode one = all.addObject();
+            one.put("reason", word(each.why().reason()));
+            if (!each.figures().isEmpty()) {
+                ArrayNode figures = one.putArray("figures");
+                each.figures().written().forEach(figure -> figures.add(word(figure)));
+            }
+            if (!each.populations().isEmpty()) {
+                ArrayNode populations = one.putArray("populations");
+                each.populations().written()
+                        .forEach(population -> populations.add(word(population)));
+            }
+            if (!each.unheld().isEmpty()) {
+                ArrayNode unheld = one.putArray("unheld");
+                for (CompositionCapacity number : each.unheld().written()) {
+                    ObjectNode said = unheld.addObject();
+                    said.put("where", word(number.where()));
+                    said.put("why", word(number.why()));
+                }
+            }
+            causes(one, each.why(), sources, places);
+        }
     }
 
     /**

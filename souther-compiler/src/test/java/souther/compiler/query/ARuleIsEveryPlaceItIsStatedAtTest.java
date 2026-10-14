@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.partition.AnswersDemanded;
+import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.ConditionGap;
 import souther.compiler.partition.ConditionOccurrence;
@@ -202,9 +203,10 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
     void aRuleIsExcludedOnlyWhereEveryPlaceIs() {
         DecisionReading.Ruled at = compiled().answering();
         SettledAt excluded = new SettledAt(at, RuleSettlement.provedNothingTakesIt(
-                RuleSearch.CameToNothing.of(List.of(new Generator.UnresolvedCombination(
-                        List.of("a rule of the decision"),
-                        Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE)))));
+                RuleSearch.CameToNothing.of(List.of(CameToNothing.metNothing(
+                        new Generator.UnresolvedCombination(List.of("a rule of the decision"),
+                                Generator.UnresolvedCombination.Reason
+                                        .NO_VALUE_CAN_STAND_THERE))))));
         SettledAt elsewhere = new SettledAt(at, RuleSettlement.of(
                 new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
                 CompositionAccount.NOTHING));
@@ -237,9 +239,7 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
         DecisionReading.Ruled second = Compiled.under(first.rule(), body.read().found().stream()
                 .filter(each -> !each.equals(first)).findFirst().orElseThrow());
         SettledAt nothingTried = new SettledAt(first, RuleSettlement.nothingToTryWith(
-                new Generator.UnresolvedCombination(List.of("a rule of the decision"),
-                        Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE),
-                CompositionAccount.NOTHING));
+                cameToNothing(), CompositionAccount.NOTHING));
         SettledAt composed = new SettledAt(second, RuleSettlement.of(
                 new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
                 CompositionAccount.NOTHING));
@@ -274,9 +274,7 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
                 List.of(new RuleStep(first.steps().getFirst().shown(), List.of(declinedSecond),
                         AnswersDemanded.NOTHING, SaidOnTheWay.NONE)), true);
         SettledAt nothingTried = new SettledAt(one, RuleSettlement.nothingToTryWith(
-                new Generator.UnresolvedCombination(List.of("a rule of the decision"),
-                        Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE),
-                CompositionAccount.NOTHING));
+                cameToNothing(), CompositionAccount.NOTHING));
         SettledAt composed = new SettledAt(other, RuleSettlement.of(
                 new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
                 CompositionAccount.NOTHING));
@@ -288,6 +286,13 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
                     Adequacy.DecisionSearch.acrossThePlaces(met).leftOut(),
                     "the conditions of the place that answered, and none of the other's");
         }
+    }
+
+    /** A search of the rule that had nothing to try and met nothing of this compiler's. */
+    private static RuleSearch.CameToNothing cameToNothing() {
+        return RuleSearch.CameToNothing.of(List.of(CameToNothing.metNothing(
+                new Generator.UnresolvedCombination(List.of("a rule of the decision"),
+                        Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE))));
     }
 
     /** A condition of the decision's reading declined for a reason, named {@code which}. */

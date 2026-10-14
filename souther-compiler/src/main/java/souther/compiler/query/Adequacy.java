@@ -2784,28 +2784,67 @@ public final class Adequacy {
             if (proved != null) {
                 return RuleSettlement.provedNothingTakesIt(proved);
             }
+            return whatTheWaysCameTo(ways, built -> whatItsRunSettles(built, probe, taken, ruled));
+        }
+
+        /**
+         * What the ways of standing the dependencies in came to together, where they did not
+         * together prove the rule.
+         *
+         * <p>A way that had a row to try is the answer over every way that had none, and among
+         * those the one that established the most, the first of them where two established as much.
+         *
+         * <p><b>Where no way had a row to try, every way is the answer.</b> They are alike as an
+         * account of the rule — the rule is left where it was — and they are not alike in what they
+         * met: one stopped at a figure and another walked some of a population leave an author two
+         * things to raise. A choice between them would be the order the ways were enumerated in,
+         * so what they came to is joined by the law every search that came to nothing is joined
+         * by.
+         *
+         * <p>What the composing was arrived at without is the first such way's. It says what the
+         * conditions of one way's region were, and two regions' conditions put into one account
+         * would read as conditions one composing went without together.
+         *
+         * @param run what the run of a row that was composed settles about the rule
+         */
+        static RuleSettlement whatTheWaysCameTo(List<Generator.BoundaryAttempt> ways,
+                                                Function<Generator.BoundaryAttempt.Built,
+                                                        RuleSettlement> run) {
             RuleSettlement established = null;
+            List<CameToNothing> cameToNothing = new ArrayList<>();
+            CompositionAccount firstAccount = null;
             for (Generator.BoundaryAttempt made : ways) {
-                RuleSettlement here = switch (made) {
+                switch (made) {
                     // What the composing came to, said on the axis it is about. The rule is left
                     // where it was and nothing here is a word about the model: the way may be the
                     // easiest row in the file to write by hand, and a requirement carrying this
                     // reason would say otherwise.
-                    case Generator.BoundaryAttempt.NoRow none ->
-                            RuleSettlement.nothingToTryWith(none.why(), none.unrepresented());
-                    case Generator.BoundaryAttempt.Built built ->
-                            whatItsRunSettles(built, probe, taken, ruled);
-                };
-                established = established == null || establishes(here) > establishes(established)
-                        ? here : established;
+                    case Generator.BoundaryAttempt.NoRow none -> {
+                        cameToNothing.add(none.came());
+                        firstAccount = firstAccount == null ? none.unrepresented() : firstAccount;
+                    }
+                    case Generator.BoundaryAttempt.Built built -> {
+                        RuleSettlement here = run.apply(built);
+                        established = established == null
+                                || establishes(here) > establishes(established)
+                                ? here : established;
+                    }
+                }
+            }
+            if (established != null) {
+                return established;
+            }
+            if (!cameToNothing.isEmpty()) {
+                return RuleSettlement.nothingToTryWith(RuleSearch.CameToNothing.of(cameToNothing),
+                        firstAccount);
             }
             // Nothing was tried at all, which is the classes not linking rather than a search that
             // came to nothing.
-            return established != null ? established
-                    : RuleSettlement.nothingToTryWith(new Generator.UnresolvedCombination(
-                            List.of("a rule of the decision"),
-                            Generator.UnresolvedCombination.Reason.LINKAGE_FAILED),
-                            souther.compiler.partition.CompositionAccount.NOTHING);
+            return RuleSettlement.nothingToTryWith(RuleSearch.CameToNothing.of(List.of(
+                            CameToNothing.metNothing(new Generator.UnresolvedCombination(
+                                    List.of("a rule of the decision"),
+                                    Generator.UnresolvedCombination.Reason.LINKAGE_FAILED)))),
+                    CompositionAccount.NOTHING);
         }
 
         /**
@@ -2862,15 +2901,21 @@ public final class Adequacy {
          * proves, so the ways of one rule may be proved by two of them — and a reader shown
          * whichever came first is shown what the walk did. The order is the selection's
          * ({@link RuleSearch.CameToNothing#of}) and not this walk's.
+         *
+         * <p><b>Only a search that came to its word over the whole of what it was asked proves
+         * anything.</b> A search a figure cut what it was handed may come back with a word that
+         * proves, and what it proves is about the part it was handed; one a figure stopped or left
+         * unplanned did not get to the end at all. Those are asked by their shape and not by their
+         * word, the way the points of a border are ({@link SearchOutcomes#provesInfeasible()}).
          */
         static RuleSearch.CameToNothing provedByEveryWay(List<Generator.BoundaryAttempt> ways) {
-            List<Generator.UnresolvedCombination> proofs = new ArrayList<>();
+            List<CameToNothing> proofs = new ArrayList<>();
             for (Generator.BoundaryAttempt way : ways) {
-                if (!(way instanceof Generator.BoundaryAttempt.NoRow none)
-                        || !none.why().reason().provesInfeasible()) {
+                if (!(way instanceof Generator.BoundaryAttempt.Unresolved whole)
+                        || !whole.why().reason().provesInfeasible()) {
                     return null;
                 }
-                proofs.add(none.why());
+                proofs.add(whole.came());
             }
             return proofs.isEmpty() ? null : RuleSearch.CameToNothing.of(proofs);
         }

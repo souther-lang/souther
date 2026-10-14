@@ -4813,6 +4813,31 @@ public final class Generator {
 
             /** What the search came to, in the words the search came back with. */
             UnresolvedCombination why();
+
+            /**
+             * The word and what of this compiler's the search met on the way to it, as the one
+             * value every other search that came to nothing is carried in.
+             *
+             * <p>Asked here and not taken apart by a caller. A caller reading the word off this and
+             * the rest out of whichever shapes it knows about reads the word alone for every shape
+             * it does not, and a search a figure stopped reaches an author as one this compiler has
+             * nothing to say about.
+             *
+             * <p>A figure that cut what the search was handed, or left nothing planned to search,
+             * is met the way a figure that stopped a search is: in every one of them the word is
+             * not about the whole of the point, and the figure is what an author would raise.
+             */
+            default CameToNothing came() {
+                return switch (this) {
+                    case Unresolved it -> CameToNothing.metNothing(it.why());
+                    case Stopped it -> new CameToNothing(it.why(), it.met());
+                    case Unexhausted it -> new CameToNothing(it.why(), it.met());
+                    case Limited it ->
+                            new CameToNothing(it.why(), CompositionShortfall.of(it.by()));
+                    case Unplanned it ->
+                            new CameToNothing(it.why(), CompositionShortfall.of(it.by()));
+                };
+            }
         }
 
         /** No row came of it, and why. Never a statement that none exists. */

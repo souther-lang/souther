@@ -1,9 +1,12 @@
 package souther.compiler.query;
 
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionCapacity;
+import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.Generator;
+import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
@@ -46,7 +49,7 @@ public sealed interface RuleSearch {
     record Composed() implements RuleSearch {}
 
     /**
-     * Nothing was composed, and these are the words the composings came back with.
+     * Nothing was composed, and what the composings came back with.
      *
      * <p>One per way of standing the dependencies in, because a rule is composed for once per way
      * and the ways may come back with different words. Whether those words say anything about the
@@ -54,12 +57,17 @@ public sealed interface RuleSearch {
      * ({@link Adequacy.DecisionSearch#provedByEveryWay}); what is kept here is what each of them
      * said.
      *
+     * <p>Each word with what the searches that came back with it met of this compiler's, joined by
+     * the law the points of a border and the classes of an axis are joined by
+     * ({@link souther.compiler.partition.CameToNothing#joined}). A word alone says
+     * the rule is one nothing could compose a row for; what was met says whether a figure an
+     * author could raise is what stopped it, and which.
+     *
      * <p><b>In one order, whatever order the ways were walked in.</b> Two runs of one model that
      * met the ways in different orders hold one value, so nothing a reader is shown can come out of
-     * the order a walk happened to take. Built through {@link #of} for that reason, and a caller
-     * that has one word says so with {@link #by}.
+     * the order a walk happened to take. Built through {@link #of} for that reason.
      */
-    record CameToNothing(List<Generator.UnresolvedCombination> ways) implements RuleSearch {
+    record CameToNothing(List<Came> ways) implements RuleSearch {
 
         public CameToNothing {
             ways = List.copyOf(ways);
@@ -70,45 +78,58 @@ public sealed interface RuleSearch {
         }
 
         /**
-         * The words the ways came back with, each once and in the order a report says them.
+         * What the ways came back with, each word once and in the order a report says them.
          *
-         * <p>By the place the word has among the reasons first, which is the order every other
-         * reader of these says them in, and by the whole of what each says after — two ways with
-         * one word and different conditions are two things said, and an order that stopped at the
-         * word would leave which of them a reader sees to the walk.
+         * <p>Joined first, so that two ways with one word and two different figures are one word
+         * having met both. Then by the place the word has among the reasons, which is the order
+         * every other reader of these says them in, and by the whole of what each word says after —
+         * two ways with one word and different conditions are two things said, and an order that
+         * stopped at the word would leave which of them a reader sees to the walk. What was met is
+         * no part of the order: it was added up under the word, so it is the same whichever way
+         * met it first.
          */
-        public static CameToNothing of(Collection<Generator.UnresolvedCombination> ways) {
-            List<Generator.UnresolvedCombination> out = new ArrayList<>();
-            for (Generator.UnresolvedCombination each : ways) {
-                if (!out.contains(each)) {
-                    out.add(each);
-                }
+        public static CameToNothing of(Collection<souther.compiler.partition.CameToNothing> ways) {
+            return new CameToNothing(souther.compiler.partition.CameToNothing.joined(ways).stream()
+                    .sorted(Comparator
+                            .comparingInt((souther.compiler.partition.CameToNothing each) ->
+                                    PublicationOrders.positionOf(each.why().reason()))
+                            .thenComparing(each -> String.valueOf(each.why())))
+                    .map(Came::of)
+                    .toList());
+        }
+    }
+
+    /**
+     * One word the ways came back with, and what the searches that came back with it met of this
+     * compiler's, each kind in the order a report says it in.
+     *
+     * <p>In that order here rather than as the sets a search adds them up in. A report says these,
+     * and a set reaching it would be said in whatever order it iterates in. So the joining is done
+     * on the sets ({@link souther.compiler.partition.CameToNothing#joined}) and what is kept is
+     * the result put in order once.
+     *
+     * @param why         what the searches came to, in the words a report prints
+     * @param figures     the figures they stopped at, were cut short by, or left nothing planned at
+     * @param populations what this compiler writes some of that they walked in part
+     * @param unheld      the numbers they could not hold
+     */
+    record Came(Generator.UnresolvedCombination why,
+                CanonicalSelection<CompositionBudget> figures,
+                CanonicalSelection<CompositionRepertoire> populations,
+                CanonicalSelection<CompositionCapacity> unheld) {
+
+        public Came {
+            if (why == null || figures == null || populations == null || unheld == null) {
+                throw new IllegalArgumentException("a word the ways came back with says what they"
+                        + " met, or that it was nothing");
             }
-            out.sort(Comparator
-                    .comparingInt((Generator.UnresolvedCombination each) ->
-                            PublicationOrders.positionOf(each.reason()))
-                    .thenComparing(String::valueOf));
-            return new CameToNothing(out);
         }
 
-        /** One word, for a caller whose composing was made once. */
-        public static CameToNothing by(Generator.UnresolvedCombination why) {
-            return of(List.of(why));
-        }
-
-        /**
-         * The one word there is, for a caller that already knows the composing was made once.
-         *
-         * <p>Checked rather than assumed: a caller asking this of a rule whose ways came back with
-         * two words is a caller reading one of them as the whole answer.
-         */
-        public Generator.UnresolvedCombination only() {
-            if (ways.size() != 1) {
-                throw new IllegalStateException(
-                        "one word was asked for where the ways came back with " + ways.size()
-                                + ": " + ways);
-            }
-            return ways.get(0);
+        static Came of(souther.compiler.partition.CameToNothing came) {
+            return new Came(came.why(),
+                    PublicationOrders.COMPOSITION_BUDGETS.keep(came.met().figures()),
+                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(came.met().populations()),
+                    PublicationOrders.COMPOSITION_CAPACITIES.keep(came.met().unheld()));
         }
     }
 }
