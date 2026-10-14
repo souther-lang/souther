@@ -706,6 +706,7 @@ public final class Partitions {
                 // rules beside it divide the position exactly as they would have without it.
                 case TOLD_NOTHING_APART -> {
                     found.add(RuleWithoutALine.of(each.what().by().cited(),
+                            each.what().by().readAt(),
                             new FilingCoordinate.AtPosition(term.position()), each.why()));
                     account.disposedOf(each.what(),
                             new EvidenceAccount.Disposition.TheRuleDividedNothing(term));
@@ -768,6 +769,7 @@ public final class Partitions {
         if (made.why() != null && blocked.isEmpty()) {
             RuleEvidence.statementsIn(answered.notComposed())
                     .forEach(each -> found.add(RuleWithoutALine.of(each.origin().cited(),
+                            each.origin().readAt(),
                             new FilingCoordinate.AtPosition(term.position()), made.why())));
         }
         // Said here because this is where they were asked. A blocker carried in and never reached

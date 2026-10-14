@@ -399,43 +399,43 @@ public sealed interface ExampleMessage extends Message {
     record TheRuleGoesThroughThisArm(souther.compiler.diag.Localizable arm)
             implements ExampleMessage, Supporting {}
 
-    /**
-     * One condition of that rule standing in a value the body calls, marked at the call the rule
-     * went through: the condition as {@link TheRuleTakesThisConditionHolding} says it, in this call
-     * of {@code called}.
-     *
-     * <p>Beside the mark on the construct and not instead of it. The construct is written once for
-     * every call of the value, so a rule that comes out one way in one call and the other way in
-     * the next has two marks there saying both, and what pairs each with its call is this.
-     */
-    record TheRuleTakesAConditionHoldingInThisCall(String called)
-            implements ExampleMessage, Supporting {}
-
-    /** The same, where the rule takes it failing. */
-    record TheRuleTakesAConditionFailingInThisCall(String called)
-            implements ExampleMessage, Supporting {}
-
-    /** The same for an arm, which is named, so the call says which one. */
-    record TheRuleGoesThroughAnArmInThisCall(Localizable arm, String called)
-            implements ExampleMessage, Supporting {}
-
-    /**
-     * A condition of that rule reached through more than one call, marked at the outermost: a
-     * condition of the rule is somewhere in this call of {@code called}.
-     *
-     * <p>No more than that. A call written inside {@code called} is one place for every call of it,
-     * so which of those calls the condition is in, and which way it went there, is nothing a mark
-     * can pair with one copy — the report writes it out ({@link TheReportNamesEveryCallAConditionIsIn}).
-     */
-    record AConditionOfTheRuleIsInThisCall(String called) implements ExampleMessage, Supporting {}
-
-    /** That the report names every call each condition of the rule was reached through, said
-     *  wherever a mark at a call cannot. */
-    record TheReportNamesEveryCallAConditionIsIn() implements ExampleMessage, Supporting {}
-
     /** A condition of the rule with nothing to send a reader to, so that a rule is never described
      *  by fewer conditions than it turns on. */
     record OneConditionOfTheRuleIsNotShown() implements ExampleMessage, Supporting {}
+
+    /**
+     * The call of a helper a condition of that rule is written in, where the rule takes the
+     * condition holding in the copy this call made.
+     *
+     * <p>Put at the call and not at the condition. A helper called more than once is one place in
+     * the source, and the conditions of its copies marked there alike are conditions a reader
+     * cannot tell apart; the call is what each copy was made at.
+     *
+     * @param called what was called
+     */
+    record TheRuleTakesItHoldingInThisCall(String called) implements ExampleMessage, Supporting {}
+
+    /** The same, where the rule takes it failing. */
+    record TheRuleTakesItFailingInThisCall(String called) implements ExampleMessage, Supporting {}
+
+    /** The same, of an arm of a fork the helper writes. */
+    record TheRuleGoesThroughItsArmInThisCall(Localizable arm, String called)
+            implements ExampleMessage, Supporting {}
+
+    /** A call the copy a condition of that rule stands in was made through, further out than the
+     *  call of the helper that writes the condition — or that call, where the condition has
+     *  nothing to say of its own. */
+    record TheRuleGoesThroughThisCall(String called) implements ExampleMessage, Supporting {}
+
+    /**
+     * The call of a helper a reading of that line was made in, where the helper writes the
+     * comparison that draws it.
+     *
+     * @param read   which reading, in the words the reading's note says it in
+     * @param called what was called
+     */
+    record TheLineIsReadInThisCall(String read, String called)
+            implements ExampleMessage, Supporting {}
 
     /**
      * No row is at one of the points a border owes, the rule that drew it having a name.

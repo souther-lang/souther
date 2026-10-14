@@ -2,6 +2,9 @@ package souther.compiler.partition;
 
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
+import souther.compiler.types.ModelOccurrence;
+
+import java.util.List;
 
 /**
  * One reading of one rule that said something about how a position's values are divided.
@@ -48,4 +51,11 @@ public sealed interface RuleEvidenceOrigin permits LineOrigin, PredicateOrigin {
      * found by where it is written, which is a place no reader can invent.
      */
     RuleCitation cited();
+
+    /**
+     * The copies of the model's construct this reading was made at, which is what a report tells
+     * the readings of one rule written in a helper apart by: the rule is one place in the source
+     * for every call of the helper. Empty for a reading made at no copy.
+     */
+    List<ModelOccurrence> readAt();
 }

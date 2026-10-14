@@ -483,8 +483,10 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
                 """);
         List<String> dropped = report.lines().filter(each -> each.contains(NOTHING_ARRIVES))
                 .toList();
+        // About `a`, and at the call that hands the helper `a`: the helper's comparison is one
+        // place for both calls, and the call is what says which of them dropped it.
         assertTrue(dropped.stream().anyMatch(each -> each.contains("comparison@7:31")
-                        && each.endsWith("about `a`")),
+                        && each.endsWith("about `a` in over@14:11")),
                 () -> "the helper's line, reached through a, is dropped: " + report);
         assertTrue(report.contains("ON point (comparison@7:31)"),
                 () -> "and reached through b it is still drawn: " + report);

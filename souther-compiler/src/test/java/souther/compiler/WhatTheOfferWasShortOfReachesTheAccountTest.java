@@ -12,7 +12,9 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -319,19 +321,20 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
                 "the rule the offer got nothing from is said in the position's word for it");
     }
 
-    /** The line the page counts the rules nothing settled under. */
+    /** The sentence the page opens each rule nothing settled with, which is one sentence here. */
     private static String whereNothingCouldShowARow(String page) {
-        List<String> found = new ArrayList<>();
+        Set<String> found = new LinkedHashSet<>();
         for (String line : page.split("\n")) {
-            // The line the rules of the decision are counted under, and not a point of a line: the
-            // page opens both the same way and what this is about is the decision's.
+            // The line a rule of the decision is opened with, and not a point of a line: the page
+            // opens both the same way and what this is about is the decision's.
             if (line.contains("nothing could show a row can be written at")
                     && line.contains("decision rule")) {
                 found.add(line);
             }
         }
-        assertEquals(1, found.size(), () -> "one body here has a rule nothing settled: " + found);
-        return found.get(0);
+        assertEquals(1, found.size(),
+                () -> "every rule nothing settled here came to one answer: " + found);
+        return found.iterator().next();
     }
 
     /** Every rule of the document whose search had nothing composed to try it with. */

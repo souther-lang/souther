@@ -160,7 +160,7 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
     /** Which question a report about the condition under test would put. */
     private static final ConditionReportAnchor WHERE =
             new ConditionReportAnchor.WhereTheReadingMetIt("m",
-                    new ConditionOccurrence("b", 0));
+                    new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0));
 
     private static final OnTheWay.TakenIn CUT = cutOver(
             new NumericTerm.ValueOf(souther.compiler.inputs.TermPath.of("r").then("cost")));

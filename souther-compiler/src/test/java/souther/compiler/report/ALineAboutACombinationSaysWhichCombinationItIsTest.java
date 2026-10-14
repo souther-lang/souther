@@ -2,11 +2,7 @@ package souther.compiler.report;
 
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
-import souther.compiler.diag.LabeledRegion;
-import souther.compiler.diag.Located;
-import souther.compiler.diag.Note;
 import souther.compiler.diag.SourceRendering;
-import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.partition.InteractionRequirements;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.query.About;
@@ -192,7 +188,8 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
             }
             Set<Set<List<Object>>> said = new HashSet<>();
             for (List<AdequacyReport.ShownCondition> way : behavior.waysOf(combination)) {
-                List<List<Object>> read = way.stream().map(each -> read(each.read())).toList();
+                List<List<Object>> read = way.stream()
+                        .map(ALineAboutACombinationSaysWhichCombinationItIsTest::read).toList();
                 assertEquals(read.size(), new HashSet<>(read).size(),
                         () -> "no condition said twice in one way: " + read);
                 said.add(new HashSet<>(read));
@@ -250,55 +247,6 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
         assertEquals(about.size(), unmade, () -> "one obligation per line: " + interaction);
     }
 
-    /**
-     * A warning about a rule through a value called once marks the call with what the rule takes
-     * in it, so the rules that go one way in one call and the other way in the next read apart.
-     */
-    @Test
-    void aWarningMarksTheOneCallAConditionIsIn() {
-        List<Located> warnings = ruleWarnings(TWICE);
-        List<Set<String>> calls = new ArrayList<>();
-        for (Located each : warnings) {
-            Set<String> marked = new HashSet<>();
-            for (LabeledRegion label : each.diagnostic().secondary()) {
-                if (label.said() instanceof ExampleMessage.TheRuleGoesThroughAnArmInThisCall) {
-                    marked.add(label.place() + " " + label.said());
-                }
-            }
-            calls.add(marked);
-            assertTrue(hints(each).isEmpty(), () -> "nothing left to the report: " + each);
-        }
-        assertEquals(3, calls.size(), () -> "the three rules with a `Plain`: " + calls);
-        for (Set<String> marked : calls) {
-            assertEquals(2, marked.size(), () -> "each call marked with its arm: " + marked);
-        }
-        assertEquals(3, new HashSet<>(calls).size(), () -> "and no two alike: " + calls);
-    }
-
-    /**
-     * A warning about a rule through calls inside calls marks only the outermost, says no more
-     * there than that a condition is in it, and leaves which calls and which way to the report.
-     */
-    @Test
-    void aWarningMarksOnlyTheOutermostCallWhereThereAreMore() {
-        List<Located> warnings = ruleWarnings(NESTED);
-        assertEquals(3, warnings.size(), () -> "the three rules with a `Plain`: " + warnings);
-        for (Located each : warnings) {
-            Set<String> marked = new HashSet<>();
-            for (LabeledRegion label : each.diagnostic().secondary()) {
-                assertTrue(!(label.said() instanceof ExampleMessage.TheRuleGoesThroughAnArmInThisCall),
-                        () -> "no arm paired with a call: " + label);
-                if (label.said() instanceof ExampleMessage.AConditionOfTheRuleIsInThisCall(var c)) {
-                    assertEquals("outer", c, () -> "the outermost call: " + label);
-                    marked.add(String.valueOf(label.place()));
-                }
-            }
-            assertEquals(2, marked.size(), () -> "each call of `outer`: " + each);
-            assertEquals(List.of(new ExampleMessage.TheReportNamesEveryCallAConditionIsIn()),
-                    hints(each), () -> "and the report is where the rest is: " + each);
-        }
-    }
-
     /** Two ways naming the same conditions in two orders are said once, in the first one's order. */
     @Test
     void aWayThatReadsLikeAnEarlierOneIsSaidOnce() {
@@ -323,20 +271,24 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
         };
     }
 
-    /** The same, read off what a page was handed. */
-    private static List<Object> read(DecisionRuleReading read) {
-        return switch (read) {
-            case DecisionRuleReading.AForkTookAnArm(var arm, var shownAt, var through) ->
+    /** The same, read off what a page was handed: the one copy a combination's condition is of,
+     *  whose calls the page holds innermost first. */
+    private static List<Object> read(AdequacyReport.ShownCondition shown) {
+        assertTrue(shown.through().size() <= 1, () -> "one copy of each condition: " + shown);
+        List<StepOfACopy> through = shown.through().isEmpty() ? List.of()
+                : shown.through().getFirst().stream().map(AdequacyReport.CallSite::step).toList()
+                        .reversed();
+        return switch (shown.read()) {
+            case DecisionRuleReading.AForkTookAnArm(var arm, var shownAt) ->
                     List.of("arm", arm.obligation().origin(), arm.obligation().part(), shownAt,
                             steps(through));
-            case DecisionRuleReading.AComparisonCameOut(var comparison, var held, var through) ->
+            case DecisionRuleReading.AComparisonCameOut(var comparison, var held) ->
                     List.of("outcome", comparison.obligation().origin(), held, steps(through));
-            case DecisionRuleReading.AnApplicationAnswered(var application, var held,
-                                                           var through) ->
+            case DecisionRuleReading.AnApplicationAnswered(var application, var held) ->
                     List.of("outcome", application.application().origin(), held, steps(through));
             case DecisionRuleReading.AConditionIsNotShown _, DecisionRuleReading.AnOutcomeIsNotPlaced _,
                  DecisionRuleReading.AForkIsNotPlaced _ ->
-                    fail("every condition of these fixtures has a site: " + read);
+                    fail("every condition of these fixtures has a site: " + shown);
         };
     }
 
@@ -409,23 +361,6 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
     /** How many lines of {@code page} say {@code word} and nothing else. */
     private static long linesSaying(String page, String word) {
         return page.lines().filter(line -> line.strip().equals(word)).count();
-    }
-
-    /** The warnings a build reads about rules of {@code source} no row takes. */
-    private static List<Located> ruleWarnings(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
-        return compilation.warnings().stream()
-                .filter(each -> each.diagnostic().said()
-                        instanceof ExampleMessage.NoRowTakesADecisionRule)
-                .toList();
-    }
-
-    private static List<Object> hints(Located warning) {
-        return warning.diagnostic().notes().stream().map(Note::said)
-                .filter(said -> said instanceof ExampleMessage.TheReportNamesEveryCallAConditionIsIn)
-                .map(said -> (Object) said).toList();
     }
 
     private static AdequacyReport.BehaviorReport behaviorOf(String source) {

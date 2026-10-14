@@ -27,7 +27,8 @@ import java.util.function.UnaryOperator;
  *
  * <p><b>One column per distinction, however often the path meets it.</b> A body asking one thing
  * twice states one distinction, and a column apiece would admit an assignment where it holds and
- * does not. So a second reading of a column already on the path is dropped where it agrees, and the
+ * does not. So a second reading of a column already on the path is that column consulted again
+ * where it agrees — one column, with where each consultation was and what it was read off — and the
  * whole path is refused where it does not — a path assuming a proposition both ways is a
  * contradiction rather than a rule, and refusing it here is what the reading of the ways does with
  * one.
@@ -65,27 +66,66 @@ final class DecisionPath {
     }
 
     /**
-     * One condition this path consulted: what it came out as, where a run through it is seen, and
-     * what it states about the input.
+     * One condition this path consulted: what it came out as, every place a run through it is
+     * seen on the way, and what it states about the input.
      *
      * <p>Only the first is part of what the path is. Which distinctions a rule turns on is what
      * tells it from another rule; where each of them is written is what joins it to a run, and what
      * it states is what a search composes a row against.
      *
+     * <p><b>One column, met as often as the way meets it.</b> A helper called twice on one way asks
+     * one thing twice: one distinction of the rule, consulted at two calls. The column is one, and
+     * what each consultation was is kept beside it — dropped, a rule through both calls would be
+     * described by one of them.
+     *
+     * @param seen   every place a run through the condition is seen on the way, in the order the
+     *               way met them; never empty. The first is where the column is witnessed, since
+     *               a run that took the way went through it there
      * @param states the condition in the words a composer of a row already works from, so that a
      *               column of a decision table and the region a row for it is looked for in cannot
      *               be read off two accounts of one comparison. As many as the condition asks of a
      *               row — every element of a list meeting two things is two relations and one
      *               column — and all of them about the one condition
+     * @param said   which copies of the model's code each of {@code states} was read off, told
+     *               where the condition was read, at every place it was consulted
      */
-    record Consulted(DecidedCondition answer, ShownBy shown, List<OnTheWay> states) {
+    record Consulted(DecidedCondition answer, List<ShownBy> seen, List<OnTheWay> states,
+                     SaidOnTheWay said) {
 
         Consulted {
-            if (answer == null || shown == null || states == null || states.isEmpty()) {
+            if (answer == null || seen == null || seen.isEmpty() || states == null
+                    || states.isEmpty() || said == null) {
                 throw new IllegalArgumentException("a condition a path consulted is an answer,"
-                        + " where it is seen, and what it states");
+                        + " where it is seen, what it states and what that was read off");
             }
+            seen = List.copyOf(seen);
             states = List.copyOf(states);
+        }
+
+        /** The condition consulted once, seen at {@code shown}. */
+        Consulted(DecidedCondition answer, ShownBy shown, List<OnTheWay> states,
+                  SaidOnTheWay said) {
+            this(answer, List.of(shown), states, said);
+        }
+
+        /** Where the column is witnessed: the first place the way met it. */
+        ShownBy shown() {
+            return seen.getFirst();
+        }
+
+        /**
+         * The same column, consulted again as {@code more} was.
+         *
+         * <p>What it states is what it states the first time — one column asks one thing — and
+         * what each consultation was read off is told of it, entry for the entry it asked the
+         * first time ({@link SaidOnTheWay#retold}), so a gap about it names every call that asked
+         * it.
+         */
+        Consulted again(Consulted more) {
+            List<ShownBy> places = new ArrayList<>(seen);
+            more.seen.stream().filter(each -> !places.contains(each)).forEach(places::add);
+            return new Consulted(answer, places, states,
+                    said.retold(states, more.states, more.said));
         }
 
         /** Where a report about the condition asks for its place, which every entry for it
@@ -97,8 +137,9 @@ final class DecisionPath {
 
     /** This path with {@code answer} on it, or null where the path already answers that column the
      *  other way. */
-    DecisionPath and(DecidedCondition answer, ShownBy shown, List<OnTheWay> states) {
-        return and(new DecisionPath(List.of(new Consulted(answer, shown, states))));
+    DecisionPath and(DecidedCondition answer, ShownBy shown, List<OnTheWay> states,
+                     SaidOnTheWay said) {
+        return and(new DecisionPath(List.of(new Consulted(answer, shown, states, said))));
     }
 
     /**
@@ -125,40 +166,49 @@ final class DecisionPath {
         return rule.hashCode();
     }
 
-    /** What this path states about the input, which is what a search composes a row against. */
-    WayToTheBorder states() {
-        return new WayToTheBorder(consulted.stream()
-                .flatMap(each -> each.states().stream()).toList());
+    /**
+     * Each condition this path consulted, with what it states about the input and asks of the
+     * answers, in the order the walk met them.
+     *
+     * <p>What a rule's way states and asks is these one after another; kept apart here, so that what
+     * a search goes without can be traced to the condition that said it.
+     */
+    List<RuleStep> steps() {
+        List<RuleStep> out = new ArrayList<>();
+        for (Consulted each : consulted) {
+            AnswersDemanded demands = demands(each);
+            out.add(new RuleStep(each.seen(), each.states(), demands,
+                    each.said().asking(demands)));
+        }
+        return List.copyOf(out);
     }
 
     /**
-     * What this path asks of the answers a row stands the dependencies in with.
+     * What one consulted condition asks of the answers a row stands the dependencies in with.
      *
      * <p>Read here, where what a condition came out as and where a report about it asks for its
      * place are one entry. Worked out from the rule alone, a demand would have no anchor and the
      * one it was given would be whichever the two lists happened to line up at.
      */
-    AnswersDemanded demands() {
+    private static AnswersDemanded demands(Consulted each) {
         List<AnswerDemand> stated = new ArrayList<>();
         List<DemandGap.Unstated> declined = new ArrayList<>();
         Set<ConditionOccurrence> takenUp = new LinkedHashSet<>();
-        for (Consulted each : consulted) {
-            Asked asked = asked(each);
-            switch (asked) {
-                case Asked.Stated(var demand) -> stated.add(demand);
-                case Asked.NotStated(var why) ->
-                        declined.add(new DemandGap.Unstated(each.anchor(), why));
-                case Asked.OfTheInput _ -> { }
-            }
-            // Which condition it is, the way the reading names one, and taken off the walk's own
-            // entry for the same consulted condition. A decline is the only entry that names one,
-            // and it is the only entry this has anything to reconcile with: what the walk took in
-            // it took in, and there is nothing there for the answer side to answer for.
-            if (!(asked instanceof Asked.OfTheInput)) {
-                for (OnTheWay state : each.states()) {
-                    if (state instanceof OnTheWay.Declined left) {
-                        takenUp.add(left.condition());
-                    }
+        Asked asked = asked(each);
+        switch (asked) {
+            case Asked.Stated(var demand) -> stated.add(demand);
+            case Asked.NotStated(var why) ->
+                    declined.add(new DemandGap.Unstated(each.anchor(), why));
+            case Asked.OfTheInput _ -> { }
+        }
+        // Which condition it is, the way the reading names one, and taken off the walk's own entry
+        // for the same consulted condition. A decline is the only entry that names one, and it is
+        // the only entry this has anything to reconcile with: what the walk took in it took in, and
+        // there is nothing there for the answer side to answer for.
+        if (!(asked instanceof Asked.OfTheInput)) {
+            for (OnTheWay state : each.states()) {
+                if (state instanceof OnTheWay.Declined left) {
+                    takenUp.add(left.condition());
                 }
             }
         }
@@ -325,15 +375,21 @@ final class DecisionPath {
                 : new Place(null, null, at.steps());
     }
 
-    /** Both paths' conditions, or null where between them they answer one column two ways. */
+    /**
+     * Both paths' conditions, or null where between them they answer one column two ways.
+     *
+     * <p>A column both answer alike is one column, consulted again ({@link Consulted#again}).
+     */
     DecisionPath and(DecisionPath more) {
         List<Consulted> out = new ArrayList<>(consulted);
         for (Consulted each : more.consulted) {
-            Consulted already = at(out, each.answer().condition());
-            if (already == null) {
+            int already = at(out, each.answer().condition());
+            if (already < 0) {
                 out.add(each);
-            } else if (!already.answer().equals(each.answer())) {
+            } else if (!out.get(already).answer().equals(each.answer())) {
                 return null;
+            } else {
+                out.set(already, out.get(already).again(each));
             }
         }
         return new DecisionPath(out);
@@ -348,28 +404,24 @@ final class DecisionPath {
     DecisionPath seenAgain(UnaryOperator<ShownBy> seen) {
         List<Consulted> out = new ArrayList<>();
         for (Consulted each : consulted) {
-            out.add(new Consulted(each.answer(), seen.apply(each.shown()), each.states()));
+            out.add(new Consulted(each.answer(), each.seen().stream().map(seen).toList(),
+                    each.states(), each.said()));
         }
         return new DecisionPath(out);
     }
 
-    /** What this path says about {@code condition}, or null where it never consulted it. */
-    private static Consulted at(List<Consulted> consulted, DecisionCondition condition) {
-        for (Consulted each : consulted) {
-            if (each.answer().condition().equals(condition)) {
+    /** Where this path consulted {@code condition}, or -1 where it never did. */
+    private static int at(List<Consulted> consulted, DecisionCondition condition) {
+        for (int each = 0; each < consulted.size(); each++) {
+            if (consulted.get(each).answer().condition().equals(condition)) {
                 return each;
             }
         }
-        return null;
+        return -1;
     }
 
     /** The rule this path is, which is its columns and what each came out as. */
     DecisionRule rule() {
         return rule;
-    }
-
-    /** Where a run down this path is seen, one entry per column in the order it met them. */
-    List<ShownBy> shownBy() {
-        return consulted.stream().map(Consulted::shown).toList();
     }
 }

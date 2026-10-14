@@ -34,8 +34,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class ADeclineIsAnsweredForByTheConditionAndNotByWhereItIsWrittenTest {
 
     /** Two conditions of one body, written in one place and told apart by the reading's name. */
-    private static final ConditionOccurrence ONE = new ConditionOccurrence("decides", 0);
-    private static final ConditionOccurrence THE_OTHER = new ConditionOccurrence("decides", 1);
+    private static final ConditionOccurrence ONE =
+            new ConditionOccurrence("decides", ConditionOccurrence.Reading.DIVIDING, 0);
+    private static final ConditionOccurrence THE_OTHER =
+            new ConditionOccurrence("decides", ConditionOccurrence.Reading.DIVIDING, 1);
 
     @Test
     void theDeclineTheAnswerSideDidNotNameIsStillInTheAccount() {

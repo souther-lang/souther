@@ -3,8 +3,11 @@ package souther.compiler.inputs;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.types.ModelOccurrence;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -47,8 +50,13 @@ import java.util.Set;
  *                  readers is one finding and each of them says how to reach it; which of them a
  *                  document writes is that document's to decide. Empty exactly where the author
  *                  named the rule, which is found by that name from anywhere
+ * @param readAt    every copy of the model's code the rule was read at here, for the reason
+ *                  {@code reachedBy} is every handle: a rule written in a helper is read once per
+ *                  call of it and found alike at each, and the calls are what tell those readings
+ *                  apart for a reader. No part of the fact, which is one however many calls found it
  */
-public record RuleWithoutALine(Fact fact, Set<RuleReportAnchor> reachedBy) {
+public record RuleWithoutALine(Fact fact, Set<RuleReportAnchor> reachedBy,
+                               List<ModelOccurrence> readAt) {
 
     public RuleWithoutALine {
         if (fact == null) {
@@ -57,20 +65,36 @@ public record RuleWithoutALine(Fact fact, Set<RuleReportAnchor> reachedBy) {
         }
         reachedBy = reachedBy == null ? Set.of() : Set.copyOf(reachedBy);
         RuleCitation.requireReached(fact.rule(), reachedBy);
+        readAt = List.copyOf(readAt);
     }
 
     /** One reader's finding about the whole of a rule, as that reader produced it. */
     public static RuleWithoutALine of(RuleCitation cited, FilingCoordinate at,
                                       BlockReason.RuleWithoutLineReason why) {
-        return of(cited, at, RuleSite.theRuleItself(), why);
+        return of(cited, List.of(), at, RuleSite.theRuleItself(), why);
+    }
+
+    /** The same, of a reading made at {@code readAt}, which says which copies of the model's code
+     *  it was read at. */
+    public static RuleWithoutALine of(RuleCitation cited, List<ModelOccurrence> readAt,
+                                      FilingCoordinate at,
+                                      BlockReason.RuleWithoutLineReason why) {
+        return of(cited, readAt, at, RuleSite.theRuleItself(), why);
     }
 
     /** The same, for a reader with a place inside the rule to send anybody to. */
     public static RuleWithoutALine of(RuleCitation cited, FilingCoordinate at,
                                       RuleSite sentTo,
                                       BlockReason.RuleWithoutLineReason why) {
+        return of(cited, List.of(), at, sentTo, why);
+    }
+
+    /** The same, read at {@code readAt}. */
+    public static RuleWithoutALine of(RuleCitation cited, List<ModelOccurrence> readAt,
+                                      FilingCoordinate at, RuleSite sentTo,
+                                      BlockReason.RuleWithoutLineReason why) {
         return new RuleWithoutALine(new Fact(cited.rule(), at, sentTo, why),
-                RuleCitation.anchorOf(cited));
+                RuleCitation.anchorOf(cited), readAt);
     }
 
     /**
@@ -143,7 +167,9 @@ public record RuleWithoutALine(Fact fact, Set<RuleReportAnchor> reachedBy) {
         }
         Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
         both.addAll(other.reachedBy);
-        return new RuleWithoutALine(fact, both);
+        List<ModelOccurrence> copies = new ArrayList<>(readAt);
+        other.readAt.stream().filter(copy -> !copies.contains(copy)).forEach(copies::add);
+        return new RuleWithoutALine(fact, both, copies);
     }
 
 }

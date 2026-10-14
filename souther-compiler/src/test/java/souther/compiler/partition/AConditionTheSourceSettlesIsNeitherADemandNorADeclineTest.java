@@ -206,7 +206,7 @@ class AConditionTheSourceSettlesIsNeitherADemandNorADeclineTest {
     private static OnTheWay only(String behavior, boolean holding) {
         InputReading read = domain(behavior).reading(rules());
         List<OnTheWay> stated = ReachingCuts.stating(conditionOf(behavior), read, holding,
-                WhatConditionsState.of(read));
+                WhatConditionsState.of(read)).entries();
         assertEquals(1, stated.size(), () -> behavior + " is one condition: " + stated);
         return stated.getFirst();
     }
@@ -226,7 +226,7 @@ class AConditionTheSourceSettlesIsNeitherADemandNorADeclineTest {
                 domain(behavior).parameterReads(), domain(behavior).declared(rules()),
                 ElementBindings.of(analysis, rules().newtypes()), domain(behavior).dependencies());
         return Condition.of(analysis.core(), reads, rules().symbols(), rules().newtypes(),
-                new ConditionNumbering(module(), behavior));
+                new ConditionNumbering(module(), behavior, ConditionOccurrence.Reading.DIVIDING));
     }
 
     /** The way the walk of {@code behavior} took to the one comparison its body writes. */

@@ -8,8 +8,10 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
 import souther.compiler.query.RuleSearch;
 import souther.compiler.query.RuleSettlement;
+import souther.compiler.query.SettledAt;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -148,8 +150,7 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
             }
             """;
 
-    private static final String LEFT_OUT =
-            "not every condition on the way to the rule is one the row was composed against";
+    private static final String LEFT_OUT = "not composed against: ";
 
     /** What the composer could not carry is named, and where it is written. */
     @Test
@@ -261,6 +262,7 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
                 """);
 
         List<RuleSettlement> unsettled = behavior.ruleSettlements().values().stream()
+                .map(SettledAt::settlement)
                 .filter(each -> !(each.requirement() instanceof RuleRequirement.Required))
                 .toList();
         assertFalse(unsettled.isEmpty(), "a rule of this body is one no row was seen taking");
@@ -279,14 +281,22 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
 
     /** The line of the page that says nothing could show a row can be written at the rules. */
     private static String whereNothingCouldShowARow(String model) {
+        List<String> entry = new ArrayList<>();
         for (String line : human(model).split("\n")) {
-            if (line.contains("nothing could show a row can be written at")
+            if (entry.isEmpty() && line.contains("nothing could show a row can be written at")
                     && line.contains("decision rule")) {
-                return line;
+                entry.add(line);
+            } else if (!entry.isEmpty() && line.startsWith("          · ")) {
+                entry.add(line);
+            } else if (!entry.isEmpty()) {
+                break;
             }
         }
-        throw new AssertionError("this model has rules nothing composed a row for:\n"
-                + human(model));
+        if (entry.isEmpty()) {
+            throw new AssertionError("this model has rules nothing composed a row for:\n"
+                    + human(model));
+        }
+        return String.join("\n", entry);
     }
 
     private static AdequacyReport.BehaviorReport reportOf(String source) {

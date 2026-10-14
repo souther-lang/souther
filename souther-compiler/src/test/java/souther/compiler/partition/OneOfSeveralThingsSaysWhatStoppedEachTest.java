@@ -64,8 +64,9 @@ class OneOfSeveralThingsSaysWhatStoppedEachTest {
                 inputs.dependencies());
         InputReading read = inputs.reading(rules);
         return new WayToTheBorder(ReachingCuts.stating(Condition.of(analysis.core(), reads,
-                        rules.symbols(), rules.newtypes(), new ConditionNumbering(module, behavior)),
-                        read, holding, WhatConditionsState.of(read))).declined().stream()
+                        rules.symbols(), rules.newtypes(), new ConditionNumbering(module, behavior,
+                                ConditionOccurrence.Reading.DIVIDING)),
+                        read, holding, WhatConditionsState.of(read)).entries()).declined().stream()
                 .flatMap(each -> each.whys().stream())
                 .toList();
     }

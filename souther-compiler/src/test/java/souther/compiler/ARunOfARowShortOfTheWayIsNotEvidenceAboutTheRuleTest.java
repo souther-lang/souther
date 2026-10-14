@@ -7,6 +7,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
 import souther.compiler.query.RuleSearch;
 import souther.compiler.query.RuleSettlement;
+import souther.compiler.query.SettledAt;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
@@ -101,6 +102,7 @@ class ARunOfARowShortOfTheWayIsNotEvidenceAboutTheRuleTest {
                 .flatMap(module -> module.behaviors().stream())
                 .filter(each -> "decides".equals(each.name()))
                 .flatMap(each -> each.ruleSettlements().values().stream())
+                .map(SettledAt::settlement)
                 .toList();
         assertFalse(out.isEmpty(), "the body decides, so it has rules a row is looked for at");
         return out;

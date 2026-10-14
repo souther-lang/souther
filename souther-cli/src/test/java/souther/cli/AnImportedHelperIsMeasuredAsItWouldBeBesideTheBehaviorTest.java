@@ -69,7 +69,8 @@ class AnImportedHelperIsMeasuredAsItWouldBeBesideTheBehaviorTest {
 
     /** What the report says about {@code calculate}, which is what moving the helper must leave
      * alone. A place in the helper names its file once the helper has one of its own, and that is
-     * about where it moved. */
+     * about where it moved; so is the call of it, which names the module that declares the helper
+     * and stands on another line of a file that imports it. */
     private static List<String> measured(String report) {
         List<String> out = new ArrayList<>();
         boolean inside = false;
@@ -80,7 +81,8 @@ class AnImportedHelperIsMeasuredAsItWouldBeBesideTheBehaviorTest {
                 break;
             }
             if (inside) {
-                out.add(line.replace("helper.sou:", ""));
+                out.add(line.replace("helper.sou:", "")
+                        .replaceAll("(repro\\.helper\\.)?tailSum@\\d+:\\d+", "tailSum@"));
             }
         }
         return out;

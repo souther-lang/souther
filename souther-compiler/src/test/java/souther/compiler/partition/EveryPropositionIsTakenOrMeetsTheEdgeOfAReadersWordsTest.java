@@ -216,7 +216,8 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
         Proposition asked = way ? stated : stated.denied();
         List<WhyNotTaken> out = new ArrayList<>();
         DemandReading.asked(asked, read).forEach(each -> collect(each, out));
-        if (DecisionMeanings.columnOf(stated, way, new ConditionOccurrence("f", 0))
+        if (DecisionMeanings.columnOf(stated, way,
+                        new ConditionOccurrence("f", ConditionOccurrence.Reading.DECIDING, 0))
                 instanceof DecidedCondition.Unread(var condition, boolean _)) {
             out.addAll(condition.whys());
         }

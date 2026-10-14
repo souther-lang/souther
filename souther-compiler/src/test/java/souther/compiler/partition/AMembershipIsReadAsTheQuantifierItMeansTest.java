@@ -274,8 +274,9 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                 inputs.dependencies());
         List<OnTheWay> stated = ReachingCuts.stating(Condition.of(analysis.core(), reads,
                         rules().symbols(), rules().newtypes(),
-                        new ConditionNumbering(module(), behavior)),
-                reading, holding, WhatConditionsState.of(reading));
+                        new ConditionNumbering(module(), behavior,
+                                ConditionOccurrence.Reading.DIVIDING)),
+                reading, holding, WhatConditionsState.of(reading)).entries();
         return stated;
     }
 

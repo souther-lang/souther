@@ -88,7 +88,8 @@ class AChoiceTheLookingNeverReachedIsNotTakenAsMetTest {
                 new InjectedAnswer(Evaluations.of(
                         new ValueName.Behavior("example.answered", "look"), 0), List.of()),
                 new ConditionReportAnchor.WhereTheReadingMetIt("m",
-                        new ConditionOccurrence("b", occurrence)),
+                        new ConditionOccurrence(
+                                "b", ConditionOccurrence.Reading.DIVIDING, occurrence)),
                 new Proposition.Always(true), List.of());
     }
 

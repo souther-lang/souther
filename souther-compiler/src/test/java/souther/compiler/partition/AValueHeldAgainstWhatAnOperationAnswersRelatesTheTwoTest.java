@@ -85,7 +85,10 @@ class AValueHeldAgainstWhatAnOperationAnswersRelatesTheTwoTest {
                 behavior m : (s: String, a: Account) -> Bool
                 let m (s, a) = hasDomain(String.lowercase(s), a)
                 """);
-        assertEquals(Set.of(notShown("5:27", "a.domain@Some"), relates("5:27", "s")),
+        // Each at the call that handed the helper its values, which is where the comparison inside
+        // it was read.
+        assertEquals(Set.of(notShown("5:27", "a.domain@Some") + " in hasDomain@8:16",
+                        relates("5:27", "s") + " in hasDomain@8:16"),
                 Set.copyOf(said(report)), report);
     }
 

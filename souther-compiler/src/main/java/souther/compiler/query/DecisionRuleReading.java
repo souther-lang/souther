@@ -5,8 +5,8 @@ import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.partition.DecisionCondition;
+import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.ShownBy;
-import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.StepOfACopy;
 
@@ -42,18 +42,10 @@ import java.util.Set;
  * act on. A condition with no construct to point at is said as that rather than left out, and never
  * stood in for by the proposition the account keys on.
  *
- * <p><b>Which copy, as it was read.</b> A construct is one site however many copies of it stand in
- * the tree, so each reading carries the steps of the copy it is of. A rule's are the calls of the
- * model the rule names its construct under; a combination's are every step of the occurrence the
- * run is recorded at, taken as the measure holds it and never rebuilt from a projection of it.
+ * <p>Which copy of the construct a condition is of is carried beside this and not in it: a rule's
+ * by the {@link ShownBy} it was read off, a combination's by the claim ({@link Seen}).
  */
 public sealed interface DecisionRuleReading {
-
-    /**
-     * The steps of the copy this condition is of, outermost first, and none where it stands where
-     * it is written or where there is no construct to be a copy of.
-     */
-    List<StepOfACopy> through();
 
     /**
      * A comparison the author wrote, coming out one way.
@@ -65,14 +57,12 @@ public sealed interface DecisionRuleReading {
      * @param comparison which comparison of the model, which is what a reader is sent to
      * @param held       whether the path took it holding — of the comparison as written, not of the
      *                   proposition the rule is keyed on
-     * @param through    which copy of it ({@link DecisionRuleReading#through})
      */
-    record AComparisonCameOut(CoverageSites.ComparisonSite comparison, boolean held,
-                              List<StepOfACopy> through) implements DecisionRuleReading {
+    record AComparisonCameOut(CoverageSites.ComparisonSite comparison, boolean held)
+            implements DecisionRuleReading {
 
         public AComparisonCameOut {
             Objects.requireNonNull(comparison, "a comparison of the model is some site");
-            through = List.copyOf(through);
         }
     }
 
@@ -81,14 +71,12 @@ public sealed interface DecisionRuleReading {
      *
      * @param application where the code answering it stands, which is what a reader is sent to
      * @param held        whether the path took it answering true
-     * @param through     which copy of it ({@link DecisionRuleReading#through})
      */
-    record AnApplicationAnswered(CoverageSites.AnswerSite application, boolean held,
-                                 List<StepOfACopy> through) implements DecisionRuleReading {
+    record AnApplicationAnswered(CoverageSites.AnswerSite application, boolean held)
+            implements DecisionRuleReading {
 
         public AnApplicationAnswered {
             Objects.requireNonNull(application, "an application of the model is some site");
-            through = List.copyOf(through);
         }
     }
 
@@ -100,12 +88,11 @@ public sealed interface DecisionRuleReading {
      * the plan that numbered the places having nothing under the construct the reading named,
      * rather than the reading of the body falling short of saying what a condition means.
      */
-    record AnOutcomeIsNotPlaced(SourceConstructOrigin construct, boolean held,
-                                List<StepOfACopy> through) implements DecisionRuleReading {
+    record AnOutcomeIsNotPlaced(SourceConstructOrigin construct, boolean held)
+            implements DecisionRuleReading {
 
         public AnOutcomeIsNotPlaced {
             Objects.requireNonNull(construct, "a truth is some construct's");
-            through = List.copyOf(through);
         }
     }
 
@@ -118,22 +105,17 @@ public sealed interface DecisionRuleReading {
      *
      * @param arm     which arm, which is what a reader is told it is
      * @param shownAt where a reader is sent for it. The site's own for a rule, which names the
-     *                construct of the model; the place the run is recorded at for a combination,
+     *                construct of the model; the place a run is recorded at for a combination,
      *                which names the copy — an arm inside one of the language's own operations is
      *                shown at the call that reached it, and a site made for the first such call
      *                would send a reader of the second to the first
-     * @param through which copy of the fork ({@link DecisionRuleReading#through}). The site is one
-     *                per construct, and a value called twice is one construct standing in two
-     *                places — a path through both copies, one each way, said by the sites alone
-     *                reads the same as the path the other way round
      */
-    record AForkTookAnArm(CoverageSites.ArmSite arm, ArmReportAnchor shownAt,
-                          List<StepOfACopy> through) implements DecisionRuleReading {
+    record AForkTookAnArm(CoverageSites.ArmSite arm, ArmReportAnchor shownAt)
+            implements DecisionRuleReading {
 
         public AForkTookAnArm {
             Objects.requireNonNull(arm, "an arm of the model is some site");
             Objects.requireNonNull(shownAt, "an arm is shown somewhere");
-            through = List.copyOf(through);
         }
     }
 
@@ -152,11 +134,6 @@ public sealed interface DecisionRuleReading {
         public AConditionIsNotShown {
             Objects.requireNonNull(condition, "a condition nothing shows is some condition");
         }
-
-        @Override
-        public List<StepOfACopy> through() {
-            return List.of();
-        }
     }
 
     /**
@@ -167,12 +144,10 @@ public sealed interface DecisionRuleReading {
      * having nothing under the construct the reading named — a different thing to chase, and a
      * reader told the first would go looking for a shape this compiler cannot read.
      */
-    record AForkIsNotPlaced(SourceConstructOrigin fork, int part, List<StepOfACopy> through)
-            implements DecisionRuleReading {
+    record AForkIsNotPlaced(SourceConstructOrigin fork, int part) implements DecisionRuleReading {
 
         public AForkIsNotPlaced {
             Objects.requireNonNull(fork, "an arm is an arm of some fork");
-            through = List.copyOf(through);
         }
     }
 
@@ -184,35 +159,49 @@ public sealed interface DecisionRuleReading {
      * already related; a fork the plan has no site for is said as a condition nothing shows rather
      * than left out, so the count of what a reader is told matches the rule.
      */
-    static List<DecisionRuleReading> of(souther.compiler.partition.DecisionReading.Ruled ruled,
-                                        Places places) {
+    static List<DecisionRuleReading> of(DecisionReading.Ruled ruled, Places places) {
         List<DecisionRuleReading> out = new ArrayList<>();
         for (ShownBy each : ruled.shownBy()) {
-            out.add(switch (each) {
-                case ShownBy.AtAnOutcome(var construct, var held) ->
-                        places.outcomeOf(construct.origin(), held, stepsOf(construct));
-                case ShownBy.AtAnArm(var fork, var part) -> places.armOf(fork.origin(), part,
-                        stepsOf(fork), null);
-                // The arm is the place a reader is sent to: the operand not run is what the run
-                // there did not do, and there is no place to send anyone for that.
-                case ShownBy.AtAnArmShortOf(var fork, var part, var _) ->
-                        places.armOf(fork.origin(), part, stepsOf(fork), null);
-                case ShownBy.ShortOf(var condition, var _) -> new AConditionIsNotShown(condition);
-                case ShownBy.NothingIsRecorded(var condition) ->
-                        new AConditionIsNotShown(condition);
-            });
+            out.add(of(each, places));
         }
         return List.copyOf(out);
     }
 
-    /** The calls of the model {@code construct} stands in. */
-    private static List<StepOfACopy> stepsOf(ModelOccurrence construct) {
-        return StepOfACopy.of(construct.lineage());
+    /** One place a rule's way consulted a condition at, as a reader is told of it. */
+    static DecisionRuleReading of(ShownBy shown, Places places) {
+        return switch (shown) {
+            case ShownBy.AtAnOutcome(var construct, var held) ->
+                    places.outcomeOf(construct.origin(), held);
+            case ShownBy.AtAnArm(var fork, var part) -> places.armOf(fork.origin(), part, null);
+            // The arm is the place a reader is sent to: the operand not run is what the run there
+            // did not do, and there is no place to send anyone for that.
+            case ShownBy.AtAnArmShortOf(var fork, var part, var _) ->
+                    places.armOf(fork.origin(), part, null);
+            case ShownBy.ShortOf(var condition, var _) -> new AConditionIsNotShown(condition);
+            case ShownBy.NothingIsRecorded(var condition) -> new AConditionIsNotShown(condition);
+        };
+    }
+
+    /**
+     * One place a run of a combination is recorded at, as a reader is told of it: the condition,
+     * and every step of the copy it stands in.
+     *
+     * @param read    which construct and which way
+     * @param through the steps of the copy, outermost first, and none where it stands where it is
+     *                written — the claim's own, the calls of the model, a call of one of the
+     *                language's own operations and a build alike
+     */
+    record Seen(DecisionRuleReading read, List<StepOfACopy> through) {
+
+        public Seen {
+            Objects.requireNonNull(read, "a place seen is some condition");
+            through = List.copyOf(through);
+        }
     }
 
     /**
      * What a run that came one way to a combination of a body's decisions would be seen doing, one
-     * reading per place, in the order the way holds them.
+     * place to an entry, in the order the way holds them.
      *
      * <p>Read off the places and not off the decisions the combination is told apart by. Those are
      * held in the terms a search steers a row by, and a sentence made of them would name input
@@ -220,24 +209,23 @@ public sealed interface DecisionRuleReading {
      * arms the author wrote, each found by the construct it is of.
      *
      * <p>Which copy, and where an arm is shown, are the claim's own. The claim is the occurrence a
-     * run is recorded at, every step of it — the calls of the model, a call of one of the
-     * language's own operations, a build — and a reading that kept less would say two places a run
+     * run is recorded at, every step of it, and an entry that kept less would say two places a run
      * is recorded at in one sentence.
      *
      * <p>A copy of a construct said once. One arm can stand for several conditions — a run down it
      * brought every truth of the condition out the way the arm says — and a sentence for each would
      * be the same sentence.
      */
-    static List<DecisionRuleReading> ofAWay(List<ControlClaim> claims, Places places) {
-        Set<DecisionRuleReading> out = new LinkedHashSet<>();
+    static List<Seen> ofAWay(List<ControlClaim> claims, Places places) {
+        Set<Seen> out = new LinkedHashSet<>();
         for (ControlClaim claim : claims) {
             out.add(switch (claim.at()) {
                 case ControlPlace.Outcome(var occurrence, var _, var held) ->
-                        places.outcomeOf(occurrence.origin(), held,
+                        new Seen(places.outcomeOf(occurrence.origin(), held),
                                 StepOfACopy.of(occurrence.lineage()));
                 case ControlPlace.Arm(var arm, var _, var anchor) ->
-                        places.armOf(arm.origin(), arm.part(),
-                                StepOfACopy.of(arm.fork().lineage()), anchor);
+                        new Seen(places.armOf(arm.origin(), arm.part(), anchor),
+                                StepOfACopy.of(arm.fork().lineage()));
             });
         }
         return List.copyOf(out);
@@ -253,7 +241,7 @@ public sealed interface DecisionRuleReading {
      * rule and combination it read. Where one construct has more than one site, the first is the
      * one filed, which is the one a walk of the list would have stopped at.
      */
-    public static final class Places {
+    final class Places {
 
         private final Map<SourceConstructOrigin, CoverageSites.ComparisonSite> comparisons =
                 new HashMap<>();
@@ -289,17 +277,16 @@ public sealed interface DecisionRuleReading {
          * <p>Matched on the construct the source wrote, for the reason {@link #armOf} gives. A
          * construct is a comparison or an application and never both, so it is found among one.
          */
-        DecisionRuleReading outcomeOf(SourceConstructOrigin construct, boolean held,
-                                      List<StepOfACopy> through) {
+        DecisionRuleReading outcomeOf(SourceConstructOrigin construct, boolean held) {
             CoverageSites.ComparisonSite comparison = comparisons.get(construct);
             if (comparison != null) {
-                return new AComparisonCameOut(comparison, held, through);
+                return new AComparisonCameOut(comparison, held);
             }
             CoverageSites.AnswerSite answer = answers.get(construct);
             if (answer != null) {
-                return new AnApplicationAnswered(answer, held, through);
+                return new AnApplicationAnswered(answer, held);
             }
-            return new AnOutcomeIsNotPlaced(construct, held, through);
+            return new AnOutcomeIsNotPlaced(construct, held);
         }
 
         /**
@@ -309,16 +296,14 @@ public sealed interface DecisionRuleReading {
          * helper carrying a fork stands in the running tree once per call site and those differ in
          * their lineage, while the arm a row is owed for is the construct — so an occurrence is the
          * wrong grain to match on here and would find nothing for the copies. Which copy it was is
-         * kept beside the site rather than matched on.
+         * carried beside the reading rather than matched on.
          *
          * @param shownAt where a reader is sent for it, or null for the site's own
          */
-        DecisionRuleReading armOf(SourceConstructOrigin fork, int part, List<StepOfACopy> through,
-                                  ArmReportAnchor shownAt) {
+        DecisionRuleReading armOf(SourceConstructOrigin fork, int part, ArmReportAnchor shownAt) {
             CoverageSites.ArmSite site = arms.get(new ArmOf(fork, part));
-            return site == null ? new AForkIsNotPlaced(fork, part, through)
-                    : new AForkTookAnArm(site, shownAt == null ? site.anchor() : shownAt,
-                            through);
+            return site == null ? new AForkIsNotPlaced(fork, part)
+                    : new AForkTookAnArm(site, shownAt == null ? site.anchor() : shownAt);
         }
     }
 }

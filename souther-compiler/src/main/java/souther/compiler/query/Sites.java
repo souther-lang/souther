@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.HelperInliner;
 import souther.compiler.check.PartId;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleCitation;
@@ -454,6 +455,18 @@ public final class Sites {
     }
 
     /**
+     * The same, as an answer that may be missing.
+     *
+     * <p>For a reader naming a construct it did not choose: the calls a copy was made through are
+     * whatever the model's code wrote, and a call in a file this compilation does not hold is still
+     * a call the copy was made at.
+     */
+    public static Citation placeIfKnown(Db db, SourceConstructOrigin origin) {
+        Answer<Citation> at = wroteIt(db, origin);
+        return at.present() ? at.value() : null;
+    }
+
+    /**
      * Where a report about one part of a rule points.
      *
      * <p>Asked here and not carried in what the reading decided. Which part of which clause it is
@@ -515,6 +528,20 @@ public final class Sites {
             };
             case StepOfACopy.ABuild _ -> Answer.absent();
         };
+    }
+
+    /**
+     * What {@code step} copied, as a reader of {@code module} is told it: the name the author
+     * wrote, and the module before it where another module declares it.
+     *
+     * <p>A block handed to a parameter is bound under the parameter with a mark of the pass that
+     * did it, which says nothing to the author and is not shown ({@link HelperInliner#asWritten}).
+     */
+    public static String calledIn(StepOfACopy step, String module) {
+        return HelperInliner.asWritten(switch (step) {
+            case StepOfACopy.ACall(var called, var _) -> called.saidIn(module);
+            case StepOfACopy.ABuild(var built, var _) -> built.saidIn(module);
+        });
     }
 
     private static Answer<Citation> whereMade(Db db, ExpansionSite.Direct at) {
@@ -630,10 +657,17 @@ public final class Sites {
         return at.present() ? at.value() : null;
     }
 
-    /** Where the reading of {@code condition}'s body met it, as an answer that may be missing. */
+    /**
+     * Where the reading of {@code condition}'s body met it, as an answer that may be missing.
+     *
+     * <p>Asked of the reading that named it. Each reading counts the conditions of a body in its own
+     * order, so a number looked up in the other's places is some other condition's place.
+     */
     private static Answer<Citation> metIn(Db db, String module, ConditionOccurrence condition) {
-        Answer<Map<ConditionOccurrence, Citation>> met =
-                db.ask(new Adequacy.ConditionsMet(module, condition.behavior()));
+        Answer<Map<ConditionOccurrence, Citation>> met = db.ask(switch (condition.reading()) {
+            case DIVIDING -> new Adequacy.ConditionsMet(module, condition.behavior());
+            case DECIDING -> new Adequacy.ConditionsDecidedMet(module, condition.behavior());
+        });
         if (!met.present()) {
             return Answer.absent();
         }

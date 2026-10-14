@@ -263,7 +263,8 @@ class SoManyElementsOfAListFiledInAMapAreComposedTest {
                     | "none" : ([], "a") -> 0
                 """));
 
-        assertTrue(report.contains("? nothing could show a row can be written at 1 decision rule"),
+        assertEquals(1, report.lines().filter(line -> line.contains(
+                        "? nothing could show a row can be written at a decision rule")).count(),
                 () -> report);
     }
 

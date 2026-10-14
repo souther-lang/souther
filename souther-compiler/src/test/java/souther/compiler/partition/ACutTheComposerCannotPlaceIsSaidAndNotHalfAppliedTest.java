@@ -218,7 +218,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
     /** Which question a report about the condition under test would put. */
     private static final ConditionReportAnchor WHERE =
             new ConditionReportAnchor.WhereTheReadingMetIt("m",
-                    new ConditionOccurrence("b", 0));
+                    new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0));
 
     private static OnTheWay.TakenIn cut(NumericTerm over) {
         return new OnTheWay.TakenIn(WHERE,

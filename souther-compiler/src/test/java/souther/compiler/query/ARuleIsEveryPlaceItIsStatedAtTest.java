@@ -2,11 +2,20 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.partition.AnswersDemanded;
 import souther.compiler.partition.CompositionAccount;
+import souther.compiler.partition.ConditionGap;
+import souther.compiler.partition.ConditionOccurrence;
+import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.MeasuredInput;
+import souther.compiler.partition.SaidOnTheWay;
+import souther.compiler.partition.OnTheWay;
+import souther.compiler.partition.ReachabilityGap;
+import souther.compiler.partition.RuleStep;
 import souther.compiler.partition.WhereNothingIsAnswered;
 
 import java.util.ArrayList;
@@ -115,15 +124,14 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
 
         /** {@code way} standing as a second place of {@code rule}. */
         static DecisionReading.Ruled under(DecisionRule rule, DecisionReading.Ruled way) {
-            return new DecisionReading.Ruled(rule, way.shownBy(), way.states(), way.demands(),
-                    way.whole());
+            return new DecisionReading.Ruled(rule, way.steps(), way.whole());
         }
 
         /** The body's reading with {@code more} beside its own ways. */
         DecisionReading with(DecisionReading.Ruled... more) {
             List<DecisionReading.Ruled> found = new ArrayList<>(read.found());
             found.addAll(Arrays.asList(more));
-            return new DecisionReading(read.behavior(), found, read.enumeration());
+            return new DecisionReading(read.behavior(), found, read.enumeration(), read.metAt());
         }
     }
 
@@ -192,23 +200,102 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
      */
     @Test
     void aRuleIsExcludedOnlyWhereEveryPlaceIs() {
-        RuleSettlement excluded = RuleSettlement.provedNothingTakesIt(
+        DecisionReading.Ruled at = compiled().answering();
+        SettledAt excluded = new SettledAt(at, RuleSettlement.provedNothingTakesIt(
                 RuleSearch.CameToNothing.of(List.of(new Generator.UnresolvedCombination(
                         List.of("a rule of the decision"),
-                        Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE))));
-        RuleSettlement elsewhere = RuleSettlement.of(
+                        Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE)))));
+        SettledAt elsewhere = new SettledAt(at, RuleSettlement.of(
                 new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
-                CompositionAccount.NOTHING);
+                CompositionAccount.NOTHING));
 
         assertInstanceOf(RuleRequirement.Unsettled.AComposedRowWentElsewhere.class,
                 Adequacy.DecisionSearch.acrossThePlaces(List.of(excluded, elsewhere))
-                        .requirement(), "one place a row may take settles nothing away");
+                        .settlement().requirement(),
+                "one place a row may take settles nothing away");
         assertInstanceOf(RuleRequirement.Unsettled.AComposedRowWentElsewhere.class,
                 Adequacy.DecisionSearch.acrossThePlaces(List.of(elsewhere, excluded))
-                        .requirement(), "whichever place was met first");
+                        .settlement().requirement(), "whichever place was met first");
         assertTrue(Adequacy.DecisionSearch.acrossThePlaces(List.of(excluded, excluded))
-                .requirement() instanceof RuleRequirement.Excluded);
+                .settlement().requirement() instanceof RuleRequirement.Excluded);
         assertNull(Adequacy.DecisionSearch.acrossThePlaces(Arrays.asList(excluded, null)),
                 "a place not searched for is not one the model leaves no row");
+    }
+
+    /**
+     * The rule's answer comes with the place it was searched at, whichever place that is and in
+     * whichever order the places were met.
+     *
+     * <p>What the search went without is a list of that place's conditions, so an answer carried
+     * apart from its place would be explained by the place a reader is shown — the first — while it
+     * was arrived at somewhere else.
+     */
+    @Test
+    void theAnswerOfARuleKeepsThePlaceItCameFrom() {
+        Compiled body = compiled();
+        DecisionReading.Ruled first = body.answering();
+        DecisionReading.Ruled second = Compiled.under(first.rule(), body.read().found().stream()
+                .filter(each -> !each.equals(first)).findFirst().orElseThrow());
+        SettledAt nothingTried = new SettledAt(first, RuleSettlement.nothingToTryWith(
+                new Generator.UnresolvedCombination(List.of("a rule of the decision"),
+                        Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
+                CompositionAccount.NOTHING));
+        SettledAt composed = new SettledAt(second, RuleSettlement.of(
+                new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
+                CompositionAccount.NOTHING));
+
+        assertEquals(composed, Adequacy.DecisionSearch.acrossThePlaces(
+                        List.of(nothingTried, composed)),
+                "the place that established more is the answer, and its place with it");
+        assertEquals(composed, Adequacy.DecisionSearch.acrossThePlaces(
+                        List.of(composed, nothingTried)),
+                "whichever place was met first");
+    }
+
+    /**
+     * What the search of a rule went without is the place it answered from's, and nothing of the
+     * place beside it.
+     *
+     * <p>Two places of one rule whose ways each decline a condition of their own. The place that
+     * established more answers for the rule, and the conditions it went without are its way's:
+     * explained by the other place's way, the rule would be said to have gone without a condition
+     * the search never met.
+     */
+    @Test
+    void whatASearchWentWithoutIsThePlaceItAnsweredFrom() {
+        Compiled body = compiled();
+        DecisionReading.Ruled first = body.answering();
+        OnTheWay.Declined declinedFirst = declined(0);
+        OnTheWay.Declined declinedSecond = declined(1);
+        DecisionReading.Ruled one = new DecisionReading.Ruled(first.rule(),
+                List.of(new RuleStep(first.steps().getFirst().shown(), List.of(declinedFirst),
+                        AnswersDemanded.NOTHING, SaidOnTheWay.NONE)), true);
+        DecisionReading.Ruled other = new DecisionReading.Ruled(first.rule(),
+                List.of(new RuleStep(first.steps().getFirst().shown(), List.of(declinedSecond),
+                        AnswersDemanded.NOTHING, SaidOnTheWay.NONE)), true);
+        SettledAt nothingTried = new SettledAt(one, RuleSettlement.nothingToTryWith(
+                new Generator.UnresolvedCombination(List.of("a rule of the decision"),
+                        Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
+                CompositionAccount.NOTHING));
+        SettledAt composed = new SettledAt(other, RuleSettlement.of(
+                new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
+                CompositionAccount.NOTHING));
+
+        for (List<SettledAt> met : List.of(List.of(nothingTried, composed),
+                List.of(composed, nothingTried))) {
+            assertEquals(List.of(new ConditionGap.OfTheInput(
+                            new ReachabilityGap.Unstated(declinedSecond))),
+                    Adequacy.DecisionSearch.acrossThePlaces(met).leftOut(),
+                    "the conditions of the place that answered, and none of the other's");
+        }
+    }
+
+    /** A condition of the decision's reading declined for a reason, named {@code which}. */
+    private static OnTheWay.Declined declined(int which) {
+        ConditionOccurrence condition =
+                new ConditionOccurrence("f", ConditionOccurrence.Reading.DECIDING, which);
+        return new OnTheWay.Declined(condition,
+                new ConditionReportAnchor.WhereTheReadingMetIt("example.ruled", condition),
+                new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER));
     }
 }
